@@ -137,10 +137,7 @@ class GlueDashboardController:
         wizard = create_glue_change_wizard(glue_type_names=glue_types)
         wizard.setWindowTitle(f"Change Glue for Cell {cell_id}")
 
-        result = wizard.exec()
-        self._logger.debug("Wizard closed — result: %s", result)
-
-        if result != QDialog.DialogCode.Accepted:
+        if wizard.exec() != QDialog.DialogCode.Accepted:
             self._logger.debug("Wizard cancelled for cell %s", cell_id)
             return
 
@@ -150,13 +147,13 @@ class GlueDashboardController:
             return
 
         selected = page.get_selected_option() if hasattr(page, "get_selected_option") else None
-        self._logger.debug("Selected glue type: %s", selected)
-
-        if selected:
-            self._view.set_cell_glue_type(cell_id, selected)
-            self._logger.info("Cell %s glue type changed to '%s'", cell_id, selected)
-        else:
+        if not selected:
             self._logger.warning("No glue type selected for cell %s", cell_id)
+            return
+
+        self._model.change_glue(cell_id, selected)  # ← persist + log
+        self._view.set_cell_glue_type(cell_id, selected)  # ← update UI
+        self._logger.info("Cell %s glue type changed to '%s'", cell_id, selected)
 
     # ------------------------------------------------------------------
     # State machine

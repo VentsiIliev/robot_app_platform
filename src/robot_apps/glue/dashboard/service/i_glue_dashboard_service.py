@@ -26,6 +26,9 @@ class IGlueDashboardService(ABC):
     @abstractmethod
     def set_mode(self, mode: str) -> None: ...
 
+    @abstractmethod
+    def change_glue(self, cell_id: int, glue_type: str) -> None: ...
+
     # ------------------------------------------------------------------
     # Queries
     # ------------------------------------------------------------------

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import datetime
 import logging
 from typing import Dict, List, Optional
 
@@ -42,6 +41,25 @@ class GlueDashboardService(IGlueDashboardService):
 
     def set_mode(self, mode: str) -> None:
         self._logger.info("set_mode → %s", mode)
+
+    def change_glue(self, cell_id: int, glue_type: str) -> None:
+        self._logger.info("change_glue → cell=%s type='%s'", cell_id, glue_type)
+        try:
+            cells: GlueCellsConfig = self._settings.get("glue_cells")
+            cell = cells.get_cell_by_id(cell_id)
+            if cell is None:
+                self._logger.warning("change_glue: cell_id=%s not found", cell_id)
+                return
+            # GlueCellsConfig is frozen — rebuild with updated type
+            from dataclasses import replace
+            updated_cell = replace(cell, type=glue_type)
+            updated_cells = GlueCellsConfig(
+                cells=[updated_cell if c.id == cell_id else c for c in cells.cells]
+            )
+            self._settings.save("glue_cells", updated_cells)
+            self._logger.info("change_glue: cell=%s saved with type='%s'", cell_id, glue_type)
+        except Exception:
+            self._logger.exception("change_glue failed for cell=%s", cell_id)
 
     # ------------------------------------------------------------------
     # Queries
