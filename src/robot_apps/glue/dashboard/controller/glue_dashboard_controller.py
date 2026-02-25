@@ -15,15 +15,14 @@ from src.robot_apps.glue.dashboard.view.glue_dashboard_view import GlueDashboard
 
 
 class GlueDashboardController:
-    """Controller — broker subscriptions + view signal handling. Zero Qt widgets owned."""
 
     def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: MessageBroker):
         self._model  = model
         self._view   = view
         self._broker = broker
         self._subs: List[Tuple[str, Callable]] = []
-        self._mode_index     = 0
-        self._current_state  = None
+        self._mode_index    = 0
+        self._current_state = ApplicationState.IDLE
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def start(self) -> None:
@@ -65,21 +64,15 @@ class GlueDashboardController:
 
     def _on_app_state(self, data) -> None:
         state = data.get("state", data) if isinstance(data, dict) else str(data)
-        self._current_state = state
-        cfg = BUTTON_STATE_MAP.get(state)
-        if cfg:
-            self._view.set_start_enabled(cfg["start"])
-            self._view.set_stop_enabled(cfg["stop"])
-            self._view.set_pause_enabled(cfg["pause"])
-            self._view.set_pause_text(self._t(cfg["pause_text"]))
+        self._apply_button_state(state)
 
     # ------------------------------------------------------------------
-    # View signals → Model / Broker
+    # View signals → Model
     # ------------------------------------------------------------------
 
     def _connect_signals(self) -> None:
-        self._view.start_requested.connect(self._model.start)
-        self._view.stop_requested.connect(self._model.stop)
+        self._view.start_requested.connect(self._on_start)
+        self._view.stop_requested.connect(self._on_stop)
         self._view.pause_requested.connect(self._on_pause)
         self._view.action_requested.connect(self._on_action)
         self._view.language_changed.connect(self._retranslate)
@@ -90,55 +83,119 @@ class GlueDashboardController:
 
     def _disconnect_signals(self) -> None:
         try:
-            self._view.start_requested.disconnect(self._model.start)
-            self._view.stop_requested.disconnect(self._model.stop)
+            self._view.start_requested.disconnect(self._on_start)
+            self._view.stop_requested.disconnect(self._on_stop)
             self._view.pause_requested.disconnect(self._on_pause)
             self._view.action_requested.disconnect(self._on_action)
             self._view.language_changed.disconnect(self._retranslate)
         except RuntimeError:
             pass
 
+    def _on_start(self) -> None:
+        self._model.start()
+        self._apply_button_state(ApplicationState.STARTED)
+        self._broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.STARTED)
+
+    def _on_stop(self) -> None:
+        self._model.stop()
+        self._apply_button_state(ApplicationState.STOPPED)
+        self._broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.STOPPED)
+
     def _on_pause(self) -> None:
-        self._broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.PAUSED)
+        if self._current_state == ApplicationState.PAUSED:
+            self._model.start()
+            self._apply_button_state(ApplicationState.STARTED)
+            self._broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.STARTED)
+        else:
+            self._model.pause()
+            self._apply_button_state(ApplicationState.PAUSED)
+            self._broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.PAUSED)
 
     def _on_action(self, action_id: str) -> None:
         if action_id == "mode_toggle":
             self._mode_index = 1 - self._mode_index
             label = MODE_TOGGLE_LABELS[self._mode_index]
             self._view.set_action_button_text("mode_toggle", self._t(label))
+            self._model.set_mode(label)
             self._broker.publish(SystemTopics.SYSTEM_MODE_CHANGE, label)
+
         elif action_id == "clean":
+            self._model.clean()
             self._broker.publish(SystemTopics.COMMAND_CLEAN, {})
+
         elif action_id == "reset_errors":
+            self._model.reset_errors()
             self._broker.publish(SystemTopics.COMMAND_RESET, {})
 
     def _on_glue_change(self, cell_id: int) -> None:
+        from PyQt6.QtWidgets import QDialog
         from src.robot_apps.glue.dashboard.ui.glue_change_guide_wizard import create_glue_change_wizard
-        wizard = create_glue_change_wizard(glue_type_names=self._model.get_all_glue_types())
+
+        glue_types = self._model.get_all_glue_types()
+        self._logger.debug("Opening glue change wizard for cell %s — available types: %s", cell_id, glue_types)
+
+        wizard = create_glue_change_wizard(glue_type_names=glue_types)
         wizard.setWindowTitle(f"Change Glue for Cell {cell_id}")
-        if wizard.exec() == 1:
-            page = wizard.page(6)
-            selected = page.get_selected_option() if hasattr(page, "get_selected_option") else None
-            if selected:
-                self._view.set_cell_glue_type(cell_id, selected)
+
+        result = wizard.exec()
+        self._logger.debug("Wizard closed — result: %s", result)
+
+        if result != QDialog.DialogCode.Accepted:
+            self._logger.debug("Wizard cancelled for cell %s", cell_id)
+            return
+
+        page = wizard.page(6)
+        if page is None:
+            self._logger.error("SelectionStep (page 6) not found in wizard")
+            return
+
+        selected = page.get_selected_option() if hasattr(page, "get_selected_option") else None
+        self._logger.debug("Selected glue type: %s", selected)
+
+        if selected:
+            self._view.set_cell_glue_type(cell_id, selected)
+            self._logger.info("Cell %s glue type changed to '%s'", cell_id, selected)
+        else:
+            self._logger.warning("No glue type selected for cell %s", cell_id)
+
+    # ------------------------------------------------------------------
+    # State machine
+    # ------------------------------------------------------------------
+
+    def _apply_button_state(self, state: str) -> None:
+        self._current_state = state
+        cfg = BUTTON_STATE_MAP.get(state)
+        if cfg:
+            self._view.set_start_enabled(cfg["start"])
+            self._view.set_stop_enabled(cfg["stop"])
+            self._view.set_pause_enabled(cfg["pause"])
+            self._view.set_pause_text(self._t(cfg["pause_text"]))
+
+    # ------------------------------------------------------------------
+    # Initialise
+    # ------------------------------------------------------------------
 
     def _initialize_view(self) -> None:
+        self._apply_button_state(ApplicationState.IDLE)        # ← sets start=True, stop/pause=False
         for cfg in GLUE_CELLS:
-            state = self._model.get_initial_cell_state(cfg.card_id)
+            state     = self._model.get_initial_cell_state(cfg.card_id)
             glue_type = self._model.get_cell_glue_type(cfg.card_id)
             if state:
                 self._view.set_cell_state(cfg.card_id, state.get("current_state", "unknown"))
             if glue_type:
                 self._view.set_cell_glue_type(cfg.card_id, glue_type)
 
+    # ------------------------------------------------------------------
+    # Localization
+    # ------------------------------------------------------------------
+
     def _retranslate(self) -> None:
         for btn in ACTION_BUTTONS:
             self._view.set_action_button_text(btn.action_id, self._t(btn.label))
         self._view.set_action_button_text("mode_toggle", self._t(MODE_TOGGLE_LABELS[self._mode_index]))
-        if self._current_state:
-            cfg = BUTTON_STATE_MAP.get(self._current_state)
-            if cfg:
-                self._view.set_pause_text(self._t(cfg["pause_text"]))
+        cfg = BUTTON_STATE_MAP.get(self._current_state)
+        if cfg:
+            self._view.set_pause_text(self._t(cfg["pause_text"]))
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)

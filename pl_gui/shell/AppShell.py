@@ -168,7 +168,7 @@ class AppShell(QWidget):
         self.close_all_apps()
 
     def setup_ui(self):
-        self.setWindowTitle("Android-Style App Folder Demo with QStackedWidget")
+        self.setWindowTitle("PL Project")
         # Set a reasonable window size instead of maximized
         self.resize(1200, 800)  # Reasonable default size
         # Center the window on screen

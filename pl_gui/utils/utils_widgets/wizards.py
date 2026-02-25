@@ -242,23 +242,28 @@ class ConfigurableWizard(QWizard):
         for page in pages:
             self.addPage(page)
 
-        # Connect finish button
-        self.button(QWizard.WizardButton.FinishButton).clicked.connect(self._on_finish)
-
         # Customize buttons if requested
         if use_material_buttons:
             self._customize_buttons()
 
+        # Connect finish button
+        self.button(QWizard.WizardButton.FinishButton).clicked.connect(self._on_finish)
+
     def _customize_buttons(self):
-        """Replace default buttons with MaterialButtons."""
-        for button_type in [
-            QWizard.WizardButton.BackButton,
-            QWizard.WizardButton.NextButton,
-            QWizard.WizardButton.CancelButton,
-            QWizard.WizardButton.FinishButton
-        ]:
+        """Replace default buttons with MaterialButtons and explicitly wire actions."""
+        button_actions = {
+            QWizard.WizardButton.BackButton: self.back,
+            QWizard.WizardButton.NextButton: self.next,
+            QWizard.WizardButton.FinishButton: self.accept,  # ← explicit accept()
+            QWizard.WizardButton.CancelButton: self.reject,  # ← explicit reject()
+        }
+        for button_type, action in button_actions.items():
             btn = self.button(button_type)
-            self.setButton(button_type, MaterialButton(btn.text()))
+            if btn is None:
+                continue
+            new_btn = MaterialButton(btn.text())
+            new_btn.clicked.connect(action)
+            self.setButton(button_type, new_btn)
 
     def _on_finish(self):
         """Called when finish button is clicked."""
