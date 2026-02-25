@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1" language="de">
+
+<!-- Generic dashboard widget strings -->
+<context>
+    <name>ControlButtonsWidget</name>
+    <message>
+        <source>Start</source>
+        <translation>Starten</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Stoppen</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+</context>
+
+<!-- Glue adapter strings (labels configured from outside the widget) -->
+<context>
+    <name>GlueAdapter</name>
+    <message>
+        <source>Reset Errors</source>
+        <translation>Fehler zurücksetzen</translation>
+    </message>
+    <message>
+        <source>Pick And Spray</source>
+        <translation>Aufnehmen und Sprühen</translation>
+    </message>
+    <message>
+        <source>Spray Only</source>
+        <translation>Nur Sprühen</translation>
+    </message>
+    <message>
+        <source>Clean</source>
+        <translation>Reinigen</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <source>Resume</source>
+        <translation>Fortsetzen</translation>
+    </message>
+    <message>
+      <source>Glue 1</source>
+      <translation>Klebstoff 1</translation>
+  </message>
+  <message>
+      <source>Glue 2</source>
+      <translation>Klebstoff 2</translation>
+  </message>
+  <message>
+      <source>Glue 3</source>
+      <translation>Klebstoff 3</translation>
+  </message>
+
+</context>
+
+<!-- Glue meter card strings (widget-owned) -->
+<context>
+    <name>GlueMeterCard</name>
+    <message>
+        <source>🧪 Loading...</source>
+        <translation>🧪 Laden...</translation>
+    </message>
+    <message>
+        <source>No glue configured</source>
+        <translation>Kein Klebstoff konfiguriert</translation>
+    </message>
+    <message>
+        <source>⚙ Change</source>
+        <translation>⚙ Ändern</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Unbekannt</translation>
+    </message>
+    <message>
+        <source>Initializing...</source>
+        <translation>Initialisierung...</translation>
+    </message>
+    <message>
+        <source>Ready</source>
+        <translation>Bereit</translation>
+    </message>
+    <message>
+        <source>Low Weight</source>
+        <translation>Wenig Klebstoff</translation>
+    </message>
+    <message>
+        <source>Empty</source>
+        <translation>Leer</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation>Fehler</translation>
+    </message>
+    <message>
+        <source>Disconnected</source>
+        <translation>Getrennt</translation>
+    </message>
+</context>
+
+</TS>

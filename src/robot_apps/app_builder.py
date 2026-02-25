@@ -1,0 +1,157 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
+
+from src.engine.core.message_broker import MessageBroker
+from src.engine.repositories.settings_service_factory import build_from_specs
+from src.engine.robot.features.navigation_service import NavigationService
+from src.engine.robot.features.tool_service import RobotToolService
+from src.engine.robot.interfaces.i_motion_service import IMotionService
+from src.engine.robot.interfaces.i_robot import IRobot
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.robot.safety.safety_checker import SafetyChecker
+from src.engine.robot.services.motion_service import MotionService
+from src.engine.robot.services.robot_service import RobotService
+from src.engine.robot.services.robot_state_manager import RobotStateManager
+from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
+from src.robot_apps.base_robot_app import BaseRobotApp
+
+T = TypeVar("T", bound=BaseRobotApp)
+_LOGGER = logging.getLogger("AppBuilder")
+
+
+@dataclass
+class _BuildContext:
+    robot: IRobot
+    motion: IMotionService
+    settings: Any
+    tool_changer: Any
+    broker: MessageBroker       # ← added
+
+
+ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
+
+
+# ---------------------------------------------------------------------------
+# Default builders
+# ---------------------------------------------------------------------------
+
+def _build_robot_service(ctx: _BuildContext) -> IRobotService:
+    publisher = RobotStatePublisher(ctx.broker)   # ← wired here
+    state = RobotStateManager(ctx.robot, publisher=publisher)
+    state.start_monitoring()
+    return RobotService(motion=ctx.motion, robot=ctx.robot, state_provider=state)
+
+
+def _build_navigation(ctx: _BuildContext) -> NavigationService:
+    return NavigationService(motion=ctx.motion, settings_service=ctx.settings)
+
+
+def _build_tool_service(ctx: _BuildContext) -> Optional[IToolService]:
+    if ctx.tool_changer is None:
+        _LOGGER.debug("IToolService declared but no tool_changer provided — skipping")
+        return None
+    if ctx.settings is None:
+        _LOGGER.debug("IToolService declared but no settings provided — skipping")
+        return None
+    return RobotToolService(
+        motion_service=ctx.motion,
+        robot_config=ctx.settings.get_robot_config(),
+        tool_changer=ctx.tool_changer,
+    )
+
+
+_DEFAULT_REGISTRY: Dict[Type, ServiceBuilderFn] = {
+    IRobotService:     _build_robot_service,
+    NavigationService: _build_navigation,
+    IToolService:      _build_tool_service,
+}
+
+
+# ---------------------------------------------------------------------------
+# AppBuilder
+# ---------------------------------------------------------------------------
+
+class AppBuilder:
+
+    def __init__(self) -> None:
+        self._robot: Optional[IRobot] = None
+        self._settings: Any = None
+        self._tool_changer: Any = None
+        self._broker: MessageBroker = MessageBroker()   # singleton by default
+        self._registry: Dict[Type, ServiceBuilderFn] = dict(_DEFAULT_REGISTRY)
+
+    def with_robot(self, robot: IRobot) -> AppBuilder:
+        self._robot = robot
+        return self
+
+    def with_settings(self, settings_service) -> AppBuilder:
+        self._settings = settings_service
+        return self
+
+    def with_tool_changer(self, tool_changer) -> AppBuilder:
+        self._tool_changer = tool_changer
+        return self
+
+    def with_broker(self, broker: MessageBroker) -> AppBuilder:
+        self._broker = broker
+        return self
+
+    def register(self, service_type: Type, builder: ServiceBuilderFn) -> AppBuilder:
+        self._registry[service_type] = builder
+        return self
+
+    def build(self, app_class: Type[T]) -> T:
+        if self._robot is None:
+            raise ValueError("AppBuilder.with_robot() is required")
+
+        _LOGGER.debug("Building %s", app_class.metadata.name)
+
+        settings_service = None
+        if app_class.settings_specs:
+            settings_service = build_from_specs(
+                specs=app_class.settings_specs,
+                settings_root=app_class.metadata.settings_root,
+                app_class=app_class,
+            )
+        motion = MotionService(self._robot, SafetyChecker(self._settings))
+        ctx = _BuildContext(
+            robot=self._robot,
+            motion=motion,
+            settings=settings_service,
+            tool_changer=self._tool_changer,
+            broker=self._broker,
+        )
+
+        services: Dict[str, Any] = {}
+
+        for spec in app_class.services:
+            builder = self._registry.get(spec.service_type)
+
+            if builder is None:
+                if spec.required:
+                    raise RuntimeError(
+                        f"No builder registered for required service "
+                        f"'{spec.name}' ({spec.service_type.__name__}). "
+                        f"Use AppBuilder.register() to add one."
+                    )
+                _LOGGER.debug("No builder for optional '%s' — skipping", spec.name)
+                continue
+
+            instance = builder(ctx)
+
+            if instance is None:
+                if spec.required:
+                    raise RuntimeError(f"Builder for required service '{spec.name}' returned None.")
+                _LOGGER.debug("Builder for optional '%s' returned None — skipping", spec.name)
+                continue
+
+            services[spec.name] = instance
+            _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
+
+        app = app_class()
+        app.start(services,settings_service=settings_service)
+        return app
