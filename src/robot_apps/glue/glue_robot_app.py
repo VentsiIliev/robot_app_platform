@@ -20,6 +20,8 @@ from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibra
 # ── Process requirements ──────────────────────────────────────────────────────
 # Defined at the app level — the app knows what each of its processes needs.
 
+# TODO need to add health check for the services and not rely on existence only
+#  — e.g. if weight cell service is built but fails to connect to any cells, the dashboard should know about it and show a warning instead of just breaking when trying to access the service
 _GLUE_PROCESS_REQUIREMENTS  = ProcessRequirements.requires("robot" )
 _CLEAN_PROCESS_REQUIREMENTS = ProcessRequirements.requires("robot")
 
