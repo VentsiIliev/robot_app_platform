@@ -1,9 +1,10 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QWidget
 
 from pl_gui.dashboard.config import CardConfig
+from src.engine.application.i_application_manager import IApplicationManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
@@ -20,21 +21,25 @@ class GlueDashboard:
 
     @staticmethod
     def create(
-        robot_service:    IRobotService,
-        settings_service: ISettingsService,
+        robot_service:     IRobotService,
+        settings_service:  ISettingsService,
         messaging_service: IMessagingService,
-        weight_service:   Optional[IWeightCellService] = None,
+        weight_service:    Optional[IWeightCellService]   = None,
+        app_manager:       Optional[IApplicationManager]  = None,
+        service_checker:   Optional[Callable[[str], bool]] = None,
     ) -> QWidget:
 
         service = GlueDashboardService(
-            process_id       = "glue",
-            robot_service    = robot_service,
+            process_id      = "glue",
+            robot_service   = robot_service,
             settings_service = settings_service,
             messaging        = messaging_service,
             weight_service   = weight_service,
+            app_manager      = app_manager,
+            service_checker  = service_checker,
         )
 
-        cells_count    = service.get_cells_count()
+        cells_count = service.get_cells_count()
         config.GLUE_CELLS = [
             CardConfig(card_id=i + 1, label=f"Cell {i + 1}")
             for i in range(cells_count)
@@ -48,7 +53,7 @@ class GlueDashboard:
             action_buttons=config.ACTION_BUTTONS,
             cards=cards,
         )
-        controller    = GlueDashboardController(model, view, messaging_service)
+        controller = GlueDashboardController(model, view, messaging_service)
         controller.load()
         view._controller = controller
         return view

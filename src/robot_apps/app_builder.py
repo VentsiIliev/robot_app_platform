@@ -167,6 +167,13 @@ class AppBuilder:
             _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
         app = app_class()
-        app.start(services, settings_service=settings_service)
+        from src.engine.application.application_manager import ApplicationManager
+        application_manager = ApplicationManager(self._messaging_service)
+        app.start(
+            services,
+            settings_service=settings_service,
+            application_manager=application_manager,
+        )
         return app
+
 

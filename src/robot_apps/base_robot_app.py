@@ -88,8 +88,13 @@ class BaseRobotApp(ABC):
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
         self._resolved: Dict[str, Any] = {}
-        self._settings_service: Optional[ISettingsService] = None  # ← add this
+        self._settings_service: Optional[ISettingsService] = None
+        self._application_manager: Optional[Any] = None
         self._running = False
+
+    @property
+    def application_manager(self):
+        return self._application_manager
 
     # ------------------------------------------------------------------
     # Persistence
@@ -129,9 +134,15 @@ class BaseRobotApp(ABC):
     # ------------------------------------------------------------------
 
     # Update start() to also accept and store the settings service:
-    def start(self, services: Dict[str, Any], settings_service: Optional[ISettingsService] = None) -> None:
+    def start(
+            self,
+            services: Dict[str, Any],
+            settings_service: Optional[ISettingsService] = None,
+            application_manager=None,
+    ) -> None:
         self._logger.info("Starting %s v%s", self.metadata.name, self.metadata.version)
         self._settings_service = settings_service
+        self._application_manager = application_manager
         self._validate_and_inject(services)
         self._running = True
         self.on_start()

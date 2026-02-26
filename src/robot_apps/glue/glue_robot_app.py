@@ -28,6 +28,8 @@ def _build_dashboard_plugin(robot_app):
             settings_service = robot_app._settings_service,
             messaging_service = ms,
             weight_service   = robot_app.get_optional_service("weight"),
+            app_manager      = robot_app.application_manager,
+            service_checker  = lambda name: robot_app.get_optional_service(name) is not None,
         )
     )
 
