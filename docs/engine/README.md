@@ -18,6 +18,10 @@ src/engine/
 │   └── weight/                 ← Weight cell service + HTTP transport
 │       ├── interfaces/
 │       └── http/
+├── process/                    ← Process lifecycle state machine
+│   ├── process_state.py        ← ProcessState, ProcessStateEvent, ProcessTopics
+│   ├── i_process.py            ← IProcess ABC
+│   └── base_process.py         ← Thread-safe BaseProcess with template hooks
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
@@ -81,6 +85,7 @@ src/engine/
 | Messaging | `MessagingService` | [core/](core/README.md) |
 | Modbus | `ModbusActionService` | [hardware/communication/modbus/](hardware/communication/modbus/README.md) |
 | Weight cells | `WeightCellService` | [hardware/weight/](hardware/weight/README.md) |
+| Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
 | Vision | `VisionService` | [vision/](vision/README.md) |

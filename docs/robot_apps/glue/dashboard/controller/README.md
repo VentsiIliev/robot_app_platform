@@ -29,7 +29,7 @@ class _DashboardBridge(QObject):
     cell_state     = pyqtSignal(int, str)     # (card_id, state_string)
     glue_type      = pyqtSignal(int, str)     # (card_id, glue_type_name)
     robot_state    = pyqtSignal(str)          # state string from RobotStateSnapshot
-    app_state      = pyqtSignal(str)          # ApplicationState string
+    process_state  = pyqtSignal(str)          # ProcessState.value from BaseProcess
 ```
 
 Broker callbacks (background threads) emit to bridge signals. Bridge signals are connected to named slots on the main thread (auto-queued by Qt).
@@ -52,38 +52,47 @@ load()
 
 ## Broker Subscriptions
 
+`_PROCESS_ID = "glue"` — the process identifier used for all `ProcessTopics` calls.
+
 For each `CardConfig` in `config.GLUE_CELLS` (card_id 1-indexed, cell_id = card_id - 1):
 
 ```
-WeightTopics.reading(cell_id)  → lambda r: bridge.weight_reading.emit(card_id, r.value)
-WeightTopics.state(cell_id)    → lambda e: bridge.cell_state.emit(card_id, e.state.value)
-GlueCellTopics.glue_type(card_id) → lambda t: bridge.glue_type.emit(card_id, t)
-RobotTopics.STATE              → lambda s: bridge.robot_state.emit(s.state or "")
-SystemTopics.APPLICATION_STATE → lambda d: bridge.app_state.emit(str(d) or d["state"])
+WeightTopics.reading(cell_id)       → lambda r: bridge.weight_reading.emit(card_id, r.value)
+WeightTopics.state(cell_id)         → lambda e: bridge.cell_state.emit(card_id, e.state.value)
+GlueCellTopics.glue_type(card_id)   → lambda t: bridge.glue_type.emit(card_id, t)
+RobotTopics.STATE                   → lambda s: bridge.robot_state.emit(getattr(s, "state", "") or "")
+ProcessTopics.state("glue")         → lambda e: bridge.process_state.emit(e.state.value)
 ```
+
+Robot state updates buttons only when `_current_state == ProcessState.IDLE.value` (process state takes priority once a process starts).
 
 ---
 
 ## State Machine
 
-`_apply_button_state(state)` looks up the state string in `BUTTON_STATE_MAP` and calls the corresponding view setters (`set_start_enabled`, `set_stop_enabled`, `set_pause_enabled`, `set_pause_text`).
+`_apply_button_state(state_str)` looks up the `ProcessState.value` string in `BUTTON_STATE_MAP` and calls the corresponding view setters (`set_start_enabled`, `set_stop_enabled`, `set_pause_enabled`, `set_pause_text`, `set_action_button_enabled`).
+
+`_current_state` tracks the last known state string and is initialized to `ProcessState.IDLE.value`.
 
 ### State Transitions via Buttons
 
-| Button | From State | To State | Published Topic |
-|--------|-----------|---------|----------------|
-| Start | IDLE | STARTED | `system/application_state` |
-| Stop | STARTED / PAUSED | STOPPED | `system/application_state` |
-| Pause (when STARTED) | STARTED | PAUSED | `system/application_state` |
-| Pause/Resume (when PAUSED) | PAUSED | STARTED | `system/application_state` |
+| Button | Controller slot | Model call | State change published by |
+|--------|----------------|-----------|--------------------------|
+| Start | `_on_start()` | `model.start()` | `BaseProcess` via `ProcessTopics.state("glue")` |
+| Stop | `_on_stop()` | `model.stop()` | `BaseProcess` via `ProcessTopics.state("glue")` |
+| Pause (or Resume) | `_on_pause()` | `model.pause()` or `model.start()` | `BaseProcess` via `ProcessTopics.state("glue")` |
+
+`_on_pause()` checks `_current_state`: if already `PAUSED`, it calls `model.start()` (which delegates to `BaseProcess.start()` which detects PAUSED → calls `_on_resume`).
 
 ### Action Buttons
 
 | `action_id` | Effect |
 |-------------|--------|
-| `"mode_toggle"` | Toggle `_mode_index` 0↔1; `set_mode(label)`; publish `system/mode_change` |
-| `"clean"` | `model.clean()`; publish `glue/command/clean` |
-| `"reset_errors"` | `model.reset_errors()`; publish `glue/command/reset_errors` |
+| `"mode_toggle"` | Toggle `_mode_index` 0↔1; `view.set_action_button_text()`; `model.set_mode(label)` |
+| `"clean"` | `model.clean()` |
+| `"reset_errors"` | `model.reset_errors()` |
+
+Action buttons are enabled/disabled by `BUTTON_STATE_MAP` — no broker topics are published for these actions.
 
 ---
 

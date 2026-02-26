@@ -49,36 +49,24 @@ class GlueCellTopics:
 
 ```python
 class SystemTopics:
-    APPLICATION_STATE  = "system/application_state"
-    SYSTEM_MODE_CHANGE = "system/mode_change"
-    COMMAND_CLEAN      = "glue/command/clean"
-    COMMAND_RESET      = "glue/command/reset_errors"
+    APPLICATION_STATE = "system/application_state"
 ```
 
-### `ApplicationState`
-
-```python
-class ApplicationState:
-    IDLE         = "idle"
-    STARTED      = "started"
-    PAUSED       = "paused"
-    INITIALIZING = "initializing"
-    CALIBRATING  = "calibrating"
-    STOPPED      = "stopped"
-    ERROR        = "error"
-```
+> **Note:** `SYSTEM_MODE_CHANGE`, `COMMAND_CLEAN`, and `COMMAND_RESET` were removed when the dashboard was migrated to `ProcessState`. The mode toggle, clean, and reset actions are now handled entirely within the controller and model — no longer published as broker topics.
 
 ### `BUTTON_STATE_MAP`
 
-Controls which buttons are enabled for each `ApplicationState`:
+Controls which buttons are enabled for each `ProcessState` value (from `src.engine.process.process_state`):
 
-| State | Start | Stop | Pause | Pause Label |
-|-------|-------|------|-------|------------|
-| `IDLE` | ✓ | ✗ | ✗ | "Pause" |
-| `STARTED` | ✗ | ✓ | ✓ | "Pause" |
-| `PAUSED` | ✗ | ✓ | ✓ | "Resume" |
-| `STOPPED` / `INITIALIZING` / `CALIBRATING` | ✗ | ✗ | ✗ | "Pause" |
-| `ERROR` | ✗ | ✓ | ✗ | "Pause" |
+| State | Start | Stop | Pause | Pause Label | Mode Toggle | Clean | Reset Errors |
+|-------|-------|------|-------|------------|-------------|-------|-------------|
+| `idle` | ✓ | ✗ | ✗ | "Pause" | ✓ | ✓ | ✗ |
+| `running` | ✗ | ✓ | ✓ | "Pause" | ✗ | ✗ | ✗ |
+| `paused` | ✗ | ✓ | ✓ | "Resume" | ✗ | ✗ | ✗ |
+| `stopped` | ✓ | ✗ | ✗ | "Pause" | ✓ | ✓ | ✗ |
+| `error` | ✗ | ✓ | ✗ | "Pause" | ✗ | ✗ | ✓ |
+
+Keys are `ProcessState.*.value` strings (`"idle"`, `"running"`, etc.). `_apply_button_state(state_str)` looks up the string in this map.
 
 ---
 
@@ -115,9 +103,11 @@ WeightCellService daemon thread
 User clicks Start
   → GlueDashboardView.start_requested.emit()
   → GlueDashboardController._on_start()
-  → model.start() → GlueDashboardService.start() → robot_service.enable_robot()
-  → _apply_button_state(ApplicationState.STARTED)
-  → broker.publish(SystemTopics.APPLICATION_STATE, ApplicationState.STARTED)
+  → model.start() → GlueDashboardService.start() (implements BaseProcess)
+  → BaseProcess._transition(RUNNING, _on_start)
+  → messaging.publish("process/glue/state", ProcessStateEvent(state=RUNNING))
+  → GlueDashboardController._on_process_state_str("running")
+  → _apply_button_state("running")
 ```
 
 ---
@@ -129,10 +119,12 @@ User clicks Start
 | `weight/cell/{cell_id}/reading` | `WeightReading` | `set_cell_weight(card_id, value)` |
 | `weight/cell/{cell_id}/state` | `CellStateEvent` | `set_cell_state(card_id, state)` |
 | `glue/cell/{card_id}/glue_type` | `str` | `set_cell_glue_type(card_id, glue_type)` |
-| `robot/state` | `RobotStateSnapshot` | `_apply_button_state(state.state)` |
-| `system/application_state` | `str` or `dict` | `_apply_button_state(state)` |
+| `robot/state` | `RobotStateSnapshot` | `_apply_button_state` (only when process is IDLE) |
+| `process/glue/state` | `ProcessStateEvent` | `_apply_button_state(event.state.value)` |
 
 Note: broker `card_id = cell_id + 1` (cards are 1-indexed, cells 0-indexed).
+
+Robot state only updates buttons when `_current_state == ProcessState.IDLE.value` — the process state takes priority once a process is running.
 
 ---
 

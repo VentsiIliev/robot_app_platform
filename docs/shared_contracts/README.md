@@ -28,7 +28,7 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 |------|--------|-------------|
 | `events/robot_events.py` | Implemented | `RobotTopics` — 4 robot state topics |
 | `events/weight_events.py` | Implemented | `WeightTopics`, `WeightReading`, `CellStateEvent`, `CellState` |
-| `events/process_events.py` | **Placeholder** | Empty — reserved for production process events |
+| `events/process_events.py` | **Placeholder** | Empty — reserved for cross-app process events (process state is in `src/engine/process/`) |
 | `events/vision_events.py` | **Placeholder** | Empty — reserved for vision / camera events |
 | `enums.py` | **Placeholder** | Empty — reserved for shared platform enums |
 | `constants.py` | **Placeholder** | Empty — reserved for shared platform constants |
@@ -54,6 +54,20 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 | `WeightTopics.reading(cell_id)` | `"weight/cell/{id}/reading"` | `WeightCellService` | `WeightReading` |
 | `WeightTopics.all_readings()` | `"weight/cell/all/reading"` | `WeightCellService` | `WeightReading` |
 
+### Process Topics (engine layer — not in shared_contracts)
+
+Process lifecycle events are defined in `src/engine/process/process_state.py`:
+
+| Method | Topic Pattern | Payload | Published By |
+|--------|--------------|---------|-------------|
+| `ProcessTopics.state(id)` | `"process/{id}/state"` | `ProcessStateEvent` | `BaseProcess._transition()` |
+| `ProcessTopics.error(id)` | `"process/{id}/error"` | *(reserved)* | *(reserved)* |
+
+```python
+# Import from engine/process, not shared_contracts:
+from src.engine.process.process_state import ProcessTopics, ProcessState, ProcessStateEvent
+```
+
 ### App-Specific Topics (not in shared_contracts)
 
 Some topic strings are defined in the robot app layer for app-specific events:
@@ -61,10 +75,7 @@ Some topic strings are defined in the robot app layer for app-specific events:
 | Topic String | Defined In | Description |
 |-------------|-----------|-------------|
 | `"glue/cell/{id}/glue_type"` | `dashboard/config.py::GlueCellTopics` | Glue type assigned to a cell |
-| `"system/application_state"` | `dashboard/config.py::SystemTopics` | Current app state (started/stopped/etc.) |
-| `"system/mode_change"` | `dashboard/config.py::SystemTopics` | Production mode toggle |
-| `"glue/command/clean"` | `dashboard/config.py::SystemTopics` | Clean command |
-| `"glue/command/reset_errors"` | `dashboard/config.py::SystemTopics` | Reset errors command |
+| `"system/application_state"` | `dashboard/config.py::SystemTopics` | Legacy system state topic (kept for external integrations) |
 
 ---
 
@@ -130,6 +141,8 @@ class RobotStateSnapshot:
 
 ## Placeholder Files
 
-`process_events.py`, `vision_events.py`, `enums.py`, and `constants.py` are currently empty. They exist to reserve module locations for future capabilities (process monitoring, camera events, shared enums). Do not remove them — imports referencing these modules should fail visibly rather than silently when the time comes to implement them.
+`process_events.py`, `vision_events.py`, `enums.py`, and `constants.py` are currently empty. They exist to reserve module locations for future capabilities. Do not remove them — imports referencing these modules should fail visibly rather than silently when the time comes to implement them.
+
+> **`process_events.py` note:** Per-process state (`ProcessState`, `ProcessStateEvent`, `ProcessTopics`) currently lives in `src/engine/process/process_state.py` — not here. `process_events.py` is reserved for higher-level cross-app process notifications if they are needed in future.
 
 → Details: [events/README.md](events/README.md)
