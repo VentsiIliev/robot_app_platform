@@ -17,3 +17,4 @@ class StubGlueDashboardService(IGlueDashboardService):
     def get_cell_glue_type(self, cell_id: int) -> Optional[str]: return "Type A"
     def get_all_glue_types(self) -> List[str]:                   return ["Type A", "Type B"]
     def get_initial_cell_state(self, cell_id: int) -> Optional[Dict]: return None
+    def get_cells_count(self) -> int: return 3

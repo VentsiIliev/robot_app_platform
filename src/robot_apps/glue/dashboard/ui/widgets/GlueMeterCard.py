@@ -3,38 +3,12 @@ from typing import Optional
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QFrame
 
-try:
-    from .GlueMeterWidget import GlueMeterWidget
-except ImportError:
-    from dashboard.glue.ui.widgets.GlueMeterWidget import GlueMeterWidget
 
-try:
-    from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
-except ImportError:
-    from dashboard.ui.widgets.shared.MaterialButton import MaterialButton
+from ..widgets.GlueMeterWidget import GlueMeterWidget
+from pl_gui.utils.utils_widgets. MaterialButton import MaterialButton
 
-try:
-    from src.dashboard.resources.styles import (
-        STATUS_UNKNOWN, STATUS_INITIALIZING, STATUS_READY,
-        STATUS_LOW_WEIGHT, STATUS_EMPTY, STATUS_ERROR, STATUS_DISCONNECTED,
-        CARD_STYLE, CARD_HEADER_STYLE, INFO_FRAME_STYLE, METER_FRAME_STYLE,
-    )
-except ImportError:
-    try:
-        from dashboard.styles import (
-            STATUS_UNKNOWN, STATUS_INITIALIZING, STATUS_READY,
-            STATUS_LOW_WEIGHT, STATUS_EMPTY, STATUS_ERROR, STATUS_DISCONNECTED,
-            CARD_STYLE, CARD_HEADER_STYLE, INFO_FRAME_STYLE, METER_FRAME_STYLE,
-        )
-    except ImportError:
-        STATUS_UNKNOWN = "#808080"
-        STATUS_INITIALIZING = "#FFA500"
-        STATUS_READY = "#28a745"
-        STATUS_LOW_WEIGHT = "#ffc107"
-        STATUS_EMPTY = "#dc3545"
-        STATUS_ERROR = "#d9534f"
-        STATUS_DISCONNECTED = "#6c757d"
-        CARD_STYLE = CARD_HEADER_STYLE = INFO_FRAME_STYLE = METER_FRAME_STYLE = ""
+# TODO fix the styles imports
+from pl_gui.dashboard.resources.styles import *
 
 
 class GlueMeterCard(QFrame):

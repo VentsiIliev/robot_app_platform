@@ -151,7 +151,7 @@ class GlueDashboardController:
             self._logger.warning("No glue type selected for cell %s", cell_id)
             return
 
-        self._model.change_glue(cell_id, selected)  # ← persist + log
+        self._model.change_glue(int(cell_id-1), selected)  # ← persist + log USE CELL_ID-1 because model/service expect 0-based index
         self._view.set_cell_glue_type(cell_id, selected)  # ← update UI
         self._logger.info("Cell %s glue type changed to '%s'", cell_id, selected)
 

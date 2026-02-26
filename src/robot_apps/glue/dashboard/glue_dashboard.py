@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QWidget
 
+from pl_gui.dashboard.config import CardConfig
 from src.engine.core.message_broker import MessageBroker
-from src.robot_apps.glue.dashboard.config import GlueDashboardConfig, GLUE_CELLS, ACTION_BUTTONS
+from src.robot_apps.glue.dashboard import config
 from src.robot_apps.glue.dashboard.controller.glue_dashboard_controller import GlueDashboardController
 from src.robot_apps.glue.dashboard.model.glue_dashboard_model import GlueDashboardModel
 from src.robot_apps.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
@@ -15,10 +16,20 @@ class GlueDashboard:
 
     @staticmethod
     def create(service: IGlueDashboardService, broker: MessageBroker) -> QWidget:
-        config     = GlueDashboardConfig()
-        model      = GlueDashboardModel(service, config)
-        cards      = GlueCardFactory(model).build_cards(GLUE_CELLS)
-        view       = GlueDashboardView(config=config, action_buttons=ACTION_BUTTONS, cards=cards)
+
+        cells_count = service.get_cells_count()
+        config.GLUE_CELLS  = []
+        for i in range(cells_count):
+            config.GLUE_CELLS.append(CardConfig(card_id= i+1,label = f"Cell {i+1}"))
+
+        configuration     = config.GlueDashboardConfig()
+        model      = GlueDashboardModel(service, configuration)
+        cards      = GlueCardFactory(model).build_cards(config.GLUE_CELLS)
+        try:
+            view       = GlueDashboardView(config=config.DashboardConfig, action_buttons=config.ACTION_BUTTONS, cards=cards)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
         controller = GlueDashboardController(model, view, broker)
         controller.start()
         return view

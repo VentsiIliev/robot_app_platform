@@ -21,6 +21,7 @@ class GlueDashboardModel:
     def get_cell_glue_type(self, cell_id: int) -> Optional[str]: return self._service.get_cell_glue_type(cell_id)
     def get_all_glue_types(self) -> List[str]:                   return self._service.get_all_glue_types()
     def get_initial_cell_state(self, cell_id: int) -> Optional[Dict]: return self._service.get_initial_cell_state(cell_id)
+    def get_cells_count(self) -> int: return self._service.get_cells_count()
 
     def start(self)                                   -> None: self._service.start()
     def stop(self)                                    -> None: self._service.stop()

@@ -44,3 +44,6 @@ class IGlueDashboardService(ABC):
 
     @abstractmethod
     def get_initial_cell_state(self, cell_id: int) -> Optional[Dict]: ...
+
+    @abstractmethod
+    def get_cells_count(self) -> int: ...

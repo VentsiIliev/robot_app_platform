@@ -43,7 +43,9 @@ class GlueDashboardService(IGlueDashboardService):
         self._logger.info("set_mode → %s", mode)
 
     def change_glue(self, cell_id: int, glue_type: str) -> None:
+
         self._logger.info("change_glue → cell=%s type='%s'", cell_id, glue_type)
+        self._logger.info(f"id type{cell_id} glue_type {type(glue_type)}")
         try:
             cells: GlueCellsConfig = self._settings.get("glue_cells")
             cell = cells.get_cell_by_id(cell_id)
@@ -90,3 +92,12 @@ class GlueDashboardService(IGlueDashboardService):
 
     def get_initial_cell_state(self, cell_id: int) -> Optional[Dict]:
         return None
+
+    def get_cells_count(self) -> int:
+        try:
+            cells: GlueCellsConfig = self._settings.get("glue_cells")
+            self._logger.info("printing cells count: %s", len(cells.cells))
+            return len(cells.cells)
+        except Exception:
+            self._logger.error("Error fetching cells count, returning 0")
+            return 0
