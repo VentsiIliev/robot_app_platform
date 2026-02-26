@@ -1,7 +1,10 @@
+import inspect
 import json
 import os
 import tempfile
 import unittest
+
+from src.robot_apps.glue.glue_robot_app import GlueRobotApp
 
 from src.engine.repositories.settings_service_factory import build_from_specs
 from src.robot_apps.base_robot_app import SettingsSpec
@@ -12,12 +15,16 @@ from src.robot_apps.glue.settings.robot import (
     SafetyLimits,
 )
 
+APP_NAME = GlueRobotApp.__name__.lower()  # "gluerobotapp" — derived from actual class
+
+
+def _get_settings_path(app_class, settings_root: str, storage_key: str) -> str:
+    """Mirror exactly what build_from_specs does."""
+    app_dir = os.path.dirname(inspect.getfile(app_class))
+    return os.path.join(app_dir, settings_root, storage_key)
+
 
 class TestRobotSettingsSerialiser(unittest.TestCase):
-
-    # ------------------------------------------------------------------
-    # RobotSettings dataclass
-    # ------------------------------------------------------------------
 
     def test_default_values(self):
         s = RobotSettings()
@@ -94,27 +101,25 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_creates_default_file_and_loads_on_first_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
 
             config = service.get("robot_config")
 
-            # File was created on disk
-            expected_path = os.path.join(tmp, "glueapplication", "robot", "config.json")
+            expected_path = os.path.join(tmp, APP_NAME, "robot", "config.json")
             self.assertTrue(os.path.exists(expected_path))
 
-            # Loaded object is correct type with defaults
             self.assertIsInstance(config, RobotSettings)
             self.assertEqual(config.robot_ip, "192.168.58.2")
 
     def test_loads_existing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "glueapplication", "robot", "config.json")
+            path = os.path.join(tmp, APP_NAME, "robot", "config.json")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
                 json.dump({"ROBOT_IP": "10.0.0.99", "ROBOT_TOOL": 5}, f)
 
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
             config = service.get("robot_config")
 
             self.assertEqual(config.robot_ip, "10.0.0.99")
@@ -123,7 +128,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_get_returns_cached_instance(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
 
             first  = service.get("robot_config")
             second = service.get("robot_config")
@@ -131,18 +136,18 @@ class TestSettingsServiceIntegration(unittest.TestCase):
 
     def test_reload_returns_fresh_instance(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "glueapplication", "robot", "config.json")
+            path = os.path.join(tmp, APP_NAME, "robot", "config.json")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
-                json.dump({"ROBOT_IP": "10.0.0.1"}, f)
+                json.dump({"ROBOT_IP": "10.0.0.1", "ROBOT_TOOL": 1}, f)
 
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
             first = service.get("robot_config")
+            self.assertEqual(first.robot_ip, "10.0.0.1")
 
-            # Simulate file change
             with open(path, "w") as f:
-                json.dump({"ROBOT_IP": "10.0.0.2"}, f)
+                json.dump({"ROBOT_IP": "10.0.0.2", "ROBOT_TOOL": 1}, f)
 
             reloaded = service.reload("robot_config")
             self.assertEqual(reloaded.robot_ip, "10.0.0.2")
@@ -151,20 +156,23 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_save_persists_to_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
 
             config = service.get("robot_config")
             config.robot_ip = "192.168.1.50"
             service.save("robot_config", config)
 
-            # Reload fresh from file
             reloaded = service.reload("robot_config")
             self.assertEqual(reloaded.robot_ip, "192.168.1.50")
 
     def test_unknown_key_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_name="GlueApplication")
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
 
             with self.assertRaises(KeyError):
                 service.get("nonexistent")
+
+
+if __name__ == "__main__":
+    unittest.main()
