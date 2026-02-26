@@ -1,0 +1,119 @@
+# `src/engine/robot/` — Robot Module Overview
+
+The `robot` package is the heart of the motion control system. It implements the full robot service stack from the physical driver layer up to high-level navigation and tool management, all behind well-defined interfaces.
+
+---
+
+## Package Structure
+
+```
+robot/
+├── interfaces/            ← Abstract contracts for all robot subsystems
+├── configuration/         ← Settings dataclasses (RobotSettings, RobotCalibrationSettings)
+├── enums/                 ← RobotAxis, Direction, ImageToRobotMapping
+├── safety/                ← SafetyChecker (workspace bounds enforcement)
+├── features/              ← NavigationService (named positions), RobotToolService
+├── services/              ← MotionService, RobotStateManager, RobotService, factory
+├── drivers/
+│   └── fairino/           ← FairinoRobot, TestRobotWrapper
+├── tool_changer.py        ← ToolChanger (slot ↔ gripper mapping)
+└── tool_manager.py        ← ToolManager (pick-and-place logic)
+```
+
+---
+
+## Architecture
+
+### Service Composition Hierarchy
+
+```
+IRobotService (public contract — what plugins see)
+└── RobotService
+      ├── IMotionService → MotionService
+      │     ├── IRobot → FairinoRobot (production) / TestRobotWrapper (dev)
+      │     └── ISafetyChecker → SafetyChecker
+      └── IRobotStateProvider → RobotStateManager
+            ├── IRobot (same instance as above)
+            └── IStatePublisher → RobotStatePublisher → IMessagingService
+```
+
+All inter-layer communication goes through interfaces. `RobotService` never knows about `FairinoRobot`; `MotionService` never knows about `RobotStateManager`. This allows each layer to be tested and replaced independently.
+
+### Optional Tool Service
+
+```
+RobotService.tools: Optional[IToolService]
+└── RobotToolService
+      └── ToolManager
+            ├── IMotionService (shared with motion layer)
+            └── IToolChanger → ToolChanger (slot ↔ tool ID registry)
+```
+
+Tool service is only wired if a `tool_changer` is provided to `create_robot_service()`.
+
+---
+
+## Full Interface Hierarchy
+
+```
+IRobotLifecycle
+  enable_robot() / disable_robot()
+      │
+      ┤ (also inherits)
+      │
+IMotionService
+  move_ptp() / move_linear() / start_jog() / stop_motion() / get_current_position()
+      │
+      └── IRobotService   ← the single interface plugins import
+              + get_current_velocity()
+              + get_current_acceleration()
+              + get_state() / get_state_topic()
+```
+
+---
+
+## Wiring
+
+All components are assembled by `create_robot_service()` in `services/robot_service_factory.py`:
+
+```python
+from src.engine.robot.services.robot_service_factory import create_robot_service
+
+robot_service = create_robot_service(
+    robot=FairinoRobot(ip="192.168.58.2"),
+    messaging_service=messaging,
+    settings_service=settings,  # optional — enables safety checks
+    tool_changer=None,           # optional — enables tool service
+)
+```
+
+The factory:
+1. Creates `SafetyChecker(settings_service)`
+2. Creates `MotionService(robot, safety_checker)`
+3. Creates `RobotStatePublisher(messaging_service)`
+4. Creates `RobotStateManager(robot, publisher)` and starts its monitoring thread
+5. Optionally creates `RobotToolService`
+6. Returns `RobotService(motion, robot, state_manager, tool_service)`
+
+---
+
+## Subpackage Documentation
+
+| Subpackage | Key Classes | Docs |
+|-----------|------------|------|
+| `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService` | [interfaces/](interfaces/README.md) |
+| `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `RobotCalibrationSettings` | [configuration/](configuration/README.md) |
+| `enums/` | `RobotAxis`, `Direction`, `ImageToRobotMapping` | [enums/](enums/README.md) |
+| `safety/` | `SafetyChecker` | [safety/](safety/README.md) |
+| `features/` | `NavigationService`, `RobotToolService` | [features/](features/README.md) |
+| `services/` | `MotionService`, `RobotStateManager`, `RobotService`, `create_robot_service` | [services/](services/README.md) |
+| `drivers/fairino/` | `FairinoRobot`, `TestRobotWrapper` | [drivers/fairino/](drivers/fairino/README.md) |
+
+---
+
+## Design Notes
+
+- **No Qt in `robot/`**: Every class in this package is pure Python. Qt widgets subscribe to topics on the messaging bus to receive robot state updates.
+- **State monitoring runs in a daemon thread**: `RobotStateManager` polls the robot at 0.5s intervals. The thread is daemonized and doesn't block process exit.
+- **Position format**: All positions are `List[float]` with 6 elements: `[x, y, z, rx, ry, rz]` in mm and degrees.
+- **Return codes vs booleans**: `IRobot` methods return `int` (0 = success, SDK error code otherwise). `IMotionService` wraps these and returns `bool` (`True` = success). This distinction is maintained at the interface boundary.
