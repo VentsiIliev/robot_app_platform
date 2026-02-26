@@ -1,20 +1,18 @@
 from __future__ import annotations
+import logging
 from dataclasses import replace
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional, Callable
 
+from src.engine.application import IApplicationManager
+from src.engine.process import ProcessRequirements
 from src.engine.core.i_messaging_service import IMessagingService
-from src.engine.application.i_application_manager import IApplicationManager
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.process.base_process import BaseProcess
-from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.robot_apps.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
 from src.robot_apps.glue.settings.cells import GlueCellsConfig
 from src.robot_apps.glue.settings.glue_types import GlueCatalog
-
-# Gluing requires robot + vision — cannot dispense without motion or alignment
-GLUE_REQUIREMENTS = ProcessRequirements.requires("robot", "vision")
 
 
 class GlueDashboardService(BaseProcess, IGlueDashboardService):
@@ -25,24 +23,22 @@ class GlueDashboardService(BaseProcess, IGlueDashboardService):
         robot_service:    IRobotService,
         settings_service: ISettingsService,
         messaging:        IMessagingService,
-        weight_service:   Optional[IWeightCellService]  = None,
-        app_manager:      Optional[IApplicationManager] = None,
+        weight_service:   Optional[IWeightCellService]    = None,
+        app_manager:      Optional[IApplicationManager]   = None,
         service_checker:  Optional[Callable[[str], bool]] = None,
+        requirements:     Optional[ProcessRequirements]   = None,
     ):
         BaseProcess.__init__(
             self,
             process_id      = process_id,
             messaging       = messaging,
             app_manager     = app_manager,
-            requirements    = GLUE_REQUIREMENTS,
+            requirements    = requirements,
             service_checker = service_checker,
         )
         self._robot    = robot_service
         self._settings = settings_service
         self._weight   = weight_service
-        self._logger.info(
-            "GlueDashboardService requires: %s", sorted(GLUE_REQUIREMENTS.services)
-        )
 
     # ── BaseProcess hooks ─────────────────────────────────────────────
 

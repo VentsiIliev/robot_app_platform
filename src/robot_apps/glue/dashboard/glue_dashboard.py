@@ -3,6 +3,7 @@ from typing import Callable, Optional
 
 from PyQt6.QtWidgets import QWidget
 
+from src.engine.process import ProcessRequirements
 from pl_gui.dashboard.config import CardConfig
 from src.engine.application.i_application_manager import IApplicationManager
 from src.engine.core.i_messaging_service import IMessagingService
@@ -24,19 +25,21 @@ class GlueDashboard:
         robot_service:     IRobotService,
         settings_service:  ISettingsService,
         messaging_service: IMessagingService,
-        weight_service:    Optional[IWeightCellService]   = None,
-        app_manager:       Optional[IApplicationManager]  = None,
+        weight_service:    Optional[IWeightCellService]    = None,
+        app_manager:       Optional[IApplicationManager]   = None,
         service_checker:   Optional[Callable[[str], bool]] = None,
+        requirements:      Optional[ProcessRequirements]   = None,
     ) -> QWidget:
 
         service = GlueDashboardService(
-            process_id      = "glue",
-            robot_service   = robot_service,
+            process_id       = "glue",
+            robot_service    = robot_service,
             settings_service = settings_service,
             messaging        = messaging_service,
             weight_service   = weight_service,
             app_manager      = app_manager,
             service_checker  = service_checker,
+            requirements     = requirements,
         )
 
         cells_count = service.get_cells_count()

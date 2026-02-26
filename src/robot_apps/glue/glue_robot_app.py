@@ -1,5 +1,6 @@
 import os
 
+from src.engine.process import ProcessRequirements
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.robot.features.navigation_service import NavigationService
@@ -16,6 +17,13 @@ from src.robot_apps.glue.settings.glue_types import GlueCatalogSerializer
 from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
 
 
+# ── Process requirements ──────────────────────────────────────────────────────
+# Defined at the app level — the app knows what each of its processes needs.
+
+_GLUE_PROCESS_REQUIREMENTS  = ProcessRequirements.requires("robot" )
+_CLEAN_PROCESS_REQUIREMENTS = ProcessRequirements.requires("robot")
+
+
 # ── Plugin factories ──────────────────────────────────────────────────────────
 
 def _build_dashboard_plugin(robot_app):
@@ -24,12 +32,13 @@ def _build_dashboard_plugin(robot_app):
 
     return WidgetPlugin(
         widget_factory=lambda ms: GlueDashboard.create(
-            robot_service    = robot_app.get_service("robot"),
-            settings_service = robot_app._settings_service,
+            robot_service     = robot_app.get_service("robot"),
+            settings_service  = robot_app._settings_service,
             messaging_service = ms,
-            weight_service   = robot_app.get_optional_service("weight"),
-            app_manager      = robot_app.application_manager,
-            service_checker  = lambda name: robot_app.get_optional_service(name) is not None,
+            weight_service    = robot_app.get_optional_service("weight"),
+            app_manager       = robot_app.application_manager,
+            service_checker   = lambda name: robot_app.get_optional_service(name) is not None,
+            requirements      = _GLUE_PROCESS_REQUIREMENTS,
         )
     )
 
