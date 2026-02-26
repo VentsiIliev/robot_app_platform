@@ -11,11 +11,13 @@ from src.robot_apps.base_robot_app import (
 from src.robot_apps.glue.settings.cells import GlueCellsConfigSerializer
 from src.robot_apps.glue.settings.glue import GlueSettingsSerializer
 from src.robot_apps.glue.settings.glue_types import GlueCatalogSerializer
-from src.robot_apps.glue.settings.robot import RobotSettingsSerializer
+from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
+
+
 
 
 def _build_dashboard_plugin(robot_app):
-    from src.plugins.dashboard.dashboard_plugin import DashboardPlugin
+    from src.plugins.base.widget_plugin import WidgetPlugin          # ← changed
     from src.robot_apps.glue.dashboard.glue_dashboard import GlueDashboard
     from src.robot_apps.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 
@@ -24,24 +26,38 @@ def _build_dashboard_plugin(robot_app):
         settings_service=robot_app._settings_service,
     )
 
-    return DashboardPlugin(
-        widget_factory=lambda broker: GlueDashboard.create(service=service, broker=broker)
+    return WidgetPlugin(                                              # ← changed
+        widget_factory=lambda messaging_service: GlueDashboard.create(service=service, messaging_service=messaging_service)
     )
 
 
-
 def _build_robot_settings_plugin(robot_app):
-    from src.plugins.robot_settings.robot_settings_plugin import RobotSettingsPlugin
-    return RobotSettingsPlugin(
-        settings_service=robot_app._settings_service,
+    from src.plugins.base.widget_plugin import WidgetPlugin
+    from src.plugins.robot_settings.robot_settings_factory import RobotSettingsFactory
+    from src.plugins.robot_settings.service.robot_settings_plugin_service import RobotSettingsPluginService
+
+    service = RobotSettingsPluginService(robot_app._settings_service)
+    factory = RobotSettingsFactory()
+    return WidgetPlugin(
+        widget_factory=lambda _ms: factory.build(service)
     )
 
 
 def _build_glue_settings_plugin(robot_app):
-    from src.plugins.glue_settings.glue_settings_plugin import GlueSettingsPlugin
-    return GlueSettingsPlugin(
-        settings_service=robot_app._settings_service,
-    )
+    from src.plugins.base.widget_plugin import WidgetPlugin
+    from src.robot_apps.glue.glue_settings import GlueSettingsFactory, GlueSettingsPluginService
+
+    service = GlueSettingsPluginService(robot_app._settings_service)
+    factory = GlueSettingsFactory()
+    return WidgetPlugin(widget_factory=lambda _ms: factory.build(service))
+
+def _build_modbus_settings_plugin(robot_app):
+    from src.plugins.base.widget_plugin import WidgetPlugin
+    from src.plugins.modbus_settings import ModbusSettingsFactory, ModbusSettingsPluginService
+
+    service = ModbusSettingsPluginService(robot_app._settings_service)
+    factory = ModbusSettingsFactory()
+    return WidgetPlugin(widget_factory=lambda _ms: factory.build(service))
 
 
 class GlueRobotApp(BaseRobotApp):
@@ -61,19 +77,23 @@ class GlueRobotApp(BaseRobotApp):
             FolderSpec(folder_id=3, name="ADMIN",      display_name="Administration"),
         ],
         plugins=[
-            PluginSpec(name="DashboardPlugin",     folder_id=1, icon="fa5s.tachometer-alt", factory=_build_dashboard_plugin),
-            # PluginSpec(name="RobotSettingsPlugin", folder_id=2, icon="fa5s.robot",          factory=_build_robot_settings_plugin),
-            # PluginSpec(name="GlueSettingsPlugin",  folder_id=2, icon="fa5s.sliders-h",      factory=_build_glue_settings_plugin),
+            PluginSpec(name="GlueDashboard", folder_id=1, icon="fa5s.tachometer-alt", factory=_build_dashboard_plugin),
+            PluginSpec(name="RobotSettings", folder_id=2, icon="fa5s.robot", factory=_build_robot_settings_plugin),
+            PluginSpec(name="GlueSettings", folder_id=2, icon="fa5s.sliders-h", factory=_build_glue_settings_plugin),
+            PluginSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired", factory=_build_modbus_settings_plugin),
         ],
+
     )
 
     settings_specs = [
-        SettingsSpec("robot_config",  RobotSettingsSerializer(),   "robot/config.json"),
-        SettingsSpec("glue_settings", GlueSettingsSerializer(),    "glue/settings.json"),
-        SettingsSpec("glue_cells",    GlueCellsConfigSerializer(), "glue/cells.json"),
-        SettingsSpec("glue_catalog",  GlueCatalogSerializer(),     "glue/catalog.json"),
-        SettingsSpec("modbus_config", ModbusConfigSerializer(),    "hardware/modbus.json"),
+        SettingsSpec("robot_config",       RobotSettingsSerializer(),            "robot/config.json"),
+        SettingsSpec("robot_calibration",  RobotCalibrationSettingsSerializer(), "robot/calibration.json"),
+        SettingsSpec("glue_settings",      GlueSettingsSerializer(),             "glue/settings.json"),
+        SettingsSpec("glue_cells",         GlueCellsConfigSerializer(),          "glue/cells.json"),
+        SettingsSpec("glue_catalog",       GlueCatalogSerializer(),              "glue/catalog.json"),
+        SettingsSpec("modbus_config",      ModbusConfigSerializer(),             "hardware/modbus.json"),
     ]
+
 
     services = [
         ServiceSpec("robot",      IRobotService,    required=True,  description="Motion and lifecycle control"),
@@ -88,6 +108,7 @@ class GlueRobotApp(BaseRobotApp):
         self._vision        = self.get_optional_service("vision")
         self._tools         = self.get_optional_service("tools")
         self._robot_config  = self.get_settings("robot_config")
+        self._robot_calibration = self.get_settings("robot_calibration")
         self._glue_settings = self.get_settings("glue_settings")
         self._glue_cells    = self.get_settings("glue_cells")
         self._glue_catalog  = self.get_settings("glue_catalog")

@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QFrame, Q
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
-from src.settings.settings_view.styles import PRIMARY, PRIMARY_DARK, BORDER
+from pl_gui.settings.settings_view.styles import PRIMARY, PRIMARY_DARK, BORDER
 
 
 class TouchSpinBox(QFrame):

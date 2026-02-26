@@ -4,9 +4,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from src.settings.settings_view.schema import SettingGroup, SettingField
-from src.settings.settings_view.styles import GROUP_STYLE, LABEL_STYLE
-from src.settings.settings_view.widget_factory import get_handler, WidgetHandler
+from pl_gui.settings.settings_view.schema import SettingGroup, SettingField
+from pl_gui.settings.settings_view.styles import GROUP_STYLE, LABEL_STYLE
+from pl_gui.settings.settings_view.widget_factory import get_handler, WidgetHandler
 
 
 class GenericSettingGroup(QGroupBox):

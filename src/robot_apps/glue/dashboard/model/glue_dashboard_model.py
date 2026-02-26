@@ -2,16 +2,29 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
+from src.plugins.base.i_plugin_model import IPluginModel
 from src.robot_apps.glue.dashboard.config import GlueDashboardConfig
 from src.robot_apps.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
 
 
-class GlueDashboardModel:
+class GlueDashboardModel(IPluginModel):
 
     def __init__(self, service: IGlueDashboardService, config: GlueDashboardConfig = None):
         self._service = service
         self._config  = config or GlueDashboardConfig()
         self._logger  = logging.getLogger(self.__class__.__name__)
+
+    # ── IPluginModel contract ─────────────────────────────────────────────
+
+    def load(self) -> GlueDashboardConfig:
+        """Return the dashboard config — initial state is pulled per-cell by the controller."""
+        return self._config
+
+    def save(self, *args, **kwargs) -> None:
+        """Not applicable — dashboard state is not persisted."""
+        pass
+
+    # ── Properties ───────────────────────────────────────────────────────
 
     @property
     def config(self) -> GlueDashboardConfig:

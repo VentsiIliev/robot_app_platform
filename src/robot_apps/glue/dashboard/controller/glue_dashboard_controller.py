@@ -4,7 +4,8 @@ from typing import Callable, List, Tuple
 
 from PyQt6.QtCore import QCoreApplication
 
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
+from src.plugins.base.i_plugin_controller import IPluginController
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.robot_apps.glue.dashboard.config import (
     ACTION_BUTTONS, BUTTON_STATE_MAP, GLUE_CELLS,
@@ -14,9 +15,9 @@ from src.robot_apps.glue.dashboard.model.glue_dashboard_model import GlueDashboa
 from src.robot_apps.glue.dashboard.view.glue_dashboard_view import GlueDashboardView
 
 
-class GlueDashboardController:
+class GlueDashboardController(IPluginController):
 
-    def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: MessageBroker):
+    def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: IMessagingService):
         self._model  = model
         self._view   = view
         self._broker = broker
@@ -25,7 +26,8 @@ class GlueDashboardController:
         self._current_state = ApplicationState.IDLE
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def start(self) -> None:
+    def load(self) -> None:
+        """IPluginController contract — wire broker, connect signals, initialise view."""
         self._subscribe()
         self._connect_signals()
         self._initialize_view()

@@ -1,8 +1,8 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pl_gui.shell.app_registry import build_app_registry
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
 
 _LOGGER = logging.getLogger("PluginLoader")
 
@@ -25,7 +25,6 @@ class _PluginManager:
 
 
 class _WidgetFactory:
-    """Delegates create_widget(app_name) to the matching plugin."""
 
     def __init__(self, manager: _PluginManager):
         self._manager = manager
@@ -47,15 +46,21 @@ class _WidgetFactory:
 
 class PluginLoader:
 
-    def __init__(self, broker: MessageBroker):
-        self._broker = broker
+    def __init__(self, messaging_service: IMessagingService):
+        self._messaging_service  = messaging_service
         self._manager = _PluginManager()
 
-    def load(self, plugin: Any, folder_id: int, icon: str = "fa5s.cog") -> 'PluginLoader':
-        name = type(plugin).__name__
+    def load(
+        self,
+        plugin: Any,
+        folder_id: int,
+        icon: str = "fa5s.cog",
+        name: Optional[str] = None,          # ← explicit name; falls back to class name
+    ) -> 'PluginLoader':
+        name = name or type(plugin).__name__
         try:
             if hasattr(plugin, "register"):
-                plugin.register(self._broker)
+                plugin.register(self._messaging_service)
             self._manager.register(name, plugin, folder_id, icon)
         except Exception:
             _LOGGER.exception("Failed to load plugin: %s", name)

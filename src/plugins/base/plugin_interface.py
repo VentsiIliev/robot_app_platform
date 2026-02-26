@@ -1,16 +1,12 @@
 from abc import ABC, abstractmethod
-
 from PyQt6.QtWidgets import QWidget
-
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
 
 
 class IPlugin(ABC):
 
     @abstractmethod
-    def register(self, broker: MessageBroker) -> None:
-        ...
+    def register(self, messaging_service: IMessagingService) -> None: ...
 
     @abstractmethod
-    def create_widget(self) -> QWidget:
-        ...
+    def create_widget(self) -> QWidget: ...

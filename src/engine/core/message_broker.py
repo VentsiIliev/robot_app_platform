@@ -1,9 +1,10 @@
 import logging
 import weakref
 from typing import Dict, List, Any, Callable
+from src.engine.core.i_messaging_service import IMessagingService
 
 
-class MessageBroker:
+class MessageBroker(IMessagingService):
     _instance = None
 
     def __new__(cls):

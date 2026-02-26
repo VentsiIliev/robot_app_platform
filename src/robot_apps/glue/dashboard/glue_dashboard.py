@@ -3,7 +3,7 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QWidget
 
 from pl_gui.dashboard.config import CardConfig
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
 from src.robot_apps.glue.dashboard import config
 from src.robot_apps.glue.dashboard.controller.glue_dashboard_controller import GlueDashboardController
 from src.robot_apps.glue.dashboard.model.glue_dashboard_model import GlueDashboardModel
@@ -15,7 +15,7 @@ from src.robot_apps.glue.dashboard.view.glue_dashboard_view import GlueDashboard
 class GlueDashboard:
 
     @staticmethod
-    def create(service: IGlueDashboardService, broker: MessageBroker) -> QWidget:
+    def create(service: IGlueDashboardService, messaging_service: IMessagingService) -> QWidget:
 
         cells_count = service.get_cells_count()
         config.GLUE_CELLS  = []
@@ -25,11 +25,10 @@ class GlueDashboard:
         configuration     = config.GlueDashboardConfig()
         model      = GlueDashboardModel(service, configuration)
         cards      = GlueCardFactory(model).build_cards(config.GLUE_CELLS)
-        try:
-            view       = GlueDashboardView(config=config.DashboardConfig, action_buttons=config.ACTION_BUTTONS, cards=cards)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-        controller = GlueDashboardController(model, view, broker)
-        controller.start()
+
+        view       = GlueDashboardView(config=config.DashboardConfig, action_buttons=config.ACTION_BUTTONS, cards=cards)
+
+        controller = GlueDashboardController(model, view, messaging_service)
+        controller.load()
+        view._controller = controller  # explicit ownership — do not rely on _subs lambdas
         return view

@@ -36,7 +36,7 @@ def main() -> None:
     robot_app = (
         AppBuilder()
         .with_robot(TestRobotWrapper())
-        .with_broker(ctx.broker)
+        .with_messaging_service(ctx.messaging_service)
         .build(GlueRobotApp)
     )
 
@@ -47,14 +47,14 @@ def main() -> None:
     qt_app = QApplication(sys.argv)
 
     # 5 — load plugins — factory lives on each PluginSpec, bootstrap knows nothing
-    loader = PluginLoader(ctx.broker)
+    loader = PluginLoader(ctx.messaging_service)
     for spec in GlueRobotApp.shell.plugins:
         if spec.factory is None:
             _LOGGER.warning("PluginSpec '%s' has no factory — skipping", spec.name)
             continue
         try:
             plugin = spec.factory(robot_app)
-            loader.load(plugin, folder_id=spec.folder_id, icon=spec.icon)
+            loader.load(plugin, folder_id=spec.folder_id, icon=spec.icon, name=spec.name)  # ← pass name
         except Exception:
             _LOGGER.exception("Failed to build plugin '%s'", spec.name)
 

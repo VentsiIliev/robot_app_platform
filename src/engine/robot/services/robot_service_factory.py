@@ -1,6 +1,6 @@
 from typing import Optional
 
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.robot.features.tool_service import RobotToolService
 from src.engine.robot.interfaces.i_robot import IRobot
 from src.engine.robot.interfaces.i_robot_service import IRobotService
@@ -14,13 +14,13 @@ from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
 
 def create_robot_service(
     robot: IRobot,
+    messaging_service: IMessagingService,          # ← required, no default
     settings_service=None,
     tool_changer=None,
-    broker: Optional[MessageBroker] = None,
 ) -> IRobotService:
     safety    = SafetyChecker(settings_service)
     motion    = MotionService(robot, safety)
-    publisher = RobotStatePublisher(broker or MessageBroker())
+    publisher = RobotStatePublisher(messaging_service)   # ← no fallback
     state     = RobotStateManager(robot, publisher=publisher)
     state.start_monitoring()
 

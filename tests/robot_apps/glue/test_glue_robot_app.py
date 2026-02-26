@@ -6,7 +6,8 @@ import unittest
 from src.robot_apps.glue.glue_robot_app import GlueRobotApp
 from src.engine.repositories.settings_service_factory import build_from_specs
 from src.robot_apps.base_robot_app import SettingsSpec
-from src.robot_apps.glue.settings.robot import RobotSettingsSerializer
+from src.engine.robot.configuration import RobotSettingsSerializer
+
 
 APP_NAME = GlueRobotApp.__name__.lower()  # derive from class, not hardcoded
 

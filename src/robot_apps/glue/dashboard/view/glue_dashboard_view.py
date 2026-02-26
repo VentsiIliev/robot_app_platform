@@ -1,9 +1,9 @@
 from PyQt6.QtCore import pyqtSignal, QEvent
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from pl_gui.shell.base_app_widget.AppWidget import AppWidget
+from src.plugins.base.i_plugin_view import IPluginView
 
 
-class GlueDashboardView(AppWidget):
+class GlueDashboardView(IPluginView):
     """View — pure Qt widget. No broker, no services, no business logic."""
 
     LOGOUT_REQUEST   = pyqtSignal()
@@ -30,10 +30,18 @@ class GlueDashboardView(AppWidget):
             cards=self._cards_input,
         )
         layout.addWidget(self._dashboard)
-        self._dashboard.start_requested.connect(self.start_requested.emit)
-        self._dashboard.stop_requested.connect(self.stop_requested.emit)
-        self._dashboard.pause_requested.connect(self.pause_requested.emit)
-        self._dashboard.action_requested.connect(self.action_requested.emit)
+        # ✓ Named methods — never .emit or lambda
+        self._dashboard.start_requested.connect(self._on_inner_start)
+        self._dashboard.stop_requested.connect(self._on_inner_stop)
+        self._dashboard.pause_requested.connect(self._on_inner_pause)
+        self._dashboard.action_requested.connect(self._on_inner_action)
+
+    # ── Named forwarders ─────────────────────────────────────────────────
+
+    def _on_inner_start(self)          -> None: self.start_requested.emit()
+    def _on_inner_stop(self)           -> None: self.stop_requested.emit()
+    def _on_inner_pause(self)          -> None: self.pause_requested.emit()
+    def _on_inner_action(self, action) -> None: self.action_requested.emit(action)
 
     def set_cell_weight(self, card_id: int, grams: float) -> None:       self._dashboard.set_cell_weight(card_id, grams)
     def set_cell_state(self, card_id: int, state: str) -> None:          self._dashboard.set_cell_state(card_id, state)

@@ -4,7 +4,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Type, TypeVar
 
-from src.engine.core.message_broker import MessageBroker
+from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.core.messaging_service import MessagingService
+
 from src.engine.repositories.settings_service_factory import build_from_specs
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.features.tool_service import RobotToolService
@@ -29,7 +31,7 @@ class _BuildContext:
     motion: IMotionService
     settings: Any
     tool_changer: Any
-    broker: MessageBroker       # ← added
+    messaging_service: IMessagingService       # ← added
 
 
 ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
@@ -40,7 +42,7 @@ ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
 # ---------------------------------------------------------------------------
 
 def _build_robot_service(ctx: _BuildContext) -> IRobotService:
-    publisher = RobotStatePublisher(ctx.broker)   # ← wired here
+    publisher = RobotStatePublisher(ctx.messaging_service)   # ← wired here
     state = RobotStateManager(ctx.robot, publisher=publisher)
     state.start_monitoring()
     return RobotService(motion=ctx.motion, robot=ctx.robot, state_provider=state)
@@ -81,7 +83,7 @@ class AppBuilder:
         self._robot: Optional[IRobot] = None
         self._settings: Any = None
         self._tool_changer: Any = None
-        self._broker: MessageBroker = MessageBroker()   # singleton by default
+        self._messaging_service: Optional[IMessagingService] = None   # ← no default
         self._registry: Dict[Type, ServiceBuilderFn] = dict(_DEFAULT_REGISTRY)
 
     def with_robot(self, robot: IRobot) -> AppBuilder:
@@ -96,8 +98,8 @@ class AppBuilder:
         self._tool_changer = tool_changer
         return self
 
-    def with_broker(self, broker: MessageBroker) -> AppBuilder:
-        self._broker = broker
+    def with_messaging_service(self, messaging_service: IMessagingService) -> AppBuilder:
+        self._messaging_service = messaging_service
         return self
 
     def register(self, service_type: Type, builder: ServiceBuilderFn) -> AppBuilder:
@@ -107,6 +109,12 @@ class AppBuilder:
     def build(self, app_class: Type[T]) -> T:
         if self._robot is None:
             raise ValueError("AppBuilder.with_robot() is required")
+
+        if self._messaging_service is None:
+            raise ValueError(
+                "AppBuilder.with_broker() is required — "
+                "pass the IMessagingService from EngineContext"
+            )
 
         _LOGGER.debug("Building %s", app_class.metadata.name)
 
@@ -123,7 +131,7 @@ class AppBuilder:
             motion=motion,
             settings=settings_service,
             tool_changer=self._tool_changer,
-            broker=self._broker,
+            messaging_service=self._messaging_service,
         )
 
         services: Dict[str, Any] = {}

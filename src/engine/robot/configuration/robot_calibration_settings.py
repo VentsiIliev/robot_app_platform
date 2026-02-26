@@ -1,0 +1,73 @@
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
+
+
+@dataclass
+class AdaptiveMovementConfig:
+    min_step_mm: float = 0.1
+    max_step_mm: float = 25.0
+    target_error_mm: float = 0.25
+    max_error_ref: float = 100.0
+    k: float = 2.0
+    derivative_scaling: float = 0.5
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'AdaptiveMovementConfig':
+        return cls(
+            min_step_mm=data.get("min_step_mm", 0.1),
+            max_step_mm=data.get("max_step_mm", 25.0),
+            target_error_mm=data.get("target_error_mm", 0.25),
+            max_error_ref=data.get("max_error_ref", 100.0),
+            k=data.get("k", 2.0),
+            derivative_scaling=data.get("derivative_scaling", 0.5),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "min_step_mm": self.min_step_mm,
+            "max_step_mm": self.max_step_mm,
+            "target_error_mm": self.target_error_mm,
+            "max_error_ref": self.max_error_ref,
+            "k": self.k,
+            "derivative_scaling": self.derivative_scaling,
+        }
+
+
+@dataclass
+class RobotCalibrationSettings:
+    adaptive_movement: AdaptiveMovementConfig = field(default_factory=AdaptiveMovementConfig)
+    z_target: int = 300
+    required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
+        return cls(
+            adaptive_movement=AdaptiveMovementConfig.from_dict(data.get("adaptive_movement_config", {})),
+            z_target=data.get("z_target", 300),
+            required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "adaptive_movement_config": self.adaptive_movement.to_dict(),
+            "z_target": self.z_target,
+            "required_ids": self.required_ids,
+        }
+
+
+class RobotCalibrationSettingsSerializer(ISettingsSerializer[RobotCalibrationSettings]):
+
+    @property
+    def settings_type(self) -> str:
+        return "robot_calibration"
+
+    def get_default(self) -> RobotCalibrationSettings:
+        return RobotCalibrationSettings()
+
+    def to_dict(self, settings: RobotCalibrationSettings) -> Dict[str, Any]:
+        return settings.to_dict()
+
+    def from_dict(self, data: Dict[str, Any]) -> RobotCalibrationSettings:
+        return RobotCalibrationSettings.from_dict(data)

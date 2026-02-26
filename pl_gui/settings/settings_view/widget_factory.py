@@ -18,11 +18,11 @@ from typing import Any, Callable
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QComboBox, QLineEdit, QWidget
 
-from src.utils.utils_widgets.SwitchButton import QToggle
-from src.utils.utils_widgets.int_list_widget import IntListWidget
-from src.settings.settings_view.schema import SettingField
-from src.settings.settings_view.styles import BORDER, PRIMARY, PRIMARY_DARK
-from src.utils.utils_widgets.touch_spinbox import TouchSpinBox
+from pl_gui.utils.utils_widgets.SwitchButton import QToggle
+from pl_gui.utils.utils_widgets.int_list_widget import IntListWidget
+from pl_gui.settings.settings_view.schema import SettingField
+from pl_gui.settings.settings_view.styles import BORDER, PRIMARY, PRIMARY_DARK
+from pl_gui.utils.utils_widgets.touch_spinbox import TouchSpinBox
 
 
 # ── shared styles ─────────────────────────────────────────────────────────────
