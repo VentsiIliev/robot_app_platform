@@ -35,6 +35,8 @@ class GlueDashboardModel(IPluginModel):
     def get_all_glue_types(self) -> List[str]:                   return self._service.get_all_glue_types()
     def get_initial_cell_state(self, cell_id: int) -> Optional[Dict]: return self._service.get_initial_cell_state(cell_id)
     def get_cells_count(self) -> int: return self._service.get_cells_count()
+    def get_cell_connection_state(self, cell_id: int) -> str:
+        return self._service.get_cell_connection_state(cell_id)
 
     def start(self)                                   -> None: self._service.start()
     def stop(self)                                    -> None: self._service.stop()
@@ -43,3 +45,4 @@ class GlueDashboardModel(IPluginModel):
     def reset_errors(self)                            -> None: self._service.reset_errors()
     def set_mode(self, mode: str)                     -> None: self._service.set_mode(mode)
     def change_glue(self, cell_id: int, glue_type: str) -> None: self._service.change_glue(cell_id, glue_type)
+

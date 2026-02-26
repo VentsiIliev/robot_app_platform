@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pl_gui.dashboard.config import DashboardConfig, ActionButtonConfig, CardConfig
+from src.engine.process.process_state import ProcessState
 
 
 class GlueCellTopics:
@@ -14,19 +15,8 @@ class GlueCellTopics:
 
 class SystemTopics:
     APPLICATION_STATE  = "system/application_state"
-    SYSTEM_MODE_CHANGE = "system/mode_change"
-    COMMAND_CLEAN      = "glue/command/clean"
-    COMMAND_RESET      = "glue/command/reset_errors"
 
 
-class ApplicationState:
-    IDLE         = "idle"
-    STARTED      = "started"
-    PAUSED       = "paused"
-    INITIALIZING = "initializing"
-    CALIBRATING  = "calibrating"
-    STOPPED      = "stopped"
-    ERROR        = "error"
 
 
 @dataclass
@@ -47,13 +37,13 @@ ACTION_BUTTONS: list[ActionButtonConfig] = [
 ]
 
 BUTTON_STATE_MAP: dict = {
-    ApplicationState.IDLE:         {"start": True,  "stop": False, "pause": False, "pause_text": "Pause"},
-    ApplicationState.STARTED:      {"start": False, "stop": True,  "pause": True,  "pause_text": "Pause"},
-    ApplicationState.PAUSED:       {"start": False, "stop": True,  "pause": True,  "pause_text": "Resume"},
-    ApplicationState.INITIALIZING: {"start": False, "stop": False, "pause": False, "pause_text": "Pause"},
-    ApplicationState.CALIBRATING:  {"start": False, "stop": False, "pause": False, "pause_text": "Pause"},
-    ApplicationState.STOPPED:      {"start": False, "stop": False, "pause": False, "pause_text": "Pause"},
-    ApplicationState.ERROR:        {"start": False, "stop": True,  "pause": False, "pause_text": "Pause"},
+    ProcessState.IDLE.value:    {"start": True,  "stop": False, "pause": False, "pause_text": "Pause",   "mode_toggle": True,  "clean": True,  "reset_errors": False},
+    ProcessState.RUNNING.value: {"start": False, "stop": True,  "pause": True,  "pause_text": "Pause",   "mode_toggle": False, "clean": False, "reset_errors": False},
+    ProcessState.PAUSED.value:  {"start": False, "stop": True,  "pause": True,  "pause_text": "Resume",  "mode_toggle": False, "clean": False, "reset_errors": False},
+    ProcessState.STOPPED.value: {"start": True,  "stop": False, "pause": False, "pause_text": "Pause",   "mode_toggle": True,  "clean": True,  "reset_errors": False},
+    ProcessState.ERROR.value:   {"start": False, "stop": True,  "pause": False, "pause_text": "Pause",   "mode_toggle": False, "clean": False, "reset_errors": True},
 }
+
+
 
 MODE_TOGGLE_LABELS = ("Pick And Spray", "Spray Only")

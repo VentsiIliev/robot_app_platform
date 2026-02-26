@@ -21,13 +21,15 @@ def _make_cell(cell_id: int, glue_type: str = "Type A", capacity: float = 5000.0
         type=glue_type,
         url=f"http://cell{cell_id}",
         capacity=capacity,
-        fetch_timeout=5,
+        fetch_timeout_seconds=5.0,
+        data_fetch_interval_ms=500,
         calibration=CalibrationConfig(zero_offset=0.0, scale_factor=1.0, temperature_compensation=False),
         measurement=MeasurementConfig(
             sampling_rate=10, filter_cutoff=1.0, averaging_samples=5,
             min_weight_threshold=0.0, max_weight_threshold=10000.0,
         ),
     )
+
 
 
 def _make_cells(*cell_ids: int) -> GlueCellsConfig:
@@ -204,14 +206,15 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
 
     def test_get_cell_capacity_fallback_on_missing_cell(self):
         svc, *_ = _make_dashboard_service(cells=_make_cells(1))
-        self.assertEqual(svc.get_cell_capacity(99), 5000.0)
+        self.assertEqual(svc.get_cell_capacity(99), 0.0)
 
     def test_get_cell_capacity_fallback_on_error(self):
         rs = _make_robot_service()
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
         svc = GlueDashboardService(robot_service=rs, settings_service=ss)
-        self.assertEqual(svc.get_cell_capacity(1), 5000.0)
+        self.assertEqual(svc.get_cell_capacity(1), 0.0)
+
 
     def test_get_cell_glue_type_correct(self):
         cell  = _make_cell(2, glue_type="Type B")

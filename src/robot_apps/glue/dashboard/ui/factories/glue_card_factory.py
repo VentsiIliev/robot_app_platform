@@ -17,7 +17,7 @@ class GlueCardFactory:
                 GlueMeterCard(
                     cfg.label,
                     cfg.card_id,
-                    capacity_grams=self._model.get_cell_capacity(cfg.card_id),
+                    capacity_grams=self._model.get_cell_capacity(cfg.card_id - 1),  # 0-based
                 ),
                 cfg.card_id,
                 getattr(cfg, "row", 0),

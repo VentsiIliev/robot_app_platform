@@ -1,13 +1,17 @@
 from __future__ import annotations
+from typing import Optional
 
 from PyQt6.QtWidgets import QWidget
 
 from pl_gui.dashboard.config import CardConfig
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
+from src.engine.repositories.interfaces.i_settings_service import ISettingsService
+from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.robot_apps.glue.dashboard import config
 from src.robot_apps.glue.dashboard.controller.glue_dashboard_controller import GlueDashboardController
 from src.robot_apps.glue.dashboard.model.glue_dashboard_model import GlueDashboardModel
-from src.robot_apps.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
+from src.robot_apps.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_apps.glue.dashboard.ui.factories.glue_card_factory import GlueCardFactory
 from src.robot_apps.glue.dashboard.view.glue_dashboard_view import GlueDashboardView
 
@@ -15,20 +19,36 @@ from src.robot_apps.glue.dashboard.view.glue_dashboard_view import GlueDashboard
 class GlueDashboard:
 
     @staticmethod
-    def create(service: IGlueDashboardService, messaging_service: IMessagingService) -> QWidget:
+    def create(
+        robot_service:    IRobotService,
+        settings_service: ISettingsService,
+        messaging_service: IMessagingService,
+        weight_service:   Optional[IWeightCellService] = None,
+    ) -> QWidget:
 
-        cells_count = service.get_cells_count()
-        config.GLUE_CELLS  = []
-        for i in range(cells_count):
-            config.GLUE_CELLS.append(CardConfig(card_id= i+1,label = f"Cell {i+1}"))
+        service = GlueDashboardService(
+            process_id       = "glue",
+            robot_service    = robot_service,
+            settings_service = settings_service,
+            messaging        = messaging_service,
+            weight_service   = weight_service,
+        )
 
-        configuration     = config.GlueDashboardConfig()
-        model      = GlueDashboardModel(service, configuration)
-        cards      = GlueCardFactory(model).build_cards(config.GLUE_CELLS)
+        cells_count    = service.get_cells_count()
+        config.GLUE_CELLS = [
+            CardConfig(card_id=i + 1, label=f"Cell {i + 1}")
+            for i in range(cells_count)
+        ]
 
-        view       = GlueDashboardView(config=config.DashboardConfig, action_buttons=config.ACTION_BUTTONS, cards=cards)
-
-        controller = GlueDashboardController(model, view, messaging_service)
+        configuration = config.GlueDashboardConfig()
+        model         = GlueDashboardModel(service, configuration)
+        cards         = GlueCardFactory(model).build_cards(config.GLUE_CELLS)
+        view          = GlueDashboardView(
+            config=config.DashboardConfig,
+            action_buttons=config.ACTION_BUTTONS,
+            cards=cards,
+        )
+        controller    = GlueDashboardController(model, view, messaging_service)
         controller.load()
-        view._controller = controller  # explicit ownership — do not rely on _subs lambdas
+        view._controller = controller
         return view

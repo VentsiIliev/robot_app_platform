@@ -109,10 +109,9 @@ class AppBuilder:
     def build(self, app_class: Type[T]) -> T:
         if self._robot is None:
             raise ValueError("AppBuilder.with_robot() is required")
-
         if self._messaging_service is None:
             raise ValueError(
-                "AppBuilder.with_broker() is required — "
+                "AppBuilder.with_messaging_service() is required — "
                 "pass the IMessagingService from EngineContext"
             )
 
@@ -125,6 +124,7 @@ class AppBuilder:
                 settings_root=app_class.metadata.settings_root,
                 app_class=app_class,
             )
+
         motion = MotionService(self._robot, SafetyChecker(self._settings))
         ctx = _BuildContext(
             robot=self._robot,
@@ -134,10 +134,16 @@ class AppBuilder:
             messaging_service=self._messaging_service,
         )
 
+        # merge app-level per-spec builders into registry (override defaults)
+        registry = dict(self._registry)
+        for spec in app_class.services:
+            if spec.builder is not None:
+                registry[spec.service_type] = spec.builder
+
         services: Dict[str, Any] = {}
 
         for spec in app_class.services:
-            builder = self._registry.get(spec.service_type)
+            builder = registry.get(spec.service_type)
 
             if builder is None:
                 if spec.required:
@@ -161,5 +167,6 @@ class AppBuilder:
             _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
         app = app_class()
-        app.start(services,settings_service=settings_service)
+        app.start(services, settings_service=settings_service)
         return app
+

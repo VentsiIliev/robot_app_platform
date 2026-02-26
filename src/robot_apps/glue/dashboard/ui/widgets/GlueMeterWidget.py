@@ -5,7 +5,8 @@ from PyQt6.QtGui import QFont, QPainter, QPen, QColor
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QLabel, QHBoxLayout
 
 try:
-    from src.dashboard.resources.styles import ICON_COLOR, STATUS_UNKNOWN, STATUS_READY, STATUS_ERROR, STATUS_DISCONNECTED
+    from src.dashboard.resources.styles import ICON_COLOR, STATUS_UNKNOWN, STATUS_READY, STATUS_ERROR, \
+        STATUS_DISCONNECTED
 except ImportError:
     try:
         from dashboard.styles import ICON_COLOR, STATUS_UNKNOWN, STATUS_READY, STATUS_ERROR, STATUS_DISCONNECTED
@@ -74,8 +75,10 @@ class GlueMeterWidget(QWidget):
     def set_state(self, state: str) -> None:
         try:
             s = str(state).strip().lower()
-            if s == "ready":
+            if s in ("ready", "connected"):
                 self.state_indicator.setStyleSheet(f"background-color: {STATUS_READY}; border-radius: 8px;")
+            elif s == "connecting":
+                self.state_indicator.setStyleSheet("background-color: #f39c12; border-radius: 8px;")
             elif s in ("disconnected", "error"):
                 self.state_indicator.setStyleSheet(f"background-color: {STATUS_ERROR}; border-radius: 8px;")
             else:
@@ -141,4 +144,3 @@ class GlueMeterWidget(QWidget):
         fill_rect = QRect(border_rect.left() + 1, border_rect.top() + 1,
                           fill_width, border_rect.height() - 2)
         painter.fillRect(fill_rect, self.get_shade())
-

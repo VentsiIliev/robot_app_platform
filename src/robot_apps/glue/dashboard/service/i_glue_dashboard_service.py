@@ -1,37 +1,23 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Dict, List, Optional
 
+from src.engine.process.i_process import IProcess
 
-class IGlueDashboardService(ABC):
 
-    # ------------------------------------------------------------------
-    # Commands
-    # ------------------------------------------------------------------
-
-    @abstractmethod
-    def start(self) -> None: ...
-
-    @abstractmethod
-    def stop(self) -> None: ...
-
-    @abstractmethod
-    def pause(self) -> None: ...
+class IGlueDashboardService(IProcess):
+    """
+    start / stop / pause / resume / reset_errors — inherited from IProcess.
+    Subclasses must implement all abstract methods here AND in IProcess.
+    """
 
     @abstractmethod
     def clean(self) -> None: ...
-
-    @abstractmethod
-    def reset_errors(self) -> None: ...
 
     @abstractmethod
     def set_mode(self, mode: str) -> None: ...
 
     @abstractmethod
     def change_glue(self, cell_id: int, glue_type: str) -> None: ...
-
-    # ------------------------------------------------------------------
-    # Queries
-    # ------------------------------------------------------------------
 
     @abstractmethod
     def get_cell_capacity(self, cell_id: int) -> float: ...
@@ -47,3 +33,6 @@ class IGlueDashboardService(ABC):
 
     @abstractmethod
     def get_cells_count(self) -> int: ...
+
+    @abstractmethod
+    def get_cell_connection_state(self, cell_id: int) -> str: ...

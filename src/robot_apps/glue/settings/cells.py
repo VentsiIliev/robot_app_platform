@@ -1,156 +1,44 @@
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
-from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
-
-
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class CalibrationConfig:
-    zero_offset: float
-    scale_factor: float
-    temperature_compensation: bool
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CalibrationConfig':
-        return cls(
-            zero_offset=data.get("zero_offset", 0.0),
-            scale_factor=data.get("scale_factor", 1.0),
-            temperature_compensation=data.get("temperature_compensation", False),
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "zero_offset": self.zero_offset,
-            "scale_factor": self.scale_factor,
-            "temperature_compensation": self.temperature_compensation,
-        }
+from src.engine.hardware.weight.config import (
+    CalibrationConfig, MeasurementConfig, CellConfig,
+    CellsConfig as GlueCellsConfig,
+    CellsConfigSerializer,
+)
 
 
-@dataclass(frozen=True)
-class MeasurementConfig:
-    sampling_rate: int
-    filter_cutoff: float
-    averaging_samples: int
-    min_weight_threshold: float
-    max_weight_threshold: float
+def _default_cell(cell_id: int, url: str, motor_address: int = 0) -> CellConfig:
+    return CellConfig(
+        id=cell_id,
+        type="Type A",
+        url=url,
+        capacity=1000.0,
+        fetch_timeout_seconds=5.0,
+        data_fetch_interval_ms=500,
+        calibration=CalibrationConfig(
+            zero_offset=0.0,
+            scale_factor=1.0,
+            temperature_compensation=False,
+        ),
+        measurement=MeasurementConfig(
+            sampling_rate=10,
+            filter_cutoff=1.0,
+            averaging_samples=5,
+            min_weight_threshold=0.0,
+            max_weight_threshold=1000.0,
+        ),
+        motor_address=motor_address,
+    )
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MeasurementConfig':
-        return cls(
-            sampling_rate=data.get("sampling_rate", 10),
-            filter_cutoff=data.get("filter_cutoff", 1.0),
-            averaging_samples=data.get("averaging_samples", 5),
-            min_weight_threshold=data.get("min_weight_threshold", 0.0),
-            max_weight_threshold=data.get("max_weight_threshold", 1000.0),
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "sampling_rate": self.sampling_rate,
-            "filter_cutoff": self.filter_cutoff,
-            "averaging_samples": self.averaging_samples,
-            "min_weight_threshold": self.min_weight_threshold,
-            "max_weight_threshold": self.max_weight_threshold,
-        }
-
-
-@dataclass(frozen=True)
-class CellConfig:
-    id: int
-    type: str
-    url: str
-    capacity: float
-    fetch_timeout: int
-    calibration: CalibrationConfig
-    measurement: MeasurementConfig
-    motor_address: int = 0
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CellConfig':
-        return cls(
-            id=data["id"],
-            type=data.get("type", ""),
-            url=data.get("url", ""),
-            capacity=data.get("capacity", 0.0),
-            fetch_timeout=data.get("fetch_timeout", 5),
-            calibration=CalibrationConfig.from_dict(data.get("calibration", {})),
-            measurement=MeasurementConfig.from_dict(data.get("measurement", {})),
-            motor_address=data.get("motor_address", 0),
-        )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "type": self.type,
-            "url": self.url,
-            "capacity": self.capacity,
-            "fetch_timeout": self.fetch_timeout,
-            "calibration": self.calibration.to_dict(),
-            "measurement": self.measurement.to_dict(),
-            "motor_address": self.motor_address,
-        }
-
-
-@dataclass(frozen=True)
-class GlueCellsConfig:
-    cells: List[CellConfig]
-
-    def get_cell_by_id(self, cell_id: int) -> Optional[CellConfig]:
-        return next((c for c in self.cells if c.id == cell_id), None)
-
-    def get_all_cell_ids(self) -> List[int]:
-        return [c.id for c in self.cells]
-
-    def get_cells_by_type(self, glue_type: str) -> List[CellConfig]:
-        return [c for c in self.cells if c.type == glue_type]
-
-    @property
-    def cell_count(self) -> int:
-        return len(self.cells)
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'GlueCellsConfig':
-        return cls(cells=[CellConfig.from_dict(c) for c in data.get("cells", [])])
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {"cells": [c.to_dict() for c in self.cells]}
-
-
-# ---------------------------------------------------------------------------
-# Serializer
-# ---------------------------------------------------------------------------
 
 _DEFAULT_CELLS = GlueCellsConfig(
     cells=[
-        CellConfig(
-            id=0,
-            type="Type A",
-            url="http://192.168.1.100",
-            capacity=1000.0,
-            fetch_timeout=5,
-            calibration=CalibrationConfig(
-                zero_offset=0.0,
-                scale_factor=1.0,
-                temperature_compensation=False,
-            ),
-            measurement=MeasurementConfig(
-                sampling_rate=10,
-                filter_cutoff=1.0,
-                averaging_samples=5,
-                min_weight_threshold=0.0,
-                max_weight_threshold=1000.0,
-            ),
-            motor_address=0,
-        )
+        _default_cell(0, "http://192.168.222.143/weight1", motor_address=0),
+        _default_cell(1, "http://192.168.222.143/weight2", motor_address=2),
+        _default_cell(2, "http://192.168.222.143/weight3", motor_address=4),
     ]
 )
 
 
-class GlueCellsConfigSerializer(ISettingsSerializer[GlueCellsConfig]):
+class GlueCellsConfigSerializer(CellsConfigSerializer):
 
     @property
     def settings_type(self) -> str:
@@ -158,9 +46,3 @@ class GlueCellsConfigSerializer(ISettingsSerializer[GlueCellsConfig]):
 
     def get_default(self) -> GlueCellsConfig:
         return _DEFAULT_CELLS
-
-    def to_dict(self, settings: GlueCellsConfig) -> Dict[str, Any]:
-        return settings.to_dict()
-
-    def from_dict(self, data: Dict[str, Any]) -> GlueCellsConfig:
-        return GlueCellsConfig.from_dict(data)

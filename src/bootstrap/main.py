@@ -19,6 +19,7 @@ def main() -> None:
     setup_logging()
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
     logging.getLogger("RobotStatePublisher").setLevel(logging.WARNING)
+    logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
 
     from PyQt6.QtWidgets import QApplication
     from pl_gui.shell.AppShell import AppShell

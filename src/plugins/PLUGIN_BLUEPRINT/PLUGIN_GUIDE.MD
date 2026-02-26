@@ -336,6 +336,84 @@ class MyController(IPluginController):
         self._subs.clear()
 ```
 
+### Cross-thread broker callbacks — `_Bridge(QObject)` pattern
+
+If broker callbacks arrive from **background threads** (e.g., weight readings from `WeightCellService`), calling Qt setters directly is unsafe. Use a `_Bridge(QObject)` with `pyqtSignal` attributes — PyQt6 automatically queues cross-thread signal delivery to the main thread.
+
+```python
+from PyQt6.QtCore import QObject, pyqtSignal
+
+class _Bridge(QObject):
+    data_updated = pyqtSignal(int, float)   # (id, value)
+
+class MyController(IPluginController):
+
+    def __init__(self, model, view, messaging_service):
+        ...
+        self._bridge = _Bridge()
+        self._bridge.data_updated.connect(self._view.set_value)
+
+    def _subscribe(self) -> None:
+        cb = lambda data, uid=item_id: self._bridge.data_updated.emit(uid, data.value)
+        self._messaging_service.subscribe("some/topic", cb)
+        self._subs.append(("some/topic", cb))
+```
+
+`_Bridge` must be stored as `self._bridge` — it must stay alive as long as the controller.
+
+---
+
+### Blocking service calls — `QThread + _Worker` pattern
+
+If a service method may block the GUI (e.g., serial port scan, HTTP request), dispatch it to a worker thread:
+
+```python
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from typing import Callable, List, Tuple
+
+class _Worker(QObject):
+    finished = pyqtSignal(object)
+
+    def __init__(self, fn: Callable): self._fn = fn
+
+    def run(self) -> None:
+        self.finished.emit(self._fn())
+
+class MyController(IPluginController):
+
+    def __init__(self, model, view):
+        ...
+        self._active: List[Tuple[QThread, _Worker]] = []
+        self._view.detect_requested.connect(self._on_detect)
+
+    def _on_detect(self) -> None:
+        self._view.set_busy(True)
+        thread = QThread()
+        worker = _Worker(fn=self._model.detect)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_detect_ready)
+        worker.finished.connect(thread.quit)
+        self._active.append((thread, worker))
+        thread.start()
+
+    def _on_detect_ready(self, result) -> None:
+        self._view.set_result(result)
+        self._view.set_busy(False)
+        self._active = [(t, w) for t, w in self._active if t.isRunning()]
+
+    def stop(self) -> None:
+        for topic, cb in reversed(self._subs):
+            try: self._messaging_service.unsubscribe(topic, cb)
+            except Exception: pass
+        self._subs.clear()
+        for thread, _ in reversed(self._active):
+            thread.quit(); thread.wait(2000)
+        self._active.clear()
+```
+
+Store threads in `_active` to prevent immediate GC. Clean up in `stop()`.
+
 ---
 
 ## Step 8 — Wire the MVC in the factory
@@ -597,10 +675,12 @@ if __name__ == "__main__":
 
 ## Real Examples in This Codebase
 
-| Plugin | Factory | Service interface | Broker needed |
-|---|---|---|---|
-| `RobotSettings` | `RobotSettingsFactory(PluginFactory)` | `IRobotSettingsService` | No — `lambda _ms:` |
-| `GlueDashboard` | `GlueDashboard.create()` | `IGlueDashboardService` | Yes — `lambda ms:` |
+| Plugin | Factory | Service interface | Broker needed | Special patterns |
+|---|---|---|---|---|
+| `RobotSettings` | `RobotSettingsFactory(PluginFactory)` | `IRobotSettingsService` | No — `lambda _ms:` | — |
+| `ModbusSettings` | `ModbusSettingsFactory(PluginFactory)` | `IModbusSettingsService` + `IModbusActionService` | No — `lambda _ms:` | `QThread + _Worker` for blocking port scan / connection test |
+| `GlueCellSettings` | `GlueCellSettingsFactory` (custom `build`) | `IGlueCellSettingsService` | Yes — `lambda ms:` | `_Bridge(QObject)` for cross-thread weight readings |
+| `GlueDashboard` | `GlueDashboard.create()` | `IGlueDashboardService` | Yes — `lambda ms:` | — |
 
 ---
 

@@ -44,13 +44,15 @@ class GlueMeterCard(QFrame):
 
     def _update_indicator(self, state_str: str) -> None:
         state_config = {
-            "unknown":       {"color": STATUS_UNKNOWN,       "text": self.tr("Unknown")},
-            "initializing":  {"color": STATUS_INITIALIZING,  "text": self.tr("Initializing...")},
-            "ready":         {"color": STATUS_READY,         "text": self.tr("Ready")},
-            "low_weight":    {"color": STATUS_LOW_WEIGHT,    "text": self.tr("Low Weight")},
-            "empty":         {"color": STATUS_EMPTY,         "text": self.tr("Empty")},
-            "error":         {"color": STATUS_ERROR,         "text": self.tr("Error")},
-            "disconnected":  {"color": STATUS_DISCONNECTED,  "text": self.tr("Disconnected")},
+            "unknown": {"color": STATUS_UNKNOWN, "text": self.tr("Unknown")},
+            "initializing": {"color": STATUS_INITIALIZING, "text": self.tr("Initializing...")},
+            "connecting": {"color": STATUS_INITIALIZING, "text": self.tr("Connecting...")},
+            "connected": {"color": STATUS_READY, "text": self.tr("Connected")},
+            "ready": {"color": STATUS_READY, "text": self.tr("Ready")},
+            "low_weight": {"color": STATUS_LOW_WEIGHT, "text": self.tr("Low Weight")},
+            "empty": {"color": STATUS_EMPTY, "text": self.tr("Empty")},
+            "error": {"color": STATUS_ERROR, "text": self.tr("Error")},
+            "disconnected": {"color": STATUS_DISCONNECTED, "text": self.tr("Disconnected")},
         }
         cfg = state_config.get(str(state_str).lower(), state_config["unknown"])
         self.state_indicator.setStyleSheet(

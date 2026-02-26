@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List
 
-from src.engine.hardware.modbus import ModbusConfig
+from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 
 
 class IModbusSettingsService(ABC):
@@ -11,13 +10,3 @@ class IModbusSettingsService(ABC):
 
     @abstractmethod
     def save_config(self, config: ModbusConfig) -> None: ...
-
-    @abstractmethod
-    def detect_ports(self) -> List[str]:
-        """Return list of available serial port names."""
-        ...
-
-    @abstractmethod
-    def test_connection(self, config: ModbusConfig) -> bool:
-        """Attempt a connection with the given config. Return True on success."""
-        ...

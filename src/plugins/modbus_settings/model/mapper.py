@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from src.engine.hardware.modbus import ModbusConfig
+from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 
 
 class ModbusSettingsMapper:

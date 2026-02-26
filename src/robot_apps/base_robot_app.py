@@ -48,6 +48,8 @@ class ServiceSpec:
     service_type: Type
     required: bool = True
     description: str = ""
+    builder: Optional[Callable] = field(default=None, compare=False)
+
 
 
 @dataclass(frozen=True)
