@@ -91,12 +91,52 @@ Used as `event.state.value` to get the string for display.
 
 ---
 
-## `process_events.py` — Process Events (Placeholder)
+## `process_events.py` — Process Lifecycle Events
 
-**Currently empty.** Reserved for production process events such as:
-- Trajectory step started/completed
-- Dispense cycle events
-- Error and alarm events from the process controller
+Defines the canonical state machine contract for any robot application process. Imported by `BaseProcess` (publisher) and dashboard controllers (subscribers).
+
+### `ProcessState` (Enum)
+
+```python
+class ProcessState(Enum):
+    IDLE    = "idle"
+    RUNNING = "running"
+    PAUSED  = "paused"
+    STOPPED = "stopped"
+    ERROR   = "error"
+```
+
+### `ProcessStateEvent` (frozen dataclass)
+
+Published on every state transition via `ProcessTopics.state(process_id)`:
+
+```python
+@dataclass(frozen=True)
+class ProcessStateEvent:
+    process_id: str
+    state:      ProcessState    # new state
+    previous:   ProcessState    # state before transition
+    message:    str      = ""   # error message or empty
+    timestamp:  datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+### `ProcessTopics`
+
+```python
+class ProcessTopics:
+    @staticmethod
+    def state(process_id: str) -> str:
+        return f"process/{process_id}/state"   # e.g. "process/glue/state"
+
+    @staticmethod
+    def error(process_id: str) -> str:
+        return f"process/{process_id}/error"   # reserved for future use
+```
+
+| Method | Topic Pattern | Payload | Published By |
+|--------|--------------|---------|-------------|
+| `state(id)` | `"process/{id}/state"` | `ProcessStateEvent` | `BaseProcess._transition()` |
+| `error(id)` | `"process/{id}/error"` | *(reserved)* | *(reserved)* |
 
 ---
 

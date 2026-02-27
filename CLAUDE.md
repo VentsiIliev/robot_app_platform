@@ -97,6 +97,8 @@ Optional services declared with `required=False` in `ServiceSpec` don't block st
 
 ### GUI (`pl_gui/`)
 
+**Treat `pl_gui/` as an external, read-only package.** It will eventually be distributed as an installable pip package. Do not modify any files inside `pl_gui/` — changes there will be lost when the package is updated. Consume its public API only (imports from `pl_gui`).
+
 - `AppShell` — main window with a stacked widget; each plugin's widget is created lazily when the user navigates to its folder
 - `FolderLauncher` — grid of app icons per folder
 - Plugin views must inherit `IPluginView` (which extends `AppWidget`) to integrate with the shell

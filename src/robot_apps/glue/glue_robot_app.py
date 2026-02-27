@@ -2,6 +2,7 @@ import os
 
 from src.engine.process import ProcessRequirements
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
+from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService

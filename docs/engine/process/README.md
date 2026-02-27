@@ -1,6 +1,9 @@
 # `src/engine/process/` — Process Lifecycle
 
-The `process` package defines a **thread-safe, broker-integrated state machine** for any robot application process (e.g., the glue dispensing cycle). It provides the `ProcessState` enum, a typed event payload, a topic namespace, a lifecycle interface, and a ready-to-subclass base implementation.
+The `process` package defines a **thread-safe, broker-integrated state machine** for any robot application process (e.g., the glue dispensing cycle). It provides a lifecycle interface and a ready-to-subclass base implementation.
+
+> **`ProcessState`, `ProcessStateEvent`, and `ProcessTopics` have moved to `src/shared_contracts/events/process_events.py`.**
+> Import them from there — not from `engine/process/`.
 
 ---
 
@@ -8,63 +11,20 @@ The `process` package defines a **thread-safe, broker-integrated state machine**
 
 | File | Key Export | Role |
 |------|-----------|------|
-| `process_state.py` | `ProcessState`, `ProcessStateEvent`, `ProcessTopics` | Enum, payload dataclass, topic strings |
 | `i_process.py` | `IProcess` | Abstract lifecycle contract |
 | `base_process.py` | `BaseProcess` | Thread-safe implementation with template hooks |
+| `process_requirements.py` | `ProcessRequirements` | Declares which services must be available before a process can start |
 
 ---
 
-## `ProcessState`
+## `ProcessState`, `ProcessStateEvent`, `ProcessTopics`
+
+These types now live in `src/shared_contracts/events/process_events.py`. See [`docs/shared_contracts/events/README.md`](../../../docs/shared_contracts/events/README.md) for the full reference.
 
 ```python
-class ProcessState(Enum):
-    IDLE    = "idle"
-    RUNNING = "running"
-    PAUSED  = "paused"
-    STOPPED = "stopped"
-    ERROR   = "error"
+# Correct import path:
+from src.shared_contracts.events.process_events import ProcessState, ProcessStateEvent, ProcessTopics
 ```
-
----
-
-## `ProcessStateEvent` (frozen dataclass)
-
-Published on every state transition:
-
-```python
-@dataclass(frozen=True)
-class ProcessStateEvent:
-    process_id: str
-    state:      ProcessState          # new state
-    previous:   ProcessState          # state before transition
-    message:    str      = ""         # error message or empty
-    timestamp:  datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-```
-
----
-
-## `ProcessTopics`
-
-```python
-class ProcessTopics:
-    @staticmethod
-    def state(process_id: str) -> str:
-        return f"process/{process_id}/state"   # e.g. "process/glue/state"
-
-    @staticmethod
-    def error(process_id: str) -> str:
-        return f"process/{process_id}/error"   # reserved for future use
-```
-
-| Method | Topic Pattern | Payload | Published By |
-|--------|--------------|---------|-------------|
-| `state(id)` | `"process/{id}/state"` | `ProcessStateEvent` | `BaseProcess._transition()` |
-| `error(id)` | `"process/{id}/error"` | *(reserved)* | *(reserved)* |
-
-> **Note:** `ProcessTopics` lives in `src/engine/process/`, not in `src/shared_contracts/`. Import it from there:
-> ```python
-> from src.engine.process.process_state import ProcessTopics, ProcessState
-> ```
 
 ---
 
@@ -116,7 +76,14 @@ class IProcess(ABC):
 
 ```python
 class BaseProcess(IProcess):
-    def __init__(self, process_id: str, messaging: IMessagingService): ...
+    def __init__(
+        self,
+        process_id:      str,
+        messaging:       IMessagingService,
+        app_manager:     Optional[IApplicationManager]   = None,
+        requirements:    Optional[ProcessRequirements]   = None,
+        service_checker: Optional[Callable[[str], bool]] = None,
+    ): ...
 
     # IProcess implementation (all thread-safe via threading.Lock)
     def start(self)        -> None: ...
@@ -206,7 +173,7 @@ Subscriber (dashboard controller):
 
 ```python
 from src.engine.process.base_process import BaseProcess
-from src.engine.process.process_state import ProcessTopics, ProcessStateEvent
+from src.shared_contracts.events.process_events import ProcessTopics, ProcessStateEvent
 
 class GlueProcess(BaseProcess):
     def __init__(self, robot_service, messaging):
