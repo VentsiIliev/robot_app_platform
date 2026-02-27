@@ -16,7 +16,7 @@ class SafetyChecker(ISafetyChecker):
         if self._settings is None:
             return True
         try:
-            config = self._settings.get("robot_config")
+            config = self._settings.get("robot_config") # TODO
             limits = getattr(config, "safety_limits", None)
             if limits is None:
                 return True
