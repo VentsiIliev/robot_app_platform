@@ -1,13 +1,13 @@
 """
 Comprehensive tests for src/robot_systems/glue/processes/.
 
-Critical business logic — robot lifecycle hooks and the GlueOperationRunner
+Critical business logic — robot lifecycle hooks and the GlueOperationCoordinator
 coordination layer.
 
 Covered:
 - CleanProcess:        state transitions, requirements
 - PickAndPlaceProcess: identical pattern with process_id "pick_and_place"
-- GlueOperationRunner: mode switching, correct sequence selection and delegation
+- GlueOperationCoordinator: mode switching, correct sequence selection and delegation
                        for SPRAY_ONLY and PICK_AND_SPRAY modes
 
 Note: Timers in CleanProcess and PickAndPlaceProcess are simulation-only and are
@@ -24,7 +24,7 @@ from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.process.process_sequence import ProcessSequence
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
-from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
+from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
 from src.shared_contracts.events.process_events import (
@@ -187,12 +187,12 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner helpers
+# GlueOperationCoordinator helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _make_runner_mocks():
     """
-    Build a GlueOperationRunner with real processes (needed for construction),
+    Build a GlueOperationCoordinator with real processes (needed for construction),
     then replace the internal ProcessSequence objects with mocks so tests can
     verify delegation without executing real sequence logic.
 
@@ -202,7 +202,7 @@ def _make_runner_mocks():
     pick  = MagicMock(); pick.process_id  = "pick_and_place"; pick.state  = ProcessState.IDLE
     clean = MagicMock(); clean.process_id = "clean";          clean.state = ProcessState.IDLE
 
-    runner = GlueOperationRunner(
+    runner = GlueOperationCoordinator(
         glue_process           = glue,
         pick_and_place_process = pick,
         clean_process          = clean,
@@ -221,10 +221,10 @@ def _make_runner_mocks():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — mode
+# GlueOperationCoordinator — mode
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerMode(unittest.TestCase):
+class TestGlueOperationCoordinatorMode(unittest.TestCase):
 
     def test_default_mode_is_spray_only(self):
         runner, *_ = _make_runner_mocks()
@@ -243,10 +243,10 @@ class TestGlueOperationRunnerMode(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — SPRAY_ONLY start
+# GlueOperationCoordinator — SPRAY_ONLY start
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerSprayOnly(unittest.TestCase):
+class TestGlueOperationCoordinatorSprayOnly(unittest.TestCase):
 
     def test_start_calls_spray_sequence_start(self):
         runner, spray_seq, pick_seq, _ = _make_runner_mocks()
@@ -261,10 +261,10 @@ class TestGlueOperationRunnerSprayOnly(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — PICK_AND_SPRAY start
+# GlueOperationCoordinator — PICK_AND_SPRAY start
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerPickAndSpray(unittest.TestCase):
+class TestGlueOperationCoordinatorPickAndSpray(unittest.TestCase):
 
     def test_start_calls_pick_sequence_start(self):
         runner, spray_seq, pick_seq, _ = _make_runner_mocks()
@@ -281,10 +281,10 @@ class TestGlueOperationRunnerPickAndSpray(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — stop
+# GlueOperationCoordinator — stop
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerStop(unittest.TestCase):
+class TestGlueOperationCoordinatorStop(unittest.TestCase):
 
     def test_stop_calls_active_sequence_stop(self):
         runner, spray_seq, *_ = _make_runner_mocks()
@@ -298,10 +298,10 @@ class TestGlueOperationRunnerStop(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — pause / resume
+# GlueOperationCoordinator — pause / resume
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerPauseResume(unittest.TestCase):
+class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
 
     def test_pause_calls_active_sequence_pause(self):
         runner, spray_seq, *_ = _make_runner_mocks()
@@ -326,10 +326,10 @@ class TestGlueOperationRunnerPauseResume(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — clean
+# GlueOperationCoordinator — clean
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerClean(unittest.TestCase):
+class TestGlueOperationCoordinatorClean(unittest.TestCase):
 
     def test_clean_starts_clean_sequence(self):
         runner, _, _, clean_seq = _make_runner_mocks()
@@ -356,10 +356,10 @@ class TestGlueOperationRunnerClean(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GlueOperationRunner — reset_errors
+# GlueOperationCoordinator — reset_errors
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestGlueOperationRunnerResetErrors(unittest.TestCase):
+class TestGlueOperationCoordinatorResetErrors(unittest.TestCase):
 
     def test_reset_errors_calls_active_sequence_reset_errors(self):
         runner, spray_seq, *_ = _make_runner_mocks()

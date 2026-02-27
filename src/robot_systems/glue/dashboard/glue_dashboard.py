@@ -17,7 +17,7 @@ from src.robot_systems.glue.dashboard.service.glue_dashboard_service import Glue
 from src.robot_systems.glue.dashboard.ui.factories.glue_card_factory import GlueCardFactory
 from src.robot_systems.glue.dashboard.view.glue_dashboard_view import GlueDashboardView
 from src.robot_systems.glue.processes.clean_process import CleanProcess
-from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
+from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
 
@@ -59,7 +59,7 @@ class GlueDashboard:
             service_checker = service_checker,
         )
 
-        runner = GlueOperationRunner(
+        runner = GlueOperationCoordinator(
             glue_process           = glue_process,
             pick_and_place_process = pick_and_place_process,
             clean_process          = clean_process,

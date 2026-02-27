@@ -14,6 +14,7 @@ The `process` package defines a **thread-safe, broker-integrated state machine**
 | `i_process.py` | `IProcess` | Abstract lifecycle contract |
 | `base_process.py` | `BaseProcess` | Thread-safe implementation with template hooks |
 | `process_requirements.py` | `ProcessRequirements` | Declares which services must be available before a process can start |
+| `process_sequence.py` | `ProcessSequence` | Executes a list of `IProcess` objects in order, auto-advancing on each stop |
 
 ---
 
@@ -211,3 +212,85 @@ process.start()   # → _on_start() → publishes ProcessStateEvent(state=RUNNIN
 - **`set_error()` bypasses `_TRANSITIONS`**: It directly sets the state to ERROR regardless of current state. Use this from external observers (e.g., a hardware monitor thread that detects a fault).
 - **`start()` handles resume**: Callers never need to check `state == PAUSED` before calling `start()` — the base class handles it. This simplifies button wiring in controllers.
 - **No Qt dependency**: `BaseProcess` and `IProcess` are pure Python. They can be tested without a `QApplication`.
+
+---
+
+## `ProcessSequence` — Ordered Process Chain
+
+`ProcessSequence` composes multiple `IProcess` instances into a pipeline. Each process runs to completion (STOPPED) before the next is started automatically via broker subscription.
+
+```python
+class ProcessSequence:
+    def __init__(
+        self,
+        processes: List[IProcess],   # must be non-empty
+        messaging: IMessagingService,
+    ) -> None: ...
+
+    def start(self)        -> None: ...   # fresh start, or resume if current is PAUSED
+    def stop(self)         -> None: ...   # stops current process; cancels pending advance
+    def pause(self)        -> None: ...   # delegates to current process
+    def reset_errors(self) -> None: ...   # delegates; clears current; resets index
+```
+
+### Auto-Advance Flow
+
+```
+ProcessSequence.start()
+  → subscribes to ProcessTopics.state(processes[0].process_id)
+  → processes[0].start()
+
+When processes[0] publishes ProcessStateEvent(state=STOPPED):
+  → _on_current_stopped() fires
+  → unsubscribes from processes[0] topic
+  → subscribes to processes[1] topic
+  → processes[1].start()
+  ... repeats until last process stops
+
+When last process stops:
+  → _current = None, _current_index = 0  (sequence complete)
+```
+
+### Resume Semantics
+
+`start()` detects whether the current process is PAUSED:
+
+```python
+def start(self) -> None:
+    with self._lock:
+        if self._current is not None and self._current.state == ProcessState.PAUSED:
+            process = self._current          # resume — index unchanged, no re-subscribe
+        else:
+            self._unsubscribe_current()
+            self._current_index = 0
+            self._current = self._processes[0]
+            self._subscribe_current()
+            process = self._current
+    process.start()
+```
+
+This lets `GlueOperationCoordinator.start()` and `GlueOperationCoordinator.resume()` both call `sequence.start()` without needing to track pause state externally.
+
+### Usage Example
+
+```python
+from src.engine.process.process_sequence import ProcessSequence
+
+# Two-step sequence: pick_and_place → glue
+sequence = ProcessSequence(
+    processes = [pick_and_place_process, glue_process],
+    messaging = messaging_service,
+)
+
+sequence.start()   # starts pick_and_place; when it stops, glue starts automatically
+sequence.pause()   # pauses pick_and_place (or glue, whichever is active)
+sequence.start()   # resumes the paused process (does not restart from index 0)
+sequence.stop()    # stops current process; cancels pending auto-advance
+```
+
+### Design Notes
+
+- **Broker-driven chaining**: the advance is triggered by a published `ProcessStateEvent` — the same event that updates the dashboard. No polling or separate thread needed.
+- **Bound method subscription**: `_on_current_stopped` is a bound method kept alive by `self`. No lambda risk. The subscription is unsubscribed before advancing to avoid double-firing.
+- **Thread-safe index management**: `_lock` guards `_current`, `_current_index`, and the subscribe/unsubscribe pair so concurrent stop/advance calls cannot corrupt state.
+- **`GlueOperationCoordinator` uses one sequence per mode**: `SPRAY_ONLY` → `[GlueProcess]`, `PICK_AND_SPRAY` → `[PickAndPlaceProcess, GlueProcess]`. Adding a mode means adding one entry to the sequences dict — no logic changes in the runner.

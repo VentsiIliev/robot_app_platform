@@ -149,7 +149,7 @@ class BaseProcess(IProcess):
             message=message,
         )
         # ACTIVE first — dashboard receives this state before any chain fires.
-        # The specific topic is published second — if a subscriber (e.g., GlueOperationRunner)
+        # The specific topic is published second — if a subscriber (e.g., GlueOperationCoordinator)
         # chains to another process, that process's ACTIVE(RUNNING) will arrive after this
         # ACTIVE event, correctly overriding it in the dashboard.
         self._messaging.publish(ProcessTopics.ACTIVE, event)

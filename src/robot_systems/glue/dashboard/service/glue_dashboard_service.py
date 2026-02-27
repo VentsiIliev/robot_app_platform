@@ -7,7 +7,7 @@ from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightC
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
-from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
+from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.settings.cells import GlueCellsConfig
 from src.robot_systems.glue.settings.glue_types import GlueCatalog
 
@@ -16,7 +16,7 @@ class GlueDashboardService(IGlueDashboardService):
 
     def __init__(
         self,
-        runner:           GlueOperationRunner,
+        runner:           GlueOperationCoordinator,
         settings_service: ISettingsService,
         weight_service:   Optional[IWeightCellService] = None,
     ):
@@ -25,7 +25,7 @@ class GlueDashboardService(IGlueDashboardService):
         self._weight   = weight_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
-    # ── Commands — delegated to GlueOperationRunner ───────────────────
+    # ── Commands — delegated to GlueOperationCoordinator ─────────────
 
     def start(self)        -> None: self._runner.start()
     def stop(self)         -> None: self._runner.stop()

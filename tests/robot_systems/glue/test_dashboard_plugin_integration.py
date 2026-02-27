@@ -6,7 +6,7 @@ from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
-from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
+from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.engine.process.process_requirements import ProcessRequirements
@@ -54,7 +54,7 @@ def _make_settings_service(cells=None, catalog=None):
     return ss, _cells, _catalog
 
 def _make_runner():
-    return MagicMock(spec=GlueOperationRunner)
+    return MagicMock(spec=GlueOperationCoordinator)
 
 def _make_dashboard_service(cells=None, catalog=None, runner=None, weight_service=None):
     ss, _c, _cat = _make_settings_service(cells, catalog)
@@ -138,7 +138,7 @@ class TestDashboardApplicationFactory(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GlueDashboardService — command delegation to GlueOperationRunner
+# GlueDashboardService — command delegation to GlueOperationCoordinator
 # ---------------------------------------------------------------------------
 
 class TestGlueDashboardServiceCommands(unittest.TestCase):
