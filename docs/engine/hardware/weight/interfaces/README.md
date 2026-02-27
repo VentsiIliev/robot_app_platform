@@ -77,7 +77,7 @@ The `cell_id` parameter is passed for logging and routing purposes — implement
 
 **File:** `i_weight_cell_service.py`
 
-The top-level service interface consumed by plugins. Combines lifecycle, reading, monitoring, and calibration operations for a multi-cell installation.
+The top-level service interface consumed by applications. Combines lifecycle, reading, monitoring, and calibration operations for a multi-cell installation.
 
 ```python
 class IWeightCellService(ABC):

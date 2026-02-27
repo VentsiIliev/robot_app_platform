@@ -40,10 +40,10 @@ Manages one or more weight measurement cells. Each cell runs an independent daem
 
 ## Integration Pattern
 
-Hardware services are optional. They are declared in `BaseRobotApp.services` with `required=False`. If a hardware device is unavailable at startup, the platform continues running — plugins that depend on the service are simply not loaded.
+Hardware services are optional. They are declared in `BaseRobotSystem.services` with `required=False`. If a hardware device is unavailable at startup, the platform continues running — applications that depend on the service are simply not loaded.
 
 ```python
-# In GlueRobotApp:
+# In GlueRobotSystem:
 services = [
     ServiceSpec(IWeightCellService, required=False),
     ...

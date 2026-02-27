@@ -1,6 +1,9 @@
+from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtWidgets import QVBoxLayout
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from src.applications.base.i_application_view import IApplicationView
+from src.robot_systems.glue.dashboard.ui.system_status_widget import SystemStatusWidget
 
 
 class GlueDashboardView(IApplicationView):
@@ -20,7 +23,6 @@ class GlueDashboardView(IApplicationView):
         super().__init__("Dashboard", parent)
 
     def setup_ui(self):
-        from PyQt6.QtWidgets import QVBoxLayout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -30,18 +32,54 @@ class GlueDashboardView(IApplicationView):
             cards=self._cards_input,
         )
         layout.addWidget(self._dashboard)
-        # ✓ Named methods — never .emit or lambda
         self._dashboard.start_requested.connect(self._on_inner_start)
         self._dashboard.stop_requested.connect(self._on_inner_stop)
         self._dashboard.pause_requested.connect(self._on_inner_pause)
         self._dashboard.action_requested.connect(self._on_inner_action)
 
-    # ── Named forwarders ─────────────────────────────────────────────────
+        self._system_status = SystemStatusWidget()
+        self._inject_aux_widget(self._system_status)
+
+    def _inject_aux_widget(self, widget) -> None:
+        """
+        Navigate the DashboardWidget layout tree to find the aux grid container
+        and add our widget spanning all rows and columns.
+
+        Layout path (read-only — pl_gui internals):
+          DashboardWidget.layout_manager.main_layout [QVBoxLayout]
+            itemAt(0).layout()  → top_section [QHBoxLayout]
+              itemAt(0).widget() → preview_container [QWidget]
+                .layout().itemAt(1).widget() → aux_grid_container [QWidget / QGridLayout]
+        """
+        try:
+            main_layout      = self._dashboard.layout_manager.main_layout
+            top_section      = main_layout.itemAt(0).layout()
+            preview_container = top_section.itemAt(0).widget()
+            aux_grid         = preview_container.layout().itemAt(1).widget()
+            aux_layout       = aux_grid.layout()
+            rows = self._config.preview_aux_rows
+            cols = self._config.preview_aux_cols
+            aux_layout.addWidget(widget, 0, 0, rows, cols)
+        except Exception as exc:
+            import logging
+            logging.getLogger(self.__class__.__name__).warning(
+                "Could not inject aux widget — layout structure may have changed: %s", exc
+            )
+
+    # ── Named forwarders ─────────────────────────────────────────────
 
     def _on_inner_start(self)          -> None: self.start_requested.emit()
     def _on_inner_stop(self)           -> None: self.stop_requested.emit()
     def _on_inner_pause(self)          -> None: self.pause_requested.emit()
     def _on_inner_action(self, action) -> None: self.action_requested.emit(action)
+
+    # ── System status setters ─────────────────────────────────────────
+
+    def set_process_state(self, state: str)          -> None: self._system_status.set_process_state(state)
+    def set_active_process(self, process_id: str)    -> None: self._system_status.set_active_process(process_id)
+    def set_system_state(self, state: str)           -> None: self._system_status.set_system_state(state)
+
+    # ── Dashboard setters ─────────────────────────────────────────────
 
     def set_cell_weight(self, card_id: int, grams: float) -> None:       self._dashboard.set_cell_weight(card_id, grams)
     def set_cell_state(self, card_id: int, state: str) -> None:          self._dashboard.set_cell_state(card_id, state)
@@ -59,19 +97,7 @@ class GlueDashboardView(IApplicationView):
     def set_action_button_enabled(self, action_id: str, enabled: bool):  self._dashboard.set_action_button_enabled(action_id, enabled)
     def get_card(self, card_id: int):                                     return self._dashboard._cards.get(card_id)
 
-    def retranslateUi(self) -> None:
-        self._dashboard.retranslateUi()
-        self.language_changed.emit()
-
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
-            self.retranslateUi()
+            self.language_changed.emit()
         super().changeEvent(event)
-
-    def closeEvent(self, event):
-        super().closeEvent(event)
-        self.LOGOUT_REQUEST.emit()
-
-    def clean_up(self):
-        if hasattr(super(), "clean_up"):
-            super().clean_up()

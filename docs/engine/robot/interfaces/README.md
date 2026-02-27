@@ -136,7 +136,7 @@ class IRobotLifecycle(ABC):
 
 **File:** `i_robot_service.py`
 
-The **top-level public interface** that plugins import. Combines `IMotionService` and `IRobotLifecycle` and adds state query methods.
+The **top-level public interface** that applications import. Combines `IMotionService` and `IRobotLifecycle` and adds state query methods.
 
 ```python
 class IRobotService(IMotionService, IRobotLifecycle, ABC):
@@ -225,7 +225,7 @@ Implementation: `ToolChanger` (`src/engine/robot/tool_changer.py`)
 
 **File:** `i_tool_service.py`
 
-High-level gripper management interface exposed to plugins.
+High-level gripper management interface exposed to applications.
 
 ```python
 class IToolService(ABC):
@@ -241,6 +241,6 @@ Returns `(success: bool, error_message: Optional[str])` tuples. Implementation: 
 
 ## Design Notes
 
-- **`IRobot` vs `IMotionService`**: `IRobot` is SDK-level (int codes, no safety). `IMotionService` is application-level (bool success, safety-checked, optional blocking wait). Plugins never use `IRobot`.
-- **`IRobotService` is the plugin boundary**: Plugin services import only `IRobotService`. Everything below it is hidden.
+- **`IRobot` vs `IMotionService`**: `IRobot` is SDK-level (int codes, no safety). `IMotionService` is application-level (bool success, safety-checked, optional blocking wait). Applications never use `IRobot`.
+- **`IRobotService` is the application boundary**: Application services import only `IRobotService`. Everything below it is hidden.
 - **All properties on `IRobotStateProvider` are thread-safe**: `RobotStateManager` uses a lock on all property reads.

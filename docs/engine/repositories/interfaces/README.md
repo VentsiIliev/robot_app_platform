@@ -110,7 +110,7 @@ class ISettingsRepository(ABC, Generic[T]):
 
 **File:** `i_settings_service.py`
 
-High-level service interface used by plugins, robot apps, and services to access settings. Hides the multi-repository structure behind a single keyed API.
+High-level service interface used by applications, robot systems, and services to access settings. Hides the multi-repository structure behind a single keyed API.
 
 ```python
 class ISettingsService(ABC):

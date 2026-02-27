@@ -27,7 +27,7 @@ robot/
 ### Service Composition Hierarchy
 
 ```
-IRobotService (public contract — what plugins see)
+IRobotService (public contract — what applications see)
 └── RobotService
       ├── IMotionService → MotionService
       │     ├── IRobot → FairinoRobot (production) / TestRobotWrapper (dev)
@@ -64,7 +64,7 @@ IRobotLifecycle
 IMotionService
   move_ptp() / move_linear() / start_jog() / stop_motion() / get_current_position()
       │
-      └── IRobotService   ← the single interface plugins import
+      └── IRobotService   ← the single interface applications import
               + get_current_velocity()
               + get_current_acceleration()
               + get_state() / get_state_topic()

@@ -19,101 +19,141 @@ python tests/run_tests.py
 python -m unittest tests/path/to/test_file.py -v
 ```
 
-**Run a plugin standalone (for development without the full platform):**
+**Run an application standalone (development without the full platform):**
 ```bash
-python src/applications/<plugin_name>/example_usage.py
+python src/applications/<app_name>/example_usage.py
 ```
 
 No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.
 
-## Architecture Overview
+---
 
-This is a **PyQt6-based platform** for controlling industrial robotic systems (FaiRino arm). It follows a **plugin-based, MVC architecture** with strict layering.
+## Three-Level Abstraction
 
-### Startup Sequence (`src/bootstrap/main.py`)
-
-Six ordered steps — order matters:
-1. `EngineContext.build()` — creates the `MessagingService` singleton
-2. `AppBuilder().with_robot(...).with_messaging_service(...).build(GlueRobotApp)` — wires all services and settings
-3. `ShellConfigurator.configure(GlueRobotApp)` — registers shell folder metadata
-4. `QApplication(sys.argv)` — Qt must exist before any widgets
-5. `PluginLoader` — iterates `GlueRobotApp.shell.plugins`, calls each `spec.factory(robot_app)`, then `plugin.register(messaging_service)`
-6. `AppShell` — creates the main window and starts the Qt event loop
-
-### Robot App (`src/robot_apps/`)
-
-`BaseRobotApp` is the abstract base. Subclasses declare class-level specs (no instance state at class level):
-
-- `metadata: AppMetadata` — identity and `settings_root`
-- `settings_specs: List[SettingsSpec]` — which JSON files to load and their serializers
-- `services: List[ServiceSpec]` — required/optional service contracts with type validation
-- `shell: ShellSetup` — folders and plugin factories for the GUI
-
-`AppBuilder` constructs the app: builds `SettingsService` from specs, builds `MotionService → RobotService → NavigationService`, then calls `app.start(services, settings_service)`.
-
-`GlueRobotApp` (`src/robot_apps/glue/glue_robot_app.py`) is the concrete app. It declares 5 plugins and 6 settings files. Each plugin is wired via a module-level factory function in that file.
-
-### Plugin Architecture
-
-Every plugin lives in `src/plugins/<name>/` and follows a strict MVC pattern. The template is `src/applications/APPLICATION_BLUEPRINT/` with a comprehensive guide at `APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`.
+The codebase is structured around three distinct levels. Understanding the boundary between each is essential.
 
 ```
-spec.factory(robot_app)
-  └─ WidgetPlugin(IPlugin)
-       └─ MyPluginFactory(PluginFactory).build(service)
-            ├─ MyModel(IPluginModel)      ← state + I/O, no Qt
-            ├─ MyView(IPluginView)        ← pure Qt, no logic
-            └─ MyController(IPluginController) ← wires M ↔ V
+Platform
+  └── RobotSystem          ← declares what this robot does
+        └── Application    ← one self-contained MVC screen
+```
+
+### Level 1 — Platform (`src/engine/`, `src/bootstrap/`, `pl_gui/`)
+
+Shared, reusable infrastructure. Knows nothing about glue, dispensing, or any specific robot task.
+
+| Package | Responsibility |
+|---------|---------------|
+| `src/engine/core/` | `MessageBroker` singleton — pub/sub and request/response |
+| `src/engine/robot/` | Robot control stack (`IRobotService`, `MotionService`, `SafetyChecker`) |
+| `src/engine/hardware/` | Hardware I/O (`ModbusActionService`, `WeightCellService`) |
+| `src/engine/repositories/` | JSON settings persistence (`SettingsService`, `BaseJsonSettingsRepository`) |
+| `src/engine/process/` | Thread-safe state machine (`BaseProcess`, `ProcessState`, `ProcessTopics`) |
+| `src/bootstrap/` | Startup sequence, `ApplicationLoader`, `SystemBuilder` |
+| `pl_gui/` | Qt shell (`AppShell`, `FolderLauncher`). **Treat as read-only external package.** |
+
+### Level 2 — RobotSystem (`src/robot_systems/`)
+
+A `RobotSystem` is a pure **declaration** — no logic, only class-level specs. It answers: *"what does this robot need?"*
+
+`BaseRobotSystem` defines four class-level attributes that every subclass must provide:
+
+```python
+class GlueRobotSystem(BaseRobotSystem):
+    metadata       = SystemMetadata(name="glue", settings_root="glue")
+    settings_specs = [...]   # which JSON files to load + their serializers
+    services       = [...]   # required/optional service contracts
+    shell          = ShellSetup(
+        folders      = [...],          # navigation folders in the GUI
+        applications = [...],          # ApplicationSpec list — one per screen
+    )
+```
+
+`SystemBuilder` reads these specs and constructs the live instance: loads settings, builds `MotionService → RobotService → NavigationService`, then calls `system.start(services, settings_service)`.
+
+### Level 3 — Application (`src/applications/`)
+
+A self-contained MVC screen registered with a RobotSystem via `ApplicationSpec`. Each application:
+
+- Lives entirely in `src/applications/<name>/`
+- Exposes one public entry point: `IMyService` interface + a factory function
+- Has **no knowledge** of the RobotSystem, other applications, or the platform beyond `IMyService`
+- Is built lazily when the user navigates to its folder
+
+```
+ApplicationSpec.factory(robot_system)
+  └── WidgetApplication(IApplication)
+        └── MyApplicationFactory(ApplicationFactory).build(service)
+              ├── MyModel(IApplicationModel)      ← state + I/O, no Qt
+              ├── MyView(IApplicationView)         ← pure Qt, no logic
+              └── MyController(IApplicationController) ← wires M ↔ V
 ```
 
 Data flows one way: `User action → View signal → Controller → Model → Service`
 
 **Layer import rules** (strictly enforced):
-- `IMyService` / `MyPluginService` — the only boundary between plugin and platform; `MyPluginService` is the only file allowed to import `ISettingsService` / `IRobotService`
-- `MyModel` — imports `IMyService` and stdlib only; **no Qt**
-- `MyView` — imports Qt and `pl_gui` only; **no model, service, or controller**
-- `MyController` — imports model, view, and `IMessagingService` only; **no services directly**
 
-### Messaging (`src/engine/core/`)
+| Layer | May import | Must NOT import |
+|-------|-----------|-----------------|
+| `IMyService` / `MyApplicationService` | `ISettingsService`, `IRobotService`, platform | Qt, model, view, controller |
+| `MyModel` | `IMyService`, stdlib | Qt, services directly |
+| `MyView` | Qt, `pl_gui` | model, service, broker, controller |
+| `MyController` | model, view, `IMessagingService` | services directly |
 
-`MessageBroker` is a singleton using **weak references** for automatic cleanup when widgets are destroyed. Always use `IMessagingService`, never `MessageBroker` directly. Supports pub/sub and request/response patterns.
+---
 
-**Critical:** Never use `lambda` or `.emit` as slot targets for PyQt6 signal connections — PyQt6 weak-references them and they are silently GC'd. Always use named bound methods.
+## Startup Sequence (`src/bootstrap/main.py`)
 
-The same rule applies to the `PluginFactory`: it assigns `view._controller = controller` automatically to keep the controller alive as long as the view. Never write this line in a factory subclass.
+Six ordered steps — order matters:
 
-### Settings (`src/engine/repositories/`)
+1. `EngineContext.build()` — creates the `MessagingService` singleton
+2. `SystemBuilder().with_robot(...).with_messaging_service(...).build(GlueRobotSystem)` — wires all services and settings
+3. `ShellConfigurator.configure(GlueRobotSystem)` — registers folder metadata with the shell
+4. `QApplication(sys.argv)` — Qt must exist before any widgets
+5. `ApplicationLoader` — iterates `GlueRobotSystem.shell.applications`, calls each `spec.factory(robot_system)`, then `application.register(messaging_service)`
+6. `AppShell` — creates the main window and starts the Qt event loop
 
-JSON-based persistence. Each setting is declared with a `SettingsSerializer` (implements `get_default()`, `to_dict()`, `from_dict()`). Settings files are stored under `storage/settings/<app_name>/`. Access via `robot_app.get_settings("key")` or `settings_service.get("key")`.
+---
 
-### Services
+## Key Patterns
 
-Default services built by `AppBuilder` for every robot app:
-- `IRobotService` → `RobotService` (wraps `MotionService` + `RobotStateManager`)
-- `NavigationService` — named position movements from settings
-- `IToolService` — optional, skipped if no `tool_changer` provided
+### Messaging
 
-Optional services declared with `required=False` in `ServiceSpec` don't block startup if unavailable (e.g., weight cells, vision).
+`MessageBroker` is a singleton using **weak references** — dead subscribers are cleaned up automatically. Always inject `IMessagingService`; never import `MessageBroker` directly.
 
-### GUI (`pl_gui/`)
+**Critical:** Never use `lambda` or bare `.emit` as PyQt6 signal slot targets — they are silently GC'd. Always use named bound methods.
 
-**Treat `pl_gui/` as an external, read-only package.** It will eventually be distributed as an installable pip package. Do not modify any files inside `pl_gui/` — changes there will be lost when the package is updated. Consume its public API only (imports from `pl_gui`).
+`ApplicationFactory` assigns `view._controller = controller` automatically to keep the controller alive as long as the view. Never write this line in a factory subclass.
 
-- `AppShell` — main window with a stacked widget; each plugin's widget is created lazily when the user navigates to its folder
-- `FolderLauncher` — grid of app icons per folder
-- Plugin views must inherit `IPluginView` (which extends `AppWidget`) to integrate with the shell
+### Cross-thread delivery
 
-### Adding a New Plugin
+When a broker callback must update Qt widgets, use `_Bridge(QObject)` with `pyqtSignal` (see `GlueCellSettingsController`). For blocking service calls (port scan, connection test), use `QThread + _Worker` tracked in `_active` list (see `ModbusSettingsController`).
 
-1. Copy `src/applications/APPLICATION_BLUEPRINT/` → `src/plugins/my_plugin/`
-2. Replace all `My`/`my`/`APPLICATION_BLUEPRINT` occurrences
-3. Implement: `IMyService` interface → `StubMyService` → `MyPluginService` → `MyModel` → `MyView` → `MyController` → `MyPluginFactory`
-4. Add a factory function and `PluginSpec` to the robot app (e.g., `glue_robot_app.py`)
-5. Verify standalone runner works: `python src/plugins/my_plugin/example_usage.py`
+### Settings
 
-### Adding a New Robot App
+JSON-based persistence. Each setting is declared with a `SettingsSerializer` (implements `get_default()`, `to_dict()`, `from_dict()`). Files are stored under `storage/settings/<system_name>/`. Access via `settings_service.get("key")`.
 
-Subclass `BaseRobotApp`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables. Wire it in `src/bootstrap/main.py` via `AppBuilder().with_robot(...).build(MyRobotApp)`.
+### Process State Machine
+
+`BaseProcess` in `src/engine/process/` provides a thread-safe state machine. Subclass it and override `_on_start`, `_on_pause`, `_on_resume`, `_on_stop` hooks. **Hooks are called while the lock is held — must be non-blocking.**
+
+---
+
+## Adding a New Application
+
+1. Copy `src/applications/APPLICATION_BLUEPRINT/` → `src/applications/my_application/`
+2. Replace all `My`/`my`/`APPLICATION_BLUEPRINT` occurrences with your application name
+3. Implement in order: `IMyService` → `StubMyService` → `MyApplicationService` → `MyModel` → `MyView` → `MyController` → `MyApplicationFactory`
+4. Add a `_build_my_application()` factory function and `ApplicationSpec` to the RobotSystem (e.g. `application_wiring.py` + `glue_robot_system.py`)
+5. Verify standalone runner: `python src/applications/my_application/example_usage.py`
+
+See `src/applications/APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD` for the full step-by-step guide.
+
+## Adding a New Robot System
+
+Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables. Wire it in `src/bootstrap/main.py` via `SystemBuilder().with_robot(...).build(MyRobotSystem)`.
+
+---
 
 ## Documentation
 
@@ -121,13 +161,13 @@ When making changes to any code inside `src/engine/`, ask the user whether
 the corresponding documentation in `docs/engine/` should be updated before
 finishing the task.
 
-When making changes to any code inside `src/plugins/`, ask the user whether
-the corresponding documentation in `docs/plugins/` should be updated before
-finishing the task. Also ask whether `src/applications/APPLICATION_BLUEPRINT/PLUGIN_GUIDE.MD`
+When making changes to any code inside `src/applications/`, ask the user whether
+the corresponding documentation in `docs/applications/` should be updated before
+finishing the task. Also ask whether `src/applications/APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`
 should be updated if the change introduces or modifies a shared pattern.
 
-When making changes to any code inside `src/robot_apps/`, ask the user whether
-the corresponding documentation in `docs/robot_apps/` should be updated before
+When making changes to any code inside `src/robot_systems/`, ask the user whether
+the corresponding documentation in `docs/robot_systems/` should be updated before
 finishing the task.
 
 When making changes to any code inside `src/shared_contracts/`, ask the user

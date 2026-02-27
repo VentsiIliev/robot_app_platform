@@ -1,6 +1,6 @@
 # `src/engine/robot/services/` — Robot Services
 
-This package contains the core service implementations that sit between the physical robot driver and the plugin layer: `MotionService` (safety-checked motion), `RobotStateManager` (state polling and broadcasting), `RobotStatePublisher` (message bus bridge), and `RobotService` (the assembled `IRobotService` facade). It also contains the `create_robot_service` factory.
+This package contains the core service implementations that sit between the physical robot driver and the application layer: `MotionService` (safety-checked motion), `RobotStateManager` (state polling and broadcasting), `RobotStatePublisher` (message bus bridge), and `RobotService` (the assembled `IRobotService` facade). It also contains the `create_robot_service` factory.
 
 ---
 
@@ -205,7 +205,7 @@ Assembly order:
 ### Motion Command
 
 ```
-Plugin → IRobotService.move_ptp(pos, tool, user, vel, acc)
+Application → IRobotService.move_ptp(pos, tool, user, vel, acc)
     │
     ▼
 RobotService.move_ptp(...)

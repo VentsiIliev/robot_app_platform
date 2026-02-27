@@ -1,6 +1,4 @@
 from src.engine.process import ProcessRequirements
-from src.engine.process.service_health_registry import ServiceHealthRegistry
-
 
 # ── Process requirements ──────────────────────────────────────────────────────
 
@@ -8,50 +6,31 @@ _GLUE_PROCESS_REQUIREMENTS  = ProcessRequirements.requires("robot")
 _CLEAN_PROCESS_REQUIREMENTS = ProcessRequirements.requires("robot")
 
 
-def _build_health_registry(robot_app) -> ServiceHealthRegistry:
-    """
-    Builds a ServiceHealthRegistry that performs real operational health checks.
-    Services implementing IHealthCheckable are auto-registered via register_service().
-    Services without health semantics (vision stub) are registered with a lambda.
-    """
-    registry = ServiceHealthRegistry()
-
-    robot = robot_app.get_optional_service("robot")
-    if robot is not None:
-        registry.register_service("robot", robot)
-
-    weight = robot_app.get_optional_service("weight")
-    if weight is not None:
-        registry.register_service("weight", weight)
-
-    vision = robot_app.get_optional_service("vision")
-    if vision is not None:
-        # VisionService has no health semantics yet — registered as always available
-        # Replace this with registry.register_service("vision", vision)
-        # once VisionService implements IHealthCheckable
-        registry.register("vision", lambda: True)
-
-    return registry
-
-
-def _build_dashboard_application(robot_app):
+def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.glue.dashboard.glue_dashboard import GlueDashboard
 
-    robot_service   = robot_app.get_service("robot")
-    health_registry = _build_health_registry(robot_app)
+    robot_service    = system.get_service("robot")          # ← eager — fails fast if missing
+    settings_service = system._settings_service
+    weight_service   = system.get_optional_service("weight")
+    system_manager   = system.system_manager
+    service_checker  = system.health_registry.check
+    requirements     = _GLUE_PROCESS_REQUIREMENTS
 
     return WidgetApplication(
         widget_factory=lambda ms: GlueDashboard.create(
             robot_service     = robot_service,
-            settings_service  = robot_app._settings_service,
+            settings_service  = settings_service,
             messaging_service = ms,
-            weight_service    = robot_app.get_optional_service("weight"),
-            system_manager= robot_app.system_manager,
-            service_checker   = health_registry.check,
-            requirements      = _GLUE_PROCESS_REQUIREMENTS,
+            weight_service    = weight_service,
+            system_manager    = system_manager,
+            service_checker   = service_checker,
+            requirements      = requirements,
         )
     )
+
+
+
 
 
 def _build_glue_cell_settings_application(robot_app):

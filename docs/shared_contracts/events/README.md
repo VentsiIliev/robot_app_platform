@@ -1,6 +1,6 @@
 # `src/shared_contracts/events/` — Event Contracts
 
-This package contains all topic-string namespaces and payload dataclasses used across the platform's publish-subscribe bus. Both publishers (engine layer) and subscribers (plugin/dashboard controllers) import from here.
+This package contains all topic-string namespaces and payload dataclasses used across the platform's publish-subscribe bus. Both publishers (engine layer) and subscribers (application/dashboard controllers) import from here.
 
 ---
 

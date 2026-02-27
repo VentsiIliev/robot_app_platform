@@ -104,7 +104,7 @@ class ModbusActionService(IModbusActionService):
 ## Data Flow
 
 ```
-ModbusSettingsPlugin
+ModbusSettingsApplication
     │
     │  detect_ports()
     │─────────────────────────────► ModbusActionService

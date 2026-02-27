@@ -13,16 +13,16 @@ class GlueCellTopics:
     def glue_type(cell_id: int) -> str: return f"glue/cell/{cell_id}/glue_type"
 
 
-class SystemTopics:
-    SYSTEM_STATE  = "system/system_state"
-
-
+# class SystemTopics:
+#     SYSTEM_STATE  = "system/system_state"
+#
+#
 
 
 @dataclass
 class GlueDashboardConfig(DashboardConfig):
     default_cell_capacity_grams: float = 5000.0
-
+    show_placeholders: bool = False  # aux grid is used for SystemStatusWidget
 
 GLUE_CELLS: list[CardConfig] = [
     CardConfig(card_id=1, label="Glue 1"),

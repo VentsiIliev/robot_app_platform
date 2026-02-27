@@ -1,6 +1,6 @@
 # `src/engine/` — Engine Overview
 
-The `engine` package is the core of the robot app platform. It provides the foundational infrastructure that all robot applications and plugins build on: messaging, robot control, hardware I/O, and settings persistence. Nothing in `engine` depends on `pl_gui` (the Qt layer) or on any specific robot application.
+The `engine` package is the core of the robot system platform. It provides the foundational infrastructure that all robot applications and applications build on: messaging, robot control, hardware I/O, and settings persistence. Nothing in `engine` depends on `pl_gui` (the Qt layer) or on any specific robot application.
 
 ---
 
@@ -43,8 +43,8 @@ src/engine/
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                     robot_apps / plugins                 │
-│           (GlueRobotApp, ModbusSettingsPlugin, …)        │
+│                     robot_apps / applications                 │
+│           (GlueRobotSystem, ModbusSettingsApplication, …)        │
 └────────────┬───────────────────────────┬─────────────────┘
              │ ISettingsService           │ IRobotService / IMessagingService
              ▼                           ▼
@@ -100,7 +100,7 @@ The engine is wired together during platform startup (`src/bootstrap/main.py`):
 1. EngineContext.build()
        └─ creates MessagingService singleton
 
-2. AppBuilder.build(GlueRobotApp)
+2. SystemBuilder.build(GlueRobotSystem)
        ├─ build_from_specs(settings_specs, …) → SettingsService
        ├─ FairinoRobot(ip)  →  create_robot_service(robot, messaging, settings)
        └─ app.start(services, settings_service)

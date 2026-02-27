@@ -41,10 +41,10 @@ result = messaging.request("vision/transformToCamera", {"x": dx, "y": dy})
 1. Add the vision interface to `src/engine/robot/interfaces/` or a new `vision/interfaces/` module
 2. Implement `VisionService` with the actual camera and processing logic
 3. Register topics in `src/shared_contracts/events/vision_events.py`
-4. Add `ServiceSpec(IVisionService, required=False)` to the robot app
+4. Add `ServiceSpec(IVisionService, required=False)` to the robot system
 
 ---
 
 ## Design Note
 
-`VisionService` is declared with `required=False` in robot app service specs, so its absence (or failure to initialize) does not prevent the platform from starting.
+`VisionService` is declared with `required=False` in robot system service specs, so its absence (or failure to initialize) does not prevent the platform from starting.

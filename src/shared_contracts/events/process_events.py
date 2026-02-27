@@ -21,6 +21,8 @@ class ProcessStateEvent:
 
 
 class ProcessTopics:
+    ACTIVE = "process/active/state"
+
     @staticmethod
     def state(process_id: str) -> str:
         return f"process/{process_id}/state"

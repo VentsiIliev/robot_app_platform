@@ -143,10 +143,15 @@ class BaseProcess(IProcess):
 
     def _publish(self, state: ProcessState, previous: ProcessState, message: str = "") -> None:
         event = ProcessStateEvent(
-            process_id = self._process_id,
-            state      = state,
-            previous   = previous,
-            message    = message,
+            process_id=self._process_id,
+            state=state,
+            previous=previous,
+            message=message,
         )
+        # ACTIVE first — dashboard receives this state before any chain fires.
+        # The specific topic is published second — if a subscriber (e.g., GlueOperationRunner)
+        # chains to another process, that process's ACTIVE(RUNNING) will arrive after this
+        # ACTIVE event, correctly overriding it in the dashboard.
+        self._messaging.publish(ProcessTopics.ACTIVE, event)
         self._messaging.publish(ProcessTopics.state(self._process_id), event)
         self._logger.info("%s → %s", previous.value, state.value)

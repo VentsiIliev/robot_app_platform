@@ -5,6 +5,7 @@ from typing import Callable, List, Tuple
 from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.system import SystemTopics
 from src.applications.base.i_application_controller import IApplicationController
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.shared_contracts.events.robot_events import RobotTopics
@@ -16,15 +17,13 @@ from src.robot_systems.glue.dashboard.config import (
 from src.robot_systems.glue.dashboard.model.glue_dashboard_model import GlueDashboardModel
 from src.robot_systems.glue.dashboard.view.glue_dashboard_view import GlueDashboardView
 
-_PROCESS_ID = "glue"
-
-
 class _DashboardBridge(QObject):
     weight_reading = pyqtSignal(int, float)
     cell_state     = pyqtSignal(int, str)
     glue_type      = pyqtSignal(int, str)
     robot_state    = pyqtSignal(str)
-    process_state  = pyqtSignal(str)   # ProcessState.value from BaseProcess
+    process_state = pyqtSignal(str, str)  # (state, process_id)
+    system_state   = pyqtSignal(str, str)   # (busy_state, active_process_id)
 
 
 class GlueDashboardController(IApplicationController):
@@ -75,6 +74,7 @@ class GlueDashboardController(IApplicationController):
         self._bridge.glue_type.connect(self._on_glue_type)
         self._bridge.robot_state.connect(self._on_robot_state_str)
         self._bridge.process_state.connect(self._on_process_state_str)
+        self._bridge.system_state.connect(self._on_system_state)      # ← was missing
 
     # ── Broker → Bridge ───────────────────────────────────────────────
 
@@ -91,8 +91,13 @@ class GlueDashboardController(IApplicationController):
 
         self._sub(RobotTopics.STATE,
                   lambda s: self._bridge.robot_state.emit(getattr(s, "state", "") or ""))
-        self._sub(ProcessTopics.state(_PROCESS_ID),
-                  lambda e: self._bridge.process_state.emit(e.state.value))
+        self._sub(ProcessTopics.ACTIVE,
+                  lambda e: self._bridge.process_state.emit(e.state.value, e.process_id))
+
+        self._sub(SystemTopics.STATE,                                  # ← was missing
+                  lambda e: self._bridge.system_state.emit(
+                      e.state.value, e.active_process or ""
+                  ))
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
 
@@ -109,13 +114,19 @@ class GlueDashboardController(IApplicationController):
             self._view.set_cell_glue_type(card_id, glue_type)
 
     def _on_robot_state_str(self, state: str) -> None:
-        # only update buttons from robot state when no process state has been received
-        if self._view_ok() and self._current_state == ProcessState.IDLE.value and state:
+        if self._view_ok() and self._current_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value) and state:
             self._apply_button_state(state)
 
-    def _on_process_state_str(self, state: str) -> None:
+    def _on_process_state_str(self, state: str, process_id: str) -> None:
         if self._view_ok():
             self._apply_button_state(state)
+            self._view.set_process_state(state)
+            self._view.set_active_process(process_id if state != ProcessState.IDLE.value else "")
+
+    def _on_system_state(self, state: str, active_process: str) -> None:  # ← was missing
+        if self._view_ok():
+            self._view.set_system_state(state)
+            self._view.set_active_process(active_process or "")
 
     # ── View signals → Model ──────────────────────────────────────────
 
@@ -144,7 +155,7 @@ class GlueDashboardController(IApplicationController):
 
     def _on_start(self) -> None:
         if not self._active: return
-        self._model.start()   # BaseProcess publishes → bridge → _apply_button_state
+        self._model.start()
 
     def _on_stop(self) -> None:
         if not self._active: return
@@ -153,7 +164,7 @@ class GlueDashboardController(IApplicationController):
     def _on_pause(self) -> None:
         if not self._active: return
         if self._current_state == ProcessState.PAUSED.value:
-            self._model.start()   # BaseProcess.start() detects PAUSED → calls _on_resume
+            self._model.start()
         else:
             self._model.pause()
 
@@ -208,9 +219,14 @@ class GlueDashboardController(IApplicationController):
 
     def _initialize_view(self) -> None:
         self._apply_button_state(ProcessState.IDLE.value)
+        self._view.set_process_state(ProcessState.IDLE.value)
+        self._view.set_system_state("idle")
+        self._view.set_active_process("")
+        # sync runner mode with the initial button label — single source of truth is the label
+        self._model.set_mode(MODE_TOGGLE_LABELS[self._mode_index])
         for cfg in GLUE_CELLS:
-            card_id   = cfg.card_id
-            cell_id   = card_id - 1
+            card_id = cfg.card_id
+            cell_id = card_id - 1
             glue_type = self._model.get_cell_glue_type(cell_id)
             if glue_type:
                 self._view.set_cell_glue_type(card_id, glue_type)

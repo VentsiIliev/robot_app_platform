@@ -3,12 +3,11 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, List, Optional, Type, Callable
+from typing import Any, ClassVar, Dict, List, Optional, Type, Callable, TYPE_CHECKING
 from dataclasses import dataclass, field
-from typing import List
 from src.engine.repositories.interfaces import ISettingsSerializer, ISettingsRepository, ISettingsService
-
+if TYPE_CHECKING:
+    from src.engine.process.service_health_registry import ServiceHealthRegistry
 
 # ---------------------------------------------------------------------------
 # Metadata primitives
@@ -90,12 +89,16 @@ class BaseRobotSystem(ABC):
         self._resolved: Dict[str, Any] = {}
         self._settings_service: Optional[ISettingsService] = None
         self._system_manager: Optional[Any] = None
+        self._health_registry: Optional[Any] = None
         self._running = False
 
     @property
     def system_manager(self):
         return self._system_manager
 
+    @property
+    def health_registry(self):
+        return self._health_registry
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -136,14 +139,15 @@ class BaseRobotSystem(ABC):
     # Update start() to also accept and store the settings service:
     def start(
             self,
-            services: Dict[str, Any],
-            settings_service: Optional[ISettingsService] = None,
-            system_manager=None,
+            services:        Dict[str, Any],
+            settings_service = None,
+            system_manager   = None,
     ) -> None:
         self._logger.info("Starting %s v%s", self.metadata.name, self.metadata.version)
         self._settings_service = settings_service
-        self._system_manager = system_manager
+        self._system_manager   = system_manager
         self._validate_and_inject(services)
+        self._health_registry  = self._build_health_registry()
         self._running = True
         self.on_start()
         self._logger.info("%s started", self.metadata.name)
@@ -203,6 +207,20 @@ class BaseRobotSystem(ABC):
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _build_health_registry(self) -> ServiceHealthRegistry:
+        """
+        Auto-derives a ServiceHealthRegistry from the system's resolved services.
+        Services implementing IHealthCheckable are registered via is_healthy().
+        Services without health semantics are registered as always available.
+        No manual wiring needed — the system already owns the name → service mapping.
+        """
+        from src.engine.process.service_health_registry import ServiceHealthRegistry
+        registry = ServiceHealthRegistry()
+        for name, service in self._resolved.items():
+            registry.register_service(name, service)
+        return registry
+
 
     def _validate_and_inject(self, services: Dict[str, Any]) -> None:
         missing: List[str] = []

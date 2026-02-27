@@ -1,6 +1,6 @@
 # `src/shared_contracts/` — Shared Contracts
 
-The `shared_contracts` package is the **canonical event bus contract** for the entire platform. It defines the topic strings, payload dataclasses, and enums used by **both** publishers (engine services, robot app services) and subscribers (plugin controllers, dashboard controllers). Nothing in this package has any dependencies on the engine or plugin layers — it is a pure vocabulary module importable by any layer.
+The `shared_contracts` package is the **canonical event bus contract** for the entire platform. It defines the topic strings, payload dataclasses, and enums used by **both** publishers (engine services, robot system services) and subscribers (application controllers, dashboard controllers). Nothing in this package has any dependencies on the engine or application layers — it is a pure vocabulary module importable by any layer.
 
 ---
 
@@ -13,7 +13,7 @@ Without `shared_contracts`, a publisher and subscriber must agree on topic strin
 from src.shared_contracts.events.robot_events import RobotTopics
 messaging.publish(RobotTopics.POSITION, [x, y, z, rx, ry, rz])
 
-# Subscriber (plugin / dashboard controller):
+# Subscriber (application / dashboard controller):
 from src.shared_contracts.events.robot_events import RobotTopics
 messaging.subscribe(RobotTopics.POSITION, self._on_position)
 ```
@@ -67,7 +67,7 @@ from src.shared_contracts.events.process_events import ProcessTopics, ProcessSta
 
 ### App-Specific Topics (not in shared_contracts)
 
-Some topic strings are defined in the robot app layer for app-specific events:
+Some topic strings are defined in the robot system layer for app-specific events:
 
 | Topic String | Defined In | Description |
 |-------------|-----------|-------------|

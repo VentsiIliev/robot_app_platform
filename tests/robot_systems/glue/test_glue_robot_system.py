@@ -20,7 +20,7 @@ def _make_service(tmp: str, robot_ip: str = "10.0.0.1", robot_tool: int = 1):
         json.dump({"ROBOT_IP": robot_ip, "ROBOT_TOOL": robot_tool}, f)
 
     specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-    return build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
+    return build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
 
 class TestGlueRobotAppSettings(unittest.TestCase):
@@ -85,7 +85,7 @@ class TestGlueRobotAppSettings(unittest.TestCase):
                 SettingsSpec("robot1", RobotSettingsSerializer(), "robot/config.json"),
                 SettingsSpec("robot2", RobotSettingsSerializer(), "robot2/config.json"),
             ]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
+            service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
             config1 = service.get("robot1")
             config2 = service.get("robot2")

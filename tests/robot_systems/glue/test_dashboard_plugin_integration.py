@@ -2,9 +2,14 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.applications.base.widget_application import WidgetApplication
+from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
+from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
 from src.robot_systems.glue.processes.glue_process import GlueProcess
+from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
+from src.engine.process.process_requirements import ProcessRequirements
 from src.robot_systems.glue.settings.cells import (
     GlueCellsConfig, CellConfig, CalibrationConfig, MeasurementConfig,
 )
@@ -48,17 +53,14 @@ def _make_settings_service(cells=None, catalog=None):
     )
     return ss, _cells, _catalog
 
-def _make_process(robot_service=None):
-    return GlueProcess(
-        robot_service = robot_service or _make_robot_service(),
-        messaging     = _make_messaging(),
-    )
+def _make_runner():
+    return MagicMock(spec=GlueOperationRunner)
 
-def _make_dashboard_service(cells=None, catalog=None, robot_service=None):
-    rs           = robot_service or _make_robot_service()
+def _make_dashboard_service(cells=None, catalog=None, runner=None, weight_service=None):
     ss, _c, _cat = _make_settings_service(cells, catalog)
-    svc          = GlueDashboardService(process=_make_process(rs), settings_service=ss)
-    return svc, rs, ss, _c, _cat
+    _runner      = runner or _make_runner()
+    svc          = GlueDashboardService(runner=_runner, settings_service=ss, weight_service=weight_service)
+    return svc, _runner, ss, _c, _cat
 
 def _make_robot_system(cells=None, catalog=None):
     ss, _, _ = _make_settings_service(cells, catalog)
@@ -67,7 +69,8 @@ def _make_robot_system(cells=None, catalog=None):
     app.get_service.return_value          = rs
     app.get_optional_service.return_value = None
     app._settings_service                 = ss
-    app.system_manager               = None
+    app.system_manager                    = None
+    # app.health_registry is auto-created by MagicMock; .check(name) returns truthy
     return app, rs, ss
 
 
@@ -104,7 +107,7 @@ class TestDashboardApplicationFactory(unittest.TestCase):
     def _build(self, cells=None, catalog=None):
         app, rs, ss = _make_robot_system(cells, catalog)
         spec        = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
-        application      = spec.factory(app)
+        application = spec.factory(app)
         return application, rs, ss
 
     def test_factory_returns_widget_application(self):
@@ -135,74 +138,57 @@ class TestDashboardApplicationFactory(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GlueDashboardService — command delegation to GlueProcess
+# GlueDashboardService — command delegation to GlueOperationRunner
 # ---------------------------------------------------------------------------
 
 class TestGlueDashboardServiceCommands(unittest.TestCase):
 
-    def _mock_process_svc(self):
-        process  = MagicMock(spec=GlueProcess)
-        ss, _, _ = _make_settings_service()
-        svc      = GlueDashboardService(process=process, settings_service=ss)
-        return svc, process
-
-    def test_start_delegates_to_process(self):
-        svc, process = self._mock_process_svc()
+    def test_start_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.start()
-        process.start.assert_called_once()
+        runner.start.assert_called_once()
 
-    def test_stop_delegates_to_process(self):
-        svc, process = self._mock_process_svc()
+    def test_stop_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.stop()
-        process.stop.assert_called_once()
+        runner.stop.assert_called_once()
 
-    def test_pause_delegates_to_process(self):
-        svc, process = self._mock_process_svc()
+    def test_pause_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.pause()
-        process.pause.assert_called_once()
+        runner.pause.assert_called_once()
 
-    def test_resume_delegates_to_process(self):
-        svc, process = self._mock_process_svc()
+    def test_resume_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.resume()
-        process.resume.assert_called_once()
+        runner.resume.assert_called_once()
 
-    def test_reset_errors_delegates_to_process(self):
-        svc, process = self._mock_process_svc()
+    def test_reset_errors_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.reset_errors()
-        process.reset_errors.assert_called_once()
+        runner.reset_errors.assert_called_once()
 
-    def test_clean_does_not_raise(self):
-        svc, _ = self._mock_process_svc()
+    def test_clean_delegates_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
         svc.clean()
+        runner.clean.assert_called_once()
 
-    def test_set_mode_does_not_raise(self):
-        svc, _ = self._mock_process_svc()
-        svc.set_mode("spray_only")
 
-    # ── Integration: real GlueProcess robot hooks ─────────────────────
+# ---------------------------------------------------------------------------
+# GlueDashboardService — set_mode label parsing
+# ---------------------------------------------------------------------------
 
-    def test_start_calls_enable_robot(self):
-        svc, rs, *_ = _make_dashboard_service()
-        svc.start()
-        rs.enable_robot.assert_called_once()
+class TestGlueDashboardServiceSetMode(unittest.TestCase):
 
-    def test_stop_calls_stop_motion_and_disable(self):
-        svc, rs, *_ = _make_dashboard_service()
-        svc.start(); svc.stop()
-        rs.stop_motion.assert_called_once()
-        rs.disable_robot.assert_called_once()
+    def test_set_mode_spray_only_passes_enum_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
+        svc.set_mode("Spray Only")
+        runner.set_mode.assert_called_once_with(GlueOperationMode.SPRAY_ONLY)
 
-    def test_pause_calls_stop_motion(self):
-        svc, rs, *_ = _make_dashboard_service()
-        svc.start(); svc.pause()
-        rs.stop_motion.assert_called_once()
-
-    def test_resume_calls_enable_robot(self):
-        svc, rs, *_ = _make_dashboard_service()
-        svc.start(); svc.pause()
-        rs.reset_mock()
-        svc.resume()
-        rs.enable_robot.assert_called_once()
+    def test_set_mode_pick_and_spray_passes_enum_to_runner(self):
+        svc, runner, *_ = _make_dashboard_service()
+        svc.set_mode("Pick And Spray")
+        runner.set_mode.assert_called_once_with(GlueOperationMode.PICK_AND_SPRAY)
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +208,7 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
     def test_get_cells_count_returns_zero_on_error(self):
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(process=_make_process(), settings_service=ss)
+        svc = GlueDashboardService(runner=_make_runner(), settings_service=ss)
         self.assertEqual(svc.get_cells_count(), 0)
 
     def test_get_cell_capacity_returns_correct_value(self):
@@ -237,7 +223,7 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
     def test_get_cell_capacity_fallback_on_error(self):
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(process=_make_process(), settings_service=ss)
+        svc = GlueDashboardService(runner=_make_runner(), settings_service=ss)
         self.assertEqual(svc.get_cell_capacity(1), 0.0)
 
     def test_get_cell_glue_type_correct(self):
@@ -257,12 +243,37 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
     def test_get_all_glue_types_empty_on_error(self):
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(process=_make_process(), settings_service=ss)
+        svc = GlueDashboardService(runner=_make_runner(), settings_service=ss)
         self.assertEqual(svc.get_all_glue_types(), [])
 
     def test_get_initial_cell_state_returns_none(self):
         svc, *_ = _make_dashboard_service()
         self.assertIsNone(svc.get_initial_cell_state(1))
+
+
+# ---------------------------------------------------------------------------
+# GlueDashboardService — connection state (weight service integration)
+# ---------------------------------------------------------------------------
+
+class TestGlueDashboardServiceConnectionState(unittest.TestCase):
+
+    def test_disconnected_when_no_weight_service(self):
+        svc, *_ = _make_dashboard_service(weight_service=None)
+        self.assertEqual(svc.get_cell_connection_state(1), "disconnected")
+
+    def test_delegates_to_weight_service_get_cell_state(self):
+        ws = MagicMock()
+        ws.get_cell_state.return_value = MagicMock(value="connected")
+        svc, *_ = _make_dashboard_service(weight_service=ws)
+        result = svc.get_cell_connection_state(1)
+        ws.get_cell_state.assert_called_once_with(1)
+        self.assertEqual(result, "connected")
+
+    def test_disconnected_on_weight_service_exception(self):
+        ws = MagicMock()
+        ws.get_cell_state.side_effect = RuntimeError("hardware error")
+        svc, *_ = _make_dashboard_service(weight_service=ws)
+        self.assertEqual(svc.get_cell_connection_state(1), "disconnected")
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +286,7 @@ class TestGlueDashboardServiceChangeGlue(unittest.TestCase):
         cells = GlueCellsConfig(cells=[_make_cell(cid, glue_type="Type A") for cid in cell_ids])
         ss    = MagicMock()
         ss.get.side_effect = lambda key: cells if key == "glue_cells" else None
-        svc   = GlueDashboardService(process=_make_process(), settings_service=ss)
+        svc   = GlueDashboardService(runner=_make_runner(), settings_service=ss)
         return svc, ss
 
     def test_change_glue_saves_updated_cells(self):
@@ -306,12 +317,12 @@ class TestGlueDashboardServiceChangeGlue(unittest.TestCase):
     def test_change_glue_exception_does_not_propagate(self):
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("db error")
-        svc = GlueDashboardService(process=_make_process(), settings_service=ss)
-        svc.change_glue(1, "Type B")
+        svc = GlueDashboardService(runner=_make_runner(), settings_service=ss)
+        svc.change_glue(1, "Type B")  # must not raise
 
 
 # ---------------------------------------------------------------------------
-# GlueProcess — state machine
+# GlueProcess — state machine (comprehensive)
 # ---------------------------------------------------------------------------
 
 class TestGlueProcess(unittest.TestCase):
@@ -321,73 +332,37 @@ class TestGlueProcess(unittest.TestCase):
         p  = GlueProcess(robot_service=rs, messaging=_make_messaging())
         return p, rs
 
+    # ── Basic state transitions ───────────────────────────────────────
+
     def test_initial_state_idle(self):
-        from src.shared_contracts.events.process_events import ProcessState
-        
         p, _ = self._make()
         self.assertEqual(p.state, ProcessState.IDLE)
 
+    def test_process_id_is_glue(self):
+        p, _ = self._make()
+        self.assertEqual(p.process_id, "glue")
+
     def test_start_transitions_to_running(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, _ = self._make()
         p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
-    def test_start_calls_enable_robot(self):
-        p, rs = self._make()
-        p.start()
-        rs.enable_robot.assert_called_once()
-
     def test_stop_from_running_transitions_to_stopped(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, _ = self._make()
         p.start(); p.stop()
         self.assertEqual(p.state, ProcessState.STOPPED)
 
-    def test_stop_calls_stop_motion_and_disable(self):
-        p, rs = self._make()
-        p.start(); p.stop()
-        rs.stop_motion.assert_called_once()
-        rs.disable_robot.assert_called_once()
-
     def test_pause_transitions_to_paused(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, _ = self._make()
         p.start(); p.pause()
         self.assertEqual(p.state, ProcessState.PAUSED)
 
-    def test_pause_calls_stop_motion(self):
-        p, rs = self._make()
-        p.start(); p.pause()
-        rs.stop_motion.assert_called_once()
-
-    def test_resume_transitions_to_running(self):
-        from src.shared_contracts.events.process_events import ProcessState
+    def test_resume_from_paused_transitions_to_running(self):
         p, _ = self._make()
         p.start(); p.pause(); p.resume()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
-    def test_resume_calls_enable_robot(self):
-        p, rs = self._make()
-        p.start(); p.pause()
-        rs.reset_mock()
-        p.resume()
-        rs.enable_robot.assert_called_once()
-
-    def test_stop_from_idle_blocked(self):
-        from src.shared_contracts.events.process_events import ProcessState
-        p, _ = self._make()
-        p.stop()
-        self.assertEqual(p.state, ProcessState.IDLE)
-
-    def test_pause_from_idle_blocked(self):
-        from src.shared_contracts.events.process_events import ProcessState
-        p, _ = self._make()
-        p.pause()
-        self.assertEqual(p.state, ProcessState.IDLE)
-
     def test_restart_from_stopped(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, rs = self._make()
         p.start(); p.stop()
         rs.reset_mock()
@@ -396,24 +371,156 @@ class TestGlueProcess(unittest.TestCase):
         rs.enable_robot.assert_called_once()
 
     def test_set_error_forces_error_state(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, _ = self._make()
         p.set_error("motor fault")
         self.assertEqual(p.state, ProcessState.ERROR)
 
     def test_reset_errors_returns_to_idle(self):
-        from src.shared_contracts.events.process_events import ProcessState
         p, _ = self._make()
         p.set_error(); p.reset_errors()
         self.assertEqual(p.state, ProcessState.IDLE)
 
-    def test_process_id(self):
+    # ── Blocked transitions ───────────────────────────────────────────
+
+    def test_stop_from_idle_is_blocked(self):
         p, _ = self._make()
-        self.assertEqual(p.process_id, "glue")
+        p.stop()
+        self.assertEqual(p.state, ProcessState.IDLE)
+
+    def test_pause_from_idle_is_blocked(self):
+        p, _ = self._make()
+        p.pause()
+        self.assertEqual(p.state, ProcessState.IDLE)
+
+    # ── Robot service hook calls ──────────────────────────────────────
+
+    def test_start_calls_enable_robot(self):
+        p, rs = self._make()
+        p.start()
+        rs.enable_robot.assert_called_once()
+
+    def test_stop_calls_stop_motion_and_disable_robot(self):
+        p, rs = self._make()
+        p.start(); p.stop()
+        rs.stop_motion.assert_called_once()
+        rs.disable_robot.assert_called_once()
+
+    def test_pause_calls_stop_motion(self):
+        p, rs = self._make()
+        p.start(); p.pause()
+        rs.stop_motion.assert_called_once()
+
+    def test_resume_calls_enable_robot(self):
+        p, rs = self._make()
+        p.start(); p.pause()
+        rs.reset_mock()
+        p.resume()
+        rs.enable_robot.assert_called_once()
+
+    def test_start_from_paused_calls_on_resume_not_on_start(self):
+        """start() from PAUSED must call _on_resume (enable_robot), not _on_start."""
+        p, rs = self._make()
+        p.start(); p.pause()
+        rs.reset_mock()
+        p.start()          # same as resume when paused
+        rs.enable_robot.assert_called_once()
+        rs.stop_motion.assert_not_called()  # _on_start only calls enable, not stop
+
+    # ── Hook errors ───────────────────────────────────────────────────
+
+    def test_hook_error_forces_error_state(self):
+        rs = _make_robot_service()
+        rs.enable_robot.side_effect = RuntimeError("motor fault")
+        p  = GlueProcess(robot_service=rs, messaging=_make_messaging())
+        p.start()
+        self.assertEqual(p.state, ProcessState.ERROR)
+
+    def test_hook_error_does_not_propagate_to_caller(self):
+        rs = _make_robot_service()
+        rs.enable_robot.side_effect = RuntimeError("motor fault")
+        p  = GlueProcess(robot_service=rs, messaging=_make_messaging())
+        p.start()  # must not raise
+
+    def test_hook_error_publishes_error_event_with_message(self):
+        ms = _make_messaging()
+        rs = _make_robot_service()
+        rs.enable_robot.side_effect = RuntimeError("motor fault")
+        p  = GlueProcess(robot_service=rs, messaging=ms)
+        p.start()
+        published_events = [c.args[1] for c in ms.publish.call_args_list]
+        error_events = [e for e in published_events if e.state == ProcessState.ERROR]
+        self.assertGreaterEqual(len(error_events), 1)   # published to ACTIVE + specific topic
+        self.assertIn("motor fault", error_events[0].message)
+
+    # ── Broker publishing ─────────────────────────────────────────────
+
+    def test_publishes_active_topic_on_start(self):
+        ms = _make_messaging()
+        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms)
+        p.start()
+        topics = [c.args[0] for c in ms.publish.call_args_list]
+        self.assertIn(ProcessTopics.ACTIVE, topics)
+
+    def test_publishes_process_specific_topic_on_start(self):
+        ms = _make_messaging()
+        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms)
+        p.start()
+        topics = [c.args[0] for c in ms.publish.call_args_list]
+        self.assertIn(ProcessTopics.state("glue"), topics)
+
+    def test_active_topic_published_before_specific_topic(self):
+        ms = _make_messaging()
+        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms)
+        p.start()
+        topics = [c.args[0] for c in ms.publish.call_args_list]
+        self.assertLess(
+            topics.index(ProcessTopics.ACTIVE),
+            topics.index(ProcessTopics.state("glue")),
+        )
+
+    # ── System manager ────────────────────────────────────────────────
+
+    def test_system_manager_acquire_blocks_start_when_false(self):
+        sm = MagicMock(spec=ISystemManager)
+        sm.acquire.return_value = False
+        p  = GlueProcess(
+            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm
+        )
+        p.start()
+        self.assertEqual(p.state, ProcessState.IDLE)
+
+    def test_system_manager_acquire_called_with_process_id(self):
+        sm = MagicMock(spec=ISystemManager)
+        sm.acquire.return_value = True
+        p  = GlueProcess(
+            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm
+        )
+        p.start()
+        sm.acquire.assert_called_once_with("glue")
+
+    def test_system_manager_release_called_on_stop(self):
+        sm = MagicMock(spec=ISystemManager)
+        sm.acquire.return_value = True
+        p  = GlueProcess(
+            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm
+        )
+        p.start(); p.stop()
+        sm.release.assert_called_with("glue")
+
+    def test_system_manager_release_called_on_reset_errors_idle(self):
+        sm = MagicMock(spec=ISystemManager)
+        sm.acquire.return_value = True
+        p  = GlueProcess(
+            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm
+        )
+        p.start(); p.stop(); p.reset_errors()
+        # release called at STOPPED and again at IDLE
+        release_calls = [c.args[0] for c in sm.release.call_args_list]
+        self.assertIn("glue", release_calls)
+
+    # ── ProcessRequirements ───────────────────────────────────────────
 
     def test_requirements_blocks_start_when_service_missing(self):
-        from src.shared_contracts.events.process_events import ProcessState
-        from src.engine.process.process_requirements import ProcessRequirements
         p = GlueProcess(
             robot_service   = _make_robot_service(),
             messaging       = _make_messaging(),
@@ -424,8 +531,6 @@ class TestGlueProcess(unittest.TestCase):
         self.assertEqual(p.state, ProcessState.IDLE)
 
     def test_requirements_allows_start_when_services_available(self):
-        from src.shared_contracts.events.process_events import ProcessState
-        from src.engine.process.process_requirements import ProcessRequirements
         p = GlueProcess(
             robot_service   = _make_robot_service(),
             messaging       = _make_messaging(),
@@ -434,13 +539,6 @@ class TestGlueProcess(unittest.TestCase):
         )
         p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)
-
-    def test_publishes_state_on_start(self):
-        ms = _make_messaging()
-        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms)
-        p.start()
-        ms.publish.assert_called()
-        self.assertEqual(ms.publish.call_args[0][0], "process/glue/state")
 
 
 if __name__ == "__main__":

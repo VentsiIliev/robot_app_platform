@@ -6,7 +6,8 @@ from typing import Dict, List, Optional
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
-from src.robot_systems.glue.processes.glue_process import GlueProcess
+from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
+from src.robot_systems.glue.processes.glue_operation_runner import GlueOperationRunner
 from src.robot_systems.glue.settings.cells import GlueCellsConfig
 from src.robot_systems.glue.settings.glue_types import GlueCatalog
 
@@ -15,28 +16,31 @@ class GlueDashboardService(IGlueDashboardService):
 
     def __init__(
         self,
-        process:          GlueProcess,
+        runner:           GlueOperationRunner,
         settings_service: ISettingsService,
         weight_service:   Optional[IWeightCellService] = None,
     ):
-        self._process  = process
+        self._runner   = runner
         self._settings = settings_service
         self._weight   = weight_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
-    # ── Commands — delegated to GlueProcess ──────────────────────────
+    # ── Commands — delegated to GlueOperationRunner ───────────────────
 
-    def start(self)         -> None: self._process.start()
-    def stop(self)          -> None: self._process.stop()
-    def pause(self)         -> None: self._process.pause()
-    def resume(self)        -> None: self._process.resume()
-    def reset_errors(self)  -> None: self._process.reset_errors()
+    def start(self)        -> None: self._runner.start()
+    def stop(self)         -> None: self._runner.stop()
+    def pause(self)        -> None: self._runner.pause()
+    def resume(self)       -> None: self._runner.resume()
+    def reset_errors(self) -> None: self._runner.reset_errors()
 
     def clean(self) -> None:
         self._logger.info("clean")
+        self._runner.clean()
 
     def set_mode(self, mode: str) -> None:
-        self._logger.info("set_mode → %s", mode)
+        operation_mode = GlueOperationMode.from_label(mode)
+        self._logger.info("set_mode → %s", operation_mode.value)
+        self._runner.set_mode(operation_mode)
 
     def change_glue(self, cell_id: int, glue_type: str) -> None:
         self._logger.info("change_glue → cell=%s type='%s'", cell_id, glue_type)

@@ -7,7 +7,7 @@ The `repositories` package provides JSON-backed persistent settings for all robo
 ## Architecture
 
 ```
-SettingsSpec (declared in BaseRobotApp)
+SettingsSpec (declared in BaseRobotSystem)
        │
        │  consumed by
        ▼
@@ -23,7 +23,7 @@ SettingsService(repos: Dict[str, ISettingsRepository])
        │
        │  implements:
        ▼
-ISettingsService   ← the only interface plugins and services see
+ISettingsService   ← the only interface applications and services see
 ```
 
 ---
@@ -31,7 +31,7 @@ ISettingsService   ← the only interface plugins and services see
 ## Settings Flow
 
 ```
-AppBuilder.build(AppClass)
+SystemBuilder.build(AppClass)
   └─ build_from_specs(settings_specs, settings_root, AppClass)
         │
         │  for each SettingsSpec(name, storage_key, serializer):
@@ -65,7 +65,7 @@ On settings_service.save("robot_config", updated):
 
 **File:** `interfaces/i_settings_service.py`
 
-The only interface plugins and services should depend on.
+The only interface applications and services should depend on.
 
 ```python
 class ISettingsService(ABC):
@@ -120,10 +120,10 @@ def build_from_specs(
 
 ## File Locations
 
-Settings files are stored relative to the robot app module or at an absolute path:
+Settings files are stored relative to the robot system module or at an absolute path:
 
 ```
-src/robot_apps/glue/
+src/robot_systems/glue/
 └── storage/
     └── settings/
         ├── robot_config.json

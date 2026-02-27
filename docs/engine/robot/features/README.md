@@ -179,6 +179,6 @@ ok = nav.move_to_calibration_position(z_offset=0.0)
 
 ## Design Notes
 
-- **`NavigationService` does not inherit `IMotionService`**: It is a feature service, not a motion service. It is not part of the `IRobotService` interface and is consumed separately by robot app logic.
+- **`NavigationService` does not inherit `IMotionService`**: It is a feature service, not a motion service. It is not part of the `IRobotService` interface and is consumed separately by robot system logic.
 - **`ToolManager` uses a lock**: All `pickup_gripper` and `drop_off_gripper` operations acquire a `threading.Lock`, making them safe to call from different threads.
 - **`robot_config` in `ToolManager`**: The `robot_config` argument is untyped because it accesses gripper-specific methods (`getSlot0PickupPointsParsed`, etc.) that are specific to the concrete glue robot config class, not to the generic `RobotSettings` dataclass.
