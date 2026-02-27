@@ -81,11 +81,13 @@ User clicks Save
 ## Usage Example
 
 ```python
-from src.plugins.robot_settings.robot_settings_plugin import RobotSettingsPlugin
+from src.applications.robot_settings.robot_settings_plugin import RobotSettingsApplication
+
 
 # In robot app wiring:
 def _build_robot_settings(robot_app):
-    return RobotSettingsPlugin(robot_app._settings_service)
+    return RobotSettingsApplication(robot_app._settings_service)
+
 
 # Standalone (requires ISettingsService stub):
 widget = RobotSettingsFactory().build(RobotSettingsPluginService(settings_service))

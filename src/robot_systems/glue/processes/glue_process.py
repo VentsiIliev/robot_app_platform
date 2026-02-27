@@ -11,21 +11,21 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 class GlueProcess(BaseProcess):
     """
     The gluing process — owns the robot lifecycle for the glue dispensing operation.
-    Lives in robot_apps/glue/processes/ — all app-specific processes live here.
+    Lives in robot_systems/glue/processes/ — all system-specific processes live here.
     """
 
     def __init__(
         self,
         robot_service:   IRobotService,
         messaging:       IMessagingService,
-        app_manager:     Optional[ISystemManager]   = None,
+        system_manager:     Optional[ISystemManager]   = None,
         requirements:    Optional[ProcessRequirements]   = None,
         service_checker: Optional[Callable[[str], bool]] = None,
     ):
         super().__init__(
             process_id      = "glue",
             messaging       = messaging,
-            app_manager     = app_manager,
+            system_manager     = system_manager,
             requirements    = requirements,
             service_checker = service_checker,
         )

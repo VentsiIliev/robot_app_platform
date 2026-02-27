@@ -98,11 +98,11 @@ class SystemBuilder:
         self._tool_changer = tool_changer
         return self
 
-    def with_messaging_service(self, messaging_service: IMessagingService) -> AppBuilder:
+    def with_messaging_service(self, messaging_service: IMessagingService) -> SystemBuilder:
         self._messaging_service = messaging_service
         return self
 
-    def register(self, service_type: Type, builder: ServiceBuilderFn) -> AppBuilder:
+    def register(self, service_type: Type, builder: ServiceBuilderFn) -> SystemBuilder:
         self._registry[service_type] = builder
         return self
 
@@ -134,7 +134,7 @@ class SystemBuilder:
             messaging_service=self._messaging_service,
         )
 
-        # merge app-level per-spec builders into registry (override defaults)
+        # merge system-level per-spec builders into registry (override defaults)
         registry = dict(self._registry)
         for spec in system_class.services:
             if spec.builder is not None:
@@ -167,12 +167,12 @@ class SystemBuilder:
             _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
         system = system_class()
-        from src.engine.application.application_manager import ApplicationManager
-        application_manager = ApplicationManager(self._messaging_service)
+        from src.engine.system.system_manager import SystemManager
+        system_manager = SystemManager(self._messaging_service)
         system.start(
             services,
             settings_service=settings_service,
-            application_manager=application_manager,
+            system_manager=system_manager,
         )
         return system
 

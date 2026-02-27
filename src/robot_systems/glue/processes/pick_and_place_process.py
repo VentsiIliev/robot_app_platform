@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional
 
-from src.engine.application.i_application_manager import IApplicationManager
+from src.engine.system.i_system_manager import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
@@ -15,14 +15,14 @@ class PickAndPlaceProcess(BaseProcess):
             self,
             robot_service: IRobotService,
             messaging: IMessagingService,
-            app_manager: Optional[IApplicationManager] = None,
+            system_manager: Optional[ISystemManager] = None,
             requirements: Optional[ProcessRequirements] = None,
             service_checker: Optional[Callable[[str], bool]] = None,
     ):
         super().__init__(
             process_id="pick_and_place",
             messaging=messaging,
-            app_manager=app_manager,
+            system_manager=system_manager,
             requirements=requirements,
             service_checker=service_checker,
         )

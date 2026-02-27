@@ -94,8 +94,8 @@ WeightCellService publishes CellStateEvent on weight/cell/{id}/state
 ## Usage Example
 
 ```python
-from src.plugins.glue_cell_settings.glue_cell_settings_factory import GlueCellSettingsFactory
-from src.plugins.glue_cell_settings.service.stub_glue_cell_settings import StubGlueCellSettingsService
+from src.applications.glue_cell_settings.glue_cell_settings_factory import GlueCellSettingsFactory
+from src.applications.glue_cell_settings.service.stub_glue_cell_settings import StubGlueCellSettingsService
 
 widget = GlueCellSettingsFactory().build(
     service=StubGlueCellSettingsService(),

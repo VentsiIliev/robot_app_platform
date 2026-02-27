@@ -24,7 +24,7 @@ def main() -> None:
     from PyQt6.QtWidgets import QApplication
     from pl_gui.shell.AppShell import AppShell
     from src.bootstrap.build_engine import EngineContext
-    from src.bootstrap.plugin_loader import PluginLoader
+    from src.bootstrap.application_loader import ApplicationLoader
     from src.bootstrap.shell_configurator import ShellConfigurator
     from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
     from src.robot_systems.system_builder import SystemBuilder
@@ -47,17 +47,17 @@ def main() -> None:
     # 4 — Qt must exist before any widgets
     qt_app = QApplication(sys.argv)
 
-    # 5 — load plugins — factory lives on each PluginSpec, bootstrap knows nothing
-    loader = PluginLoader(ctx.messaging_service)
-    for spec in GlueRobotSystem.shell.plugins:
+    # 5 — load applications — factory lives on each ApplicationSpec, bootstrap knows nothing
+    loader = ApplicationLoader(ctx.messaging_service)
+    for spec in GlueRobotSystem.shell.applications:
         if spec.factory is None:
-            _LOGGER.warning("PluginSpec '%s' has no factory — skipping", spec.name)
+            _LOGGER.warning("ApplicationSpec '%s' has no factory — skipping", spec.name)
             continue
         try:
-            plugin = spec.factory(robot_app)
-            loader.load(plugin, folder_id=spec.folder_id, icon=spec.icon, name=spec.name)  # ← pass name
+            application = spec.factory(robot_app)
+            loader.load(application, folder_id=spec.folder_id, icon=spec.icon, name=spec.name)
         except Exception:
-            _LOGGER.exception("Failed to build plugin '%s'", spec.name)
+            _LOGGER.exception("Failed to build application '%s'", spec.name)
 
     # 6 — build widget registry and launch shell
     descriptors, widget_factory = loader.build_registry()

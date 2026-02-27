@@ -66,21 +66,21 @@ In the robot app, add a module-level factory function and a `PluginSpec`:
 
 ```python
 def _build_my_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.plugins.my_plugin.my_plugin_factory import MyPluginFactory
-    from src.plugins.my_plugin.service.my_plugin_service import MyPluginService
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.my_plugin.my_plugin_factory import MyPluginFactory
+    from src.applications.my_plugin.service.my_plugin_service import MyPluginService
 
     service = MyPluginService(settings_service=robot_app._settings_service)
     factory = MyPluginFactory()
-    return WidgetPlugin(widget_factory=lambda _ms: factory.build(service))
+    return WidgetApplication(widget_factory=lambda _ms: factory.build(service))
     # If the plugin needs live broker data:
-    # return WidgetPlugin(widget_factory=lambda ms: factory.build(service, ms))
+    # return WidgetApplication(widget_factory=lambda ms: factory.build(service, ms))
 
 
 class YourRobotApp(BaseRobotApp):
     shell = ShellSetup(
         plugins=[
-            PluginSpec(name="MyPlugin", folder_id=2, icon="fa5s.cog", factory=_build_my_plugin),
+            PluginSpec(name="MyApplication", folder_id=2, icon="fa5s.cog", factory=_build_my_plugin),
         ],
     )
 ```

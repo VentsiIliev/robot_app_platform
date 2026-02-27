@@ -1,0 +1,14 @@
+{
+  "glue_types": [
+    {
+      "id": "23f65fb0-c829-4393-af89-fa430cd59ce6",
+      "name": "Type A",
+      "description": "Standard glue type A"
+    },
+    {
+      "id": "7ca5f26c-6111-4f15-b109-83c461d7195e",
+      "name": "Type B",
+      "description": "Standard glue type B"
+    }
+  ]
+}

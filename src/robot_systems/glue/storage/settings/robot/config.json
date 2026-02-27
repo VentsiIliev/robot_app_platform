@@ -1,0 +1,38 @@
+{
+  "ROBOT_IP": "192.168.58.2",
+  "ROBOT_TOOL": 0,
+  "ROBOT_USER": 0,
+  "TCP_X_OFFSET": 0.0,
+  "TCP_Y_OFFSET": 0.0,
+  "TCP_X_STEP_DISTANCE": 50.0,
+  "TCP_X_STEP_OFFSET": 0.1,
+  "TCP_Y_STEP_DISTANCE": 50.0,
+  "TCP_Y_STEP_OFFSET": 0.1,
+  "OFFSET_DIRECTION_MAP": {
+    "+X": true,
+    "-X": true,
+    "+Y": true,
+    "-Y": true
+  },
+  "MOVEMENT_GROUPS": {},
+  "SAFETY_LIMITS": {
+    "x_min": -500,
+    "x_max": 500,
+    "y_min": -500,
+    "y_max": 500,
+    "z_min": 100,
+    "z_max": 800,
+    "rx_min": 170,
+    "rx_max": 180,
+    "ry_min": -10,
+    "ry_max": 10,
+    "rz_min": -180,
+    "rz_max": 180
+  },
+  "GLOBAL_MOTION_SETTINGS": {
+    "global_velocity": 100,
+    "global_acceleration": 100,
+    "emergency_decel": 500,
+    "max_jog_step": 50
+  }
+}

@@ -1,9 +1,9 @@
 from PyQt6.QtCore import pyqtSignal, QEvent
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from src.plugins.base.i_plugin_view import IPluginView
+from src.applications.base.i_application_view import IApplicationView
 
 
-class GlueDashboardView(IPluginView):
+class GlueDashboardView(IApplicationView):
     """View — pure Qt widget. No broker, no services, no business logic."""
 
     LOGOUT_REQUEST   = pyqtSignal()

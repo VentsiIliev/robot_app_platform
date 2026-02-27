@@ -33,13 +33,13 @@ class BaseProcess(IProcess):
         self,
         process_id:      str,
         messaging:       IMessagingService,
-        app_manager:     Optional[ISystemManager]    = None,
+        system_manager:     Optional[ISystemManager]    = None,
         requirements:    Optional[ProcessRequirements]    = None,
         service_checker: Optional[Callable[[str], bool]]  = None,
     ):
         self._process_id     = process_id
         self._messaging      = messaging
-        self._app_manager    = app_manager
+        self._system_manager    = system_manager
         self._requirements   = requirements   or ProcessRequirements.none()
         self._service_checker = service_checker or (lambda _: True)
         self._state          = ProcessState.IDLE
@@ -110,9 +110,9 @@ class BaseProcess(IProcess):
                 )
                 return
 
-            # 2 — acquire application-level lock
-            if self._app_manager is not None:
-                if not self._app_manager.acquire(self._process_id):
+            # 2 — acquire system-level lock
+            if self._system_manager is not None:
+                if not self._system_manager.acquire(self._process_id):
                     return
 
         allowed = _TRANSITIONS.get(self._state, frozenset())
@@ -122,8 +122,8 @@ class BaseProcess(IProcess):
                 self._state.value, target.value, {s.value for s in allowed},
             )
             if target == ProcessState.RUNNING:
-                if self._app_manager:
-                    self._app_manager.release(self._process_id)
+                if self._system_manager:
+                    self._system_manager.release(self._process_id)
             return
 
         previous    = self._state
@@ -136,8 +136,8 @@ class BaseProcess(IProcess):
             self._publish(ProcessState.ERROR, previous, str(exc))
             return
 
-        if target in _RELEASE_ON and self._app_manager:
-            self._app_manager.release(self._process_id)
+        if target in _RELEASE_ON and self._system_manager:
+            self._system_manager.release(self._process_id)
 
         self._publish(target, previous, message)
 

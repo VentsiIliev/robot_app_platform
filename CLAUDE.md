@@ -21,7 +21,7 @@ python -m unittest tests/path/to/test_file.py -v
 
 **Run a plugin standalone (for development without the full platform):**
 ```bash
-python src/plugins/<plugin_name>/example_usage.py
+python src/applications/<plugin_name>/example_usage.py
 ```
 
 No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.
@@ -55,7 +55,7 @@ Six ordered steps — order matters:
 
 ### Plugin Architecture
 
-Every plugin lives in `src/plugins/<name>/` and follows a strict MVC pattern. The template is `src/plugins/PLUGIN_BLUEPRINT/` with a comprehensive guide at `PLUGIN_BLUEPRINT/PLUGIN_GUIDE.MD`.
+Every plugin lives in `src/plugins/<name>/` and follows a strict MVC pattern. The template is `src/applications/APPLICATION_BLUEPRINT/` with a comprehensive guide at `APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`.
 
 ```
 spec.factory(robot_app)
@@ -105,8 +105,8 @@ Optional services declared with `required=False` in `ServiceSpec` don't block st
 
 ### Adding a New Plugin
 
-1. Copy `src/plugins/PLUGIN_BLUEPRINT/` → `src/plugins/my_plugin/`
-2. Replace all `My`/`my`/`PLUGIN_BLUEPRINT` occurrences
+1. Copy `src/applications/APPLICATION_BLUEPRINT/` → `src/plugins/my_plugin/`
+2. Replace all `My`/`my`/`APPLICATION_BLUEPRINT` occurrences
 3. Implement: `IMyService` interface → `StubMyService` → `MyPluginService` → `MyModel` → `MyView` → `MyController` → `MyPluginFactory`
 4. Add a factory function and `PluginSpec` to the robot app (e.g., `glue_robot_app.py`)
 5. Verify standalone runner works: `python src/plugins/my_plugin/example_usage.py`
@@ -123,7 +123,7 @@ finishing the task.
 
 When making changes to any code inside `src/plugins/`, ask the user whether
 the corresponding documentation in `docs/plugins/` should be updated before
-finishing the task. Also ask whether `src/plugins/PLUGIN_BLUEPRINT/PLUGIN_GUIDE.MD`
+finishing the task. Also ask whether `src/applications/APPLICATION_BLUEPRINT/PLUGIN_GUIDE.MD`
 should be updated if the change introduces or modifies a shared pattern.
 
 When making changes to any code inside `src/robot_apps/`, ask the user whether

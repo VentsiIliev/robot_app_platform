@@ -86,9 +86,9 @@ User clicks Test
 ## Usage Example
 
 ```python
-from src.plugins.modbus_settings.modbus_settings_factory import ModbusSettingsFactory
-from src.plugins.modbus_settings.service.stub_modbus_settings_service import StubModbusSettingsService
-from src.plugins.modbus_settings.service.stub_modbus_action_service import StubModbusActionService
+from src.applications.modbus_settings.modbus_settings_factory import ModbusSettingsFactory
+from src.applications.modbus_settings.service.stub_modbus_settings_service import StubModbusSettingsService
+from src.applications.modbus_settings.service.stub_modbus_action_service import StubModbusActionService
 
 widget = ModbusSettingsFactory().build(
     StubModbusSettingsService(),
@@ -99,7 +99,7 @@ widget = ModbusSettingsFactory().build(
 Or run standalone:
 
 ```bash
-python src/plugins/modbus_settings/example_usage.py
+python src/applications/modbus_settings/example_usage.py
 ```
 
 ---

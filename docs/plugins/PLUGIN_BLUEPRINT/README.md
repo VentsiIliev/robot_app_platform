@@ -62,11 +62,11 @@ PLUGIN_BLUEPRINT/
 def run_standalone() -> None:
     import sys
     from PyQt6.QtWidgets import QApplication, QMainWindow
-    from src.plugins.PLUGIN_BLUEPRINT.my_plugin_factory import MyPluginFactory
-    from src.plugins.PLUGIN_BLUEPRINT.service.stub_my_service import StubMyService
+    from src.applications.PLUGIN_BLUEPRINT.my_plugin_factory import MyApplicationFactory
+    from src.applications.PLUGIN_BLUEPRINT.service.stub_my_service import StubMyService
 
-    app    = QApplication(sys.argv)
-    widget = MyPluginFactory().build(StubMyService())
+    app = QApplication(sys.argv)
+    widget = MyApplicationFactory().build(StubMyService())
 
     window = QMainWindow()
     window.setCentralWidget(widget)

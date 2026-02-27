@@ -11,7 +11,7 @@ def build_app_registry(plugin_manager, widget_factory_instance) -> Tuple[List[Ap
     This is the integration point - it knows about plugins_example, but MainWindow doesn't.
 
     Args:
-        plugin_manager: Object with get_loaded_plugin_names() and get_plugin(name)
+        plugin_manager: Object with get_loaded_application_names() and get_application(name)
         widget_factory_instance: Instance that can create widgets via create_widget(app_name)
 
     Returns:
@@ -20,8 +20,8 @@ def build_app_registry(plugin_manager, widget_factory_instance) -> Tuple[List[Ap
 
     descriptors = []
 
-    for plugin_name in plugin_manager.get_loaded_plugin_names():
-        plugin = plugin_manager.get_plugin(plugin_name)
+    for plugin_name in plugin_manager.get_loaded_application_names():
+        plugin = plugin_manager.get_application(plugin_name)
         if plugin:
             json_metadata = getattr(plugin, '_json_metadata', {})
             folder_id = json_metadata.get('folder_id', 1)

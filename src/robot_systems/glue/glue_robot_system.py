@@ -9,14 +9,14 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.engine.vision.vision_service import VisionService
 from src.robot_systems.base_robot_system import (
-    SystemMetadata, BaseRobotSystem, FolderSpec, PluginSpec,
+    SystemMetadata, BaseRobotSystem, FolderSpec, ApplicationSpec,
     ServiceSpec, SettingsSpec, ShellSetup,
 )
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
 from src.robot_systems.glue.settings.glue import GlueSettingsSerializer
 from src.robot_systems.glue.settings.glue_types import GlueCatalogSerializer
 from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
-from src.robot_systems.glue import plugin_wiring
+from src.robot_systems.glue import application_wiring
 
 # ── Service builders ──────────────────────────────────────────────────────────
 
@@ -29,14 +29,14 @@ def _build_weight_cell_service(ctx):
     )
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
+# ── System ───────────────────────────────────────────────────────────────────────
 
 class GlueRobotSystem(BaseRobotSystem):
 
     metadata = SystemMetadata(
-        name="GlueApplication",
+        name="GlueSystem",
         version="1.0.0",
-        description="Automated glue dispensing application",
+        description="Automated glue dispensing system",
         author="Platform Team",
         settings_root=os.path.join("storage", "settings"),
     )
@@ -47,12 +47,12 @@ class GlueRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=2, name="SERVICE",    display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN",      display_name="Administration"),
         ],
-        plugins=[
-            PluginSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=plugin_wiring._build_dashboard_plugin),
-            PluginSpec(name="RobotSettings",   folder_id=2, icon="fa5s.robot",            factory=plugin_wiring._build_robot_settings_plugin),
-            PluginSpec(name="GlueSettings",    folder_id=2, icon="fa5s.sliders-h",        factory=plugin_wiring._build_glue_settings_plugin),
-            PluginSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=plugin_wiring._build_modbus_settings_plugin),
-            PluginSpec(name="CellSettings", folder_id=2, icon="fa5s.weight", factory=plugin_wiring._build_glue_cell_settings_plugin),
+        applications=[
+            ApplicationSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=application_wiring._build_dashboard_application),
+            ApplicationSpec(name="RobotSettings",   folder_id=2, icon="fa5s.robot",            factory=application_wiring._build_robot_settings_application),
+            ApplicationSpec(name="GlueSettings",    folder_id=2, icon="fa5s.sliders-h",        factory=application_wiring._build_glue_settings_application),
+            ApplicationSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=application_wiring._build_modbus_settings_application),
+            ApplicationSpec(name="CellSettings", folder_id=2, icon="fa5s.weight", factory=application_wiring._build_glue_cell_settings_application),
 
         ],
     )

@@ -28,7 +28,7 @@ class GlueDashboard:
         settings_service:  ISettingsService,
         messaging_service: IMessagingService,
         weight_service:    Optional[IWeightCellService]    = None,
-        app_manager:       Optional[ISystemManager]   = None,
+        system_manager:       Optional[ISystemManager]   = None,
         service_checker:   Optional[Callable[[str], bool]] = None,
         requirements:      Optional[ProcessRequirements]   = None,
     ) -> QWidget:
@@ -36,7 +36,7 @@ class GlueDashboard:
         process = GlueProcess(
             robot_service   = robot_service,
             messaging       = messaging_service,
-            app_manager     = app_manager,
+            system_manager= system_manager,
             requirements    = requirements,
             service_checker = service_checker,
         )

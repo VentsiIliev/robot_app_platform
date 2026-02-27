@@ -219,15 +219,15 @@ class TestGlueSettingsControllerGlueTypes(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Integration — PluginSpec declared in GlueRobotApp
+# Integration — ApplicationSpec declared in GlueRobotSystem
 # ---------------------------------------------------------------------------
 
-class TestGlueSettingsPluginSpec(unittest.TestCase):
+class TestGlueSettingsApplicationSpec(unittest.TestCase):
 
     def _spec(self):
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         return next(
-            (s for s in GlueRobotSystem.shell.plugins if s.name == "GlueSettings"),
+            (s for s in GlueRobotSystem.shell.applications if s.name == "GlueSettings"),
             None,
         )
 
@@ -243,16 +243,16 @@ class TestGlueSettingsPluginSpec(unittest.TestCase):
     def test_spec_icon_set(self):
         self.assertIsNotNone(self._spec().icon)
 
-    def test_factory_returns_widget_plugin(self):
+    def test_factory_returns_widget_application(self):
         from unittest.mock import MagicMock
-        from src.plugins.base.widget_plugin import WidgetPlugin
+        from src.applications.base.widget_application import WidgetApplication
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         ss  = MagicMock()
         ss.get.side_effect = lambda k: MagicMock()
         app = MagicMock()
         app._settings_service = ss
-        plugin = self._spec().factory(app)
-        self.assertIsInstance(plugin, WidgetPlugin)
+        application = self._spec().factory(app)
+        self.assertIsInstance(application, WidgetApplication)
 
     def test_factory_registers_messaging_service(self):
         from unittest.mock import MagicMock
@@ -261,10 +261,10 @@ class TestGlueSettingsPluginSpec(unittest.TestCase):
         ss.get.side_effect = lambda k: MagicMock()
         app = MagicMock()
         app._settings_service = ss
-        plugin = self._spec().factory(app)
+        application = self._spec().factory(app)
         ms = MagicMock()
-        plugin.register(ms)
-        self.assertIs(plugin._messaging_service, ms)
+        application.register(ms)
+        self.assertIs(application._messaging_service, ms)
 
 
 if __name__ == "__main__":

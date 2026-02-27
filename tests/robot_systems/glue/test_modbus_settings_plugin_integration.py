@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
-from src.plugins.base.widget_plugin import WidgetPlugin
-from src.plugins.modbus_settings.service.modbus_settings_plugin_service import ModbusSettingsPluginService
+from src.applications.base.widget_application import WidgetApplication
+from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 
-def _make_robot_app(config=None):
+def _make_robot_system(config=None):
     cfg = config or ModbusConfig()
     ss  = MagicMock()
     ss.get.side_effect = lambda key: cfg if key == "modbus_config" else None
@@ -18,19 +18,19 @@ def _make_robot_app(config=None):
 
 def _spec():
     return next(
-        (s for s in GlueRobotSystem.shell.plugins if s.name == "ModbusSettings"),
+        (s for s in GlueRobotSystem.shell.applications if s.name == "ModbusSettings"),
         None,
     )
 
 
 # ---------------------------------------------------------------------------
-# PluginSpec declaration
+# ApplicationSpec declaration
 # ---------------------------------------------------------------------------
 
-class TestModbusSettingsPluginSpec(unittest.TestCase):
+class TestModbusSettingsApplicationSpec(unittest.TestCase):
 
     def test_spec_declared(self):
-        self.assertIsNotNone(_spec(), "ModbusSettings PluginSpec missing")
+        self.assertIsNotNone(_spec(), "ModbusSettings ApplicationSpec missing")
 
     def test_spec_folder_id(self):
         self.assertEqual(_spec().folder_id, 2)
@@ -46,50 +46,50 @@ class TestModbusSettingsPluginSpec(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Factory — WidgetPlugin construction
+# Factory — WidgetApplication construction
 # ---------------------------------------------------------------------------
 
-class TestModbusSettingsPluginFactory(unittest.TestCase):
+class TestModbusSettingsApplicationFactory(unittest.TestCase):
 
-    def test_factory_returns_widget_plugin(self):
-        self.assertIsInstance(_spec().factory(_make_robot_app()), WidgetPlugin)
+    def test_factory_returns_widget_application(self):
+        self.assertIsInstance(_spec().factory(_make_robot_system()), WidgetApplication)
 
     def test_factory_does_not_require_messaging_service(self):
-        self.assertIsNotNone(_spec().factory(_make_robot_app()))
+        self.assertIsNotNone(_spec().factory(_make_robot_system()))
 
     def test_register_stores_messaging_service(self):
-        plugin = _spec().factory(_make_robot_app())
+        application = _spec().factory(_make_robot_system())
         ms     = MagicMock()
-        plugin.register(ms)
-        self.assertIs(plugin._messaging_service, ms)
+        application.register(ms)
+        self.assertIs(application._messaging_service, ms)
 
     def test_widget_factory_callable_ignores_messaging_service(self):
-        plugin = _spec().factory(_make_robot_app())
+        application = _spec().factory(_make_robot_system())
         with patch(
-            "src.plugins.modbus_settings.modbus_settings_factory.ModbusSettingsFactory.build"
+            "src.applications.modbus_settings.modbus_settings_factory.ModbusSettingsFactory.build"
         ) as mock_build:
             mock_build.return_value = MagicMock()
-            plugin.register(MagicMock())
-            plugin.create_widget()
+            application.register(MagicMock())
+            application.create_widget()
             mock_build.assert_called_once()
 
-    def test_factory_called_twice_returns_independent_plugins(self):
-        p1 = _spec().factory(_make_robot_app())
-        p2 = _spec().factory(_make_robot_app())
+    def test_factory_called_twice_returns_independent_applications(self):
+        p1 = _spec().factory(_make_robot_system())
+        p2 = _spec().factory(_make_robot_system())
         self.assertIsNot(p1, p2)
 
 
 # ---------------------------------------------------------------------------
-# ModbusSettingsPluginService — settings only (no action methods)
+# ModbusSettingsApplicationService — settings only (no action methods)
 # ---------------------------------------------------------------------------
 
-class TestModbusSettingsPluginServiceIntegration(unittest.TestCase):
+class TestModbusSettingsApplicationServiceIntegration(unittest.TestCase):
 
     def _make_service(self, config=None):
         cfg = config or ModbusConfig(port="COM5", baudrate=115200, slave_address=10)
         ss  = MagicMock()
         ss.get.side_effect = lambda key: cfg if key == "modbus_config" else None
-        return ModbusSettingsPluginService(ss), ss, cfg
+        return ModbusSettingsApplicationService(ss), ss, cfg
 
     def test_load_config_returns_correct_instance(self):
         svc, _, cfg = self._make_service()
@@ -182,17 +182,17 @@ class TestModbusActionServiceIntegration(unittest.TestCase):
         self.assertNotIn("settings_service", src)
 
     def test_factory_uses_modbus_action_service(self):
-        """_build_modbus_settings_plugin must wire ModbusActionService — not a mock."""
+        """_build_modbus_settings_application must wire ModbusActionService — not a mock."""
         from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
-        plugin = _spec().factory(_make_robot_app())
-        # WidgetPlugin.widget_factory is a callable — call it with mock broker
+        application = _spec().factory(_make_robot_system())
+        # WidgetApplication.widget_factory is a callable — call it with mock broker
         ms     = MagicMock()
-        plugin.register(ms)
+        application.register(ms)
         with patch(
-            "src.plugins.modbus_settings.modbus_settings_factory.ModbusSettingsFactory.build"
+            "src.applications.modbus_settings.modbus_settings_factory.ModbusSettingsFactory.build"
         ) as mock_build:
             mock_build.return_value = MagicMock()
-            plugin.create_widget()
+            application.create_widget()
             _, kwargs = mock_build.call_args
             args = mock_build.call_args[0]
             # second positional arg must be an IModbusActionService
@@ -200,7 +200,7 @@ class TestModbusActionServiceIntegration(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# GlueRobotApp settings_specs — modbus_config declared
+# GlueRobotSystem settings_specs — modbus_config declared
 # ---------------------------------------------------------------------------
 
 class TestModbusSettingsSpecInGlueApp(unittest.TestCase):
@@ -239,26 +239,26 @@ class TestModbusSettingsSpecInGlueApp(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Plugin ordering
+# Application ordering
 # ---------------------------------------------------------------------------
 
-class TestModbusSettingsPluginOrdering(unittest.TestCase):
+class TestModbusSettingsApplicationOrdering(unittest.TestCase):
 
     def test_modbus_settings_in_service_folder(self):
         self.assertIn("ModbusSettings", [
-            s.name for s in GlueRobotSystem.shell.plugins if s.folder_id == 2
+            s.name for s in GlueRobotSystem.shell.applications if s.folder_id == 2
         ])
 
     def test_service_folder_declared(self):
         self.assertIn(2, [f.folder_id for f in GlueRobotSystem.shell.folders])
 
-    def test_all_service_plugins_have_icons(self):
-        for spec in GlueRobotSystem.shell.plugins:
+    def test_all_service_applications_have_icons(self):
+        for spec in GlueRobotSystem.shell.applications:
             if spec.folder_id == 2:
                 self.assertIsNotNone(spec.icon, f"{spec.name} missing icon")
 
-    def test_all_service_plugins_have_factories(self):
-        for spec in GlueRobotSystem.shell.plugins:
+    def test_all_service_applications_have_factories(self):
+        for spec in GlueRobotSystem.shell.applications:
             if spec.folder_id == 2:
                 self.assertIsNotNone(spec.factory, f"{spec.name} missing factory")
 

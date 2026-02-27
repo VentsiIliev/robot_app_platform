@@ -1,0 +1,64 @@
+{
+  "cells": [
+    {
+      "id": 0,
+      "type": "Type A",
+      "url": "http://192.168.222.143/weight1",
+      "capacity": 10000.0,
+      "fetch_timeout": 5,
+      "calibration": {
+        "zero_offset": 0.0,
+        "scale_factor": 1.0,
+        "temperature_compensation": false
+      },
+      "measurement": {
+        "sampling_rate": 10,
+        "filter_cutoff": 1.0,
+        "averaging_samples": 5,
+        "min_weight_threshold": 0.0,
+        "max_weight_threshold": 1000.0
+      },
+      "motor_address": 0
+    },
+    {
+      "id": 1,
+      "type": "Type A",
+      "url": "http://192.168.222.143/weight2",
+      "capacity": 10000.0,
+      "fetch_timeout": 5,
+      "calibration": {
+        "zero_offset": 0.0,
+        "scale_factor": 1.0,
+        "temperature_compensation": false
+      },
+      "measurement": {
+        "sampling_rate": 10,
+        "filter_cutoff": 1.0,
+        "averaging_samples": 5,
+        "min_weight_threshold": 0.0,
+        "max_weight_threshold": 1000.0
+      },
+      "motor_address": 0
+    },
+    {
+      "id": 2,
+      "type": "Type A",
+      "url": "http://192.168.222.143/weight3",
+      "capacity": 10000.0,
+      "fetch_timeout": 5,
+      "calibration": {
+        "zero_offset": 0.0,
+        "scale_factor": 1.0,
+        "temperature_compensation": false
+      },
+      "measurement": {
+        "sampling_rate": 10,
+        "filter_cutoff": 1.0,
+        "averaging_samples": 5,
+        "min_weight_threshold": 0.0,
+        "max_weight_threshold": 1000.0
+      },
+      "motor_address": 0
+    }
+  ]
+}

@@ -5,7 +5,7 @@ from typing import Callable, List, Tuple
 from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 
 from src.engine.core.i_messaging_service import IMessagingService
-from src.plugins.base.i_plugin_controller import IPluginController
+from src.applications.base.i_application_controller import IApplicationController
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.weight_events import WeightTopics
@@ -27,7 +27,7 @@ class _DashboardBridge(QObject):
     process_state  = pyqtSignal(str)   # ProcessState.value from BaseProcess
 
 
-class GlueDashboardController(IPluginController):
+class GlueDashboardController(IApplicationController):
 
     def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: IMessagingService):
         self._model         = model

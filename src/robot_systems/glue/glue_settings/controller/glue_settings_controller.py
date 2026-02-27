@@ -1,11 +1,11 @@
 import logging
 
-from src.plugins.base.i_plugin_controller import IPluginController
+from src.applications.base.i_application_controller import IApplicationController
 from src.robot_systems.glue.glue_settings.model.glue_settings_model import GlueSettingsModel
 from src.robot_systems.glue.glue_settings.view.glue_settings_view import GlueSettingsView
 
 
-class GlueSettingsController(IPluginController):
+class GlueSettingsController(IApplicationController):
 
     def __init__(self, model: GlueSettingsModel, view: GlueSettingsView):
         self._model  = model

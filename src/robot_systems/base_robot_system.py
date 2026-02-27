@@ -29,7 +29,7 @@ class FolderSpec:
 
 
 @dataclass(frozen=True)
-class PluginSpec:
+class ApplicationSpec:
     name: str
     folder_id: int
     icon: str = "fa5s.cog"
@@ -39,7 +39,7 @@ class PluginSpec:
 @dataclass(frozen=True)
 class ShellSetup:
     folders: List[FolderSpec] = field(default_factory=list)
-    plugins: List[PluginSpec] = field(default_factory=list)
+    applications: List[ApplicationSpec] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -68,19 +68,19 @@ class SettingsSpec:
     required: bool = True
 
 # ---------------------------------------------------------------------------
-# Base application
+# Base system
 # ---------------------------------------------------------------------------
 
 class BaseRobotSystem(ABC):
     """
     Subclasses declare:
-        metadata: AppMetadata       — identity
+        metadata: SystemMetadata       — identity
         services: list[ServiceSpec] — required/optional service contracts
 
-    Platform calls app.start(services_dict) to resolve and inject.
+    Platform calls system.start(services_dict) to resolve and inject.
     """
 
-    metadata: ClassVar[SystemMetadata] = SystemMetadata(name="UnnamedApp")
+    metadata: ClassVar[SystemMetadata] = SystemMetadata(name="UnnamedSystem")
     services: ClassVar[List[ServiceSpec]] = []
     settings_specs: ClassVar[List[SettingsSpec]] = []
     shell: ClassVar[ShellSetup] = ShellSetup()
@@ -89,12 +89,12 @@ class BaseRobotSystem(ABC):
         self._logger = logging.getLogger(self.__class__.__name__)
         self._resolved: Dict[str, Any] = {}
         self._settings_service: Optional[ISettingsService] = None
-        self._application_manager: Optional[Any] = None
+        self._system_manager: Optional[Any] = None
         self._running = False
 
     @property
-    def application_manager(self):
-        return self._application_manager
+    def system_manager(self):
+        return self._system_manager
 
     # ------------------------------------------------------------------
     # Persistence
@@ -104,7 +104,7 @@ class BaseRobotSystem(ABC):
         if self._settings_service is None:
             raise RuntimeError(
                 f"[{self.metadata.name}] No settings service available. "
-                f"Ensure settings_specs are declared and AppBuilder is used."
+                f"Ensure settings_specs are declared and SystemBuilder is used."
             )
         return self._settings_service.get(name)
 
@@ -138,11 +138,11 @@ class BaseRobotSystem(ABC):
             self,
             services: Dict[str, Any],
             settings_service: Optional[ISettingsService] = None,
-            application_manager=None,
+            system_manager=None,
     ) -> None:
         self._logger.info("Starting %s v%s", self.metadata.name, self.metadata.version)
         self._settings_service = settings_service
-        self._application_manager = application_manager
+        self._system_manager = system_manager
         self._validate_and_inject(services)
         self._running = True
         self.on_start()
@@ -179,7 +179,7 @@ class BaseRobotSystem(ABC):
     @classmethod
     def describe(cls) -> str:
         lines = [
-            f"App    : {cls.metadata.name} v{cls.metadata.version}",
+            f"System    : {cls.metadata.name} v{cls.metadata.version}",
             f"Desc   : {cls.metadata.description}",
             f"Author : {cls.metadata.author}",
             f"Storage: {cls.metadata.settings_root}/{cls.metadata.name.lower()}/",

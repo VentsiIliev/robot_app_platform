@@ -9,8 +9,8 @@ from src.shared_contracts.events.robot_events import RobotTopics
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)-8s] %(name)s — %(message)s")
 
 from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
-from src.robot_apps.app_builder import AppBuilder
-from src.robot_apps.glue.glue_robot_app import GlueRobotApp
+from src.robot_systems.system_builder import SystemBuilder
+from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 
 def on_robot_state(snapshot: RobotStateSnapshot) -> None:       # ← named function, stays alive
@@ -22,10 +22,10 @@ broker.subscribe(RobotTopics.STATE, on_robot_state)             # ← strong ref
 
 
 app = (
-    AppBuilder()
+    SystemBuilder()
     .with_robot(TestRobotWrapper())
     .register(VisionService, lambda ctx: VisionService())
-    .build(GlueRobotApp)
+    .build(GlueRobotSystem)
 )
 
 

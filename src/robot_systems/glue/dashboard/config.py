@@ -14,7 +14,7 @@ class GlueCellTopics:
 
 
 class SystemTopics:
-    APPLICATION_STATE  = "system/application_state"
+    SYSTEM_STATE  = "system/system_state"
 
 
 

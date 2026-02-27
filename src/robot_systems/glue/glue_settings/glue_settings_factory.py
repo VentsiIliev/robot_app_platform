@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from src.plugins.base.i_plugin_controller import IPluginController
-from src.plugins.base.i_plugin_model import IPluginModel
-from src.plugins.base.i_plugin_view import IPluginView
-from src.plugins.base.plugin_factory import PluginFactory
+from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.i_application_model import IApplicationModel
+from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.application_factory import ApplicationFactory
 from src.robot_systems.glue.glue_settings.controller.glue_settings_controller import GlueSettingsController
 from src.robot_systems.glue.glue_settings.model.glue_settings_model import GlueSettingsModel
 from src.robot_systems.glue.glue_settings.service.i_glue_settings_service import IGlueSettingsService
 from src.robot_systems.glue.glue_settings.view.glue_settings_view import GlueSettingsView
 
 
-class GlueSettingsFactory(PluginFactory):
+class GlueSettingsFactory(ApplicationFactory):
 
-    def _create_model(self, service: IGlueSettingsService) -> IPluginModel:
+    def _create_model(self, service: IGlueSettingsService) -> IApplicationModel:
         return GlueSettingsModel(service)
 
-    def _create_view(self) -> IPluginView:
+    def _create_view(self) -> IApplicationView:
         return GlueSettingsView()
 
-    def _create_controller(self, model: IPluginModel, view: IPluginView) -> IPluginController:
+    def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         return GlueSettingsController(model, view)

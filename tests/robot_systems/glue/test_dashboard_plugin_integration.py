@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.plugins.base.widget_plugin import WidgetPlugin
+from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.processes.glue_process import GlueProcess
@@ -60,30 +60,30 @@ def _make_dashboard_service(cells=None, catalog=None, robot_service=None):
     svc          = GlueDashboardService(process=_make_process(rs), settings_service=ss)
     return svc, rs, ss, _c, _cat
 
-def _make_robot_app(cells=None, catalog=None):
+def _make_robot_system(cells=None, catalog=None):
     ss, _, _ = _make_settings_service(cells, catalog)
     rs       = _make_robot_service()
     app      = MagicMock()
     app.get_service.return_value          = rs
     app.get_optional_service.return_value = None
     app._settings_service                 = ss
-    app.application_manager               = None
+    app.system_manager               = None
     return app, rs, ss
 
 
 # ---------------------------------------------------------------------------
-# PluginSpec declaration
+# ApplicationSpec declaration
 # ---------------------------------------------------------------------------
 
-class TestDashboardPluginSpec(unittest.TestCase):
+class TestDashboardApplicationSpec(unittest.TestCase):
 
     def _spec(self):
         return next(
-            (s for s in GlueRobotSystem.shell.plugins if s.name == "GlueDashboard"), None,
+            (s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard"), None,
         )
 
     def test_spec_declared(self):
-        self.assertIsNotNone(self._spec(), "GlueDashboard PluginSpec missing")
+        self.assertIsNotNone(self._spec(), "GlueDashboard ApplicationSpec missing")
 
     def test_spec_folder_id(self):
         self.assertEqual(self._spec().folder_id, 1)
@@ -96,40 +96,40 @@ class TestDashboardPluginSpec(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Factory builds a WidgetPlugin
+# Factory builds a WidgetApplication
 # ---------------------------------------------------------------------------
 
-class TestDashboardPluginFactory(unittest.TestCase):
+class TestDashboardApplicationFactory(unittest.TestCase):
 
     def _build(self, cells=None, catalog=None):
-        app, rs, ss = _make_robot_app(cells, catalog)
-        spec        = next(s for s in GlueRobotSystem.shell.plugins if s.name == "GlueDashboard")
-        plugin      = spec.factory(app)
-        return plugin, rs, ss
+        app, rs, ss = _make_robot_system(cells, catalog)
+        spec        = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
+        application      = spec.factory(app)
+        return application, rs, ss
 
-    def test_factory_returns_widget_plugin(self):
-        plugin, _, _ = self._build()
-        self.assertIsInstance(plugin, WidgetPlugin)
+    def test_factory_returns_widget_application(self):
+        application, _, _ = self._build()
+        self.assertIsInstance(application, WidgetApplication)
 
     def test_factory_requests_robot_service(self):
-        app, _, _ = _make_robot_app()
-        spec = next(s for s in GlueRobotSystem.shell.plugins if s.name == "GlueDashboard")
+        app, _, _ = _make_robot_system()
+        spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
         spec.factory(app)
         app.get_service.assert_called_with("robot")
 
     def test_register_stores_messaging_service(self):
-        plugin, _, _ = self._build()
+        application, _, _ = self._build()
         ms = MagicMock()
-        plugin.register(ms)
-        self.assertIs(plugin._messaging_service, ms)
+        application.register(ms)
+        self.assertIs(application._messaging_service, ms)
 
     def test_widget_factory_forwards_messaging_service(self):
-        plugin, _, _ = self._build()
+        application, _, _ = self._build()
         ms = MagicMock()
-        plugin.register(ms)
+        application.register(ms)
         with patch("src.robot_systems.glue.dashboard.glue_dashboard.GlueDashboard.create") as mock_create:
             mock_create.return_value = MagicMock()
-            plugin.create_widget()
+            application.create_widget()
             _, kwargs = mock_create.call_args
             self.assertIs(kwargs.get("messaging_service"), ms)
 

@@ -2,7 +2,7 @@ from PyQt6.QtCore import pyqtSignal, QEvent
 from PyQt6.QtWidgets import QVBoxLayout
 
 from pl_gui.settings.settings_view.settings_view import SettingsView
-from src.plugins.base.i_plugin_view import IPluginView
+from src.applications.base.i_application_view import IApplicationView
 from src.robot_systems.glue.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.glue_settings.view.glue_settings_schema import (
     SPRAY_GROUP, PUMP_GROUP, GENERATOR_GROUP, TIMING_GROUP, RAMP_GROUP,
@@ -10,7 +10,7 @@ from src.robot_systems.glue.glue_settings.view.glue_settings_schema import (
 from src.robot_systems.glue.glue_settings.view.glue_type_tab import GlueTypeTab
 
 
-class GlueSettingsView(IPluginView):
+class GlueSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no model, no business logic."""
 
     save_requested        = pyqtSignal(dict)

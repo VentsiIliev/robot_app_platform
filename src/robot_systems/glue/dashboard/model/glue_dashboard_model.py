@@ -2,19 +2,19 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from src.plugins.base.i_plugin_model import IPluginModel
+from src.applications.base.i_application_model import IApplicationModel
 from src.robot_systems.glue.dashboard.config import GlueDashboardConfig
 from src.robot_systems.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
 
 
-class GlueDashboardModel(IPluginModel):
+class GlueDashboardModel(IApplicationModel):
 
     def __init__(self, service: IGlueDashboardService, config: GlueDashboardConfig = None):
         self._service = service
         self._config  = config or GlueDashboardConfig()
         self._logger  = logging.getLogger(self.__class__.__name__)
 
-    # ── IPluginModel contract ─────────────────────────────────────────────
+    # ── IApplicationModel contract ─────────────────────────────────────────────
 
     def load(self) -> GlueDashboardConfig:
         """Return the dashboard config — initial state is pulled per-cell by the controller."""

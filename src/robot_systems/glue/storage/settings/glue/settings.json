@@ -1,0 +1,21 @@
+{
+  "spray_width": 5.1,
+  "spraying_height": 10.0,
+  "fan_speed": 50.0,
+  "time_between_generator_and_glue": 1.0,
+  "motor_speed": 10000.0,
+  "reverse_duration": 1.0,
+  "speed_reverse": 1000.0,
+  "rz_angle": 0.0,
+  "glue_type": "Type A",
+  "generator_timeout": 5.0,
+  "time_before_motion": 1.0,
+  "time_before_stop": 1.0,
+  "reach_start_threshold": 1.0,
+  "reach_end_threshold": 1.0,
+  "initial_ramp_speed": 5000.0,
+  "forward_ramp_steps": 1,
+  "reverse_ramp_steps": 1,
+  "initial_ramp_speed_duration": 1.0,
+  "spray_on": true
+}

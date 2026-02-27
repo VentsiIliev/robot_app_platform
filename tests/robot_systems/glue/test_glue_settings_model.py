@@ -128,7 +128,7 @@ class TestGlueSettingsModelGlueTypes(unittest.TestCase):
         svc.remove_glue_type.assert_called_once_with("some-id")
 
 
-class TestGlueSettingsPluginService(unittest.TestCase):
+class TestGlueSettingsApplicationService(unittest.TestCase):
 
     def _make_ss(self, settings=None, catalog=None):
         from src.robot_systems.glue.settings.glue_types import GlueCatalog
@@ -142,69 +142,69 @@ class TestGlueSettingsPluginService(unittest.TestCase):
         return ss, _settings, _catalog
 
     def test_load_settings_reads_correct_key(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         ss, cfg, _ = self._make_ss()
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         self.assertIs(svc.load_settings(), cfg)
         ss.get.assert_called_with("glue_settings")
 
     def test_save_settings_writes_correct_key(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         ss, _, _ = self._make_ss()
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         new = GlueSettings(spray_width=5.5)
         svc.save_settings(new)
         ss.save.assert_called_once_with("glue_settings", new)
 
     def test_load_glue_types_returns_list(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         ss, _, catalog = self._make_ss()
-        svc   = GlueSettingsPluginService(ss)
+        svc   = GlueSettingsApplicationService(ss)
         types = svc.load_glue_types()
         self.assertEqual(len(types), len(catalog.glue_types))
 
     def test_add_glue_type_saves_catalog(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         from src.robot_systems.glue.settings.glue_types import GlueCatalog
         catalog = GlueCatalog(glue_types=[])
         ss, _, _ = self._make_ss(catalog=catalog)
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         result = svc.add_glue_type("New Type", "desc")
         self.assertEqual(result.name, "New Type")
         ss.save.assert_called_once()
 
     def test_update_glue_type_saves_catalog(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         from src.robot_systems.glue.settings.glue_types import GlueCatalog
         existing = Glue(name="Old", glue_id="fixed-id")
         catalog  = GlueCatalog(glue_types=[existing])
         ss, _, _ = self._make_ss(catalog=catalog)
-        svc    = GlueSettingsPluginService(ss)
+        svc    = GlueSettingsApplicationService(ss)
         result = svc.update_glue_type("fixed-id", "New Name", "new desc")
         self.assertEqual(result.name, "New Name")
         ss.save.assert_called_once()
 
     def test_update_glue_type_missing_id_raises(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         ss, _, _ = self._make_ss()
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         with self.assertRaises(KeyError):
             svc.update_glue_type("nonexistent-id", "X", "")
 
     def test_remove_glue_type_saves_catalog(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         from src.robot_systems.glue.settings.glue_types import GlueCatalog
         existing = Glue(name="Old", glue_id="del-id")
         catalog  = GlueCatalog(glue_types=[existing])
         ss, _, _ = self._make_ss(catalog=catalog)
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         svc.remove_glue_type("del-id")
         ss.save.assert_called_once()
 
     def test_remove_glue_type_missing_id_raises(self):
-        from src.robot_systems.glue.glue_settings.service.glue_settings_plugin_service import GlueSettingsPluginService
+        from src.robot_systems.glue.glue_settings.service.glue_settings_application_service import GlueSettingsApplicationService
         ss, _, _ = self._make_ss()
-        svc = GlueSettingsPluginService(ss)
+        svc = GlueSettingsApplicationService(ss)
         with self.assertRaises(KeyError):
             svc.remove_glue_type("nonexistent-id")
 

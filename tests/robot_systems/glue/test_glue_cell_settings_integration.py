@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from src.engine.hardware.weight.config import (
     CalibrationConfig, CellConfig, CellsConfig, MeasurementConfig,
 )
-from src.plugins.base.widget_plugin import WidgetPlugin
+from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
 
@@ -25,7 +25,7 @@ def _cell(cid):
 def _cells(*ids):
     return CellsConfig(cells=[_cell(i) for i in ids])
 
-def _make_robot_app(cells=None):
+def _make_robot_system(cells=None):
     cfg = cells or _cells(0, 1, 2)
     ss  = MagicMock()
     ss.get.side_effect = lambda key: cfg if key == "glue_cells" else MagicMock()
@@ -37,19 +37,19 @@ def _make_robot_app(cells=None):
 
 def _spec():
     return next(
-        (s for s in GlueRobotSystem.shell.plugins if s.name == "CellSettings"),
+        (s for s in GlueRobotSystem.shell.applications if s.name == "CellSettings"),
         None,
     )
 
 
 # ---------------------------------------------------------------------------
-# PluginSpec declaration
+# ApplicationSpec declaration
 # ---------------------------------------------------------------------------
 
-class TestGlueCellSettingsPluginSpec(unittest.TestCase):
+class TestGlueCellSettingsApplicationSpec(unittest.TestCase):
 
     def test_spec_declared(self):
-        self.assertIsNotNone(_spec(), "CellSettings PluginSpec missing from GlueRobotApp.shell.plugins")
+        self.assertIsNotNone(_spec(), "CellSettings ApplicationSpec missing from GlueRobotSystem.shell.applications")
 
     def test_spec_folder_id(self):
         self.assertEqual(_spec().folder_id, 2)
@@ -65,34 +65,34 @@ class TestGlueCellSettingsPluginSpec(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Factory — WidgetPlugin construction
+# Factory — WidgetApplication construction
 # ---------------------------------------------------------------------------
 
-class TestGlueCellSettingsPluginFactory(unittest.TestCase):
+class TestGlueCellSettingsApplicationFactory(unittest.TestCase):
 
-    def test_factory_returns_widget_plugin(self):
-        plugin = _spec().factory(_make_robot_app())
-        self.assertIsInstance(plugin, WidgetPlugin)
+    def test_factory_returns_widget_application(self):
+        application = _spec().factory(_make_robot_system())
+        self.assertIsInstance(application, WidgetApplication)
 
     def test_factory_passes_weight_service(self):
-        app = _make_robot_app()
+        app = _make_robot_system()
         _spec().factory(app)
         app.get_optional_service.assert_any_call("weight")
 
     def test_factory_works_without_weight_service(self):
-        app = _make_robot_app()
+        app = _make_robot_system()
         app.get_optional_service.return_value = None   # no weight hardware
-        plugin = _spec().factory(app)
-        self.assertIsInstance(plugin, WidgetPlugin)
+        application = _spec().factory(app)
+        self.assertIsInstance(application, WidgetApplication)
 
     def test_widget_factory_callable(self):
-        plugin = _spec().factory(_make_robot_app())
+        application = _spec().factory(_make_robot_system())
         ms     = MagicMock()
         with patch(
-            "src.plugins.glue_cell_settings.glue_cell_settings_factory.GlueCellSettingsFactory.build",
+            "src.applications.glue_cell_settings.glue_cell_settings_factory.GlueCellSettingsFactory.build",
             return_value=MagicMock(),
         ) as mock_build:
-            plugin._widget_factory(ms)
+            application._widget_factory(ms)
             mock_build.assert_called_once()
 
 
@@ -161,9 +161,9 @@ class TestWeightServiceSpec(unittest.TestCase):
 class TestGlueCellSettingsServiceSaveAndPush(unittest.TestCase):
 
     def test_save_persists_and_pushes(self):
-        from src.plugins.glue_cell_settings.service.glue_cell_settings_service import GlueCellSettingsService
-        from src.plugins.glue_cell_settings.model.glue_cell_settings_model import GlueCellSettingsModel
-        from src.plugins.glue_cell_settings.model.mapper import GlueCellMapper
+        from src.applications.glue_cell_settings.service.glue_cell_settings_service import GlueCellSettingsService
+        from src.applications.glue_cell_settings.model.glue_cell_settings_model import GlueCellSettingsModel
+        from src.applications.glue_cell_settings.model.mapper import GlueCellMapper
 
         cells_cfg = _cells(0)
         ss        = MagicMock()
@@ -185,9 +185,9 @@ class TestGlueCellSettingsServiceSaveAndPush(unittest.TestCase):
         ws.update_config.assert_called_once_with(0, 3.14, 0.99)
 
     def test_save_without_weight_service_still_persists(self):
-        from src.plugins.glue_cell_settings.service.glue_cell_settings_service import GlueCellSettingsService
-        from src.plugins.glue_cell_settings.model.glue_cell_settings_model import GlueCellSettingsModel
-        from src.plugins.glue_cell_settings.model.mapper import GlueCellMapper
+        from src.applications.glue_cell_settings.service.glue_cell_settings_service import GlueCellSettingsService
+        from src.applications.glue_cell_settings.model.glue_cell_settings_model import GlueCellSettingsModel
+        from src.applications.glue_cell_settings.model.mapper import GlueCellMapper
 
         cells_cfg = _cells(0)
         ss        = MagicMock()

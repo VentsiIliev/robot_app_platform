@@ -1,14 +1,14 @@
 import logging
 from typing import List, Optional
 
-from src.plugins.base.i_plugin_model import IPluginModel
+from src.applications.base.i_application_model import IApplicationModel
 from src.robot_systems.glue.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.glue_settings.service.i_glue_settings_service import IGlueSettingsService
 from src.robot_systems.glue.settings.glue import GlueSettings
 from src.robot_systems.glue.settings.glue_types import Glue
 
 
-class GlueSettingsModel(IPluginModel):
+class GlueSettingsModel(IApplicationModel):
 
     def __init__(self, service: IGlueSettingsService):
         self._service  = service

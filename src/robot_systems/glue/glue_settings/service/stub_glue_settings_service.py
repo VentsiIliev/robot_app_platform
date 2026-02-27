@@ -1,8 +1,8 @@
 from typing import List
 
-from src.robot_apps.glue.glue_settings.service.i_glue_settings_service import IGlueSettingsService
-from src.robot_apps.glue.settings.glue import GlueSettings
-from src.robot_apps.glue.settings.glue_types import Glue
+from src.robot_systems.glue.glue_settings.service.i_glue_settings_service import IGlueSettingsService
+from src.robot_systems.glue.settings.glue import GlueSettings
+from src.robot_systems.glue.settings.glue_types import Glue
 
 
 class StubGlueSettingsService(IGlueSettingsService):

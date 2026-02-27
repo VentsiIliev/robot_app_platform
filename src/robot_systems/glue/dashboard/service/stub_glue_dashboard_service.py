@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional
-from src.robot_apps.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
+from src.robot_systems.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
 
 
 class StubGlueDashboardService(IGlueDashboardService):

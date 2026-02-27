@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
-from src.plugins.base.widget_plugin import WidgetPlugin
-from src.plugins.robot_settings.service.robot_settings_plugin_service import RobotSettingsPluginService
+from src.applications.base.widget_application import WidgetApplication
+from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 
@@ -11,7 +11,7 @@ from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_robot_app(config=None, calibration=None):
+def _make_robot_system(config=None, calibration=None):
     ss = MagicMock()
     ss.get.side_effect = lambda key: (
         config      or RobotSettings()      if key == "robot_config"      else
@@ -23,19 +23,19 @@ def _make_robot_app(config=None, calibration=None):
 
 
 # ---------------------------------------------------------------------------
-# PluginSpec declaration
+# ApplicationSpec declaration
 # ---------------------------------------------------------------------------
 
-class TestRobotSettingsPluginSpec(unittest.TestCase):
+class TestRobotSettingsApplicationSpec(unittest.TestCase):
 
     def _spec(self):
         return next(
-            (s for s in GlueRobotSystem.shell.plugins if s.name == "RobotSettings"),
+            (s for s in GlueRobotSystem.shell.applications if s.name == "RobotSettings"),
             None,
         )
 
     def test_spec_declared(self):
-        self.assertIsNotNone(self._spec(), "RobotSettings PluginSpec missing from GlueRobotApp.shell.plugins")
+        self.assertIsNotNone(self._spec(), "RobotSettings ApplicationSpec missing from GlueRobotSystem.shell.applications")
 
     def test_spec_folder_id(self):
         self.assertEqual(self._spec().folder_id, 2)
@@ -48,52 +48,52 @@ class TestRobotSettingsPluginSpec(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Factory builds a WidgetPlugin
+# Factory builds a WidgetApplication
 # ---------------------------------------------------------------------------
 
-class TestRobotSettingsPluginFactory(unittest.TestCase):
+class TestRobotSettingsApplicationFactory(unittest.TestCase):
 
-    def test_factory_returns_widget_plugin(self):
-        robot_app = _make_robot_app()
-        spec      = next(s for s in GlueRobotSystem.shell.plugins if s.name == "RobotSettings")
-        plugin    = spec.factory(robot_app)
-        self.assertIsInstance(plugin, WidgetPlugin)
+    def test_factory_returns_widget_application(self):
+        robot_app = _make_robot_system()
+        spec      = next(s for s in GlueRobotSystem.shell.applications if s.name == "RobotSettings")
+        application    = spec.factory(robot_app)
+        self.assertIsInstance(application, WidgetApplication)
 
     def test_factory_does_not_require_messaging_service(self):
-        robot_app = _make_robot_app()
-        spec      = next(s for s in GlueRobotSystem.shell.plugins if s.name == "RobotSettings")
+        robot_app = _make_robot_system()
+        spec      = next(s for s in GlueRobotSystem.shell.applications if s.name == "RobotSettings")
         # Should not raise before register() is called
-        plugin = spec.factory(robot_app)
-        self.assertIsNotNone(plugin)
+        application = spec.factory(robot_app)
+        self.assertIsNotNone(application)
 
     def test_register_stores_messaging_service(self):
-        robot_app        = _make_robot_app()
-        spec             = next(s for s in GlueRobotSystem.shell.plugins if s.name == "RobotSettings")
-        plugin           = spec.factory(robot_app)
+        robot_app        = _make_robot_system()
+        spec             = next(s for s in GlueRobotSystem.shell.applications if s.name == "RobotSettings")
+        application           = spec.factory(robot_app)
         messaging_service = MagicMock()
-        plugin.register(messaging_service)
-        self.assertIs(plugin._messaging_service, messaging_service)
+        application.register(messaging_service)
+        self.assertIs(application._messaging_service, messaging_service)
 
     def test_widget_factory_callable_ignores_messaging_service(self):
         """RobotSettings does not use the broker — lambda must accept and ignore it."""
-        robot_app = _make_robot_app()
-        spec = next(s for s in GlueRobotSystem.shell.plugins if s.name == "RobotSettings")
-        plugin = spec.factory(robot_app)
+        robot_app = _make_robot_system()
+        spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "RobotSettings")
+        application = spec.factory(robot_app)
 
         with patch(
-                "src.plugins.robot_settings.robot_settings_factory.RobotSettingsFactory.build"
+                "src.applications.robot_settings.robot_settings_factory.RobotSettingsFactory.build"
         ) as mock_build:
             mock_build.return_value = MagicMock()
-            plugin.register(MagicMock())
-            plugin.create_widget()
+            application.register(MagicMock())
+            application.create_widget()
             mock_build.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# RobotSettingsPluginService — integration with ISettingsService
+# RobotSettingsApplicationService — integration with ISettingsService
 # ---------------------------------------------------------------------------
 
-class TestRobotSettingsPluginServiceIntegration(unittest.TestCase):
+class TestRobotSettingsApplicationServiceIntegration(unittest.TestCase):
 
     def _make_service(self, config=None, calibration=None):
         cfg   = config      or RobotSettings(robot_ip="1.1.1.1", robot_tool=3)
@@ -103,7 +103,7 @@ class TestRobotSettingsPluginServiceIntegration(unittest.TestCase):
             cfg   if key == "robot_config"      else
             calib if key == "robot_calibration" else None
         )
-        return RobotSettingsPluginService(ss), ss, cfg, calib
+        return RobotSettingsApplicationService(ss), ss, cfg, calib
 
     def test_load_config_returns_correct_instance(self):
         svc, _, cfg, _ = self._make_service()

@@ -1,0 +1,21 @@
+{
+  "adaptive_movement_config": {
+    "min_step_mm": 0.1,
+    "max_step_mm": 25.0,
+    "target_error_mm": 0.25,
+    "max_error_ref": 100.0,
+    "k": 2.0,
+    "derivative_scaling": 0.5
+  },
+  "z_target": 300,
+  "required_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    8
+  ]
+}
