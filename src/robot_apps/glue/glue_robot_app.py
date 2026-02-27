@@ -15,79 +15,7 @@ from src.robot_apps.glue.settings.cells import GlueCellsConfigSerializer
 from src.robot_apps.glue.settings.glue import GlueSettingsSerializer
 from src.robot_apps.glue.settings.glue_types import GlueCatalogSerializer
 from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
-
-
-# ── Process requirements ──────────────────────────────────────────────────────
-# Defined at the app level — the app knows what each of its processes needs.
-
-# TODO need to add health check for the services and not rely on existence only
-#  — e.g. if weight cell service is built but fails to connect to any cells, the dashboard should know about it and show a warning instead of just breaking when trying to access the service
-_GLUE_PROCESS_REQUIREMENTS  = ProcessRequirements.requires("robot" )
-_CLEAN_PROCESS_REQUIREMENTS = ProcessRequirements.requires("robot")
-
-
-# ── Plugin factories ──────────────────────────────────────────────────────────
-
-def _build_dashboard_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.robot_apps.glue.dashboard.glue_dashboard import GlueDashboard
-
-    robot_service = robot_app.get_service("robot")   # called eagerly
-
-    return WidgetPlugin(
-        widget_factory=lambda ms: GlueDashboard.create(
-            robot_service     = robot_service,
-            settings_service  = robot_app._settings_service,
-            messaging_service = ms,
-            weight_service    = robot_app.get_optional_service("weight"),
-            app_manager       = robot_app.application_manager,
-            service_checker   = lambda name: robot_app.get_optional_service(name) is not None,
-            requirements      = _GLUE_PROCESS_REQUIREMENTS,
-        )
-    )
-
-
-def _build_glue_cell_settings_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.plugins.glue_cell_settings import GlueCellSettingsFactory, GlueCellSettingsService
-
-    service = GlueCellSettingsService(
-        settings_service = robot_app._settings_service,
-        weight_service   = robot_app.get_optional_service("weight"),
-    )
-    return WidgetPlugin(
-        widget_factory=lambda ms: GlueCellSettingsFactory().build(service, ms)
-    )
-
-
-def _build_robot_settings_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.plugins.robot_settings.robot_settings_factory import RobotSettingsFactory
-    from src.plugins.robot_settings.service.robot_settings_plugin_service import RobotSettingsPluginService
-
-    service = RobotSettingsPluginService(robot_app._settings_service)
-    return WidgetPlugin(widget_factory=lambda _ms: RobotSettingsFactory().build(service))
-
-
-def _build_glue_settings_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.robot_apps.glue.glue_settings import GlueSettingsFactory, GlueSettingsPluginService
-
-    service = GlueSettingsPluginService(robot_app._settings_service)
-    return WidgetPlugin(widget_factory=lambda _ms: GlueSettingsFactory().build(service))
-
-
-def _build_modbus_settings_plugin(robot_app):
-    from src.plugins.base.widget_plugin import WidgetPlugin
-    from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
-    from src.plugins.modbus_settings import ModbusSettingsFactory, ModbusSettingsPluginService
-
-    settings_service = ModbusSettingsPluginService(robot_app._settings_service)
-    action_service   = ModbusActionService()
-    return WidgetPlugin(
-        widget_factory=lambda _ms: ModbusSettingsFactory().build(settings_service, action_service)
-    )
-
+from src.robot_apps.glue import plugin_wiring
 
 # ── Service builders ──────────────────────────────────────────────────────────
 
@@ -119,11 +47,11 @@ class GlueRobotApp(BaseRobotApp):
             FolderSpec(folder_id=3, name="ADMIN",      display_name="Administration"),
         ],
         plugins=[
-            PluginSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=_build_dashboard_plugin),
-            PluginSpec(name="RobotSettings",   folder_id=2, icon="fa5s.robot",            factory=_build_robot_settings_plugin),
-            PluginSpec(name="GlueSettings",    folder_id=2, icon="fa5s.sliders-h",        factory=_build_glue_settings_plugin),
-            PluginSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=_build_modbus_settings_plugin),
-            PluginSpec(name="CellSettings", folder_id=2, icon="fa5s.weight", factory=_build_glue_cell_settings_plugin),
+            PluginSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=plugin_wiring._build_dashboard_plugin),
+            PluginSpec(name="RobotSettings",   folder_id=2, icon="fa5s.robot",            factory=plugin_wiring._build_robot_settings_plugin),
+            PluginSpec(name="GlueSettings",    folder_id=2, icon="fa5s.sliders-h",        factory=plugin_wiring._build_glue_settings_plugin),
+            PluginSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=plugin_wiring._build_modbus_settings_plugin),
+            PluginSpec(name="CellSettings", folder_id=2, icon="fa5s.weight", factory=plugin_wiring._build_glue_cell_settings_plugin),
 
         ],
     )
@@ -145,41 +73,36 @@ class GlueRobotApp(BaseRobotApp):
         ServiceSpec(
             name         = "weight",
             service_type = IWeightCellService,
-            required     = False,               # graceful — runs without cells connected
+            required     = True,
             description  = "Multi-cell weight monitoring",
             builder      = _build_weight_cell_service,
         ),
     ]
 
     def on_start(self) -> None:
-        self._robot              = self.get_service("robot")
-        self._navigation         = self.get_service("navigation")
-        self._vision             = self.get_optional_service("vision")
-        self._tools              = self.get_optional_service("tools")
-        self._robot_config       = self.get_settings("robot_config")
-        self._robot_calibration  = self.get_settings("robot_calibration")
-        self._glue_settings      = self.get_settings("glue_settings")
-        self._glue_cells         = self.get_settings("glue_cells")      # GlueCellsConfig
-        self._glue_catalog       = self.get_settings("glue_catalog")
-        self._modbus_config      = self.get_settings("modbus_config")
+        self._robot = self.get_service("robot")
+        self._navigation = self.get_service("navigation")
+        self._vision = self.get_optional_service("vision")
+        self._tools = self.get_optional_service("tools")
+        self._robot_config = self.get_settings("robot_config")
+        self._robot_calibration = self.get_settings("robot_calibration")
+        self._glue_settings = self.get_settings("glue_settings")
+        self._glue_cells = self.get_settings("glue_cells")
+        self._glue_catalog = self.get_settings("glue_catalog")
+        self._modbus_config = self.get_settings("modbus_config")
+        self._weight = self.get_service("weight")
 
-        # weight — optional, may be None if the build failed
-        self._weight: IWeightCellService | None = self.get_optional_service("weight")
-        if self._weight is not None:
-            # connect all cells declared in glue_cells settings
-
-            # start polling all cell ids at 0.5s interval
-            self._weight.start_monitoring(
-                cell_ids   = self._glue_cells.get_all_cell_ids(),
-                interval_s = 0.5,
-            )
+        self._weight.start_monitoring(
+            cell_ids=self._glue_cells.get_all_cell_ids(),
+            interval_s=0.5,
+        )
 
         self._robot.enable_robot()
 
     def on_stop(self) -> None:
-        if self._weight is not None:
-            self._weight.stop_monitoring()
-            self._weight.disconnect_all()
+
+        self._weight.stop_monitoring()
+        self._weight.disconnect_all()
 
         self._robot.stop_motion()
         self._robot.disable_robot()

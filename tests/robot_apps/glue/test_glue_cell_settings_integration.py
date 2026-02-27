@@ -148,7 +148,7 @@ class TestWeightServiceSpec(unittest.TestCase):
         self.assertIsNotNone(self._spec(), "weight ServiceSpec missing")
 
     def test_weight_service_optional(self):
-        self.assertFalse(self._spec().required)
+        self.assertTrue(self._spec().required)
 
     def test_weight_service_has_builder(self):
         self.assertIsNotNone(self._spec().builder)
