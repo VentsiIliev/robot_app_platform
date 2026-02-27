@@ -1,18 +1,22 @@
 from __future__ import annotations
 import logging
 from contextlib import contextmanager
-from typing import List, Optional
+from typing import List
 
-from src.engine.hardware.motor.interfaces.i_motor_transport import IMotorTransport
+from src.engine.hardware.communication.i_register_transport import IRegisterTransport
 
 
-class ModbusMotorTransport(IMotorTransport):
+class ModbusRegisterTransport(IRegisterTransport):
     """
-    IMotorTransport implementation over Modbus RTU via minimalmodbus.
+    Shared Modbus RTU implementation of IRegisterTransport via minimalmodbus.
 
-    Per-call connections are used by default (open+close each call).
-    Call connect() / disconnect() to keep a persistent connection open
-    for hot-path operations (e.g. continuous speed adjustment).
+    All four register operations are overridden for native batch efficiency.
+    Supports both per-call and persistent connections — call connect() /
+    disconnect() to keep a session open for hot-path callers.
+
+    Do not instantiate directly — subclass for your device:
+        class ModbusMotorTransport(ModbusRegisterTransport, IMotorTransport): pass
+        class ModbusGeneratorTransport(ModbusRegisterTransport, IGeneratorTransport): pass
     """
 
     def __init__(
@@ -32,29 +36,34 @@ class ModbusMotorTransport(IMotorTransport):
         self._stopbits      = stopbits
         self._parity        = parity
         self._timeout       = timeout
-        self._persistent    = None   # set by connect()
+        self._persistent    = None
         self._logger        = logging.getLogger(self.__class__.__name__)
 
-    # ── IMotorTransport ───────────────────────────────────────────────
+    # ── IRegisterTransport ────────────────────────────────────────────
+
+    def read_register(self, address: int) -> int:
+        with self._session() as inst:
+            return int(inst.read_register(address, functioncode=3))
+
+    def read_registers(self, address: int, count: int) -> List[int]:
+        with self._session() as inst:
+            return list(inst.read_registers(address, count, functioncode=3))
+
+    def write_register(self, address: int, value: int) -> None:
+        with self._session() as inst:
+            inst.write_register(address, value, functioncode=6)
 
     def write_registers(self, address: int, values: List[int]) -> None:
         with self._session() as inst:
             inst.write_registers(address, values)
 
-    def read_register(self, address: int) -> int:
-        with self._session() as inst:
-            return inst.read_register(address)
-
-    def read_registers(self, address: int, count: int) -> List[int]:
-        with self._session() as inst:
-            return list(inst.read_registers(address, count))
-
     # ── Persistent connection ─────────────────────────────────────────
 
     def connect(self) -> None:
         if self._persistent is None:
+            self._logger.debug("Connecting to %s (slave=%s) ...", self._port, self._slave_address)
             self._persistent = self._make_instrument()
-            self._logger.info("Persistent connection opened on %s", self._port)
+            self._logger.info("Connected to %s (slave=%s)", self._port, self._slave_address)
 
     def disconnect(self) -> None:
         if self._persistent is not None:
@@ -70,7 +79,7 @@ class ModbusMotorTransport(IMotorTransport):
     @contextmanager
     def _session(self):
         if self._persistent is not None:
-            yield self._persistent   # reuse persistent connection
+            yield self._persistent
         else:
             inst = self._make_instrument()
             try:
@@ -83,7 +92,7 @@ class ModbusMotorTransport(IMotorTransport):
 
     def _make_instrument(self):
         import minimalmodbus
-        inst = minimalmodbus.Instrument(self._port, self._slave_address)
+        inst                = minimalmodbus.Instrument(self._port, self._slave_address)
         inst.serial.baudrate = self._baudrate
         inst.serial.bytesize = self._bytesize
         inst.serial.stopbits = self._stopbits

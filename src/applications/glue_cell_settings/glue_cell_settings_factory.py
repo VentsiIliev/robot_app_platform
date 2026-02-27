@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from src.engine.core.i_messaging_service import IMessagingService
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.i_application_model import IApplicationModel

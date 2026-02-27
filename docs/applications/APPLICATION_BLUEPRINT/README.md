@@ -30,16 +30,16 @@ APPLICATION_BLUEPRINT/
 
 ## Class Summary
 
-| Class | Interface | Role |
-|-------|-----------|------|
-| `MyPlugin` | `IApplication` | Bootstrap entry point; creates service + factory |
+| Class                  | Interface | Role |
+|------------------------|-----------|------|
+| `MyApplication`        | `IApplication` | Bootstrap entry point; creates service + factory |
 | `MyApplicationFactory` | `ApplicationFactory` | Implements 3 factory methods; wiring is automatic |
-| `IMyService` | ABC | Application-platform boundary: `get_value()` / `save_value(value)` |
+| `IMyService`           | ABC | Application-platform boundary: `get_value()` / `save_value(value)` |
 | `MyApplicationService` | `IMyService` | Wraps `ISettingsService`; only file importing platform services |
-| `StubMyService` | `IMyService` | Returns `"stub_value"`, prints to stdout |
-| `MyModel` | `IApplicationModel` | Holds `_value: Optional[str]`; delegates I/O to `IMyService` |
-| `MyView` | `IApplicationView` | `save_requested: pyqtSignal(str)`; `set_value(value)` setter |
-| `MyController` | `IApplicationController` | Connects `save_requested → _on_save`; `destroyed → stop` |
+| `StubMyService`        | `IMyService` | Returns `"stub_value"`, prints to stdout |
+| `MyModel`              | `IApplicationModel` | Holds `_value: Optional[str]`; delegates I/O to `IMyService` |
+| `MyView`               | `IApplicationView` | `save_requested: pyqtSignal(str)`; `set_value(value)` setter |
+| `MyController`         | `IApplicationController` | Connects `save_requested → _on_save`; `destroyed → stop` |
 
 ---
 

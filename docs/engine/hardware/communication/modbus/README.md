@@ -147,3 +147,62 @@ print("Connected:", ok)
 - **`pyserial` is a soft dependency** — `detect_ports()` and `test_connection()` each import `serial` inside the function body, so the rest of the platform loads without it installed.
 - **No persistent connection** — `test_connection` opens and immediately closes the port. Persistent sessions are managed by application-level Modbus libraries.
 - **`ModbusConfigSerializer.settings_type = "modbus_config"`** — this string is the key used when registering the serializer in `SettingsSpec` and retrieving it via `settings_service.get("modbus_config")`.
+
+---
+
+## `ModbusRegisterTransport`
+
+**File:** `modbus_register_transport.py`
+
+Shared Modbus RTU implementation of `IRegisterTransport` via `minimalmodbus`. Used as a base class by device-specific transports:
+
+```python
+class ModbusMotorTransport(ModbusRegisterTransport, IMotorTransport): pass
+class ModbusGeneratorTransport(ModbusRegisterTransport, IGeneratorTransport): pass
+```
+
+Supports both **per-call** (auto-open/close) and **persistent** connections:
+
+| Method | Description |
+|--------|-------------|
+| `connect()` | Opens persistent session. Logs `DEBUG` with port+slave before attempting, `INFO` on success. |
+| `disconnect()` | Closes persistent session. |
+| `read_register(address)` | Single register read (functioncode 3). |
+| `read_registers(address, count)` | Batch register read. |
+| `write_register(address, value)` | Single register write (functioncode 6). |
+| `write_registers(address, values)` | Batch register write. |
+
+If `connect()` is not called, each read/write opens and immediately closes a connection via `_session()`.
+
+---
+
+## `ModbusExceptionType`
+
+**File:** `modbus_exception_type.py`
+
+Classifies all Modbus and serial-layer exceptions into a single enum for consistent error handling.
+
+```python
+class ModbusExceptionType(Enum):
+    MODBUS_EXCEPTION       = "ModbusException"
+    INVALID_RESPONSE_ERROR = "InvalidResponseError"
+    NO_RESPONSE_ERROR      = "NoResponseError"
+    LOCAL_ECHO_ERROR       = "LocalEchoError"
+    ILLEGAL_REQUEST_ERROR  = "IllegalRequestError"
+    IO_ERROR               = "IOError"
+    SERIAL_ERROR           = "SerialException"   ← physical port unavailable/misconfigured
+    TIMEOUT_ERROR          = "timeout"
+    CONNECTION_ERROR       = "connection"
+    CHECKSUM_ERROR         = "Checksum error in rtu mode"
+```
+
+`from_exception(exc)` classifies any exception automatically:
+- String matches: `"timeout"`, `"connection"`, `"Checksum error in rtu mode"`
+- Class name matches: all other enum values are matched against `type(exc).__name__`
+- `SERIAL_ERROR` catches `serial.serialutil.SerialException` (port unavailable, errno 5 EIO, etc.)
+- Default fallback: `MODBUS_EXCEPTION`
+
+```python
+exc_type = ModbusExceptionType.from_exception(exc)
+print(exc_type.description())   # "Serial port error — port unavailable or misconfigured"
+```

@@ -1,36 +1,24 @@
-from src.engine.process import ProcessRequirements
+from src.robot_systems.glue.service_ids import ServiceID
 
-# ── Process requirements ──────────────────────────────────────────────────────
-
-_GLUE_PROCESS_REQUIREMENTS  = ProcessRequirements.requires("robot")
-_CLEAN_PROCESS_REQUIREMENTS = ProcessRequirements.requires("robot")
+from src.robot_systems.glue.settings_ids import SettingsID
 
 
 def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.glue.dashboard.glue_dashboard import GlueDashboard
 
-    robot_service    = system.get_service("robot")          # ← eager — fails fast if missing
+    coordinator = system.coordinator
     settings_service = system._settings_service
-    weight_service   = system.get_optional_service("weight")
-    system_manager   = system.system_manager
-    service_checker  = system.health_registry.check
-    requirements     = _GLUE_PROCESS_REQUIREMENTS
+    weight_service = system.get_optional_service(ServiceID.WEIGHT)
 
     return WidgetApplication(
         widget_factory=lambda ms: GlueDashboard.create(
-            robot_service     = robot_service,
-            settings_service  = settings_service,
-            messaging_service = ms,
-            weight_service    = weight_service,
-            system_manager    = system_manager,
-            service_checker   = service_checker,
-            requirements      = requirements,
+            coordinator=coordinator,
+            settings_service=settings_service,
+            messaging_service=ms,
+            weight_service=weight_service,
         )
     )
-
-
-
 
 
 def _build_glue_cell_settings_application(robot_app):
@@ -38,8 +26,9 @@ def _build_glue_cell_settings_application(robot_app):
     from src.applications.glue_cell_settings import GlueCellSettingsFactory, GlueCellSettingsService
 
     service = GlueCellSettingsService(
-        settings_service = robot_app._settings_service,
-        weight_service   = robot_app.get_optional_service("weight"),
+        robot_app._settings_service,
+        settings_key=SettingsID.GLUE_CELLS,
+        weight_service=robot_app.get_service(ServiceID.WEIGHT)
     )
     return WidgetApplication(
         widget_factory=lambda ms: GlueCellSettingsFactory().build(service, ms)
@@ -49,9 +38,14 @@ def _build_glue_cell_settings_application(robot_app):
 def _build_robot_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.robot_settings.robot_settings_factory import RobotSettingsFactory
-    from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
+    from src.applications.robot_settings.service.robot_settings_application_service import \
+        RobotSettingsApplicationService
 
-    service = RobotSettingsApplicationService(robot_app._settings_service)
+    service = RobotSettingsApplicationService(
+        robot_app._settings_service,
+        config_key=SettingsID.ROBOT_CONFIG,
+        calibration_key=SettingsID.ROBOT_CALIBRATION,
+    )
     return WidgetApplication(widget_factory=lambda _ms: RobotSettingsFactory().build(service))
 
 
@@ -68,8 +62,12 @@ def _build_modbus_settings_application(robot_app):
     from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
     from src.applications.modbus_settings import ModbusSettingsFactory, ModbusSettingsApplicationService
 
-    settings_service = ModbusSettingsApplicationService(robot_app._settings_service)
-    action_service   = ModbusActionService()
+    settings_service = ModbusSettingsApplicationService(
+        robot_app._settings_service,
+        config_key=SettingsID.MODBUS_CONFIG,
+    )
+
+    action_service = ModbusActionService()
     return WidgetApplication(
         widget_factory=lambda _ms: ModbusSettingsFactory().build(settings_service, action_service)
     )

@@ -10,19 +10,22 @@ from src.applications.glue_cell_settings.service.i_glue_cell_settings_service im
 class GlueCellSettingsService(IGlueCellSettingsService):
 
     def __init__(
-        self,
-        settings_service: ISettingsService,
-        weight_service:   Optional[IWeightCellService] = None,
+            self,
+            settings_service: ISettingsService,
+            settings_key: str,
+            weight_service: Optional[IWeightCellService] = None,
+
     ):
         self._settings = settings_service
-        self._weight   = weight_service
-        self._logger   = logging.getLogger(self.__class__.__name__)
+        self._settings_key = settings_key
+        self._weight = weight_service
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def load_cells(self) -> CellsConfig:
-        return self._settings.get("glue_cells")
+        return self._settings.get(self._settings_key)
 
     def save_cells(self, config: CellsConfig) -> None:
-        self._settings.save("glue_cells", config)
+        self._settings.save(self._settings_key, config)
         self._logger.info("Saved %d cell configs", config.cell_count)
 
     def tare(self, cell_id: int) -> bool:

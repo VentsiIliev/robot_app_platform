@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, call
 
+from src.robot_systems.glue.settings_ids import SettingsID
 from src.engine.robot.configuration import (
     RobotSettings,
     RobotCalibrationSettings,
@@ -115,20 +116,20 @@ class TestRobotSettingsApplicationService(unittest.TestCase):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         cfg = RobotSettings(robot_ip="7.7.7.7")
         ss  = self._make_settings_service(config=cfg)
-        svc = RobotSettingsApplicationService(ss)
+        svc = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
         self.assertEqual(svc.load_config().robot_ip, "7.7.7.7")
 
     def test_load_calibration_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         calib = RobotCalibrationSettings(z_target=999)
         ss    = self._make_settings_service(calibration=calib)
-        svc   = RobotSettingsApplicationService(ss)
+        svc   = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
         self.assertEqual(svc.load_calibration().z_target, 999)
 
     def test_save_config_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         ss  = MagicMock()
-        svc = RobotSettingsApplicationService(ss)
+        svc = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
         cfg = RobotSettings()
         svc.save_config(cfg)
         ss.save.assert_called_once_with("robot_config", cfg)
@@ -136,7 +137,7 @@ class TestRobotSettingsApplicationService(unittest.TestCase):
     def test_save_calibration_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         ss    = MagicMock()
-        svc   = RobotSettingsApplicationService(ss)
+        svc   = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
         calib = RobotCalibrationSettings()
         svc.save_calibration(calib)
         ss.save.assert_called_once_with("robot_calibration", calib)

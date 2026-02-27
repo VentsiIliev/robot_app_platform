@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.robot_systems.glue.settings_ids import SettingsID
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.applications.base.widget_application import WidgetApplication
 from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
@@ -89,7 +90,7 @@ class TestModbusSettingsApplicationServiceIntegration(unittest.TestCase):
         cfg = config or ModbusConfig(port="COM5", baudrate=115200, slave_address=10)
         ss  = MagicMock()
         ss.get.side_effect = lambda key: cfg if key == "modbus_config" else None
-        return ModbusSettingsApplicationService(ss), ss, cfg
+        return ModbusSettingsApplicationService(ss,config_key = SettingsID.MODBUS_CONFIG), ss, cfg
 
     def test_load_config_returns_correct_instance(self):
         svc, _, cfg = self._make_service()

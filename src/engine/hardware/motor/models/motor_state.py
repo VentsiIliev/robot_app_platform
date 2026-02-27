@@ -5,13 +5,9 @@ from typing import Dict, List, Optional, Tuple
 
 @dataclass
 class MotorState:
-    """
-    Snapshot of a single motor's health after a health-check cycle.
-    error_codes contains only errors relevant to this motor (pre-filtered by MotorHealthChecker).
-    """
-    motor_address:       int
-    is_healthy:          bool       = False
-    error_codes:         List[int]  = field(default_factory=list)
+    motor_address:        int
+    is_healthy:           bool      = False
+    error_codes:          List[int] = field(default_factory=list)
     communication_errors: List[str] = field(default_factory=list)
 
     @property
@@ -19,13 +15,8 @@ class MotorState:
         return bool(self.error_codes or self.communication_errors)
 
     def describe_errors(self) -> List[str]:
-        from src.engine.hardware.motor.models.motor_error_codes import MotorErrorCode
-        lines = []
-        for code in self.error_codes:
-            mc = MotorErrorCode.from_code(code)
-            lines.append(mc.description() if mc else f"Unknown error code {code}")
-        lines.extend(self.communication_errors)
-        return lines
+        """Returns raw error codes as strings — decoder is in the transport layer."""
+        return [f"error code {c}" for c in self.error_codes] + self.communication_errors
 
     def __str__(self) -> str:
         return (
@@ -38,7 +29,6 @@ class MotorState:
 
 @dataclass
 class MotorsSnapshot:
-    """Snapshot of all motors after a bulk health-check cycle."""
     success: bool
     motors:  Dict[int, MotorState] = field(default_factory=dict)
 
@@ -52,7 +42,6 @@ class MotorsSnapshot:
         return self.success and all(m.is_healthy for m in self.motors.values())
 
     def get_all_errors_sorted(self) -> List[Tuple[int, int]]:
-        """Returns [(error_code, motor_address), ...] sorted by error_code."""
         pairs = [
             (code, state.motor_address)
             for state in self.motors.values()

@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.hardware.weight.config import (
     CalibrationConfig, CellConfig, CellsConfig, MeasurementConfig,
 )
@@ -77,7 +79,7 @@ class TestGlueCellSettingsApplicationFactory(unittest.TestCase):
     def test_factory_passes_weight_service(self):
         app = _make_robot_system()
         _spec().factory(app)
-        app.get_optional_service.assert_any_call("weight")
+        app.get_optional_service.assert_any_call(ServiceID.WEIGHT)
 
     def test_factory_works_without_weight_service(self):
         app = _make_robot_system()
@@ -140,7 +142,7 @@ class TestWeightServiceSpec(unittest.TestCase):
 
     def _spec(self):
         return next(
-            (s for s in GlueRobotSystem.services if s.name == "weight"),
+            (s for s in GlueRobotSystem.services if s.name == ServiceID.WEIGHT),
             None,
         )
 
@@ -193,7 +195,7 @@ class TestGlueCellSettingsServiceSaveAndPush(unittest.TestCase):
         ss        = MagicMock()
         ss.get.return_value = cells_cfg
 
-        svc   = GlueCellSettingsService(ss, weight_service=None)
+        svc   = GlueCellSettingsService(ss,settings_key=SettingsID.GLUE_CELLS, weight_service=None)
         model = GlueCellSettingsModel(svc)
         model.load()
 

@@ -1,12 +1,12 @@
 """
-Motor controller mock runner — manual integration / smoke test.
+Motor service mock runner — manual integration / smoke test.
 
 Run with:
     python src/engine/hardware/motor/mock_runner.py
 
 No serial port required. MockMotorTransport intercepts all register I/O
 and prints what would be sent over the wire.  Use it to verify
-MotorController logic, ramp sequences, health-check parsing, and error
+MotorService logic, ramp sequences, health-check parsing, and error
 filtering without any hardware attached.
 
 Configurable sections at the bottom of this file:
@@ -27,7 +27,7 @@ logging.basicConfig(
 
 from src.engine.hardware.motor.interfaces.i_motor_transport import IMotorTransport
 from src.engine.hardware.motor.models.motor_config import MotorConfig
-from src.engine.hardware.motor.motor_controller import MotorController
+from src.engine.hardware.motor.motor_service import MotorService
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -121,12 +121,17 @@ def _section(title: str) -> None:
     print(f"{'─' * 60}")
 
 
-def _make_controller(transport: MockMotorTransport) -> MotorController:
+def _make_service(transport: MockMotorTransport) -> MotorService:
     config = MotorConfig(
-        ramp_step_delay_s  = 0.0,   # no real delays in mock runner
-        health_check_delay_s = 0.0,
+        health_check_trigger_register = 17,
+        motor_error_count_register    = 20,
+        motor_error_registers_start   = 21,
+        motor_addresses               = [0, 2, 4, 6],
+        address_to_error_prefix       = {0: 1, 2: 2, 4: 3, 6: 4},
+        ramp_step_delay_s             = 0.0,   # no real delays in mock runner
+        health_check_delay_s          = 0.0,
     )
-    return MotorController(transport=transport, config=config)
+    return MotorService(transport=transport, config=config)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -136,7 +141,7 @@ def _make_controller(transport: MockMotorTransport) -> MotorController:
 def scenario_turn_on_off(t: MockMotorTransport, motor_addr: int = 0) -> None:
     """Full start-ramp-run-stop sequence for one motor."""
     _section(f"SCENARIO: turn_on / turn_off  (motor {motor_addr})")
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     print("\n— turn_on: speed=1000  ramp_steps=4  initial_ramp_speed=200  initial_dur=0s")
     result = ctrl.turn_on(
@@ -165,7 +170,7 @@ def scenario_turn_on_off(t: MockMotorTransport, motor_addr: int = 0) -> None:
 def scenario_persistent_connection(t: MockMotorTransport, motor_addr: int = 0) -> None:
     """Open → repeated set_speed (hot path) → close."""
     _section(f"SCENARIO: persistent connection  (motor {motor_addr})")
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     print("\n— open()")
     ctrl.open()
@@ -182,7 +187,7 @@ def scenario_health_check_healthy(t: MockMotorTransport, motor_addr: int = 0) ->
     """Health check when board reports 0 errors."""
     _section(f"SCENARIO: health_check — healthy  (motor {motor_addr})")
     t.set_healthy()
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     state = ctrl.health_check(motor_addr)
     print(f"\n  Result: {state}")
@@ -197,7 +202,7 @@ def scenario_health_check_with_errors(
     """Health check when board reports specific error codes."""
     _section(f"SCENARIO: health_check — errors {error_codes}  (motor {motor_addr})")
     t.set_errors(error_codes)
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     state = ctrl.health_check(motor_addr)
     print(f"\n  Result: {state}")
@@ -217,7 +222,7 @@ def scenario_health_check_all(
     """Bulk health check across multiple motors."""
     _section(f"SCENARIO: health_check_all  addresses={motor_addrs}  errors={error_codes}")
     t.set_errors(error_codes)
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     snapshot = ctrl.health_check_all(motor_addrs)
     print(f"\n  Snapshot: success={snapshot.success}  all_healthy={snapshot.all_healthy()}")
@@ -231,7 +236,7 @@ def scenario_health_check_all(
 def scenario_transport_failure(t: MockMotorTransport, motor_addr: int = 0) -> None:
     """Verify controller returns False / records comm error on transport failure."""
     _section(f"SCENARIO: transport failure  (motor {motor_addr})")
-    ctrl = _make_controller(t)
+    ctrl = _make_service(t)
 
     print("\n— turn_on with write failure")
     t.raise_on_write = True

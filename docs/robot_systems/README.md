@@ -17,7 +17,7 @@ SystemBuilder
 
 BaseRobotSystem (ABC)
   ├─ class-level specs: metadata, settings_specs, services, shell
-  └─ instance: _resolved, _settings_service, on_start(), on_stop()
+  └─ instance: _resolved, _settings_service, _messaging_service, on_start(), on_stop()
 ```
 
 ---
@@ -37,7 +37,8 @@ class BaseRobotSystem(ABC):
     def get_settings_repo(self, name: str) -> ISettingsRepository: ...
     def get_service(self, name: str) -> Any: ...
     def get_optional_service(self, name: str) -> Optional[Any]: ...
-    def start(self, services: Dict[str, Any], settings_service: ...) -> None: ...
+    def start(self, services: Dict[str, Any], settings_service=None,
+              system_manager=None, messaging_service=None) -> None: ...
     def stop(self) -> None: ...
     def is_running: bool  # property
 
@@ -110,7 +111,7 @@ SystemBuilder.build(AppClass)
        if instance is None: skip optional / raise for required
        services[spec.name] = instance
   7. app = AppClass()
-  8. app.start(services, settings_service)
+  8. app.start(services, settings_service, system_manager, messaging_service)
   9. return app
 ```
 

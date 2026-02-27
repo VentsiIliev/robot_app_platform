@@ -76,6 +76,30 @@ class SystemStatusWidget(QFrame):
         self._system_badge = QLabel("idle")
         self._apply_badge(self._system_badge, "idle")
 
+        # Row 3 — service warning
+        warn_label = QLabel("Warning")
+        warn_label.setStyleSheet(_LABEL_STYLE)
+        self._warning_badge = QLabel("")
+        self._warning_badge.setWordWrap(True)
+        self._warning_badge.setStyleSheet(
+            "QLabel { color: #F87171; font-size: 11px; padding: 2px 10px; }"
+        )
+        self._warning_badge.setVisible(False)
+
+        for lbl in (proc_label, id_label, sys_label, warn_label):
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        # replace the existing addWidget block:
+        grid.addWidget(proc_label,             0, 0)
+        grid.addWidget(self._process_badge,    0, 1)
+        grid.addWidget(id_label,               1, 0)
+        grid.addWidget(self._process_id_badge, 1, 1)
+        grid.addWidget(sys_label,              2, 0)
+        grid.addWidget(self._system_badge,     2, 1)
+        grid.addWidget(warn_label,             3, 0)
+        grid.addWidget(self._warning_badge,    3, 1)
+
+
         for lbl in (proc_label, id_label, sys_label):
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
@@ -101,6 +125,14 @@ class SystemStatusWidget(QFrame):
     def set_system_state(self, state: str) -> None:
         self._apply_badge(self._system_badge, state)
         self._system_badge.setText(state.upper())
+
+    def set_warning(self, message: str) -> None:
+        if message:
+            self._warning_badge.setText(message)
+            self._warning_badge.setVisible(True)
+        else:
+            self._warning_badge.setText("")
+            self._warning_badge.setVisible(False)
 
     # ── Internal ──────────────────────────────────────────────────────
 

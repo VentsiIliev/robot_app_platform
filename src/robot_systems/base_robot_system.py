@@ -87,9 +87,10 @@ class BaseRobotSystem(ABC):
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
         self._resolved: Dict[str, Any] = {}
-        self._settings_service: Optional[ISettingsService] = None
-        self._system_manager: Optional[Any] = None
-        self._health_registry: Optional[Any] = None
+        self._settings_service:  Optional[ISettingsService] = None
+        self._messaging_service: Optional[Any] = None
+        self._system_manager:    Optional[Any] = None
+        self._health_registry:   Optional[Any] = None
         self._running = False
 
     @property
@@ -136,18 +137,19 @@ class BaseRobotSystem(ABC):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    # Update start() to also accept and store the settings service:
     def start(
             self,
-            services:        Dict[str, Any],
-            settings_service = None,
-            system_manager   = None,
+            services:          Dict[str, Any],
+            settings_service   = None,
+            system_manager     = None,
+            messaging_service  = None,
     ) -> None:
         self._logger.info("Starting %s v%s", self.metadata.name, self.metadata.version)
-        self._settings_service = settings_service
-        self._system_manager   = system_manager
+        self._settings_service  = settings_service
+        self._messaging_service = messaging_service
+        self._system_manager    = system_manager
         self._validate_and_inject(services)
-        self._health_registry  = self._build_health_registry()
+        self._health_registry   = self._build_health_registry()
         self._running = True
         self.on_start()
         self._logger.info("%s started", self.metadata.name)

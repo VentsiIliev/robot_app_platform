@@ -3,6 +3,7 @@ import logging
 from dataclasses import replace
 from typing import Dict, List, Optional
 
+from src.robot_systems.glue.settings_ids import SettingsID
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.glue.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
@@ -45,7 +46,7 @@ class GlueDashboardService(IGlueDashboardService):
     def change_glue(self, cell_id: int, glue_type: str) -> None:
         self._logger.info("change_glue → cell=%s type='%s'", cell_id, glue_type)
         try:
-            cells_config: GlueCellsConfig = self._settings.get("glue_cells")
+            cells_config: GlueCellsConfig = self._settings.get(SettingsID.GLUE_CELLS)
             cell = cells_config.get_cell_by_id(cell_id)
             if cell is None:
                 self._logger.warning("change_glue: cell_id=%s not found", cell_id)
@@ -54,7 +55,7 @@ class GlueDashboardService(IGlueDashboardService):
             updated_cells = GlueCellsConfig(
                 cells=[updated_cell if c.id == cell_id else c for c in cells_config.cells]
             )
-            self._settings.save("glue_cells", updated_cells)
+            self._settings.save(SettingsID.GLUE_CELLS, updated_cells)
         except Exception:
             self._logger.exception("change_glue failed for cell=%s", cell_id)
 
@@ -62,7 +63,7 @@ class GlueDashboardService(IGlueDashboardService):
 
     def get_cell_capacity(self, cell_id: int) -> float:
         try:
-            cells_config: GlueCellsConfig = self._settings.get("glue_cells")
+            cells_config: GlueCellsConfig = self._settings.get(SettingsID.GLUE_CELLS)
             cell = cells_config.get_cell_by_id(cell_id)
             return cell.capacity if cell is not None else 0.0
         except Exception:
@@ -71,7 +72,7 @@ class GlueDashboardService(IGlueDashboardService):
 
     def get_cell_glue_type(self, cell_id: int) -> Optional[str]:
         try:
-            cells_config: GlueCellsConfig = self._settings.get("glue_cells")
+            cells_config: GlueCellsConfig = self._settings.get(SettingsID.GLUE_CELLS)
             cell = cells_config.get_cell_by_id(cell_id)
             return cell.type if cell else None
         except Exception:
@@ -79,7 +80,7 @@ class GlueDashboardService(IGlueDashboardService):
 
     def get_all_glue_types(self) -> List[str]:
         try:
-            catalog: GlueCatalog = self._settings.get("glue_catalog")
+            catalog: GlueCatalog = self._settings.get(SettingsID.GLUE_CATALOG)
             return catalog.get_all_names()
         except Exception:
             return []
@@ -89,7 +90,7 @@ class GlueDashboardService(IGlueDashboardService):
 
     def get_cells_count(self) -> int:
         try:
-            cells_config: GlueCellsConfig = self._settings.get("glue_cells")
+            cells_config: GlueCellsConfig = self._settings.get(SettingsID.GLUE_CELLS)
             return cells_config.cell_count
         except Exception:
             self._logger.error("get_cells_count failed, returning 0")

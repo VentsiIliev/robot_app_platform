@@ -1,22 +1,33 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, List
 
 
 @dataclass
 class MotorConfig:
     """
-    Register map and timing constants for a motor controller board.
-    Inject into MotorController — no hardcoded register addresses anywhere else.
-    """
-    slave_id:                        int   = 1
-    health_check_trigger_register:   int   = 17
-    motor_error_count_register:      int   = 20
-    motor_error_registers_start:     int   = 21
-    health_check_delay_s:            float = 3.0
-    ramp_step_delay_s:               float = 0.001
+    Register map, motor topology, and timing constants for a motor controller board.
 
-    # Maps motor_address → error-code prefix digit
-    # e.g. motor addr 0 → errors start with "1x" (11, 12, 13, 14)
-    address_to_error_prefix: Dict[int, int] = field(
-        default_factory=lambda: {0: 1, 2: 2, 4: 3, 6: 4}
-    )
+    All register addresses are board firmware specific — no defaults are provided.
+    Instantiate with explicit values in the robot system that owns the hardware.
+
+    motor_addresses         — ordered list of Modbus register addresses for each motor.
+                              Length determines the motor count (1, 4, 44, …).
+    address_to_error_prefix — optional mapping: motor_address → error-code prefix digit,
+                              used to filter board-level error codes per motor.
+                              Leave empty ({}) if the board does not use prefixed error codes.
+    """
+
+    # ── Register map (board firmware specific — no defaults) ──────────
+    health_check_trigger_register: int
+    motor_error_count_register:    int
+    motor_error_registers_start:   int
+
+    # ── Motor topology ────────────────────────────────────────────────
+    motor_addresses: List[int]
+
+    # ── Timing ───────────────────────────────────────────────────────
+    health_check_delay_s: float = 0.0
+    ramp_step_delay_s:    float = 0.001
+
+    # ── Error code filtering (optional) ──────────────────────────────
+    address_to_error_prefix: Dict[int, int] = field(default_factory=dict)

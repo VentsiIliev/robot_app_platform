@@ -4,38 +4,65 @@ import time
 from typing import List, Optional
 
 from src.engine.hardware.motor.health.motor_health_checker import MotorHealthChecker
-from src.engine.hardware.motor.interfaces.i_motor_controller import IMotorController
+from src.engine.hardware.motor.interfaces.i_motor_error_decoder import IMotorErrorDecoder
+from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.engine.hardware.motor.interfaces.i_motor_transport import IMotorTransport
 from src.engine.hardware.motor.models.motor_config import MotorConfig
 from src.engine.hardware.motor.models.motor_state import MotorState, MotorsSnapshot
 from src.engine.hardware.motor.utils import split_into_16bit
 
 
-class MotorController(IMotorController):
+class MotorService(IMotorService):
     """
-    IMotorController implementation — uses IMotorTransport for all I/O.
+    IMotorService implementation — uses IMotorTransport for all I/O.
     Has no knowledge of Modbus, serial ports, or any communication protocol.
     """
 
     def __init__(
         self,
-        transport: IMotorTransport,
-        config:    MotorConfig = None,
+        transport:     IMotorTransport,
+        config:        MotorConfig,
+        error_decoder: Optional[IMotorErrorDecoder] = None,
     ) -> None:
-        self._transport = transport
-        self._config    = config or MotorConfig()
-        self._health    = MotorHealthChecker(transport, self._config)
-        self._logger    = logging.getLogger(self.__class__.__name__)
+        self._transport  = transport
+        self._config     = config
+        self._health     = MotorHealthChecker(self._transport, self._config, error_decoder)
+        self._logger     = logging.getLogger(self.__class__.__name__)
+        self._connected  = False
 
-    # ── IMotorController — lifecycle ──────────────────────────────────
+    # ── IHealthCheckable ──────────────────────────────────────────────
+
+    def is_healthy(self) -> bool:
+        """Returns True when the service has an open connection and is ready for commands."""
+        return self._connected
+
+    # ── Motor topology ────────────────────────────────────────────────
+
+    @property
+    def motor_addresses(self) -> List[int]:
+        """The motor addresses declared in this service's MotorConfig."""
+        return self._config.motor_addresses
+
+    # ── IMotorService — lifecycle ─────────────────────────────────────
 
     def open(self) -> None:
-        self._transport.connect()
+        try:
+            self._transport.connect()
+            self._connected = True
+            self._logger.info("Motor service connected")
+        except Exception:
+            self._connected = False
+            self._logger.exception("Motor service failed to connect — running disconnected")
 
     def close(self) -> None:
-        self._transport.disconnect()
+        try:
+            self._transport.disconnect()
+        except Exception:
+            self._logger.warning("Motor service disconnect raised an error", exc_info=True)
+        finally:
+            self._connected = False
 
-    # ── IMotorController — commands ───────────────────────────────────
+    # ── IMotorService — commands ──────────────────────────────────────
 
     def turn_on(
         self,
@@ -100,18 +127,23 @@ class MotorController(IMotorController):
     def health_check_all(self, motor_addresses: List[int]) -> MotorsSnapshot:
         return self._health.check_all_motors(motor_addresses)
 
+    def health_check_all_configured(self) -> MotorsSnapshot:
+        return self._health.check_all_motors(self._config.motor_addresses)
+
     # ── Internal ──────────────────────────────────────────────────────
 
     def _ramp(self, motor_address: int, target: int, steps: int) -> bool:
         steps     = max(1, steps)
         increment = target // steps
         for i in range(steps):
-            value      = increment * (i + 1)
-            high, low  = split_into_16bit(value)
+            value     = increment * (i + 1)
+            high, low = split_into_16bit(value)
             try:
                 self._transport.write_registers(motor_address, [low, high])
             except Exception:
-                self._logger.exception("Ramp step %d/%d failed for motor %s", i + 1, steps, motor_address)
+                self._logger.exception(
+                    "Ramp step %d/%d failed for motor %s", i + 1, steps, motor_address
+                )
                 return False
             if self._config.ramp_step_delay_s > 0:
                 time.sleep(self._config.ramp_step_delay_s)

@@ -108,6 +108,14 @@ class BaseProcess(IProcess):
                     "Cannot start '%s' — required services unavailable: %s",
                     self._process_id, missing,
                 )
+                from src.shared_contracts.events.process_events import ServiceUnavailableEvent
+                self._messaging.publish(
+                    ProcessTopics.service_unavailable(self._process_id),
+                    ServiceUnavailableEvent(
+                        process_id=self._process_id,
+                        missing_services=missing,
+                    ),
+                )
                 return
 
             # 2 — acquire system-level lock

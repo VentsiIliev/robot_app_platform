@@ -171,8 +171,9 @@ class SystemBuilder:
         system_manager = SystemManager(self._messaging_service)
         system.start(
             services,
-            settings_service=settings_service,
-            system_manager=system_manager,
+            settings_service  = settings_service,
+            system_manager    = system_manager,
+            messaging_service = self._messaging_service,
         )
         return system
 

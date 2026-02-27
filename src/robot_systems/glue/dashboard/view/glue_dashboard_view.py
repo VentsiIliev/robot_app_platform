@@ -78,6 +78,8 @@ class GlueDashboardView(IApplicationView):
     def set_process_state(self, state: str)          -> None: self._system_status.set_process_state(state)
     def set_active_process(self, process_id: str)    -> None: self._system_status.set_active_process(process_id)
     def set_system_state(self, state: str)           -> None: self._system_status.set_system_state(state)
+    def set_service_warning(self, message: str)      -> None: self._system_status.set_warning(message)
+
 
     # ── Dashboard setters ─────────────────────────────────────────────
 

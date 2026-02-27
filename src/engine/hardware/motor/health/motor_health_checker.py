@@ -1,25 +1,44 @@
 from __future__ import annotations
 import logging
 import time
-from typing import Dict, List
+from typing import List, Optional
 
+from src.engine.hardware.motor.interfaces.i_motor_error_decoder import IMotorErrorDecoder
 from src.engine.hardware.motor.interfaces.i_motor_transport import IMotorTransport
 from src.engine.hardware.motor.models.motor_config import MotorConfig
 from src.engine.hardware.motor.models.motor_state import MotorState, MotorsSnapshot
 
 
+class _NullErrorDecoder(IMotorErrorDecoder):
+    def decode(self, error_code: int) -> str:
+        return f"error code {error_code}"
+
+
 class MotorHealthChecker:
     """
-    Performs health-check cycles against a motor controller board.
-    Depends only on IMotorTransport — knows nothing about Modbus or serial ports.
+    Performs health check cycles against a motor controller board.
+    Depends only on IMotorTransport and IMotorErrorDecoder —
+    knows nothing about Modbus, serial ports, or board-specific error codes.
     """
 
-    def __init__(self, transport: IMotorTransport, config: MotorConfig) -> None:
+    def __init__(
+        self,
+        transport:     IMotorTransport,
+        config:        MotorConfig,
+        error_decoder: Optional[IMotorErrorDecoder] = None,
+    ) -> None:
         self._transport = transport
         self._config    = config
         self._logger    = logging.getLogger(self.__class__.__name__)
-
-    # ── Public ────────────────────────────────────────────────────────
+        if error_decoder is None:
+            self._logger.warning(
+                "No IMotorErrorDecoder provided — motor error codes will be "
+                "logged as raw integers. Inject a decoder via MotorController "
+                "to get human-readable descriptions."
+            )
+            self._decoder = _NullErrorDecoder()
+        else:
+            self._decoder = error_decoder
 
     def check_motor(self, motor_address: int) -> MotorState:
         state = MotorState(motor_address=motor_address)
@@ -47,12 +66,10 @@ class MotorHealthChecker:
         try:
             self._trigger_health_check()
             error_count = self._read_error_count()
-
             if error_count == 0:
                 for addr in motor_addresses:
                     snapshot.add(MotorState(motor_address=addr, is_healthy=True))
                 return snapshot
-
             raw_errors = self._read_error_values(error_count)
             for addr in motor_addresses:
                 relevant = self._filter_for_motor(raw_errors, addr)
@@ -64,7 +81,6 @@ class MotorHealthChecker:
                 else:
                     state.is_healthy = True
                 snapshot.add(state)
-
         except Exception as exc:
             self._logger.exception("Bulk health check failed")
             snapshot.success = False
@@ -74,21 +90,15 @@ class MotorHealthChecker:
                 snapshot.add(state)
         return snapshot
 
-    # ── Internal ──────────────────────────────────────────────────────
-
     def _trigger_health_check(self) -> None:
-        self._transport.write_registers(
-            self._config.health_check_trigger_register, [1]
-        )
+        self._transport.write_registers(self._config.health_check_trigger_register, [1])
         time.sleep(self._config.health_check_delay_s)
 
     def _read_error_count(self) -> int:
         return self._transport.read_register(self._config.motor_error_count_register)
 
     def _read_error_values(self, count: int) -> List[int]:
-        values = self._transport.read_registers(
-            self._config.motor_error_registers_start, count
-        )
+        values = self._transport.read_registers(self._config.motor_error_registers_start, count)
         return [v for v in values if v != 0]
 
     def _filter_for_motor(self, raw_errors: List[int], motor_address: int) -> List[int]:
@@ -98,8 +108,5 @@ class MotorHealthChecker:
         return [e for e in raw_errors if e // 10 == prefix]
 
     def _log_errors(self, motor_address: int, error_codes: List[int]) -> None:
-        from src.engine.hardware.motor.models.motor_error_codes import MotorErrorCode
         for code in error_codes:
-            mc = MotorErrorCode.from_code(code)
-            desc = mc.description() if mc else f"unknown({code})"
-            self._logger.warning("Motor %s — %s", motor_address, desc)
+            self._logger.warning("Motor %s — %s", motor_address, self._decoder.decode(code))

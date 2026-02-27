@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import List
 
 
 class ProcessState(Enum):
@@ -20,6 +21,13 @@ class ProcessStateEvent:
     timestamp:  datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+@dataclass(frozen=True)
+class ServiceUnavailableEvent:
+    process_id:       str
+    missing_services: List[str]
+    timestamp:        datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class ProcessTopics:
     ACTIVE = "process/active/state"
 
@@ -30,3 +38,7 @@ class ProcessTopics:
     @staticmethod
     def error(process_id: str) -> str:
         return f"process/{process_id}/error"
+
+    @staticmethod
+    def service_unavailable(process_id: str) -> str:
+        return f"process/{process_id}/service_unavailable"

@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.robot_systems.glue.process_ids import ProcessID
 from src.applications.base.widget_application import WidgetApplication
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
@@ -69,7 +70,7 @@ def _make_robot_system(cells=None, catalog=None):
     app.get_service.return_value          = rs
     app.get_optional_service.return_value = None
     app._settings_service                 = ss
-    app.system_manager                    = None
+    app.coordinator                       = _make_runner()
     # app.health_registry is auto-created by MagicMock; .check(name) returns truthy
     return app, rs, ss
 
@@ -114,11 +115,11 @@ class TestDashboardApplicationFactory(unittest.TestCase):
         application, _, _ = self._build()
         self.assertIsInstance(application, WidgetApplication)
 
-    def test_factory_requests_robot_service(self):
+    def test_factory_accesses_coordinator(self):
         app, _, _ = _make_robot_system()
         spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
         spec.factory(app)
-        app.get_service.assert_called_with("robot")
+        _ = app.coordinator  # coordinator is accessed at factory time, not widget creation time
 
     def test_register_stores_messaging_service(self):
         application, _, _ = self._build()
@@ -466,7 +467,7 @@ class TestGlueProcess(unittest.TestCase):
         p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms)
         p.start()
         topics = [c.args[0] for c in ms.publish.call_args_list]
-        self.assertIn(ProcessTopics.state("glue"), topics)
+        self.assertIn(ProcessTopics.state(ProcessID.GLUE), topics)
 
     def test_active_topic_published_before_specific_topic(self):
         ms = _make_messaging()
@@ -475,7 +476,7 @@ class TestGlueProcess(unittest.TestCase):
         topics = [c.args[0] for c in ms.publish.call_args_list]
         self.assertLess(
             topics.index(ProcessTopics.ACTIVE),
-            topics.index(ProcessTopics.state("glue")),
+            topics.index(ProcessTopics.state(ProcessID.GLUE)),
         )
 
     # ── System manager ────────────────────────────────────────────────

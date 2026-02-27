@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional
 
+from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.system import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess
@@ -23,7 +24,7 @@ class GlueProcess(BaseProcess):
         service_checker: Optional[Callable[[str], bool]] = None,
     ):
         super().__init__(
-            process_id      = "glue",
+            process_id      = ProcessID.GLUE,
             messaging       = messaging,
             system_manager     = system_manager,
             requirements    = requirements,

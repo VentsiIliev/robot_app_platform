@@ -4,6 +4,7 @@ from typing import Callable, List, Tuple
 
 from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 
+from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.system import SystemTopics
 from src.applications.base.i_application_controller import IApplicationController
@@ -24,6 +25,8 @@ class _DashboardBridge(QObject):
     robot_state    = pyqtSignal(str)
     process_state = pyqtSignal(str, str)  # (state, process_id)
     system_state   = pyqtSignal(str, str)   # (busy_state, active_process_id)
+    service_warning = pyqtSignal(str)
+
 
 
 class GlueDashboardController(IApplicationController):
@@ -75,6 +78,8 @@ class GlueDashboardController(IApplicationController):
         self._bridge.robot_state.connect(self._on_robot_state_str)
         self._bridge.process_state.connect(self._on_process_state_str)
         self._bridge.system_state.connect(self._on_system_state)      # ← was missing
+        self._bridge.service_warning.connect(self._on_service_warning)
+
 
     # ── Broker → Bridge ───────────────────────────────────────────────
 
@@ -98,6 +103,14 @@ class GlueDashboardController(IApplicationController):
                   lambda e: self._bridge.system_state.emit(
                       e.state.value, e.active_process or ""
                   ))
+        for pid in ProcessID:
+            self._sub(
+                ProcessTopics.service_unavailable(pid),
+                lambda e: self._bridge.service_warning.emit(
+                    f"{e.process_id}: unavailable — {', '.join(e.missing_services)}"
+                ),
+            )
+
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
 
@@ -122,11 +135,18 @@ class GlueDashboardController(IApplicationController):
             self._apply_button_state(state)
             self._view.set_process_state(state)
             self._view.set_active_process(process_id if state != ProcessState.IDLE.value else "")
+            if state == ProcessState.RUNNING.value:
+                self._view.set_service_warning("")
 
     def _on_system_state(self, state: str, active_process: str) -> None:  # ← was missing
         if self._view_ok():
             self._view.set_system_state(state)
             self._view.set_active_process(active_process or "")
+
+    def _on_service_warning(self, message: str) -> None:
+        if self._view_ok():
+            self._view.set_service_warning(message)
+
 
     # ── View signals → Model ──────────────────────────────────────────
 

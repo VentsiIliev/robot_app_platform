@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
+from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.system.i_system_manager import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess
@@ -23,7 +24,7 @@ class CleanProcess(BaseProcess):
         simulation_duration_s: float = _SIMULATION_DURATION_S,
     ):
         super().__init__(
-            process_id      = "clean",
+            process_id      = ProcessID.CLEAN,
             messaging       = messaging,
             system_manager  = system_manager,
             requirements    = requirements,

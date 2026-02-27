@@ -4,15 +4,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+from src.bootstrap.logging_config import setup_logging
+
 _LOGGER = logging.getLogger("main")
-
-
-def setup_logging() -> None:
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)-8s] %(name)s — %(message)s",
-        datefmt="%H:%M:%S",
-    )
 
 
 def main() -> None:
