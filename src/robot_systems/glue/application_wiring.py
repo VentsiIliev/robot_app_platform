@@ -28,7 +28,7 @@ def _build_glue_cell_settings_application(robot_app):
     service = GlueCellSettingsService(
         robot_app._settings_service,
         settings_key=SettingsID.GLUE_CELLS,
-        weight_service=robot_app.get_service(ServiceID.WEIGHT)
+        weight_service=robot_app.get_optional_service(ServiceID.WEIGHT)
     )
     return WidgetApplication(
         widget_factory=lambda ms: GlueCellSettingsFactory().build(service, ms)

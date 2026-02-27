@@ -173,7 +173,7 @@ class TestGlueCellSettingsServiceSaveAndPush(unittest.TestCase):
         ws        = MagicMock()
         ws.update_config.return_value = True
 
-        svc   = GlueCellSettingsService(ss, ws)
+        svc   = GlueCellSettingsService(ss,settings_key=SettingsID.GLUE_CELLS, weight_service=ws)
         model = GlueCellSettingsModel(svc)
         model.load()
 
