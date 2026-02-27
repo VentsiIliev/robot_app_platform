@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pl_gui.dashboard.config import DashboardConfig, ActionButtonConfig, CardConfig
-from src.engine.process.process_state import ProcessState
+from src.shared_contracts.events.process_events import ProcessState
 
 
 class GlueCellTopics:

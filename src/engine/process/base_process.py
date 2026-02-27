@@ -7,7 +7,7 @@ from src.engine.application.i_application_manager import IApplicationManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.i_process import IProcess
 from src.engine.process.process_requirements import ProcessRequirements
-from src.engine.process.process_state import ProcessState, ProcessStateEvent, ProcessTopics
+from src.shared_contracts.events.process_events import ProcessState, ProcessTopics, ProcessStateEvent
 
 _TRANSITIONS: Dict[ProcessState, FrozenSet[ProcessState]] = {
     ProcessState.IDLE:    frozenset({ProcessState.RUNNING}),

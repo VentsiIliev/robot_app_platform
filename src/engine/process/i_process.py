@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
-from src.engine.process.process_state import ProcessState
 from src.engine.process.process_requirements import ProcessRequirements
+from src.shared_contracts.events.process_events import ProcessState
 
 
 class IProcess(ABC):

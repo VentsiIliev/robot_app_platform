@@ -5,8 +5,8 @@ from typing import Callable, List, Tuple
 from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 
 from src.engine.core.i_messaging_service import IMessagingService
-from src.engine.process.process_state import ProcessTopics, ProcessState
 from src.plugins.base.i_plugin_controller import IPluginController
+from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.weight_events import WeightTopics
 from src.robot_apps.glue.dashboard.config import (
