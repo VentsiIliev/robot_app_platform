@@ -32,9 +32,11 @@ def _build_dashboard_plugin(robot_app):
     from src.plugins.base.widget_plugin import WidgetPlugin
     from src.robot_apps.glue.dashboard.glue_dashboard import GlueDashboard
 
+    robot_service = robot_app.get_service("robot")   # called eagerly
+
     return WidgetPlugin(
         widget_factory=lambda ms: GlueDashboard.create(
-            robot_service     = robot_app.get_service("robot"),
+            robot_service     = robot_service,
             settings_service  = robot_app._settings_service,
             messaging_service = ms,
             weight_service    = robot_app.get_optional_service("weight"),

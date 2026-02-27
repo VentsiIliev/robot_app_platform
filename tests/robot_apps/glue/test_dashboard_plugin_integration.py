@@ -30,6 +30,8 @@ def _make_cell(cell_id: int, glue_type: str = "Type A", capacity: float = 5000.0
         ),
     )
 
+def _make_messaging():
+    return MagicMock()
 
 
 def _make_cells(*cell_ids: int) -> GlueCellsConfig:
@@ -57,9 +59,18 @@ def _make_robot_service():
 
 
 def _make_dashboard_service(cells=None, catalog=None):
-    ss, _cells, _catalog = _make_settings_service(cells, catalog)
+    _cells   = cells   or _make_cells(1, 2, 3)
+    _catalog = catalog or _make_catalog("Type A", "Type B")
     rs = _make_robot_service()
-    return GlueDashboardService(robot_service=rs, settings_service=ss), rs, ss, _cells, _catalog
+    ss, _cells, _catalog = _make_settings_service(_cells, _catalog)  # unpack correctly
+    svc = GlueDashboardService(
+        process_id       = "test_dashboard",
+        robot_service    = rs,
+        settings_service = ss,
+        messaging        = _make_messaging(),
+    )
+    return svc, rs, ss, _cells, _catalog
+
 
 
 def _make_robot_app(cells=None, catalog=None):
@@ -148,18 +159,24 @@ class TestGlueDashboardServiceCommands(unittest.TestCase):
         svc.start()
         rs.enable_robot.assert_called_once()
 
+    # test_stop_calls_stop_motion
     def test_stop_calls_stop_motion(self):
         svc, rs, *_ = _make_dashboard_service()
+        svc.start()  # ← must be in RUNNING state before stop() is valid
         svc.stop()
         rs.stop_motion.assert_called_once()
 
+    # test_stop_calls_disable_robot
     def test_stop_calls_disable_robot(self):
         svc, rs, *_ = _make_dashboard_service()
+        svc.start()
         svc.stop()
         rs.disable_robot.assert_called_once()
 
+    # test_pause_calls_stop_motion
     def test_pause_calls_stop_motion(self):
         svc, rs, *_ = _make_dashboard_service()
+        svc.start()  # ← must be RUNNING before pause() is valid
         svc.pause()
         rs.stop_motion.assert_called_once()
 
@@ -195,7 +212,13 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
         rs = _make_robot_service()
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(robot_service=rs, settings_service=ss)
+        svc = GlueDashboardService(
+            process_id="test_dashboard",
+            robot_service=rs,
+            settings_service=ss,
+            messaging=MagicMock(),
+        )
+
         self.assertEqual(svc.get_cells_count(), 0)
 
     def test_get_cell_capacity_returns_correct_value(self):
@@ -212,7 +235,14 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
         rs = _make_robot_service()
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(robot_service=rs, settings_service=ss)
+        # Replace every bare instantiation with:
+        svc = GlueDashboardService(
+            process_id="test_dashboard",
+            robot_service=rs,
+            settings_service=ss,
+            messaging=MagicMock(),
+        )
+
         self.assertEqual(svc.get_cell_capacity(1), 0.0)
 
 
@@ -235,7 +265,14 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
         rs = _make_robot_service()
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("boom")
-        svc = GlueDashboardService(robot_service=rs, settings_service=ss)
+        # Replace every bare instantiation with:
+        svc = GlueDashboardService(
+            process_id="test_dashboard",
+            robot_service=rs,
+            settings_service=ss,
+            messaging=MagicMock(),
+        )
+
         self.assertEqual(svc.get_all_glue_types(), [])
 
     def test_get_initial_cell_state_returns_none(self):
@@ -254,7 +291,14 @@ class TestGlueDashboardServiceChangeGlue(unittest.TestCase):
         ss    = MagicMock()
         ss.get.side_effect = lambda key: cells if key == "glue_cells" else None
         rs  = _make_robot_service()
-        svc = GlueDashboardService(robot_service=rs, settings_service=ss)
+        # Replace every bare instantiation with:
+        svc = GlueDashboardService(
+            process_id="test_dashboard",
+            robot_service=rs,
+            settings_service=ss,
+            messaging=MagicMock(),
+        )
+
         return svc, ss, cells
 
     def test_change_glue_saves_updated_cells(self):
@@ -287,7 +331,14 @@ class TestGlueDashboardServiceChangeGlue(unittest.TestCase):
         rs = _make_robot_service()
         ss = MagicMock()
         ss.get.side_effect = RuntimeError("db error")
-        svc = GlueDashboardService(robot_service=rs, settings_service=ss)
+        # Replace every bare instantiation with:
+        svc = GlueDashboardService(
+            process_id="test_dashboard",
+            robot_service=rs,
+            settings_service=ss,
+            messaging=MagicMock(),
+        )
+
         svc.change_glue(1, "Type B")  # must not raise
 
 
