@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.robot_apps.glue.settings.cells import CalibrationConfig
+from src.robot_systems.glue.settings.cells import CalibrationConfig
 
 
 class ICellCalibrator(ABC):

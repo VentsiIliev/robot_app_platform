@@ -2,19 +2,19 @@ import logging
 from typing import Type
 
 from pl_gui.shell.shell_config import ShellConfig, FolderDefinition, create_custom_folder
-from src.robot_apps.base_robot_app import BaseRobotApp
+from src.robot_systems.base_robot_system import BaseRobotSystem
 
 _LOGGER = logging.getLogger("ShellConfigurator")
 
 
 class ShellConfigurator:
     """
-    Reads ShellSetup metadata from a BaseRobotApp and configures
+    Reads ShellSetup metadata from a BaseRobotSystem and configures
     the pl_gui ShellConfig. Called once at bootstrap before AppShell is created.
     """
 
     @staticmethod
-    def configure(app_class: Type[BaseRobotApp]) -> None:
+    def configure(app_class: Type[BaseRobotSystem]) -> None:
         setup = app_class.shell
 
         if not setup.folders:

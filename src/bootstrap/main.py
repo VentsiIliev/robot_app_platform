@@ -27,29 +27,29 @@ def main() -> None:
     from src.bootstrap.plugin_loader import PluginLoader
     from src.bootstrap.shell_configurator import ShellConfigurator
     from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
-    from src.robot_apps.app_builder import AppBuilder
-    from src.robot_apps.glue.glue_robot_app import GlueRobotApp
+    from src.robot_systems.system_builder import SystemBuilder
+    from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
     # 1 — engine singletons
     ctx = EngineContext.build()
 
     # 2 — robot app (settings loaded, services wired)
     robot_app = (
-        AppBuilder()
+        SystemBuilder()
         .with_robot(TestRobotWrapper())
         .with_messaging_service(ctx.messaging_service)
-        .build(GlueRobotApp)
+        .build(GlueRobotSystem)
     )
 
     # 3 — shell folder layout from app metadata
-    ShellConfigurator.configure(GlueRobotApp)
+    ShellConfigurator.configure(GlueRobotSystem)
 
     # 4 — Qt must exist before any widgets
     qt_app = QApplication(sys.argv)
 
     # 5 — load plugins — factory lives on each PluginSpec, bootstrap knows nothing
     loader = PluginLoader(ctx.messaging_service)
-    for spec in GlueRobotApp.shell.plugins:
+    for spec in GlueRobotSystem.shell.plugins:
         if spec.factory is None:
             _LOGGER.warning("PluginSpec '%s' has no factory — skipping", spec.name)
             continue

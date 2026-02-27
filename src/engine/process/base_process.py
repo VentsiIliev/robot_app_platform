@@ -3,7 +3,7 @@ import logging
 import threading
 from typing import Callable, Dict, FrozenSet, Optional
 
-from src.engine.application.i_application_manager import IApplicationManager
+from src.engine.system.i_system_manager import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.i_process import IProcess
 from src.engine.process.process_requirements import ProcessRequirements
@@ -24,7 +24,7 @@ class BaseProcess(IProcess):
     """
     Thread-safe state machine + broker publishing.
 
-    Optional IApplicationManager enforces single-process exclusivity.
+    Optional ISystemManager enforces single-process exclusivity.
     Optional ProcessRequirements + service_checker enforces that all
     required services are available before a RUNNING transition is allowed.
     """
@@ -33,7 +33,7 @@ class BaseProcess(IProcess):
         self,
         process_id:      str,
         messaging:       IMessagingService,
-        app_manager:     Optional[IApplicationManager]    = None,
+        app_manager:     Optional[ISystemManager]    = None,
         requirements:    Optional[ProcessRequirements]    = None,
         service_checker: Optional[Callable[[str], bool]]  = None,
     ):

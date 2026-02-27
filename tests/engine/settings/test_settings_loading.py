@@ -4,10 +4,10 @@ import os
 import tempfile
 import unittest
 
-from src.robot_apps.glue.glue_robot_app import GlueRobotApp
+from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 from src.engine.repositories.settings_service_factory import build_from_specs
-from src.robot_apps.base_robot_app import SettingsSpec
+from src.robot_systems.base_robot_system import SettingsSpec
 from src.engine.robot.configuration import (
     MovementGroup,
     RobotSettings,
@@ -16,7 +16,7 @@ from src.engine.robot.configuration import (
 )
 
 
-APP_NAME = GlueRobotApp.__name__.lower()  # "gluerobotapp" — derived from actual class
+APP_NAME = GlueRobotSystem.__name__.lower()  # "gluerobotsystem" — derived from actual class
 
 
 def _get_settings_path(app_class, settings_root: str, storage_key: str) -> str:
@@ -102,7 +102,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_creates_default_file_and_loads_on_first_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
 
             config = service.get("robot_config")
 
@@ -120,7 +120,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
                 json.dump({"ROBOT_IP": "10.0.0.99", "ROBOT_TOOL": 5}, f)
 
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
             config = service.get("robot_config")
 
             self.assertEqual(config.robot_ip, "10.0.0.99")
@@ -129,7 +129,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_get_returns_cached_instance(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
 
             first  = service.get("robot_config")
             second = service.get("robot_config")
@@ -143,7 +143,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
                 json.dump({"ROBOT_IP": "10.0.0.1", "ROBOT_TOOL": 1}, f)
 
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
             first = service.get("robot_config")
             self.assertEqual(first.robot_ip, "10.0.0.1")
 
@@ -157,7 +157,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_save_persists_to_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
 
             config = service.get("robot_config")
             config.robot_ip = "192.168.1.50"
@@ -169,7 +169,7 @@ class TestSettingsServiceIntegration(unittest.TestCase):
     def test_unknown_key_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec("robot_config", RobotSettingsSerializer(), "robot/config.json")]
-            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotApp)
+            service = build_from_specs(specs, settings_root=tmp, app_class=GlueRobotSystem)
 
             with self.assertRaises(KeyError):
                 service.get("nonexistent")

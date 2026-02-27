@@ -3,7 +3,7 @@ from src.engine.hardware.weight.http.http_cell_transport import HttpCellTranspor
 from src.engine.hardware.weight.interfaces.i_cell_calibrator import ICellCalibrator
 from src.engine.hardware.weight.interfaces.i_cell_transport import ICellTransport
 from src.engine.hardware.weight.weight_cell_service import WeightCellService
-from src.robot_apps.glue.settings.cells import CellConfig, GlueCellsConfig
+from src.robot_systems.glue.settings.cells import CellConfig, GlueCellsConfig
 
 
 def build_http_weight_cell_service(

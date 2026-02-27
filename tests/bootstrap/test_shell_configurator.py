@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from src.bootstrap.shell_configurator import ShellConfigurator
-from src.robot_apps.base_robot_app import (
-    AppMetadata, BaseRobotApp, FolderSpec, ShellSetup,
+from src.robot_systems.base_robot_system import (
+    SystemMetadata, BaseRobotSystem, FolderSpec, ShellSetup,
 )
 
 
@@ -11,8 +11,8 @@ from src.robot_apps.base_robot_app import (
 # Minimal concrete app stubs
 # ---------------------------------------------------------------------------
 
-class _AppWithFolders(BaseRobotApp):
-    metadata = AppMetadata(name="TestApp")
+class _AppWithFolders(BaseRobotSystem):
+    metadata = SystemMetadata(name="TestApp")
     shell    = ShellSetup(folders=[
         FolderSpec(folder_id=1, name="PROD",    display_name="Production"),
         FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
@@ -25,8 +25,8 @@ class _AppWithFolders(BaseRobotApp):
     def on_stop(self)  -> None: pass
 
 
-class _AppWithNoFolders(BaseRobotApp):
-    metadata = AppMetadata(name="EmptyApp")
+class _AppWithNoFolders(BaseRobotSystem):
+    metadata = SystemMetadata(name="EmptyApp")
     shell    = ShellSetup(folders=[])
     settings_specs = []
     services       = []
@@ -104,36 +104,36 @@ class TestShellConfiguratorGlueApp(unittest.TestCase):
 
     def test_glue_app_registers_three_folders(self):
         from pl_gui.shell.shell_config import ShellConfig
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
-        ShellConfigurator.configure(GlueRobotApp)
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        ShellConfigurator.configure(GlueRobotSystem)
         self.assertEqual(len(ShellConfig.get_folders()), 3)
 
     def test_glue_app_registers_production_folder(self):
         from pl_gui.shell.shell_config import ShellConfig
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
-        ShellConfigurator.configure(GlueRobotApp)
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        ShellConfigurator.configure(GlueRobotSystem)
         ids = [f.id for f in ShellConfig.get_folders()]
         self.assertIn(1, ids)
 
     def test_glue_app_registers_service_folder(self):
         from pl_gui.shell.shell_config import ShellConfig
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
-        ShellConfigurator.configure(GlueRobotApp)
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        ShellConfigurator.configure(GlueRobotSystem)
         ids = [f.id for f in ShellConfig.get_folders()]
         self.assertIn(2, ids)
 
     def test_glue_app_registers_admin_folder(self):
         from pl_gui.shell.shell_config import ShellConfig
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
-        ShellConfigurator.configure(GlueRobotApp)
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        ShellConfigurator.configure(GlueRobotSystem)
         ids = [f.id for f in ShellConfig.get_folders()]
         self.assertIn(3, ids)
 
     def test_configure_is_idempotent(self):
         from pl_gui.shell.shell_config import ShellConfig
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
-        ShellConfigurator.configure(GlueRobotApp)
-        ShellConfigurator.configure(GlueRobotApp)
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        ShellConfigurator.configure(GlueRobotSystem)
+        ShellConfigurator.configure(GlueRobotSystem)
         self.assertEqual(len(ShellConfig.get_folders()), 3)
 
 

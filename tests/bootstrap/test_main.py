@@ -13,8 +13,8 @@ _PATCH_ENGINE_CTX = "src.bootstrap.build_engine.EngineContext"
 _PATCH_LOADER     = "src.bootstrap.plugin_loader.PluginLoader"
 _PATCH_SHELL_CFG  = "src.bootstrap.shell_configurator.ShellConfigurator"
 _PATCH_ROBOT      = "src.engine.robot.drivers.fairino.test_robot.TestRobotWrapper"
-_PATCH_BUILDER    = "src.robot_apps.app_builder.AppBuilder"
-_PATCH_GLUE_APP   = "src.robot_apps.glue.glue_robot_app.GlueRobotApp"
+_PATCH_BUILDER    = "src.robot_systems.system_builder.SystemBuilder"
+_PATCH_GLUE_APP   = "src.robot_systems.glue.glue_robot_system.GlueRobotSystem"
 _PATCH_SYS_EXIT   = "sys.exit"
 
 
@@ -32,13 +32,13 @@ def _run_main(plugins=None, extra_patches=None):
     mock_ctx       = MagicMock()
     mock_ctx.messaging_service = mock_ms
 
-    mock_robot_app = MagicMock()
-    mock_robot_app.stop = MagicMock()
+    mock_robot_system = MagicMock()
+    mock_robot_system.stop = MagicMock()
 
     mock_builder   = MagicMock()
     mock_builder.with_robot.return_value              = mock_builder
     mock_builder.with_messaging_service.return_value  = mock_builder
-    mock_builder.build.return_value                   = mock_robot_app
+    mock_builder.build.return_value                   = mock_robot_system
 
     mock_loader    = MagicMock()
     mock_loader.build_registry.return_value = ([], MagicMock())
@@ -79,7 +79,7 @@ def _run_main(plugins=None, extra_patches=None):
 
     return {
         "ctx":             mock_ctx,
-        "robot_app":       mock_robot_app,
+        "robot_system":       mock_robot_system,
         "loader":          mock_loader,
         "shell_cfg":       started.get(_PATCH_SHELL_CFG),
         "builder":         mock_builder,
@@ -121,13 +121,13 @@ class TestMainIntegration(unittest.TestCase):
         mock_ctx       = MagicMock()
         mock_ctx.messaging_service = mock_ms
 
-        mock_robot_app = MagicMock()
-        mock_robot_app.stop = MagicMock()
+        mock_robot_system = MagicMock()
+        mock_robot_system.stop = MagicMock()
 
         mock_builder   = MagicMock()
         mock_builder.with_robot.return_value              = mock_builder
         mock_builder.with_messaging_service.return_value  = mock_builder
-        mock_builder.build.return_value                   = mock_robot_app
+        mock_builder.build.return_value                   = mock_robot_system
 
         mock_loader    = MagicMock()
         mock_loader.build_registry.return_value = ([], MagicMock())
@@ -160,7 +160,7 @@ class TestMainIntegration(unittest.TestCase):
 
         return {
             "engine_cls":  mock_engine_cls,
-            "robot_app":   mock_robot_app,
+            "robot_system":   mock_robot_system,
             "loader":      mock_loader,
             "loader_cls":  mock_loader_cls,
             "shell_cfg":   mock_shell_cfg,
@@ -206,9 +206,9 @@ class TestMainIntegration(unittest.TestCase):
         mocks = self._patch_and_run(plugins=[spec])
         mocks["loader"].load.assert_not_called()
 
-    def test_robot_app_stop_called_on_exit(self):
+    def test_robot_system_stop_called_on_exit(self):
         mocks = self._patch_and_run()
-        mocks["robot_app"].stop.assert_called_once()
+        mocks["robot_system"].stop.assert_called_once()
 
     def test_build_registry_called_once(self):
         mocks = self._patch_and_run()
@@ -218,14 +218,14 @@ class TestMainIntegration(unittest.TestCase):
         mocks = self._patch_and_run()
         mocks["builder"].with_messaging_service.assert_called_once_with(mocks["ms"])
 
-    def test_spec_factory_called_with_robot_app(self):
+    def test_spec_factory_called_with_robot_system(self):
         spec = MagicMock()
         spec.factory   = MagicMock(return_value=MagicMock())
         spec.folder_id = 1
         spec.icon      = "fa5s.cog"
         spec.name      = "TestPlugin"
         mocks = self._patch_and_run(plugins=[spec])
-        spec.factory.assert_called_once_with(mocks["robot_app"])
+        spec.factory.assert_called_once_with(mocks["robot_system"])
 
     def test_failing_plugin_factory_does_not_abort_loop(self):
         spec_bad = MagicMock()

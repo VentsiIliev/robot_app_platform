@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+from src.engine.core.i_health_checkable import IHealthCheckable
 from src.shared_contracts.events.weight_events import CellState, WeightReading
-from src.robot_apps.glue.settings.cells import CalibrationConfig
+from src.robot_systems.glue.settings.cells import CalibrationConfig
 
 
-class IWeightCellService(ABC):
+class IWeightCellService(IHealthCheckable, ABC):
 
     @abstractmethod
     def connect(self, cell_id: int) -> bool: ...
@@ -48,3 +49,7 @@ class IWeightCellService(ABC):
 
     @abstractmethod
     def update_config(self, cell_id: int, offset: float, scale: float) -> bool: ...
+
+    def is_healthy(self) -> bool:
+        """Healthy = at least one cell is connected."""
+        return len(self.get_connected_cell_ids()) > 0

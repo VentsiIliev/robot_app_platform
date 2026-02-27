@@ -171,9 +171,9 @@ class TestModbusSettingsControllerStop(unittest.TestCase):
 class TestModbusSettingsPluginSpec(unittest.TestCase):
 
     def _spec(self):
-        from src.robot_apps.glue.glue_robot_app import GlueRobotApp
+        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         return next(
-            (s for s in GlueRobotApp.shell.plugins if s.name == "ModbusSettings"),
+            (s for s in GlueRobotSystem.shell.plugins if s.name == "ModbusSettings"),
             None,
         )
 

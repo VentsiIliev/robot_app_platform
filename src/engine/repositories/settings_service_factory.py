@@ -5,7 +5,7 @@ from typing import List, Type
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.repositories.json.base_json_settings_repository import BaseJsonSettingsRepository
 from src.engine.repositories.settings_service import SettingsService
-from src.robot_apps.base_robot_app import SettingsSpec
+from src.robot_systems.base_robot_system import SettingsSpec
 
 
 # def build_from_specs(
@@ -31,7 +31,7 @@ from typing import List, Type
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.repositories.json.base_json_settings_repository import BaseJsonSettingsRepository
 from src.engine.repositories.settings_service import SettingsService
-from src.robot_apps.base_robot_app import SettingsSpec
+from src.robot_systems.base_robot_system import SettingsSpec
 
 
 def build_from_specs(
