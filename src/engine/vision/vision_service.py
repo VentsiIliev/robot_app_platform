@@ -34,20 +34,22 @@ class VisionService(IVisionService, IHealthCheckable):
         return self._vision_system.updateSettings(settings)
 
     def is_healthy(self) -> bool:
-        return self._running
-
-    """GLUE SYSTEM"""
-
-    # src/engine/vision/vision_service.py
+        if not self._running:
+            return False
+        state_manager = self._vision_system.state_manager
+        if state_manager is None:
+            # no messaging wired — fall back to a running flag only
+            return self._running
+        from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import ServiceState
+        return state_manager.state in (ServiceState.IDLE, ServiceState.STARTED)
 
     def save_work_area(self, area_type: str, pixel_points) -> tuple[bool, str]:
         import numpy as np
         data = {
             "area_type": area_type,
-            "corners": np.array(pixel_points, dtype=np.float32),
+            "corners":   np.array(pixel_points, dtype=np.float32),
         }
         return self._vision_system.saveWorkAreaPoints(data)
 
     def get_work_area(self, area_type: str) -> tuple[bool, str, any]:
         return self._vision_system.getWorkAreaPoints(area_type)
-

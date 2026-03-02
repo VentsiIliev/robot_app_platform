@@ -261,39 +261,83 @@ class BrokerDebugView(IApplicationView):
     # ── Public API ────────────────────────────────────────────────────
 
     def set_topic_map(self, topic_map: Dict[str, int]) -> None:
-        self._table.setRowCount(0)
+        # ── preserve scroll position ──────────────────────────────────
+        scrollbar = self._table.verticalScrollBar()
+        scroll_pos = scrollbar.value()
+
+        # build index of current rows by topic name
+        existing: Dict[str, int] = {}
+        for r in range(self._table.rowCount()):
+            item = self._table.item(r, 0)
+            if item:
+                existing[item.text()] = r
+
+        new_topics = set(topic_map.keys())
+        old_topics = set(existing.keys())
+
+        # remove stale rows (iterate in reverse so indices stay valid)
+        for topic in old_topics - new_topics:
+            self._table.removeRow(existing[topic])
+
+        # rebuild existing index after removals
+        existing = {}
+        for r in range(self._table.rowCount()):
+            item = self._table.item(r, 0)
+            if item:
+                existing[item.text()] = r
+
         for topic, count in sorted(topic_map.items()):
-            row = self._table.rowCount()
-            self._table.insertRow(row)
+            if topic in existing:
+                # ── update count cell only ────────────────────────────
+                row = existing[topic]
+                count_item = self._table.item(row, 1)
+                if count_item and count_item.text() != str(count):
+                    count_item.setText(str(count))
+                    if count == 0:
+                        count_item.setForeground(QColor(_MUTED))
+                    elif count >= 3:
+                        count_item.setForeground(QColor(_SUCCESS))
+                    else:
+                        count_item.setForeground(QColor(_TEXT))
+            else:
+                # ── insert new row at end ─────────────────────────────
+                row = self._table.rowCount()
+                self._table.insertRow(row)
 
-            self._table.setItem(row, 0, QTableWidgetItem(topic))
+                self._table.setItem(row, 0, QTableWidgetItem(topic))
 
-            count_item = QTableWidgetItem(str(count))
-            count_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if count == 0:
-                count_item.setForeground(QColor(_MUTED))
-            elif count >= 3:
-                count_item.setForeground(QColor(_SUCCESS))
-            self._table.setItem(row, 1, count_item)
+                count_item = QTableWidgetItem(str(count))
+                count_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if count == 0:
+                    count_item.setForeground(QColor(_MUTED))
+                elif count >= 3:
+                    count_item.setForeground(QColor(_SUCCESS))
+                self._table.setItem(row, 1, count_item)
 
-            actions = QWidget()
-            al = QHBoxLayout(actions); al.setContentsMargins(4,2,4,2); al.setSpacing(4)
-            spy_btn   = QPushButton("Spy")
-            clear_btn = QPushButton("Clear")
-            for btn, color in ((spy_btn, _PRIMARY), (clear_btn, _DANGER)):
-                btn.setStyleSheet(f"""
-                    QPushButton {{ background:transparent; color:{color};
-                        border:1px solid {color}; border-radius:4px;
-                        font-size:7pt; padding:2px 6px; }}
-                    QPushButton:hover {{ background:rgba(0,0,0,0.06); }}
-                """)
-            spy_btn.clicked.connect(lambda _, t=topic: (
-                self._spy_topic.setText(t), self.spy_requested.emit(t)
-            ))
-            clear_btn.clicked.connect(lambda _, t=topic: self.clear_topic_requested.emit(t))
-            al.addWidget(spy_btn); al.addWidget(clear_btn)
-            self._table.setCellWidget(row, 2, actions)
-            self._table.setRowHeight(row, 36)
+                actions = QWidget()
+                al = QHBoxLayout(actions)
+                al.setContentsMargins(4, 2, 4, 2)
+                al.setSpacing(4)
+                spy_btn = QPushButton("Spy")
+                clear_btn = QPushButton("Clear")
+                for btn, color in ((spy_btn, _PRIMARY), (clear_btn, _DANGER)):
+                    btn.setStyleSheet(f"""
+                        QPushButton {{ background:transparent; color:{color};
+                            border:1px solid {color}; border-radius:4px;
+                            font-size:7pt; padding:2px 6px; }}
+                        QPushButton:hover {{ background:rgba(0,0,0,0.06); }}
+                    """)
+                spy_btn.clicked.connect(lambda _, t=topic: (
+                    self._spy_topic.setText(t), self.spy_requested.emit(t)
+                ))
+                clear_btn.clicked.connect(lambda _, t=topic: self.clear_topic_requested.emit(t))
+                al.addWidget(spy_btn)
+                al.addWidget(clear_btn)
+                self._table.setCellWidget(row, 2, actions)
+                self._table.setRowHeight(row, 36)
+
+        # ── restore scroll position ───────────────────────────────────
+        scrollbar.setValue(scroll_pos)
 
         self._graph.set_topic_map(topic_map)
 

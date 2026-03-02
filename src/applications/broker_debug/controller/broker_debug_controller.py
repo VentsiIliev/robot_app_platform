@@ -1,5 +1,6 @@
+import html
 import logging
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
@@ -10,7 +11,18 @@ from src.engine.core.i_messaging_service import IMessagingService
 
 
 class _Bridge(QObject):
-    message_received = pyqtSignal(str, object)   # topic, message
+    message_received = pyqtSignal(str, object)
+
+
+class _SpyCallback:
+    """Bound-method wrapper — keeps the callback alive and usable with WeakMethod."""
+
+    def __init__(self, topic: str, bridge: _Bridge):
+        self._topic  = topic
+        self._bridge = bridge
+
+    def __call__(self, msg) -> None:
+        self._bridge.message_received.emit(self._topic, msg)
 
 
 class BrokerDebugController(IApplicationController):
@@ -22,10 +34,9 @@ class BrokerDebugController(IApplicationController):
         self._messaging = messaging
         self._bridge   = _Bridge()
         self._active   = False
-        self._spies:   Dict[str, Callable] = {}
+        self._spies:   Dict[str, _SpyCallback] = {}   # strong refs — keep alive
         self._logger   = logging.getLogger(self.__class__.__name__)
 
-        # Auto-refresh timer
         self._timer = QTimer()
         self._timer.setInterval(2000)
         self._timer.timeout.connect(self._refresh)
@@ -41,7 +52,6 @@ class BrokerDebugController(IApplicationController):
     def stop(self) -> None:
         self._active = False
         self._timer.stop()
-        # Remove all active spies
         for topic, cb in list(self._spies.items()):
             try:
                 self._model.unsubscribe_spy(topic, cb)
@@ -63,14 +73,13 @@ class BrokerDebugController(IApplicationController):
     def _refresh(self) -> None:
         if not self._active:
             return
-        topic_map = self._model.refresh()
-        self._view.set_topic_map(topic_map)
+        self._view.set_topic_map(self._model.refresh())
 
     def _on_publish(self, topic: str, message: str) -> None:
         self._model.publish(topic, message)
         self._view.append_log(
             f'<b style="color:#905BA9;">PUB</b> '
-            f'<b>{topic}</b> → <code>{message or "(empty)"}</code>'
+            f'<b>{topic}</b> → <code>{html.escape(message or "(empty)")}</code>'
         )
         self._refresh()
 
@@ -80,12 +89,9 @@ class BrokerDebugController(IApplicationController):
                 f'<span style="color:#888;">Already spying on <b>{topic}</b></span>'
             )
             return
-
-        def _spy_callback(msg, _topic=topic):
-            self._bridge.message_received.emit(_topic, msg)
-
-        self._spies[topic] = _spy_callback
-        self._model.subscribe_spy(topic, _spy_callback)
+        cb = _SpyCallback(topic, self._bridge)   # strong ref stored in self._spies
+        self._spies[topic] = cb
+        self._model.subscribe_spy(topic, cb)
         self._view.append_log(
             f'<b style="color:#2E7D32;">SPY ON</b> <b>{topic}</b>'
         )
@@ -119,5 +125,5 @@ class BrokerDebugController(IApplicationController):
             preview = preview[:120] + "…"
         self._view.append_log(
             f'<b style="color:#1565C0;">MSG</b> '
-            f'<b>{topic}</b> ← <code>{preview}</code>'
+            f'<b>{topic}</b> ← <code>{html.escape(preview)}</code>'
         )

@@ -15,6 +15,7 @@ class MessageBroker(IMessagingService):
 
     def _init(self):
         self.subscribers: Dict[str, List[weakref.ref]] = {}
+        self._published_topics: set = set()
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def subscribe(self, topic: str, callback: Callable):
@@ -59,6 +60,7 @@ class MessageBroker(IMessagingService):
             self.logger.debug(f"Unsubscribed {removed_count} callback(s) from topic '{topic}'")
 
     def publish(self, topic: str, message: Any):
+        self._published_topics.add(topic)
         if topic not in self.subscribers:
             self.logger.debug(f"No subscribers for topic '{topic}'")
             return
@@ -111,13 +113,14 @@ class MessageBroker(IMessagingService):
         return sum(1 for ref in self.subscribers[topic] if ref() is not None)
 
     def get_all_topics(self) -> List[str]:
-        return list(self.subscribers.keys())
+        return list(set(self.subscribers.keys()) | self._published_topics)  # ← merge both sets
 
     def clear_topic(self, topic: str):
         if topic in self.subscribers:
             count = len(self.subscribers[topic])
             del self.subscribers[topic]
             self.logger.debug(f"Cleared {count} subscribers from topic '{topic}'")
+        self._published_topics.discard(topic)
 
     def request(self, topic: str, message: Any, timeout: float = 1.0):
         if topic not in self.subscribers:
@@ -147,4 +150,5 @@ class MessageBroker(IMessagingService):
     def clear_all(self):
         total_cleared = sum(len(subs) for subs in self.subscribers.values())
         self.subscribers.clear()
+        self._published_topics.clear()  # ← add
         self.logger.debug(f"Cleared all {total_cleared} subscribers from all topics")
