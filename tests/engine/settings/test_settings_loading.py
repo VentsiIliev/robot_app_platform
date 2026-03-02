@@ -166,13 +166,13 @@ class TestSettingsServiceIntegration(unittest.TestCase):
             reloaded = service.reload(SettingsID.ROBOT_CONFIG)
             self.assertEqual(reloaded.robot_ip, "192.168.1.50")
 
-    def test_unknown_key_raises(self):
+    def test_not_enum_key_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
-            with self.assertRaises(KeyError):
-                service.get("nonexistent")
+            with self.assertRaises(TypeError):
+                service.get("not_enum")
 
 
 if __name__ == "__main__":

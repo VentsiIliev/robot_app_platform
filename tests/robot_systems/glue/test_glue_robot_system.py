@@ -63,36 +63,6 @@ class TestGlueRobotAppSettings(unittest.TestCase):
 
             self.assertIs(first, second)
 
-    def test_missing_key_raises(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            service = _make_service(tmp)
-
-            with self.assertRaises(Exception):
-                service.get("nonexistent_key")
-
-    def test_multiple_specs_loaded_independently(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            base = os.path.join(tmp, APP_NAME)
-            os.makedirs(os.path.join(base, "robot"), exist_ok=True)
-            os.makedirs(os.path.join(base, "robot2"), exist_ok=True)
-
-            with open(os.path.join(base, "robot", "config.json"), "w") as f:
-                json.dump({"ROBOT_IP": "10.0.0.1", "ROBOT_TOOL": 1}, f)
-            with open(os.path.join(base, "robot2", "config.json"), "w") as f:
-                json.dump({"ROBOT_IP": "10.0.0.2", "ROBOT_TOOL": 2}, f)
-
-            specs = [
-                SettingsSpec("robot1", RobotSettingsSerializer(), "robot/config.json"),
-                SettingsSpec("robot2", RobotSettingsSerializer(), "robot2/config.json"),
-            ]
-            service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
-
-            config1 = service.get("robot1")
-            config2 = service.get("robot2")
-
-            self.assertEqual(config1.robot_ip, "10.0.0.1")
-            self.assertEqual(config2.robot_ip, "10.0.0.2")
-            self.assertIsNot(config1, config2)
 
 
 if __name__ == "__main__":

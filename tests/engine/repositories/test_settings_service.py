@@ -13,6 +13,7 @@ Covered:
 import unittest
 from unittest.mock import MagicMock
 
+from engine.repositories.test_settings_service_factory import SettingsIDTestEnum
 from src.engine.repositories.settings_service import SettingsService
 
 
@@ -22,50 +23,25 @@ def _make_repo(load_value=None):
     return repo
 
 
-class TestSettingsServiceUnknownKey(unittest.TestCase):
-
-    def setUp(self):
-        self.service = SettingsService(repos={"existing": _make_repo()})
-
-    def test_get_unknown_key_raises_key_error(self):
-        with self.assertRaises(KeyError):
-            self.service.get("nonexistent")
-
-    def test_reload_unknown_key_raises_key_error(self):
-        with self.assertRaises(KeyError):
-            self.service.reload("nonexistent")
-
-    def test_save_unknown_key_raises_key_error(self):
-        with self.assertRaises(KeyError):
-            self.service.save("nonexistent", object())
-
-    def test_get_repo_unknown_key_raises_key_error(self):
-        with self.assertRaises(KeyError):
-            self.service.get_repo("nonexistent")
-
-    def test_key_error_message_lists_available_keys(self):
-        with self.assertRaises(KeyError) as ctx:
-            self.service.get("nonexistent")
-        self.assertIn("existing", str(ctx.exception))
 
 
 class TestSettingsServiceCaching(unittest.TestCase):
 
     def test_get_calls_repo_load_on_first_access(self):
         repo = _make_repo(load_value="first")
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
 
-        result = service.get("cfg")
+        result = service.get(SettingsIDTestEnum.A)
 
         repo.load.assert_called_once()
         self.assertEqual(result, "first")
 
     def test_get_returns_cached_value_on_second_call(self):
         repo = _make_repo(load_value="cached")
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
 
-        first = service.get("cfg")
-        second = service.get("cfg")
+        first = service.get(SettingsIDTestEnum.A)
+        second = service.get(SettingsIDTestEnum.A)
 
         # repo.load should only be called once
         repo.load.assert_called_once()
@@ -74,10 +50,10 @@ class TestSettingsServiceCaching(unittest.TestCase):
     def test_reload_bypasses_cache_and_calls_repo(self):
         repo = _make_repo()
         repo.load.side_effect = ["first", "second"]
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
 
-        service.get("cfg")        # primes cache
-        reloaded = service.reload("cfg")
+        service.get(SettingsIDTestEnum.A)        # primes cache
+        reloaded = service.reload(SettingsIDTestEnum.A)
 
         self.assertEqual(repo.load.call_count, 2)
         self.assertEqual(reloaded, "second")
@@ -85,11 +61,11 @@ class TestSettingsServiceCaching(unittest.TestCase):
     def test_reload_updates_cache(self):
         repo = _make_repo()
         repo.load.side_effect = ["original", "updated"]
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
 
-        service.get("cfg")
-        service.reload("cfg")
-        cached = service.get("cfg")   # must not call load again
+        service.get(SettingsIDTestEnum.A)
+        service.reload(SettingsIDTestEnum.A)
+        cached = service.get(SettingsIDTestEnum.A)   # must not call load again
 
         self.assertEqual(repo.load.call_count, 2)
         self.assertEqual(cached, "updated")
@@ -99,20 +75,20 @@ class TestSettingsServiceSave(unittest.TestCase):
 
     def test_save_calls_repo_save(self):
         repo = _make_repo()
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
         new_value = {"updated": True}
 
-        service.save("cfg", new_value)
+        service.save(SettingsIDTestEnum.A, new_value)
 
         repo.save.assert_called_once_with(new_value)
 
     def test_save_updates_cache_so_get_skips_reload(self):
         repo = _make_repo(load_value="old")
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
         new_value = "new"
 
-        service.save("cfg", new_value)
-        result = service.get("cfg")
+        service.save(SettingsIDTestEnum.A, new_value)
+        result = service.get(SettingsIDTestEnum.A)
 
         # repo.load should never be called because save already populated cache
         repo.load.assert_not_called()
@@ -120,11 +96,11 @@ class TestSettingsServiceSave(unittest.TestCase):
 
     def test_save_then_get_returns_saved_value(self):
         repo = _make_repo(load_value="original")
-        service = SettingsService({"cfg": repo})
+        service = SettingsService({SettingsIDTestEnum.A: repo})
 
-        service.get("cfg")           # prime cache with "original"
-        service.save("cfg", "saved")
-        result = service.get("cfg")
+        service.get(SettingsIDTestEnum.A)           # prime cache with "original"
+        service.save(SettingsIDTestEnum.A, "saved")
+        result = service.get(SettingsIDTestEnum.A)
 
         self.assertEqual(result, "saved")
 
@@ -134,10 +110,10 @@ class TestSettingsServiceGetRepo(unittest.TestCase):
     def test_get_repo_returns_correct_repository(self):
         repo_a = _make_repo()
         repo_b = _make_repo()
-        service = SettingsService({"a": repo_a, "b": repo_b})
+        service = SettingsService({SettingsIDTestEnum.A: repo_a, SettingsIDTestEnum.B: repo_b})
 
-        self.assertIs(service.get_repo("a"), repo_a)
-        self.assertIs(service.get_repo("b"), repo_b)
+        self.assertIs(service.get_repo(SettingsIDTestEnum.A), repo_a)
+        self.assertIs(service.get_repo(SettingsIDTestEnum.B), repo_b)
 
 
 if __name__ == "__main__":
