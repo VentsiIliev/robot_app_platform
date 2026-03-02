@@ -17,6 +17,18 @@ def _build_camera_settings_application(robot_system):
         widget_factory=lambda ms: factory.build(service, ms)
     )
 
+def _build_calibration_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.calibration.calibration_factory import CalibrationFactory
+    from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
+
+    service = CalibrationApplicationService(
+        vision_service=robot_system.get_optional_service(ServiceID.VISION),
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: CalibrationFactory(ms).build(service)
+    )
+
 
 def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication
@@ -32,6 +44,17 @@ def _build_dashboard_application(system):
             settings_service=settings_service,
             messaging_service=ms,
             weight_service=weight_service,
+        )
+    )
+
+def _build_broker_debug_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.broker_debug.broker_debug_factory import BrokerDebugFactory
+    from src.applications.broker_debug.service.broker_debug_application_service import BrokerDebugApplicationService
+
+    return WidgetApplication(
+        widget_factory=lambda ms: BrokerDebugFactory(ms).build(
+            BrokerDebugApplicationService(ms)
         )
     )
 

@@ -1,0 +1,306 @@
+from datetime import datetime
+from typing import Dict
+
+from PyQt6.QtCore import pyqtSignal, Qt, QTimer
+from PyQt6.QtGui import QColor, QTextCursor, QFont
+from PyQt6.QtWidgets import (
+    QHBoxLayout, QVBoxLayout, QWidget, QLabel,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QTextEdit, QLineEdit, QPushButton, QSplitter,
+    QSizePolicy, QAbstractItemView,
+)
+
+from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
+from src.applications.base.i_application_view import IApplicationView
+from src.applications.broker_debug.view.graph_widget import GraphWidget
+
+_BG       = "#F8F9FA"
+_PANEL    = "#FFFFFF"
+_BORDER   = "#E0E0E0"
+_PRIMARY  = "#905BA9"
+_TEXT     = "#1A1A2E"
+_MUTED    = "#888899"
+_DANGER   = "#D32F2F"
+_SUCCESS  = "#2E7D32"
+
+_SECTION = "color: #1A1A2E; font-size: 9pt; font-weight: bold; background: transparent; padding: 4px 0;"
+_CAPTION = "color: #888899; font-size: 8pt; background: transparent; padding: 2px 0;"
+
+_LOG_STYLE = """
+QTextEdit {
+    background: #F3F4F8;
+    color: #1A1A2E;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 8pt;
+    padding: 4px;
+}
+"""
+_TABLE_STYLE = """
+QTableWidget {
+    background: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    gridline-color: #F0F0F0;
+    font-size: 9pt;
+}
+QHeaderView::section {
+    background: #EDE7F6;
+    color: #1A1A2E;
+    font-weight: bold;
+    font-size: 8pt;
+    padding: 4px;
+    border: none;
+    border-bottom: 1px solid #D0C8E0;
+}
+QTableWidget::item:selected { background: rgba(144,91,169,0.15); color: #1A1A2E; }
+"""
+_INPUT_STYLE = """
+QLineEdit {
+    background: white;
+    color: #1A1A2E;
+    border: 1.5px solid #E0E0E0;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 9pt;
+}
+QLineEdit:focus { border-color: #905BA9; }
+"""
+_BTN_PRI = """
+MaterialButton {
+    background: #905BA9; color: white;
+    border-radius: 6px; font-weight: bold; min-height: 34px;
+}
+MaterialButton:hover { background: #7A4D90; }
+"""
+_BTN_SEC = """
+MaterialButton {
+    background: transparent; color: #905BA9;
+    border: 1.5px solid #905BA9;
+    border-radius: 6px; font-weight: bold; min-height: 34px;
+}
+MaterialButton:hover { background: rgba(144,91,169,0.08); }
+"""
+_BTN_DANGER = """
+MaterialButton {
+    background: transparent; color: #D32F2F;
+    border: 1.5px solid #D32F2F;
+    border-radius: 6px; font-weight: bold; min-height: 34px;
+}
+MaterialButton:hover { background: rgba(211,47,47,0.08); }
+"""
+
+
+def _divider() -> QWidget:
+    d = QWidget(); d.setFixedHeight(1); d.setStyleSheet(f"background:{_BORDER};"); return d
+
+def _label(text: str, style: str = _SECTION) -> QLabel:
+    l = QLabel(text); l.setStyleSheet(style); return l
+
+
+class BrokerDebugView(IApplicationView):
+
+    refresh_requested   = pyqtSignal()
+    publish_requested   = pyqtSignal(str, str)        # topic, message
+    spy_requested       = pyqtSignal(str)             # topic
+    unspy_requested     = pyqtSignal(str)             # topic
+    clear_topic_requested = pyqtSignal(str)           # topic
+
+    def __init__(self, parent=None):
+        super().__init__("BrokerDebug", parent)
+
+    def setup_ui(self) -> None:
+        self.setStyleSheet(f"background: {_BG};")
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet("QSplitter::handle { background: #E0E0E0; width: 1px; }")
+        splitter.addWidget(self._build_left())
+        splitter.addWidget(self._build_right())
+        splitter.setSizes([560, 480])
+
+        root.addWidget(splitter)
+
+    def clean_up(self) -> None:
+        pass
+
+    # ── Left panel: topic table + graph ──────────────────────────────
+
+    def _build_left(self) -> QWidget:
+        w = QWidget(); w.setStyleSheet(f"background:{_BG};")
+        vl = QVBoxLayout(w); vl.setContentsMargins(12, 12, 12, 12); vl.setSpacing(8)
+
+        # Header row
+        hdr = QHBoxLayout(); hdr.setContentsMargins(0,0,0,0)
+        hdr.addWidget(_label("Active Topics"))
+        hdr.addStretch()
+        self._refresh_btn = MaterialButton("↻ Refresh")
+        self._refresh_btn.setStyleSheet(_BTN_SEC)
+        self._refresh_btn.setFixedHeight(30)
+        hdr.addWidget(self._refresh_btn)
+        vl.addLayout(hdr)
+
+        # Topic table
+        self._table = QTableWidget(0, 3)
+        self._table.setHorizontalHeaderLabels(["Topic", "Subscribers", "Actions"])
+        self._table.setStyleSheet(_TABLE_STYLE)
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self._table.setColumnWidth(1, 90)
+        self._table.setColumnWidth(2, 160)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._table.verticalHeader().setVisible(False)
+        self._table.setFixedHeight(280)
+        vl.addWidget(self._table)
+
+        vl.addWidget(_divider())
+        vl.addWidget(_label("Pub/Sub Graph"))
+
+        # Graph
+        self._graph = GraphWidget()
+        vl.addWidget(self._graph, stretch=1)
+
+        self._refresh_btn.clicked.connect(self.refresh_requested.emit)
+        return w
+
+    # ── Right panel: publish + spy log ───────────────────────────────
+
+    def _build_right(self) -> QWidget:
+        w = QWidget(); w.setStyleSheet(f"background:{_PANEL}; border-left:1px solid {_BORDER};")
+        vl = QVBoxLayout(w); vl.setContentsMargins(14, 12, 14, 12); vl.setSpacing(10)
+
+        # ── Publish ───────────────────────────────────────────────────
+        vl.addWidget(_label("Publish Message"))
+
+        vl.addWidget(_label("Topic", _CAPTION))
+        self._pub_topic = QLineEdit(); self._pub_topic.setPlaceholderText("e.g. vision-system/latest-image")
+        self._pub_topic.setStyleSheet(_INPUT_STYLE); vl.addWidget(self._pub_topic)
+
+        vl.addWidget(_label("Payload", _CAPTION))
+        self._pub_payload = QLineEdit(); self._pub_payload.setPlaceholderText('e.g. {"value": 42}')
+        self._pub_payload.setStyleSheet(_INPUT_STYLE); vl.addWidget(self._pub_payload)
+
+        pub_row = QHBoxLayout(); pub_row.setSpacing(8)
+        self._pub_btn = MaterialButton("Publish")
+        self._pub_btn.setStyleSheet(_BTN_PRI)
+        self._clear_pub_btn = MaterialButton("Clear")
+        self._clear_pub_btn.setStyleSheet(_BTN_SEC)
+        pub_row.addWidget(self._pub_btn); pub_row.addWidget(self._clear_pub_btn)
+        vl.addLayout(pub_row)
+
+        vl.addWidget(_divider())
+
+        # ── Spy subscribe ─────────────────────────────────────────────
+        vl.addWidget(_label("Spy on Topic"))
+        vl.addWidget(_label("Topic to watch", _CAPTION))
+
+        spy_row = QHBoxLayout(); spy_row.setSpacing(8)
+        self._spy_topic = QLineEdit(); self._spy_topic.setPlaceholderText("topic to spy on")
+        self._spy_topic.setStyleSheet(_INPUT_STYLE)
+        self._spy_btn   = MaterialButton("Subscribe")
+        self._spy_btn.setStyleSheet(_BTN_PRI)
+        self._unspy_btn = MaterialButton("Unsubscribe")
+        self._unspy_btn.setStyleSheet(_BTN_DANGER)
+        spy_row.addWidget(self._spy_topic, stretch=1)
+        spy_row.addWidget(self._spy_btn)
+        spy_row.addWidget(self._unspy_btn)
+        vl.addLayout(spy_row)
+
+        vl.addWidget(_divider())
+
+        # ── Message log ───────────────────────────────────────────────
+        log_hdr = QHBoxLayout(); log_hdr.setContentsMargins(0,0,0,0)
+        log_hdr.addWidget(_label("Message Log"))
+        log_hdr.addStretch()
+        self._clear_log_btn = MaterialButton("Clear Log")
+        self._clear_log_btn.setStyleSheet(_BTN_SEC)
+        self._clear_log_btn.setFixedHeight(28)
+        log_hdr.addWidget(self._clear_log_btn)
+        vl.addLayout(log_hdr)
+
+        self._log = QTextEdit(); self._log.setReadOnly(True)
+        self._log.setStyleSheet(_LOG_STYLE)
+        self._log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        vl.addWidget(self._log, stretch=1)
+
+        # Signals
+        self._pub_btn.clicked.connect(self._on_publish_clicked)
+        self._pub_payload.returnPressed.connect(self._on_publish_clicked)
+        self._clear_pub_btn.clicked.connect(lambda: (
+            self._pub_topic.clear(), self._pub_payload.clear()
+        ))
+        self._spy_btn.clicked.connect(self._on_spy_clicked)
+        self._unspy_btn.clicked.connect(self._on_unspy_clicked)
+        self._clear_log_btn.clicked.connect(self._log.clear)
+
+        return w
+
+    # ── Internal slots ────────────────────────────────────────────────
+
+    def _on_publish_clicked(self) -> None:
+        topic   = self._pub_topic.text().strip()
+        payload = self._pub_payload.text().strip()
+        if topic:
+            self.publish_requested.emit(topic, payload)
+
+    def _on_spy_clicked(self) -> None:
+        topic = self._spy_topic.text().strip()
+        if topic:
+            self.spy_requested.emit(topic)
+
+    def _on_unspy_clicked(self) -> None:
+        topic = self._spy_topic.text().strip()
+        if topic:
+            self.unspy_requested.emit(topic)
+
+    # ── Public API ────────────────────────────────────────────────────
+
+    def set_topic_map(self, topic_map: Dict[str, int]) -> None:
+        self._table.setRowCount(0)
+        for topic, count in sorted(topic_map.items()):
+            row = self._table.rowCount()
+            self._table.insertRow(row)
+
+            self._table.setItem(row, 0, QTableWidgetItem(topic))
+
+            count_item = QTableWidgetItem(str(count))
+            count_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if count == 0:
+                count_item.setForeground(QColor(_MUTED))
+            elif count >= 3:
+                count_item.setForeground(QColor(_SUCCESS))
+            self._table.setItem(row, 1, count_item)
+
+            actions = QWidget()
+            al = QHBoxLayout(actions); al.setContentsMargins(4,2,4,2); al.setSpacing(4)
+            spy_btn   = QPushButton("Spy")
+            clear_btn = QPushButton("Clear")
+            for btn, color in ((spy_btn, _PRIMARY), (clear_btn, _DANGER)):
+                btn.setStyleSheet(f"""
+                    QPushButton {{ background:transparent; color:{color};
+                        border:1px solid {color}; border-radius:4px;
+                        font-size:7pt; padding:2px 6px; }}
+                    QPushButton:hover {{ background:rgba(0,0,0,0.06); }}
+                """)
+            spy_btn.clicked.connect(lambda _, t=topic: (
+                self._spy_topic.setText(t), self.spy_requested.emit(t)
+            ))
+            clear_btn.clicked.connect(lambda _, t=topic: self.clear_topic_requested.emit(t))
+            al.addWidget(spy_btn); al.addWidget(clear_btn)
+            self._table.setCellWidget(row, 2, actions)
+            self._table.setRowHeight(row, 36)
+
+        self._graph.set_topic_map(topic_map)
+
+    def append_log(self, message: str) -> None:
+        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        self._log.append(f'<span style="color:{_MUTED};">[{ts}]</span> {message}')
+        self._log.moveCursor(QTextCursor.MoveOperation.End)
+
+    def set_spy_topic(self, topic: str) -> None:
+        self._spy_topic.setText(topic)
