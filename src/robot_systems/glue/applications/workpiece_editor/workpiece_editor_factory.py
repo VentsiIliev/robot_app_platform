@@ -18,17 +18,17 @@ class WorkpieceEditorFactory(ApplicationFactory):
         return WorkpieceEditorModel(service)
 
     def _create_view(self) -> IApplicationView:
-        raise NotImplementedError
+        raise NotImplementedError("Use build() directly")
 
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         assert isinstance(model, WorkpieceEditorModel)
         assert isinstance(view, WorkpieceEditorView)
         return WorkpieceEditorController(model, view, self._messaging)
 
-    def build(self, service: IWorkpieceEditorService):
-        model      = self._create_model(service)
-        glue_types = model.get_glue_types()
-        view       = WorkpieceEditorView(glue_types=glue_types)
+    def build(self, service: IWorkpieceEditorService, messaging=None):
+        schema = service.get_form_schema()
+        model = self._create_model(service)
+        view = WorkpieceEditorView(schema=schema)
         controller = self._create_controller(model, view)
         controller.load()
         view._controller = controller

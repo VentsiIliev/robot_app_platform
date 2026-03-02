@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 from typing import List
 
+from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config import WorkpieceFormSchema
 from src.robot_systems.glue.workpieces.service.i_workpiece_service import IWorkpieceService
 from src.robot_systems.glue.applications.workpiece_editor.service import IWorkpieceEditorService
 from src.engine.vision.i_vision_service import IVisionService
@@ -20,14 +21,19 @@ _logger = logging.getLogger(__name__)
 class WorkpieceEditorService(IWorkpieceEditorService):
 
     def __init__(self,
-                 vision_service: IVisionService,
-                 workpiece_service: IWorkpieceService,
-                 settings_service: ISettingsService,
-                 catalog_key: Enum):
+                 vision_service,
+                 workpiece_service,
+                 settings_service,
+                 catalog_key,
+                 form_schema: WorkpieceFormSchema):
         self._vision            = vision_service
         self._workpiece_service = workpiece_service
         self._settings          = settings_service
         self._catalog_key       = catalog_key
+        self._form_schema       = form_schema
+
+    def get_form_schema(self) -> WorkpieceFormSchema:
+        return self._form_schema
 
     def get_glue_types(self) -> List[str]:
         try:

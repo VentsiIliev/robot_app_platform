@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QVBoxLayout, QLabel
 from PyQt6.QtCore import pyqtSignal
 from contour_editor import SettingsGroup, BezierSegmentManager, SettingsConfig
 
+from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config import WorkpieceFormSchema
 from src.robot_systems.glue.settings.glue import GlueSettingKey
 
 from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.glue_settings_provider import \
@@ -18,6 +19,7 @@ from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.confi
 from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.virtual_keyboard_widget_factory import \
     VirtualKeyboardWidgetFactory
 from src.applications.base.i_application_view import IApplicationView
+from src.robot_systems.glue.workpieces.model.glue_workpiece_filed import GlueWorkpieceField
 
 _logger = logging.getLogger(__name__)
 
@@ -27,8 +29,8 @@ class WorkpieceEditorView(IApplicationView):
     save_requested    = pyqtSignal(dict)
     execute_requested = pyqtSignal(dict)
 
-    def __init__(self, glue_types: List[str], parent=None):
-        self._glue_types       = glue_types
+    def __init__(self,schema: WorkpieceFormSchema, parent=None):
+        self._schema = schema
         self._editor           = None
         self._capture_handler  = None   # set by controller via set_capture_handler()
         super().__init__("WorkpieceEditor", parent)
@@ -50,7 +52,8 @@ class WorkpieceEditorView(IApplicationView):
     def _build_editor(self):
 
 
-        settings_provider = SegmentSettingsProvider(material_types=self._glue_types)
+        glue_types = self._schema.get_options(GlueWorkpieceField.GLUE_TYPE.value)
+        settings_provider = SegmentSettingsProvider(material_types=glue_types)
         default_settings  = settings_provider.get_default_values()
 
         config = SettingsConfig(
@@ -95,9 +98,12 @@ class WorkpieceEditorView(IApplicationView):
             combo_field_key=GlueSettingKey.GLUE_TYPE.value,
         )
 
+        form_factory = WorkpieceFormFactory(
+            schema=self._schema)  # was: WorkpieceFormFactory(glue_types=self._glue_types)
+
         provider = GlueSettingsProvider(
             default_settings  = default_settings,
-            material_types    = self._glue_types,
+            material_types    = glue_types,
             material_type_key = GlueSettingKey.GLUE_TYPE.value,
         )
 
@@ -105,7 +111,7 @@ class WorkpieceEditorView(IApplicationView):
             WorkpieceEditorBuilder()
             .with_segment_manager(BezierSegmentManager)
             .with_settings(config, provider)
-            .with_form(WorkpieceFormFactory(glue_types=self._glue_types))
+            .with_form(form_factory)
             .with_widgets(VirtualKeyboardWidgetFactory())
             .on_save(self._on_save_cb)
             .on_capture(self._on_capture_cb)

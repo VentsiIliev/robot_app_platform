@@ -8,7 +8,10 @@ def _build_workpiece_editor_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
     from src.robot_systems.glue.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.workpieces.service.workpiece_service import WorkpieceService
+    from src.robot_systems.glue.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
     from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+    from src.robot_systems.glue.settings.glue_workpiece_form_schema import build_glue_workpiece_form_schema
 
     system_dir   = os.path.dirname(inspect.getfile(GlueRobotSystem))
     storage_root = os.path.join(system_dir, "storage", "workpieces")
@@ -16,11 +19,16 @@ def _build_workpiece_editor_application(robot_system):
     repo              = JsonWorkpieceRepository(storage_root)
     workpiece_service = WorkpieceService(repo)
 
+    catalog      = robot_system._settings_service.get(SettingsID.GLUE_CATALOG)
+    glue_types   = catalog.get_all_names()
+    form_schema  = build_glue_workpiece_form_schema(glue_types)
+
     service = WorkpieceEditorService(
         vision_service    = robot_system.get_optional_service(ServiceID.VISION),
         workpiece_service = workpiece_service,
         settings_service  = robot_system._settings_service,
         catalog_key       = SettingsID.GLUE_CATALOG,
+        form_schema       = form_schema,
     )
     return WidgetApplication(
         widget_factory=lambda ms: WorkpieceEditorFactory(ms).build(service)

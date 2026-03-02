@@ -221,33 +221,14 @@ class SaveWorkpieceHandler:
         return (len(errors) == 0, errors)
 
     @classmethod
-    def validate_form_data(cls, form_data: Dict[str, Any]) -> tuple[bool, list[str]]:
-        """Validate form data against configured field requirements"""
+    def validate_form_data(cls, data: dict, required_keys: list = None) -> tuple[bool, list]:
+        if required_keys is None:
+            # fallback to old provider for backward compat
+            field_provider = WorkpieceFieldProvider.get_instance()
+            Field = field_provider.get_field_enum()
+            required_keys = [getattr(Field, name).value for name in field_provider.get_required_fields()]
         errors = []
-
-        # Get field configuration
-        field_provider = WorkpieceFieldProvider.get_instance()
-        Field = field_provider.get_field_enum()
-
-        # Validate required fields
-        for field_name in field_provider.get_required_fields():
-            if hasattr(Field, field_name):
-                field = getattr(Field, field_name)
-                value = form_data.get(field.value, "").strip() if isinstance(form_data.get(field.value),
-                                                                             str) else form_data.get(field.value)
-
-                if not value:
-                    errors.append(f"{field_name.replace('_', ' ').title()} is mandatory and cannot be empty")
-
-        # Special validation for HEIGHT field if it exists
-        if hasattr(Field, 'HEIGHT'):
-            height_value = form_data.get(Field.HEIGHT.value, "")
-            if height_value:
-                try:
-                    height_float = float(str(height_value).strip())
-                    if height_float <= 0:
-                        errors.append("Height must be a positive number greater than 0")
-                except (ValueError, TypeError):
-                    errors.append("Height must be a valid number")
-
-        return (len(errors) == 0, errors)
+        for key in required_keys:
+            if not data.get(key):
+                errors.append(f"'{key}' is required")
+        return len(errors) == 0, errors
