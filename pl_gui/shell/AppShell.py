@@ -170,7 +170,7 @@ class AppShell(QWidget):
     def setup_ui(self):
         self.setWindowTitle("PL Project")
         # Set a reasonable window size instead of maximized
-        self.resize(1200, 800)  # Reasonable default size
+        self.resize(1280, 1024)  # Reasonable default size
         # Center the window on screen
         self.center_on_screen()
         self.setStyleSheet("""

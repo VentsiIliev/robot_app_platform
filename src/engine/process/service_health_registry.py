@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+from enum import Enum
 from typing import Callable, Dict
 
 from src.engine.core.i_health_checkable import IHealthCheckable
@@ -26,13 +27,13 @@ class ServiceHealthRegistry:
     """
 
     def __init__(self) -> None:
-        self._checks: Dict[str, Callable[[], bool]] = {}
+        self._checks: Dict[Enum, Callable[[], bool]] = {}
 
-    def register(self, service_name: str, check: Callable[[], bool]) -> ServiceHealthRegistry:
+    def register(self, service_name: Enum, check: Callable[[], bool]) -> ServiceHealthRegistry:
         self._checks[service_name] = check
         return self
 
-    def register_service(self, service_name: str, service: object) -> ServiceHealthRegistry:
+    def register_service(self, service_name: Enum, service: object) -> ServiceHealthRegistry:
         """Auto-register a service — uses is_healthy() if IHealthCheckable, else always True."""
         if isinstance(service, IHealthCheckable):
             self._checks[service_name] = service.is_healthy
@@ -40,7 +41,7 @@ class ServiceHealthRegistry:
             self._checks[service_name] = lambda: True
         return self
 
-    def check(self, service_name: str) -> bool:
+    def check(self, service_name: Enum) -> bool:
         fn = self._checks.get(service_name)
         if fn is None:
             _logger.debug("No health check registered for '%s' — treating as unhealthy", service_name)

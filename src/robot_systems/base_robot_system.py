@@ -105,7 +105,7 @@ class BaseRobotSystem(ABC):
     # Persistence
     # ------------------------------------------------------------------
 
-    def get_settings(self, name: str) -> Any:
+    def get_settings(self, name: Enum) -> Any:
         if self._settings_service is None:
             raise RuntimeError(
                 f"[{self.metadata.name}] No settings service available. "
@@ -113,7 +113,7 @@ class BaseRobotSystem(ABC):
             )
         return self._settings_service.get(name)
 
-    def get_settings_repo(self, name: str) -> ISettingsRepository:
+    def get_settings_repo(self, name: Enum) -> ISettingsRepository:
         if self._settings_service is None:
             raise RuntimeError(f"[{self.metadata.name}] No settings service available.")
         return self._settings_service.get_repo(name)
@@ -233,8 +233,8 @@ class BaseRobotSystem(ABC):
         return registry
 
 
-    def _validate_and_inject(self, services: Dict[str, Any]) -> None:
-        missing: List[str] = []
+    def _validate_and_inject(self, services: Dict[Enum, Any]) -> None:
+        missing: List[Enum] = []
 
         for spec in self.services:
             provided = services.get(spec.name)

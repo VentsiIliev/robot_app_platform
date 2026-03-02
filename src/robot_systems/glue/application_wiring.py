@@ -2,6 +2,21 @@ from src.robot_systems.glue.service_ids import ServiceID
 
 from src.robot_systems.glue.settings_ids import SettingsID
 
+def _build_camera_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.camera_settings.camera_settings_factory import CameraSettingsFactory
+    from src.applications.camera_settings.service.camera_settings_application_service import CameraSettingsApplicationService
+    from src.robot_systems.glue.service_ids import ServiceID
+
+    service = CameraSettingsApplicationService(
+        settings_service = robot_system._settings_service,
+        vision_service   = robot_system.get_optional_service(ServiceID.VISION),
+    )
+    factory = CameraSettingsFactory()
+    return WidgetApplication(
+        widget_factory=lambda ms: factory.build(service, ms)
+    )
+
 
 def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication

@@ -152,12 +152,18 @@ def _combo_set(w: QComboBox, v: Any) -> None:
 _SPINBOX_HANDLER = WidgetHandler(
     create=_make_spinbox,
     get_value=lambda w: w.value(),
+    set_value=lambda w, v: w.setValue(int(v)),
+)
+
+_DOUBLE_SPINBOX_HANDLER = WidgetHandler(
+    create=_make_spinbox,
+    get_value=lambda w: w.value(),
     set_value=lambda w, v: w.setValue(float(v)),
 )
 
 _REGISTRY: dict[str, WidgetHandler] = {
     "spinbox":        _SPINBOX_HANDLER,
-    "double_spinbox": _SPINBOX_HANDLER,
+    "double_spinbox": _DOUBLE_SPINBOX_HANDLER,
     "combo": WidgetHandler(
         create=_make_combo,
         get_value=lambda w: w.currentText(),

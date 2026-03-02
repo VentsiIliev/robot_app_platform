@@ -17,15 +17,19 @@ from src.robot_systems.glue.dashboard.config import (
 )
 from src.robot_systems.glue.dashboard.model.glue_dashboard_model import GlueDashboardModel
 from src.robot_systems.glue.dashboard.view.glue_dashboard_view import GlueDashboardView
+from src.shared_contracts.events.vision_events import VisionTopics
+
 
 class _DashboardBridge(QObject):
-    weight_reading = pyqtSignal(int, float)
-    cell_state     = pyqtSignal(int, str)
-    glue_type      = pyqtSignal(int, str)
-    robot_state    = pyqtSignal(str)
-    process_state = pyqtSignal(str, str)  # (state, process_id)
-    system_state   = pyqtSignal(str, str)   # (busy_state, active_process_id)
+    weight_reading  = pyqtSignal(int, float)
+    cell_state      = pyqtSignal(int, str)
+    glue_type       = pyqtSignal(int, str)
+    robot_state     = pyqtSignal(str)
+    process_state   = pyqtSignal(str, str)
+    system_state    = pyqtSignal(str, str)
     service_warning = pyqtSignal(str)
+    camera_image    = pyqtSignal(object)    # ← add this
+
 
 
 
@@ -79,7 +83,7 @@ class GlueDashboardController(IApplicationController):
         self._bridge.process_state.connect(self._on_process_state_str)
         self._bridge.system_state.connect(self._on_system_state)      # ← was missing
         self._bridge.service_warning.connect(self._on_service_warning)
-
+        self._bridge.camera_image.connect(self._on_camera_image)
 
     # ── Broker → Bridge ───────────────────────────────────────────────
 
@@ -111,8 +115,13 @@ class GlueDashboardController(IApplicationController):
                 ),
             )
 
+        self._sub(VisionTopics.LATEST_IMAGE,
+              lambda msg: self._bridge.camera_image.emit(msg))
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
+    def _on_camera_image(self, message: object) -> None:
+        if self._view_ok():
+            self._view.set_trajectory_image(message)
 
     def _on_weight(self, card_id: int, grams: float) -> None:
         if self._view_ok():
