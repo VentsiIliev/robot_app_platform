@@ -1,3 +1,4 @@
 from .segment_settings_provider import SegmentSettingsProvider
+from .segment_editor_config import SegmentEditorConfig
 from .workpiece_form_factory import WorkpieceFormFactory
 from .workpiece_form_schema import WorkpieceFormSchema, WorkpieceFormFieldSpec

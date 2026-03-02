@@ -27,8 +27,9 @@ class WorkpieceEditorFactory(ApplicationFactory):
 
     def build(self, service: IWorkpieceEditorService, messaging=None):
         schema = service.get_form_schema()
+        segment_config = service.get_segment_config()
         model = self._create_model(service)
-        view = WorkpieceEditorView(schema=schema)
+        view = WorkpieceEditorView(schema=schema, segment_config=segment_config)
         controller = self._create_controller(model, view)
         controller.load()
         view._controller = controller

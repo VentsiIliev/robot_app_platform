@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List
 from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.workpiece_form_schema import WorkpieceFormSchema
+from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.segment_editor_config import SegmentEditorConfig
 
 
 class IWorkpieceEditorService(ABC):
@@ -9,7 +9,7 @@ class IWorkpieceEditorService(ABC):
     def get_form_schema(self) -> WorkpieceFormSchema: ...
 
     @abstractmethod
-    def get_glue_types(self) -> List[str]: ...
+    def get_segment_config(self) -> SegmentEditorConfig: ...
 
     @abstractmethod
     def get_contours(self) -> list: ...

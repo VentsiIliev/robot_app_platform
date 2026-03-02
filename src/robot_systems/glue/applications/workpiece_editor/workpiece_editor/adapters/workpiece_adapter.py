@@ -5,7 +5,10 @@ from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from contour_editor.models.segment import Segment
 
 from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config import SegmentSettingsProvider
-from src.robot_systems.glue.workpieces.model.glue_workpiece_filed import GlueWorkpieceField
+
+# Canonical output keys — match GlueWorkpieceField.CONTOUR/SPRAY_PATTERN values
+_KEY_CONTOUR       = "contour"
+_KEY_SPRAY_PATTERN = "sprayPattern"
 
 
 class WorkpieceAdapter:
@@ -85,14 +88,14 @@ class WorkpieceAdapter:
                 print(f"[WorkpieceAdapter] Using first CONTOUR segment as main contour (WORKPIECE layer empty)")
 
         if main_segment:
-            result[GlueWorkpieceField.CONTOUR.value] = cls._segment_to_contour_array(main_segment)
+            result[_KEY_CONTOUR] = cls._segment_to_contour_array(main_segment)
             complete_settings = cls._ensure_complete_settings(
                 main_segment.settings if hasattr(main_segment, 'settings') else None
             )
             result.update(complete_settings)
         else:
             print(f"[WorkpieceAdapter] No segments found, using empty contour")
-            result[GlueWorkpieceField.CONTOUR.value] = np.zeros((0, 1, 2), dtype=np.float32)
+            result[_KEY_CONTOUR] = np.zeros((0, 1, 2), dtype=np.float32)
             # Still need to provide default settings
             result.update(cls._ensure_complete_settings(None))
 
@@ -127,7 +130,7 @@ class WorkpieceAdapter:
                         "settings": complete_settings
                     })
 
-        result[GlueWorkpieceField.SPRAY_PATTERN.value] = spray_pattern
+        result[_KEY_SPRAY_PATTERN] = spray_pattern
         return result
 
     @staticmethod
