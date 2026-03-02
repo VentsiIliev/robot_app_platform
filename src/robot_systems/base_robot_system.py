@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Type, Callable, TYPE_CHECKING
 from dataclasses import dataclass, field
 from src.engine.repositories.interfaces import ISettingsSerializer, ISettingsRepository, ISettingsService
@@ -86,7 +87,7 @@ class BaseRobotSystem(ABC):
 
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._resolved: Dict[str, Any] = {}
+        self._resolved: Dict[Enum, Any] = {}
         self._settings_service:  Optional[ISettingsService] = None
         self._messaging_service: Optional[Any] = None
         self._system_manager:    Optional[Any] = None
@@ -121,7 +122,11 @@ class BaseRobotSystem(ABC):
     # Service accessors
     # ------------------------------------------------------------------
 
-    def get_service(self, name: str) -> Any:
+    def get_service(self, name: Enum) -> Any:
+        if not isinstance(name, Enum):
+            raise TypeError(
+              f"Service name must be an Enum value, got {type(name).__name__!r}. "
+            )
         service = self._resolved.get(name)
         if service is None:
             raise RuntimeError(
@@ -130,7 +135,11 @@ class BaseRobotSystem(ABC):
             )
         return service
 
-    def get_optional_service(self, name: str) -> Optional[Any]:
+    def get_optional_service(self, name: Enum) -> Optional[Any]:
+        if not isinstance(name, Enum):
+            raise TypeError(
+                f"Service name must be an Enum value, got {type(name).__name__!r}. "
+            )
         return self._resolved.get(name)
 
     # ------------------------------------------------------------------
