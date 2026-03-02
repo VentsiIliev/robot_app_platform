@@ -4,7 +4,7 @@ Unit tests for SettingsService.
 These are pure unit tests — all repositories are mocked, no disk I/O.
 
 Covered:
-- get() caches on first load and returns cache on subsequent calls
+- get() caches on the first load and returns cache on subsequent calls
 - reload() always calls repo.load() regardless of cache
 - save() persists via repo and updates the in-memory cache
 - Unknown key raises KeyError on get(), reload(), save(), and get_repo()
@@ -21,8 +21,6 @@ def _make_repo(load_value=None):
     repo = MagicMock()
     repo.load.return_value = load_value or {"key": "value"}
     return repo
-
-
 
 
 class TestSettingsServiceCaching(unittest.TestCase):
@@ -65,7 +63,7 @@ class TestSettingsServiceCaching(unittest.TestCase):
 
         service.get(SettingsIDTestEnum.A)
         service.reload(SettingsIDTestEnum.A)
-        cached = service.get(SettingsIDTestEnum.A)   # must not call load again
+        cached = service.get(SettingsIDTestEnum.A)   # must not call a load again
 
         self.assertEqual(repo.load.call_count, 2)
         self.assertEqual(cached, "updated")
