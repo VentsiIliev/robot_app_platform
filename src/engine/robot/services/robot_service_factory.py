@@ -13,15 +13,16 @@ from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
 
 
 def create_robot_service(
-    robot: IRobot,
-    messaging_service: IMessagingService,          # ← required, no default
-    settings_service=None,
-    tool_changer=None,
+        robot: IRobot,
+        messaging_service: IMessagingService,  # ← required, no default
+        robot_settings_key,
+        settings_service=None,
+        tool_changer=None,
 ) -> IRobotService:
-    safety    = SafetyChecker(settings_service)
-    motion    = MotionService(robot, safety)
-    publisher = RobotStatePublisher(messaging_service)   # ← no fallback
-    state     = RobotStateManager(robot, publisher=publisher)
+    safety = SafetyChecker(robot_settings_key,settings_service)
+    motion = MotionService(robot, safety)
+    publisher = RobotStatePublisher(messaging_service)  # ← no fallback
+    state = RobotStateManager(robot, publisher=publisher)
     state.start_monitoring()
 
     tool_service: Optional[IToolService] = None

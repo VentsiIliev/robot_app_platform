@@ -2,12 +2,13 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.robot.safety.safety_checker import SafetyChecker
+from src.robot_systems.glue.settings_ids import SettingsID
 
-
+settings_key = SettingsID.ROBOT_CONFIG
 class TestSafetyChecker(unittest.TestCase):
 
     def setUp(self):
-        self.checker = SafetyChecker(settings_service=None)
+        self.checker = SafetyChecker(settings_key=settings_key,settings_service=None)
 
     # ------------------------------------------------------------------
     # No settings — always allow
@@ -32,7 +33,7 @@ class TestSafetyChecker(unittest.TestCase):
     def test_settings_without_limits_allows(self):
         settings = MagicMock()
         settings.get.return_value = MagicMock(spec=[])  # no safety_limits attr
-        checker = SafetyChecker(settings)
+        checker = SafetyChecker(settings_key,settings)
         self.assertTrue(checker.is_within_safety_limits([100.0, 200.0, 300.0]))
 
     # ------------------------------------------------------------------
@@ -48,7 +49,7 @@ class TestSafetyChecker(unittest.TestCase):
         cfg.safety_limits = limits
         settings = MagicMock()
         settings.get.return_value = cfg
-        return SafetyChecker(settings)
+        return SafetyChecker(settings_key=settings_key,settings_service=settings)
 
     def test_position_within_limits_allowed(self):
         checker = self._checker_with_limits(-500, 500, -500, 500, 0, 800)
@@ -65,5 +66,5 @@ class TestSafetyChecker(unittest.TestCase):
     def test_settings_exception_fails_open(self):
         settings = MagicMock()
         settings.get.side_effect = RuntimeError("config error")
-        checker = SafetyChecker(settings)
+        checker = SafetyChecker(settings_key,settings)
         self.assertTrue(checker.is_within_safety_limits([100.0, 200.0, 300.0]))

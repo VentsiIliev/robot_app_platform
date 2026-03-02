@@ -20,6 +20,7 @@ from src.engine.robot.services.robot_service import RobotService
 from src.engine.robot.services.robot_state_manager import RobotStateManager
 from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
 from src.robot_systems.base_robot_system import BaseRobotSystem
+from src.robot_systems.glue.settings_ids import SettingsID
 
 T = TypeVar("T", bound=BaseRobotSystem)
 _LOGGER = logging.getLogger("SystemBuilder")
@@ -49,7 +50,7 @@ def _build_robot_service(ctx: _BuildContext) -> IRobotService:
 
 
 def _build_navigation(ctx: _BuildContext) -> NavigationService:
-    return NavigationService(motion=ctx.motion, settings_service=ctx.settings)
+    return NavigationService(motion=ctx.motion,settings_key=SettingsID.ROBOT_CONFIG, settings_service=ctx.settings)
 
 
 def _build_tool_service(ctx: _BuildContext) -> Optional[IToolService]:
@@ -125,7 +126,7 @@ class SystemBuilder:
                 system_class=system_class,
             )
 
-        motion = MotionService(self._robot, SafetyChecker(self._settings))
+        motion = MotionService(self._robot, SafetyChecker(SettingsID.ROBOT_CONFIG,self._settings))
         ctx = _BuildContext(
             robot=self._robot,
             motion=motion,

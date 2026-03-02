@@ -1,9 +1,10 @@
 import logging
+from enum import Enum
 from typing import Optional, List
 
 from ..interfaces.i_motion_service import IMotionService
 
-
+# TODO REMOVE THE HARDCODED GROUP NAMES
 _GROUP_HOME        = "HOME"
 _GROUP_LOGIN       = "LOGIN"
 _GROUP_CALIBRATION = "CALIBRATION"
@@ -11,8 +12,14 @@ _GROUP_CALIBRATION = "CALIBRATION"
 
 class NavigationService:
 
-    def __init__(self, motion: IMotionService, settings_service=None):
+    def __init__(self, motion: IMotionService,settings_key, settings_service=None):
+        if not isinstance(settings_key, Enum):
+            raise TypeError(
+                f"SafetyChecker: settings_key must be an Enum value, got {type(settings_key).__name__!r}. "
+                f"Use a constant from settings_ids, not a bare string."
+            )
         self._motion = motion
+        self.settings_key = settings_key
         self._settings = settings_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -87,7 +94,7 @@ class NavigationService:
     def _get_config(self):
         if self._settings is None:
             raise RuntimeError("NavigationService has no settings_service — cannot navigate")
-        return self._settings.get("robot_config")
+        return self._settings.get(self.settings_key)
 
     def _get_group(self, config, name: str):
         groups = getattr(config, "movement_groups", {})
