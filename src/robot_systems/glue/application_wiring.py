@@ -83,6 +83,7 @@ def _build_broker_debug_application(robot_system):
     )
 
 
+
 def _build_glue_cell_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.glue_cell_settings import GlueCellSettingsFactory, GlueCellSettingsService
@@ -95,6 +96,22 @@ def _build_glue_cell_settings_application(robot_app):
     return WidgetApplication(
         widget_factory=lambda ms: GlueCellSettingsFactory().build(service, ms)
     )
+
+def _build_user_management_application(robot_system):
+    import os, inspect
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.user_management.user_management_factory import UserManagementFactory
+    from src.applications.user_management.service.user_management_application_service import UserManagementApplicationService
+    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
+    from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+    from src.robot_systems.glue.settings.glue_user_schema import GLUE_USER_SCHEMA
+
+    storage = os.path.join(
+        os.path.dirname(inspect.getfile(GlueRobotSystem)),
+        "storage", "users", "users.csv",
+    )
+    service = UserManagementApplicationService(CsvUserRepository(storage, GLUE_USER_SCHEMA))
+    return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
 
 
 def _build_robot_settings_application(robot_app):

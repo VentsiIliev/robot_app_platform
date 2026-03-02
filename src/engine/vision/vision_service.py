@@ -51,5 +51,8 @@ class VisionService(IVisionService, IHealthCheckable):
         }
         return self._vision_system.saveWorkAreaPoints(data)
 
+    def get_latest_contours(self) -> list:
+        return list(self._vision_system._latest_contours or [])
+
     def get_work_area(self, area_type: str) -> tuple[bool, str, any]:
         return self._vision_system.getWorkAreaPoints(area_type)

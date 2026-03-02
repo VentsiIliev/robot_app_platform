@@ -39,10 +39,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def get_contours(self) -> list:
         if self._vision is None:
+            _logger.warning("get_contours: no vision service")
             return []
         try:
-            contours, _, _ = self._vision._vision_system.run()
-            return contours or []
+            return self._vision.get_latest_contours()
         except Exception as exc:
             _logger.error("get_contours failed: %s", exc)
             return []

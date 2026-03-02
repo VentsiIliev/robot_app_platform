@@ -11,26 +11,25 @@ from src.shared_contracts.events.vision_events import VisionTopics
 
 
 class _Bridge(QObject):
-    camera_frame   = pyqtSignal(object)
-    contours_ready = pyqtSignal(list)
+    camera_frame = pyqtSignal(object)
 
 
 class WorkpieceEditorController(IApplicationController):
 
     def __init__(self, model: WorkpieceEditorModel, view: WorkpieceEditorView,
                  messaging: IMessagingService):
-        self._model   = model
-        self._view    = view
-        self._broker  = messaging
-        self._bridge  = _Bridge()
-        self._subs:   List[Tuple[str, Callable]] = []
-        self._active  = False
-        self._logger  = logging.getLogger(self.__class__.__name__)
+        self._model  = model
+        self._view   = view
+        self._broker = messaging
+        self._bridge = _Bridge()
+        self._subs:  List[Tuple[str, Callable]] = []
+        self._active = False
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def load(self) -> None:
         self._active = True
         self._bridge.camera_frame.connect(self._on_camera_frame)
-        self._bridge.contours_ready.connect(self._view.update_contours)
+        self._view.set_capture_handler(self._get_contours)   # synchronous capture
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
@@ -43,6 +42,15 @@ class WorkpieceEditorController(IApplicationController):
             except Exception:
                 pass
         self._subs.clear()
+
+    # ── Capture (synchronous) ─────────────────────────────────────────
+
+    def _get_contours(self) -> list:
+        contours = self._model.get_contours()
+        self._logger.debug("Capture: got %d contours from vision", len(contours))
+        return contours
+
+    # ── Broker → Bridge ───────────────────────────────────────────────
 
     def _subscribe(self) -> None:
         self._sub(VisionTopics.LATEST_IMAGE, self._on_latest_image_raw)
@@ -57,10 +65,11 @@ class WorkpieceEditorController(IApplicationController):
         if self._active:
             self._view.update_camera_feed(frame)
 
+    # ── View → Model ──────────────────────────────────────────────────
+
     def _connect_signals(self) -> None:
         self._view.save_requested.connect(self._on_save)
         self._view.execute_requested.connect(self._on_execute)
-        self._view.capture_requested.connect(self._on_capture)
 
     def _on_save(self, data: dict) -> None:
         ok, msg = self._model.save_workpiece(data)
@@ -70,9 +79,6 @@ class WorkpieceEditorController(IApplicationController):
         ok, msg = self._model.execute_workpiece(data)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
 
-    def _on_capture(self) -> None:
-        contours = self._model.get_contours()
-        self._bridge.contours_ready.emit(contours)
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)

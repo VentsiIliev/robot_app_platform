@@ -26,11 +26,11 @@ class WorkpieceEditorView(IApplicationView):
 
     save_requested    = pyqtSignal(dict)
     execute_requested = pyqtSignal(dict)
-    capture_requested = pyqtSignal()
 
     def __init__(self, glue_types: List[str], parent=None):
-        self._glue_types = glue_types
-        self._editor     = None
+        self._glue_types       = glue_types
+        self._editor           = None
+        self._capture_handler  = None   # set by controller via set_capture_handler()
         super().__init__("WorkpieceEditor", parent)
 
     def setup_ui(self) -> None:
@@ -114,6 +114,10 @@ class WorkpieceEditorView(IApplicationView):
             .build()
         )
 
+    def set_capture_handler(self, handler) -> None:
+        """Controller injects its get_contours callable here."""
+        self._capture_handler = handler
+
     # ── Callbacks from editor → emit signals ─────────────────────────
 
     def _on_save_cb(self, data: dict) -> None:
@@ -123,7 +127,12 @@ class WorkpieceEditorView(IApplicationView):
         self.execute_requested.emit(data)
 
     def _on_capture_cb(self) -> list:
-        self.capture_requested.emit()
+        """Called synchronously by the editor — must return contours."""
+        if self._capture_handler is not None:
+            try:
+                return self._capture_handler() or []
+            except Exception as exc:
+                _logger.error("capture handler failed: %s", exc)
         return []
 
     def _on_camera_feed_cb(self) -> None:

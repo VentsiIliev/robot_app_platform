@@ -70,11 +70,12 @@ class VisionSystem:
             self.cameraMatrix = None
             self.cameraDist   = None
 
-        # ── Frame state ───────────────────────────────────────────────────────
+        # ── Frame state ───────────────────────────────────────────────────────────
         self.image          = None
         self.rawImage       = None
         self.correctedImage = None
         self.rawMode        = False
+        self._latest_contours = []   # ← cached by run(), read by get_latest_contours()
 
         self.current_skip_frames = 0
         self.frame_grabber = FrameGrabber(self.camera, maxlen=5)
@@ -169,6 +170,7 @@ class VisionSystem:
                 correct_image_fn  = self.correctImage,
                 spray_area_points = self.service.sprayAreaPoints,
             )
+            self._latest_contours = contours   # Cache the latest detected contours
             return contours, self.correctedImage, None
 
         if not self.service.isCalibrated:
