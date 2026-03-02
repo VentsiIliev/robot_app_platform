@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.robot_systems.glue.applications.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.applications.base.widget_application import WidgetApplication
 from src.engine.system.i_system_manager import ISystemManager
-from src.robot_systems.glue.dashboard.service.glue_dashboard_service import GlueDashboardService
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
@@ -131,7 +131,7 @@ class TestDashboardApplicationFactory(unittest.TestCase):
         application, _, _ = self._build()
         ms = MagicMock()
         application.register(ms)
-        with patch("src.robot_systems.glue.dashboard.glue_dashboard.GlueDashboard.create") as mock_create:
+        with patch("src.robot_systems.glue.applications.dashboard.glue_dashboard.GlueDashboard.create") as mock_create:
             mock_create.return_value = MagicMock()
             application.create_widget()
             _, kwargs = mock_create.call_args

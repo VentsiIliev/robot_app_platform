@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from src.robot_systems.glue.glue_settings.model.mapper import GlueSettingsMapper
+from src.robot_systems.glue.applications.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.settings.glue import GlueSettings
 
 

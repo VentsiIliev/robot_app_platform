@@ -58,9 +58,9 @@ def main() -> None:
     shell = AppShell(app_descriptors=descriptors, widget_factory=widget_factory)
     shell.show()
 
-    # 7 — broker debug window (temporary — remove when no longer needed)
-    _debug_window = _build_broker_debug_window(ctx.messaging_service)
-    _debug_window.show()
+    # # 7 — broker debug window (temporary — remove when no longer needed)
+    # _debug_window = _build_broker_debug_window(ctx.messaging_service)
+    # _debug_window.show()
 
     try:
         sys.exit(qt_app.exec())

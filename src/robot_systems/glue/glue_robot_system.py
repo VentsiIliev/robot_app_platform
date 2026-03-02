@@ -105,6 +105,7 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="CameraSettings",  folder_id=2, icon="fa5s.camera",          factory=application_wiring._build_camera_settings_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",          factory=application_wiring._build_calibration_application),
             ApplicationSpec(name="BrokerDebug", folder_id=3, icon="fa5s.project-diagram",       factory=application_wiring._build_broker_debug_application),
+            ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
 
         ],
     )

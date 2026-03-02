@@ -1,0 +1,2 @@
+from src.robot_systems.glue.workpieces.repository.i_workpiece_repository import IWorkpieceRepository
+from src.robot_systems.glue.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository

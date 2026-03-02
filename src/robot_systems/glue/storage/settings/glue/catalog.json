@@ -9,6 +9,11 @@
       "id": "7ca5f26c-6111-4f15-b109-83c461d7195e",
       "name": "Type B",
       "description": "Standard glue type B"
+    },
+    {
+      "id": "37603fe7-38b1-43fb-b31c-46f95c46e94e",
+      "name": "Type C",
+      "description": "Type C"
     }
   ]
 }

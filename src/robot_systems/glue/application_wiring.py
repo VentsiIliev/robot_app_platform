@@ -1,6 +1,30 @@
+from src.robot_systems.glue.workpieces.service.workpiece_service import WorkpieceService
+from src.robot_systems.glue.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
 from src.robot_systems.glue.service_ids import ServiceID
-
 from src.robot_systems.glue.settings_ids import SettingsID
+
+def _build_workpiece_editor_application(robot_system):
+    import os, inspect
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.glue.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+
+    system_dir   = os.path.dirname(inspect.getfile(GlueRobotSystem))
+    storage_root = os.path.join(system_dir, "storage", "workpieces")
+
+    repo              = JsonWorkpieceRepository(storage_root)
+    workpiece_service = WorkpieceService(repo)
+
+    service = WorkpieceEditorService(
+        vision_service    = robot_system.get_optional_service(ServiceID.VISION),
+        workpiece_service = workpiece_service,
+        settings_service  = robot_system._settings_service,
+        catalog_key       = SettingsID.GLUE_CATALOG,
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: WorkpieceEditorFactory(ms).build(service)
+    )
 
 def _build_camera_settings_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
@@ -32,7 +56,7 @@ def _build_calibration_application(robot_system):
 
 def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication
-    from src.robot_systems.glue.dashboard.glue_dashboard import GlueDashboard
+    from src.robot_systems.glue.applications.dashboard.glue_dashboard import GlueDashboard
 
     coordinator = system.coordinator
     settings_service = system._settings_service
@@ -89,7 +113,7 @@ def _build_robot_settings_application(robot_app):
 
 def _build_glue_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
-    from src.robot_systems.glue.glue_settings import GlueSettingsFactory, GlueSettingsApplicationService
+    from src.robot_systems.glue.applications.glue_settings import GlueSettingsFactory, GlueSettingsApplicationService
 
     service = GlueSettingsApplicationService(robot_app._settings_service)
     return WidgetApplication(widget_factory=lambda _ms: GlueSettingsFactory().build(service))

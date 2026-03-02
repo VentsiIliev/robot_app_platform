@@ -1,9 +1,9 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from src.robot_systems.glue.glue_settings.controller.glue_settings_controller import GlueSettingsController
-from src.robot_systems.glue.glue_settings.model.glue_settings_model import GlueSettingsModel
-from src.robot_systems.glue.glue_settings.model.mapper import GlueSettingsMapper
+from src.robot_systems.glue.applications.glue_settings.model.glue_settings_model import GlueSettingsModel
+from src.robot_systems.glue.applications.glue_settings.controller.glue_settings_controller import GlueSettingsController
+from src.robot_systems.glue.applications.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.settings.glue import GlueSettings
 from src.robot_systems.glue.settings.glue_types import Glue
 
@@ -246,7 +246,6 @@ class TestGlueSettingsApplicationSpec(unittest.TestCase):
     def test_factory_returns_widget_application(self):
         from unittest.mock import MagicMock
         from src.applications.base.widget_application import WidgetApplication
-        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         ss  = MagicMock()
         ss.get.side_effect = lambda k: MagicMock()
         app = MagicMock()
@@ -256,7 +255,6 @@ class TestGlueSettingsApplicationSpec(unittest.TestCase):
 
     def test_factory_registers_messaging_service(self):
         from unittest.mock import MagicMock
-        from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         ss  = MagicMock()
         ss.get.side_effect = lambda k: MagicMock()
         app = MagicMock()
