@@ -15,15 +15,15 @@ class VacuumPump:
           xOffset (float): The x-axis offset from the main tooltip for positioning the vacuum pump (default is 0).
           yOffset (float): The y-axis offset from the main tooltip for positioning the vacuum pump (default is 0).
           zOffset (float): The z-axis offset from the main tooltip for positioning the vacuum pump (default is 105).
-          digitalOutput (int): The digital output pin number used to control the vacuum pump (default is 3).
-          vacuumPump (object): A placeholder for the vacuum pump object, can be used to hold any further configurations (default is None).
+          digitalOutput (int): The digital output pin used to control the vacuum pump (default is 3).
+          vacuumPump (object): A placeholder for the vacuum pump object can be used to hold any further configurations (default is None).
 
       Methods:
           turnOn(robot):
               Turns on the vacuum pump by setting the corresponding digital output to the ON_VALUE.
 
           turnOff(robot):
-              Turns off the vacuum pump by setting the corresponding digital output to the OFF_VALUE, and performs
+              Turns off the vacuum pump by setting the corresponding digital output to the OFF_VALUE and performs
               a quick reset on another digital output to ensure the pump is properly turned off.
       """
     ON_VALUE = 1

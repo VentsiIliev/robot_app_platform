@@ -1,1 +1,0 @@
-from src.robot_systems.glue.applications.workpiece_editor.service.i_workpiece_editor_service import IWorkpieceEditorService

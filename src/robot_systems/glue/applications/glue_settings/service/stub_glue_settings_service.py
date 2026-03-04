@@ -1,6 +1,6 @@
 from typing import List
 
-from robot_systems.glue.applications.glue_settings.service import IGlueSettingsService
+from src.robot_systems.glue.applications.glue_settings.service.i_glue_settings_service import IGlueSettingsService
 from src.robot_systems.glue.settings.glue import GlueSettings
 from src.robot_systems.glue.settings.glue_types import Glue
 

@@ -1,3 +1,6 @@
+from enum import Enum
+
+
 class ToolType(Enum):
     """
     Enum representing different types of robot tools.

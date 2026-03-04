@@ -1,0 +1,1 @@
+from src.applications.workpiece_editor.model.workpiece_editor_model import WorkpieceEditorModel

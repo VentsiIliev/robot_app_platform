@@ -1,106 +1,137 @@
+from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
+from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
+    build_glue_segment_settings_schema
 from src.robot_systems.glue.service_ids import ServiceID
 from src.robot_systems.glue.settings_ids import SettingsID
+import os
+import logging
+
+# ── Canonical storage paths ───────────────────────────────────────────────────
+# Single definition — used by both editor (write) and library (read).
+_logger = logging.getLogger(__name__)
+_SYSTEM_DIR = os.path.dirname(os.path.abspath(__file__))
+_WORKPIECES_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
+_USERS_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
+
+
+def _build_workpiece_library_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.workpiece_library.workpiece_library_factory import WorkpieceLibraryFactory
+    from src.robot_systems.glue.domain.workpieces.glue_workpiece_library_service import GlueWorkpieceLibraryService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+
+    settings_service = robot_system._settings_service
+
+    def _get_glue_types() -> list:
+        catalog = settings_service.get(SettingsID.GLUE_CATALOG)
+        return catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
+
+    repo = JsonWorkpieceRepository(_WORKPIECES_STORAGE)
+    service = GlueWorkpieceLibraryService(WorkpieceService(repo), glue_types_fn=_get_glue_types)
+
+    return WidgetApplication(
+        widget_factory=lambda _ms: WorkpieceLibraryFactory().build(service, _ms)
+    )
+
 
 def _build_workpiece_editor_application(robot_system):
-    import os, inspect
-    from contour_editor import SettingsConfig, SettingsGroup
     from src.applications.base.widget_application import WidgetApplication
-    from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
-    from src.robot_systems.glue.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
-    from src.robot_systems.glue.workpieces.service.workpiece_service import WorkpieceService
-    from src.robot_systems.glue.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
-    from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-    from src.robot_systems.glue.settings.glue import GlueSettingKey
-    from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.segment_settings_provider import \
-        SegmentSettingsProvider
-    from src.robot_systems.glue.applications.workpiece_editor.workpiece_editor.config.segment_editor_config import \
-        SegmentEditorConfig
-    from src.robot_systems.glue.settings.glue_workpiece_form_schema import build_glue_workpiece_form_schema
+    from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+    from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
-    system_dir   = os.path.dirname(inspect.getfile(GlueRobotSystem))
-    storage_root = os.path.join(system_dir, "storage", "workpieces")
+    settings_service = robot_system._settings_service
+    vision_service = robot_system.get_optional_service(ServiceID.VISION)
 
-    catalog    = robot_system._settings_service.get(SettingsID.GLUE_CATALOG)
+    catalog = settings_service.get(SettingsID.GLUE_CATALOG)
     glue_types = catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
-    form_schema = build_glue_workpiece_form_schema(glue_types)
-
-    # per-segment settings panel — glue-specific, built here so editor knows nothing about it
-    provider = SegmentSettingsProvider(material_types=glue_types)
-    defaults = provider.get_default_values()
-    settings_config = SettingsConfig(
-        default_settings=defaults,
-        groups=[
-            SettingsGroup("General", [
-                GlueSettingKey.SPRAY_WIDTH.value,
-                GlueSettingKey.SPRAYING_HEIGHT.value,
-                GlueSettingKey.GLUE_TYPE.value,
-            ]),
-            SettingsGroup("Forward Motion", [
-                GlueSettingKey.FORWARD_RAMP_STEPS.value,
-                GlueSettingKey.INITIAL_RAMP_SPEED.value,
-                GlueSettingKey.INITIAL_RAMP_SPEED_DURATION.value,
-                GlueSettingKey.MOTOR_SPEED.value,
-            ]),
-            SettingsGroup("Reverse Motion", [
-                GlueSettingKey.REVERSE_DURATION.value,
-                GlueSettingKey.SPEED_REVERSE.value,
-                GlueSettingKey.REVERSE_RAMP_STEPS.value,
-            ]),
-            SettingsGroup("Robot", [
-                "velocity", "acceleration",
-                GlueSettingKey.RZ_ANGLE.value,
-                "adaptive_spacing_mm",
-                "spline_density_multiplier",
-                "smoothing_lambda",
-            ]),
-            SettingsGroup("Generator", [
-                GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value,
-                GlueSettingKey.GENERATOR_TIMEOUT.value,
-            ]),
-            SettingsGroup("Thresholds (mm)", [
-                GlueSettingKey.REACH_START_THRESHOLD.value,
-                GlueSettingKey.REACH_END_THRESHOLD.value,
-            ]),
-            SettingsGroup("Pump Speed", [
-                "glue_speed_coefficient",
-                "glue_acceleration_coefficient",
-            ]),
-        ],
-        combo_field_key=GlueSettingKey.GLUE_TYPE.value,
-    )
-    segment_config = SegmentEditorConfig(
-        settings_config   = settings_config,
-        settings_provider = provider,
-    )
-
-    repo              = JsonWorkpieceRepository(storage_root)
-    workpiece_service = WorkpieceService(repo)
+    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
 
     service = WorkpieceEditorService(
-        vision_service    = robot_system.get_optional_service(ServiceID.VISION),
-        workpiece_service = workpiece_service,
-        form_schema       = form_schema,
-        segment_config    = segment_config,
+        vision_service=vision_service,
+        save_fn=lambda data: workpiece_service.save(data),
+        update_fn=lambda sid, data: workpiece_service.update(sid, data),
+        form_schema=build_glue_workpiece_form_schema(glue_types),
+        segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(glue_types)),
+        id_exists_fn=workpiece_service.workpiece_id_exists,
     )
-    return WidgetApplication(
-        widget_factory=lambda ms: WorkpieceEditorFactory(ms).build(service)
+
+    class _PendingLoader:
+        def __init__(self):
+            self.raw = None
+            self.storage_id = None  # ← track which existing workpiece is being edited
+
+        def on_open_requested(self, payload) -> None:
+            # payload = {"raw": {...}, "storage_id": "2026-..."} OR just raw dict (legacy)
+            if isinstance(payload, dict) and "storage_id" in payload:
+                self.raw = payload["raw"]
+                self.storage_id = payload["storage_id"]
+            else:
+                self.raw = payload
+                self.storage_id = None
+
+        def pop(self):
+            raw, self.raw = self.raw, None
+            sid, self.storage_id = self.storage_id, None
+            return raw, sid
+
+    pending = _PendingLoader()
+    robot_system._messaging_service.subscribe(
+        WorkpieceTopics.OPEN_IN_EDITOR, pending.on_open_requested
     )
+
+    def _make_widget(ms):
+        widget = WorkpieceEditorFactory(ms).build(service)
+        raw, storage_id = pending.pop()
+        if raw is not None:
+            try:
+                from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
+                editor_data = WorkpieceAdapter.from_raw(raw)
+                inner = widget._editor.contourEditor.editor_with_rulers.editor
+                inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
+                widget._editor.contourEditor.data = raw
+                service.set_editing(storage_id)
+            except Exception as exc:
+                _logger.exception("Auto-load workpiece failed: %s", exc)
+        else:
+            service.set_editing(None)
+        return widget
+
+    return WidgetApplication(widget_factory=_make_widget)
+
+
+def _build_user_management_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.user_management.user_management_factory import UserManagementFactory
+    from src.applications.user_management.service.user_management_application_service import \
+        UserManagementApplicationService
+    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
+    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
+
+    service = UserManagementApplicationService(CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA))
+    return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
+
 
 def _build_camera_settings_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.camera_settings.camera_settings_factory import CameraSettingsFactory
-    from src.applications.camera_settings.service.camera_settings_application_service import CameraSettingsApplicationService
+    from src.applications.camera_settings.service.camera_settings_application_service import \
+        CameraSettingsApplicationService
     from src.robot_systems.glue.service_ids import ServiceID
 
     service = CameraSettingsApplicationService(
-        settings_service = robot_system._settings_service,
-        vision_service   = robot_system.get_optional_service(ServiceID.VISION),
+        settings_service=robot_system._settings_service,
+        vision_service=robot_system.get_optional_service(ServiceID.VISION),
     )
     factory = CameraSettingsFactory()
     return WidgetApplication(
         widget_factory=lambda ms: factory.build(service, ms)
     )
+
 
 def _build_calibration_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
@@ -132,6 +163,7 @@ def _build_dashboard_application(system):
         )
     )
 
+
 def _build_broker_debug_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.broker_debug.broker_debug_factory import BrokerDebugFactory
@@ -142,7 +174,6 @@ def _build_broker_debug_application(robot_system):
             BrokerDebugApplicationService(ms)
         )
     )
-
 
 
 def _build_glue_cell_settings_application(robot_app):
@@ -157,22 +188,6 @@ def _build_glue_cell_settings_application(robot_app):
     return WidgetApplication(
         widget_factory=lambda ms: GlueCellSettingsFactory().build(service, ms)
     )
-
-def _build_user_management_application(robot_system):
-    import os, inspect
-    from src.applications.base.widget_application import WidgetApplication
-    from src.applications.user_management.user_management_factory import UserManagementFactory
-    from src.applications.user_management.service.user_management_application_service import UserManagementApplicationService
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-    from src.robot_systems.glue.settings.glue_user_schema import GLUE_USER_SCHEMA
-
-    storage = os.path.join(
-        os.path.dirname(inspect.getfile(GlueRobotSystem)),
-        "storage", "users", "users.csv",
-    )
-    service = UserManagementApplicationService(CsvUserRepository(storage, GLUE_USER_SCHEMA))
-    return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
 
 
 def _build_robot_settings_application(robot_app):

@@ -56,6 +56,15 @@ def main() -> None:
     # 6 — build widget registry and launch shell
     descriptors, widget_factory = loader.build_registry()
     shell = AppShell(app_descriptors=descriptors, widget_factory=widget_factory)
+
+    # Wire broker → shell navigation # used to automatically
+    # open the workpiece editor when the "open in editor" button is clicked in the library
+    def _on_navigate(payload: dict) -> None:
+        app_name = payload.get("app") if isinstance(payload, dict) else str(payload)
+        if app_name:
+            shell.show_app(app_name)
+
+    ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
     shell.show()
 
     # # 7 — broker debug window (temporary — remove when no longer needed)

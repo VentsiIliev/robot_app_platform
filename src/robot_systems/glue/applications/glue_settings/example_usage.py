@@ -12,8 +12,8 @@
 def run_standalone() -> None:
     import sys
     from PyQt6.QtWidgets import QApplication, QMainWindow
-    from robot_systems.glue.applications.glue_settings import GlueSettingsFactory
-    from robot_systems.glue.applications.glue_settings.service.stub_glue_settings_service import StubGlueSettingsService
+    from src.robot_systems.glue.applications.glue_settings import GlueSettingsFactory
+    from src.robot_systems.glue.applications.glue_settings.service.stub_glue_settings_service import StubGlueSettingsService
 
     app    = QApplication(sys.argv)
     widget = GlueSettingsFactory().build(StubGlueSettingsService())

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from modules.shared.tools.enums.Gripper import Gripper
 
+from src.robot_systems.glue.tools.enums.Gripper import Gripper
 
 SLOT_TOOL_MAP = {
     10: 0,

@@ -1,5 +1,0 @@
-from src.robot_systems.glue.workpieces.model.glue_workpiece import GlueWorkpiece
-from src.robot_systems.glue.workpieces.repository.i_workpiece_repository import IWorkpieceRepository
-from src.robot_systems.glue.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
-from src.robot_systems.glue.workpieces.service.i_workpiece_service import IWorkpieceService
-from src.robot_systems.glue.workpieces.service.workpiece_service import WorkpieceService

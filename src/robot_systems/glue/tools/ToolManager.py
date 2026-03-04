@@ -2,8 +2,7 @@ import threading
 import time
 from typing import Optional, Tuple
 
-
-from modules.shared.tools.ToolChanger import ToolChanger
+from src.engine.robot.tool_changer import ToolChanger
 
 
 class ToolManager:

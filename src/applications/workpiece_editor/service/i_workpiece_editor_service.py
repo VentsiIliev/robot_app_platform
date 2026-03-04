@@ -1,0 +1,28 @@
+from abc import ABC, abstractmethod
+from typing import Optional
+
+from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
+from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
+
+
+class IWorkpieceEditorService(ABC):
+
+    @abstractmethod
+    def get_form_schema(self) -> WorkpieceFormSchema: ...
+
+    @abstractmethod
+    def get_segment_config(self) -> SegmentEditorConfig: ...
+
+    @abstractmethod
+    def get_contours(self) -> list: ...
+
+    @abstractmethod
+    def save_workpiece(self, data: dict) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def execute_workpiece(self, data: dict) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def set_editing(self, storage_id: Optional[str]) -> None:
+        """Pass storage_id to edit an existing workpiece on the next save, or None for new."""
+        ...

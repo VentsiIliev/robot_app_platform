@@ -1,2 +1,0 @@
-from src.robot_systems.glue.workpieces.service.i_workpiece_service import IWorkpieceService
-from src.robot_systems.glue.workpieces.service.workpiece_service import WorkpieceService

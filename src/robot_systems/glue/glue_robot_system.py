@@ -21,60 +21,7 @@ from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
-
-
-
-# ── Service builders ──────────────────────────────────────────────────────────
-
-def _build_weight_cell_service(ctx):
-    from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service
-    cells_config = ctx.settings.get(SettingsID.GLUE_CELLS)   # GlueCellsConfig — all cells
-    return build_http_weight_cell_service(
-        cells_config = cells_config,
-        messaging    = ctx.messaging_service,
-    )
-
-
-def _build_motor_service(ctx):
-    from src.engine.hardware.motor.modbus.modbus_motor_factory import build_modbus_motor_service
-    from src.engine.hardware.motor.models.motor_config import MotorConfig
-    from src.robot_systems.glue.motor.glue_motor_error_decoder import GlueMotorErrorDecoder
-    modbus_config = ctx.settings.get(SettingsID.MODBUS_CONFIG)
-    return build_modbus_motor_service(
-        modbus_config = modbus_config,
-        motor_config  = MotorConfig(
-            health_check_trigger_register = 17,
-            motor_error_count_register    = 20,
-            motor_error_registers_start   = 21,
-            motor_addresses               = [0, 2, 4, 6],   # 4 glue pump motors
-            address_to_error_prefix       = {0: 1, 2: 2, 4: 3, 6: 4},
-        ),
-        error_decoder = GlueMotorErrorDecoder(),
-    )
-
-def _build_vision_service(ctx):
-    import inspect, os
-    from src.engine.vision.vision_service import VisionService
-    from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSystem
-    from src.engine.vision.implementation.VisionSystem.core.service.internal_service import Service
-
-    ctx.settings.get(SettingsID.VISION_CAMERA_SETTINGS)          # creates file with defaults if missing
-    settings_file_path = ctx.settings.get_repo(SettingsID.VISION_CAMERA_SETTINGS).file_path
-
-    system_dir = os.path.dirname(inspect.getfile(GlueRobotSystem))
-    calibration_path = os.path.join(system_dir, "storage","settings", "vision","data")
-    os.makedirs(calibration_path, exist_ok=True)
-
-    service = Service(
-        data_storage_path  = calibration_path,
-        settings_file_path = settings_file_path,
-    )
-    vision_system = VisionSystem(
-        storage_path      = calibration_path,
-        messaging_service    = ctx.messaging_service,
-        service           = service,
-    )
-    return VisionService(vision_system)
+from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, build_vision_service
 
 
 
@@ -107,6 +54,7 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="BrokerDebug", folder_id=3, icon="fa5s.project-diagram",       factory=application_wiring._build_broker_debug_application),
             ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",        factory=application_wiring._build_user_management_application),
+            ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
         ],
     )
 
@@ -124,21 +72,21 @@ class GlueRobotSystem(BaseRobotSystem):
     services = [
         ServiceSpec(ServiceID.ROBOT,       IRobotService,      required=True,  description="Motion and lifecycle control"),
         ServiceSpec(ServiceID.NAVIGATION,  NavigationService,  required=True,  description="Named position movements"),
-        ServiceSpec(ServiceID.VISION,      IVisionService,      required=False, description="Camera-based alignment",builder=_build_vision_service),
+        ServiceSpec(ServiceID.VISION,      IVisionService,      required=False, description="Camera-based alignment",builder=build_vision_service),
         ServiceSpec(ServiceID.TOOLS,       IToolService,       required=False, description="Gripper / tool changer"),
         ServiceSpec(
             name         = ServiceID.WEIGHT,
             service_type = IWeightCellService,
             required     = True,
             description  = "Multi-cell weight monitoring",
-            builder      = _build_weight_cell_service,
+            builder      = build_weight_cell_service,
         ),
         ServiceSpec(
             name         = ServiceID.MOTOR,
             service_type = IMotorService,
             required     = True,
             description  = "Glue pump motor service",
-            builder      = _build_motor_service,
+            builder      = build_motor_service,
         ),
     ]
 

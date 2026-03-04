@@ -4,7 +4,6 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QHBoxLayout, QVBoxLayout,
     QLabel, QLineEdit, QComboBox, QPushButton,
-    QMessageBox,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
@@ -13,6 +12,7 @@ from src.applications.base.i_application_controller import IApplicationControlle
 from src.applications.user_management.domain.user_schema import UserRecord, UserSchema, FieldDescriptor
 from src.applications.user_management.model.user_management_model import UserManagementModel
 from src.applications.user_management.view.user_management_view import UserManagementView
+from src.applications.base.styled_message_box import show_warning, show_info, ask_yes_no
 
 _logger = logging.getLogger(__name__)
 
@@ -53,9 +53,9 @@ class UserManagementController(IApplicationController):
                 if ok:
                     self._view.set_users(self._model.get_users())
                 else:
-                    QMessageBox.warning(self._view, "Add User", msg)
+                    show_warning(self._view, "Add User", msg)
             except ValueError as exc:
-                QMessageBox.warning(self._view, "Invalid Input", str(exc))
+                show_warning(self._view, "Invalid Input", str(exc))
 
     def _on_edit(self, record: UserRecord) -> None:
         dialog = _UserDialog(schema=self._model.schema, record=record, parent=self._view)
@@ -67,27 +67,23 @@ class UserManagementController(IApplicationController):
                 if ok:
                     self._view.set_users(self._model.get_users())
                 else:
-                    QMessageBox.warning(self._view, "Update User", msg)
+                    show_warning(self._view, "Update User", msg)
             except ValueError as exc:
-                QMessageBox.warning(self._view, "Invalid Input", str(exc))
+                show_warning(self._view, "Invalid Input", str(exc))
 
     def _on_delete(self, record: UserRecord) -> None:
-        uid   = record.get_id(self._model.schema.id_key)
-        reply = QMessageBox.question(
-            self._view, "Confirm Delete", f"Delete user '{uid}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            ok, msg = self._model.delete_user(uid)
-            self._view.set_status(msg)
-            if ok:
-                self._view.set_users(self._model.get_users())
+        uid = record.get_id(self._model.schema.id_key)
+        if not ask_yes_no(self._view, "Confirm Delete", f"Delete user '{uid}'?"):
+            return
+        ok, msg = self._model.delete_user(uid)
+        self._view.set_status(msg)
+        if ok:
+            self._view.set_users(self._model.get_users())
 
     def _on_qr(self, record: UserRecord) -> None:
         ok, msg, qr_path = self._model.generate_qr(record)
         if not ok:
-            QMessageBox.warning(self._view, "QR Error", msg)
+            show_warning(self._view, "QR Error", msg)
             return
         _QrDialog(record=record, qr_path=qr_path, model=self._model, parent=self._view).exec()
 
@@ -97,7 +93,6 @@ class UserManagementController(IApplicationController):
             self._view.set_users(all_records)
             self._view.set_status(f"{len(all_records)} users")
             return
-        # find the field key for this label
         fd = next(
             (f for f in self._model.schema.fields if f.label == column_label and not f.mask_in_table),
             None,
@@ -118,7 +113,7 @@ class _UserDialog(QDialog):
         super().__init__(parent)
         self._schema  = schema
         self._record  = record
-        self._widgets = {}   # key → QWidget
+        self._widgets = {}
         self.setWindowTitle("Edit User" if record else "Add User")
         self.setModal(True)
         self.setMinimumWidth(420)
@@ -128,12 +123,10 @@ class _UserDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QFormLayout(self)
-
         for fd in self._schema.fields:
             widget = self._make_widget(fd)
             self._widgets[fd.key] = widget
             layout.addRow(f"{fd.label}:", widget)
-
         btns       = QHBoxLayout()
         btn_save   = QPushButton("Save");   btn_save.clicked.connect(self.accept)
         btn_cancel = QPushButton("Cancel"); btn_cancel.clicked.connect(self.reject)
@@ -197,23 +190,19 @@ class _QrDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-
         if self._qr_path:
             lbl = QLabel()
             lbl.setPixmap(QPixmap(self._qr_path))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(lbl)
-
         uid  = self._record.get_id(self._model.schema.id_key)
         info = QLabel(f"ID: {uid}")
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(info)
-
         btn_email = QPushButton("📧 Email Access Package")
         btn_email.setMinimumHeight(44)
         btn_email.clicked.connect(self._on_send)
         layout.addWidget(btn_email)
-
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
@@ -223,7 +212,6 @@ class _QrDialog(QDialog):
             return
         ok, msg = self._model.send_access_package(self._record, self._qr_path)
         if ok:
-            QMessageBox.information(self, "Sent", msg)
+            show_info(self, "Sent", msg)
         else:
-            QMessageBox.warning(self, "Email Error", msg)
-
+            show_warning(self, "Email Error", msg)

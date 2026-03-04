@@ -1,0 +1,1 @@
+from src.applications.workpiece_editor.service.i_workpiece_editor_service import IWorkpieceEditorService
