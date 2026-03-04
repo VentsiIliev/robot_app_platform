@@ -10,6 +10,7 @@ from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)
 
+
 def _has_valid_contour(contour) -> bool:
     if contour is None:
         return False
@@ -29,21 +30,23 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  form_schema:    WorkpieceFormSchema,
                  segment_config: SegmentEditorConfig,
                  id_exists_fn:   Callable[[str], bool] = None):
-        self._vision              = vision_service
-        self._save_fn             = save_fn
-        self._update_fn           = update_fn
-        self._id_exists_fn        = id_exists_fn
-        self._form_schema         = form_schema
-        self._segment_config      = segment_config
-        self._editing_storage_id  = None   # set → edit mode; None → create mode
+        self._vision             = vision_service
+        self._save_fn            = save_fn
+        self._update_fn          = update_fn
+        self._id_exists_fn       = id_exists_fn
+        self._form_schema        = form_schema
+        self._segment_config     = segment_config
+        self._editing_storage_id = None
 
     def set_editing(self, storage_id) -> None:
         self._editing_storage_id = storage_id
         _logger.debug("WorkpieceEditorService: editing_storage_id=%s", storage_id)
 
+    def _schema(self) -> WorkpieceFormSchema:
+        return self._form_schema() if callable(self._form_schema) else self._form_schema
 
     def get_form_schema(self) -> WorkpieceFormSchema:
-        return self._form_schema
+        return self._schema()
 
     def get_segment_config(self) -> SegmentEditorConfig:
         return self._segment_config
@@ -60,16 +63,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         try:
-            form_data = data.get("form_data", {})
+            form_data   = data.get("form_data", {})
             editor_data = data.get("editor_data")
-            complete = self._merge(form_data, editor_data) if editor_data else dict(form_data)
-            print(f"[save_workpiece] complete: {complete}]")
-            required = self._form_schema.get_required_keys()
+            complete    = self._merge(form_data, editor_data) if editor_data else dict(form_data)
+            required    = self._schema().get_required_keys()
             is_valid, errors = SaveWorkpieceHandler.validate_form_data(complete, required)
             if not is_valid:
                 return False, f"Validation failed: {', '.join(errors)}"
 
-            # ── Validate main contour ─────────────────────────────────────────────
             if not _has_valid_contour(complete.get("contour")):
                 return False, (
                     "No main workpiece contour found.\n"
@@ -98,12 +99,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def _merge(self, form_data: dict, editor_data) -> dict:
         if not isinstance(editor_data, ContourEditorData):
             return dict(form_data)
-        merged = {**WorkpieceAdapter.to_workpiece_data(editor_data), **form_data}
-        combo_key = self._form_schema.combo_key  # ← was material_type_key
+        merged    = {**WorkpieceAdapter.to_workpiece_data(editor_data), **form_data}
+        combo_key = self._schema().combo_key
         if combo_key:
             val = form_data.get(combo_key) or form_data.get("glue_type") or form_data.get("glueType")
             if val:
                 merged[combo_key] = val
         return merged
-
-

@@ -1,13 +1,17 @@
 import logging
 import time
 import threading
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
+from .interfaces import IToolService
 from .interfaces.i_tool_changer import IToolChanger
 from .interfaces.i_motion_service import IMotionService
+from .interfaces.tool_definition import ToolDefinition
 
 
-class ToolManager:
+class ToolManager(IToolService):
+
+
 
     _TRANSIENT_ERROR = "Request-sent"
 
@@ -20,10 +24,14 @@ class ToolManager:
         self._motion = motion_service
         self._tool_changer = tool_changer
         self._robot_config = robot_config
-        self.current_gripper: Optional[int] = None
+        self._current_gripper: Optional[int] = None
         self._lock = threading.Lock()
         self._logger = logging.getLogger(self.__class__.__name__)
         self._tools: dict = {}
+
+    @property
+    def current_gripper(self) -> Optional[int]:
+        return self._current_gripper
 
     def add_tool(self, name: str, tool) -> None:
         self._tools[name] = tool
@@ -140,3 +148,6 @@ class ToolManager:
         if gripper_id not in table:
             return None, None
         return table[gripper_id][0](), table[gripper_id][1]()
+
+    def get_tools(self) -> List[ToolDefinition]:
+        return self._tool_changer.list_tools()

@@ -9,6 +9,7 @@ class SettingsID(str, Enum):
     GLUE_CATALOG      = "glue_catalog"
     MODBUS_CONFIG     = "modbus_config"
     VISION_CAMERA_SETTINGS = "vision_camera_settings"
+    TOOL_CHANGER_CONFIG = "tool_changer_config"
 
     def __str__(self) -> str:
         return self.value

@@ -74,6 +74,8 @@ class MovementGroup:
     position: Optional[str] = None
     points: List[str] = field(default_factory=list)
     iterations: int = 1
+    has_iterations: bool = False
+    has_trajectory_execution: bool = False
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'MovementGroup':
@@ -83,32 +85,24 @@ class MovementGroup:
             position=data.get("position"),
             points=data.get("points", []),
             iterations=data.get("iterations", 1),
+            has_iterations=data.get("has_iterations", False),
+            has_trajectory_execution=data.get("has_trajectory_execution", False),
         )
 
     def to_dict(self) -> Dict:
-        result = {"velocity": self.velocity, "acceleration": self.acceleration, "iterations": self.iterations}
+        result = {
+            "velocity": self.velocity,
+            "acceleration": self.acceleration,
+            "iterations": self.iterations,
+            "has_iterations": self.has_iterations,
+            "has_trajectory_execution": self.has_trajectory_execution,
+        }
         if self.position:
             result["position"] = self.position
         if self.points:
             result["points"] = self.points
         return result
 
-    def parse_position(self) -> Optional[List[float]]:
-        if not self.position:
-            return None
-        try:
-            return [float(x.strip()) for x in self.position.strip("[]").split(",")]
-        except (ValueError, AttributeError):
-            return None
-
-    def parse_points(self) -> List[List[float]]:
-        result = []
-        for point in self.points:
-            try:
-                result.append([float(x.strip()) for x in point.strip("[]").split(",")])
-            except (ValueError, AttributeError):
-                continue
-        return result
 
 
 @dataclass

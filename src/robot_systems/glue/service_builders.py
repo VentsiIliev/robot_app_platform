@@ -46,3 +46,19 @@ def build_vision_service(ctx):
         service           = service,
     )
     return VisionService(vision_system)
+
+
+def build_tool_service(ctx):
+    from src.engine.robot.tool_changer import ToolChanger
+    from src.engine.robot.tool_manager import ToolManager
+
+    tc_settings  = ctx.settings.get(SettingsID.TOOL_CHANGER_CONFIG)
+    tool_changer = ToolChanger(slots=tc_settings.slots, tools=tc_settings.tools)
+    robot_config = ctx.settings.get(SettingsID.ROBOT_CONFIG)
+
+    return ToolManager(
+        motion_service = ctx.motion,
+        tool_changer   = tool_changer,
+        robot_config   = robot_config,
+    )
+

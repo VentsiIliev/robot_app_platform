@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
-    QVBoxLayout, QWidget, QGroupBox,
+    QVBoxLayout, QWidget, QFrame,
 )
 
 from src.engine.robot.configuration import MovementGroup
@@ -32,6 +32,7 @@ class MovementGroupDef:
     group_type: MovementGroupType
     has_iterations: bool = False
     has_trajectory_execution: bool = False
+    display_name: Optional[str] = None   # shown in group box title; falls back to name
 
 
 MOVEMENT_GROUP_DEFINITIONS: Dict[str, MovementGroupDef] = {
@@ -200,62 +201,130 @@ class PositionEditorDialog(QDialog):
 
 # ── MovementGroupWidget ───────────────────────────────────────────────────────
 
-class MovementGroupWidget(QGroupBox):
+class MovementGroupWidget(QWidget):
     """
-    UI for a single movement group.
-
-    Pure presentation — no controller logic.
-    Type/layout determined by MovementGroupDef; values loaded from MovementGroup.
-
-    Action signals are forwarded to whoever owns this widget (e.g. MovementGroupsTab
-    or the main controller), which then calls set_position() / add_point() back.
+    Collapsible widget for a single movement group.
+    Collapsed by default — click the header to expand/collapse.
     """
 
     # Value-change signals
-    velocity_changed     = pyqtSignal(str, int)   # group_name, value
+    velocity_changed     = pyqtSignal(str, int)
     acceleration_changed = pyqtSignal(str, int)
     iterations_changed   = pyqtSignal(str, int)
-    position_changed     = pyqtSignal(str, str)   # group_name, position_str
-    points_changed       = pyqtSignal(str, list)  # group_name, all_points
+    position_changed     = pyqtSignal(str, str)
+    points_changed       = pyqtSignal(str, list)
 
-    # Action-request signals — no data, caller decides how to fulfil
-    set_current_requested        = pyqtSignal(str)  # group_name
-    move_to_requested            = pyqtSignal(str)  # group_name
-    execute_trajectory_requested = pyqtSignal(str)  # group_name
+    # Action-request signals
+    set_current_requested        = pyqtSignal(str)  # group_name — single position
+    move_to_requested = pyqtSignal(str, object)  # group_name, point_str (None for single-pos)
+
+    execute_trajectory_requested = pyqtSignal(str)
+    remove_requested             = pyqtSignal(str)
+    add_current_requested        = pyqtSignal(str)  # group_name — multi position
 
     def __init__(self, definition: MovementGroupDef, parent=None):
-        super().__init__(definition.name, parent)
-        self._def  = definition
-        self._name = definition.name
-        self.setStyleSheet(GROUP_STYLE)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        super().__init__(parent)
+        self._def      = definition
+        self._name     = definition.name
+        self._expanded = False
 
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setStyleSheet("background: transparent;")
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Header ────────────────────────────────────────────────────
+        self._header = QPushButton()
+        self._header.setCheckable(True)
+        self._header.setChecked(False)
+        self._header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._header.setMinimumHeight(44)
+        self._header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._header.clicked.connect(self._toggle)
+        outer.addWidget(self._header)
+        self._update_header_style(False)
+
+        # ── Body ──────────────────────────────────────────────────────
+        self._body = QFrame()
+        self._body.setObjectName("mgBody")
+        self._body.setStyleSheet(f"""
+            QFrame#mgBody {{
+                background: white;
+                border: 1px solid {BORDER};
+                border-top: none;
+                border-radius: 0 0 8px 8px;
+            }}
+        """)
+        self._body.setVisible(False)
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(12, 12, 12, 12)
+        self._body_layout.setSpacing(12)
+        outer.addWidget(self._body)
+
+        # initialise optional widget references before _build_body
         self._velocity_spin:     Optional[TouchSpinBox] = None
         self._acceleration_spin: Optional[TouchSpinBox] = None
         self._iterations_spin:   Optional[TouchSpinBox] = None
         self._position_display:  Optional[QLineEdit]    = None
         self._points_list:       Optional[QListWidget]  = None
 
-        self._build_ui()
+        self._build_body()
+
+    def _update_header_style(self, expanded: bool) -> None:
+        arrow = "▲" if expanded else "▼"
+        title = self._def.display_name or self._def.name
+        self._header.setText(f"  {arrow}   {title}")
+        self._header.setStyleSheet(f"""
+            QPushButton {{
+                background: {GROUP_STYLE.split('background:')[1].split(';')[0].strip()
+                             if 'background:' in GROUP_STYLE else PRIMARY_LIGHT};
+                color: {PRIMARY_DARK};
+                border: 1px solid {BORDER};
+                border-radius: {'0px' if expanded else '8px'};
+                border-bottom-left-radius: {'0px' if expanded else '8px'};
+                border-bottom-right-radius: {'0px' if expanded else '8px'};
+                text-align: left;
+                padding-left: 12px;
+                font-size: 11pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: {BORDER};
+            }}
+        """)
+
+    def _toggle(self) -> None:
+        self._expanded = not self._expanded
+        self._body.setVisible(self._expanded)
+        self._update_header_style(self._expanded)
+        # collapse the button check state to match
+        self._header.setChecked(self._expanded)
 
     # ── UI construction ───────────────────────────────────────────────────
 
-    def _build_ui(self):
-        outer = QVBoxLayout()
-        outer.setContentsMargins(12, 16, 12, 12)
-        outer.setSpacing(12)
+    def _build_body(self):
+        # ── Remove button ──────────────────────────────────────────────
+        rm_row = QHBoxLayout()
+        rm_row.addStretch()
+        rm_btn = QPushButton("✕ Remove Group")
+        rm_btn.setStyleSheet(_GHOST_BTN_STYLE)
+        rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        rm_btn.clicked.connect(lambda: self.remove_requested.emit(self._name))
+        rm_row.addWidget(rm_btn)
+        self._body_layout.addLayout(rm_row)
 
-        outer.addWidget(self._build_vel_acc_row())
+        self._body_layout.addWidget(self._build_vel_acc_row())
 
         if self._def.has_iterations:
-            outer.addWidget(self._build_iterations_row())
+            self._body_layout.addWidget(self._build_iterations_row())
 
         if self._def.group_type == MovementGroupType.SINGLE_POSITION:
-            outer.addWidget(self._build_single_position_section())
+            self._body_layout.addWidget(self._build_single_position_section())
         elif self._def.group_type == MovementGroupType.MULTI_POSITION:
-            outer.addWidget(self._build_multi_position_section())
+            self._body_layout.addWidget(self._build_multi_position_section())
 
-        self.setLayout(outer)
 
     def _build_vel_acc_row(self) -> QWidget:
         row = QWidget()
@@ -340,12 +409,12 @@ class MovementGroupWidget(QGroupBox):
 
         for label, signal in [
             ("Set Current", self.set_current_requested),
-            ("Move To",     self.move_to_requested),
+            ("Move To", self.move_to_requested),
         ]:
             btn = QPushButton(label)
             btn.setStyleSheet(_ACTION_BTN_STYLE)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda _, s=signal: s.emit(self._name))
+            btn.clicked.connect(lambda _, s=signal: s.emit(self._name, None))  # None = use group position
             row_layout.addWidget(btn)
 
         layout.addWidget(row)
@@ -386,9 +455,9 @@ class MovementGroupWidget(QGroupBox):
         btn_layout.addWidget(edit_btn)
 
         for label, slot in [
-            ("Remove",      self._on_remove_point),
-            ("Move To",     lambda: self.move_to_requested.emit(self._name)),
-            ("Set Current", lambda: self.set_current_requested.emit(self._name)),
+            ("Remove", self._on_remove_point),
+            ("Move To", self._on_move_to_point),  # ← named method
+            ("Set Current", self._on_add_current),
         ]:
             btn = QPushButton(label)
             btn.setStyleSheet(_ACTION_BTN_STYLE)
@@ -453,6 +522,15 @@ class MovementGroupWidget(QGroupBox):
         self._points_list.item(row).setText(pos)
         self.points_changed.emit(self._name, self._collect_points())
 
+    def _on_move_to_point(self) -> None:
+        if self._points_list is None:
+            return
+        row = self._points_list.currentRow()
+        if row < 0:
+            self.move_to_requested.emit(self._name, None)   # controller will warn "no point selected"
+            return
+        point_str = self._points_list.item(row).text()
+        self.move_to_requested.emit(self._name, point_str)
     # ── Internal helpers ──────────────────────────────────────────────────
 
     @staticmethod
@@ -468,10 +546,15 @@ class MovementGroupWidget(QGroupBox):
         return cell
 
     def _on_remove_point(self):
-        row = self._points_list.currentRow()
-        if row >= 0:
-            self._points_list.takeItem(row)
-            self.points_changed.emit(self._name, self._collect_points())
+        if self._points_list is not None:
+            row = self._points_list.currentRow()
+            if row >= 0:
+                self._points_list.takeItem(row)
+                self.points_changed.emit(self._name, self._collect_points())
+
+    def _on_add_current(self):
+        self.add_current_requested.emit(self._name)
+
 
     def _collect_points(self) -> List[str]:
         return [self._points_list.item(i).text() for i in range(self._points_list.count())]
@@ -479,7 +562,7 @@ class MovementGroupWidget(QGroupBox):
     # ── Public API ────────────────────────────────────────────────────────
 
     def load(self, group: MovementGroup) -> None:
-        """Populate all widgets from model — no signals emitted."""
+        """Populate all widgets from a model — no signals emitted."""
         for spin, val in [
             (self._velocity_spin,     float(group.velocity)),
             (self._acceleration_spin, float(group.acceleration)),
@@ -504,24 +587,27 @@ class MovementGroupWidget(QGroupBox):
 
     def get_values(self) -> MovementGroup:
         return MovementGroup(
-            velocity     = int(self._velocity_spin.value())     if self._velocity_spin     else 0,
-            acceleration = int(self._acceleration_spin.value()) if self._acceleration_spin else 0,
-            iterations   = int(self._iterations_spin.value())   if self._iterations_spin   else 1,
-            position     = self._position_display.text() or None if self._position_display else None,
-            points       = self._collect_points()               if self._points_list       else [],
+            velocity=int(self._velocity_spin.value()) if self._velocity_spin else 0,
+            acceleration=int(self._acceleration_spin.value()) if self._acceleration_spin else 0,
+            iterations=int(self._iterations_spin.value()) if self._iterations_spin else 1,
+            position=self._position_display.text() or None if self._position_display else None,
+            points=self._collect_points() if self._points_list else [],
+            has_iterations=self._def.has_iterations,
+            has_trajectory_execution=self._def.has_trajectory_execution,
         )
 
     def set_position(self, position_str: str) -> None:
         """Called by controller after handling set_current_requested."""
-        if self._position_display:
+        if self._position_display is not None:
             self._position_display.setText(position_str)
             self.position_changed.emit(self._name, position_str)
 
     def add_point(self, point_str: str) -> None:
         """Called by controller after handling set_current_requested on a multi-pos group."""
-        if self._points_list:
+        if self._points_list is not None:
             item = QListWidgetItem(point_str)
             self._points_list.addItem(item)
+            self._points_list.scrollToItem(item)
             self._points_list.setCurrentItem(item)
             self.points_changed.emit(self._name, self._collect_points())
 
@@ -543,8 +629,12 @@ class MovementGroupsTab(QWidget):
 
     values_changed               = pyqtSignal(str, object)  # "GROUP_NAME.field", value
     set_current_requested        = pyqtSignal(str)           # group_name
-    move_to_requested            = pyqtSignal(str)           # group_name
+    move_to_requested = pyqtSignal(str, object)  # group_name, point_str or None
+
     execute_trajectory_requested = pyqtSignal(str)           # group_name
+    add_group_requested = pyqtSignal()
+    remove_group_requested = pyqtSignal(str)  # group_name
+    add_current_requested = pyqtSignal(str)   # group_name — for multi-position
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -554,22 +644,31 @@ class MovementGroupsTab(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(16, 16, 16, 16)
         self._layout.setSpacing(16)
+
+        # ── Add Group toolbar ─────────────────────────────────────────
+        toolbar = QWidget()
+        toolbar.setStyleSheet("background: transparent;")
+        tb_layout = QHBoxLayout(toolbar)
+        tb_layout.setContentsMargins(0, 0, 0, 0)
+        tb_layout.addStretch()
+        add_btn = QPushButton("＋  Add Group")
+        add_btn.setStyleSheet(_ACTION_BTN_STYLE)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.clicked.connect(self.add_group_requested.emit)
+        tb_layout.addWidget(add_btn)
+        self._layout.addWidget(toolbar)
+
         self._layout.addStretch()
 
-    def load(self, groups: Dict[str, MovementGroup]) -> None:
-        """
-        First call: creates one widget per group.
-        Subsequent calls: updates values in existing widgets.
-        Groups not in MOVEMENT_GROUP_DEFINITIONS fall back to type inference.
-        """
+    def load(self, groups: Dict[str, MovementGroup], extra_defs: Dict[str, MovementGroupDef] = None) -> None:
+        extra_defs = extra_defs or {}
         for name, group in groups.items():
             if name not in self._widgets:
-                defn = MOVEMENT_GROUP_DEFINITIONS.get(name) or self._infer_def(name, group)
+                defn = extra_defs.get(name) or MOVEMENT_GROUP_DEFINITIONS.get(name) or self._infer_def(name, group)
                 widget = MovementGroupWidget(defn)
                 self._connect_widget(widget)
                 self._widgets[name] = widget
                 self._layout.insertWidget(self._layout.count() - 1, widget)
-
             self._widgets[name].load(group)
 
     def get_values(self) -> Dict[str, MovementGroup]:
@@ -578,17 +677,40 @@ class MovementGroupsTab(QWidget):
     def get_widget(self, group_name: str) -> Optional[MovementGroupWidget]:
         return self._widgets.get(group_name)
 
+    def add_group(self, name: str, defn: MovementGroupDef, group: MovementGroup) -> None:
+        if name in self._widgets:
+            return
+        widget = MovementGroupWidget(defn)
+        self._connect_widget(widget)
+        self._widgets[name] = widget
+        self._layout.insertWidget(self._layout.count() - 1, widget)  # before stretch
+        widget.load(group)
+
+    def remove_group(self, name: str) -> None:
+        widget = self._widgets.pop(name, None)
+        if widget is not None:
+            self._layout.removeWidget(widget)
+            widget.deleteLater()
+
     # ── Private ───────────────────────────────────────────────────────────
 
     @staticmethod
     def _infer_def(name: str, group: MovementGroup) -> MovementGroupDef:
+        upper = name.upper()
+        if "PICKUP" in upper or "DROPOFF" in upper:
+            return MovementGroupDef(name, MovementGroupType.MULTI_POSITION, has_trajectory_execution=True)
         if group.position is not None:
             gtype = MovementGroupType.SINGLE_POSITION
         elif group.points:
             gtype = MovementGroupType.MULTI_POSITION
         else:
             gtype = MovementGroupType.VELOCITY_ONLY
-        return MovementGroupDef(name, gtype)
+        return MovementGroupDef(
+            name=name,
+            group_type=gtype,
+            has_iterations=group.has_iterations,
+            has_trajectory_execution=group.has_trajectory_execution,
+        )
 
     def _connect_widget(self, w: MovementGroupWidget) -> None:
         w.velocity_changed.connect(
@@ -609,3 +731,6 @@ class MovementGroupsTab(QWidget):
         w.set_current_requested.connect(self.set_current_requested)
         w.move_to_requested.connect(self.move_to_requested)
         w.execute_trajectory_requested.connect(self.execute_trajectory_requested)
+        w.remove_requested.connect(self.remove_group_requested)
+        w.add_current_requested.connect(self.set_current_requested)  # reuse same signal
+

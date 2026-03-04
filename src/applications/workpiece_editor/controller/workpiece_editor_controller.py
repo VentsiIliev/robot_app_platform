@@ -8,7 +8,6 @@ from src.applications.workpiece_editor.model import WorkpieceEditorModel
 from src.applications.workpiece_editor.view.workpiece_editor_view import WorkpieceEditorView
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
-from PyQt6.QtWidgets import QMessageBox
 from src.applications.base.styled_message_box import show_warning
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
@@ -18,24 +17,25 @@ class _Bridge(QObject):
     load_workpiece_raw = pyqtSignal(dict)
 
 
-
 class WorkpieceEditorController(IApplicationController):
 
     def __init__(self, model: WorkpieceEditorModel, view: WorkpieceEditorView,
                  messaging: IMessagingService):
-        self._model  = model
-        self._view   = view
-        self._broker = messaging
-        self._bridge = _Bridge()
-        self._subs:  List[Tuple[str, Callable]] = []
-        self._active = False
-        self._logger = logging.getLogger(self.__class__.__name__)
+        self._model          = model
+        self._view           = view
+        self._broker         = messaging
+        self._bridge         = _Bridge()
+        self._subs:          List[Tuple[str, Callable]] = []
+        self._active         = False
+        self._camera_active  = True          # ← controls whether feed updates are forwarded
+        self._logger         = logging.getLogger(self.__class__.__name__)
 
     def load(self) -> None:
-        self._active = True
+        self._active        = True
+        self._camera_active = True
         self._bridge.camera_frame.connect(self._on_camera_frame)
-        self._bridge.load_workpiece_raw.connect(self._on_load_workpiece_raw)  # ← add
-        self._view.set_capture_handler(self._get_contours)
+        self._bridge.load_workpiece_raw.connect(self._on_load_workpiece_raw)
+        self._view.set_capture_handler(self._on_capture)   # ← renamed
         self._view.set_save_callback(self._on_form_submit)
         self._connect_signals()
         self._subscribe()
@@ -58,18 +58,72 @@ class WorkpieceEditorController(IApplicationController):
                 pass
         self._subs.clear()
 
-    # ── Capture (synchronous) ─────────────────────────────────────────
+    # ── Capture ───────────────────────────────────────────────────────
 
-    def _get_contours(self) -> list:
+    def _on_capture(self) -> list:
+        """Called by the editor's capture button. Picks the largest contour,
+        stops the live feed and loads the contour into the Workpiece layer."""
         contours = self._model.get_contours()
         self._logger.debug("Capture: got %d contours from vision", len(contours))
-        return contours
+        largest = self._pick_largest(contours)
+        if largest is None:
+            self._logger.warning("Capture: no usable contour found")
+            show_warning(self._view, "Capture", "No contour detected.\nMake sure the vision system is running.")
+            return []
+
+        self._logger.debug("Capture: largest contour has %d points", len(largest))
+
+        # Stop live camera feed so the captured frame stays visible
+        self._camera_active = False
+
+        try:
+            from src.applications.workpiece_editor.editor_core.handlers.CaptureDataHandler import CaptureDataHandler
+            editor_frame = self._view._editor
+            inner = editor_frame.contourEditor.editor_with_rulers.editor
+            wm = inner.workpiece_manager
+
+            wm.clear_workpiece()
+
+            editor_data = CaptureDataHandler.from_capture_data(
+                contours=largest,
+                metadata={"source": "camera_capture"},
+            )
+
+            wm.load_editor_data(editor_data, close_contour=True)
+
+            editor_frame.pointManagerWidget.refresh_points()
+            inner.update()
+
+        except Exception:
+            self._logger.exception("Capture: failed to load contour into editor")
+
+        return [largest]
+
+    @staticmethod
+    def _pick_largest(contours: list):
+        import cv2
+        import numpy as np
+        if not contours:
+            return None
+        best, best_area = None, -1.0
+        for c in contours:
+            try:
+                arr = np.array(c, dtype=np.float32)
+                area = float(cv2.contourArea(arr))
+                if area > best_area:
+                    best_area = area
+                    best = arr
+            except Exception:
+                import traceback
+                traceback.print_exc()
+                continue
+        return best
 
     # ── Broker → Bridge ───────────────────────────────────────────────
 
     def _subscribe(self) -> None:
         self._sub(VisionTopics.LATEST_IMAGE, self._on_latest_image_raw)
-        self._sub(WorkpieceTopics.OPEN_IN_EDITOR, self._on_open_in_editor_raw)  # ← add
+        self._sub(WorkpieceTopics.OPEN_IN_EDITOR, self._on_open_in_editor_raw)
 
     def _on_latest_image_raw(self, msg) -> None:
         if isinstance(msg, dict):
@@ -78,15 +132,21 @@ class WorkpieceEditorController(IApplicationController):
                 self._bridge.camera_frame.emit(frame)
 
     def _on_camera_frame(self, frame) -> None:
-        if self._active:
-            self._view.update_camera_feed(frame)
+        if not self._active or not self._camera_active or frame is None:
+            return
+        try:
+            import cv2
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        except Exception:
+            rgb = frame
+        self._view.update_camera_feed(rgb)
 
     # ── View → Model ──────────────────────────────────────────────────
 
     def _on_form_submit(self, form_data: dict):
         try:
             inner = self._view._editor.contourEditor.editor_with_rulers.editor
-            editor_data = inner.workpiece_manager.export_editor_data()  # ← was from_manager
+            editor_data = inner.workpiece_manager.export_editor_data()
         except Exception:
             editor_data = None
 
@@ -96,14 +156,15 @@ class WorkpieceEditorController(IApplicationController):
         if not ok:
             show_warning(self._view, "Cannot Save", msg)
             return False, msg
+        # Resume live feed after successful save
+        self._camera_active = True
         return True, msg
 
     def _connect_signals(self) -> None:
-        self._view.save_requested.connect(self._on_save)  # fallback if callback not used
+        self._view.save_requested.connect(self._on_save)
         self._view.execute_requested.connect(self._on_execute)
 
     def _on_save(self, data: dict) -> None:
-        # Fallback path — only fires if set_form_submit_callback wasn't honored
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece (fallback): %s — %s", ok, msg)
         if not ok:
@@ -112,7 +173,6 @@ class WorkpieceEditorController(IApplicationController):
     def _on_execute(self, data: dict) -> None:
         ok, msg = self._model.execute_workpiece(data)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
-
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)
@@ -129,13 +189,13 @@ class WorkpieceEditorController(IApplicationController):
             return
         try:
             from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
-            raw = payload.get("raw", payload)
+            raw        = payload.get("raw", payload)
             storage_id = payload.get("storage_id")
             editor_data = WorkpieceAdapter.from_raw(raw)
             inner = self._view._editor.contourEditor.editor_with_rulers.editor
             inner.workpiece_manager.clear_workpiece()
             inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
-            self._view._editor.contourEditor.data = raw  # lazy form prefill
+            self._view._editor.contourEditor.data = raw
             self._model.set_editing(storage_id)
             self._logger.info("Loaded workpiece into editor (storage_id=%s)", storage_id)
         except Exception as exc:

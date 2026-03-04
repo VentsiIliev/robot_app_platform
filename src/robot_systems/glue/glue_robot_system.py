@@ -21,7 +21,9 @@ from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
-from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, build_vision_service
+from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
+    build_vision_service, build_tool_service
+from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 
 
 
@@ -55,6 +57,7 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",        factory=application_wiring._build_user_management_application),
             ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
+            ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application)
         ],
     )
 
@@ -66,34 +69,43 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.GLUE_CATALOG,      GlueCatalogSerializer(),               "glue/catalog.json"),
         SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
         SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS, CameraSettingsSerializer(),         "vision/camera_settings.json"),
+        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG, ToolChangerSettingsSerializer(), "tools/tool_changer.json"),
 
     ]
 
     services = [
-        ServiceSpec(ServiceID.ROBOT,       IRobotService,      required=True,  description="Motion and lifecycle control"),
-        ServiceSpec(ServiceID.NAVIGATION,  NavigationService,  required=True,  description="Named position movements"),
-        ServiceSpec(ServiceID.VISION,      IVisionService,      required=False, description="Camera-based alignment",builder=build_vision_service),
-        ServiceSpec(ServiceID.TOOLS,       IToolService,       required=False, description="Gripper / tool changer"),
+        ServiceSpec(ServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control"),
+        ServiceSpec(ServiceID.NAVIGATION, NavigationService, required=True, description="Named position movements"),
+        ServiceSpec(ServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
+                    builder=build_vision_service),
         ServiceSpec(
-            name         = ServiceID.WEIGHT,
-            service_type = IWeightCellService,
-            required     = True,
-            description  = "Multi-cell weight monitoring",
-            builder      = build_weight_cell_service,
+            name=ServiceID.WEIGHT,
+            service_type=IWeightCellService,
+            required=True,
+            description="Multi-cell weight monitoring",
+            builder=build_weight_cell_service,
         ),
         ServiceSpec(
-            name         = ServiceID.MOTOR,
-            service_type = IMotorService,
-            required     = True,
-            description  = "Glue pump motor service",
-            builder      = build_motor_service,
+            name=ServiceID.MOTOR,
+            service_type=IMotorService,
+            required=True,
+            description="Glue pump motor service",
+            builder=build_motor_service,
+        ),
+        ServiceSpec(
+            name=ServiceID.TOOLS,
+            service_type=IToolService,
+            required=False,
+            description="Gripper / tool changer",
+            builder=build_tool_service,
         ),
     ]
 
-
     def on_start(self) -> None:
+        from src.robot_systems.glue.navigation import GlueNavigationService
         self._robot = self.get_service(ServiceID.ROBOT)
-        self._navigation = self.get_service(ServiceID.NAVIGATION)
+        _nav_engine      = self.get_service(ServiceID.NAVIGATION)
+        self._navigation = GlueNavigationService(_nav_engine)  # ← typed facade
         self._vision = self.get_optional_service(ServiceID.VISION)
         self._tools = self.get_optional_service(ServiceID.TOOLS)
         self._robot_config = self.get_settings(SettingsID.ROBOT_CONFIG)

@@ -15,9 +15,16 @@ from src.applications.robot_settings.view.robot_settings_schema import (
 class RobotSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no business logic."""
 
-    save_requested   = pyqtSignal(dict)
-    value_changed    = pyqtSignal(str, object, str)
+    save_requested = pyqtSignal(dict)
+    value_changed = pyqtSignal(str, object, str)
     movement_changed = pyqtSignal(str, object)
+    add_group_requested = pyqtSignal()
+    remove_group_requested = pyqtSignal(str)
+    set_current_requested = pyqtSignal(str)
+    move_to_requested = pyqtSignal(str, object)  # group_name, point_str or None
+
+    execute_requested  = pyqtSignal(str)   # group_name
+
 
     def __init__(self, parent=None):
         super().__init__("RobotSettings", parent)
@@ -41,6 +48,11 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.save_requested.connect(self._on_inner_save)
         self._settings_view.value_changed_signal.connect(self._on_inner_value_changed)
         self._movement_tab.values_changed.connect(self._on_inner_movement_changed)
+        self._movement_tab.add_group_requested.connect(self.add_group_requested)
+        self._movement_tab.remove_group_requested.connect(self.remove_group_requested)
+        self._movement_tab.set_current_requested.connect(self.set_current_requested)
+        self._movement_tab.move_to_requested.connect(self.move_to_requested)
+        self._movement_tab.execute_trajectory_requested.connect(self.execute_requested)
 
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)
@@ -54,8 +66,8 @@ class RobotSettingsView(IApplicationView):
     def load_config(self, config) -> None:
         self._settings_view.load(config)
 
-    def load_movement_groups(self, groups: dict) -> None:
-        self._movement_tab.load(groups)
+    def load_movement_groups(self, groups: dict, extra_defs: dict = None) -> None:
+        self._movement_tab.load(groups, extra_defs=extra_defs)
 
     def get_values(self) -> dict:
         return self._settings_view.get_values()
@@ -67,6 +79,26 @@ class RobotSettingsView(IApplicationView):
         if event.type() == QEvent.Type.LanguageChange:
             self.on_language_changed()
         super().changeEvent(event)
+
+    def add_movement_group(self, name: str, defn, group) -> None:
+        self._movement_tab.add_group(name, defn, group)
+
+    def remove_movement_group(self, name: str) -> None:
+        self._movement_tab.remove_group(name)
+
+    def get_group_widget(self, group_name: str):
+        return self._movement_tab.get_widget(group_name)
+
+    def _on_move_to(self, group_name: str, point_str) -> None:
+        if point_str is None:
+            # single-position group — use stored group position
+            fn = lambda: self._model.move_to_group(group_name)
+            label = f"Move To — {group_name}"
+        else:
+            # multi-position group — move to the selected point
+            fn = lambda: self._model.move_to_point(group_name, point_str)
+            label = f"Move To point in {group_name}"
+        self._run_blocking(fn=fn, label=label)
 
     def clean_up(self) -> None:
         pass

@@ -41,7 +41,6 @@ class ContourDetectionService:
         inside = filtered if spray_area_points is None else [
             c for c in filtered if self._all_inside(spray_area_points, c)
         ]
-
         if not inside:
             if self._publisher:
                 self._publisher.publish_latest_image(corrected)

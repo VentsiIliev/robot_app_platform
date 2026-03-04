@@ -4,7 +4,7 @@ import numpy as np
 from typing import Any, Dict, List, Optional
 
 from src.robot_systems.glue.domain.workpieces.model.glue_workpiece_filed import GlueWorkpieceField
-from src.robot_systems.glue.tools.enums.Gripper import Gripper
+
 from src.applications.workpiece_editor.editor_core.models.base_workpiece import BaseWorkpiece
 
 
@@ -15,7 +15,7 @@ class GlueWorkpiece(BaseWorkpiece):
         workpieceId: str,
         name: str,
         description: str,
-        gripperID: Gripper,
+        gripperID: int,
         glueType: str,
         contour,
         height: float,
@@ -98,7 +98,7 @@ class GlueWorkpiece(BaseWorkpiece):
             description  = data[F.DESCRIPTION.value],
             height       = data.get(F.HEIGHT.value, 4),
             glueQty      = data[F.GLUE_QTY.value],
-            gripperID    = Gripper(data[F.GRIPPER_ID.value]),
+            gripperID =     int(data.get(F.GRIPPER_ID.value, 0)),
             glueType     = data[F.GLUE_TYPE.value],
             contour      = data[F.CONTOUR.value],
             pickupPoint  = data.get(F.PICKUP_POINT.value),

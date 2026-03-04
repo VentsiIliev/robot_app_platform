@@ -14,7 +14,61 @@
     "+Y": true,
     "-Y": true
   },
-  "MOVEMENT_GROUPS": {},
+  "MOVEMENT_GROUPS": {
+    "JHFG": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": false
+    },
+    "SLOT 11 PICKUP": {
+      "velocity": 5,
+      "acceleration": 20,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "points": [
+        "[0.100, 0.000, 0.000, 0.000, 0.000, 0.000]",
+        "[0.200, 0.000, 0.000, 0.000, 0.000, 0.000]",
+        "[0.300, 0.000, 0.000, 0.000, 0.000, 0.000]",
+        "[0.400, 0.000, 0.000, 0.000, 0.000, 0.000]"
+      ]
+    },
+    "SLOT 11 DROPOFF": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true
+    },
+    "SLOT 12 PICKUP": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true
+    },
+    "SLOT 12 DROPOFF": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true
+    },
+    "CLEAN": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": true,
+      "has_trajectory_execution": true,
+      "points": [
+        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]",
+        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]",
+        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]"
+      ]
+    }
+  },
   "SAFETY_LIMITS": {
     "x_min": -500,
     "x_max": 500,

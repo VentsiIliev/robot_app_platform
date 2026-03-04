@@ -313,6 +313,9 @@ class WorkpieceLibraryView(IApplicationView):
         layout.addWidget(self._btn_delete)
         return w
 
+    def set_schema(self, schema: WorkpieceSchema) -> None:
+        self._schema = schema
+
     # ── Internal slots ────────────────────────────────────────────────
 
     def _on_open_in_editor(self) -> None:

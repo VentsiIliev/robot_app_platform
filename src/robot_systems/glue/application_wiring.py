@@ -13,6 +13,23 @@ _SYSTEM_DIR = os.path.dirname(os.path.abspath(__file__))
 _WORKPIECES_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
 _USERS_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
 
+def _get_tools(robot_system) -> list:
+    tc = robot_system._settings_service.get(SettingsID.TOOL_CHANGER_CONFIG)
+    return tc.get_tool_options() if tc else []
+
+
+def _build_tool_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.tool_settings import (
+        ToolSettingsFactory, ToolSettingsApplicationService,
+    )
+    service = ToolSettingsApplicationService(robot_system._settings_service)
+    return WidgetApplication(
+        widget_factory=lambda _ms: ToolSettingsFactory().build(service)
+    )
+
+
+
 
 def _build_workpiece_library_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
@@ -28,8 +45,12 @@ def _build_workpiece_library_application(robot_system):
         return catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
     repo = JsonWorkpieceRepository(_WORKPIECES_STORAGE)
-    service = GlueWorkpieceLibraryService(WorkpieceService(repo), glue_types_fn=_get_glue_types)
 
+    service = GlueWorkpieceLibraryService(
+        WorkpieceService(repo),
+        glue_types_fn=_get_glue_types,
+        tools_fn=lambda: _get_tools(robot_system),
+    )
     return WidgetApplication(
         widget_factory=lambda _ms: WorkpieceLibraryFactory().build(service, _ms)
     )
@@ -46,6 +67,14 @@ def _build_workpiece_editor_application(robot_system):
     settings_service = robot_system._settings_service
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
 
+    def _get_glue_types():
+        catalog = settings_service.get(SettingsID.GLUE_CATALOG)
+        return catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
+
+    def _get_tools():
+        tc = settings_service.get(SettingsID.TOOL_CHANGER_CONFIG)
+        return tc.get_tool_options() if tc else []
+
     catalog = settings_service.get(SettingsID.GLUE_CATALOG)
     glue_types = catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
@@ -55,8 +84,11 @@ def _build_workpiece_editor_application(robot_system):
         vision_service=vision_service,
         save_fn=lambda data: workpiece_service.save(data),
         update_fn=lambda sid, data: workpiece_service.update(sid, data),
-        form_schema=build_glue_workpiece_form_schema(glue_types),
-        segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(glue_types)),
+        form_schema=lambda: build_glue_workpiece_form_schema(  # ← lazy callable
+            glue_types=_get_glue_types(),
+            tools=_get_tools(),
+        ),
+        segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types())),
         id_exists_fn=workpiece_service.workpiece_id_exists,
     )
 
@@ -193,13 +225,16 @@ def _build_glue_cell_settings_application(robot_app):
 def _build_robot_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.robot_settings.robot_settings_factory import RobotSettingsFactory
-    from src.applications.robot_settings.service.robot_settings_application_service import \
-        RobotSettingsApplicationService
+    from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
+    from src.robot_systems.glue.service_ids import ServiceID
 
     service = RobotSettingsApplicationService(
         robot_app._settings_service,
-        config_key=SettingsID.ROBOT_CONFIG,
-        calibration_key=SettingsID.ROBOT_CALIBRATION,
+        config_key         = SettingsID.ROBOT_CONFIG,
+        calibration_key    = SettingsID.ROBOT_CALIBRATION,
+        robot_service      = robot_app.get_optional_service(ServiceID.ROBOT),
+        tool_settings_key  = SettingsID.TOOL_CHANGER_CONFIG,
+        navigation_service = robot_app.get_service(ServiceID.NAVIGATION),
     )
     return WidgetApplication(widget_factory=lambda _ms: RobotSettingsFactory().build(service))
 

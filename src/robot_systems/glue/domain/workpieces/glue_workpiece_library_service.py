@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 F = GlueWorkpieceField
 
-def build_glue_workpiece_library_schema(glue_types: List[str]) -> WorkpieceSchema:
+def build_glue_workpiece_library_schema(glue_types: List[str],tool_names) -> WorkpieceSchema:
     return WorkpieceSchema(
         id_key   = "id",
         name_key = F.NAME.value,
@@ -23,7 +23,7 @@ def build_glue_workpiece_library_schema(glue_types: List[str]) -> WorkpieceSchem
             WorkpieceFieldDescriptor(key="date",                label="Date",        table_display=True,  detail_display=True,  editable=False),
             WorkpieceFieldDescriptor(key=F.GLUE_TYPE.value,     label="Glue Type",   table_display=True,  detail_display=True,  editable=True,  widget="combo", options=glue_types),
             WorkpieceFieldDescriptor(key=F.HEIGHT.value,        label="Height (mm)", table_display=False, detail_display=True,  editable=True,  widget="text"),
-            WorkpieceFieldDescriptor(key=F.GRIPPER_ID.value,    label="Gripper",     table_display=False, detail_display=True,  editable=False),
+            WorkpieceFieldDescriptor(key=F.GRIPPER_ID.value,    label="Gripper",     table_display=False, detail_display=True,  editable=True, widget="combo",   options=tool_names),
             WorkpieceFieldDescriptor(key=F.DESCRIPTION.value,   label="Description", table_display=False, detail_display=True,  editable=True,  widget="text"),
         ],
     )
@@ -31,12 +31,16 @@ def build_glue_workpiece_library_schema(glue_types: List[str]) -> WorkpieceSchem
 
 class GlueWorkpieceLibraryService(IWorkpieceLibraryService):
 
-    def __init__(self, workpiece_service: IWorkpieceService, glue_types_fn: Callable[[], List[str]]):
+    def __init__(self, workpiece_service: IWorkpieceService,
+                 glue_types_fn: Callable[[], List[str]],
+                 tools_fn=None):
         self._service       = workpiece_service
         self._glue_types_fn = glue_types_fn   # called fresh each time get_schema() is invoked
+        self._tools_fn = tools_fn or (lambda: [])
 
     def get_schema(self) -> WorkpieceSchema:
-        return build_glue_workpiece_library_schema(self._glue_types_fn())
+        tool_names = [t.name for t in self._tools_fn()]
+        return build_glue_workpiece_library_schema(self._glue_types_fn(),tool_names)
 
 
     def list_all(self) -> List[WorkpieceRecord]:

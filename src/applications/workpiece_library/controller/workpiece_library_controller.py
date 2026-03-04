@@ -3,6 +3,7 @@ import logging
 from PyQt6.QtWidgets import QMessageBox
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.workpiece_library.domain import WorkpieceSchema
 from src.applications.workpiece_library.model.workpiece_library_model import WorkpieceLibraryModel
 from src.applications.workpiece_library.view.workpiece_library_view import WorkpieceLibraryView
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
@@ -39,11 +40,13 @@ class WorkpieceLibraryController(IApplicationController):
 
     # ── Handlers ──────────────────────────────────────────────────────
 
+
     def _refresh(self) -> None:
-        self._all_records = self._model.load()
+        self._all_records = self._model.load()  # already there
+        schema = self._model.get_schema()  # ← re-fetch schema fresh
+        self._view.set_schema(schema)  # ← new setter
         self._view.set_records(self._all_records)
         self._view.set_status(f"{len(self._all_records)} workpiece(s) loaded")
-        _logger.debug("WorkpieceLibrary refreshed — %d records", len(self._all_records))
 
     def _on_search(self, text: str) -> None:
         text = text.strip().lower()

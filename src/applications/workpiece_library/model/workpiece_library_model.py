@@ -43,3 +43,6 @@ class WorkpieceLibraryModel(IApplicationModel):
 
     def load_raw(self, storage_id: str) -> Optional[dict]:
         return self._service.load_raw(storage_id)
+
+    def get_schema(self) -> WorkpieceSchema:
+        return self._service.get_schema()  # calls _glue_types_fn() + _tools_fn() fresh
