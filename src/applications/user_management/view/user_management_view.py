@@ -63,6 +63,7 @@ class UserManagementView(IApplicationView):
                 item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._table.setItem(row, col, item)
         self._table.viewport().update()
+        self._on_selection_changed()
 
     def set_status(self, msg: str) -> None:
         self._status.setText(msg)
