@@ -5,6 +5,7 @@ from typing import Optional
 import cv2
 
 from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber import FrameGrabber
+from src.engine.vision.implementation.VisionSystem.core.camera.remote_camera import RemoteCamera
 from src.engine.vision.implementation.VisionSystem.core.path_resolver import get_path_resolver
 from src.engine.vision.implementation.VisionSystem.core.external_communication.system_state_management import (
     StateManager, ServiceState, MessagePublisher, SubscriptionManager,
@@ -60,7 +61,7 @@ class VisionSystem:
             messaging_service = self.messaging_service,
         )
 
-        # ── Calibration state ─────────────────────────────────────────────────
+        # ── Calibration state ────────────────────────────────────────────────
         self.threshold_by_area = "spray"
 
         if self.service.isCalibrated:
@@ -102,7 +103,8 @@ class VisionSystem:
             height = self.camera_settings.get_camera_height(),
         )
         self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
-        self.camera.set_auto_exposure(True)
+        self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
 
     def load_calibration_data(self) -> None:

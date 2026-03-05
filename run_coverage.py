@@ -51,7 +51,7 @@ def main() -> None:
         python, "-m", "coverage", "run",
         f"--source={args.module}",
         "--branch",                          # measure branch coverage too
-        "--omit=*/__pycache__/*,*/test_*",
+        # "--omit=*/__pycache__/*,*/test_*",
         "-m", "unittest", "discover",
         "-s", str(ROOT / "tests"),
         "-p", "test_*.py",
