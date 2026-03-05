@@ -1,0 +1,1 @@
+from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour

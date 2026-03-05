@@ -1,0 +1,9 @@
+Model Summary
+=============
+Model: robust_0.987
+Accuracy: 0.987
+Trained: 2025-12-04 09:50:02
+Features: unknown
+Feature Version: unknown
+Dataset: unknown
+Training pairs: unknown

@@ -1,0 +1,94 @@
+{
+  "model_info": {
+    "model_id": "model_20251204_095002",
+    "model_name": "robust_0.987",
+    "accuracy": 0.987280701754386,
+    "timestamp": "20251204_095002",
+    "training_date": "2025-12-04 09:50:02"
+  },
+  "feature_extraction": {},
+  "dataset_info": {
+    "total_contours": 800,
+    "total_pairs": 15200,
+    "positive_pairs": 7600,
+    "negative_pairs": 7600,
+    "dataset_config": {
+      "n_shapes": 8,
+      "n_scales": 5,
+      "n_variants": 5,
+      "n_noisy": 4,
+      "included_shapes": null,
+      "include_hard_negatives": true,
+      "img_size": [
+        256,
+        256
+      ],
+      "noise_level": 0.5,
+      "deform_strength": 0.01,
+      "epsilon_ratio": 0.01,
+      "min_scale": 0.5,
+      "max_scale": 3.0
+    }
+  },
+  "training_config": {
+    "dataset": {
+      "n_shapes": 8,
+      "n_scales": 5,
+      "n_variants": 5,
+      "n_noisy": 4,
+      "included_shapes": null,
+      "include_hard_negatives": true,
+      "img_size": [
+        256,
+        256
+      ],
+      "noise_level": 0.5,
+      "deform_strength": 0.01,
+      "epsilon_ratio": 0.01,
+      "min_scale": 0.5,
+      "max_scale": 3.0
+    },
+    "features": {
+      "n_fourier_descriptors": 6,
+      "n_curvature_bins": 20,
+      "use_parallel_processing": true,
+      "max_workers": null,
+      "feature_types": [
+        "hu_moments",
+        "fourier",
+        "geometric",
+        "curvature"
+      ]
+    },
+    "training": {
+      "test_size": 0.2,
+      "validation_size": 0.1,
+      "random_state": 42,
+      "batch_size": 500,
+      "enable_visualizations": true,
+      "save_intermediate_results": true,
+      "model_configs": [
+        "robust"
+      ],
+      "min_accuracy_threshold": 0.92,
+      "confidence_threshold": 0.8
+    },
+    "io": {
+      "models_dir": "production_models/20251204_094825/models",
+      "datasets_dir": "production_models/20251204_094825/datasets",
+      "results_dir": "production_models/20251204_094825/results",
+      "timestamp_format": "%Y%m%d_%H%M%S",
+      "model_name_template": "{model_type}_acc{accuracy:.3f}",
+      "save_model_metadata": true,
+      "save_training_history": true,
+      "compress_datasets": false,
+      "max_saved_models": 10,
+      "auto_cleanup": true
+    }
+  },
+  "compatibility": {
+    "required_features": "unknown",
+    "feature_version": "unknown",
+    "curvature_bins": "unknown"
+  }
+}
