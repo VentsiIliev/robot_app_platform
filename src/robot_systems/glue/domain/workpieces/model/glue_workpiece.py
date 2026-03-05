@@ -98,7 +98,7 @@ class GlueWorkpiece(BaseWorkpiece):
             description  = data[F.DESCRIPTION.value],
             height       = data.get(F.HEIGHT.value, 4),
             glueQty      = data[F.GLUE_QTY.value],
-            gripperID =     int(data.get(F.GRIPPER_ID.value, 0)),
+            gripperID    = _coerce_gripper_id(data.get(F.GRIPPER_ID.value, 0)),
             glueType     = data[F.GLUE_TYPE.value],
             contour      = data[F.CONTOUR.value],
             pickupPoint  = data.get(F.PICKUP_POINT.value),
@@ -136,6 +136,23 @@ class GlueWorkpiece(BaseWorkpiece):
 
 
 # ── Module-level helpers (not part of public API) ─────────────────────────────
+
+# Legacy workpieces stored the tool name string (e.g. "Single Gripper") instead
+# of the integer tool id.  Map known names to their ids from tool_changer.json.
+_LEGACY_GRIPPER_NAME_TO_ID: dict = {
+    "Single Gripper": 1,
+    "Double Gripper": 4,
+}
+
+
+def _coerce_gripper_id(raw) -> int:
+    if isinstance(raw, int):
+        return raw
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return _LEGACY_GRIPPER_NAME_TO_ID.get(str(raw), 0)
+
 
 def _to_n12(data) -> np.ndarray:
     if isinstance(data, np.ndarray):

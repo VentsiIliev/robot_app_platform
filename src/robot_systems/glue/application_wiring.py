@@ -13,6 +13,20 @@ _SYSTEM_DIR = os.path.dirname(os.path.abspath(__file__))
 _WORKPIECES_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
 _USERS_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
 
+def _build_contour_matching_tester(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.contour_matching_tester.contour_matching_tester_factory import ContourMatchingTesterFactory
+    from src.applications.contour_matching_tester.service.contour_matching_tester_service import ContourMatchingTesterService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+
+    service = ContourMatchingTesterService(
+        vision_service=robot_system.get_optional_service(ServiceID.VISION),
+        workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+    )
+    return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory().build(service, ms))
+
+
 def _get_tools(robot_system) -> list:
     tc = robot_system._settings_service.get(SettingsID.TOOL_CHANGER_CONFIG)
     return tc.get_tool_options() if tc else []

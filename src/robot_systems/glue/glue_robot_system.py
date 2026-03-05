@@ -57,7 +57,8 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",        factory=application_wiring._build_user_management_application),
             ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
-            ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application)
+            ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application),
+            ApplicationSpec(name="ContourMatchingTester", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_contour_matching_tester)
         ],
     )
 
@@ -68,8 +69,8 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.GLUE_CELLS,        GlueCellsConfigSerializer(),           "glue/cells.json"),
         SettingsSpec(SettingsID.GLUE_CATALOG,      GlueCatalogSerializer(),               "glue/catalog.json"),
         SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
-        SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS, CameraSettingsSerializer(),         "vision/camera_settings.json"),
-        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG, ToolChangerSettingsSerializer(), "tools/tool_changer.json"),
+        SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS,     CameraSettingsSerializer(),         "vision/camera_settings.json"),
+        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,    ToolChangerSettingsSerializer(),      "tools/tool_changer.json"),
 
     ]
 
