@@ -36,7 +36,7 @@ from src.shared_contracts.events.process_events import (
 
 def _ms():   return MagicMock()
 def _robot(): return MagicMock()
-
+def _navigation_service(): return MagicMock()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CleanProcess
@@ -136,18 +136,18 @@ class TestCleanProcessRequirements(unittest.TestCase):
 class TestPickAndPlaceProcessIdentity(unittest.TestCase):
 
     def test_process_id_is_pick_and_place(self):
-        p = PickAndPlaceProcess(robot_service=_robot(), messaging=_ms())
+        p = PickAndPlaceProcess(robot_service=_robot(), messaging=_ms(),navigation_service=_navigation_service())
         self.assertEqual(p.process_id, "pick_and_place")
 
     def test_initial_state_is_idle(self):
-        p = PickAndPlaceProcess(robot_service=_robot(), messaging=_ms())
+        p = PickAndPlaceProcess(robot_service=_robot(), messaging=_ms(),navigation_service=_navigation_service())
         self.assertEqual(p.state, ProcessState.IDLE)
 
 
 class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 
     def _make(self):
-        return PickAndPlaceProcess(robot_service=_robot(), messaging=_ms())
+        return PickAndPlaceProcess(robot_service=_robot(), messaging=_ms(),navigation_service=_navigation_service())
 
     def test_start_transitions_to_running(self):
         p = self._make()

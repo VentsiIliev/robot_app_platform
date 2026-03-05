@@ -67,6 +67,14 @@
         "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]",
         "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]"
       ]
+    },
+    "HOME": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]"
     }
   },
   "SAFETY_LIMITS": {

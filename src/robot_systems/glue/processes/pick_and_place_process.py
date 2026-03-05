@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
+from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.system.i_system_manager import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
@@ -17,6 +18,7 @@ class PickAndPlaceProcess(BaseProcess):
     def __init__(
             self,
             robot_service:   IRobotService,
+            navigation_service: GlueNavigationService,
             messaging:       IMessagingService,
             system_manager:  Optional[ISystemManager]        = None,
             requirements:    Optional[ProcessRequirements]   = None,
@@ -31,6 +33,7 @@ class PickAndPlaceProcess(BaseProcess):
             service_checker = service_checker,
         )
         self._robot              = robot_service
+        self.navigation_service = navigation_service
         self._simulation_duration = simulation_duration_s
         self._sim_timer: Optional[threading.Timer] = None
 
@@ -41,6 +44,7 @@ class PickAndPlaceProcess(BaseProcess):
         self._sim_timer = threading.Timer(self._simulation_duration, self._simulation_complete)
         self._sim_timer.daemon = True
         self._sim_timer.start()
+        self.navigation_service.move_home()
 
     def _on_stop(self) -> None:
         self._cancel_timer()

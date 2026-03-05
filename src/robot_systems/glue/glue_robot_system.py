@@ -151,6 +151,7 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
         from src.robot_systems.glue.processes.glue_process import GlueProcess
         from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
+        from src.robot_systems.glue.navigation import GlueNavigationService
 
         glue_process_requirements    = ProcessRequirements.requires(ServiceID.ROBOT,ServiceID.MOTOR,ServiceID.VISION)
         pick_and_place_process_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
@@ -162,6 +163,7 @@ class GlueRobotSystem(BaseRobotSystem):
         return GlueOperationCoordinator(
             glue_process = GlueProcess(
                 robot_service   = self._robot,
+                navigation_service = self._navigation,
                 messaging       = self._messaging_service,
                 system_manager  = self._system_manager,
                 requirements    = glue_process_requirements,
@@ -169,6 +171,7 @@ class GlueRobotSystem(BaseRobotSystem):
             ),
             pick_and_place_process = PickAndPlaceProcess(
                 robot_service   = self._robot,
+                navigation_service = self._navigation,
                 messaging       = self._messaging_service,
                 system_manager  = self._system_manager,
                 requirements    = pick_and_place_process_requirements,

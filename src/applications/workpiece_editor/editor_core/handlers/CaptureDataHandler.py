@@ -8,7 +8,7 @@ from contour_editor.models.segment import Layer, Segment
 
 
 class CaptureDataHandler:
-    WORKPIECE_LAYER = "Workpiece"
+    WORKPIECE_LAYER = "Main"
     CONTOUR_LAYER = "Contour"
     FILL_LAYER = "Fill"
 

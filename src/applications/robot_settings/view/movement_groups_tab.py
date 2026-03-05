@@ -407,15 +407,17 @@ class MovementGroupWidget(QWidget):
         edit_btn.clicked.connect(self._on_edit_single_position)
         row_layout.addWidget(edit_btn)
 
-        for label, signal in [
-            ("Set Current", self.set_current_requested),
-            ("Move To", self.move_to_requested),
-        ]:
-            btn = QPushButton(label)
-            btn.setStyleSheet(_ACTION_BTN_STYLE)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda _, s=signal: s.emit(self._name, None))  # None = use group position
-            row_layout.addWidget(btn)
+        set_btn = QPushButton("Set Current")
+        set_btn.setStyleSheet(_ACTION_BTN_STYLE)
+        set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_btn.clicked.connect(self._on_set_current_clicked)
+        row_layout.addWidget(set_btn)
+
+        move_btn = QPushButton("Move To")
+        move_btn.setStyleSheet(_ACTION_BTN_STYLE)
+        move_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        move_btn.clicked.connect(self._on_move_to_clicked)
+        row_layout.addWidget(move_btn)
 
         layout.addWidget(row)
         return section
@@ -483,7 +485,13 @@ class MovementGroupWidget(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             on_accept(dlg.get_position_str())
 
-    def _on_edit_single_position(self):
+    def _on_set_current_clicked(self) -> None:
+        self.set_current_requested.emit(self._name)
+
+    def _on_move_to_clicked(self) -> None:
+        self.move_to_requested.emit(self._name, None)
+
+    def _on_edit_single_position(self) -> None:
         current = self._position_display.text() if self._position_display else ""
         self._open_editor(
             f"Edit Position — {self._name}",

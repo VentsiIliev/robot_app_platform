@@ -89,6 +89,16 @@ class MovementGroup:
             has_trajectory_execution=data.get("has_trajectory_execution", False),
         )
 
+    def parse_position(self) -> Optional[List[float]]:
+        if self.position is None:
+            return None
+        import json
+        return [float(v) for v in json.loads(self.position)]
+
+    def parse_points(self) -> List[List[float]]:
+        import json
+        return [[float(v) for v in json.loads(p)] for p in self.points]
+
     def to_dict(self) -> Dict:
         result = {
             "velocity": self.velocity,

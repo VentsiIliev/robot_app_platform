@@ -56,7 +56,7 @@ class CalibrationController(IApplicationController):
     # ── Bridge → View (main thread) ───────────────────────────────────
 
     def _on_camera_frame(self, frame) -> None:
-        if self._active:
+        if self._active and frame is not None:  # ← add `and frame is not None`
             self._view.update_camera_view(frame)
 
     # ── View → Model ──────────────────────────────────────────────────

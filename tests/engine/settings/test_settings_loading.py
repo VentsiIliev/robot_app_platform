@@ -55,8 +55,8 @@ class TestRobotSettingsSerialiser(unittest.TestCase):
         self.assertIn("HOME", restored.movement_groups)
         self.assertEqual(restored.movement_groups["HOME"].velocity, 30)
         self.assertEqual(
-            restored.movement_groups["HOME"].parse_position(),
-            [100.0, 0.0, 300.0, 180.0, 0.0, 0.0]
+            restored.movement_groups["HOME"].position,
+            "[100.0, 0.0, 300.0, 180.0, 0.0, 0.0]",
         )
 
     def test_safety_limits_round_trip(self):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional
 
+from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.system import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
@@ -18,6 +19,7 @@ class GlueProcess(BaseProcess):
     def __init__(
         self,
         robot_service:   IRobotService,
+        navigation_service: GlueNavigationService,
         messaging:       IMessagingService,
         system_manager:     Optional[ISystemManager]   = None,
         requirements:    Optional[ProcessRequirements]   = None,
@@ -31,11 +33,13 @@ class GlueProcess(BaseProcess):
             service_checker = service_checker,
         )
         self._robot = robot_service
+        self.navigation_service = navigation_service
 
     # ── BaseProcess hooks ─────────────────────────────────────────────
 
     def _on_start(self) -> None:
         self._robot.enable_robot()
+        self.navigation_service.move_to_calibration_position()
 
     def _on_stop(self) -> None:
         self._robot.stop_motion()

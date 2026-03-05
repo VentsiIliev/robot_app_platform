@@ -143,5 +143,80 @@ class TestRobotSettingsApplicationService(unittest.TestCase):
         ss.save.assert_called_once_with("robot_calibration", calib)
 
 
+class TestRobotSettingsModelMotionDelegation(unittest.TestCase):
+
+    def _loaded(self):
+        service = _make_service()
+        model   = RobotSettingsModel(service)
+        model.load()
+        return model, service
+
+    def test_get_current_position_delegates(self):
+        model, service = self._loaded()
+        service.get_current_position.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        self.assertEqual(model.get_current_position(), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        service.get_current_position.assert_called_once()
+
+    def test_get_slot_info_delegates(self):
+        model, service = self._loaded()
+        service.get_slot_info.return_value = [(1, "Grip"), (2, None)]
+        self.assertEqual(model.get_slot_info(), [(1, "Grip"), (2, None)])
+
+    def test_move_to_group_delegates(self):
+        model, service = self._loaded()
+        service.move_to_group.return_value = True
+        self.assertTrue(model.move_to_group("HOME"))
+        service.move_to_group.assert_called_once_with("HOME")
+
+    def test_execute_group_delegates(self):
+        model, service = self._loaded()
+        service.execute_group.return_value = True
+        self.assertTrue(model.execute_group("TRAJ"))
+        service.execute_group.assert_called_once_with("TRAJ")
+
+    def test_move_to_point_delegates(self):
+        model, service = self._loaded()
+        service.move_to_point.return_value = True
+        self.assertTrue(model.move_to_point("HOME", "[0,0,0,0,0,0]"))
+        service.move_to_point.assert_called_once_with("HOME", "[0,0,0,0,0,0]")
+
+
+class TestRobotSettingsModelExpectedMovementGroups(unittest.TestCase):
+
+    def _loaded(self, config=None):
+        cfg     = config or RobotSettings()
+        service = _make_service(config=cfg)
+        service.get_slot_info.return_value = []
+        model   = RobotSettingsModel(service)
+        model.load()
+        return model, service
+
+    def test_returns_existing_groups(self):
+        cfg = RobotSettings()
+        cfg.movement_groups = {"HOME": MovementGroup(velocity=50)}
+        model, _ = self._loaded(cfg)
+        self.assertIn("HOME", model.get_expected_movement_groups())
+
+    def test_adds_pickup_and_dropoff_for_assigned_tool(self):
+        model, service = self._loaded()
+        service.get_slot_info.return_value = [(1, "Gripper")]
+        result = model.get_expected_movement_groups()
+        self.assertIn("SLOT 1 PICKUP",  result)
+        self.assertIn("SLOT 1 DROPOFF", result)
+
+    def test_skips_slot_with_no_tool(self):
+        model, service = self._loaded()
+        service.get_slot_info.return_value = [(1, None)]
+        result = model.get_expected_movement_groups()
+        self.assertNotIn("SLOT 1 PICKUP", result)
+
+    def test_does_not_overwrite_existing_slot_group(self):
+        cfg = RobotSettings()
+        cfg.movement_groups["SLOT 1 PICKUP"] = MovementGroup(velocity=99)
+        model, service = self._loaded(cfg)
+        service.get_slot_info.return_value = [(1, "Gripper")]
+        result = model.get_expected_movement_groups()
+        self.assertEqual(result["SLOT 1 PICKUP"].velocity, 99)
+
 if __name__ == "__main__":
     unittest.main()

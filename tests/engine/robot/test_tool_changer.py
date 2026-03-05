@@ -1,7 +1,9 @@
 import unittest
 
+from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig, ToolChanger
 
+tools = [ToolDefinition(id=1,name="Tool1"),ToolDefinition(id=2,name="Tool2"),ToolDefinition(id=3,name="Tool3"),]
 
 class TestToolChanger(unittest.TestCase):
 
@@ -10,7 +12,9 @@ class TestToolChanger(unittest.TestCase):
             SlotConfig(id=10, tool_id=0),
             SlotConfig(id=11, tool_id=1),
             SlotConfig(id=12, tool_id=2),
-        ])
+        ],
+            tools=tools
+        )
 
     def test_get_slot_id_by_tool_id_found(self):
         tc = self._make()

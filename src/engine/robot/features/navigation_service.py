@@ -34,6 +34,8 @@ class NavigationService:
                 wait_to_reach=True,
             )
         except Exception:
+            import traceback
+            traceback.print_exc()
             self._logger.exception("move_to_group('%s') failed", group_name)
             return False
 
