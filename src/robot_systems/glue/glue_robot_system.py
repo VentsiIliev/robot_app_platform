@@ -47,8 +47,8 @@ class GlueRobotSystem(BaseRobotSystem):
         ],
         applications=[
             ApplicationSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=application_wiring._build_dashboard_application),
-            ApplicationSpec(name="RobotSettings",   folder_id=2, icon="fa5s.robot",            factory=application_wiring._build_robot_settings_application),
-            ApplicationSpec(name="GlueSettings",    folder_id=2, icon="fa5s.sliders-h",        factory=application_wiring._build_glue_settings_application),
+            ApplicationSpec(name="RobotSettings",   folder_id=2, icon="mdi.robot-industrial",            factory=application_wiring._build_robot_settings_application),
+            ApplicationSpec(name="GlueSettings",    folder_id=2, icon="ph.drop-light",        factory=application_wiring._build_glue_settings_application),
             ApplicationSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="CellSettings",    folder_id=2, icon="fa5s.weight",           factory=application_wiring._build_glue_cell_settings_application),
             ApplicationSpec(name="CameraSettings",  folder_id=2, icon="fa5s.camera",          factory=application_wiring._build_camera_settings_application),
