@@ -9,9 +9,9 @@ from src.applications.contour_matching_tester.service.contour_matching_tester_se
 
 class ContourMatchingTesterApplication(IApplication):
 
-    def __init__(self, vision_service=None, workpiece_repository=None):
+    def __init__(self, vision_service=None, workpiece_service=None):
         self._logger  = logging.getLogger(self.__class__.__name__)
-        self._service = ContourMatchingTesterService(vision_service, workpiece_repository)
+        self._service = ContourMatchingTesterService(vision_service, workpiece_service)
 
     def register(self, messaging_service: IMessagingService) -> None:
         self._logger.debug("ContourMatchingTesterApplication registered")

@@ -80,7 +80,7 @@ class GlueWorkpiece(BaseWorkpiece):
             GlueWorkpieceField.WORKPIECE_ID.value:  self.workpieceId,
             GlueWorkpieceField.NAME.value:          self.name,
             GlueWorkpieceField.DESCRIPTION.value:   self.description,
-            GlueWorkpieceField.GRIPPER_ID.value:    self.gripperID.value if hasattr(self.gripperID, "value") else self.gripperID,
+            GlueWorkpieceField.GRIPPER_ID.value:    self.gripperID,
             GlueWorkpieceField.GLUE_TYPE.value:     self.glueType,
             GlueWorkpieceField.CONTOUR.value:       self.contour,
             GlueWorkpieceField.HEIGHT.value:        self.height,
@@ -92,18 +92,20 @@ class GlueWorkpiece(BaseWorkpiece):
     @staticmethod
     def from_dict(data: dict) -> GlueWorkpiece:
         F = GlueWorkpieceField
-        return GlueWorkpiece(
+        wp = GlueWorkpiece(
             workpieceId  = data[F.WORKPIECE_ID.value],
             name         = data[F.NAME.value],
             description  = data[F.DESCRIPTION.value],
             height       = data.get(F.HEIGHT.value, 4),
             glueQty      = data[F.GLUE_QTY.value],
-            gripperID    = _coerce_gripper_id(data.get(F.GRIPPER_ID.value, 0)),
+            gripperID    = int(data[F.GRIPPER_ID.value]),
             glueType     = data[F.GLUE_TYPE.value],
             contour      = data[F.CONTOUR.value],
             pickupPoint  = data.get(F.PICKUP_POINT.value),
             sprayPattern = data.get(F.SPRAY_PATTERN.value, {}),
         )
+        print(f"GlueWorkpiece.from_dict: {wp}")
+        return wp
 
     @staticmethod
     def serialize(workpiece: GlueWorkpiece) -> dict:
@@ -135,23 +137,6 @@ class GlueWorkpiece(BaseWorkpiece):
         return wp
 
 
-# ── Module-level helpers (not part of public API) ─────────────────────────────
-
-# Legacy workpieces stored the tool name string (e.g. "Single Gripper") instead
-# of the integer tool id.  Map known names to their ids from tool_changer.json.
-_LEGACY_GRIPPER_NAME_TO_ID: dict = {
-    "Single Gripper": 1,
-    "Double Gripper": 4,
-}
-
-
-def _coerce_gripper_id(raw) -> int:
-    if isinstance(raw, int):
-        return raw
-    try:
-        return int(raw)
-    except (ValueError, TypeError):
-        return _LEGACY_GRIPPER_NAME_TO_ID.get(str(raw), 0)
 
 
 def _to_n12(data) -> np.ndarray:

@@ -1,75 +1,153 @@
 from typing import Optional
 
+import cv2
 import numpy as np
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QVBoxLayout, QLabel,
-    QListWidget, QPushButton, QTextEdit, QWidget, QSizePolicy,
+    QHBoxLayout, QVBoxLayout, QLabel, QFrame,
+    QListWidget, QPushButton, QWidget, QSizePolicy,
+    QTableWidget, QTableWidgetItem, QHeaderView,
 )
 
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, TEXT_COLOR,
+    PRIMARY, PRIMARY_LIGHT,
+)
+from pl_gui.utils.utils_widgets.clickable_label import ClickableLabel
 from src.applications.base.i_application_view import IApplicationView
 
-_DARK_BG   = "#1e1e1e"
-_PANEL_BG  = "#2a2a2a"
-_ACCENT    = "#0078d4"
-_TEXT      = "#e0e0e0"
-_MUTED     = "#888888"
-_BTN_STYLE = (
-    "QPushButton {"
-    f"  background:{_ACCENT}; color:#fff; border:none;"
-    "  border-radius:4px; padding:8px 16px; font-size:13px;"
-    "}"
-    "QPushButton:hover  { background:#1a8fe8; }"
-    "QPushButton:pressed { background:#005fa3; }"
-    "QPushButton:disabled { background:#444; color:#777; }"
-)
-_LIST_STYLE = (
-    f"QListWidget {{ background:{_PANEL_BG}; color:{_TEXT}; border:1px solid #444;"
-    f"  border-radius:4px; font-size:12px; }}"
-    f"QListWidget::item:selected {{ background:{_ACCENT}; }}"
-)
-_TEXT_STYLE = (
-    f"QTextEdit {{ background:{_PANEL_BG}; color:{_TEXT}; border:1px solid #444;"
-    f"  border-radius:4px; font-size:12px; font-family:monospace; }}"
-)
+_LIST_STYLE = f"""
+QListWidget {{
+    background: white;
+    color: {TEXT_COLOR};
+    border: 1px solid {BORDER};
+    border-radius: 4px;
+    font-size: 12px;
+}}
+QListWidget::item:selected {{ background: #EDE7F6; color: {TEXT_COLOR}; }}
+"""
+
+_TABLE_STYLE = """
+QTableWidget {
+    background: white;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    gridline-color: #F0F0F0;
+    font-size: 9pt;
+}
+QHeaderView::section {
+    background: #EDE7F6;
+    color: #1A1A2E;
+    font-weight: bold;
+    font-size: 9pt;
+    padding: 6px 4px;
+    border: none;
+    border-bottom: 1px solid #D0C8E0;
+}
+QTableWidget::item { padding: 4px; }
+QTableWidget::item:selected { background: rgba(144,91,169,0.15); color: #1A1A2E; }
+"""
+
+_CAPTURE_BTN_STYLE = f"""
+QPushButton {{
+    background-color: white;
+    color: {PRIMARY};
+    border: 2px solid {PRIMARY};
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-size: 10pt;
+    font-weight: bold;
+    min-height: 32px;
+}}
+QPushButton:hover   {{ background-color: {PRIMARY_LIGHT}; }}
+QPushButton:pressed {{ background-color: {PRIMARY_LIGHT}; }}
+"""
+
+_CAPTURE_ACTIVE_BTN_STYLE = f"""
+QPushButton {{
+    background-color: {PRIMARY};
+    color: white;
+    border: 2px solid {PRIMARY};
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-size: 10pt;
+    font-weight: bold;
+    min-height: 32px;
+}}
+QPushButton:hover   {{ background-color: #7A4E9A; }}
+QPushButton:pressed {{ background-color: #6B3E8B; }}
+"""
+
+_STATUS_LIVE_STYLE     = "color: #2E7D32; font-size: 9pt; font-weight: bold; background: transparent;"
+_STATUS_CAPTURED_STYLE = "color: #905BA9; font-size: 9pt; font-weight: bold; background: transparent;"
+
+_SUMMARY_OK_STYLE   = "color: #2E7D32; font-size: 11pt; font-weight: bold; background: transparent;"
+_SUMMARY_WARN_STYLE = "color: #C62828; font-size: 11pt; font-weight: bold; background: transparent;"
+_SUMMARY_IDLE_STYLE = "color: #888; font-size: 10pt; background: transparent;"
+
+_THUMB_IDLE_STYLE   = "color: #aaa; font-size: 9pt; background: transparent; border: none;"
+_THUMB_NAME_STYLE   = f"color: {TEXT_COLOR}; font-size: 9pt; font-weight: bold; background: transparent; border: none;"
+
+_COLOR_HIGH = QColor("#E8F5E9")
+_COLOR_MED  = QColor("#FFF9C4")
+_COLOR_LOW  = QColor("#FFEBEE")
+
+_COLS = ["#", "Workpiece", "Orientation", "Confidence", "Result"]
+_THUMB_SIZE = 140
 
 
 class ContourMatchingTesterView(IApplicationView):
 
     load_workpieces_requested = pyqtSignal()
     match_requested           = pyqtSignal()
+    capture_requested         = pyqtSignal()
+    workpiece_selected        = pyqtSignal(int)   # row index
 
     def __init__(self, parent=None):
         self._current_frame: Optional[np.ndarray] = None
         super().__init__("ContourMatchingTester", parent)
 
     def setup_ui(self) -> None:
-        self.setStyleSheet(f"background:{_DARK_BG}; color:{_TEXT};")
-
+        self.setStyleSheet(f"background-color: {BG_COLOR};")
         root = QHBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
-
         root.addWidget(self._build_camera_panel(), stretch=3)
         root.addWidget(self._build_control_panel(), stretch=1)
 
-    # ── Panel builders ────────────────────────────────────────────────────
+    # ── Panel builders ────────────────────────────────────────────────────────
 
     def _build_camera_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background:{_PANEL_BG}; border-radius:6px;")
+        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
 
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
         header = QLabel("Camera Feed")
-        header.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:bold;")
-        layout.addWidget(header)
+        header.setStyleSheet(LABEL_STYLE)
+        header_row.addWidget(header)
+        header_row.addStretch()
 
-        self._feed_label = QLabel("No camera feed")
+        self._status_label = QLabel("● LIVE")
+        self._status_label.setStyleSheet(_STATUS_LIVE_STYLE)
+        header_row.addWidget(self._status_label)
+
+        self._capture_btn = QPushButton("Capture")
+        self._capture_btn.setStyleSheet(_CAPTURE_BTN_STYLE)
+        self._capture_btn.clicked.connect(self._on_capture_clicked)
+        header_row.addWidget(self._capture_btn)
+
+        layout.addLayout(header_row)
+
+        self._feed_label = ClickableLabel()
         self._feed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._feed_label.setStyleSheet(f"color:{_MUTED}; background:#111; border-radius:4px;")
+        self._feed_label.setStyleSheet(
+            f"color: #888; background: white; border: 1px solid {BORDER}; border-radius: 4px;"
+        )
         self._feed_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._feed_label.setMinimumSize(320, 240)
         layout.addWidget(self._feed_label)
@@ -78,96 +156,197 @@ class ContourMatchingTesterView(IApplicationView):
 
     def _build_control_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background:{_PANEL_BG}; border-radius:6px;")
+        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        # — Workpieces section —
+        # ── Workpieces ──
         wp_header = QLabel("Workpieces")
-        wp_header.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:bold;")
+        wp_header.setStyleSheet(LABEL_STYLE)
         layout.addWidget(wp_header)
 
         self._load_btn = QPushButton("Load Workpieces")
-        self._load_btn.setStyleSheet(_BTN_STYLE)
+        self._load_btn.setStyleSheet(ACTION_BTN_STYLE)
         self._load_btn.clicked.connect(self._on_load_clicked)
         layout.addWidget(self._load_btn)
 
         self._workpiece_list = QListWidget()
         self._workpiece_list.setStyleSheet(_LIST_STYLE)
-        self._workpiece_list.setMaximumHeight(180)
+        self._workpiece_list.setMaximumHeight(120)
+        self._workpiece_list.currentRowChanged.connect(self._on_workpiece_row_changed)
         layout.addWidget(self._workpiece_list)
 
-        # — Matching section —
+        # ── Thumbnail preview ──
+        thumb_frame = QFrame()
+        thumb_frame.setStyleSheet(
+            f"QFrame {{ background: white; border: 1px solid {BORDER}; border-radius: 6px; }}"
+        )
+        thumb_layout = QVBoxLayout(thumb_frame)
+        thumb_layout.setContentsMargins(6, 6, 6, 6)
+        thumb_layout.setSpacing(4)
+
+        self._thumb_name_label = QLabel("Click a workpiece to preview")
+        self._thumb_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._thumb_name_label.setStyleSheet(_THUMB_IDLE_STYLE)
+        thumb_layout.addWidget(self._thumb_name_label)
+
+        self._thumb_img_label = QLabel()
+        self._thumb_img_label.setFixedSize(_THUMB_SIZE, _THUMB_SIZE)
+        self._thumb_img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._thumb_img_label.setStyleSheet(
+            f"background: {BG_COLOR}; border: none;"
+        )
+        thumb_layout.addWidget(self._thumb_img_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        layout.addWidget(thumb_frame)
+
+        # ── Matching ──
         match_header = QLabel("Matching")
-        match_header.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:bold;")
+        match_header.setStyleSheet(LABEL_STYLE)
         layout.addWidget(match_header)
 
         self._match_btn = QPushButton("Match")
-        self._match_btn.setStyleSheet(_BTN_STYLE)
+        self._match_btn.setStyleSheet(ACTION_BTN_STYLE)
         self._match_btn.clicked.connect(self._on_match_clicked)
         layout.addWidget(self._match_btn)
 
-        results_label = QLabel("Results")
-        results_label.setStyleSheet(f"color:{_MUTED}; font-size:11px; font-weight:bold;")
-        layout.addWidget(results_label)
+        # ── Results ──
+        results_header = QLabel("Results")
+        results_header.setStyleSheet(LABEL_STYLE)
+        layout.addWidget(results_header)
 
-        self._results_text = QTextEdit()
-        self._results_text.setReadOnly(True)
-        self._results_text.setStyleSheet(_TEXT_STYLE)
-        self._results_text.setPlaceholderText("Run matching to see results…")
-        layout.addWidget(self._results_text, stretch=1)
+        self._summary_label = QLabel("Run matching to see results")
+        self._summary_label.setStyleSheet(_SUMMARY_IDLE_STYLE)
+        self._summary_label.setWordWrap(True)
+        layout.addWidget(self._summary_label)
+
+        self._results_table = QTableWidget(0, len(_COLS))
+        self._results_table.setHorizontalHeaderLabels(_COLS)
+        self._results_table.setStyleSheet(_TABLE_STYLE)
+        self._results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._results_table.verticalHeader().setVisible(False)
+        hdr = self._results_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self._results_table, stretch=1)
 
         return panel
 
-    # ── Inbound setters ───────────────────────────────────────────────────
+    # ── Inbound setters ───────────────────────────────────────────────────────
 
-    def set_camera_frame(self, frame: Optional[np.ndarray]) -> None:
-        self._current_frame = frame
-        if frame is None:
-            self._feed_label.setText("No camera feed")
+    def update_camera_view(self, image: np.ndarray) -> None:
+        if self._feed_label is None:
             return
-        rgb = frame[:, :, ::-1].copy()
+        rgb  = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
-        qimg = QImage(rgb.tobytes(), w, h, ch * w, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(qimg).scaled(
-            self._feed_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.FastTransformation,
-        )
-        self._feed_label.setPixmap(pixmap)
+        qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+        self._feed_label.set_frame(QPixmap.fromImage(qimg))
+
+    def set_capture_state(self, captured: bool) -> None:
+        if captured:
+            self._status_label.setText("⏸ CAPTURED")
+            self._status_label.setStyleSheet(_STATUS_CAPTURED_STYLE)
+            self._capture_btn.setText("Resume")
+            self._capture_btn.setStyleSheet(_CAPTURE_ACTIVE_BTN_STYLE)
+        else:
+            self._status_label.setText("● LIVE")
+            self._status_label.setStyleSheet(_STATUS_LIVE_STYLE)
+            self._capture_btn.setText("Capture")
+            self._capture_btn.setStyleSheet(_CAPTURE_BTN_STYLE)
 
     def set_workpieces(self, workpieces: list) -> None:
         self._workpiece_list.clear()
         for wp in workpieces:
             self._workpiece_list.addItem(getattr(wp, "name", str(wp)))
-        self._results_text.clear()
+        self._results_table.setRowCount(0)
+        self._summary_label.setText("Run matching to see results")
+        self._summary_label.setStyleSheet(_SUMMARY_IDLE_STYLE)
+        self._clear_thumbnail()
+
+    def show_thumbnail(self, name: str, thumbnail_bytes: Optional[bytes]) -> None:
+        self._thumb_name_label.setText(name or "Unknown")
+        self._thumb_name_label.setStyleSheet(_THUMB_NAME_STYLE)
+        if thumbnail_bytes:
+            pixmap = QPixmap()
+            pixmap.loadFromData(thumbnail_bytes)
+            scaled = pixmap.scaled(
+                _THUMB_SIZE, _THUMB_SIZE,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._thumb_img_label.setPixmap(scaled)
+            self._thumb_img_label.setText("")
+        else:
+            self._thumb_img_label.setPixmap(QPixmap())
+            self._thumb_img_label.setText("No preview")
+            self._thumb_img_label.setStyleSheet(f"color: #aaa; background: {BG_COLOR}; border: none;")
 
     def set_match_results(self, results: dict, no_match_count: int) -> None:
         wps          = results.get("workpieces", [])
         orientations = results.get("orientations", [])
         confidences  = results.get("mlConfidences", [])
+        ml_results   = results.get("mlResults", [])
+        matched      = len(wps)
 
-        lines = [
-            f"Matched: {len(wps)}   Unmatched: {no_match_count}",
-            "─" * 34,
-        ]
+        if matched == 0 and no_match_count == 0:
+            self._summary_label.setText("No contours detected")
+            self._summary_label.setStyleSheet(_SUMMARY_IDLE_STYLE)
+        elif no_match_count == 0:
+            self._summary_label.setText(f"✓  All {matched} contour(s) matched")
+            self._summary_label.setStyleSheet(_SUMMARY_OK_STYLE)
+        else:
+            self._summary_label.setText(f"✓ {matched} matched     ✗ {no_match_count} unmatched")
+            style = _SUMMARY_OK_STYLE if matched >= no_match_count else _SUMMARY_WARN_STYLE
+            self._summary_label.setStyleSheet(style)
+
+        self._results_table.clearSpans()
+        self._results_table.setRowCount(matched)
+
         for i, (wp, orient) in enumerate(zip(wps, orientations)):
-            name = getattr(wp, "name", f"WP {i}")
-            conf = confidences[i] if i < len(confidences) else 0.0
-            lines.append(f"[{i}]  {name}")
-            lines.append(f"     orient = {orient:.1f}°   conf = {conf:.1f}%")
+            name   = getattr(wp, "name", f"WP {i}")
+            conf   = confidences[i] if i < len(confidences) else 0.0
+            result = ml_results[i]  if i < len(ml_results)  else ""
+            color  = _COLOR_HIGH if conf >= 80 else (_COLOR_MED if conf >= 50 else _COLOR_LOW)
 
-        if not wps:
-            lines.append("No matches found.")
+            for col, text, align in (
+                (0, f"#{i}",          Qt.AlignmentFlag.AlignCenter),
+                (1, name,             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                (2, f"{orient:.1f}°", Qt.AlignmentFlag.AlignCenter),
+                (3, f"{conf:.1f}%",   Qt.AlignmentFlag.AlignCenter),
+                (4, result or "—",    Qt.AlignmentFlag.AlignCenter),
+            ):
+                item = QTableWidgetItem(text)
+                item.setTextAlignment(align)
+                item.setBackground(color)
+                self._results_table.setItem(i, col, item)
 
-        self._results_text.setPlainText("\n".join(lines))
+        if matched == 0:
+            self._results_table.setRowCount(1)
+            item = QTableWidgetItem("No matches found")
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setForeground(QColor("#888888"))
+            self._results_table.setItem(0, 0, item)
+            self._results_table.setSpan(0, 0, 1, len(_COLS))
 
     def set_matching_busy(self, busy: bool) -> None:
         self._match_btn.setEnabled(not busy)
         self._match_btn.setText("Matching…" if busy else "Match")
 
-    # ── Inner forwarders — named methods only, no lambdas ─────────────────
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    def _clear_thumbnail(self) -> None:
+        self._thumb_name_label.setText("Click a workpiece to preview")
+        self._thumb_name_label.setStyleSheet(_THUMB_IDLE_STYLE)
+        self._thumb_img_label.setPixmap(QPixmap())
+        self._thumb_img_label.setText("")
+        self._thumb_img_label.setStyleSheet(f"background: {BG_COLOR}; border: none;")
+
+    # ── Outbound forwarders ───────────────────────────────────────────────────
 
     def _on_load_clicked(self) -> None:
         self.load_workpieces_requested.emit()
@@ -175,7 +354,12 @@ class ContourMatchingTesterView(IApplicationView):
     def _on_match_clicked(self) -> None:
         self.match_requested.emit()
 
-    # ── AppWidget hooks ───────────────────────────────────────────────────
+    def _on_capture_clicked(self) -> None:
+        self.capture_requested.emit()
+
+    def _on_workpiece_row_changed(self, row: int) -> None:
+        if row >= 0:
+            self.workpiece_selected.emit(row)
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:
@@ -184,4 +368,3 @@ class ContourMatchingTesterView(IApplicationView):
 
     def clean_up(self) -> None:
         pass
-

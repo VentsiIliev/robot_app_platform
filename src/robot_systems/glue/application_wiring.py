@@ -43,8 +43,6 @@ def _build_tool_settings_application(robot_system):
     )
 
 
-
-
 def _build_workpiece_library_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.workpiece_library.workpiece_library_factory import WorkpieceLibraryFactory
@@ -92,7 +90,7 @@ def _build_workpiece_editor_application(robot_system):
     catalog = settings_service.get(SettingsID.GLUE_CATALOG)
     glue_types = catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
-    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
+    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE),tool_provider=_get_tools)
 
     service = WorkpieceEditorService(
         vision_service=vision_service,
