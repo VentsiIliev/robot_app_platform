@@ -52,7 +52,7 @@ def print_pose_explained(pose_matrix):
     _logger.info(f"Yaw   (rotation around Z) = {yaw:.2f}°")
 
 
-    _logger.info("\nCamera looks DOWN the -Z axis of its coordinate system.")
+    _logger.info("\nCamera looks DOWN the -Z axis of its coordinate vision_service.")
 
     _logger.info("Positive tz means chessboard is in front of the camera.\n")
 

@@ -1,7 +1,7 @@
 {
   "ROBOT_IP": "192.168.58.2",
-  "ROBOT_TOOL": 0,
-  "ROBOT_USER": 0,
+  "ROBOT_TOOL": 1,
+  "ROBOT_USER": 1,
   "TCP_X_OFFSET": 0.0,
   "TCP_Y_OFFSET": 0.0,
   "TCP_X_STEP_DISTANCE": 50.0,
@@ -63,18 +63,26 @@
       "has_iterations": true,
       "has_trajectory_execution": true,
       "points": [
-        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]",
-        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]",
-        "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]"
+        "[-165.037, -300.705, 298.201, 180, 0, 90]",
+        "[-165.037, -431.735, 298.201, 180, 0, 90]",
+        "[-165.037, -400, 298.201, 180, 0, 90]"
       ]
     },
     "HOME": {
-      "velocity": 0,
-      "acceleration": 0,
+      "velocity": 10,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[0.000, 0.000, 0.000, 0.000, 0.000, 0.000]"
+      "position": "[-232.343, -93.902, 819.846, 180, 0, 90]"
+    },
+    "CALIBRATION": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-20.097, 331.717, 819.378, 179.915, 0.011, 0.001]"
     }
   },
   "SAFETY_LIMITS": {

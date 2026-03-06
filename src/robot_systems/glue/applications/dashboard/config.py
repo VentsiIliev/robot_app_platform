@@ -14,7 +14,7 @@ class GlueCellTopics:
 
 
 # class SystemTopics:
-#     SYSTEM_STATE  = "system/system_state"
+#     SYSTEM_STATE  = "vision_service/system_state"
 #
 #
 

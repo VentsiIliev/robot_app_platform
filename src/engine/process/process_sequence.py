@@ -120,3 +120,11 @@ class ProcessSequence:
             next_index + 1, len(self._processes), next_process.process_id,
         )
         next_process.start()
+
+    @property
+    def is_running(self) -> bool:
+        with self._lock:
+            return (
+                self._current is not None
+                and self._current.state in (ProcessState.RUNNING, ProcessState.PAUSED)
+            )

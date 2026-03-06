@@ -4,7 +4,7 @@ import time
 
 class VacuumPump:
     """
-      A class to control the state of a vacuum pump for a robotic system.
+      A class to control the state of a vacuum pump for a robotic vision_service.
 
       This class provides functionality to turn the vacuum pump on and off by controlling a digital output pin.
       The pump is typically used in robotic systems for tasks like picking and placing, where a vacuum is required to hold objects.

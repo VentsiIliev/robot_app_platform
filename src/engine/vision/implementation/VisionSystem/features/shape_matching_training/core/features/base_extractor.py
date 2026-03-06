@@ -326,7 +326,7 @@ def get_feature_extraction_metadata(extractor: BaseFeatureExtractor) -> Dict[str
     """
     metadata = extractor.get_metadata()
     
-    # Add additional system information
+    # Add additional vision_service information
     metadata.update({
         'feature_extraction_version': '2.0.0',
         'total_features': extractor.get_feature_count(),

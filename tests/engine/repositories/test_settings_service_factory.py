@@ -48,11 +48,11 @@ class _Ser(ISettingsSerializer[_Cfg]):
 
 
 class FakeSystem:
-    """Dummy robot system class — name resolves to 'fakesystem'."""
+    """Dummy robot vision_service class — name resolves to 'fakesystem'."""
 
 
 class AnotherSystem:
-    """A second system class — name resolves to 'anothersystem'."""
+    """A second vision_service class — name resolves to 'anothersystem'."""
 
 
 # ── Tests ──────────────────────────────────────────────────────────────────────

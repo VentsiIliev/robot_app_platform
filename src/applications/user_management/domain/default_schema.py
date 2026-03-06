@@ -1,6 +1,6 @@
 from src.applications.user_management.domain.user_schema import UserSchema, FieldDescriptor
 
-# Default schema matching the original User model — reuse or replace per robot system
+# Default schema matching the original User model — reuse or replace per robot vision_service
 DEFAULT_USER_SCHEMA = UserSchema(
     id_key="id",
     fields=[

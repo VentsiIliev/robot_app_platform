@@ -51,7 +51,7 @@ def run_standalone():
     widget = CalibrationFactory(messaging).build(StubCalibrationService())
     window = QMainWindow()
     window.setCentralWidget(widget)
-    window.resize(1280, 900)
+    window.resize(1280, 1024)
     window.setWindowTitle("Calibration — Standalone")
     window.destroyed.connect(stop_event.set)
     window.show()

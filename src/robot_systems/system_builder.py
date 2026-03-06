@@ -135,7 +135,7 @@ class SystemBuilder:
             messaging_service=self._messaging_service,
         )
 
-        # merge system-level per-spec builders into registry (override defaults)
+        # merge vision_service-level per-spec builders into registry (override defaults)
         registry = dict(self._registry)
         for spec in system_class.services:
             if spec.builder is not None:

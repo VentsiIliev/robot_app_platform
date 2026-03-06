@@ -4,7 +4,7 @@ Plugin-internal JSON mapper.
 Translates between the nested camera_settings.json format and
 CameraSettingsData (plugin DTO).
 
-No vision system imports — this file belongs entirely to the plugin layer.
+No vision vision_service imports — this file belongs entirely to the plugin layer.
 Cross-layer mapping (CameraSettings ↔ CameraSettingsData) lives in
 src/adapter/mapper.py (VisionSystemSettingsMapper).
 """

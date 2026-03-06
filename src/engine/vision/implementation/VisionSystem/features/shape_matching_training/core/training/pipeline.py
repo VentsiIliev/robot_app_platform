@@ -250,6 +250,12 @@ class TrainingPipeline:
     
     def _evaluate_models(self, training_results: Dict[str, Any]) -> Dict[str, Any]:
         """Evaluate all trained models"""
+        if not training_results:
+            raise RuntimeError(
+                "All models failed to train — cannot evaluate. "
+                "Check the training errors above for details."
+            )
+
         print("📈 Evaluating models...")
         
         # Create evaluator

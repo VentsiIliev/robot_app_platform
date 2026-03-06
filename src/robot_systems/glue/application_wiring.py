@@ -1,10 +1,15 @@
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
+from src.engine.robot.calibration.robot_calibration.config_helpers import AdaptiveMovementConfig, \
+    RobotCalibrationEventsConfig
 from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
     build_glue_segment_settings_schema
+from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.service_ids import ServiceID
 from src.robot_systems.glue.settings_ids import SettingsID
 import os
 import logging
+
+from src.shared_contracts.events.robot_events import RobotCalibrationTopics
 
 # ── Canonical storage paths ───────────────────────────────────────────────────
 # Single definition — used by both editor (write) and library (read).
@@ -184,7 +189,9 @@ def _build_calibration_application(robot_system):
 
     service = CalibrationApplicationService(
         vision_service=robot_system.get_optional_service(ServiceID.VISION),
+        process_controller=robot_system.coordinator,
     )
+
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(ms).build(service)
     )

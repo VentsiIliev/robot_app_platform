@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
+import numpy as np
+
 
 class IVisionService(ABC):
 
@@ -30,3 +32,34 @@ class IVisionService(ABC):
 
     @abstractmethod
     def get_work_area(self, area_type: str) -> tuple[bool, str, any]: ...
+
+    @abstractmethod
+    def run_matching(self, workpieces: list, contours: list) -> Tuple[dict, int, List, List]: ...
+
+    @abstractmethod
+    def get_latest_frame(self)-> np.ndarray: ...
+
+    @abstractmethod
+    def detect_aruco_markers(self, image: np.ndarray) -> tuple: ...
+
+    @abstractmethod
+    def get_camera_width(self) -> int: ...
+
+    @abstractmethod
+    def get_camera_height(self) -> int: ...
+
+    @abstractmethod
+    def get_chessboard_width(self) -> int: ...
+
+    @abstractmethod
+    def get_chessboard_height(self) -> int: ...
+
+    @abstractmethod
+    def get_square_size_mm(self) -> float: ...
+
+    @abstractmethod
+    def set_draw_contours(self, enabled: bool) -> None: ...
+
+    @property
+    @abstractmethod
+    def camera_to_robot_matrix_path(self) -> str: ...

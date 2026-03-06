@@ -495,7 +495,7 @@ def predict_similarity(model, contour1, contour2):
     """
     from ..core.features.base_extractor import FeatureExtractorFactory
     
-    # Create feature extractor (using same features as original system)
+    # Create feature extractor (using same features as original vision_service)
     extractor_configs = [
         {'name': 'geometric'},
         {'name': 'hu', 'config': {'use_log_transform': True}}
@@ -514,7 +514,7 @@ def predict_similarity(model, contour1, contour2):
     probability = model.predict_proba([features])[0]
     confidence = max(probability)
     
-    # Apply confidence thresholds (same logic as old system)
+    # Apply confidence thresholds (same logic as old vision_service)
     if prediction == 1:  # SAME
         conf_low = 0.8
         conf_high = 0.95

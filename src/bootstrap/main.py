@@ -21,6 +21,7 @@ def main() -> None:
     from src.bootstrap.application_loader import ApplicationLoader
     from src.bootstrap.shell_configurator import ShellConfigurator
     from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
+    from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
     from src.robot_systems.system_builder import SystemBuilder
     from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
@@ -30,7 +31,7 @@ def main() -> None:
     # 2 — robot app (settings loaded, services wired)
     robot_app = (
         SystemBuilder()
-        .with_robot(TestRobotWrapper())
+        .with_robot(FairinoRobot("192.168.58.2"))
         .with_messaging_service(ctx.messaging_service)
         .build(GlueRobotSystem)
     )

@@ -1,7 +1,7 @@
 """
 Configuration Management Module
 
-Provides configuration classes and utilities for the shape matching training system.
+Provides configuration classes and utilities for the shape matching training vision_service.
 Supports hierarchical configuration, validation, and environment-specific settings.
 """
 

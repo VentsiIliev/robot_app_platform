@@ -84,7 +84,7 @@ User clicks Save
 from src.applications.robot_settings.robot_settings_application import RobotSettingsApplication
 
 
-# In robot system wiring:
+# In robot vision_service wiring:
 def _build_robot_settings(robot_system):
     return RobotSettingsApplication(robot_system._settings_service)
 

@@ -18,7 +18,7 @@ class FolderDefinition:
     def get_translate_fn(self) -> Callable[[str], str]:
         """Return a translate function for this folder."""
         # For now, returns the display name
-        # In future, this can integrate with real translation system
+        # In future, this can integrate with real translation vision_service
         return lambda key: self.display_name
 
 

@@ -209,7 +209,7 @@ def run_hand_eye():
     T = compute_hand_eye()
     _logger.info("\n====================================")
 
-    _logger.info("  HAND-EYE CALIBRATION RESULT")
+    _logger.info("  HAND-EYE ROBOT_CALIBRATION RESULT")
 
     _logger.info("====================================")
 

@@ -809,7 +809,7 @@ class UserManagementWidget(TranslatableWidget):
         )
 
         template = get_email_template(user_name=user.get_full_name(),
-                                      message="Here is your system access package")
+                                      message="Here is your vision_service access package")
         sender = EmailSenderService(config=get_default_email_config())
 
         try:
@@ -836,7 +836,7 @@ class UserManagementWidget(TranslatableWidget):
         """Email the QR code to the user or administrator"""
         from modules.shared.core.email.emailSender import EmailSenderService,get_email_template,get_default_email_config
         template = get_email_template(user_name=user.get_full_name(),
-                                    message="Here is your QR code for accessing the system.")
+                                    message="Here is your QR code for accessing the vision_service.")
         sender = EmailSenderService(config=get_default_email_config())
 
         try:

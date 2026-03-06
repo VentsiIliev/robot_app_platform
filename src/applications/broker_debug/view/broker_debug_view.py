@@ -178,7 +178,7 @@ class BrokerDebugView(IApplicationView):
         vl.addWidget(_label("Publish Message"))
 
         vl.addWidget(_label("Topic", _CAPTION))
-        self._pub_topic = QLineEdit(); self._pub_topic.setPlaceholderText("e.g. vision-system/latest-image")
+        self._pub_topic = QLineEdit(); self._pub_topic.setPlaceholderText("e.g. vision-vision_service/latest-image")
         self._pub_topic.setStyleSheet(_INPUT_STYLE); vl.addWidget(self._pub_topic)
 
         vl.addWidget(_label("Payload", _CAPTION))

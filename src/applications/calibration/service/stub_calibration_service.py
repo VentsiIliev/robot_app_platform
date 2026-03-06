@@ -21,3 +21,6 @@ class StubCalibrationService(ICalibrationService):
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_camera_and_robot")
         return True, "Stub: camera and robot calibrated"
+
+    def stop_calibration(self) -> None:
+        _logger.info("Stub: stop_calibration")

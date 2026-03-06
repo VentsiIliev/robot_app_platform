@@ -42,7 +42,7 @@ class SGDClassifierConfig(BaseConfig):
     
     # Learning Rate and Optimization
     learning_rate: str = 'optimal'
-    eta0: float = 0.0
+    eta0: float = 0.01
     power_t: float = 0.5
     
     # Early Stopping
@@ -82,7 +82,12 @@ class SGDClassifierConfig(BaseConfig):
             validate_positive_number(self.tol, 'tol')
         
         validate_positive_number(self.epsilon, 'epsilon')
-        
+
+        if self.eta0 <= 0:
+            raise ConfigValidationError(
+                f"eta0 must be > 0 (sklearn 1.4+ requires a positive value). Got {self.eta0}"
+            )
+
         # Validate learning rate
         valid_lr_schedules = ['constant', 'optimal', 'invscaling', 'adaptive']
         validate_choice(self.learning_rate, valid_lr_schedules, 'learning_rate')

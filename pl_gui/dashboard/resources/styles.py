@@ -2,7 +2,7 @@
 Central style configuration for the dashboard plugin.
 
 Provides consistent styling constants and stylesheets aligned with the
-application-wide design system.
+application-wide design vision_service.
 """
 
 # ================= COLOR CONSTANTS =================

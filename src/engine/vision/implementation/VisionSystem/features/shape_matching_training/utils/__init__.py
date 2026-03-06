@@ -2,7 +2,7 @@
 Utility Functions Module
 
 Provides common utilities for I/O operations, visualization, metrics calculation,
-and data validation used throughout the shape matching training system.
+and data validation used throughout the shape matching training vision_service.
 """
 
 from .io_utils import load_model, save_model, load_dataset, save_dataset

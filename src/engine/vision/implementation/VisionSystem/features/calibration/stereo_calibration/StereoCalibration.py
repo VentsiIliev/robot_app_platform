@@ -1,7 +1,7 @@
 import logging
 """
 ===========================================================
-STEREO CAMERA CALIBRATION AND DEPTH ESTIMATION PIPELINE
+STEREO CAMERA ROBOT_CALIBRATION AND DEPTH ESTIMATION PIPELINE
 ===========================================================
 
 Author: [Your Name]
@@ -137,7 +137,7 @@ if len(objpoints) == 0:
 
     sys.exit(1)
 # --------------------------------------------------------
-# 4. INDIVIDUAL CAMERA CALIBRATION
+# 4. INDIVIDUAL CAMERA ROBOT_CALIBRATION
 # --------------------------------------------------------
 
 _logger.info("[INFO] Calibrating each camera individually...")
@@ -150,7 +150,7 @@ ret_right, mtx_right, dist_right, _, _ = cv2.calibrateCamera(objpoints, imgpoint
 
 
 # --------------------------------------------------------
-# 5. STEREO CALIBRATION
+# 5. STEREO ROBOT_CALIBRATION
 # --------------------------------------------------------
 
 _logger.info("[INFO] Performing stereo calibration...")

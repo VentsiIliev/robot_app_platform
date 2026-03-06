@@ -4,7 +4,7 @@ from enum import Enum
 class GlueMotorErrorCode(Enum):
     """
     Error codes reported by the Modbus motor controller board used in the
-    glue robot system. Specific to this board's firmware — do not use in
+    glue robot vision_service. Specific to this board's firmware — do not use in
     generic motor logic.
     """
     MOTOR_1_MISSING              = 11

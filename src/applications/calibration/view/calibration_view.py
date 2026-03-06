@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QWidget, QLabel,
@@ -63,6 +64,56 @@ MaterialButton:hover   { background: #E0D6F0; }
 MaterialButton:pressed { background: #D4CAE4; }
 """
 
+_BTN_OVERLAY_OFF = """
+MaterialButton {
+    background: transparent;
+    color: #888;
+    border: 1.5px solid #CCCCCC;
+    border-radius: 8px;
+    font-weight: bold;
+    min-height: 36px;
+}
+MaterialButton:hover { background: rgba(0,0,0,0.04); }
+"""
+_BTN_OVERLAY_ON = """
+MaterialButton {
+    background: #E8F5E9;
+    color: #2E7D32;
+    border: 1.5px solid #4CAF50;
+    border-radius: 8px;
+    font-weight: bold;
+    min-height: 36px;
+}
+MaterialButton:hover { background: #DCEDC8; }
+"""
+
+_BTN_DANGER = """
+MaterialButton {
+    background: #D32F2F;
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+    min-height: 44px;
+}
+MaterialButton:hover   { background: #B71C1C; }
+MaterialButton:pressed { background: #9A0007; }
+MaterialButton:disabled {
+    background: #EEEEEE;
+    color: #BDBDBD;
+    border: 1.5px solid #E0E0E0;
+}
+"""
+
+
+_CROSSHAIR_COLOR     = (0, 255, 80)    # BGR bright green
+_CROSSHAIR_THICKNESS = 1
+
+_MAGNIFY_CROP_HALF   = 60              # px from center to crop edge
+_MAGNIFY_INSET_SIZE  = 210             # output inset square (px)
+_MAGNIFY_MARGIN      = 10              # inset distance from frame edge
+_MAGNIFY_BORDER      = (230, 230, 230) # BGR inset border
+_MAGNIFY_SOURCE      = (0, 200, 255)   # BGR source-region indicator
+
 
 def _divider() -> QWidget:
     d = QWidget()
@@ -83,9 +134,12 @@ class CalibrationView(IApplicationView):
     calibrate_camera_requested   = pyqtSignal()
     calibrate_robot_requested    = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
+    stop_calibration_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__("Calibration", parent)
+        self._crosshair_on = False
+        self._magnifier_on = False
 
     def setup_ui(self) -> None:
         root = QHBoxLayout(self)
@@ -97,7 +151,7 @@ class CalibrationView(IApplicationView):
     def clean_up(self) -> None:
         pass
 
-    # ── Preview panel (left) ──────────────────────────────────────────
+    # ── Preview panel ─────────────────────────────────────────────────
 
     def _build_preview_panel(self) -> QWidget:
         panel = QWidget()
@@ -116,11 +170,11 @@ class CalibrationView(IApplicationView):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        layout.addWidget(caption, stretch=0)
+        layout.addWidget(caption,             stretch=0)
         layout.addWidget(self._preview_label, stretch=1)
         return panel
 
-    # ── Controls panel (right) ───────────────────────────────────────
+    # ── Controls panel ────────────────────────────────────────────────
 
     def _build_controls_panel(self) -> QWidget:
         panel = QWidget()
@@ -135,9 +189,20 @@ class CalibrationView(IApplicationView):
         self._capture_btn.setStyleSheet(_BTN_SECONDARY)
         layout.addWidget(self._capture_btn)
 
+        # overlay toggles side-by-side
+        overlay_row = QHBoxLayout()
+        overlay_row.setSpacing(8)
+        self._crosshair_btn = MaterialButton("⊕  Crosshair")
+        self._crosshair_btn.setStyleSheet(_BTN_OVERLAY_OFF)
+        self._magnifier_btn = MaterialButton("🔍  Magnifier")
+        self._magnifier_btn.setStyleSheet(_BTN_OVERLAY_OFF)
+        overlay_row.addWidget(self._crosshair_btn)
+        overlay_row.addWidget(self._magnifier_btn)
+        layout.addLayout(overlay_row)
+
         layout.addWidget(_divider())
 
-        # ── Individual calibrations ───────────────────────────────────
+        # ── Calibrate ─────────────────────────────────────────────────
         layout.addWidget(_section_label("Calibrate"))
         self._calibrate_camera_btn = MaterialButton("Calibrate Camera")
         self._calibrate_camera_btn.setStyleSheet(_BTN_PRIMARY)
@@ -149,7 +214,12 @@ class CalibrationView(IApplicationView):
 
         layout.addWidget(_divider())
 
-        # ── Sequence ─────────────────────────────────────────────────
+        self._stop_robot_btn = MaterialButton("⏹  Stop Robot Calibration")
+        self._stop_robot_btn.setStyleSheet(_BTN_DANGER)
+        self._stop_robot_btn.setEnabled(False)
+        layout.addWidget(self._stop_robot_btn)
+
+        # ── Sequence ──────────────────────────────────────────────────
         layout.addWidget(_section_label("Sequence"))
         self._calibrate_sequence_btn = MaterialButton("Calibrate Camera → Robot")
         self._calibrate_sequence_btn.setStyleSheet(_BTN_SEQUENCE)
@@ -157,7 +227,7 @@ class CalibrationView(IApplicationView):
 
         layout.addWidget(_divider())
 
-        # ── Log area ──────────────────────────────────────────────────
+        # ── Log ───────────────────────────────────────────────────────
         layout.addWidget(_section_label("Log"))
         self._log = QTextEdit()
         self._log.setReadOnly(True)
@@ -175,13 +245,36 @@ class CalibrationView(IApplicationView):
         self._calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
         self._calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
         self._calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
+        self._crosshair_btn.clicked.connect(self._toggle_crosshair)
+        self._magnifier_btn.clicked.connect(self._toggle_magnifier)
+        self._stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
+
+    def _toggle_crosshair(self) -> None:
+        self._crosshair_on = not self._crosshair_on
+        self._crosshair_btn.setStyleSheet(
+            _BTN_OVERLAY_ON if self._crosshair_on else _BTN_OVERLAY_OFF
+        )
+
+    def _toggle_magnifier(self) -> None:
+        self._magnifier_on = not self._magnifier_on
+        self._magnifier_btn.setStyleSheet(
+            _BTN_OVERLAY_ON if self._magnifier_on else _BTN_OVERLAY_OFF
+        )
 
     # ── Public API ────────────────────────────────────────────────────
+
+    def set_stop_calibration_enabled(self, enabled: bool) -> None:
+        self._stop_robot_btn.setEnabled(enabled)
 
     def update_camera_view(self, image) -> None:
         if image is None:
             return
-        rgb  = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        frame = image
+        if self._crosshair_on:
+            frame = self._draw_crosshair(frame)
+        if self._magnifier_on:
+            frame = self._draw_magnifier(frame)
+        rgb  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
         self._preview_label.set_frame(QPixmap.fromImage(qimg))
@@ -195,9 +288,58 @@ class CalibrationView(IApplicationView):
 
     def set_buttons_enabled(self, enabled: bool) -> None:
         for btn in (
-            self._capture_btn,
-            self._calibrate_camera_btn,
-            self._calibrate_robot_btn,
-            self._calibrate_sequence_btn,
+                self._capture_btn,
+                self._calibrate_camera_btn,
+                self._calibrate_robot_btn,
+                self._calibrate_sequence_btn,
         ):
             btn.setEnabled(enabled)
+
+    # ── Frame overlays ────────────────────────────────────────────────
+
+    @staticmethod
+    def _draw_crosshair(image: np.ndarray) -> np.ndarray:
+        frame   = image.copy()
+        h, w    = frame.shape[:2]
+        cx, cy  = w // 2, h // 2
+        cv2.line(frame, (0, cy), (w, cy), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        cv2.line(frame, (cx, 0), (cx, h), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        return frame
+
+    @staticmethod
+    def _draw_magnifier(image: np.ndarray) -> np.ndarray:
+        frame  = image.copy()
+        h, w   = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        half   = _MAGNIFY_CROP_HALF
+
+        # Clamp crop to frame bounds
+        x1 = max(0, cx - half)
+        y1 = max(0, cy - half)
+        x2 = min(w, cx + half)
+        y2 = min(h, cy + half)
+
+        crop   = frame[y1:y2, x1:x2]
+        size   = _MAGNIFY_INSET_SIZE
+        zoomed = cv2.resize(crop, (size, size), interpolation=cv2.INTER_LINEAR)
+
+        # Crosshair on inset
+        iz = size // 2
+        cv2.line(zoomed, (0, iz),    (size, iz),   _CROSSHAIR_COLOR, 1)
+        cv2.line(zoomed, (iz, 0),    (iz, size),   _CROSSHAIR_COLOR, 1)
+        cv2.circle(zoomed, (iz, iz), 3, _CROSSHAIR_COLOR, -1)
+
+        # Paste inset — bottom-right corner
+        m  = _MAGNIFY_MARGIN
+        px = w - size - m
+        py = h - size - m
+        if px >= 0 and py >= 0:
+            frame[py:py + size, px:px + size] = zoomed
+            # inset border
+            cv2.rectangle(frame, (px - 1, py - 1), (px + size, py + size),
+                          _MAGNIFY_BORDER, 1)
+
+        # Source region indicator on main frame
+        cv2.rectangle(frame, (x1, y1), (x2, y2), _MAGNIFY_SOURCE, 1)
+
+        return frame

@@ -6,8 +6,8 @@ from src.applications.broker_debug.service.i_broker_debug_service import IBroker
 _logger = logging.getLogger(__name__)
 
 _STUB_TOPICS = {
-    "vision-system/latest-image":        3,
-    "vision-system/threshold-image":     1,
+    "vision-vision_service/latest-image":        3,
+    "vision-vision_service/threshold-image":     1,
     "vision-service/state":              2,
     "process/glue/state":                4,
     "weight-cell/reading":               2,

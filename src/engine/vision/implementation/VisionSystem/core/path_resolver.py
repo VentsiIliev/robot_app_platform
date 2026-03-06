@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 class PathResolver:
-    """Centralized path resolution for the vision system"""
+    """Centralized path resolution for the vision vision_service"""
 
     def __init__(self, base_path: Path | str | None = None):
         if base_path is None:

@@ -41,5 +41,7 @@ class GlueNavigationService:
             position[2] += z_offset
             return self._nav.move_to_position(position, group_name)
         except Exception:
+            import traceback
+            traceback.print_exc()
             return False
 

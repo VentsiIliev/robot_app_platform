@@ -11,8 +11,12 @@ from pathlib import Path
 
 from datetime import datetime
 
-from .config import RobustTrainingConfig
-from .core.training.pipeline import TrainingPipeline
+
+from src.engine.vision.implementation.VisionSystem.features.shape_matching_training.config.training_configs import RobustTrainingConfig
+from src.engine.vision.implementation.VisionSystem.features.shape_matching_training.core.training.pipeline import TrainingPipeline
+
+# from .config import RobustTrainingConfig
+# from .core.training.pipeline import TrainingPipeline
 
 def train_production_model():
     """
@@ -22,7 +26,7 @@ def train_production_model():
     print("🚀 PRODUCTION MODEL TRAINING")
     print("=" * 80)
 
-    # Step 1: Create robust configuration
+    # Step 1: Create a robust configuration
     print("\n📋 Step 1: Setting up configuration...")
     config = RobustTrainingConfig()
 
@@ -32,7 +36,7 @@ def train_production_model():
     config.dataset.n_variants = 10  # More shape variants
     config.dataset.n_noisy = 10  # More noisy samples
 
-    # Set up output directory with timestamp
+    # Set up the output directory with a timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path("./production_models") / timestamp
     config.io.models_dir = output_dir / "models"

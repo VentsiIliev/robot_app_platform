@@ -9,6 +9,7 @@ from src.applications.base.app_dialog import (
 )
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
+from src.applications.robot_settings.model.mapper import RobotCalibrationMapper, RobotSettingsMapper
 from src.applications.robot_settings.model.robot_settings_model import RobotSettingsModel
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
 from src.applications.robot_settings.view.robot_settings_view import RobotSettingsView
@@ -46,8 +47,12 @@ class RobotSettingsController(IApplicationController):
 
 
     def load(self) -> None:
-        config, _ = self._model.load()
-        self._view.load_config(config)
+        config, calibration = self._model.load()
+        flat = {
+            **RobotSettingsMapper.to_flat_dict(config),
+            **RobotCalibrationMapper.to_flat_dict(calibration),
+        }
+        self._view.load_config(flat)
 
         extra_defs = {}
         for slot_id, tool_name in self._model.get_slot_info():
@@ -192,7 +197,7 @@ class _AddGroupDialog(AppDialog):
         # Name
         root.addWidget(self._label("Group Name"))
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("e.g. HOME, CALIBRATION, SLOT 2 PICKUP")
+        self._name_edit.setPlaceholderText("e.g. HOME, ROBOT_CALIBRATION, SLOT 2 PICKUP")
         self._name_edit.setStyleSheet(DIALOG_INPUT_STYLE)
         root.addWidget(self._name_edit)
 

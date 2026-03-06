@@ -7,7 +7,7 @@ _settings: ContourMatchingSettings = ContourMatchingSettings(_DEFAULT_SETTINGS_P
 
 
 def configure(settings_file_path: Path) -> None:
-    """Override the settings storage path — call once before first use (e.g. for per-system storage)."""
+    """Override the settings storage path — call once before first use (e.g. for per-vision_service storage)."""
     global _settings
     _settings = ContourMatchingSettings(settings_file_path)
 

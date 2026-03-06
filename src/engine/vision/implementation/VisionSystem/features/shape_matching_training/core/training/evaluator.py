@@ -195,8 +195,24 @@ class ModelEvaluator:
             Comparison analysis results
         """
         if not model_results:
-            raise ValueError("No model results provided for comparison")
-        
+            return {
+                'model_names': [],
+                'metric_comparison': {},
+                'rankings': {},
+                'statistical_tests': {},
+                'best_model': None,
+            }
+
+        if len(model_results) == 1:
+            model_name = next(iter(model_results))
+            return {
+                'model_names': [model_name],
+                'metric_comparison': {},
+                'rankings': {model_name: 1},
+                'statistical_tests': {},
+                'best_model': model_name,
+            }
+
         print(f"📊 Comparing {len(model_results)} models...")
         
         if comparison_metrics is None:

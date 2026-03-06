@@ -17,7 +17,7 @@ class FolderConfig:
 
 
 class FolderLauncher(QWidget):
-    """Manages the main folders page layout using FolderController system"""
+    """Manages the main folders page layout using FolderController vision_service"""
 
     # Signals to communicate with the main window
     folder_opened = pyqtSignal(object)  # FolderController object
@@ -60,7 +60,7 @@ class FolderLauncher(QWidget):
         container.adjustSize()
 
     def __create_folders(self):
-        """Create all folders using the new FolderController system"""
+        """Create all folders using the new FolderController vision_service"""
         for config in self.folder_config_list:
             ID = config.ID
             folder_name = config.name

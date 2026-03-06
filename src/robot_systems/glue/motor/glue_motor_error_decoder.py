@@ -5,8 +5,8 @@ from src.robot_systems.glue.motor.glue_motor_error_codes import GlueMotorErrorCo
 class GlueMotorErrorDecoder(IMotorErrorDecoder):
     """
     IMotorErrorDecoder for the Modbus motor controller board used in the
-    glue robot system. Inject into build_modbus_motor_controller() when
-    wiring the glue system's motor controller.
+    glue robot vision_service. Inject into build_modbus_motor_controller() when
+    wiring the glue vision_service's motor controller.
     """
 
     def decode(self, error_code: int) -> str:

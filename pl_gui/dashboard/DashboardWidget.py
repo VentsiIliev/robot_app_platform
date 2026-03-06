@@ -16,10 +16,10 @@ class DashboardWidget(QWidget):
     and routes typed setter calls to the correct card by card_id.
 
     Has zero knowledge of MessageBroker, topics, factories, or any
-    external system.
+    external vision_service.
     """
 
-    # User-action signals (adapter connects these to system calls)
+    # User-action signals (adapter connects these to vision_service calls)
     start_requested = pyqtSignal()
     stop_requested = pyqtSignal()
     pause_requested = pyqtSignal()

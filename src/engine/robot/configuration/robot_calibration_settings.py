@@ -36,8 +36,34 @@ class AdaptiveMovementConfig:
 
 
 @dataclass
+class AxisMappingConfig:
+    marker_id: int = 4
+    move_mm: float = 100.0
+    max_attempts: int = 100
+    delay_after_move_s: float = 1.0
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'AxisMappingConfig':
+        return cls(
+            marker_id=int(data.get("marker_id", 4)),
+            move_mm=float(data.get("move_mm", 100.0)),
+            max_attempts=int(data.get("max_attempts", 100)),
+            delay_after_move_s=float(data.get("delay_after_move_s", 1.0)),
+        )
+
+    def to_dict(self) -> Dict:
+        return {
+            "marker_id": self.marker_id,
+            "move_mm": self.move_mm,
+            "max_attempts": self.max_attempts,
+            "delay_after_move_s": self.delay_after_move_s,
+        }
+
+
+@dataclass
 class RobotCalibrationSettings:
     adaptive_movement: AdaptiveMovementConfig = field(default_factory=AdaptiveMovementConfig)
+    axis_mapping: AxisMappingConfig = field(default_factory=AxisMappingConfig)
     z_target: int = 300
     required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
 
@@ -45,6 +71,7 @@ class RobotCalibrationSettings:
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
         return cls(
             adaptive_movement=AdaptiveMovementConfig.from_dict(data.get("adaptive_movement_config", {})),
+            axis_mapping=AxisMappingConfig.from_dict(data.get("axis_mapping_config", {})),
             z_target=data.get("z_target", 300),
             required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
         )
@@ -52,6 +79,7 @@ class RobotCalibrationSettings:
     def to_dict(self) -> Dict:
         return {
             "adaptive_movement_config": self.adaptive_movement.to_dict(),
+            "axis_mapping_config": self.axis_mapping.to_dict(),
             "z_target": self.z_target,
             "required_ids": self.required_ids,
         }

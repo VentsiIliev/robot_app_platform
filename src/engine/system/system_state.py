@@ -18,4 +18,4 @@ class SystemStateEvent:
 
 
 class SystemTopics:
-    STATE = "system/state"
+    STATE = "vision_service/state"

@@ -23,3 +23,8 @@ def setup_logging() -> None:
         datefmt="%H:%M:%S",
     ))
     logging.basicConfig(level=logging.DEBUG, handlers=[handler])
+
+    # suppress noisy third-party loggers
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)

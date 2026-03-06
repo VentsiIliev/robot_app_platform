@@ -49,7 +49,7 @@ class GlueCellTopics:
 
 ```python
 class SystemTopics:
-    APPLICATION_STATE = "system/application_state"
+    APPLICATION_STATE = "vision_service/application_state"
 ```
 
 > **Note:** `SYSTEM_MODE_CHANGE`, `COMMAND_CLEAN`, and `COMMAND_RESET` were removed when the dashboard was migrated to `ProcessState`. The mode toggle, clean, and reset actions are now handled entirely within the controller and model — no longer published as broker topics.

@@ -20,7 +20,7 @@ from src.engine.core.messaging_service import MessagingService
 
 # ── Example form schema ───────────────────────────────────────────────────────
 # Defines the fields shown in the workpiece creation form.
-# Each robot system provides its own — this one is illustrative only.
+# Each robot vision_service provides its own — this one is illustrative only.
 
 _PART_TYPES = ["Standard", "Heavy", "Delicate"]
 

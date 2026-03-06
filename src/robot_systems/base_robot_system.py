@@ -68,7 +68,7 @@ class SettingsSpec:
     required: bool = True
 
 # ---------------------------------------------------------------------------
-# Base system
+# Base vision_service
 # ---------------------------------------------------------------------------
 
 class BaseRobotSystem(ABC):
@@ -77,7 +77,7 @@ class BaseRobotSystem(ABC):
         metadata: SystemMetadata       — identity
         services: list[ServiceSpec] — required/optional service contracts
 
-    Platform calls system.start(services_dict) to resolve and inject.
+    Platform calls vision_service.start(services_dict) to resolve and inject.
     """
 
     metadata: ClassVar[SystemMetadata] = SystemMetadata(name="UnnamedSystem")
@@ -221,10 +221,10 @@ class BaseRobotSystem(ABC):
 
     def _build_health_registry(self) -> ServiceHealthRegistry:
         """
-        Auto-derives a ServiceHealthRegistry from the system's resolved services.
+        Auto-derives a ServiceHealthRegistry from the vision_service's resolved services.
         Services implementing IHealthCheckable are registered via is_healthy().
         Services without health semantics are registered as always available.
-        No manual wiring needed — the system already owns the name → service mapping.
+        No manual wiring needed — the vision_service already owns the name → service mapping.
         """
         from src.engine.process.service_health_registry import ServiceHealthRegistry
         registry = ServiceHealthRegistry()

@@ -7,6 +7,12 @@
     "k": 2.0,
     "derivative_scaling": 0.5
   },
+  "axis_mapping_config": {
+    "marker_id": 4,
+    "move_mm": 101.0,
+    "max_attempts": 100,
+    "delay_after_move_s": 1.0
+  },
   "z_target": 300,
   "required_ids": [
     0,

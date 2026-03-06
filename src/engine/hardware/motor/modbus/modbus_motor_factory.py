@@ -18,9 +18,9 @@ def build_modbus_motor_service(
     Build a MotorService wired to Modbus RTU.
 
     motor_config  — required: register map and motor topology for this board.
-                    Instantiate MotorConfig explicitly in the robot system that
+                    Instantiate MotorConfig explicitly in the robot vision_service that
                     owns the hardware — no generic defaults exist.
-    error_decoder — inject a system-specific IMotorErrorDecoder to translate
+    error_decoder — inject a vision_service-specific IMotorErrorDecoder to translate
                     board firmware error codes into human-readable descriptions.
                     If omitted, raw integer codes are logged with a warning.
     """

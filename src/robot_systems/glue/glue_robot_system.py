@@ -22,7 +22,7 @@ from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
 from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    build_vision_service, build_tool_service
+    build_vision_service, build_tool_service, _build_calibration_service
 from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 
 
@@ -34,7 +34,7 @@ class GlueRobotSystem(BaseRobotSystem):
     metadata = SystemMetadata(
         name="GlueSystem",
         version="1.0.0",
-        description="Automated glue dispensing system",
+        description="Automated glue dispensing vision_service",
         author="Platform Team",
         settings_root=os.path.join("storage", "settings"),
     )
@@ -71,7 +71,6 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
         SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS,     CameraSettingsSerializer(),         "vision/camera_settings.json"),
         SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,    ToolChangerSettingsSerializer(),      "tools/tool_changer.json"),
-
     ]
 
     services = [
@@ -126,6 +125,7 @@ class GlueRobotSystem(BaseRobotSystem):
         self._motor = self.get_service(ServiceID.MOTOR)
         self._motor.open()
 
+        self._calibration_service = _build_calibration_service(self)
         self._coordinator = self._build_coordinator()
 
         self._robot.enable_robot()
@@ -148,42 +148,48 @@ class GlueRobotSystem(BaseRobotSystem):
 
     def _build_coordinator(self):
         from src.engine.process.process_requirements import ProcessRequirements
+        from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
         from src.robot_systems.glue.processes.clean_process import CleanProcess
         from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
         from src.robot_systems.glue.processes.glue_process import GlueProcess
         from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
-        from src.robot_systems.glue.navigation import GlueNavigationService
-
-        glue_process_requirements    = ProcessRequirements.requires(ServiceID.ROBOT,ServiceID.MOTOR,ServiceID.VISION)
-        pick_and_place_process_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
-        clean_process_requirements = ProcessRequirements.requires(ServiceID.ROBOT)
-
+        glue_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.MOTOR, ServiceID.VISION)
+        pick_and_place_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
+        clean_requirements = ProcessRequirements.requires(ServiceID.ROBOT)
+        calibration_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
 
         service_checker = self.health_registry.check
 
         return GlueOperationCoordinator(
-            glue_process = GlueProcess(
-                robot_service   = self._robot,
-                navigation_service = self._navigation,
-                messaging       = self._messaging_service,
-                system_manager  = self._system_manager,
-                requirements    = glue_process_requirements,
-                service_checker = service_checker,
+            glue_process=GlueProcess(
+                robot_service=self._robot,
+                navigation_service=self._navigation,
+                messaging=self._messaging_service,
+                system_manager=self._system_manager,
+                requirements=glue_requirements,
+                service_checker=service_checker,
             ),
-            pick_and_place_process = PickAndPlaceProcess(
-                robot_service   = self._robot,
-                navigation_service = self._navigation,
-                messaging       = self._messaging_service,
-                system_manager  = self._system_manager,
-                requirements    = pick_and_place_process_requirements,
-                service_checker = service_checker,
+            pick_and_place_process=PickAndPlaceProcess(
+                robot_service=self._robot,
+                navigation_service=self._navigation,
+                messaging=self._messaging_service,
+                system_manager=self._system_manager,
+                requirements=pick_and_place_requirements,
+                service_checker=service_checker,
             ),
-            clean_process = CleanProcess(
-                robot_service   = self._robot,
-                messaging       = self._messaging_service,
-                system_manager  = self._system_manager,
-                requirements    = clean_process_requirements,
-                service_checker = service_checker,
+            clean_process=CleanProcess(
+                robot_service=self._robot,
+                messaging=self._messaging_service,
+                system_manager=self._system_manager,
+                requirements=clean_requirements,
+                service_checker=service_checker,
             ),
-            messaging = self._messaging_service,
+            calibration_process=RobotCalibrationProcess(
+                calibration_service=self._calibration_service,
+                messaging=self._messaging_service,
+                system_manager=self._system_manager,
+                requirements=calibration_requirements,
+                service_checker=service_checker,
+            ),
+            messaging=self._messaging_service,
         )

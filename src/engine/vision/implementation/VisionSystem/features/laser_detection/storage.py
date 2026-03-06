@@ -20,7 +20,7 @@ class LaserCalibrationStorage:
     Manages storage of laser calibration data using the ApplicationStorageResolver.
 
     This ensures calibration data is stored in the proper application storage
-    structure alongside other vision system data.
+    structure alongside other vision vision_service data.
     """
 
     def __init__(self, app_name: str = "glue_dispensing_application"):

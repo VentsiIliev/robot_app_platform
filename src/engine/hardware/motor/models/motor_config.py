@@ -8,7 +8,7 @@ class MotorConfig:
     Register map, motor topology, and timing constants for a motor controller board.
 
     All register addresses are board firmware specific — no defaults are provided.
-    Instantiate with explicit values in the robot system that owns the hardware.
+    Instantiate with explicit values in the robot vision_service that owns the hardware.
 
     motor_addresses         — ordered list of Modbus register addresses for each motor.
                               Length determines the motor count (1, 4, 44, …).

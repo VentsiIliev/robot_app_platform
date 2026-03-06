@@ -4,12 +4,14 @@ from PyQt6.QtWidgets import QVBoxLayout
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.settings.settings_view.settings_view import SettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
+from src.applications.robot_settings.view.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.robot_settings_schema import (
-    CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,
+    CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_MARKER_GROUP,
     GLOBAL_MOTION_GROUP, OFFSET_DIRECTION_GROUP, ROBOT_INFO_GROUP,
     SAFETY_LIMITS_GROUP, TCP_STEP_GROUP,
 )
+
 
 
 class RobotSettingsView(IApplicationView):
@@ -35,14 +37,14 @@ class RobotSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         self._movement_tab  = MovementGroupsTab()
-        self._settings_view = SettingsView(
+        self._settings_view = CollapsibleSettingsView(
             component_name="RobotSettings",
             mapper=RobotSettingsMapper.to_flat_dict,
         )
         self._settings_view.add_tab("General",             [ROBOT_INFO_GROUP, GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP])
         self._settings_view.add_tab("Safety",              [SAFETY_LIMITS_GROUP])
         self._settings_view.add_raw_tab("Movement Groups", self._movement_tab)
-        self._settings_view.add_tab("Calibration",         [CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP])
+        self._settings_view.add_tab("Calibration",         [CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,CALIBRATION_AXIS_MAPPING_GROUP])
         layout.addWidget(self._settings_view)
 
         self._settings_view.save_requested.connect(self._on_inner_save)
@@ -63,8 +65,8 @@ class RobotSettingsView(IApplicationView):
     def _on_inner_movement_changed(self, key: str, value) -> None:
         self.movement_changed.emit(key, value)
 
-    def load_config(self, config) -> None:
-        self._settings_view.load(config)
+    def load_config(self, flat: dict) -> None:
+        self._settings_view.set_values(flat)
 
     def load_movement_groups(self, groups: dict, extra_defs: dict = None) -> None:
         self._movement_tab.load(groups, extra_defs=extra_defs)

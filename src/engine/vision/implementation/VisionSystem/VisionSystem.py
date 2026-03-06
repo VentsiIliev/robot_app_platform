@@ -32,7 +32,7 @@ class VisionSystem:
         self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
         self.service           = service or Service(data_storage_path=self.storage_path)
         self.messaging_service = messaging_service
-        self.service_id        = "vision_system"
+        self.service_id        = "vision_service"
 
         self.camera_settings = self.service.loadSettings()
         self.setup_camera()
@@ -64,7 +64,7 @@ class VisionSystem:
         # ── Calibration state ────────────────────────────────────────────────
         self.threshold_by_area = "spray"
 
-        if self.service.isCalibrated:
+        if self.service.cameraData is not None:
             self.cameraMatrix = self.service.get_camera_matrix()
             self.cameraDist   = self.service.get_distortion_coefficients()
         else:
@@ -168,14 +168,14 @@ class VisionSystem:
             contours, self.correctedImage, _ = self._contour_service.detect(
                 image             = self.image,
                 threshold         = self._get_thresh_by_area(self.threshold_by_area),
-                is_calibrated     = self.service.isCalibrated,
+                is_calibrated     = self.cameraMatrix is not None,
                 correct_image_fn  = self.correctImage,
                 spray_area_points = self.service.sprayAreaPoints,
             )
-            self._latest_contours = contours   # Cache the latest detected contours
+            self._latest_contours = contours
             return contours, self.correctedImage, None
 
-        if not self.service.isCalibrated:
+        if self.cameraMatrix is None:
             if self.message_publisher:
                 self.message_publisher.publish_latest_image(self.image)
             return None, self.image, None
@@ -221,11 +221,10 @@ class VisionSystem:
             self.perspectiveMatrix     = outcome.perspective_matrix
             self.optimal_camera_matrix = None
             self.service.loadCameraCalibrationData()
-            self.service.loadPerspectiveMatrix()
+            # Note: do NOT reload perspectiveMatrix from disk here — the outcome
+            # already provides the correct value and the file may not exist yet.
             self.service.loadCameraToRobotMatrix()
-            if self.service.cameraData is not None and self.service.cameraToRobotMatrix is not None:
-                self.service.isCalibrated = True
-            _logger.info("Camera calibration completed and system recalibrated")
+            _logger.info("Camera calibration completed and vision_service recalibrated")
         return outcome.success, outcome.message
 
     # ── ArUco ─────────────────────────────────────────────────────────────────
@@ -316,3 +315,4 @@ class VisionSystem:
     def _loop(self) -> None:
         while not self.stop_signal:
             self.run()
+

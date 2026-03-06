@@ -20,6 +20,7 @@ from src.robot_systems.glue.applications.dashboard import GlueDashboardView
 from src.shared_contracts.events.vision_events import VisionTopics
 
 
+
 class _DashboardBridge(QObject):
     weight_reading  = pyqtSignal(int, float)
     cell_state      = pyqtSignal(int, str)
@@ -117,6 +118,11 @@ class GlueDashboardController(IApplicationController):
 
         self._sub(VisionTopics.LATEST_IMAGE,
               lambda msg: self._bridge.camera_image.emit(msg))
+
+        self._sub(
+            ProcessTopics.busy(ProcessID.COORDINATOR),
+            lambda e: self._bridge.service_warning.emit(e.message),
+        )
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
     def _on_camera_image(self, message: object) -> None:

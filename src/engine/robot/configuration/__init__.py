@@ -8,6 +8,7 @@ from .robot_settings import (
 )
 from .robot_calibration_settings import (
     AdaptiveMovementConfig,
+    AxisMappingConfig,
     RobotCalibrationSettings,
     RobotCalibrationSettingsSerializer,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "RobotSettings",
     "RobotSettingsSerializer",
     "AdaptiveMovementConfig",
+    "AxisMappingConfig",
     "RobotCalibrationSettings",
     "RobotCalibrationSettingsSerializer",
 ]

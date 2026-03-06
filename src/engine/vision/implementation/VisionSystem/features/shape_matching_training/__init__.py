@@ -1,7 +1,7 @@
 """
 Shape Matching Training Module
 
-A comprehensive machine learning system for contour similarity detection and matching.
+A comprehensive machine learning vision_service for contour similarity detection and matching.
 This module provides tools for synthetic data generation, feature extraction, model training,
 and real-time shape matching applications.
 """

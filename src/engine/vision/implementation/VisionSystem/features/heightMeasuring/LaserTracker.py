@@ -454,7 +454,7 @@ if __name__ == '__main__':
         cv2.line(frame, (center_x, center_y - line_length), (center_x, center_y + line_length), color, thickness)
 
     from VisionSystem.VisionSystem import VisionSystem
-    configFilePath = "/home/plp/cobot-soft-v2/cobot-glue-dispencing-v2/cobot-soft-glue-dispencing-v2/system/storage/settings/camera_settings.json"
+    configFilePath = "/home/plp/cobot-soft-v2/cobot-glue-dispencing-v2/cobot-soft-glue-dispencing-v2/vision_service/storage/settings/camera_settings.json"
     parser = argparse.ArgumentParser(description='Run the Laser Tracker')
     parser.add_argument('-W', '--width',
                         default=1280,

@@ -1,6 +1,44 @@
 # src/robot_systems/glue/service_builders.py
+from src.robot_systems.glue.service_ids import ServiceID
 from src.robot_systems.glue.settings_ids import SettingsID
 
+def _build_calibration_service(robot_system):
+    from src.engine.robot.calibration.robot_calibration_service import RobotCalibrationService
+    from src.engine.robot.calibration.robot_calibration.config_helpers import (
+        RobotCalibrationConfig, RobotCalibrationEventsConfig,
+    )
+    from src.shared_contracts.events.robot_events import RobotCalibrationTopics
+    from src.robot_systems.glue.navigation import GlueNavigationService
+
+    calib_settings = robot_system._robot_calibration
+    robot_settings = robot_system._robot_config
+    nav_service    = GlueNavigationService(robot_system.get_service(ServiceID.NAVIGATION))
+
+    events_config = RobotCalibrationEventsConfig(
+        broker=robot_system._messaging_service,
+        calibration_start_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_START,
+        calibration_stop_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_STOP,
+        calibration_image_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_IMAGE,
+        calibration_log_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_LOG,
+    )
+
+    config = RobotCalibrationConfig(
+        vision_service=robot_system._vision,
+        robot_service=robot_system._robot,
+        navigation_service=nav_service,
+        height_measuring_service=None,
+        required_ids=calib_settings.required_ids,
+        z_target=calib_settings.z_target,
+        robot_tool=robot_settings.robot_tool,
+        robot_user=robot_settings.robot_user,
+        axis_mapping_config=calib_settings.axis_mapping,
+    )
+
+    return RobotCalibrationService(
+        config=config,
+        adaptive_config=calib_settings.adaptive_movement,
+        events_config=events_config,
+    )
 
 def build_weight_cell_service(ctx):
     from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service

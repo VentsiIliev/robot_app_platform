@@ -2,6 +2,7 @@ from typing import List
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
+from .fairino.linux.fairino import Robot
 from .test_robot import TestRobotWrapper
 
 
@@ -9,7 +10,8 @@ class FairinoRobot(IRobot):
 
     def __init__(self, ip: str):
         self.ip = ip
-        self.robot = TestRobotWrapper()  # Replace with Robot.RPC(self.ip) in production
+        #self.robot = TestRobotWrapper()  # Replace with Robot.RPC(self.ip) in production
+        self.robot = Robot.RPC(self.ip)
         self._over_speed_strategy = 3
 
     def move_ptp(
@@ -52,6 +54,8 @@ class FairinoRobot(IRobot):
         try:
             result = self.robot.GetActualTCPPose()
         except Exception:
+            import traceback
+            traceback.print_exc()
             return []
         if isinstance(result, int) or result is None:
             return []

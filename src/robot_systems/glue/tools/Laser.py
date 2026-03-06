@@ -27,8 +27,8 @@ class Laser:
                Initializes the Laser object by setting up the Modbus slave address, detecting the communication port,
                and initializing the Modbus client.
 
-               The port is detected based on the operating system. If the system is Windows, a predefined port (COM5) is used.
-               If the system is Linux, the appropriate port is detected using the `find_ch341_uart_port` method.
+               The port is detected based on the operating vision_service. If the vision_service is Windows, a predefined port (COM5) is used.
+               If the vision_service is Linux, the appropriate port is detected using the `find_ch341_uart_port` method.
 
                Raises:
                    Exception: If the communication port cannot be detected or the Modbus client cannot be initialized, an exception is raised.

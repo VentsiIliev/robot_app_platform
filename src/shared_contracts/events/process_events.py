@@ -20,6 +20,12 @@ class ProcessStateEvent:
     message:    str      = ""
     timestamp:  datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+@dataclass(frozen=True)
+class ProcessBusyEvent:
+    requested_by: str
+    message:      str
+    timestamp:    datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
 
 @dataclass(frozen=True)
 class ServiceUnavailableEvent:
@@ -42,3 +48,8 @@ class ProcessTopics:
     @staticmethod
     def service_unavailable(process_id: str) -> str:
         return f"process/{process_id}/service_unavailable"
+
+
+    @staticmethod
+    def busy(requester_id: str) -> str:
+        return f"process/{requester_id}/busy"

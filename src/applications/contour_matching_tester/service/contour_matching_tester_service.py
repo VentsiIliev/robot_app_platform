@@ -46,14 +46,9 @@ class ContourMatchingTesterService(IContourMatchingTesterService):
         return closed
 
     def run_matching(self, workpieces: list, contours: list) -> Tuple[dict, int, List, List]:
-        from src.engine.vision.implementation.VisionSystem.features.contour_matching import find_matching_workpieces
-        result, no_matches, matched_contours = find_matching_workpieces(workpieces, contours)
-        return (
-            result,
-            len(no_matches),
-            [c.get() for c in matched_contours],
-            [c.get() for c in no_matches],
-        )
+        if self._vision_service is None:
+            return {}, 0, [], []
+        return self._vision_service.run_matching(workpieces, contours)
 
     def get_thumbnail(self, workpiece_index: int) -> Optional[bytes]:
         if workpiece_index < 0 or workpiece_index >= len(self._metadata):

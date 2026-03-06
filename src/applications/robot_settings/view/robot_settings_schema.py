@@ -57,3 +57,10 @@ SAFETY_LIMITS_GROUP = SettingGroup("Safety Limits", [
     SettingField("safety_rz_min", "RZ Min", "spinbox", default=-180, min_val=-180,  max_val=180,  suffix=" °",  step=1, step_options=[1, 5, 10]),
     SettingField("safety_rz_max", "RZ Max", "spinbox", default=180,  min_val=-180,  max_val=180,  suffix=" °",  step=1, step_options=[1, 5, 10]),
 ])
+
+CALIBRATION_AXIS_MAPPING_GROUP = SettingGroup("Axis Mapping", [
+    SettingField("calib_axis_marker_id",       "Marker ID",            "spinbox",        default=4,     min_val=0,   max_val=255,  step=1,   step_options=[1]),
+    SettingField("calib_axis_move_mm",         "Move Distance",        "double_spinbox", default=100.0, min_val=1.0, max_val=500.0, decimals=1, suffix=" mm", step=1.0, step_options=[1, 5, 10, 50]),
+    SettingField("calib_axis_max_attempts",    "Max Detect Attempts",  "spinbox",        default=100,   min_val=1,   max_val=1000, step=10,  step_options=[10, 50, 100]),
+    SettingField("calib_axis_delay_after_move","Delay After Move",     "double_spinbox", default=1.0,   min_val=0.0, max_val=10.0, decimals=2, suffix=" s", step=0.1, step_options=[0.1, 0.5, 1.0]),
+])

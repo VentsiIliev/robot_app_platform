@@ -118,7 +118,7 @@ class BaseProcess(IProcess):
                 )
                 return
 
-            # 2 — acquire system-level lock
+            # 2 — acquire vision_service-level lock
             if self._system_manager is not None:
                 if not self._system_manager.acquire(self._process_id):
                     return

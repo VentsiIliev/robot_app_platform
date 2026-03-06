@@ -60,6 +60,11 @@ class Service(IService):
     @property
     def perspectiveMatrix(self):
         return self.data_manager.perspectiveMatrix
+
+    @perspectiveMatrix.setter
+    def perspectiveMatrix(self, value):
+        self.data_manager.perspectiveMatrix = value
+        self._logger.info("perspectiveMatrix updated in Service")
     @property
     def sprayAreaPoints(self):
         return self.data_manager.sprayAreaPoints

@@ -1,0 +1,115 @@
+import numpy as np
+import logging
+
+_logger = logging.getLogger(__name__)
+
+
+class CalibrationRobotController:
+    def __init__(self, robot_service, navigation_service, tool: int, user: int, adaptive_movement_config):
+        self.robot_service = robot_service
+        self._navigation_service = navigation_service
+        self._tool = tool
+        self._user = user
+        self.adaptive_movement_config = adaptive_movement_config
+        self._calibration_position = None
+
+    # ── Helpers ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _require_pose(pose, caller: str) -> list:
+        if not pose or len(pose) < 6:
+            raise RuntimeError(
+                f"Robot position unavailable in {caller}: got {pose!r}. "
+                "Is the robot connected and ready?"
+            )
+        return list(pose)
+
+    # ── Motion ────────────────────────────────────────────────────────
+
+    def move_to_position(self, position, blocking=False):
+        return self.robot_service.move_ptp(
+            position=position,
+            tool=self._tool,
+            user=self._user,
+            velocity=30,
+            acceleration=10,
+            wait_to_reach=blocking,
+        )
+
+    def get_iterative_align_position(self, current_error_mm, offset_x_mm, offset_y_mm, alignment_threshold_mm):
+        min_step_mm        = self.adaptive_movement_config.min_step_mm
+        max_step_mm        = self.adaptive_movement_config.max_step_mm
+        target_error_mm    = alignment_threshold_mm
+        max_error_ref      = self.adaptive_movement_config.max_error_ref
+        k                  = self.adaptive_movement_config.k
+        derivative_scaling = self.adaptive_movement_config.derivative_scaling
+
+        normalized_error = min(current_error_mm / max_error_ref, 1.0)
+        step_scale  = np.tanh(k * normalized_error)
+        max_move_mm = min_step_mm + step_scale * (max_step_mm - min_step_mm)
+
+        if current_error_mm < target_error_mm * 2:
+            damping_ratio = (current_error_mm / (target_error_mm * 2)) ** 2
+            max_move_mm *= max(damping_ratio, 0.05)
+
+        if hasattr(self, 'previous_error_mm'):
+            error_change    = current_error_mm - self.previous_error_mm
+            derivative_factor = 1.0 / (1.0 + derivative_scaling * abs(error_change))
+            max_move_mm    *= derivative_factor
+
+        self.previous_error_mm = current_error_mm
+
+        if current_error_mm < target_error_mm * 0.5:
+            max_move_mm = min_step_mm
+
+        move_x_mm = max(-max_move_mm, min(max_move_mm, offset_x_mm))
+        move_y_mm = max(-max_move_mm, min(max_move_mm, offset_y_mm))
+
+        _logger.debug("Adaptive movement: max_move=%.1fmm (error=%.3fmm)", max_move_mm, current_error_mm)
+        _logger.debug("Making iterative movement: X+=%.3fmm, Y+=%.3fmm", move_x_mm, move_y_mm)
+
+        raw = self.robot_service.get_current_position()
+        x, y, z, rx, ry, rz = self._require_pose(raw, "get_iterative_align_position")
+        return [x + move_x_mm, y + move_y_mm, z, rx, ry, rz]
+
+    def move_to_calibration_position(self):
+        if self._navigation_service:
+            self._navigation_service.move_to_calibration_position()
+        self._calibration_position = self.robot_service.get_current_position()
+        _logger.info("Calibration position captured: %s", self._calibration_position)
+
+    def get_current_z_value(self):
+        raw = self.robot_service.get_current_position()
+        pose = self._require_pose(raw, "get_current_z_value")
+        _logger.info("Current Z value: %s mm", pose[2])
+        return pose[2]
+
+    def get_current_position(self):
+        return self.robot_service.get_current_position()
+
+    def get_calibration_position(self):
+        return self._calibration_position
+
+    def move_y_relative(self, dy_mm, blocking=False):
+        raw = self.robot_service.get_current_position()
+        x, y, z, rx, ry, rz = self._require_pose(raw, "move_y_relative")
+        return self.robot_service.move_ptp(
+            position=[x, y + dy_mm, z, rx, ry, rz],
+            tool=self._tool,
+            user=self._user,
+            velocity=30,
+            acceleration=10,
+            wait_to_reach=blocking,
+        )
+
+    def move_x_relative(self, dx_mm, blocking=False):
+        raw = self.robot_service.get_current_position()
+        x, y, z, rx, ry, rz = self._require_pose(raw, "move_x_relative")
+        return self.robot_service.move_ptp(
+            position=[x + dx_mm, y, z, rx, ry, rz],
+            tool=self._tool,
+            user=self._user,
+            velocity=30,
+            acceleration=10,
+            wait_to_reach=blocking,
+        )

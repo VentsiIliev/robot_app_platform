@@ -14,3 +14,6 @@ class ICalibrationService(ABC):
 
     @abstractmethod
     def calibrate_camera_and_robot(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def stop_calibration(self) -> None: ...

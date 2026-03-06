@@ -59,9 +59,9 @@ class Camera:
     # def _resolve_backend_for_platform(self):
     #     if self.backend is not None:
     #         return self.backend
-    #     if platform.system() == 'Windows' and hasattr(cv2, 'CAP_DSHOW'):
+    #     if platform.vision_service() == 'Windows' and hasattr(cv2, 'CAP_DSHOW'):
     #         return cv2.CAP_DSHOW
-    #     if platform.system() == 'Linux' and hasattr(cv2, 'CAP_V4L2'):
+    #     if platform.vision_service() == 'Linux' and hasattr(cv2, 'CAP_V4L2'):
     #         return cv2.CAP_V4L2
     #     return getattr(cv2, 'CAP_ANY', 0)
 

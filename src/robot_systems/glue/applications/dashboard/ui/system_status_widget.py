@@ -38,7 +38,7 @@ _CONTAINER_STYLE = (
 
 class SystemStatusWidget(QFrame):
     """
-    Aux-grid panel — shows currently active process and system busy state.
+    Aux-grid panel — shows currently active process and vision_service busy state.
     Updated via set_process_state() / set_system_state() from the controller.
     No broker knowledge — pure display widget.
     """
@@ -70,7 +70,7 @@ class SystemStatusWidget(QFrame):
             "QLabel { color: #E2E8F0; font-size: 11px; padding: 2px 10px; }"
         )
 
-        # Row 2 — system busy state
+        # Row 2 — vision_service busy state
         sys_label = QLabel("System")
         sys_label.setStyleSheet(_LABEL_STYLE)
         self._system_badge = QLabel("idle")

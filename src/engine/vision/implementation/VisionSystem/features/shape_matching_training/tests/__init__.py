@@ -1,7 +1,7 @@
 """
 Test Suite Module
 
-Comprehensive test suite for the shape matching training system including
+Comprehensive test suite for the shape matching training vision_service including
 unit tests, integration tests, and test fixtures.
 """
 

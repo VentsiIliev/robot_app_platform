@@ -81,5 +81,5 @@ class IService(ABC):
     @property
     @abstractmethod
     def isCalibrated(self) -> bool:
-        """True if the system has both camera calibration data and camera-to-robot matrix."""
+        """True if the vision_service has both camera calibration data and camera-to-robot matrix."""
         pass

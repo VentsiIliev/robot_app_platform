@@ -24,3 +24,6 @@ class CalibrationModel(IApplicationModel):
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         return self._service.calibrate_camera_and_robot()
+
+    def stop_calibration(self) -> None:
+        self._service.stop_calibration()

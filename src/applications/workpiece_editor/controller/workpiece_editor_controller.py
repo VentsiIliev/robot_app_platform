@@ -68,7 +68,7 @@ class WorkpieceEditorController(IApplicationController):
         largest = self._pick_largest(contours)
         if largest is None:
             self._logger.warning("Capture: no usable contour found")
-            show_warning(self._view, "Capture", "No contour detected.\nMake sure the vision system is running.")
+            show_warning(self._view, "Capture", "No contour detected.\nMake sure the vision vision_service is running.")
             return []
 
         self._logger.debug("Capture: largest contour has %d points", len(largest))

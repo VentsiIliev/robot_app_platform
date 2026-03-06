@@ -528,7 +528,7 @@ class CameraSettings(Settings):
         """Set erode iterations."""
         self.set_value(CameraSettingKey.ERODE_ITERATIONS.value, iterations)
 
-    # ======= CALIBRATION METHODS =======
+    # ======= ROBOT_CALIBRATION METHODS =======
     def get_chessboard_width(self):
         """Get chessboard width."""
         return self.get_value(CameraSettingKey.CHESSBOARD_WIDTH.value)
@@ -771,7 +771,7 @@ class CameraSettings(Settings):
         _logger.info(f"Erode Kernel: {self.get_erode_kernel_size()}, Iterations: {self.get_erode_iterations()}")
 
 
-        _logger.info("\n=== CALIBRATION ===")
+        _logger.info("\n=== ROBOT_CALIBRATION ===")
 
         _logger.info(f"Chessboard: {self.get_chessboard_width()}x{self.get_chessboard_height()}")
 
