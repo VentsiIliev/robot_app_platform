@@ -81,7 +81,7 @@ class BaseProcess(IProcess):
         self,
         process_id:      str,
         messaging:       IMessagingService,
-        app_manager:     Optional[IApplicationManager]   = None,
+        system_manager:  Optional[ISystemManager]        = None,
         requirements:    Optional[ProcessRequirements]   = None,
         service_checker: Optional[Callable[[str], bool]] = None,
     ): ...

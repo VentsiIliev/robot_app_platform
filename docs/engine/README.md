@@ -19,9 +19,11 @@ src/engine/
 │       ├── interfaces/
 │       └── http/
 ├── process/                    ← Process lifecycle state machine
-│   ├── process_state.py        ← ProcessState, ProcessStateEvent, ProcessTopics
 │   ├── i_process.py            ← IProcess ABC
-│   └── base_process.py         ← Thread-safe BaseProcess with template hooks
+│   ├── base_process.py         ← Thread-safe BaseProcess with template hooks
+│   ├── process_requirements.py ← Service pre-condition declarations
+│   └── process_sequence.py     ← Auto-advancing ordered process chain
+│   (ProcessState, ProcessStateEvent, ProcessTopics → src/shared_contracts/events/process_events.py)
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
@@ -34,7 +36,11 @@ src/engine/
 │   ├── services/               ← MotionService, RobotStateManager, RobotService
 │   └── drivers/
 │       └── fairino/            ← FairinoRobot, TestRobotWrapper
-└── vision/                     ← VisionService (stub)
+└── vision/                     ← IVisionService interface + VisionSystem implementation
+    ├── i_vision_service.py     ← IVisionService ABC
+    ├── camera_settings_serializer.py
+    └── implementation/
+        └── VisionSystem/       ← Full camera + contour + calibration system
 ```
 
 ---
@@ -88,7 +94,7 @@ src/engine/
 | Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
-| Vision | `VisionService` | [vision/](vision/README.md) |
+| Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |
 
 ---
 

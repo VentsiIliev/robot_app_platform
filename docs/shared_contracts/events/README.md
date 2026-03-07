@@ -140,14 +140,34 @@ class ProcessTopics:
 
 ---
 
-## `vision_events.py` — Vision Events (Placeholder)
+## `vision_events.py` — Vision Events
 
-**Currently empty.** Reserved for camera and computer vision events such as:
-- Detection results
-- Coordinate transformation responses
-- Camera state changes
+Defines `VisionTopics` — the topic-string constants for the `VisionSystem` messaging integration.
 
-When implemented, this will define topics under the `vision/` namespace and corresponding payload dataclasses. See `docs/engine/vision/README.md` for the intended API.
+```python
+class VisionTopics:
+    SERVICE_STATE              = "vision-service/state"
+    LATEST_IMAGE               = "vision-vision_service/latest-image"
+    FPS                        = "vision-vision_service/fps"
+    CALIBRATION_IMAGE_CAPTURED = "vision-vision_service/calibration-image-captured"
+    BRIGHTNESS_REGION          = "vision-vision_service/brightness-region"
+    THRESHOLD_REGION           = "vision-vision_service/threshold"
+    CALIBRATION_FEEDBACK       = "vision-vision_service/calibration-feedback"
+    THRESHOLD_IMAGE            = "vision-vision_service/threshold-image"
+    AUTO_BRIGHTNESS            = "vision-vision_service/auto-brightness"
+    TRANSFORM_TO_CAMERA_POINT  = "vision-vision_service/transform-to-camera-point"
+```
+
+| Topic | Direction | Publisher / Subscriber |
+|-------|-----------|----------------------|
+| `SERVICE_STATE` | Publish | `StateManager` on every state change |
+| `LATEST_IMAGE` | Publish | `MessagePublisher` on each processed frame |
+| `FPS` | Publish | `MessagePublisher` at each tick |
+| `CALIBRATION_FEEDBACK` | Publish | `CalibrationService` during calibration |
+| `THRESHOLD_REGION` | Subscribe | `VisionSystem.on_threshold_update()` |
+| `TRANSFORM_TO_CAMERA_POINT` | Subscribe | Coordinate transform requests |
+
+See `docs/engine/vision/README.md` for the full `VisionSystem` API.
 
 ---
 

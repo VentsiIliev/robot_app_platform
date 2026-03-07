@@ -36,6 +36,14 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `modbus_settings/` | Modbus serial port configuration — port detection + connection test |
 | `glue_cell_settings/` | Weight cell configuration + live readings per cell |
 | `robot_settings/` | Robot kinematics, safety limits, calibration, and movement group editor |
+| `camera_settings/` | Camera resolution, brightness, thresholds, and work area configuration |
+| `calibration/` | Robot-to-camera calibration workflow (ArUco marker capture + solve) |
+| `broker_debug/` | Live message broker inspector — spy on topics, publish test messages |
+| `workpiece_editor/` | Contour-based workpiece path editor with vision overlay |
+| `workpiece_library/` | Workpiece catalogue — browse, edit metadata, delete entries |
+| `tool_settings/` | Tool changer configuration (grip offsets, tool type selection) |
+| `user_management/` | User account management backed by a CSV repository |
+| `contour_matching_tester/` | Offline workpiece-to-contour match testing tool |
 
 ---
 

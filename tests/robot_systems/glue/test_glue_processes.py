@@ -7,8 +7,9 @@ coordination layer.
 Covered:
 - CleanProcess:        state transitions, requirements
 - PickAndPlaceProcess: identical pattern with process_id "pick_and_place"
+- GlueProcess:         state transitions (mirrors CleanProcess)
 - GlueOperationCoordinator: mode switching, correct sequence selection and delegation
-                       for SPRAY_ONLY and PICK_AND_SPRAY modes
+                       for SPRAY_ONLY and PICK_AND_SPRAY modes, calibration path
 
 Note: Timers in CleanProcess and PickAndPlaceProcess are simulation-only and are
 not tested here. Only state flow and correct execution order are verified.
@@ -27,6 +28,7 @@ from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMo
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
+from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
 from src.shared_contracts.events.process_events import (
     ProcessState, ProcessStateEvent, ProcessTopics,
 )
@@ -201,11 +203,13 @@ def _make_runner_mocks():
     glue  = MagicMock(); glue.process_id  = "glue";          glue.state  = ProcessState.IDLE
     pick  = MagicMock(); pick.process_id  = "pick_and_place"; pick.state  = ProcessState.IDLE
     clean = MagicMock(); clean.process_id = "clean";          clean.state = ProcessState.IDLE
+    calib = MagicMock(); calib.process_id = "robot_calibration"; calib.state = ProcessState.IDLE
 
     runner = GlueOperationCoordinator(
         glue_process           = glue,
         pick_and_place_process = pick,
         clean_process          = clean,
+        calibration_process    = calib,
         messaging              = _ms(),
     )
 
@@ -390,6 +394,98 @@ class TestGlueOperationMode(unittest.TestCase):
     def test_enum_values(self):
         self.assertEqual(GlueOperationMode.SPRAY_ONLY.value, "spray_only")
         self.assertEqual(GlueOperationMode.PICK_AND_SPRAY.value, "pick_and_spray")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GlueProcess
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestGlueProcessIdentity(unittest.TestCase):
+
+    def test_process_id_is_glue(self):
+        p = GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+        self.assertEqual(p.process_id, "glue")
+
+    def test_initial_state_is_idle(self):
+        p = GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+        self.assertEqual(p.state, ProcessState.IDLE)
+
+
+class TestGlueProcessStateTransitions(unittest.TestCase):
+
+    def _make(self):
+        return GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+
+    def test_start_transitions_to_running(self):
+        p = self._make(); p.start()
+        self.assertEqual(p.state, ProcessState.RUNNING)
+
+    def test_stop_from_running_transitions_to_stopped(self):
+        p = self._make(); p.start(); p.stop()
+        self.assertEqual(p.state, ProcessState.STOPPED)
+
+    def test_pause_from_running_transitions_to_paused(self):
+        p = self._make(); p.start(); p.pause()
+        self.assertEqual(p.state, ProcessState.PAUSED)
+
+    def test_resume_from_paused_transitions_to_running(self):
+        p = self._make(); p.start(); p.pause(); p.resume()
+        self.assertEqual(p.state, ProcessState.RUNNING)
+
+    def test_set_error_forces_error_state(self):
+        p = self._make(); p.set_error("encoder lost")
+        self.assertEqual(p.state, ProcessState.ERROR)
+
+    def test_reset_errors_returns_to_idle(self):
+        p = self._make(); p.set_error(); p.reset_errors()
+        self.assertEqual(p.state, ProcessState.IDLE)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GlueOperationCoordinator — calibration path
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestGlueOperationCoordinatorCalibration(unittest.TestCase):
+
+    def _make_with_calib(self):
+        """Return coordinator with the real calibration process mock accessible."""
+        glue  = MagicMock(); glue.process_id  = "glue";          glue.state  = ProcessState.IDLE
+        pick  = MagicMock(); pick.process_id  = "pick_and_place"; pick.state  = ProcessState.IDLE
+        clean = MagicMock(); clean.process_id = "clean";          clean.state = ProcessState.IDLE
+        calib = MagicMock(); calib.process_id = "robot_calibration"; calib.state = ProcessState.IDLE
+
+        runner = GlueOperationCoordinator(
+            glue_process           = glue,
+            pick_and_place_process = pick,
+            clean_process          = clean,
+            calibration_process    = calib,
+            messaging              = _ms(),
+        )
+        return runner, calib
+
+    def test_calibrate_calls_process_start(self):
+        runner, calib = self._make_with_calib()
+        runner.calibrate()
+        calib.start.assert_called_once()
+
+    def test_stop_calibration_calls_process_stop_when_active(self):
+        runner, calib = self._make_with_calib()
+        calib.state = ProcessState.IDLE
+        runner.calibrate()
+        runner.stop_calibration()
+        calib.stop.assert_called_once()
+
+    def test_stop_calibration_clears_active_process(self):
+        runner, calib = self._make_with_calib()
+        calib.state = ProcessState.IDLE
+        runner.calibrate()
+        runner.stop_calibration()
+        self.assertIsNone(runner._active_process)
+
+    def test_stop_calibration_when_not_active_does_not_raise(self):
+        runner, calib = self._make_with_calib()
+        runner.stop_calibration()   # never started — must not raise
+        calib.stop.assert_not_called()
 
 
 if __name__ == "__main__":
