@@ -31,7 +31,8 @@ def main() -> None:
     # 2 — robot app (settings loaded, services wired)
     robot_app = (
         SystemBuilder()
-        .with_robot(FairinoRobot("192.168.58.2"))
+        # .with_robot(FairinoRobot("192.168.58.2"))
+        .with_robot(TestRobotWrapper())
         .with_messaging_service(ctx.messaging_service)
         .build(GlueRobotSystem)
     )

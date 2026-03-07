@@ -15,9 +15,9 @@ class RobotStateManager(IRobotStateProvider):
     _POLL_INTERVAL_S = 0.5
 
     def __init__(self, robot: IRobot, publisher: Optional[IStatePublisher] = None, state_topic: str = "robot/state"):
-        # self._robot = robot
+        self._robot = robot
         # testing with a separate connection just for monitoring
-        self._robot = FairinoRobot("192.168.58.2")
+        # self._robot = FairinoRobot("192.168.58.2") # TODO use this for fairino cobot to avoid interfering with motion commands
         self._publisher = publisher
         self._state_topic = state_topic
         self._logger = logging.getLogger(self.__class__.__name__)
