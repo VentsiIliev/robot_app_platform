@@ -1,12 +1,15 @@
 import logging
 
 import numpy as np
-
+import logging
 from src.engine.core.i_health_checkable import IHealthCheckable
 from src.engine.vision.i_vision_service import IVisionService
+from src.engine.vision.i_exposure_control import IExposureControl
+
+_logger = logging.getLogger(__name__)
 
 
-class VisionService(IVisionService, IHealthCheckable):
+class VisionService(IVisionService, IHealthCheckable,IExposureControl):
 
     def __init__(self, vision_system):
         self._vision_system = vision_system
@@ -97,3 +100,11 @@ class VisionService(IVisionService, IHealthCheckable):
             [c.get() for c in matched_contours],
             [c.get() for c in no_matches],
         )
+
+    def set_auto_exposure(self, enabled: bool) -> None:
+        camera = self._vision_system.camera
+        if hasattr(camera, "set_auto_exposure"):
+            camera.set_auto_exposure(enabled)
+        else:
+            _logger.debug("set_auto_exposure: camera does not support exposure control, skipping")
+        self._vision_system.camera_settings.set_brightness_auto(enabled)

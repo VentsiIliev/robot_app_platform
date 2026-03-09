@@ -12,9 +12,30 @@ class ModbusActionService(IModbusActionService):
 
     def detect_ports(self) -> List[str]:
         try:
-            self._logger.info("Detecting serial ports")
             import serial.tools.list_ports
-            return [p.device for p in serial.tools.list_ports.comports()]
+            import serial
+
+            active: List[str] = []
+            for info in serial.tools.list_ports.comports():
+                # vid is an integer assigned by the OS to every USB device.
+                # Built-in UART ports (ttyS*, COM1-4) always have vid=None.
+                # RS485 adapters always connect via USB — so vid=None means skip.
+                if info.vid is None:
+                    continue
+
+                # Probe: try to open the port to confirm it is physically
+                # accessible right now. Drops disconnected dongles and ports
+                # with I/O errors (termios ENXIO, permission denied, in-use).
+                try:
+                    with serial.Serial(port=info.device, baudrate=9600, timeout=0.05):
+                        pass
+                    active.append(info.device)
+                except serial.SerialException:
+                    self._logger.debug("Port %s skipped — open failed", info.device)
+
+            self._logger.info("RS485 ports detected: %s", active)
+            return active
+
         except Exception:
             self._logger.exception("Failed to detect serial ports")
             return []

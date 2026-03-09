@@ -243,8 +243,7 @@ class RefactoredRobotCalibrationPipeline:
         return handle_iterate_alignment_state(context)
 
     def _take_height_sample(self,context):
-        print(f"Returing from height sample state early for testing purposes")
-        return RobotCalibrationStates.DONE
+
         return handle_height_sample_state(context)
 
     def _handle_done(self, context):
@@ -289,11 +288,15 @@ class RefactoredRobotCalibrationPipeline:
             # Check final state
             final_state = self.calibration_state_machine.current_state
             success = final_state == RobotCalibrationStates.DONE
+            cancelled = final_state == RobotCalibrationStates.CANCELLED
 
             if success:
                 self._finalize_calibration()
-            
-            return success
+            elif cancelled:
+                self._stop_robot_motion()
+
+            msg = "Calibration complete" if success else ("Calibration cancelled" if cancelled else "Calibration failed")
+            return success, msg
 
         except Exception as e:
             _logger.error(f"Error in refactored calibration run: {e}")
@@ -306,6 +309,12 @@ class RefactoredRobotCalibrationPipeline:
             _logger.info("=== ROBOT_CALIBRATION FINISHED ===")
             _logger.info("Stopping live feed thread...")
             stop_live_feed_thread()
+
+    def _stop_robot_motion(self):
+        try:
+            self.calibration_context.calibration_robot_controller.robot_service.stop_motion()
+        except Exception:
+            pass
 
     def _finalize_calibration(self):
         """Finalize the calibration by computing and saving the homography matrix"""

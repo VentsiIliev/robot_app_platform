@@ -118,6 +118,19 @@ class RobotCalibrationContext(Context):
         
         self.current_state_start_time = None
 
+    def wait_for_frame(self):
+        """Return next camera frame, or None if stop was requested before a frame arrived."""
+        while True:
+            if self.stop_event.is_set():
+                return None
+            frame = self.vision_service.get_latest_frame()
+            if frame is not None:
+                return frame
+
+    def interruptible_sleep(self, seconds: float) -> bool:
+        """Sleep up to `seconds`. Returns True if interrupted (stop requested), False otherwise."""
+        return self.stop_event.wait(timeout=seconds)
+
     def flush_camera_buffer(self):
         if self.vision_service:
             for _ in range(self.min_camera_flush):

@@ -10,7 +10,9 @@ from PyQt6.QtGui import QImage, QPixmap, QTextCursor
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.clickable_label import ClickableLabel
+from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.robot_jog_widget import RobotJogWidget
 
 _BG          = "#F8F9FA"
 _PANEL_BG    = "#FFFFFF"
@@ -135,6 +137,8 @@ class CalibrationView(IApplicationView):
     calibrate_robot_requested    = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
     stop_calibration_requested = pyqtSignal()
+    jog_requested              = pyqtSignal(str, str, str, float)
+    jog_stopped                = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__("Calibration", parent)
@@ -148,8 +152,27 @@ class CalibrationView(IApplicationView):
         root.addWidget(self._build_preview_panel(),  stretch=3)
         root.addWidget(self._build_controls_panel(), stretch=2)
 
+        self._drawer = DrawerToggle(self, side="right", width=320)
+        self._jog_widget = RobotJogWidget()
+        self._drawer.add_widget(self._jog_widget)
+
+        self._jog_widget.jog_requested.connect(self.jog_requested)
+        self._jog_widget.jog_stopped.connect(self.jog_stopped)
+
+    def can_close(self) -> bool:
+        if hasattr(self, "_controller") and self._controller.is_calibrating():
+            from src.applications.base.styled_message_box import show_warning
+            show_warning(
+                self,
+                "Calibration Running",
+                "Calibration is currently running.\nPlease stop it before leaving.",
+            )
+            return False
+        return True
+
     def clean_up(self) -> None:
-        pass
+        if hasattr(self, "_controller"):
+            self._controller.stop()
 
     # ── Preview panel ─────────────────────────────────────────────────
 
@@ -343,3 +366,6 @@ class CalibrationView(IApplicationView):
         cv2.rectangle(frame, (x1, y1), (x2, y2), _MAGNIFY_SOURCE, 1)
 
         return frame
+
+    def set_jog_position(self, pos: list) -> None:
+        self._jog_widget.set_position(pos)

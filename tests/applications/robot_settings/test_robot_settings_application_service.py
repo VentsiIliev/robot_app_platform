@@ -87,59 +87,70 @@ class TestGetSlotInfo(unittest.TestCase):
 class TestMoveToGroup(unittest.TestCase):
 
     def test_returns_false_without_navigation(self):
-        self.assertFalse(_make_svc().move_to_group("HOME"))
+        ok, _ = _make_svc().move_to_group("HOME")
+        self.assertFalse(ok)
 
     def test_delegates_to_navigation_and_returns_true(self):
         nav = MagicMock(); nav.move_to_group.return_value = True
-        self.assertTrue(_make_svc(nav=nav).move_to_group("HOME"))
+        ok, _ = _make_svc(nav=nav).move_to_group("HOME")
+        self.assertTrue(ok)
         nav.move_to_group.assert_called_once_with("HOME")
 
     def test_delegates_to_navigation_and_returns_false(self):
         nav = MagicMock(); nav.move_to_group.return_value = False
-        self.assertFalse(_make_svc(nav=nav).move_to_group("HOME"))
+        ok, _ = _make_svc(nav=nav).move_to_group("HOME")
+        self.assertFalse(ok)
 
     def test_returns_false_on_exception(self):
         nav = MagicMock(); nav.move_to_group.side_effect = RuntimeError("fail")
-        self.assertFalse(_make_svc(nav=nav).move_to_group("HOME"))
+        ok, _ = _make_svc(nav=nav).move_to_group("HOME")
+        self.assertFalse(ok)
 
 
 class TestExecuteGroup(unittest.TestCase):
 
     def test_returns_false_without_navigation(self):
-        self.assertFalse(_make_svc().execute_group("TRAJ"))
+        ok, _ = _make_svc().execute_group("TRAJ")
+        self.assertFalse(ok)
 
     def test_calls_move_linear_group_on_navigation(self):
         nav = MagicMock(); nav.move_linear_group.return_value = True
-        self.assertTrue(_make_svc(nav=nav).execute_group("TRAJ"))
+        ok, _ = _make_svc(nav=nav).execute_group("TRAJ")
+        self.assertTrue(ok)
         nav.move_linear_group.assert_called_once_with("TRAJ")
 
     def test_returns_false_on_exception(self):
         nav = MagicMock(); nav.move_linear_group.side_effect = RuntimeError("fail")
-        self.assertFalse(_make_svc(nav=nav).execute_group("TRAJ"))
+        ok, _ = _make_svc(nav=nav).execute_group("TRAJ")
+        self.assertFalse(ok)
 
 
 class TestMoveToPoint(unittest.TestCase):
 
     def test_returns_false_without_navigation(self):
-        self.assertFalse(_make_svc().move_to_point("HOME", "[0,0,0,0,0,0]"))
+        ok, _ = _make_svc().move_to_point("HOME", "[0,0,0,0,0,0]")
+        self.assertFalse(ok)
 
     def test_parses_and_delegates_six_values(self):
         nav = MagicMock(); nav.move_to_position.return_value = True
-        result = _make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]")
-        self.assertTrue(result)
+        ok, _ = _make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]")
+        self.assertTrue(ok)
         nav.move_to_position.assert_called_once_with([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], "HOME")
 
     def test_returns_false_for_wrong_arg_count(self):
         nav = MagicMock()
-        self.assertFalse(_make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0]"))
+        ok, _ = _make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0]")
+        self.assertFalse(ok)
 
     def test_returns_false_for_invalid_format(self):
         nav = MagicMock()
-        self.assertFalse(_make_svc(nav=nav).move_to_point("HOME", "not_a_list"))
+        ok, _ = _make_svc(nav=nav).move_to_point("HOME", "not_a_list")
+        self.assertFalse(ok)
 
     def test_returns_false_on_navigation_exception(self):
         nav = MagicMock(); nav.move_to_position.side_effect = RuntimeError("fail")
-        self.assertFalse(_make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]"))
+        ok, _ = _make_svc(nav=nav).move_to_point("HOME", "[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]")
+        self.assertFalse(ok)
 
 
 if __name__ == "__main__":

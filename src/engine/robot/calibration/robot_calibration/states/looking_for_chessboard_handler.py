@@ -25,9 +25,9 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
         Next state to transition to
     """
     # Get frame for chessboard detection
-    chessboard_frame = None
-    while chessboard_frame is None:
-        chessboard_frame = context.vision_service.get_latest_frame()
+    chessboard_frame = context.wait_for_frame()
+    if chessboard_frame is None:
+        return RobotCalibrationStates.CANCELLED
 
     # Find chessboard and compute pixels per millimeter
     result = context.calibration_vision.find_chessboard_and_compute_ppm(chessboard_frame)

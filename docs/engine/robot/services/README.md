@@ -53,7 +53,7 @@ class MotionService(IMotionService):
 |--------|---------------|---------|
 | `move_ptp(position, tool, user, velocity, acceleration, wait_to_reach=False)` | Yes | `bool` |
 | `move_linear(position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False)` | Yes | `bool` |
-| `start_jog(axis, direction, step)` | No | `int` (SDK code) |
+| `start_jog(axis, direction, step)` | Yes (pre-flight) | `int` (SDK code) |
 | `stop_motion()` | No | `bool` |
 | `get_current_position()` | No | `List[float]` |
 
@@ -64,6 +64,36 @@ When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position
 - Or timeout after `_WAIT_TIMEOUT_S = 10.0s` (logs warning, returns `False`)
 
 Rotation axes (rx, ry, rz) are not included in the distance calculation.
+
+**`start_jog` safety pre-flight:**
+
+Before issuing the jog command to the robot, `start_jog` computes where the robot *would* end up after the step and runs `is_within_safety_limits` on that projected target. If the target falls outside the limits, the jog is blocked and `-1` is returned without touching the hardware.
+
+For **linear axes** (X/Y/Z), the projected target is computed using a rotation-matrix projection of the tool-frame step into base-frame coordinates — see `_tool_frame_delta` below. This handles tool orientations where base and tool axes differ (e.g. `rx≈180°` flips the tool Z axis relative to base Z).
+
+For **rotational axes** (RX/RY/RZ), the offset is applied directly to the corresponding element of the current position.
+
+**`_tool_frame_delta` static helper:**
+
+```python
+@staticmethod
+def _tool_frame_delta(position: List[float], axis_idx: int,
+                      direction_value: float, step: float) -> tuple[float, float, float]:
+```
+
+Projects a single tool-frame jog step into a base-frame `(dx, dy, dz)` displacement.
+
+Builds the ZYX extrinsic rotation matrix `R = Rz(rz) · Ry(ry) · Rx(rx)` from the current Euler angles `position[3:6]` (degrees), then returns the scaled column corresponding to the jogged axis:
+
+| `axis_idx` | Tool axis | Column of R |
+|-----------|-----------|-------------|
+| 0 | X | `(cy·cz, cy·sz, −sy)` |
+| 1 | Y | `(cz·sx·sy − cx·sz, cx·cz + sx·sy·sz, cy·sx)` |
+| 2 | Z | `(cx·cz·sy + sx·sz, cx·sy·sz − cz·sx, cx·cy)` |
+
+Verification at `rx=180°, ry=0°, rz=0°` (R = diag(1, −1, −1)):
+- Tool Z PLUS → base `(0, 0, −1)·step` → base Z decreases ✓
+- Tool X PLUS → base `(1, 0, 0)·step` → base X increases ✓
 
 **`start_jog` note:** Jog uses the `jog_velocity` and `jog_acceleration` values set at construction time (defaults: 10.0), not parameters passed by the caller.
 
@@ -220,6 +250,30 @@ MotionService.move_ptp(...)
     │       ret != 0 → return False
     │
     └─ wait_to_reach? → _wait_for_position(pos, threshold=2mm, timeout=10s)
+```
+
+### Jog Command
+
+```
+Application → IRobotService.start_jog(axis, direction, step)
+    │
+    ▼
+MotionService.start_jog(...)
+    │
+    ├─ IRobot.get_current_position() → List[float]  (6 elements: x,y,z,rx,ry,rz)
+    │
+    ├─ compute projected target:
+    │       linear axis (idx < 3):
+    │           _tool_frame_delta(current, idx, direction, step)
+    │           → R = Rz(rz)·Ry(ry)·Rx(rx); project tool-axis column into base frame
+    │           target[0..2] += (dx, dy, dz)
+    │       rotational axis (idx ≥ 3):
+    │           target[idx] += direction * step
+    │
+    ├─ SafetyChecker.is_within_safety_limits(target) → bool
+    │       False → log warning, return -1  (hardware not touched)
+    │
+    └─ IRobot.start_jog(axis, direction, step, jog_vel, jog_acc) → int
 ```
 
 ### State Broadcasting (background thread)

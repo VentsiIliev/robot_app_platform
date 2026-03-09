@@ -59,7 +59,10 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
         model = _make_model(cfg)
         ctrl  = RobotSettingsController(model, view)
         ctrl.load()
-        view.load_config.assert_called_once_with(cfg)
+        view.load_config.assert_called_once()
+        flat = view.load_config.call_args[0][0]
+        self.assertIsInstance(flat, dict)
+        self.assertEqual(flat.get("robot_ip"), "5.5.5.5")
 
     def test_load_pushes_movement_groups_to_view(self):
         cfg = RobotSettings()

@@ -35,10 +35,9 @@ def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
     context.flush_camera_buffer()
 
     # Capture frame for ArUco detection
-    all_aruco_detection_frame = None
-    while all_aruco_detection_frame is None:
-        _logger.debug("Waiting for frame for ArUco detection...")
-        all_aruco_detection_frame = context.vision_service.get_latest_frame()
+    all_aruco_detection_frame = context.wait_for_frame()
+    if all_aruco_detection_frame is None:
+        return RobotCalibrationStates.CANCELLED
 
     # Show live feed if visualization is enabled
     if context.live_visualization:

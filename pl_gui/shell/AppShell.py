@@ -126,6 +126,11 @@ class AppShell(QWidget):
         Close all cached app widgets and restore the folder interface.
         Useful when logging out or shutting down.
         """
+
+        # Give each widget a chance to veto the close
+        for app_widget in self.running_widgets.values():
+            if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
+                return
         print("MainWindow: Closing all running apps...")
 
         # Only manage OUR cache - no plugin_widget_factory access!

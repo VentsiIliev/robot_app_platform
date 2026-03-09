@@ -38,21 +38,21 @@ class GlueProcess(BaseProcess):
     # ── BaseProcess hooks ─────────────────────────────────────────────
 
     def _on_start(self) -> None:
-        # self._robot.enable_robot()
+        self._robot.enable_robot()
         # self.navigation_service.move_to_calibration_position()
         self._logger.info("Glue started")
 
     def _on_stop(self) -> None:
-        # self._robot.stop_motion()
-        # self._robot.disable_robot()
+        self._robot.stop_motion()
+        self._robot.disable_robot()
         self._logger.info("Glue stopped")
 
     def _on_pause(self) -> None:
-        # self._robot.stop_motion()
+        self._robot.stop_motion()
         self._logger.info("Glue paused")
 
     def _on_resume(self) -> None:
-        # self._robot.enable_robot()
+        self._robot.enable_robot()
         self._logger.info("Glue resumed")
 
     def _on_reset_errors(self) -> None:

@@ -27,7 +27,7 @@ class ModbusRegisterTransport(IRegisterTransport):
         bytesize:      int   = 8,
         stopbits:      int   = 1,
         parity:        str   = "N",
-        timeout:       float = 0.01,
+        timeout:       float = 0.03,
     ) -> None:
         self._port          = port
         self._slave_address = slave_address

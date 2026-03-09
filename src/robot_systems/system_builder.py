@@ -126,7 +126,7 @@ class SystemBuilder:
                 system_class=system_class,
             )
 
-        motion = MotionService(self._robot, SafetyChecker(SettingsID.ROBOT_CONFIG,self._settings))
+        motion = MotionService(self._robot, SafetyChecker(SettingsID.ROBOT_CONFIG, settings_service))
         ctx = _BuildContext(
             robot=self._robot,
             motion=motion,

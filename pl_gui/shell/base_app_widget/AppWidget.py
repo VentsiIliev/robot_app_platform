@@ -41,6 +41,14 @@ class AppWidget(QWidget):
     def clean_up(self):
         pass
 
+    def can_close(self) -> bool:
+        """
+        Override to veto navigation. Return False to block the shell from closing this app.
+        The shell calls this before clean_up(), removeWidget(), and deleteLater().
+        """
+        return True
+
+
 if __name__ == "__main__":
     from PyQt6.QtWidgets import QApplication
     import sys

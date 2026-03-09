@@ -1,9 +1,10 @@
 import logging
 from typing import List, Tuple, Callable
 
-from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.jog_controller import JogController
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration.view.calibration_view import CalibrationView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -41,14 +42,16 @@ class _Bridge(QObject):
 class CalibrationController(IApplicationController):
 
     def __init__(self, model: CalibrationModel, view: CalibrationView,
-                 messaging: IMessagingService):
+                 messaging: IMessagingService,jog_service):
         self._model    = model
         self._view     = view
+        self._jog = JogController(view, jog_service, messaging)
         self._broker   = messaging
         self._bridge   = _Bridge()
         self._subs:    List[Tuple[str, Callable]] = []
         self._threads: List[Tuple[QThread, _Worker]] = []
-        self._running  = False
+        self._running               = False
+        self._robot_process_running = False   # ← tracks robot calibration process state
         self._logger   = logging.getLogger(self.__class__.__name__)
 
     def load(self) -> None:
@@ -113,9 +116,12 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
 
+    def _log(self, ok: bool, msg: str) -> None:
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+
     def _on_capture(self) -> None:
         ok, msg = self._model.capture_calibration_image()
-        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._log(ok, msg)
 
     def _on_calibrate_camera(self) -> None:
         self._run_in_thread(self._model.calibrate_camera)
@@ -148,10 +154,16 @@ class CalibrationController(IApplicationController):
             self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
             self._view.set_buttons_enabled(True)
 
+    def is_calibrating(self) -> bool:
+        threads_active = any(t.isRunning() for t, _ in self._threads)
+        return threads_active or self._robot_process_running
+
     def _on_calibration_process_state(self, event: ProcessStateEvent) -> None:
         if event.state == ProcessState.RUNNING:
+            self._robot_process_running = True    # ← set
             self._bridge.stop_btn_enabled.emit(True)
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
+            self._robot_process_running = False   # ← clear
             self._bridge.stop_btn_enabled.emit(False)
 
         if event.state == ProcessState.STOPPED:
@@ -169,8 +181,8 @@ class CalibrationController(IApplicationController):
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_task_done)
         worker.failed.connect(self._on_task_failed)
-        worker.finished.connect(thread.quit)
-        worker.failed.connect(thread.quit)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         thread.finished.connect(self._on_thread_finished)
         self._threads.append((thread, worker))
         thread.start()

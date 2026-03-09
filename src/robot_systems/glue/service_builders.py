@@ -1,6 +1,52 @@
 # src/robot_systems/glue/service_builders.py
 from src.robot_systems.glue.service_ids import ServiceID
 from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.service_ids import ServiceID
+from src.robot_systems.glue.settings_ids import SettingsID
+
+
+# ── Private adapter ───────────────────────────────────────────────────────────
+class _LiveConfigTransport:
+    """
+    IRegisterTransport adapter that reads ModbusConfig fresh from the settings
+    cache on every operation.
+
+    Solves the stale-port problem: ModbusRegisterTransport snapshots port/baud
+    at construction time.  This wrapper creates a fresh transport per call using
+    whatever the settings service currently holds — so a user can change the
+    Modbus config in the UI, save, and the next laser operation picks it up
+    immediately without restarting.
+    """
+
+    def __init__(self, get_config):
+        self._get_config = get_config
+
+    def _fresh(self):
+        from src.engine.hardware.communication.modbus.modbus_register_transport import ModbusRegisterTransport
+        cfg = self._get_config()
+        return ModbusRegisterTransport(
+            port=cfg.port,
+            slave_address=cfg.slave_address,
+            baudrate=cfg.baudrate,
+            bytesize=cfg.bytesize,
+            stopbits=cfg.stopbits,
+            parity=cfg.parity,
+            timeout=cfg.timeout,
+        )
+
+    def write_register(self, address: int, value: int) -> None:
+        self._fresh().write_register(address, value)
+
+    def read_register(self, address: int) -> int:
+        return self._fresh().read_register(address)
+
+    def write_registers(self, address: int, values: list) -> None:
+        self._fresh().write_registers(address, values)
+
+    def read_registers(self, address: int, count: int) -> list:
+        return self._fresh().read_registers(address, count)
+
+
 
 def _build_calibration_service(robot_system):
     from src.engine.robot.calibration.robot_calibration_service import RobotCalibrationService
@@ -39,6 +85,52 @@ def _build_calibration_service(robot_system):
         adaptive_config=calib_settings.adaptive_movement,
         events_config=events_config,
     )
+
+def _build_height_measuring_services(robot_system):
+    from src.engine.robot.height_measuring.laser_detector import LaserDetector
+    from src.engine.robot.height_measuring.laser_detection_service import LaserDetectionService
+    from src.engine.robot.height_measuring.laser_calibration_service import LaserCalibrationService
+    from src.engine.robot.height_measuring.height_measuring_service import HeightMeasuringService
+    from src.robot_systems.glue.tools.glue_laser_control import GlueLaserControl
+
+    settings     = robot_system.get_settings(SettingsID.HEIGHT_MEASURING_SETTINGS)
+    robot_config = robot_system.get_settings(SettingsID.ROBOT_CONFIG)
+    calib_repo   = robot_system._settings_service.get_repo(SettingsID.HEIGHT_MEASURING_CALIBRATION)
+
+    # Read modbus config fresh from settings on every operation — not at build time.
+    # This means updating modbus settings in the UI takes effect immediately on
+    # the next laser operation without requiring a restart.
+    def _get_modbus_config():
+        return robot_system.get_settings(SettingsID.MODBUS_CONFIG)
+
+    transport = _LiveConfigTransport(_get_modbus_config)
+
+    laser_control = GlueLaserControl(transport)
+    detector      = LaserDetector(settings.detection)
+    detection_svc = LaserDetectionService(
+        detector=detector,
+        laser=laser_control,
+        vision_service=robot_system._vision,
+        config=settings.detection,
+        exposure_control=robot_system._vision
+    )
+    calibration_svc = LaserCalibrationService(
+        laser_service=detection_svc,
+        robot_service=robot_system._robot,
+        repository=calib_repo,
+        config=settings.calibration,
+        tool=robot_config.robot_tool,
+        user=robot_config.robot_user,
+    )
+    measuring_svc = HeightMeasuringService(
+        laser_service=detection_svc,
+        robot_service=robot_system._robot,
+        repository=calib_repo,
+        config=settings.measuring,
+        tool=robot_config.robot_tool,
+        user=robot_config.robot_user,
+    )
+    return measuring_svc, calibration_svc, detection_svc
 
 def build_weight_cell_service(ctx):
     from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service

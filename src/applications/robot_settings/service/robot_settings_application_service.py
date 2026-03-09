@@ -5,6 +5,7 @@ from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettin
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.applications.robot_settings.service.i_robot_settings_service import IRobotSettingsService
 from src.engine.robot.features.navigation_service import NavigationService
+from src.engine.robot.enums.axis import RobotAxis, Direction
 
 class RobotSettingsApplicationService(IRobotSettingsService):
 
@@ -60,30 +61,71 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         except Exception:
             return []
 
-    def move_to_group(self, group_name: str) -> bool:
+    def move_to_group(self, group_name: str) -> tuple[bool, str]:
         if self._navigation is None:
-            return False
+            return False, "Navigation service not available"
         try:
-            return self._navigation.move_to_group(group_name)
-        except Exception:
-            return False
+            ok = self._navigation.move_to_group(group_name)
+            if ok:
+                return True, ""
+            return False, (
+                "Motion was blocked.\n"
+                "The target position may be outside the configured safety limits.\n"
+                "Open Settings → Safety tab to review and adjust the workspace bounds."
+            )
+        except Exception as e:
+            return False, f"Motion error: {e}"
 
-    def execute_group(self, group_name: str) -> bool:
+    def execute_group(self, group_name: str) -> tuple[bool, str]:
         if self._navigation is None:
-            return False
+            return False, "Navigation service not available"
         try:
-            return self._navigation.move_linear_group(group_name)
-        except Exception:
-            return False
+            ok = self._navigation.move_linear_group(group_name)
+            if ok:
+                return True, ""
+            return False, (
+                "Execution was blocked.\n"
+                "One or more trajectory positions may be outside the configured safety limits.\n"
+                "Open Settings → Safety tab to review and adjust the workspace bounds."
+            )
+        except Exception as e:
+            return False, f"Execution error: {e}"
 
-    def move_to_point(self, group_name: str, point_str: str) -> bool:
+    def move_to_point(self, group_name: str, point_str: str) -> tuple[bool, str]:
         if self._navigation is None:
-            return False
+            return False, "Navigation service not available"
         try:
             values = [float(x.strip()) for x in point_str.strip("[] ").split(",")]
             if len(values) != 6:
-                return False
-            return self._navigation.move_to_position(values, group_name)
-        except Exception:
-            return False
+                return False, "Invalid position format — expected 6 values [x, y, z, rx, ry, rz]"
+            ok = self._navigation.move_to_position(values, group_name)
+            if ok:
+                return True, ""
+            return False, (
+                "Motion was blocked.\n"
+                "The target position may be outside the configured safety limits.\n"
+                "Open Settings → Safety tab to review and adjust the workspace bounds."
+            )
+        except Exception as e:
+            return False, f"Motion error: {e}"
 
+
+    def jog(self, axis: str, direction: str, step: float) -> None:
+        if self._robot is None:
+            return
+        try:
+            self._robot.start_jog(
+                RobotAxis.get_by_string(axis),
+                Direction.get_by_string(direction),
+                step,
+            )
+        except Exception:
+            pass
+
+    def stop_jog(self) -> None:
+        if self._robot is None:
+            return
+        try:
+            self._robot.stop_motion()
+        except Exception:
+            pass

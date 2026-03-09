@@ -44,7 +44,8 @@ class FairinoRobot(IRobot):
         acc: float,
     ) -> int:
         return self.robot.StartJOG(
-            ref=4, nb=axis.value, dir=direction.value, vel=vel, acc=acc, max_dis=step
+            ref=4, nb=axis.value, dir=1 if direction == Direction.PLUS else 0,
+            vel=vel, acc=acc, max_dis=step
         ) or 0
 
     def stop_motion(self) -> int:

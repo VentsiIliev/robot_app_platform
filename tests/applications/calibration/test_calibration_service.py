@@ -13,6 +13,12 @@ def _make_vision(capture=None, calibrate=None):
     return vs
 
 
+def _make_svc(capture=None, calibrate=None):
+    vs = _make_vision(capture=capture, calibrate=calibrate)
+    pc = MagicMock()
+    return CalibrationApplicationService(vs, pc), vs, pc
+
+
 class TestStubCalibrationService(unittest.TestCase):
 
     def setUp(self):
@@ -45,58 +51,50 @@ class TestStubCalibrationService(unittest.TestCase):
 class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
 
     def test_capture_delegates_to_vision(self):
-        vs = _make_vision(capture=(True, "captured"))
-        svc = CalibrationApplicationService(vs)
+        svc, vs, _ = _make_svc(capture=(True, "captured"))
         ok, msg = svc.capture_calibration_image()
         vs.capture_calibration_image.assert_called_once()
         self.assertTrue(ok)
         self.assertEqual(msg, "captured")
 
     def test_calibrate_camera_delegates_to_vision(self):
-        vs = _make_vision(calibrate=(True, "cam ok"))
-        svc = CalibrationApplicationService(vs)
+        svc, vs, _ = _make_svc(calibrate=(True, "cam ok"))
         ok, msg = svc.calibrate_camera()
         vs.calibrate_camera.assert_called_once()
         self.assertTrue(ok)
         self.assertEqual(msg, "cam ok")
 
-    def test_calibrate_robot_returns_not_implemented(self):
-        svc = CalibrationApplicationService(MagicMock())
+    def test_calibrate_robot_calls_process_controller_and_returns_success(self):
+        svc, _, pc = _make_svc()
         ok, msg = svc.calibrate_robot()
-        self.assertFalse(ok)
-        self.assertIn("not yet implemented", msg.lower())
+        pc.calibrate.assert_called_once()
+        self.assertTrue(ok)
 
     def test_calibrate_camera_and_robot_short_circuits_on_camera_failure(self):
-        vs = _make_vision(calibrate=(False, "no cam"))
-        svc = CalibrationApplicationService(vs)
+        svc, vs, _ = _make_svc(calibrate=(False, "no cam"))
         ok, msg = svc.calibrate_camera_and_robot()
         self.assertFalse(ok)
         self.assertIn("Camera calibration failed", msg)
         self.assertIn("no cam", msg)
 
-    def test_calibrate_camera_and_robot_fails_on_robot_failure(self):
-        vs = _make_vision(calibrate=(True, "cam ok"))
-        svc = CalibrationApplicationService(vs)
+    def test_calibrate_camera_and_robot_starts_robot_on_camera_success(self):
+        svc, vs, pc = _make_svc(calibrate=(True, "cam ok"))
         ok, msg = svc.calibrate_camera_and_robot()
-        # robot calibration is not implemented → always fails
-        self.assertFalse(ok)
-        self.assertIn("Robot calibration failed", msg)
+        self.assertTrue(ok)
+        pc.calibrate.assert_called_once()
 
     def test_calibrate_camera_and_robot_calls_camera_first(self):
-        vs = _make_vision(calibrate=(False, "fail"))
-        svc = CalibrationApplicationService(vs)
+        svc, vs, _ = _make_svc(calibrate=(False, "fail"))
         svc.calibrate_camera_and_robot()
         vs.calibrate_camera.assert_called_once()
 
-    def test_calibrate_camera_and_robot_does_not_call_robot_on_camera_failure(self):
-        vs = _make_vision(calibrate=(False, "fail"))
-        svc = CalibrationApplicationService(vs)
+    def test_calibrate_camera_and_robot_does_not_call_controller_on_camera_failure(self):
+        svc, vs, pc = _make_svc(calibrate=(False, "fail"))
         svc.calibrate_camera_and_robot()
-        # robot method has no backing vision call — just ensure camera stopped it
-        vs.capture_calibration_image.assert_not_called()
+        pc.calibrate.assert_not_called()
 
     def test_service_with_none_vision_raises_on_call(self):
-        svc = CalibrationApplicationService(None)
+        svc = CalibrationApplicationService(None, MagicMock())
         with self.assertRaises(Exception):
             svc.capture_calibration_image()
 

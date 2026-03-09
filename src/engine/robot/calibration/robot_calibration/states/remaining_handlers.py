@@ -24,9 +24,12 @@ wait_to_reach_position = True #TODO set to False only for testing!
 def handle_align_robot_state(context) -> RobotCalibrationStates:
     """
     Handle the ALIGN_ROBOT state.
-    
+
     This state moves the robot to align with the current marker being calibrated.
     """
+    if context.stop_event.is_set():
+        return RobotCalibrationStates.CANCELLED
+
     required_ids_list = sorted(list(context.required_ids))
     marker_id = required_ids_list[context.current_marker_id]
     context.iteration_count = 0
@@ -97,7 +100,8 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     _logger.info(message)
 
     if result:
-        time.sleep(1)
+        if context.interruptible_sleep(1.0):
+            return RobotCalibrationStates.CANCELLED
         return RobotCalibrationStates.ITERATE_ALIGNMENT
     else:
         return RobotCalibrationStates.ERROR
@@ -129,9 +133,9 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
 
     # Capture frame
     capture_start = time.time()
-    iteration_image = None
-    while iteration_image is None:
-        iteration_image = context.vision_service.get_latest_frame()
+    iteration_image = context.wait_for_frame()
+    if iteration_image is None:
+        return RobotCalibrationStates.CANCELLED
     capture_time = time.time() - capture_start
 
     # Detect marker
@@ -212,7 +216,8 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
 
         # Stability wait
         stability_start = time.time()
-        time.sleep(context.fast_iteration_wait)
+        if context.interruptible_sleep(context.fast_iteration_wait):
+            return RobotCalibrationStates.CANCELLED
         stability_time = time.time() - stability_start
         
         context.debug_draw.draw_image_center(iteration_image)

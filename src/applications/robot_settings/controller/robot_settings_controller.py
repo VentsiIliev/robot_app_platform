@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Callable
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QLineEdit, QComboBox, QCheckBox, QVBoxLayout, QLabel
@@ -8,11 +8,14 @@ from src.applications.base.app_dialog import (
     AppDialog, DIALOG_INPUT_STYLE, DIALOG_COMBO_STYLE, DIALOG_CHECKBOX_STYLE,
 )
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.jog_controller import JogController
+from src.applications.base.robot_jog_service import RobotJogService
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
 from src.applications.robot_settings.model.mapper import RobotCalibrationMapper, RobotSettingsMapper
 from src.applications.robot_settings.model.robot_settings_model import RobotSettingsModel
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
 from src.applications.robot_settings.view.robot_settings_view import RobotSettingsView
+from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.robot.configuration import MovementGroup
 
 
@@ -26,16 +29,15 @@ class _Worker(QObject):
     def run(self):
         self.finished.emit(self._fn())
 
-
-
-
 class RobotSettingsController(IApplicationController):
 
-    def __init__(self, model: RobotSettingsModel, view: RobotSettingsView):
-        self._model = model
-        self._view = view
-        self._logger = logging.getLogger(self.__class__.__name__)
+    def __init__(self, model: RobotSettingsModel, view: RobotSettingsView,
+                 messaging: IMessagingService, jog_service: RobotJogService):
+        self._model    = model
+        self._view     = view
+        self._jog      = JogController(view, jog_service, messaging)
         self._active: List[Tuple[QThread, _Worker]] = []
+        self._logger   = logging.getLogger(self.__class__.__name__)
 
         self._view.save_requested.connect(self._on_save)
         self._view.add_group_requested.connect(self._on_add_group)
@@ -44,6 +46,7 @@ class RobotSettingsController(IApplicationController):
         self._view.move_to_requested.connect(self._on_move_to)
         self._view.execute_requested.connect(self._on_execute)
         self._view.destroyed.connect(self.stop)
+
 
 
     def load(self) -> None:
@@ -71,9 +74,10 @@ class RobotSettingsController(IApplicationController):
             self._model.get_expected_movement_groups(),
             extra_defs=extra_defs,
         )
+        self._jog.start()
 
     def stop(self) -> None:
-        pass
+        self._jog.stop()
 
     def _on_save(self, _values: dict) -> None:
         try:
@@ -163,21 +167,23 @@ class RobotSettingsController(IApplicationController):
         worker = _Worker(fn)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(lambda ok: self._on_motion_done(ok, label))
+        worker.finished.connect(lambda result: self._on_motion_done(result, label))
         worker.finished.connect(thread.quit)
         thread.finished.connect(lambda: self._active.remove((thread, worker))
         if (thread, worker) in self._active else None)
         self._active.append((thread, worker))
         thread.start()
 
-    def _on_motion_done(self, ok: bool, label: str) -> None:
+    def _on_motion_done(self, result, label: str) -> None:
+        ok, reason = result if isinstance(result, tuple) else (bool(result), "")
         if not ok:
-            show_warning(self._view, label,
-                         f"Motion failed for '{label}'.\n"
-                         "Check the robot is connected and the group has a position configured.")
+            msg = reason or (
+                f"Motion failed for '{label}'.\n"
+                "Check the robot is connected and the group has a position configured."
+            )
+            show_warning(self._view, label, msg)
         else:
             self._logger.info("%s completed successfully", label)
-
 
 class _AddGroupDialog(AppDialog):
 

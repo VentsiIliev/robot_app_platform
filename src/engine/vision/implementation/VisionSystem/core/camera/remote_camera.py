@@ -1,64 +1,43 @@
-import time
+import requests
+from urllib.parse import urlparse
 
-import cv2
+from src.engine.vision.implementation.plvision.PLVision.Camera import Camera
 
 
-class RemoteCamera:
+class RemoteCamera(Camera):
     """
-    Wraps an MJPEG HTTP stream as a Camera-like object with a .capture() method.
-    Can be used in VisionSystem as a drop-in replacement.
+    Camera subclass for MJPEG HTTP streams.
+    Delegates all capture and exposure control to Camera,
+    which already handles http:// device strings via CAP_FFMPEG.
     """
 
-    def __init__(self, url, width=None, height=None, fps=None):
-        """
-        :param url: MJPEG stream URL (e.g., 'http://127.0.0.1:5000/video_feed')
-        :param width: optional desired width
-        :param height: optional desired height
-        :param fps: optional desired FPS (some streams ignore this)
-        """
-        self.url = url
-        self.width = width
-        self.height = height
-        self.requested_fps = fps
-        self.cap = cv2.VideoCapture(url)
-        self.active = self.cap.isOpened()
+    def __init__(self, url: str, width=None, height=None, fps=None):
+        super().__init__(
+            device=url,
+            width=width or 1280,
+            height=height or 720,
+            fps=fps,
+        )
+        self.url: str = url
+        parsed = urlparse(url)
+        self._base_url: str = f"{parsed.scheme}://{parsed.netloc}"
         if not self.active:
             raise RuntimeError(f"Failed to open remote camera at {url}")
 
-        if self.width and self.height:
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            time.sleep(0.05)
-
-    def capture(self, grab_only=False, timeout=1.0):
+    def set_auto_exposure(self, enabled: bool):
         """
-        Mimics the Camera.capture() method.
-        :param grab_only: ignored (for API compatibility)
-        :param timeout: seconds to wait for a frame
-        :return: frame or None
+        Override Camera.set_auto_exposure — skips the stop/start stream cycle
+        that causes SIGSEGV on FFMPEG HTTP streams. Sends an HTTP request to
+        the camera server instead.
         """
-        if not self.active:
-            return None
-
-        start_time = time.time()
-        while True:
-            ret, frame = self.cap.read()
-            if ret:
-                return frame
-            if (time.time() - start_time) > timeout:
-                return None
-            time.sleep(0.001)
-
-    def isOpened(self):
-        self.active = self.cap.isOpened()
-        return self.active
-
-    def close(self):
-        if self.cap is not None:
-            self.cap.release()
-        self.cap = None
-        self.active = False
-
-    # Backward-compatible aliases
-    stopCapture = close
-    stop_stream = close
+        if not self.active or self.cap is None:
+            return
+        try:
+            value = "true" if enabled else "false"
+            url = f"{self._base_url}/set_auto_exposure?value={value}"
+            r = requests.get(url, timeout=2)
+            if r.status_code != 200:
+                print("Failed to set auto exposure:", r.text)
+        except Exception:
+            import traceback
+            traceback.print_exc()

@@ -33,13 +33,18 @@ class GlueOperationCoordinator:
             GlueOperationMode.SPRAY_ONLY:     ProcessSequence([glue_process],                         messaging),
             GlueOperationMode.PICK_AND_SPRAY: ProcessSequence([pick_and_place_process, glue_process], messaging),
         }
-        self._clean_process        = clean_process
+        self._clean_sequence       = ProcessSequence([clean_process], messaging)
         self._calibration_process  = calibration_process
+        self._messaging            = messaging
         self._mode                 = GlueOperationMode.SPRAY_ONLY
         self._active_sequence: Optional[ProcessSequence] = None
         self._active_process:  Optional[IProcess]        = None
         self._lock             = threading.Lock()
         self._logger           = logging.getLogger(self.__class__.__name__)
+
+    @property
+    def _active(self) -> Optional[ProcessSequence]:
+        return self._active_sequence
 
     def _any_running(self) -> bool:
         if self._active_sequence is not None and self._active_sequence.is_running:
@@ -106,11 +111,12 @@ class GlueOperationCoordinator:
 
     def clean(self) -> None:
         with self._lock:
-            if self._reject_if_busy("clean"):
-                return
-            self._active_process = self._clean_process
-            process = self._clean_process
-        process.start()
+            current = self._active_sequence
+            if current is not None and current is not self._clean_sequence:
+                current.stop()
+            self._active_sequence = self._clean_sequence
+            sequence = self._clean_sequence
+        sequence.start()
 
     def calibrate(self) -> None:
         with self._lock:

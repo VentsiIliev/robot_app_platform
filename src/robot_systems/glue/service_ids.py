@@ -8,3 +8,4 @@ class ServiceID(str, Enum):
     TOOLS      = "tools"
     WEIGHT     = "weight"
     MOTOR      = "motor"
+    HEIGHT_MEASURING = "height_measuring"

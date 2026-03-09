@@ -158,6 +158,8 @@ class TestRobotCalibrationMapperToFlatDict(unittest.TestCase):
             "calib_min_step_mm", "calib_max_step_mm", "calib_target_error_mm",
             "calib_max_error_ref", "calib_k", "calib_derivative_scaling",
             "calib_z_target", "calib_required_ids",
+            "calib_axis_marker_id", "calib_axis_move_mm",
+            "calib_axis_max_attempts", "calib_axis_delay_after_move",
         }
         self.assertEqual(expected, set(flat.keys()))
 

@@ -56,9 +56,9 @@ def _build_workpiece_library_application(robot_system):
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
 
     settings_service = robot_system._settings_service
+    catalog = settings_service.get(SettingsID.GLUE_CATALOG)
 
     def _get_glue_types() -> list:
-        catalog = settings_service.get(SettingsID.GLUE_CATALOG)
         return catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
     repo = JsonWorkpieceRepository(_WORKPIECES_STORAGE)
@@ -186,14 +186,15 @@ def _build_calibration_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
-
+    from src.applications.base.robot_jog_service import RobotJogService
     service = CalibrationApplicationService(
         vision_service=robot_system.get_optional_service(ServiceID.VISION),
         process_controller=robot_system.coordinator,
     )
 
+    jog_service = RobotJogService(robot_system.get_optional_service(ServiceID.ROBOT))
     return WidgetApplication(
-        widget_factory=lambda ms: CalibrationFactory(ms).build(service)
+        widget_factory=lambda ms: CalibrationFactory(ms,jog_service).build(service)
     )
 
 
@@ -247,6 +248,7 @@ def _build_robot_settings_application(robot_app):
     from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
     from src.robot_systems.glue.service_ids import ServiceID
 
+    from src.applications.base.robot_jog_service import RobotJogService
     service = RobotSettingsApplicationService(
         robot_app._settings_service,
         config_key         = SettingsID.ROBOT_CONFIG,
@@ -255,8 +257,8 @@ def _build_robot_settings_application(robot_app):
         tool_settings_key  = SettingsID.TOOL_CHANGER_CONFIG,
         navigation_service = robot_app.get_service(ServiceID.NAVIGATION),
     )
-    return WidgetApplication(widget_factory=lambda _ms: RobotSettingsFactory().build(service))
-
+    jog_service = RobotJogService(robot_app.get_optional_service(ServiceID.ROBOT))
+    return WidgetApplication(widget_factory=lambda ms: RobotSettingsFactory(ms, jog_service).build(service))
 
 def _build_glue_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
@@ -280,3 +282,24 @@ def _build_modbus_settings_application(robot_app):
     return WidgetApplication(
         widget_factory=lambda _ms: ModbusSettingsFactory().build(settings_service, action_service)
     )
+
+
+def _build_height_measuring_application(robot_app):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.height_measuring.height_measuring_factory import HeightMeasuringFactory
+    from src.applications.height_measuring.service.height_measuring_application_service import (
+        HeightMeasuringApplicationService,
+    )
+
+    from src.applications.base.robot_jog_service import RobotJogService
+    settings_repo = robot_app._settings_service.get_repo(SettingsID.HEIGHT_MEASURING_SETTINGS)
+    service = HeightMeasuringApplicationService(
+        vision_service=robot_app.get_optional_service(ServiceID.VISION),
+        height_measuring_service=robot_app._height_measuring_service,
+        calibration_service=robot_app._height_measuring_calibration_service,
+        settings_repo=settings_repo,
+        laser_ops=robot_app._laser_detection_service,
+    )
+    jog_service = RobotJogService(robot_app.get_optional_service(ServiceID.ROBOT))
+    return WidgetApplication(widget_factory=lambda ms: HeightMeasuringFactory(ms, jog_service).build(service))
+

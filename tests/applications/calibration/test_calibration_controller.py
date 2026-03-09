@@ -149,6 +149,8 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
     def test_on_calibrate_camera_calls_model(self):
         ctrl, model, _, _ = _make_ctrl()
         ctrl._on_calibrate_camera()
+        for thread, _ in list(ctrl._threads):
+            thread.wait(2000)
         model.calibrate_camera.assert_called_once()
 
     def test_on_calibrate_robot_calls_model(self):
@@ -159,7 +161,10 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
     def test_on_calibrate_sequence_calls_model(self):
         ctrl, model, _, _ = _make_ctrl()
         ctrl._on_calibrate_sequence()
+        for thread, _ in list(ctrl._threads):
+            thread.wait(2000)
         model.calibrate_camera_and_robot.assert_called_once()
+
 
     def test_success_appends_tick_prefix(self):
         ctrl, _, view, _ = _make_ctrl(capture=(True, "done"))
@@ -167,8 +172,8 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
         view.append_log.assert_called_once_with("✓ done")
 
     def test_failure_appends_cross_prefix(self):
-        ctrl, _, view, _ = _make_ctrl(camera=(False, "no cam"))
-        ctrl._on_calibrate_camera()
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl._log(False, "no cam")
         view.append_log.assert_called_once_with("✗ no cam")
 
     def test_log_helper_success(self):

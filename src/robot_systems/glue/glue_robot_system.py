@@ -22,8 +22,10 @@ from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
 from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    build_vision_service, build_tool_service, _build_calibration_service
+    build_vision_service, build_tool_service, _build_calibration_service, _build_height_measuring_services
 from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
+from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
+from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
 
 
 
@@ -58,7 +60,8 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",        factory=application_wiring._build_user_management_application),
             ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
             ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application),
-            ApplicationSpec(name="ContourMatchingTester", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_contour_matching_tester)
+            ApplicationSpec(name="ContourMatchingTester", folder_id=2, icon="fa6s.shapes",            factory=application_wiring._build_contour_matching_tester),
+            ApplicationSpec(name="HeightMeasuring",       folder_id=2, icon="fa5s.ruler-vertical",   factory=application_wiring._build_height_measuring_application),
         ],
     )
 
@@ -70,7 +73,9 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.GLUE_CATALOG,      GlueCatalogSerializer(),               "glue/catalog.json"),
         SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
         SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS,     CameraSettingsSerializer(),         "vision/camera_settings.json"),
-        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,    ToolChangerSettingsSerializer(),      "tools/tool_changer.json"),
+        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,          ToolChangerSettingsSerializer(),         "tools/tool_changer.json"),
+        SettingsSpec(SettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
+        SettingsSpec(SettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
     ]
 
     services = [
@@ -126,7 +131,10 @@ class GlueRobotSystem(BaseRobotSystem):
         self._motor.open()
 
         self._calibration_service = _build_calibration_service(self)
-        self._coordinator = self._build_coordinator()
+        self._height_measuring_service, self._height_measuring_calibration_service, \
+            self._laser_detection_service = _build_height_measuring_services(self)
+
+        self._coordinator         = self._build_coordinator()
 
         self._robot.enable_robot()
 

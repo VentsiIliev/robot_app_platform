@@ -4,7 +4,7 @@ src/engine/robot/calibration/robot_calibration/states/
 
 Each handler receives a context and returns a RobotCalibrationStates value.
 Tests verify:
-  - stop_event is respected (the fix from stop_calibration_fix_plan.md)
+  - stop_event is respected (returns CANCELLED, not ERROR)
   - normal happy/sad paths return correct next states
 """
 import threading
@@ -57,6 +57,21 @@ def _make_context(**overrides):
     ctx.vision_service.get_camera_width.return_value = 640
     ctx.vision_service.get_camera_height.return_value = 480
     ctx.debug_draw = MagicMock()
+
+    # Wire helpers to mirror the real RobotCalibrationContext behaviour
+    def _wait_for_frame():
+        while True:
+            if ctx.stop_event.is_set():
+                return None
+            frame = ctx.vision_service.get_latest_frame()
+            if frame is not None:
+                return frame
+    ctx.wait_for_frame = _wait_for_frame
+
+    def _interruptible_sleep(seconds):
+        return ctx.stop_event.wait(timeout=seconds)
+    ctx.interruptible_sleep = _interruptible_sleep
+
     for k, v in overrides.items():
         setattr(ctx, k, v)
     return ctx
@@ -68,14 +83,14 @@ def _make_context(**overrides):
 
 class TestLookingForChessboardHandler(unittest.TestCase):
 
-    def test_returns_error_when_stop_event_set_before_call(self):
+    def test_returns_cancelled_when_stop_event_set_before_call(self):
         ctx = _make_context()
         ctx.stop_event.set()
         ctx.vision_service.get_latest_frame.return_value = None  # would block without stop check
         result = handle_looking_for_chessboard_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
 
-    def test_returns_error_when_stop_event_set_while_waiting_for_frame(self):
+    def test_returns_cancelled_when_stop_event_set_while_waiting_for_frame(self):
         ctx = _make_context()
 
         call_count = [0]
@@ -87,7 +102,7 @@ class TestLookingForChessboardHandler(unittest.TestCase):
 
         ctx.vision_service.get_latest_frame.side_effect = _frame
         result = handle_looking_for_chessboard_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
 
     def test_chessboard_found_returns_chessboard_found(self):
         ctx = _make_context()
@@ -112,14 +127,14 @@ class TestLookingForChessboardHandler(unittest.TestCase):
 
 class TestLookingForArucoMarkersHandler(unittest.TestCase):
 
-    def test_returns_error_when_stop_event_set_before_call(self):
+    def test_returns_cancelled_when_stop_event_set_before_call(self):
         ctx = _make_context()
         ctx.stop_event.set()
         ctx.vision_service.get_latest_frame.return_value = None
         result = handle_looking_for_aruco_markers_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
 
-    def test_returns_error_when_stop_event_set_while_waiting_for_frame(self):
+    def test_returns_cancelled_when_stop_event_set_while_waiting_for_frame(self):
         ctx = _make_context()
 
         call_count = [0]
@@ -131,7 +146,7 @@ class TestLookingForArucoMarkersHandler(unittest.TestCase):
 
         ctx.vision_service.get_latest_frame.side_effect = _frame
         result = handle_looking_for_aruco_markers_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
 
     def test_all_markers_found_returns_all_aruco_found(self):
         ctx = _make_context()
@@ -156,11 +171,11 @@ class TestLookingForArucoMarkersHandler(unittest.TestCase):
 
 class TestAlignRobotHandler(unittest.TestCase):
 
-    def test_returns_error_when_stop_event_set_at_entry(self):
+    def test_returns_cancelled_when_stop_event_set_at_entry(self):
         ctx = _make_context()
         ctx.stop_event.set()
         result = handle_align_robot_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
         ctx.calibration_robot_controller.move_to_position.assert_not_called()
 
     def test_move_success_returns_iterate_alignment(self):
@@ -176,11 +191,9 @@ class TestAlignRobotHandler(unittest.TestCase):
         result = handle_align_robot_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ERROR)
 
-    def test_returns_error_when_stop_event_fires_in_post_move_wait(self):
+    def test_returns_cancelled_when_stop_event_fires_in_post_move_wait(self):
         ctx = _make_context()
         ctx.calibration_robot_controller.move_to_position.return_value = True
-
-        original_wait = threading.Event.wait
 
         def _fast_wait(self_ev, timeout=None):
             self_ev.set()
@@ -189,7 +202,7 @@ class TestAlignRobotHandler(unittest.TestCase):
         with patch.object(threading.Event, "wait", _fast_wait):
             result = handle_align_robot_state(ctx)
 
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -223,57 +236,8 @@ class TestIterateAlignmentHandler(unittest.TestCase):
         ctx.alignment_threshold_mm = 100.0   # very loose — always pass
         return ctx
 
-    def test_returns_error_when_stop_event_set_before_frame(self):
-        ctx = _make_context()
-        ctx.stop_event.set()
-        ctx.vision_service.get_latest_frame.return_value = None
-        result = handle_iterate_alignment_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
-
-    def test_returns_error_when_stop_event_set_while_waiting_for_frame(self):
-        ctx = _make_context()
-
-        call_count = [0]
-        def _frame():
-            call_count[0] += 1
-            if call_count[0] == 1:
-                ctx.stop_event.set()
-            return None
-
-        ctx.vision_service.get_latest_frame.side_effect = _frame
-        result = handle_iterate_alignment_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
-
-    def test_returns_error_on_max_iterations_exceeded(self):
-        ctx = _make_context()
-        ctx.iteration_count = ctx.max_iterations  # already at max
-        result = handle_iterate_alignment_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
-
-    def test_marker_not_found_stays_in_iterate(self):
-        ctx = _make_context()
-        ctx.calibration_vision.detect_specific_marker.return_value = MagicMock(found=False)
-        result = handle_iterate_alignment_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
-
-    def test_stop_event_in_stability_wait_returns_error(self):
-        ctx = self._aligned_ctx()
-
-        def _fast_wait(self_ev, timeout=None):
-            self_ev.set()
-            return True
-
-        with patch.object(threading.Event, "wait", _fast_wait):
-            result = handle_iterate_alignment_state(ctx)
-
-        self.assertEqual(result, RobotCalibrationStates.ERROR)
-
-    def test_alignment_success_returns_sample_height(self):
-        ctx = self._aligned_ctx()
-        result = handle_iterate_alignment_state(ctx)
-        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
-
-    def test_alignment_not_reached_stays_in_iterate(self):
+    def _not_aligned_ctx(self):
+        """Context where alignment never succeeds (large error)."""
         ctx = _make_context()
         ctx.iteration_count = 0
 
@@ -291,7 +255,61 @@ class TestIterateAlignmentHandler(unittest.TestCase):
         ctx.calibration_vision.PPM = 1.0
         ctx.alignment_threshold_mm = 0.001   # very tight — never pass
         ctx.calibration_robot_controller.move_to_position.return_value = True
+        return ctx
 
+    def test_returns_cancelled_when_stop_event_set_before_frame(self):
+        ctx = _make_context()
+        ctx.stop_event.set()
+        ctx.vision_service.get_latest_frame.return_value = None
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
+
+    def test_returns_cancelled_when_stop_event_set_while_waiting_for_frame(self):
+        ctx = _make_context()
+
+        call_count = [0]
+        def _frame():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                ctx.stop_event.set()
+            return None
+
+        ctx.vision_service.get_latest_frame.side_effect = _frame
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
+
+    def test_returns_error_on_max_iterations_exceeded(self):
+        ctx = _make_context()
+        ctx.iteration_count = ctx.max_iterations  # already at max
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.ERROR)
+
+    def test_marker_not_found_stays_in_iterate(self):
+        ctx = _make_context()
+        ctx.calibration_vision.detect_specific_marker.return_value = MagicMock(found=False)
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+
+    def test_stop_event_in_stability_wait_returns_cancelled(self):
+        """Stop event fires during the post-move stability wait (non-aligned path)."""
+        ctx = self._not_aligned_ctx()
+
+        def _fast_wait(self_ev, timeout=None):
+            self_ev.set()
+            return True
+
+        with patch.object(threading.Event, "wait", _fast_wait):
+            result = handle_iterate_alignment_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.CANCELLED)
+
+    def test_alignment_success_returns_sample_height(self):
+        ctx = self._aligned_ctx()
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
+
+    def test_alignment_not_reached_stays_in_iterate(self):
+        ctx = self._not_aligned_ctx()
         result = handle_iterate_alignment_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
 

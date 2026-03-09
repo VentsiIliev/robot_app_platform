@@ -6,6 +6,9 @@ from pl_gui.settings.settings_view.settings_view import SettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
+from src.applications.base.drawer_toggle import DrawerToggle
+from src.applications.base.robot_jog_widget import RobotJogWidget
+
 from src.applications.robot_settings.view.robot_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_MARKER_GROUP,
     GLOBAL_MOTION_GROUP, OFFSET_DIRECTION_GROUP, ROBOT_INFO_GROUP,
@@ -24,6 +27,9 @@ class RobotSettingsView(IApplicationView):
     remove_group_requested = pyqtSignal(str)
     set_current_requested = pyqtSignal(str)
     move_to_requested = pyqtSignal(str, object)  # group_name, point_str or None
+    jog_requested = pyqtSignal(str, str, str, float)
+    jog_started = pyqtSignal(str)
+    jog_stopped = pyqtSignal(str)
 
     execute_requested  = pyqtSignal(str)   # group_name
 
@@ -47,6 +53,10 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("Calibration",         [CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,CALIBRATION_AXIS_MAPPING_GROUP])
         layout.addWidget(self._settings_view)
 
+        self._drawer = DrawerToggle(self, side="right", width=320)
+        self._jog_widget = RobotJogWidget()
+        self._drawer.add_widget(self._jog_widget)
+
         self._settings_view.save_requested.connect(self._on_inner_save)
         self._settings_view.value_changed_signal.connect(self._on_inner_value_changed)
         self._movement_tab.values_changed.connect(self._on_inner_movement_changed)
@@ -55,6 +65,10 @@ class RobotSettingsView(IApplicationView):
         self._movement_tab.set_current_requested.connect(self.set_current_requested)
         self._movement_tab.move_to_requested.connect(self.move_to_requested)
         self._movement_tab.execute_trajectory_requested.connect(self.execute_requested)
+
+        self._jog_widget.jog_requested.connect(self.jog_requested)
+        self._jog_widget.jog_started.connect(self.jog_started)
+        self._jog_widget.jog_stopped.connect(self.jog_stopped)
 
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)
@@ -101,6 +115,10 @@ class RobotSettingsView(IApplicationView):
             fn = lambda: self._model.move_to_point(group_name, point_str)
             label = f"Move To point in {group_name}"
         self._run_blocking(fn=fn, label=label)
+
+    def set_jog_position(self, pos: list) -> None:
+        self._jog_widget.set_position(pos)
+
 
     def clean_up(self) -> None:
         pass

@@ -51,11 +51,18 @@ class RobotSettingsModel(IApplicationModel):
                     existing[key] = MovementGroup()
         return existing
 
-    def move_to_group(self, group_name: str) -> bool:
+    def move_to_group(self, group_name: str) -> tuple[bool, str]:
         return self._service.move_to_group(group_name)
 
-    def execute_group(self, group_name: str) -> bool:
+    def execute_group(self, group_name: str) -> tuple[bool, str]:
         return self._service.execute_group(group_name)
 
-    def move_to_point(self, group_name: str, point_str: str) -> bool:
+    def move_to_point(self, group_name: str, point_str: str) -> tuple[bool, str]:
         return self._service.move_to_point(group_name, point_str)
+
+    def jog(self, axis: str, direction: str, step: float) -> None:
+        self._service.jog(axis, direction, step)
+
+    def stop_jog(self) -> None:
+        self._service.stop_jog()
+

@@ -47,13 +47,13 @@ class RobotCalibrationService(IRobotCalibrationService):
             self._pipeline = RefactoredRobotCalibrationPipeline(
                 self._config, self._adaptive_config, self._events_config
             )
-            success = self._pipeline.run()
+            success, msg = self._pipeline.run()
         finally:
             self._detach_log_handler(handler)
 
         self._calibrated = success
-        self._status     = "done" if success else "error"
-        msg = "Calibration complete" if success else "Calibration failed"
+        if self._status != "stopped":
+            self._status = "done" if success else "error"
         _logger.info(msg)
         return success, msg
 

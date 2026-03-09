@@ -26,28 +26,23 @@ class FolderController(QObject):
         self.folder_widget = folder_widget
         self.main_window = main_window
 
-        # Business state
         self.state = FolderState()
+        self._veto_pending = False          # ← NEW
 
-        # Managers for complex operations - created via injected factory
         self.floating_icon_manager = ui_factory.create_floating_icon_manager(folder_widget)
         self.overlay_manager = ui_factory.create_overlay_manager(
             folder_widget, overlay_parent=self.main_window, overlay_callback=self.handle_outside_click
         )
         self.expanded_view_manager = ui_factory.create_expanded_view_manager(folder_widget)
 
-        # Connect to UI events
         self.folder_widget.clicked.connect(self.handle_folder_click)
 
     def set_main_window(self, main_window):
-        """Set main window reference"""
         self.main_window = main_window
 
     def handle_folder_click(self):
-        """Handle folder click - business logic"""
         if self.state.is_grayed_out or self.state.app_running:
             return
-
         self.state.is_open = not self.state.is_open
         if self.state.is_open:
             try:
@@ -60,16 +55,13 @@ class FolderController(QObject):
             self.close_folder()
 
     def open_folder(self):
-        """Business logic for opening folder"""
         if not self.main_window:
             self.state.is_open = False
             return
-
         overlay = self.overlay_manager.show_overlay()
         if not overlay:
             self.state.is_open = False
             return
-
         expanded_view = self.expanded_view_manager.show_expanded_view(
             self.folder_widget.folder_name,
             overlay,
@@ -79,21 +71,17 @@ class FolderController(QObject):
             self.handle_close_app
         )
         self.expanded_view_manager.populate_apps(self.folder_widget.buttons)
-
         screen_center = self.main_window.rect().center()
         self.expanded_view_manager.fade_in(screen_center)
-
         self.folder_opened.emit()
 
     def handle_outside_click(self):
-        """Handle clicking outside folder"""
         if self.state.current_app_name:
             self.minimize_to_floating_icon()
         else:
             self.close_folder()
 
     def minimize_to_floating_icon(self):
-        """Business logic for minimizing to floating icon"""
         self.overlay_manager.hide_overlay()
         self.expanded_view_manager.fade_out()
         self.overlay_manager.set_style(f"background-color: {OVERLAY_FAINT};")
@@ -103,46 +91,59 @@ class FolderController(QObject):
         )
 
     def restore_from_floating_icon(self):
-        """Business logic for restoring from floating icon"""
-        self.overlay_manager.show_overlay()
-        self.floating_icon_manager.hide_floating_icon()
-        self.overlay_manager.set_style(f"background-color: {OVERLAY_LIGHT};")
+        if self.state.current_app_name and self.main_window:
+            app_widget = getattr(self.main_window, 'running_widgets', {}).get(self.state.current_app_name)
+            if app_widget and hasattr(app_widget, 'can_close') and not app_widget.can_close():
+                return  # warning shown by can_close(), floating icon stays visible
 
+        self.overlay_manager.show_overlay()
+        self.overlay_manager.set_style(f"background-color: {OVERLAY_LIGHT};")
         if self.main_window:
             center = self.main_window.rect().center()
-            self.expanded_view_manager.fade_in(center)
-
+            self.expanded_view_manager.fade_in(center)        # ← start expand first
             if self.state.current_app_name:
                 self.expanded_view_manager.show_close_button()
+        self.floating_icon_manager.hide_floating_icon()       # ← MOVED: hide AFTER fade_in starts
 
     def close_folder(self):
-        """Business logic for closing folder"""
+        # ── veto gate: absorb the close_requested fired after a vetoed handle_close_app ──
+        if self._veto_pending:                                 # ← NEW
+            self._veto_pending = False
+            self.expanded_view_manager.show_close_button()    # restore the hidden close btn
+            return
+
         if not self.state.current_app_name:
             self.state.app_running = False
-
         self.expanded_view_manager.fade_out()
         self.overlay_manager.hide_overlay()
         self.floating_icon_manager.hide_floating_icon()
-
         self.state.is_open = False
         self.state.current_app_name = None
-
         self.folder_closed.emit()
 
     def handle_app_selected(self, app_name):
-        """Business logic for app selection"""
+        # Veto check: block navigating to a new app if the current one can't be closed
+        if self.state.current_app_name and self.main_window:
+            app_widget = getattr(self.main_window, 'running_widgets', {}).get(self.state.current_app_name)
+            if app_widget and hasattr(app_widget, 'can_close') and not app_widget.can_close():
+                return
+
         self.state.app_running = True
         self.state.current_app_name = app_name
-
         self.app_selected.emit(app_name)
-
         self.expanded_view_manager.show_close_button()
         self.overlay_manager.set_style(f"background-color: {OVERLAY_SUBTLE};")
         self.overlay_manager.hide_overlay()
         QTimer.singleShot(300, self.minimize_to_floating_icon)
 
     def handle_close_app(self):
-        """Business logic for closing app"""
+        # ── veto check BEFORE any state mutation ──
+        if self.main_window:                                   # ← NEW
+            app_widget = getattr(self.main_window, 'running_widgets', {}).get(self.state.current_app_name)
+            if app_widget and hasattr(app_widget, 'can_close') and not app_widget.can_close():
+                self._veto_pending = True   # block the close_requested that fires next
+                return
+
         self.state.app_running = False
         self.state.current_app_name = None
         self.expanded_view_manager.hide_close_button()
@@ -150,7 +151,6 @@ class FolderController(QObject):
         self.close_folder()
 
     def set_disabled(self, disabled):
-        """Update business and UI state"""
         self.state.is_grayed_out = disabled
         self.folder_widget.set_grayed_out(disabled)
         self.folder_widget.setVisible(not disabled)

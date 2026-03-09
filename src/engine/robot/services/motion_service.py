@@ -26,11 +26,13 @@ class MotionService(IMotionService):
         self._safety = safety_checker
         self._jog_vel = jog_velocity
         self._jog_acc = jog_acceleration
+        self._last_jog_target: List[float] = []
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
-        if not self._safety.is_within_safety_limits(position):
-            self._logger.warning("move_ptp blocked by safety limits: %s", position)
+        violations = self._safety.get_violations(position)
+        if violations:
+            self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
             return False
         try:
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
@@ -46,8 +48,9 @@ class MotionService(IMotionService):
             return False
 
     def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
-        if not self._safety.is_within_safety_limits(position):
-            self._logger.warning("move_linear blocked by safety limits: %s", position)
+        violations = self._safety.get_violations(position)
+        if violations:
+            self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
             return False
         try:
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
@@ -61,10 +64,32 @@ class MotionService(IMotionService):
         except Exception:
             self._logger.exception("move_linear failed")
             return False
-
     def start_jog(self, axis: RobotAxis, direction: Direction, step: float) -> int:
         self._logger.debug("start_jog → axis=%s direction=%s step=%s", axis, direction, step)
         try:
+            current = self._robot.get_current_position()
+            self._logger.info(f"Current -> {current}")
+            if current and len(current) >= 3:
+                target = list(current)
+
+                idx = axis.value - 1  # X=0, Y=1, Z=2, RX=3, RY=4, RZ=5
+                if idx < len(target):
+                    if idx < 3 and len(target) >= 6:
+                        dx, dy, dz = self._tool_frame_delta(target, idx, direction.value, step)
+                        target[0] += dx
+                        target[1] += dy
+                        target[2] += dz
+                    else:
+                        target[idx] += direction.value * step
+                self._logger.info(f"Target -> {target}")
+                violations = self._safety.get_violations(target)
+                if violations:
+                    self._logger.warning(
+                        "start_jog blocked by safety limits: axis=%s dir=%s step=%s → %s",
+                        axis, direction, step, ", ".join(violations),
+                    )
+                    return -1
+
             ret = self._robot.start_jog(axis, direction, step, self._jog_vel, self._jog_acc)
             self._logger.debug("start_jog ← ret=%s", ret)
             return ret
@@ -72,8 +97,10 @@ class MotionService(IMotionService):
             self._logger.exception("start_jog failed")
             return -1
 
+
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
+        self._last_jog_target = []
         try:
             success = self._robot.stop_motion() == 0
             self._logger.debug("stop_motion ← success=%s", success)
@@ -88,6 +115,26 @@ class MotionService(IMotionService):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _tool_frame_delta(position: List[float], axis_idx: int,
+                          direction_value: float, step: float):
+        """Project a single tool-frame jog step into base-frame XYZ displacement.
+
+        R = Rz(rz) · Ry(ry) · Rx(rx), angles in degrees from position[3:6].
+        Returns (dx, dy, dz) in base frame.
+        """
+        cx, sx = math.cos(math.radians(position[3])), math.sin(math.radians(position[3]))
+        cy, sy = math.cos(math.radians(position[4])), math.sin(math.radians(position[4]))
+        cz, sz = math.cos(math.radians(position[5])), math.sin(math.radians(position[5]))
+        cols = (
+            (cy * cz,               cy * sz,              -sy     ),   # tool X in base
+            (cz*sx*sy - cx*sz,      cx*cz + sx*sy*sz,      cy*sx  ),   # tool Y in base
+            (cx*cz*sy + sx*sz,      cx*sy*sz - cz*sx,      cx*cy  ),   # tool Z in base
+        )
+        col = cols[axis_idx]
+        scale = direction_value * step
+        return col[0] * scale, col[1] * scale, col[2] * scale
 
     def _wait_for_position(
         self,
