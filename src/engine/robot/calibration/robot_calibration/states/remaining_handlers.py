@@ -192,10 +192,15 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(offset_x_mm, offset_y_mm)
         _logger.info(f"Marker {marker_id} offsets: image_mm=({offset_x_mm:.2f},{offset_y_mm:.2f}) -> "
             f"mapped_robot_mm=({mapped_x_mm:.2f},{mapped_y_mm:.2f})")
-        
-        iterative_position = context.calibration_robot_controller.get_iterative_align_position(
-            current_error_mm, mapped_x_mm, mapped_y_mm, context.alignment_threshold_mm
-        )
+
+        try:
+            iterative_position = context.calibration_robot_controller.get_iterative_align_position(
+                current_error_mm, mapped_x_mm, mapped_y_mm, context.alignment_threshold_mm
+            )
+        except RuntimeError as e:
+            _logger.error("Cannot compute iterative position: %s", e)
+            context.calibration_error_message = str(e)
+            return RobotCalibrationStates.ERROR
         
         movement_start = time.time()
         result = context.calibration_robot_controller.move_to_position(iterative_position, blocking=wait_to_reach_position)

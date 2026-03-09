@@ -72,7 +72,7 @@ def _build_calibration_service(robot_system):
         vision_service=robot_system._vision,
         robot_service=robot_system._robot,
         navigation_service=nav_service,
-        height_measuring_service=None,
+        height_measuring_service=robot_system._height_measuring_service,
         required_ids=calib_settings.required_ids,
         z_target=calib_settings.z_target,
         robot_tool=robot_settings.robot_tool,

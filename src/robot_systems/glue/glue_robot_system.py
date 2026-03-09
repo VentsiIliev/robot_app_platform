@@ -130,9 +130,11 @@ class GlueRobotSystem(BaseRobotSystem):
         self._motor = self.get_service(ServiceID.MOTOR)
         self._motor.open()
 
-        self._calibration_service = _build_calibration_service(self)
         self._height_measuring_service, self._height_measuring_calibration_service, \
             self._laser_detection_service = _build_height_measuring_services(self)
+
+        self._calibration_service = _build_calibration_service(self)
+
 
         self._coordinator         = self._build_coordinator()
 
