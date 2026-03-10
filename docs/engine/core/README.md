@@ -146,6 +146,30 @@ Caller                      MessageBroker               Handler
 
 ---
 
+## `ICoordinateTransformer`
+
+**File:** `src/engine/core/i_coordinate_transformer.py`
+
+Platform-level interface for 2D point transformations (canonical use: camera pixels → robot mm via homography). Decouples callers from NumPy and the matrix file format.
+
+```python
+class ICoordinateTransformer(ABC):
+    def transform(self, x: float, y: float) -> Tuple[float, float]: ...
+    def is_available(self) -> bool: ...
+    def reload(self) -> bool: ...
+```
+
+| Method | Description |
+|--------|-------------|
+| `transform(x, y)` | Convert pixel to robot mm relative to **camera center**. Raises `RuntimeError` if matrix not loaded. |
+| `transform_to_tcp(x, y)` | Same as `transform`, then adds TCP offset (camera → tool tip). Raises `RuntimeError` if matrix not loaded **or** if no TCP offsets were provided at construction. |
+| `is_available()` | `True` if the transformation matrix is loaded and usable. |
+| `reload()` | Re-read the matrix from its source. Returns `True` if now available. Call after a calibration run writes a new matrix file. |
+
+**Rule:** Inject `ICoordinateTransformer`; never instantiate `HomographyTransformer` inside a service. The concrete type lives in `src/engine/vision/homography_transformer.py` and is created in the wiring layer.
+
+---
+
 ## Pub/Sub Topics Reference
 
 Topics are defined as class constants in `src/shared_contracts/events/`.

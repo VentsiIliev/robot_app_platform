@@ -9,6 +9,7 @@ Camera-based alignment and detection system. Defines `IVisionService` and hosts 
 ```
 src/engine/vision/
 ├── i_vision_service.py                        ← IVisionService ABC (16 methods)
+├── homography_transformer.py                  ← HomographyTransformer (ICoordinateTransformer impl)
 ├── camera_settings_serializer.py              ← CameraSettingsSerializer (engine ↔ settings layer)
 └── implementation/
     ├── VisionSystem/
@@ -104,6 +105,32 @@ class IVisionService(ABC):
     # ArUco
     def detect_aruco_markers(self, image) -> tuple: ...
 ```
+
+---
+
+## `HomographyTransformer`
+
+**File:** `homography_transformer.py`
+
+Concrete `ICoordinateTransformer` that loads a 3×3 homography matrix from a `.npy` file and applies projective math to convert camera pixel coordinates to robot-frame millimetres.
+
+```python
+class HomographyTransformer(ICoordinateTransformer):
+    def __init__(self, matrix_path: str,
+                 tcp_x_offset: float = <not provided>,
+                 tcp_y_offset: float = <not provided>): ...
+    def is_available(self) -> bool: ...
+    def reload(self) -> bool: ...
+    def transform(self, x: float, y: float) -> Tuple[float, float]: ...
+    def transform_to_tcp(self, x: float, y: float) -> Tuple[float, float]: ...
+```
+
+- Matrix is loaded once at construction via `np.load(matrix_path)`.
+- If the file is missing or unreadable, `is_available()` returns `False`; `transform()` raises `RuntimeError`.
+- `reload()` re-reads the file from disk — call this after a calibration run writes a fresh matrix so that the running service picks up the new values without restarting.
+- `tcp_x_offset` / `tcp_y_offset` are **optional** but must both be provided together. If either is omitted, calling `transform_to_tcp()` raises `RuntimeError` — there is no silent default.
+- `transform_to_tcp(x, y)` = `transform(x, y)` + `(tcp_x_offset, tcp_y_offset)`. Use this when you need the result relative to the tool tip rather than the camera optical center.
+- Created by the wiring layer (`application_wiring.py`) using `vision_service.camera_to_robot_matrix_path` and `robot_config.tcp_x_offset` / `robot_config.tcp_y_offset`; injected as `ICoordinateTransformer` into services that need it.
 
 ---
 

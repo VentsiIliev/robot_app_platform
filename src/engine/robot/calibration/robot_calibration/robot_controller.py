@@ -5,11 +5,14 @@ _logger = logging.getLogger(__name__)
 
 
 class CalibrationRobotController:
-    def __init__(self, robot_service, navigation_service, tool: int, user: int, adaptive_movement_config):
+    def __init__(self, robot_service, navigation_service, tool: int, user: int, adaptive_movement_config,
+                 velocity: int = 30, acceleration: int = 10):
         self.robot_service = robot_service
         self._navigation_service = navigation_service
         self._tool = tool
         self._user = user
+        self._velocity = velocity
+        self._acceleration = acceleration
         self.adaptive_movement_config = adaptive_movement_config
         self._calibration_position = None
 
@@ -31,8 +34,8 @@ class CalibrationRobotController:
             position=position,
             tool=self._tool,
             user=self._user,
-            velocity=30,
-            acceleration=10,
+            velocity=self._velocity,
+            acceleration=self._acceleration,
             wait_to_reach=blocking,
         )
 
@@ -97,8 +100,8 @@ class CalibrationRobotController:
             position=[x, y + dy_mm, z, rx, ry, rz],
             tool=self._tool,
             user=self._user,
-            velocity=30,
-            acceleration=10,
+            velocity=self._velocity,
+            acceleration=self._acceleration,
             wait_to_reach=blocking,
         )
 
@@ -109,7 +112,7 @@ class CalibrationRobotController:
             position=[x + dx_mm, y, z, rx, ry, rz],
             tool=self._tool,
             user=self._user,
-            velocity=30,
-            acceleration=10,
+            velocity=self._velocity,
+            acceleration=self._acceleration,
             wait_to_reach=blocking,
         )

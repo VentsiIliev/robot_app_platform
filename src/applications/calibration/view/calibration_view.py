@@ -106,6 +106,24 @@ MaterialButton:disabled {
 }
 """
 
+_BTN_TEST = """
+MaterialButton {
+    background: #E8F5E9;
+    color: #2E7D32;
+    border: 1.5px solid #4CAF50;
+    border-radius: 8px;
+    font-weight: bold;
+    min-height: 44px;
+}
+MaterialButton:hover   { background: #DCEDC8; }
+MaterialButton:pressed { background: #C8E6C9; }
+MaterialButton:disabled {
+    background: #EEEEEE;
+    color: #BDBDBD;
+    border: 1.5px solid #E0E0E0;
+}
+"""
+
 
 _CROSSHAIR_COLOR     = (0, 255, 80)    # BGR bright green
 _CROSSHAIR_THICKNESS = 1
@@ -136,7 +154,9 @@ class CalibrationView(IApplicationView):
     calibrate_camera_requested   = pyqtSignal()
     calibrate_robot_requested    = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
-    stop_calibration_requested = pyqtSignal()
+    stop_calibration_requested   = pyqtSignal()
+    test_calibration_requested   = pyqtSignal()
+    view_depth_map_requested     = pyqtSignal()
     jog_requested              = pyqtSignal(str, str, str, float)
     jog_stopped                = pyqtSignal(str)
 
@@ -250,6 +270,20 @@ class CalibrationView(IApplicationView):
 
         layout.addWidget(_divider())
 
+        # ── Test ──────────────────────────────────────────────────────
+        layout.addWidget(_section_label("Test"))
+        self._test_calibration_btn = MaterialButton("▶  Test Calibration")
+        self._test_calibration_btn.setStyleSheet(_BTN_TEST)
+        self._test_calibration_btn.setEnabled(False)
+        layout.addWidget(self._test_calibration_btn)
+
+        self._view_depth_map_btn = MaterialButton("📈  View Depth Map")
+        self._view_depth_map_btn.setStyleSheet(_BTN_TEST)
+        self._view_depth_map_btn.setEnabled(False)
+        layout.addWidget(self._view_depth_map_btn)
+
+        layout.addWidget(_divider())
+
         # ── Log ───────────────────────────────────────────────────────
         layout.addWidget(_section_label("Log"))
         self._log = QTextEdit()
@@ -268,6 +302,8 @@ class CalibrationView(IApplicationView):
         self._calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
         self._calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
         self._calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
+        self._test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
+        self._view_depth_map_btn.clicked.connect(self.view_depth_map_requested.emit)
         self._crosshair_btn.clicked.connect(self._toggle_crosshair)
         self._magnifier_btn.clicked.connect(self._toggle_magnifier)
         self._stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
@@ -288,6 +324,12 @@ class CalibrationView(IApplicationView):
 
     def set_stop_calibration_enabled(self, enabled: bool) -> None:
         self._stop_robot_btn.setEnabled(enabled)
+
+    def set_test_calibration_enabled(self, enabled: bool) -> None:
+        self._test_calibration_btn.setEnabled(enabled)
+
+    def set_depth_map_enabled(self, enabled: bool) -> None:
+        self._view_depth_map_btn.setEnabled(enabled)
 
     def update_camera_view(self, image) -> None:
         if image is None:

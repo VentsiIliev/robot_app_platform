@@ -27,3 +27,15 @@ class CalibrationModel(IApplicationModel):
 
     def stop_calibration(self) -> None:
         self._service.stop_calibration()
+
+    def is_calibrated(self) -> bool:
+        return self._service.is_calibrated()
+
+    def test_calibration(self) -> tuple[bool, str]:
+        return self._service.test_calibration()
+
+    def stop_test_calibration(self) -> None:
+        self._service.stop_test_calibration()
+
+    def get_height_calibration_data(self):
+        return self._service.get_height_calibration_data()

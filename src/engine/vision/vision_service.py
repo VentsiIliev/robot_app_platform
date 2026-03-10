@@ -94,6 +94,7 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def run_matching(self, workpieces: list, contours: list):
         from src.engine.vision.implementation.VisionSystem.features.contour_matching import find_matching_workpieces
         result, no_matches, matched_contours = find_matching_workpieces(workpieces, contours)
+        print(f"[run_matching] {result}")
         return (
             result,
             len(no_matches),

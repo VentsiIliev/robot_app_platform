@@ -1,5 +1,6 @@
 import numpy as np
-
+import logging
+_logger = logging.getLogger(__name__)
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from pathlib import Path
 
@@ -21,12 +22,12 @@ def _calculateDifferences(workpieceContour: Contour, contour: Contour, debug: bo
     workpieceCentroid = workpieceContour.getCentroid()
     contourCentroid = contour.getCentroid()
     centroidDiff = np.array(contourCentroid) - np.array(workpieceCentroid)
-
+    _logger.debug(f"centroidDiff: {centroidDiff}")
     # --- Compute rotation difference ---
     wpAngle = workpieceContour.getOrientation()
     contourAngle = contour.getOrientation()
     rotationDiff = (contourAngle - wpAngle + 180) % 360 - 180  # Normalize to [-180, 180]
-
+    _logger.debug(f"rotationDiff: {rotationDiff}")
     # --- Optional debug output ---
     if debug:
         _debug_contours(workpieceContour, contour, wpAngle, contourAngle, rotationDiff,

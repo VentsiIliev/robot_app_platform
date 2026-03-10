@@ -19,8 +19,8 @@ def create_robot_service(
         settings_service=None,
         tool_changer=None,
 ) -> IRobotService:
-    safety = SafetyChecker(robot_settings_key,settings_service)
-    motion = MotionService(robot, safety)
+    safety = SafetyChecker(robot_settings_key, settings_service)
+    motion = MotionService(robot, safety, messaging_service=messaging_service)
     publisher = RobotStatePublisher(messaging_service)  # ← no fallback
     state = RobotStateManager(robot, publisher=publisher)
     state.start_monitoring()

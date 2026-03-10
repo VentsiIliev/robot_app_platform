@@ -66,6 +66,8 @@ class RobotCalibrationSettings:
     axis_mapping: AxisMappingConfig = field(default_factory=AxisMappingConfig)
     z_target: int = 300
     required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
+    velocity: int = 30
+    acceleration: int = 10
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
@@ -74,6 +76,8 @@ class RobotCalibrationSettings:
             axis_mapping=AxisMappingConfig.from_dict(data.get("axis_mapping_config", {})),
             z_target=data.get("z_target", 300),
             required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
+            velocity=int(data.get("velocity", 30)),
+            acceleration=int(data.get("acceleration", 10)),
         )
 
     def to_dict(self) -> Dict:
@@ -82,6 +86,8 @@ class RobotCalibrationSettings:
             "axis_mapping_config": self.axis_mapping.to_dict(),
             "z_target": self.z_target,
             "required_ids": self.required_ids,
+            "velocity": self.velocity,
+            "acceleration": self.acceleration,
         }
 
 

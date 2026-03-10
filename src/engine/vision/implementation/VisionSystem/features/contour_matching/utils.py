@@ -89,54 +89,34 @@ def close_contours_if_open(contours):
             contours[i] = np.vstack([cnt, first_point])
     return contours
 
-def calculate_mask_overlap(contour1, contour2, canvas_size=(800, 800)):
-    """
-    Calculate overlap between two contours using binary masks.
+def calculate_mask_overlap(contour1, contour2, canvas_size=None):
+    c1 = np.array(contour1, dtype=np.int32).reshape(-1, 1, 2)
+    c2 = np.array(contour2, dtype=np.int32).reshape(-1, 1, 2)
 
-    Args:
-        contour1: First contour (workpiece contour after initial alignment)
-        contour2: Second contour (target/new contour)
-        canvas_size: Size of the canvas to draw masks on
-
-    Returns:
-        float: Overlap ratio (Intersection over Union)
-    """
-    # Ensure contours are in the right format
-    c1 = np.array(contour1, dtype=np.int32)
-    c2 = np.array(contour2, dtype=np.int32)
-
-    # Reshape if needed
-    if len(c1.shape) == 3:
-        c1 = c1.reshape(-1, 1, 2)
+    if canvas_size is None:
+        # fit canvas tightly around both contours with padding
+        all_pts = np.concatenate([c1.reshape(-1, 2), c2.reshape(-1, 2)], axis=0)
+        x_min, y_min = all_pts.min(axis=0) - 10
+        x_max, y_max = all_pts.max(axis=0) + 10
+        w = int(x_max - x_min) + 1
+        h = int(y_max - y_min) + 1
+        # shift contours to start at (0,0)
+        c1 = c1 - np.array([[[x_min, y_min]]], dtype=np.int32)
+        c2 = c2 - np.array([[[x_min, y_min]]], dtype=np.int32)
+        canvas_size = (h, w)
     else:
-        c1 = c1.reshape(-1, 1, 2)
+        canvas_size = (canvas_size[1], canvas_size[0])   # (height, width) for numpy
 
-    if len(c2.shape) == 3:
-        c2 = c2.reshape(-1, 1, 2)
-    else:
-        c2 = c2.reshape(-1, 1, 2)
-
-    # Create masks
     mask1 = np.zeros(canvas_size, dtype=np.uint8)
     mask2 = np.zeros(canvas_size, dtype=np.uint8)
 
-    # Draw filled contours
-    cv2.drawContours(mask1, [c1], -1, 255, -1)  # -1 means filled
+    cv2.drawContours(mask1, [c1], -1, 255, -1)
     cv2.drawContours(mask2, [c2], -1, 255, -1)
 
-    # Calculate intersection and union
-    intersection = np.logical_and(mask1, mask2)
-    union = np.logical_or(mask1, mask2)
+    intersection_area = np.count_nonzero(np.logical_and(mask1, mask2))
+    union_area        = np.count_nonzero(np.logical_or(mask1, mask2))
 
-    # Calculate IoU (Intersection over Union)
-    intersection_area = np.sum(intersection)
-    union_area = np.sum(union)
-
-    if union_area == 0:
-        return 0.0
-
-    iou = intersection_area / union_area
-    return iou
+    return intersection_area / union_area if union_area > 0 else 0.0
 
 def convexity_ratio(contour):
     """Compute how concave a shape is (area vs convex hull area)."""

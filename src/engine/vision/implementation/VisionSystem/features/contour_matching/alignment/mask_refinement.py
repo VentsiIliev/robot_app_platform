@@ -21,7 +21,7 @@ def _refine_alignment_with_mask(workpiece_contour, target_contour):
     centroid = contour_obj.getCentroid()
 
     best_rotation = 0
-    best_overlap = calculate_mask_overlap(workpiece_contour, target_contour)
+    best_overlap = calculate_mask_overlap(workpiece_contour, target_contour,canvas_size=(1280,720))
     print(f"      Initial overlap (0°): {best_overlap:.4f}")
 
     # Stage 1: Coarse search
@@ -71,7 +71,7 @@ def _coarse_search(workpiece_contour, target_contour, centroid, best_rotation, b
     while angle < 360 and iteration < max_iterations:
         signed_angle = angle if angle <= 180 else angle - 360
         rotated_points = _rotate_contour(workpiece_contour, signed_angle, centroid)
-        overlap = calculate_mask_overlap(rotated_points, target_contour)
+        overlap = calculate_mask_overlap(rotated_points, target_contour,canvas_size=(1280,720))
 
         if overlap > best_overlap:
             improvement = overlap - best_overlap
@@ -134,7 +134,7 @@ def _local_refinement(workpiece_contour, target_contour, centroid, best_rotation
 
             angle = (angle + 180) % 360 - 180
             rotated_points = _rotate_contour(workpiece_contour, angle, centroid)
-            overlap = calculate_mask_overlap(rotated_points, target_contour)
+            overlap = calculate_mask_overlap(rotated_points, target_contour,canvas_size=(1280,720))
 
             if overlap > best_overlap:
                 improvement = overlap - best_overlap
@@ -182,7 +182,7 @@ def _fine_tune(workpiece_contour, target_contour, centroid, best_rotation, best_
             angle = best_rotation + offset_sign * offset
             angle = (angle + 180) % 360 - 180
             rotated_points = _rotate_contour(workpiece_contour, angle, centroid)
-            overlap = calculate_mask_overlap(rotated_points, target_contour)
+            overlap = calculate_mask_overlap(rotated_points, target_contour,canvas_size=(1280,720))
 
             if overlap > best_overlap:
                 improvement = overlap - best_overlap

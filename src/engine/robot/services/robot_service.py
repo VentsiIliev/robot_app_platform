@@ -43,7 +43,7 @@ class RobotService(IRobotService):
         return self._motion.stop_motion()
 
     def get_current_position(self) -> List[float]:
-        return self._motion.get_current_position()
+        return list(self._state.position)
 
     # --- IRobotLifecycle ---
 

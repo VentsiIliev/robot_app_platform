@@ -35,7 +35,10 @@ class _Bridge(QObject):
     log_received            = pyqtSignal(str)
     process_finished        = pyqtSignal(bool, str)
     camera_process_finished = pyqtSignal(bool, str)
-    stop_btn_enabled        = pyqtSignal(bool)        # ← new
+    stop_btn_enabled        = pyqtSignal(bool)
+    test_btn_enabled        = pyqtSignal(bool)
+    test_finished           = pyqtSignal(bool, str)
+    depth_map_btn_enabled   = pyqtSignal(bool)
 
 
 
@@ -59,15 +62,21 @@ class CalibrationController(IApplicationController):
         self._bridge.camera_frame.connect(self._on_camera_frame)
         self._bridge.log_received.connect(self._on_log_received)
         self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
+        self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
+        self._bridge.test_finished.connect(self._on_test_finished)
+        self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
         self._view.stop_calibration_requested.connect(self._on_stop_calibration)
 
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
+        self._view.set_test_calibration_enabled(self._model.is_calibrated())
+        self._view.set_depth_map_enabled(self._model.get_height_calibration_data() is not None)
 
     def stop(self) -> None:
         self._running = False
-        self._model.stop_calibration()  # ← signal pipeline to stop first
+        self._model.stop_calibration()
+        self._model.stop_test_calibration()
         for topic, cb in reversed(self._subs):
             try:
                 self._broker.unsubscribe(topic, cb)
@@ -98,6 +107,7 @@ class CalibrationController(IApplicationController):
     # ── Bridge → View (main thread) ───────────────────────────────────
     def _on_stop_calibration(self) -> None:
         self._model.stop_calibration()
+        self._model.stop_test_calibration()
         self._bridge.stop_btn_enabled.emit(False)
 
     def _on_camera_frame(self, frame) -> None:
@@ -115,6 +125,8 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_camera_requested.connect(self._on_calibrate_camera)
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
+        self._view.test_calibration_requested.connect(self._on_test_calibration)
+        self._view.view_depth_map_requested.connect(self._on_view_depth_map)
 
     def _log(self, ok: bool, msg: str) -> None:
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
@@ -160,16 +172,62 @@ class CalibrationController(IApplicationController):
 
     def _on_calibration_process_state(self, event: ProcessStateEvent) -> None:
         if event.state == ProcessState.RUNNING:
-            self._robot_process_running = True    # ← set
+            self._robot_process_running = True
             self._bridge.stop_btn_enabled.emit(True)
+            self._bridge.test_btn_enabled.emit(False)
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
-            self._robot_process_running = False   # ← clear
+            self._robot_process_running = False
             self._bridge.stop_btn_enabled.emit(False)
 
         if event.state == ProcessState.STOPPED:
             self._bridge.process_finished.emit(True, "Robot calibration complete")
+            self._bridge.test_btn_enabled.emit(True)
+            self._bridge.depth_map_btn_enabled.emit(
+                self._model.get_height_calibration_data() is not None
+            )
         elif event.state == ProcessState.ERROR:
             self._bridge.process_finished.emit(False, event.message or "Robot calibration failed")
+            self._bridge.test_btn_enabled.emit(False)
+
+    def _on_view_depth_map(self) -> None:
+        from src.applications.calibration.view.depth_map_dialog import DepthMapDialog
+        data = self._model.get_height_calibration_data()
+        if data is None:
+            self._view.append_log("✗ No height calibration data available")
+            return
+        dlg = DepthMapDialog(data, parent=self._view)
+        dlg.exec()
+
+    def _on_test_calibration(self) -> None:
+        self._view.set_buttons_enabled(False)
+        self._bridge.test_btn_enabled.emit(False)
+        self._bridge.stop_btn_enabled.emit(True)
+        thread = QThread()
+        worker = _Worker(self._model.test_calibration)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_test_worker_done)
+        worker.failed.connect(self._on_test_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_test_worker_done(self, result) -> None:
+        ok, msg = result
+        self._bridge.test_finished.emit(ok, msg)
+
+    def _on_test_worker_failed(self, error: str) -> None:
+        self._bridge.test_finished.emit(False, f"Test error: {error}")
+
+    def _on_test_finished(self, ok: bool, msg: str) -> None:
+        if not self._running:
+            return
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_buttons_enabled(True)
+        self._bridge.stop_btn_enabled.emit(False)
+        self._bridge.test_btn_enabled.emit(True)
 
     # ── Thread helper ─────────────────────────────────────────────────
 

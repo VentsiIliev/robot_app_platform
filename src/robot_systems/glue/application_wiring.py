@@ -187,9 +187,29 @@ def _build_calibration_application(robot_system):
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
     from src.applications.base.robot_jog_service import RobotJogService
+    from src.engine.vision.homography_transformer import HomographyTransformer
+
+    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_config = robot_system._robot_config
+    transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            tcp_x_offset=robot_config.tcp_x_offset,
+            tcp_y_offset=robot_config.tcp_y_offset,
+        )
+        if vision_service is not None and robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        if vision_service is not None else None
+    )
+
     service = CalibrationApplicationService(
-        vision_service=robot_system.get_optional_service(ServiceID.VISION),
+        vision_service=vision_service,
         process_controller=robot_system.coordinator,
+        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
+        height_service=robot_system.get_optional_service(ServiceID.HEIGHT_MEASURING),
+        robot_config=robot_system._robot_config,
+        calib_config=robot_system._robot_calibration,
+        transformer=transformer,
     )
 
     jog_service = RobotJogService(robot_system.get_optional_service(ServiceID.ROBOT))

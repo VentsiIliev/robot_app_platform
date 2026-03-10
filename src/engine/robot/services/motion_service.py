@@ -1,12 +1,13 @@
 import math
 import logging
 import time
-from typing import List
+from typing import List, Optional
 
 from ..interfaces.i_motion_service import IMotionService
 from ..interfaces.i_robot import IRobot
 from ..interfaces.i_safety_checker import ISafetyChecker
 from ..enums.axis import RobotAxis, Direction
+from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class MotionService(IMotionService):
@@ -21,6 +22,7 @@ class MotionService(IMotionService):
         safety_checker: ISafetyChecker,
         jog_velocity: float = 10.0,
         jog_acceleration: float = 10.0,
+        messaging_service=None,
     ):
         self._robot = robot
         self._safety = safety_checker
@@ -28,6 +30,12 @@ class MotionService(IMotionService):
         self._jog_acc = jog_acceleration
         self._last_jog_target: List[float] = []
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._cached_position: List[float] = []
+        if messaging_service:
+            messaging_service.subscribe(RobotTopics.POSITION, self._on_position)
+
+    def _on_position(self, position: List[float]) -> None:
+        self._cached_position = position
 
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
         violations = self._safety.get_violations(position)
@@ -145,7 +153,7 @@ class MotionService(IMotionService):
     ) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            current = self._robot.get_current_position()
+            current = self._cached_position or self._robot.get_current_position()
             if current and len(current) >= 3:
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))
                 if dist <= threshold:

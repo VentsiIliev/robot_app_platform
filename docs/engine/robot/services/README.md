@@ -13,11 +13,12 @@ IRobotService (public interface)
                  ├── _motion: IMotionService
                  │       └── MotionService
                  │                 ├── _robot: IRobot
-                 │                 └── _safety: ISafetyChecker
+                 │                 ├── _safety: ISafetyChecker
+                 │                 └── _cached_position: List[float]  ← updated by "robot/position" subscription
                  ├── _robot: IRobot  (same instance — for enable/disable)
                  ├── _state: IRobotStateProvider
                  │       └── RobotStateManager
-                 │                 ├── _robot: IRobot
+                 │                 ├── _robot: FairinoRobot(robot.ip)  ← dedicated connection, correct IP
                  │                 └── _publisher: IStatePublisher
                  │                         └── RobotStatePublisher
                  │                                   └── IMessagingService
@@ -46,8 +47,11 @@ class MotionService(IMotionService):
         safety_checker: ISafetyChecker,
         jog_velocity: float = 10.0,
         jog_acceleration: float = 10.0,
+        messaging_service=None,          # Optional[IMessagingService]
     ): ...
 ```
+
+If `messaging_service` is provided, `MotionService` subscribes to `RobotTopics.POSITION` (`"robot/position"`) via the named bound method `_on_position`. The received position is cached in `self._cached_position`. This eliminates a competing XML-RPC call to the robot during move-wait loops (see `_wait_for_position` below).
 
 | Method | Safety checked | Returns |
 |--------|---------------|---------|
@@ -59,9 +63,11 @@ class MotionService(IMotionService):
 
 **`wait_to_reach` semantics:**
 
-When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position` polls `get_current_position()` every `_WAIT_DELAY_S = 0.1s` until:
+When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position` checks position every `_WAIT_DELAY_S = 0.1s` until:
 - Euclidean distance on (x, y, z) only: `√(Σ(aᵢ − bᵢ)²)` ≤ `_WAIT_THRESHOLD_MM = 2.0mm`
 - Or timeout after `_WAIT_TIMEOUT_S = 10.0s` (logs warning, returns `False`)
+
+Position is read from `self._cached_position` (updated by the `"robot/position"` subscription). If the cache is empty (subscription not yet received), it falls back to `self._robot.get_current_position()` directly. This avoids a concurrent XML-RPC connection to the robot while the poll thread is already reading the same endpoint.
 
 Rotation axes (rx, ry, rz) are not included in the distance calculation.
 
@@ -125,11 +131,11 @@ class RobotStateSnapshot:
 
 **File:** `robot_state_manager.py`
 
-Implements `IRobotStateProvider`. Polls the robot hardware at 0.5s intervals in a daemon thread and publishes `RobotStateSnapshot` via `IStatePublisher`.
+Implements `IRobotStateProvider`. Polls the robot hardware at 0.1s intervals in a daemon thread and publishes `RobotStateSnapshot` via `IStatePublisher`.
 
 ```python
 class RobotStateManager(IRobotStateProvider):
-    _POLL_INTERVAL_S = 0.5
+    _POLL_INTERVAL_S = 0.1
 
     def __init__(
         self,
@@ -154,6 +160,8 @@ class RobotStateManager(IRobotStateProvider):
 **Thread safety:** All property reads acquire `self._lock`. `_build_snapshot` also acquires the lock.
 
 **`stop_monitoring()`** signals the thread to stop and joins with a 2s timeout.
+
+**Dedicated connection:** `RobotStateManager` opens its own `FairinoRobot` connection (using `robot.ip` when available, falling back to the passed robot for test doubles). This dedicated connection is the **only** caller of `GetActualTCPPose` — the command thread no longer polls position directly, preventing `http.client.CannotSendRequest` errors from simultaneous XML-RPC calls.
 
 ---
 
@@ -200,7 +208,8 @@ class RobotService(IRobotService):
 ```
 
 Delegates:
-- All `IMotionService` methods → `self._motion`
+- Motion commands (`move_ptp`, `move_linear`, `start_jog`, `stop_motion`) → `self._motion`
+- `get_current_position()` → `list(self._state.position)` — reads the cache maintained by `RobotStateManager`, **no XML-RPC call**
 - `enable_robot()` / `disable_robot()` → `self._robot.enable()` / `.disable()`
 - `get_current_velocity()` / `get_current_acceleration()` / `get_state()` / `get_state_topic()` → `self._state`
 
@@ -213,7 +222,8 @@ Delegates:
 ```python
 def create_robot_service(
     robot: IRobot,
-    messaging_service: IMessagingService,
+    messaging_service: IMessagingService,   # required
+    robot_settings_key,
     settings_service=None,
     tool_changer=None,
 ) -> IRobotService:
@@ -221,10 +231,10 @@ def create_robot_service(
 ```
 
 Assembly order:
-1. `SafetyChecker(settings_service)` ← optional settings
-2. `MotionService(robot, safety_checker)` ← default jog params
+1. `SafetyChecker(robot_settings_key, settings_service)` ← optional settings
+2. `MotionService(robot, safety_checker, messaging_service=messaging_service)` ← subscribes to `"robot/position"`
 3. `RobotStatePublisher(messaging_service)` ← required
-4. `RobotStateManager(robot, publisher)` + `state.start_monitoring()`
+4. `RobotStateManager(robot, publisher)` + `state.start_monitoring()` ← opens dedicated connection via `robot.ip`
 5. Optionally: `RobotToolService(motion, robot_config, tool_changer)`
 6. Returns `RobotService(motion, robot, state, tool_service)`
 
@@ -250,6 +260,8 @@ MotionService.move_ptp(...)
     │       ret != 0 → return False
     │
     └─ wait_to_reach? → _wait_for_position(pos, threshold=2mm, timeout=10s)
+                              reads self._cached_position (from "robot/position" subscription)
+                              falls back to IRobot.get_current_position() if cache is empty
 ```
 
 ### Jog Command
@@ -279,7 +291,8 @@ MotionService.start_jog(...)
 ### State Broadcasting (background thread)
 
 ```
-RobotStateManager._poll_loop()  [every 0.5s, daemon thread]
+RobotStateManager._poll_loop()  [every 0.1s, daemon thread]
+    │  (runs on a dedicated FairinoRobot(robot.ip) connection — sole XML-RPC caller)
     │
     ├─ IRobot.get_current_position() → List[float]
     ├─ IRobot.get_current_velocity() → float
@@ -291,6 +304,7 @@ RobotStateManager._poll_loop()  [every 0.5s, daemon thread]
             │
             ├─ messaging.publish("robot/state",        snapshot)
             ├─ messaging.publish("robot/position",     snapshot.position)
+            │       └─▶ MotionService._on_position(position)  ← updates _cached_position
             ├─ messaging.publish("robot/velocity",     snapshot.velocity)
             └─ messaging.publish("robot/acceleration", snapshot.acceleration)
 ```
@@ -335,3 +349,5 @@ messaging.subscribe("robot/state", on_state)
 - **`_build_snapshot` is overridable**: Subclasses can override `RobotStateManager._build_snapshot()` to include additional application-specific state fields in the published snapshot (using `with_extra()`).
 - **`start_monitoring()` is idempotent**: Calling it when already running does nothing. `stop_monitoring()` signals the thread and waits up to 2s.
 - **`create_robot_service` requires `messaging_service`**: Unlike `settings_service` and `tool_changer`, the messaging service is not optional. State publishing is fundamental to the platform's reactive architecture.
+- **Single XML-RPC caller for position**: `RobotStateManager` opens its own `FairinoRobot(robot.ip)` connection and is the **only** code path that calls `GetActualTCPPose`. `MotionService._wait_for_position` reads from its subscription cache instead, and `RobotService.get_current_position()` reads from `RobotStateManager.position` (no XML-RPC). This prevents `http.client.CannotSendRequest` errors caused by two threads simultaneously using the same XML-RPC connection.
+- **`_on_position` is a named bound method**: Required for correct behaviour with `MessageBroker`'s weak references — lambdas would be silently garbage-collected.

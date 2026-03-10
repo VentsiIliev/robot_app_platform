@@ -1,11 +1,12 @@
+import copy
 from typing import Any
-
+import logging
 import cv2
 import numpy as np
 
 from src.engine.vision.implementation.VisionSystem.features.contour_matching.matching.best_match_result import BestMatchResult
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
-
+_logger = logging.getLogger(__name__)
 
 class GeometricMatchingStrategy:
     def __init__(
@@ -28,10 +29,15 @@ class GeometricMatchingStrategy:
 
         for wp in workpieces:
             wp_contour = Contour(wp.get_main_contour())
+            _logger.debug(f"Workpiece contour before similarity: {wp_contour.contour_points}")
+            # similarity = self._getSimilarity(
+            #     wp_contour.get(),
+            #     contour.get()
+            # )
 
-            similarity = self._getSimilarity(
-                wp_contour.get(),
-                contour.get()
+            similarity = self._getSimilarity(        # !!!! IMPORTANT NOTE: MAKE SURE TO PASS A DEEP COPY
+                copy.deepcopy(wp_contour.get()),     # BECAUSE _getSimilarity MUTATES THE ORIGINAL
+                copy.deepcopy(contour.get())        # AND LATER _calculateDifferences RETURNS WRONG RESULTS !!!!
             )
 
             if similarity > self.similarity_threshold * 100 and similarity > best.confidence:
@@ -41,6 +47,9 @@ class GeometricMatchingStrategy:
                     contour,
                     self._debug_differences
                 )
+
+                _logger.debug(f"Differences between: {wp_contour.get()} and {contour.get()}")
+                _logger.debug(f"Centroid diff: {centroid_diff}, Rotation diff: {rotation_diff}, Contour angle: {contour_angle}")
 
                 best = BestMatchResult(
                     workpiece=wp,

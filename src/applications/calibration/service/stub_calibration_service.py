@@ -24,3 +24,16 @@ class StubCalibrationService(ICalibrationService):
 
     def stop_calibration(self) -> None:
         _logger.info("Stub: stop_calibration")
+
+    def is_calibrated(self) -> bool:
+        return False
+
+    def test_calibration(self) -> tuple[bool, str]:
+        _logger.info("Stub: test_calibration")
+        return True, "Stub: test calibration complete"
+
+    def stop_test_calibration(self) -> None:
+        _logger.info("Stub: stop_test_calibration")
+
+    def get_height_calibration_data(self):
+        return None

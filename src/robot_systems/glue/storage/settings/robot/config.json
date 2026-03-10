@@ -2,8 +2,8 @@
   "ROBOT_IP": "192.168.58.2",
   "ROBOT_TOOL": 1,
   "ROBOT_USER": 1,
-  "TCP_X_OFFSET": 0.0,
-  "TCP_Y_OFFSET": 0.0,
+  "TCP_X_OFFSET": -0.041,
+  "TCP_Y_OFFSET": 76.859,
   "TCP_X_STEP_DISTANCE": 50.0,
   "TCP_X_STEP_OFFSET": 0.1,
   "TCP_Y_STEP_DISTANCE": 50.0,
@@ -100,8 +100,8 @@
     "rz_max": 180
   },
   "GLOBAL_MOTION_SETTINGS": {
-    "global_velocity": 100,
-    "global_acceleration": 100,
+    "global_velocity": 30,
+    "global_acceleration": 30,
     "emergency_decel": 500,
     "max_jog_step": 50
   }

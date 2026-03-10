@@ -99,6 +99,8 @@ class RobotCalibrationMapper:
             "calib_derivative_scaling":    am.derivative_scaling,
             "calib_z_target":              settings.z_target,
             "calib_required_ids":          settings.required_ids,
+            "calib_velocity":              settings.velocity,
+            "calib_acceleration":          settings.acceleration,
             "calib_axis_marker_id":        ax.marker_id,
             "calib_axis_move_mm":          ax.move_mm,
             "calib_axis_max_attempts":     ax.max_attempts,
@@ -119,6 +121,8 @@ class RobotCalibrationMapper:
         am.derivative_scaling = float(flat.get("calib_derivative_scaling", am.derivative_scaling))
         s.z_target            = int(flat.get("calib_z_target",             s.z_target))
         s.required_ids        = flat.get("calib_required_ids",             s.required_ids)
+        s.velocity            = int(flat.get("calib_velocity",             s.velocity))
+        s.acceleration        = int(flat.get("calib_acceleration",         s.acceleration))
 
         ax.marker_id          = int(flat.get("calib_axis_marker_id",        ax.marker_id))
         ax.move_mm            = float(flat.get("calib_axis_move_mm",        ax.move_mm))

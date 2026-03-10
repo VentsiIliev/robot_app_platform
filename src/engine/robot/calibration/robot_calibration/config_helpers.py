@@ -47,12 +47,15 @@ class RobotCalibrationConfig:
     def __init__(self, vision_service, robot_service, navigation_service,
                  height_measuring_service, required_ids, z_target,
                  robot_tool, robot_user,
-                 axis_mapping_config=None,        # ← new
+                 velocity: int = 30, acceleration: int = 10,
+                 axis_mapping_config=None,
                  debug=False, step_by_step=False, live_visualization=False):
         self.vision_service = vision_service
         self.robot_service = robot_service
         self.robot_tool = robot_tool
         self.robot_user = robot_user
+        self.velocity = velocity
+        self.acceleration = acceleration
         self.navigation_service = navigation_service
         self.height_measuring_service = height_measuring_service
         self.required_ids = required_ids

@@ -135,6 +135,8 @@ class RefactoredRobotCalibrationPipeline:
             config.robot_tool,
             config.robot_user,
             adaptive_movement_config,
+            velocity=config.velocity,
+            acceleration=config.acceleration,
         )
         context.calibration_robot_controller.move_to_calibration_position()
 

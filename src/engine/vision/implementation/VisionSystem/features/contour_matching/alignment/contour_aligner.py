@@ -1,6 +1,7 @@
 import copy
 from typing import Any, Dict, List, Optional, Tuple
-
+import logging
+_logger = logging.getLogger(__name__)
 import numpy as np
 
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
@@ -42,11 +43,11 @@ def apply_translation(contours, dx, dy):
 def align_single_contour(
     target: Contour,
     reference: np.ndarray,
-    spray_contours: Optional[List[Contour]] = None,
-    spray_fills: Optional[List[Contour]] = None,
-    rotation_diff: float = 0.0,
-    translation_diff: Tuple[float, float] = (0.0, 0.0),
-    refine: bool = True
+    spray_contours: Optional[List[Contour]],
+    spray_fills: Optional[List[Contour]],
+    rotation_diff: float,
+    translation_diff: Tuple[float, float],
+    refine: bool
 ) -> None:
     """
     Align a single target contour to a reference contour, optionally applying the same
@@ -71,12 +72,14 @@ def align_single_contour(
     target.rotate(rotation_diff, centroid)
     apply_rotation(spray_contours, rotation_diff, centroid)
     apply_rotation(spray_fills, rotation_diff, centroid)
+    _logger.debug(f"Applied initial rotation of {rotation_diff:.2f} degrees around centroid ({centroid[0]:.1f}, {centroid[1]:.1f})")
 
     # --- Initial translation ---
     dx, dy = translation_diff
     target.translate(dx, dy)
     apply_translation(spray_contours, dx, dy)
     apply_translation(spray_fills, dx, dy)
+    _logger.debug(f"Applied initial translation of (dx={dx:.1f}, dy={dy:.1f})")
 
     # --- Mask-based refinement ---
     if refine:
@@ -90,24 +93,24 @@ def align_single_contour(
             target.rotate(best_rotation, centroid_after)
             apply_rotation(spray_contours, best_rotation, centroid_after)
             apply_rotation(spray_fills, best_rotation, centroid_after)
-
+            _logger.debug(f"Applied mask-based refinement rotation of {best_rotation:.2f} degrees around centroid ({centroid_after[0]:.1f}, {centroid_after[1]:.1f})")
 
 def align_contours_generic(
     target_contours: List[Contour],
     reference_contours: List[np.ndarray],
-    spray_contours_list: Optional[List[List[Contour]]] = None,
-    spray_fills_list: Optional[List[List[Contour]]] = None,
-    rotation_diffs: Optional[List[float]] = None,
-    translation_diffs: Optional[List[Tuple[float, float]]] = None,
-    refine: bool = True
+    spray_contours_list: List[List[Contour]],
+    spray_fills_list: List[List[Contour]],
+    rotation_diffs: List[float],
+    translation_diffs: List[Tuple[float, float]],
+    refine: bool
 ) -> None:
     """
     Align multiple target contours to corresponding reference contours using `align_single_contour`.
     """
-    spray_contours_list = spray_contours_list or [[] for _ in target_contours]
-    spray_fills_list = spray_fills_list or [[] for _ in target_contours]
-    rotation_diffs = rotation_diffs or [0.0] * len(target_contours)
-    translation_diffs = translation_diffs or [(0.0, 0.0)] * len(target_contours)
+    spray_contours_list = spray_contours_list
+    spray_fills_list = spray_fills_list
+    rotation_diffs = rotation_diffs
+    translation_diffs = translation_diffs
 
     for i, (target, reference) in enumerate(zip(target_contours, reference_contours)):
         align_single_contour(

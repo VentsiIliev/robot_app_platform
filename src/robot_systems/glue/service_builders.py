@@ -77,6 +77,8 @@ def _build_calibration_service(robot_system):
         z_target=calib_settings.z_target,
         robot_tool=robot_settings.robot_tool,
         robot_user=robot_settings.robot_user,
+        velocity=calib_settings.velocity,
+        acceleration=calib_settings.acceleration,
         axis_mapping_config=calib_settings.axis_mapping,
     )
 
