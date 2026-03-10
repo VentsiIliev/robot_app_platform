@@ -3,13 +3,12 @@ import logging
 import logging.handlers
 from typing import Callable, List, Optional, Tuple
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.pick_and_place_visualizer.model.pick_and_place_visualizer_model import (
     PickAndPlaceVisualizerModel,
 )
-from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visualizer_service import SimResult
 from src.applications.pick_and_place_visualizer.view.pick_and_place_visualizer_view import (
     PickAndPlaceVisualizerView,
 )
@@ -20,23 +19,12 @@ from src.shared_contracts.events.vision_events import VisionTopics
 
 
 class _Bridge(QObject):
-    camera_frame   = pyqtSignal(object)
-    process_state  = pyqtSignal(str)
-    log_record     = pyqtSignal(str)
-    sim_result     = pyqtSignal(object)
-    workpiece_placed  = pyqtSignal(object)
-    plane_reset       = pyqtSignal()
-
-
-class _Worker(QObject):
-    finished = pyqtSignal(object)
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self) -> None:
-        self.finished.emit(self._fn())
+    camera_frame     = pyqtSignal(object)
+    process_state    = pyqtSignal(str)
+    log_record       = pyqtSignal(str)
+    workpiece_placed = pyqtSignal(object)
+    plane_reset      = pyqtSignal()
+    match_result     = pyqtSignal(object)
 
 
 class _BridgeLogHandler(logging.Handler):
@@ -77,18 +65,17 @@ class PickAndPlaceVisualizerController(IApplicationController):
         self._bridge  = _Bridge()
         self._subs:   List[Tuple[str, Callable]] = []
         self._active  = False
-        self._threads: List[Tuple[QThread, _Worker]] = []
         self._log_handler = _BridgeLogHandler(self._bridge)
         self._logger  = logging.getLogger(self.__class__.__name__)
 
         self._bridge.camera_frame.connect(self._on_camera_frame)
         self._bridge.process_state.connect(self._on_process_state)
         self._bridge.log_record.connect(self._on_log_record)
-        self._bridge.sim_result.connect(self._on_sim_result)
         self._bridge.workpiece_placed.connect(self._on_workpiece_placed)
         self._bridge.plane_reset.connect(self._on_plane_reset)
+        self._bridge.match_result.connect(self._on_match_result)
 
-        self._view.run_simulation_requested.connect(self._on_run_simulation)
+        self._view.simulation_toggled.connect(self._on_simulation_toggled)
         self._view.destroyed.connect(self.stop)
 
     def load(self) -> None:
@@ -123,9 +110,25 @@ class PickAndPlaceVisualizerController(IApplicationController):
                 f"@ ({event.plane_x:.1f}, {event.plane_y:.1f})"
             )
 
+    def _on_match_result(self, items) -> None:
+        if not self._active:
+            return
+        from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visualizer_service import MatchedItem
+        matched = [
+            MatchedItem(
+                workpiece_name=info.workpiece_name,
+                workpiece_id=info.workpiece_id,
+                gripper_id=info.gripper_id,
+                orientation=info.orientation,
+            )
+            for info in items
+        ]
+        self._view.set_matched_items(matched)
+
     def _on_plane_reset(self) -> None:
         if self._active:
             self._view.reset_plane()
+            self._view.set_matched_items([])
             self._view.append_log("[PLANE] Reset — new run started")
 
     def _on_start_process(self) -> None:
@@ -150,10 +153,6 @@ class PickAndPlaceVisualizerController(IApplicationController):
             except Exception:
                 pass
         self._subs.clear()
-        for thread, _ in self._threads:
-            thread.quit()
-            thread.wait()
-        self._threads.clear()
 
     # ── Broker subscriptions ──────────────────────────────────────────
 
@@ -167,6 +166,8 @@ class PickAndPlaceVisualizerController(IApplicationController):
                   lambda e: self._bridge.workpiece_placed.emit(e))
         self._sub(PickAndPlaceTopics.PLANE_RESET,
                   lambda _: self._bridge.plane_reset.emit())
+        self._sub(PickAndPlaceTopics.MATCH_RESULT,
+                  lambda items: self._bridge.match_result.emit(items))
 
 
     def _sub(self, topic: str, cb: Callable) -> None:
@@ -191,34 +192,6 @@ class PickAndPlaceVisualizerController(IApplicationController):
         if self._active:
             self._view.append_log(text)
 
-    def _on_sim_result(self, result: SimResult) -> None:
-        self._view.set_busy(False)
-        self._view.set_simulation_result(result)
-        if result.error:
-            self._view.append_log(f"[SIM] ERROR: {result.error}")
-        else:
-            self._view.append_log(
-                f"[SIM] Done — {len(result.matched)} matched, "
-                f"{result.unmatched_count} unmatched, "
-                f"{len(result.placements)} placed"
-            )
-
-    # ── Worker ────────────────────────────────────────────────────────
-
-    def _on_run_simulation(self) -> None:
-        if not self._active:
-            return
-        self._view.set_busy(True)
-        self._view.append_log("[SIM] Running simulation…")
-
-        thread = QThread()
-        worker = _Worker(self._model.run_simulation)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda r: self._bridge.sim_result.emit(r))
-        worker.finished.connect(thread.quit)
-        self._threads.append((thread, worker))
-        thread.finished.connect(lambda: self._threads.remove(
-            next((t for t in self._threads if t[0] is thread), (thread, worker))
-        ) if (thread, worker) in self._threads else None)
-        thread.start()
+    def _on_simulation_toggled(self, value: bool) -> None:
+        self._model.set_simulation(value)
+        self._view.append_log(f"[SIM] Simulation mode {'ON' if value else 'OFF'}")

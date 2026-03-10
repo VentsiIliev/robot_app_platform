@@ -27,6 +27,10 @@ class PickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
         self._config    = config
         self._process   = pick_and_place_process
 
+    def set_simulation(self, value: bool) -> None:
+        if self._process and hasattr(self._process, "set_simulation"):
+            self._process.set_simulation(value)
+
     def start_process(self) -> None:
         if self._process:
             self._process.start()

@@ -50,7 +50,7 @@ _MATCH_COLS = ["WP Name", "ID", "Gripper", "Orientation"]
 
 class PickAndPlaceVisualizerView(IApplicationView):
 
-    run_simulation_requested = pyqtSignal()
+    simulation_toggled = pyqtSignal(bool)
     start_process_requested = pyqtSignal()
     stop_process_requested  = pyqtSignal()
     pause_process_requested = pyqtSignal()
@@ -144,11 +144,12 @@ class PickAndPlaceVisualizerView(IApplicationView):
         sep2.setStyleSheet(f"color: {BORDER};")
         row.addWidget(sep2)
 
-        # ── Simulation ──
-        self._run_btn = QPushButton("⟳ Simulate")
-        self._run_btn.setStyleSheet(ACTION_BTN_STYLE)
-        self._run_btn.clicked.connect(self._on_run_clicked)
-        row.addWidget(self._run_btn)
+        # ── Simulation mode toggle ──
+        self._sim_toggle_btn = QPushButton("Simulation: OFF")
+        self._sim_toggle_btn.setCheckable(True)
+        self._sim_toggle_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._sim_toggle_btn.toggled.connect(self._on_sim_toggled)
+        row.addWidget(self._sim_toggle_btn)
 
         return row
 
@@ -263,6 +264,14 @@ class PickAndPlaceVisualizerView(IApplicationView):
         )
         self._feed_label.setPixmap(px)
 
+    def set_matched_items(self, items: List[MatchedItem]) -> None:
+        self._populate_table(items)
+        n = len(items)
+        self._summary_label.setText(f"✓ {n} matched" if n else "No matches")
+        self._summary_label.setStyleSheet(
+            ("color: #2E7D32;" if n else "color: #888;") + " font-size: 9pt; background: transparent;"
+        )
+
     def set_simulation_result(self, result: SimResult) -> None:
         self._populate_table(result.matched)
         self._plane_canvas.set_placed(result.placements)
@@ -323,12 +332,12 @@ class PickAndPlaceVisualizerView(IApplicationView):
         self._log_text.appendPlainText(text)
 
     def set_busy(self, busy: bool) -> None:
-        self._run_btn.setEnabled(not busy)
-        self._run_btn.setText("Running…" if busy else "▶  Run Simulation")
+        pass  # no longer used
 
     # ── Private ───────────────────────────────────────────────────────
 
     def _populate_table(self, items: List[MatchedItem]) -> None:
+        self._match_table.clearSpans()
         self._match_table.setRowCount(len(items))
         colors = ["#E3F2FD", "#E8F5E9", "#FFF9C4", "#FCE4EC", "#F3E5F5"]
         for i, item in enumerate(items):
@@ -352,8 +361,9 @@ class PickAndPlaceVisualizerView(IApplicationView):
             self._match_table.setItem(0, 0, cell)
             self._match_table.setSpan(0, 0, 1, len(_MATCH_COLS))
 
-    def _on_run_clicked(self) -> None:
-        self.run_simulation_requested.emit()
+    def _on_sim_toggled(self, checked: bool) -> None:
+        self._sim_toggle_btn.setText("Simulation: ON" if checked else "Simulation: OFF")
+        self.simulation_toggled.emit(checked)
 
     def _on_clear_log(self) -> None:
         self._log_text.clear()

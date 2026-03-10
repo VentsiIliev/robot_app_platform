@@ -46,8 +46,8 @@ class PickAndPlaceWorkflow:
         config:               PickAndPlaceConfig,
         logger:               logging.Logger,
         on_workpiece_placed:  Optional[Callable] = None,
-        on_match_result:      Optional[Callable] = None,    # ← new
-
+        on_match_result:      Optional[Callable] = None,
+        simulation:           bool = False,
     ):
         self._robot              = robot
         self._navigation         = navigation
@@ -57,17 +57,19 @@ class PickAndPlaceWorkflow:
         self._transformer        = transformer
         self._config             = config
         self._logger             = logger
-        self._on_workpiece_placed = on_workpiece_placed    # ← new
-        self._on_match_result     = on_match_result         # ← new
+        self._on_workpiece_placed = on_workpiece_placed
+        self._on_match_result     = on_match_result
+        self._simulation          = simulation
         self._plane              = Plane(config.plane)
         self._plane_mgr          = PlaneManagementService(self._plane)
         self._pickup_calc        = PickupCalculator(config)
         self._placement_calc     = PlacementCalculator(self._plane_mgr, config)
 
     def run(self, stop_event: threading.Event, run_allowed: threading.Event) -> Tuple[ProcessState, str]:
-        if not self._navigation.move_home():
-            self._logger.error("Failed to move to home — aborting")
-            return ProcessState.ERROR, "Failed to move to home position"
+        if not self._simulation:
+            if not self._navigation.move_home():
+                self._logger.error("Failed to move to home — aborting")
+                return ProcessState.ERROR, "Failed to move to home position"
 
         while not stop_event.is_set():
             self._wait(run_allowed, stop_event)
@@ -100,17 +102,18 @@ class PickAndPlaceWorkflow:
                     break
 
                 placed = self._process_match(workpiece, float(orientation))
+                if not self._simulation:
+                    if placed is None:
+                        self._drop_gripper_if_held()
+                        return ProcessState.ERROR, "Motion or gripper failure — check robot and tool changer"
 
-                if placed is None:
-                    self._drop_gripper_if_held()
-                    return ProcessState.ERROR, "Motion or gripper failure — check robot and tool changer"
-
-                if not placed:
-                    self._logger.info("Plane full — done")
-                    self._drop_gripper_if_held()
-                    return ProcessState.STOPPED, ""
-
-        self._drop_gripper_if_held()
+                if not self._simulation:
+                    if not placed:
+                        self._logger.info("Plane full — done")
+                        self._drop_gripper_if_held()
+                        return ProcessState.STOPPED, ""
+        if not self._simulation:
+            self._drop_gripper_if_held()
         return ProcessState.STOPPED, ""
 
     # ── Single workpiece ──────────────────────────────────────────────
@@ -124,9 +127,10 @@ class PickAndPlaceWorkflow:
 
         robot_x, robot_y = self._transformer.transform(pickup_px[0], pickup_px[1])
 
-        gripper_ok = self._ensure_gripper(gripper_id)
-        if gripper_ok is None:
-            return None
+        if not self._simulation:
+            gripper_ok = self._ensure_gripper(gripper_id)
+            if gripper_ok is None:
+                return None
 
         measured_z = self._height.measure_at(robot_x, robot_y) if self._height else None
         # FIXME remove when height calibration is ready
@@ -177,7 +181,8 @@ class PickAndPlaceWorkflow:
         for pos in [positions.descent, positions.pickup, positions.lift]:
             ok = self._robot.move_linear(
                 pos.to_list(), tool=0, user=0,
-                velocity=20, acceleration=10, blendR=0, wait_to_reach=True,
+                velocity=20, acceleration=10, blendR=0,
+                wait_to_reach=not self._simulation,
             )
             if not ok:
                 self._logger.warning("Pick motion failed at %s", pos)
@@ -188,7 +193,8 @@ class PickAndPlaceWorkflow:
         for pos in [positions.approach, positions.drop]:
             self._robot.move_linear(
                 pos.to_list(), tool=0, user=0,
-                velocity=20, acceleration=10, blendR=0, wait_to_reach=True,
+                velocity=20, acceleration=10, blendR=0,
+                wait_to_reach=not self._simulation,
             )
 
     def _ensure_gripper(self, gripper_id: int) -> Optional[bool]:

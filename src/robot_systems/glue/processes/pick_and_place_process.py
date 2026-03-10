@@ -49,10 +49,15 @@ class PickAndPlaceProcess(BaseProcess):
         self._transformer = transformer
         self._config     = config
 
+        self._simulation  = False
         self._run_allowed = threading.Event()
         self._run_allowed.set()
         self._stop_event  = threading.Event()
         self._worker: Optional[threading.Thread] = None
+
+    def set_simulation(self, value: bool) -> None:
+        self._simulation = value
+        self._logger.info("Simulation mode %s", "ON" if value else "OFF")
 
     # ── BaseProcess hooks (called under lock — non-blocking) ──────────
 
@@ -98,6 +103,8 @@ class PickAndPlaceProcess(BaseProcess):
             from src.shared_contracts.events.process_events import ProcessState
             from src.shared_contracts.events.pick_and_place_events import WorkpiecePlacedEvent
 
+            from src.shared_contracts.events.pick_and_place_events import MatchedWorkpieceInfo
+
             def _on_placed(workpiece_name, gripper_id, plane_x, plane_y, width, height):
                 self._messaging.publish(
                     PickAndPlaceTopics.WORKPIECE_PLACED,
@@ -111,6 +118,18 @@ class PickAndPlaceProcess(BaseProcess):
                     ),
                 )
 
+            def _on_match_result(workpieces, orientations, no_match_count):
+                items = [
+                    MatchedWorkpieceInfo(
+                        workpiece_name=str(getattr(wp, "name", "?")),
+                        workpiece_id=str(getattr(wp, "id", "?")),
+                        gripper_id=int(wp.gripperID),
+                        orientation=float(orient),
+                    )
+                    for wp, orient in zip(workpieces, orientations)
+                ]
+                self._messaging.publish(PickAndPlaceTopics.MATCH_RESULT, items)
+
             workflow = PickAndPlaceWorkflow(
                 robot=self._robot,
                 navigation=self._navigation,
@@ -121,6 +140,8 @@ class PickAndPlaceProcess(BaseProcess):
                 config=self._config,
                 logger=self._logger,
                 on_workpiece_placed=_on_placed,
+                on_match_result=_on_match_result,
+                simulation=self._simulation,
             )
             status, message = workflow.run(
                 stop_event=self._stop_event,

@@ -42,6 +42,9 @@ class IPickAndPlaceVisualizerService(ABC):
     # ── Live process control ──────────────────────────────────────────
 
     @abstractmethod
+    def set_simulation(self, value: bool) -> None: ...
+
+    @abstractmethod
     def start_process(self) -> None: ...
 
     @abstractmethod

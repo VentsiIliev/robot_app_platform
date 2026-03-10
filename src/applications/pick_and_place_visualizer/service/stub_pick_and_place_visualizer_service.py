@@ -34,3 +34,6 @@ class StubPickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
 
     def reset_process(self) -> None:
         print("[Stub] reset_process")
+
+    def set_simulation(self, value: bool) -> None:
+        print(f"[Stub] set_simulation({value})")
