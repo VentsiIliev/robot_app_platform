@@ -29,10 +29,7 @@
       "has_iterations": false,
       "has_trajectory_execution": true,
       "points": [
-        "[0.100, 0.000, 0.000, 0.000, 0.000, 0.000]",
-        "[0.200, 0.000, 0.000, 0.000, 0.000, 0.000]",
-        "[0.300, 0.000, 0.000, 0.000, 0.000, 0.000]",
-        "[0.400, 0.000, 0.000, 0.000, 0.000, 0.000]"
+        "[90.200, -130.000, 300.000, 180.000, 0.000, 0.000]"
       ]
     },
     "SLOT 11 DROPOFF": {
@@ -40,7 +37,10 @@
       "acceleration": 0,
       "iterations": 1,
       "has_iterations": false,
-      "has_trajectory_execution": true
+      "has_trajectory_execution": true,
+      "points": [
+        "[90.200, -130.000, 300.000, 180.000, 0.000, 0.000]"
+      ]
     },
     "SLOT 12 PICKUP": {
       "velocity": 0,
@@ -86,8 +86,8 @@
     }
   },
   "SAFETY_LIMITS": {
-    "x_min": -500,
-    "x_max": 500,
+    "x_min": -600,
+    "x_max": 600,
     "y_min": -650,
     "y_max": 650,
     "z_min": 270,

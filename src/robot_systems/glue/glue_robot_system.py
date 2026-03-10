@@ -27,6 +27,8 @@ from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
 
+import os
+_WORKPIECES_STORAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "workpieces")
 
 
 # ── System ───────────────────────────────────────────────────────────────────────
@@ -62,6 +64,12 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application),
             ApplicationSpec(name="ContourMatchingTester", folder_id=2, icon="fa6s.shapes",            factory=application_wiring._build_contour_matching_tester),
             ApplicationSpec(name="HeightMeasuring",       folder_id=2, icon="fa5s.ruler-vertical",   factory=application_wiring._build_height_measuring_application),
+            ApplicationSpec(
+                name="PickAndPlaceVisualizer",
+                folder_id=2,
+                icon="fa5s.map-marked",
+                factory=application_wiring._build_pick_and_place_visualizer,
+            )
         ],
     )
 
@@ -157,18 +165,33 @@ class GlueRobotSystem(BaseRobotSystem):
         return self._coordinator
 
     def _build_coordinator(self):
+        from src.engine.vision.homography_transformer import HomographyTransformer
         from src.engine.process.process_requirements import ProcessRequirements
         from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
         from src.robot_systems.glue.processes.clean_process import CleanProcess
         from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
         from src.robot_systems.glue.processes.glue_process import GlueProcess
         from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
+        from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
+        from src.robot_systems.glue.domain.matching.matching_service import MatchingService
+        from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
+            JsonWorkpieceRepository
+        from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+
         glue_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.MOTOR, ServiceID.VISION)
         pick_and_place_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
         clean_requirements = ProcessRequirements.requires(ServiceID.ROBOT)
         calibration_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
-
         service_checker = self.health_registry.check
+
+        vision_service = self.get_optional_service(ServiceID.VISION)
+        tool_service = self.get_optional_service(ServiceID.TOOLS)
+        height_service = self._height_measuring_service
+        transformer = HomographyTransformer(vision_service.camera_to_robot_matrix_path) if vision_service else None
+        matching_service = MatchingService(
+            vision_service=vision_service,
+            workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+        ) if vision_service else None
 
         return GlueOperationCoordinator(
             glue_process=GlueProcess(
@@ -183,6 +206,11 @@ class GlueRobotSystem(BaseRobotSystem):
                 robot_service=self._robot,
                 navigation_service=self._navigation,
                 messaging=self._messaging_service,
+                matching_service=matching_service,
+                tool_service=tool_service,
+                height_service=height_service,
+                transformer=transformer,
+                config=PickAndPlaceConfig(),
                 system_manager=self._system_manager,
                 requirements=pick_and_place_requirements,
                 service_checker=service_checker,
@@ -203,3 +231,5 @@ class GlueRobotSystem(BaseRobotSystem):
             ),
             messaging=self._messaging_service,
         )
+
+

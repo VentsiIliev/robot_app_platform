@@ -2,75 +2,137 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
-from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.process_ids import ProcessID
-from src.engine.system.i_system_manager import ISystemManager
+from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
+from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
-
-_SIMULATION_DURATION_S = 3.0
+from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.system.i_system_manager import ISystemManager
+from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
+from src.robot_systems.glue.navigation import GlueNavigationService
+from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
+from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
+from src.shared_contracts.events.pick_and_place_events import PickAndPlaceTopics
 
 
 class PickAndPlaceProcess(BaseProcess):
 
     def __init__(
-            self,
-            robot_service:   IRobotService,
-            navigation_service: GlueNavigationService,
-            messaging:       IMessagingService,
-            system_manager:  Optional[ISystemManager]        = None,
-            requirements:    Optional[ProcessRequirements]   = None,
-            service_checker: Optional[Callable[[str], bool]] = None,
-            simulation_duration_s: float = _SIMULATION_DURATION_S,
+        self,
+        robot_service: IRobotService,
+        navigation_service: GlueNavigationService,
+        messaging: IMessagingService,
+        matching_service: Optional[IMatchingService] = None,
+        tool_service: Optional[IToolService] = None,
+        height_service: Optional[IHeightMeasuringService] = None,
+        transformer: Optional[ICoordinateTransformer] = None,
+        config: Optional[PickAndPlaceConfig] = None,
+        system_manager: Optional[ISystemManager] = None,
+        requirements: Optional[ProcessRequirements] = None,
+        service_checker: Optional[Callable[[str], bool]] = None,
     ):
         super().__init__(
-            process_id      = ProcessID.PICK_AND_PLACE,
-            messaging       = messaging,
-            system_manager  = system_manager,
-            requirements    = requirements,
-            service_checker = service_checker,
+            process_id=ProcessID.PICK_AND_PLACE,
+            messaging=messaging,
+            system_manager=system_manager,
+            requirements=requirements,
+            service_checker=service_checker,
         )
-        self._robot              = robot_service
-        self.navigation_service = navigation_service
-        self._simulation_duration = simulation_duration_s
-        self._sim_timer: Optional[threading.Timer] = None
+        self._robot      = robot_service
+        self._navigation = navigation_service
+        self._matching   = matching_service
+        self._tools      = tool_service
+        self._height     = height_service
+        self._transformer = transformer
+        self._config     = config
 
-    # ── BaseProcess hooks ─────────────────────────────────────────────
+        self._run_allowed = threading.Event()
+        self._run_allowed.set()
+        self._stop_event  = threading.Event()
+        self._worker: Optional[threading.Thread] = None
+
+    # ── BaseProcess hooks (called under lock — non-blocking) ──────────
 
     def _on_start(self) -> None:
-        self._logger.info("Pick-and-place started — simulating %.1fs of work", self._simulation_duration)
-        self._sim_timer = threading.Timer(self._simulation_duration, self._simulation_complete)
-        self._sim_timer.daemon = True
-        self._sim_timer.start()
-        self.navigation_service.move_home()
+        self._stop_event.clear()
+        self._run_allowed.set()
+        self._robot.enable_robot()
+        # Signal visualizer to clear the plane canvas before the new run
+        self._messaging.publish(PickAndPlaceTopics.PLANE_RESET, {})
+        self._worker = threading.Thread(
+            target=self._run_workflow, daemon=True, name="PickAndPlaceWorker"
+        )
+        self._worker.start()
+        self._logger.info("Pick-and-place started")
 
     def _on_stop(self) -> None:
-        self._cancel_timer()
-        self._logger.info("Pick-and-place stopped")
+        self._robot.stop_motion()
+        self._stop_event.set()
+        self._run_allowed.set()   # unblock worker if it is paused
+        self._logger.info("Pick-and-place stopping")
 
     def _on_pause(self) -> None:
-        self._cancel_timer()
+        self._robot.stop_motion()
+        self._run_allowed.clear()
         self._logger.info("Pick-and-place paused")
 
     def _on_resume(self) -> None:
-        self._logger.info("Pick-and-place resumed — simulating %.1fs remaining", self._simulation_duration)
-        self._sim_timer = threading.Timer(self._simulation_duration, self._simulation_complete)
-        self._sim_timer.daemon = True
-        self._sim_timer.start()
+        self._run_allowed.set()
+        self._logger.info("Pick-and-place resumed")
 
     def _on_reset_errors(self) -> None:
-        self._cancel_timer()
+        self._stop_event.clear()
+        self._run_allowed.set()
 
-    # ── Simulation ────────────────────────────────────────────────────
+    # ── Worker ────────────────────────────────────────────────────────
 
-    def _simulation_complete(self) -> None:
-        """Called from the timer thread when simulated work is done."""
-        self._logger.info("Pick-and-place simulation complete — stopping")
-        self.stop()
+    def _run_workflow(self) -> None:
+        if not all([self._matching, self._tools, self._height, self._transformer]):
+            self._logger.error("Pick-and-place not fully configured")
+            self.set_error("Required services not configured")
+            return
+        try:
+            from src.shared_contracts.events.process_events import ProcessState
+            from src.shared_contracts.events.pick_and_place_events import WorkpiecePlacedEvent
 
-    def _cancel_timer(self) -> None:
-        if self._sim_timer is not None:
-            self._sim_timer.cancel()
-            self._sim_timer = None
+            def _on_placed(workpiece_name, gripper_id, plane_x, plane_y, width, height):
+                self._messaging.publish(
+                    PickAndPlaceTopics.WORKPIECE_PLACED,
+                    WorkpiecePlacedEvent(
+                        workpiece_name=workpiece_name,
+                        gripper_id=gripper_id,
+                        plane_x=plane_x,
+                        plane_y=plane_y,
+                        width=width,
+                        height=height,
+                    ),
+                )
+
+            workflow = PickAndPlaceWorkflow(
+                robot=self._robot,
+                navigation=self._navigation,
+                matching=self._matching,
+                tools=self._tools,
+                height=self._height,
+                transformer=self._transformer,
+                config=self._config,
+                logger=self._logger,
+                on_workpiece_placed=_on_placed,
+            )
+            status, message = workflow.run(
+                stop_event=self._stop_event,
+                run_allowed=self._run_allowed,
+            )
+            if self._stop_event.is_set():
+                return
+            if status == ProcessState.ERROR:
+                self.set_error(message)
+            else:
+                self.stop()
+        except Exception:
+            self._logger.exception("Pick-and-place workflow error")
+            self.set_error("Unexpected error in pick-and-place workflow")
+

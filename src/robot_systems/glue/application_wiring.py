@@ -18,16 +18,47 @@ _SYSTEM_DIR = os.path.dirname(os.path.abspath(__file__))
 _WORKPIECES_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
 _USERS_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
 
+def _build_pick_and_place_visualizer(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.pick_and_place_visualizer import PickAndPlaceVisualizerFactory
+    from src.applications.pick_and_place_visualizer.service.pick_and_place_visualizer_service import (
+        PickAndPlaceVisualizerService,
+    )
+    from src.robot_systems.glue.domain.matching.matching_service import MatchingService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+    from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
+
+    vision_service    = robot_system.get_optional_service(ServiceID.VISION)
+    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
+    matching_service  = MatchingService(vision_service=vision_service,
+                                        workpiece_service=workpiece_service)
+    service = PickAndPlaceVisualizerService(
+        matching_service=matching_service,
+        config=PickAndPlaceConfig(),
+        pick_and_place_process=robot_system.coordinator.pick_and_place_process,
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: PickAndPlaceVisualizerFactory().build(service, ms)
+    )
+
+
+
 def _build_contour_matching_tester(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.contour_matching_tester.contour_matching_tester_factory import ContourMatchingTesterFactory
     from src.applications.contour_matching_tester.service.contour_matching_tester_service import ContourMatchingTesterService
     from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+    from src.robot_systems.glue.domain.matching.matching_service import MatchingService
+
+    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
+    vision_service    = robot_system.get_optional_service(ServiceID.VISION)
 
     service = ContourMatchingTesterService(
-        vision_service=robot_system.get_optional_service(ServiceID.VISION),
-        workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+        vision_service=vision_service,
+        workpiece_service=workpiece_service,
+
     )
     return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory().build(service, ms))
 

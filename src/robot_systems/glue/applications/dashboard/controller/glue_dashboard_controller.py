@@ -26,7 +26,7 @@ class _DashboardBridge(QObject):
     cell_state      = pyqtSignal(int, str)
     glue_type       = pyqtSignal(int, str)
     robot_state     = pyqtSignal(str)
-    process_state   = pyqtSignal(str, str)
+    process_state = pyqtSignal(str, str, str)   # state, process_id, message
     system_state    = pyqtSignal(str, str)
     service_warning = pyqtSignal(str)
     camera_image    = pyqtSignal(object)    # ← add this
@@ -102,7 +102,7 @@ class GlueDashboardController(IApplicationController):
         self._sub(RobotTopics.STATE,
                   lambda s: self._bridge.robot_state.emit(getattr(s, "state", "") or ""))
         self._sub(ProcessTopics.ACTIVE,
-                  lambda e: self._bridge.process_state.emit(e.state.value, e.process_id))
+                  lambda e: self._bridge.process_state.emit(e.state.value, e.process_id, e.message))
 
         self._sub(SystemTopics.STATE,                                  # ← was missing
                   lambda e: self._bridge.system_state.emit(
@@ -145,13 +145,20 @@ class GlueDashboardController(IApplicationController):
         if self._view_ok() and self._current_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value) and state:
             self._apply_button_state(state)
 
-    def _on_process_state_str(self, state: str, process_id: str) -> None:
+    def _on_process_state_str(self, state: str, process_id: str, message: str) -> None:
         if self._view_ok():
             self._apply_button_state(state)
             self._view.set_process_state(state)
             self._view.set_active_process(process_id if state != ProcessState.IDLE.value else "")
             if state == ProcessState.RUNNING.value:
                 self._view.set_service_warning("")
+            if state == ProcessState.ERROR.value:
+                from src.applications.base.styled_message_box import show_critical
+                show_critical(
+                    self._view,
+                    self._t("Process Error"),
+                    message or self._t("An unexpected error occurred."),
+                )
 
     def _on_system_state(self, state: str, active_process: str) -> None:  # ← was missing
         if self._view_ok():

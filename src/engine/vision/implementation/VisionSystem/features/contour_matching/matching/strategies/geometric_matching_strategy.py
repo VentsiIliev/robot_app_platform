@@ -29,11 +29,8 @@ class GeometricMatchingStrategy:
 
         for wp in workpieces:
             wp_contour = Contour(wp.get_main_contour())
-            _logger.debug(f"Workpiece contour before similarity: {wp_contour.contour_points}")
-            # similarity = self._getSimilarity(
-            #     wp_contour.get(),
-            #     contour.get()
-            # )
+            # _logger.debug(f"Workpiece contour before similarity: {wp_contour.contour_points}")
+
 
             similarity = self._getSimilarity(        # !!!! IMPORTANT NOTE: MAKE SURE TO PASS A DEEP COPY
                 copy.deepcopy(wp_contour.get()),     # BECAUSE _getSimilarity MUTATES THE ORIGINAL
@@ -48,8 +45,8 @@ class GeometricMatchingStrategy:
                     self._debug_differences
                 )
 
-                _logger.debug(f"Differences between: {wp_contour.get()} and {contour.get()}")
-                _logger.debug(f"Centroid diff: {centroid_diff}, Rotation diff: {rotation_diff}, Contour angle: {contour_angle}")
+                # _logger.debug(f"Differences between: {wp_contour.get()} and {contour.get()}")
+                # _logger.debug(f"Centroid diff: {centroid_diff}, Rotation diff: {rotation_diff}, Contour angle: {contour_angle}")
 
                 best = BestMatchResult(
                     workpiece=wp,
