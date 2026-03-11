@@ -93,6 +93,8 @@ class PickAndPlaceVisualizerController(IApplicationController):
         if self._broker:
             self._subscribe()
 
+        self._view.set_process_state(self._model.get_process_state())
+
     def _on_workpiece_placed(self, event) -> None:
         from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visualizer_service import PlacedItem
         if self._active:

@@ -22,6 +22,7 @@ class PickAndPlaceVisualizerModel(IApplicationModel):
         return self._service.get_plane_bounds()
 
     def set_simulation(self, value: bool) -> None: self._service.set_simulation(value)
+    def get_process_state(self) -> str:            return self._service.get_process_state()
     def start_process(self) -> None:  self._service.start_process()
     def stop_process(self) -> None:   self._service.stop_process()
     def pause_process(self) -> None:  self._service.pause_process()

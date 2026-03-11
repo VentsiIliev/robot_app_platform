@@ -3,7 +3,6 @@ import threading
 import time
 from typing import List, Optional
 
-from ..drivers.fairino import FairinoRobot
 from ..interfaces.i_robot import IRobot
 from ..interfaces.i_robot_state_provider import IRobotStateProvider
 from ..interfaces.i_state_publisher import IStatePublisher
@@ -15,10 +14,7 @@ class RobotStateManager(IRobotStateProvider):
     _POLL_INTERVAL_S = 0.1
 
     def __init__(self, robot: IRobot, publisher: Optional[IStatePublisher] = None, state_topic: str = "robot/state"):
-        if hasattr(robot, 'ip'):
-            self._robot = FairinoRobot(robot.ip)
-        else:
-            self._robot = robot
+        self._robot = robot
         self._publisher = publisher
         self._state_topic = state_topic
         self._logger = logging.getLogger(self.__class__.__name__)

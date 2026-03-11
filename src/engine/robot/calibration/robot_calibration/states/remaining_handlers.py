@@ -262,6 +262,9 @@ def handle_done_state(context) -> RobotCalibrationStates:
         return RobotCalibrationStates.ALIGN_ROBOT
     else:
         # All markers processed - complete calibration
+        if context.height_measuring_service and context.height_map_samples:
+            _logger.info("Saving height map: %d samples", len(context.height_map_samples))
+            context.height_measuring_service.save_height_map(context.height_map_samples)
         _logger.info("All markers processed. Calibration complete.")
         return RobotCalibrationStates.DONE  # Final completion
 

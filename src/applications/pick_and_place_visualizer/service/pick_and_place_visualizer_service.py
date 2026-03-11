@@ -47,6 +47,11 @@ class PickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
         if self._process:
             self._process.reset_errors()
 
+    def get_process_state(self) -> str:
+        if self._process:
+            return self._process.state.value
+        return "idle"
+
     def run_simulation(self) -> SimResult:
         try:
             result, no_match_count, _, _ = self._matching.run_matching()

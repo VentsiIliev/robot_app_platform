@@ -70,6 +70,8 @@ class PickAndPlaceWorkflow:
             if not self._navigation.move_home():
                 self._logger.error("Failed to move to home — aborting")
                 return ProcessState.ERROR, "Failed to move to home position"
+        else:
+            self._logger.info("[SIM] move_home skipped")
 
         while not stop_event.is_set():
             self._wait(run_allowed, stop_event)
@@ -83,9 +85,9 @@ class PickAndPlaceWorkflow:
             if not workpieces:
                 if no_match_count == 0:
                     self._logger.warning("No contours detected — check camera and placement area")
-                    return ProcessState.ERROR, "No workpieces detected — check camera and placement area"
+                    return ProcessState.STOPPED, "No workpieces detected"
                 self._logger.info("No workpieces matched — done")
-                return ProcessState.ERROR, "No workpieces found matching known templates"
+                return ProcessState.STOPPED, "No workpieces matched any known template"
 
             self._logger.info("Matched %d workpiece(s), %d unmatched", len(workpieces), no_match_count)
 
@@ -106,14 +108,21 @@ class PickAndPlaceWorkflow:
                     if placed is None:
                         self._drop_gripper_if_held()
                         return ProcessState.ERROR, "Motion or gripper failure — check robot and tool changer"
+                else:
+                    self._logger.info("[SIM] drop_gripper_if_held skipped")
 
                 if not self._simulation:
                     if not placed:
                         self._logger.info("Plane full — done")
                         self._drop_gripper_if_held()
                         return ProcessState.STOPPED, ""
+                else:
+                    self._logger.info("[SIM] drop_gripper_if_held skipped")
         if not self._simulation:
             self._drop_gripper_if_held()
+        else:
+            self._logger.info("[SIM] drop_gripper_if_held skipped")
+
         return ProcessState.STOPPED, ""
 
     # ── Single workpiece ──────────────────────────────────────────────
@@ -131,11 +140,13 @@ class PickAndPlaceWorkflow:
             gripper_ok = self._ensure_gripper(gripper_id)
             if gripper_ok is None:
                 return None
+        else:
+            self._logger.info("[SIM] ensure_gripper(%d) skipped", gripper_id)
 
         measured_z = self._height.measure_at(robot_x, robot_y) if self._height else None
         # FIXME remove when height calibration is ready
         measured_z = 0
-
+        self._logger.debug(f"Measured z(wp height) -> {measured_z}")
 
         workpiece_height = (
             measured_z + self._config.height_adjustment_mm

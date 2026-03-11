@@ -43,8 +43,8 @@ ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
 # ---------------------------------------------------------------------------
 
 def _build_robot_service(ctx: _BuildContext) -> IRobotService:
-    publisher = RobotStatePublisher(ctx.messaging_service)   # ← wired here
-    state = RobotStateManager(ctx.robot, publisher=publisher)
+    publisher = RobotStatePublisher(ctx.messaging_service)
+    state = RobotStateManager(ctx.robot.clone(), publisher=publisher)
     state.start_monitoring()
     return RobotService(motion=ctx.motion, robot=ctx.robot, state_provider=state)
 

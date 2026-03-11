@@ -1,12 +1,13 @@
 import logging
 import time
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
 from src.engine.repositories.interfaces.settings_repository import ISettingsRepository
+from src.engine.robot.height_measuring.depth_map_data import DepthMapData
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationData
 from src.engine.robot.height_measuring.laser_detection_service import LaserDetectionService
@@ -25,13 +26,15 @@ class HeightMeasuringService(IHeightMeasuringService):
         config: Optional[HeightMeasuringSettings] = None,
         tool: int = 0,
         user: int = 0,
+        depth_map_repository: Optional[ISettingsRepository] = None,
     ):
-        self._laser  = laser_service
-        self._robot  = robot_service
-        self._repo   = repository
-        self._config = config
-        self._tool   = tool
-        self._user   = user
+        self._laser            = laser_service
+        self._robot            = robot_service
+        self._repo             = repository
+        self._depth_map_repo   = depth_map_repository
+        self._config           = config
+        self._tool             = tool
+        self._user             = user
         self._calib: Optional[LaserCalibrationData] = None
         self._poly_model: Optional[LinearRegression] = None
         self._poly_transform: Optional[PolynomialFeatures] = None
@@ -45,6 +48,26 @@ class HeightMeasuringService(IHeightMeasuringService):
 
     def reload_calibration(self) -> None:
         self._load_calibration()
+
+    def save_height_map(self, samples: List[List[float]]) -> None:
+        if not samples:
+            return
+        if self._depth_map_repo is None:
+            _logger.warning("save_height_map: no depth_map_repository injected — cannot save depth map")
+            return
+        data = DepthMapData(points=[list(s) for s in samples])
+        self._depth_map_repo.save(data)
+        _logger.info("Depth map saved: %d points", len(samples))
+
+    def get_depth_map_data(self) -> Optional[DepthMapData]:
+        if self._depth_map_repo is None:
+            return None
+        try:
+            data = self._depth_map_repo.load()
+            return data if data.has_data() else None
+        except Exception as e:
+            _logger.error("Failed to load depth map data: %s", e)
+            return None
 
     def measure_at(self, x: float, y: float) -> Optional[float]:
         if not self.is_calibrated():

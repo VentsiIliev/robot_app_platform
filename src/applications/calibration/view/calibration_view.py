@@ -279,7 +279,7 @@ class CalibrationView(IApplicationView):
 
         self._view_depth_map_btn = MaterialButton("📈  View Depth Map")
         self._view_depth_map_btn.setStyleSheet(_BTN_TEST)
-        self._view_depth_map_btn.setEnabled(False)
+        self._view_depth_map_btn.setEnabled(True)
         layout.addWidget(self._view_depth_map_btn)
 
         layout.addWidget(_divider())

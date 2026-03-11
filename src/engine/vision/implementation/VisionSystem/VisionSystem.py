@@ -171,7 +171,7 @@ class VisionSystem:
                 threshold         = self._get_thresh_by_area(self.threshold_by_area),
                 is_calibrated     = self.cameraMatrix is not None,
                 correct_image_fn  = self.correctImage,
-                spray_area_points = self.service.sprayAreaPoints,
+                spray_area_points = self._get_area_points_by_region(self.threshold_by_area),
             )
             self._latest_contours = contours
             return contours, self.correctedImage, None
@@ -317,3 +317,9 @@ class VisionSystem:
         while not self.stop_signal:
             self.run()
 
+    def _get_area_points_by_region(self, area: str):
+        if area == "pickup":
+            return self.service.pickupAreaPoints
+        if area == "spray":
+            return self.service.sprayAreaPoints
+        raise ValueError(f"Invalid area region: {area!r}")

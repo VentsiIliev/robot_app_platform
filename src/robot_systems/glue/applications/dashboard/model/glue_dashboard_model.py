@@ -39,6 +39,8 @@ class GlueDashboardModel(IApplicationModel):
     def get_cell_connection_state(self, cell_id: int) -> str:
         return self._service.get_cell_connection_state(cell_id)
 
+    def get_process_state(self) -> str:               return self._service.get_process_state()
+
     def start(self)                                   -> None: self._service.start()
     def stop(self)                                    -> None: self._service.stop()
     def pause(self)                                   -> None: self._service.pause()

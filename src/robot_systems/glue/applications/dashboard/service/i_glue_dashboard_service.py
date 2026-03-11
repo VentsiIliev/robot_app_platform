@@ -54,3 +54,6 @@ class IGlueDashboardService(ABC):
     @abstractmethod
     def get_cell_connection_state(self, cell_id: int) -> str: ...
 
+    @abstractmethod
+    def get_process_state(self) -> str: ...
+

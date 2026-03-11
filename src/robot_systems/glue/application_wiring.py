@@ -237,7 +237,7 @@ def _build_calibration_application(robot_system):
         vision_service=vision_service,
         process_controller=robot_system.coordinator,
         robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
-        height_service=robot_system.get_optional_service(ServiceID.HEIGHT_MEASURING),
+        height_service=getattr(robot_system, '_height_measuring_service', None),
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
@@ -333,6 +333,35 @@ def _build_modbus_settings_application(robot_app):
     return WidgetApplication(
         widget_factory=lambda _ms: ModbusSettingsFactory().build(settings_service, action_service)
     )
+
+
+def _build_pick_target_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.pick_target.pick_target_factory import PickTargetFactory
+    from src.applications.pick_target.service.pick_target_application_service import PickTargetApplicationService
+    from src.engine.vision.homography_transformer import HomographyTransformer
+
+    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_service  = robot_system.get_optional_service(ServiceID.ROBOT)
+    robot_config = robot_system._robot_config
+    transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            tcp_x_offset=robot_config.tcp_x_offset,
+            tcp_y_offset=robot_config.tcp_y_offset,
+        )
+        if vision_service is not None and robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        if vision_service is not None else None
+    )
+    service = PickTargetApplicationService(
+        vision_service=vision_service,
+        robot_service=robot_service,
+        transformer=transformer,
+        robot_config=robot_system._robot_config,
+        navigation=robot_system._navigation,
+    )
+    return WidgetApplication(widget_factory=lambda ms: PickTargetFactory(ms).build(service))
 
 
 def _build_height_measuring_application(robot_app):

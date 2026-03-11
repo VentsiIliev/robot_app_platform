@@ -108,6 +108,17 @@ class GlueOperationCoordinator:
         if process is not None:
             process.reset_errors()
 
+    def get_active_state(self) -> str:
+        """Return the state of the currently active process, or IDLE if none."""
+        with self._lock:
+            seq  = self._active_sequence
+            proc = self._active_process
+        if seq is not None and seq._current is not None:
+            return seq._current.state.value
+        if proc is not None:
+            return proc.state.value
+        return ProcessState.IDLE.value
+
     def set_mode(self, mode: GlueOperationMode) -> None:
         with self._lock:
             self._mode = mode

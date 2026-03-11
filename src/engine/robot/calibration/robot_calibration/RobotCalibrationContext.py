@@ -80,6 +80,9 @@ class RobotCalibrationContext(Context):
         
         # Performance optimization
         self.min_camera_flush = 5
+
+        # Height map samples collected during HEIGHT_SAMPLE states
+        self.height_map_samples: list = []  # [[x, y, height_mm], ...]
         self.fast_iteration_wait = 1
         
         # Timing and performance tracking

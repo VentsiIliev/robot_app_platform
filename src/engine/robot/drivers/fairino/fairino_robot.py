@@ -82,3 +82,7 @@ class FairinoRobot(IRobot):
 
     def set_digital_output(self, port_id: int, value: bool) -> None:
         self.robot.SetDO(port_id, value)
+
+    # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
+    def clone(self) -> 'IRobot':
+        return FairinoRobot(self.ip)

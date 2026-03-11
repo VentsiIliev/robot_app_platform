@@ -96,6 +96,9 @@ class GlueDashboardService(IGlueDashboardService):
             self._logger.error("get_cells_count failed, returning 0")
             return 0
 
+    def get_process_state(self) -> str:
+        return self._runner.get_active_state()
+
     def get_cell_connection_state(self, cell_id: int) -> str:
         if self._weight is None:
             return "disconnected"

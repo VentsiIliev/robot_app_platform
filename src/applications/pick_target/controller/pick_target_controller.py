@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+import logging
+import time
+from typing import Callable, List, Optional, Tuple
+
+import cv2
+import numpy as np
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
+
+from src.applications.base.i_application_controller import IApplicationController
+from src.applications.pick_target.model.pick_target_model import PickTargetModel
+from src.applications.pick_target.view.pick_target_view import PickTargetView
+from src.engine.core.i_messaging_service import IMessagingService
+from src.shared_contracts.events.vision_events import VisionTopics
+
+_logger = logging.getLogger(__name__)
+
+
+class _Bridge(QObject):
+    """Routes broker callbacks (background thread) safely to the main thread."""
+    camera_frame = pyqtSignal(object)
+
+
+class _MoveWorker(QObject):
+    """Iterates captured robot coords and moves to each one."""
+    log_message = pyqtSignal(str)
+    finished    = pyqtSignal()
+
+    def __init__(self, model: PickTargetModel, coords: List[Tuple[float, float]], delay: float = 0.0):
+        super().__init__()
+        self._model  = model
+        self._coords = coords
+        self._delay  = delay
+        self._stop   = False
+
+    def request_stop(self) -> None:
+        self._stop = True
+
+    def run(self) -> None:
+        try:
+            for i, (rx, ry) in enumerate(self._coords):
+                if self._stop:
+                    self.log_message.emit("[STOP] Aborted by user.")
+                    break
+                self.log_message.emit(
+                    f"[MOVE] {i + 1}/{len(self._coords)}: robot=({rx:.1f}, {ry:.1f})"
+                )
+                ok = self._model.move_to(rx, ry)
+                status = "[OK]  " if ok else "[FAIL]"
+                self.log_message.emit(f"{status} ({rx:.1f}, {ry:.1f})")
+                if self._delay > 0 and i < len(self._coords) - 1 and not self._stop:
+                    self.log_message.emit(f"[WAIT] {self._delay:.1f}s...")
+                    time.sleep(self._delay)
+            else:
+                self.log_message.emit("[DONE] Sequence complete.")
+        except Exception as exc:
+            _logger.exception("MoveWorker error")
+            self.log_message.emit(f"[ERROR] {exc}")
+        finally:
+            self.finished.emit()
+
+
+class _CalibWorker(QObject):
+    """Moves robot to the calibration position."""
+    log_message = pyqtSignal(str)
+    finished    = pyqtSignal()
+
+    def __init__(self, model: PickTargetModel):
+        super().__init__()
+        self._model = model
+
+    def run(self) -> None:
+        try:
+            ok = self._model.move_to_calibration_position()
+            self.log_message.emit(
+                "[OK]   Reached calibration position." if ok
+                else "[FAIL] Could not reach calibration position."
+            )
+        except Exception as exc:
+            _logger.exception("CalibWorker error")
+            self.log_message.emit(f"[ERROR] {exc}")
+        finally:
+            self.finished.emit()
+
+
+class PickTargetController(IApplicationController):
+
+    def __init__(
+        self,
+        model:     PickTargetModel,
+        view:      PickTargetView,
+        messaging: Optional[IMessagingService] = None,
+    ):
+        self._model   = model
+        self._view    = view
+        self._broker  = messaging
+        self._bridge  = _Bridge()
+        self._subs:   List[Tuple[str, Callable]] = []
+        self._active: List[Tuple[QThread, QObject]] = []  # keeps workers alive
+        self._current_worker: Optional[QObject] = None
+        self._alive   = False
+        self._captured_coords: List[Tuple[float, float]] = []
+
+        self._bridge.camera_frame.connect(self._on_camera_frame)
+
+        self._view.capture_requested.connect(self._on_capture)
+        self._view.move_requested.connect(self._on_move)
+        self._view.calibration_pos_requested.connect(self._on_go_to_calibration)
+        self._view.tcp_toggled.connect(self._model.set_use_tcp)
+        self._view.destroyed.connect(self.stop)
+
+    def load(self) -> None:
+        self._alive = True
+        if self._broker:
+            self._subscribe()
+
+    def stop(self) -> None:
+        self._alive = False
+        if self._current_worker and hasattr(self._current_worker, "request_stop"):
+            self._current_worker.request_stop()
+        for thread, _ in self._active:
+            thread.quit()
+            thread.wait(3000)
+        self._active.clear()
+        for topic, cb in reversed(self._subs):
+            try:
+                self._broker.unsubscribe(topic, cb)
+            except Exception:
+                pass
+        self._subs.clear()
+
+    # ── Broker subscriptions ──────────────────────────────────────────
+
+    def _subscribe(self) -> None:
+        self._sub(VisionTopics.LATEST_IMAGE, self._on_camera_frame_raw)
+
+    def _sub(self, topic: str, cb: Callable) -> None:
+        self._broker.subscribe(topic, cb)
+        self._subs.append((topic, cb))
+
+    def _on_camera_frame_raw(self, msg) -> None:
+        if isinstance(msg, dict):
+            frame = msg.get("image")
+            if frame is not None:
+                self._bridge.camera_frame.emit(frame)
+
+    # ── Main-thread slots ─────────────────────────────────────────────
+
+    def _on_camera_frame(self, frame) -> None:
+        if frame is not None and self._alive:
+            try:
+                self._view.update_camera_frame(frame)
+            except Exception:
+                pass
+
+    def _on_log_message(self, text: str) -> None:
+        if self._alive:
+            self._view.append_log(text)
+
+    def _on_move_done(self) -> None:
+        self._view.set_busy(False)
+        self._view.set_move_enabled(bool(self._captured_coords))
+        self._current_worker = None
+
+    def _on_calib_done(self) -> None:
+        self._view.set_busy(False)
+        self._view.set_move_enabled(bool(self._captured_coords))
+        self._current_worker = None
+
+    def _on_thread_finished(self) -> None:
+        self._active = [(t, w) for t, w in self._active if t.isRunning()]
+
+    # ── Capture (main thread) ─────────────────────────────────────────
+
+    def _on_capture(self) -> None:
+        try:
+            frame, pixel_centroids, robot_coords = self._model.capture()
+        except Exception as exc:
+            self._view.append_log(f"[ERROR] Capture failed: {exc}")
+            return
+
+        self._captured_coords = robot_coords
+
+        if frame is not None and len(frame.shape) == 3:
+            self._view.update_captured_frame(self._annotate(frame, pixel_centroids))
+
+        n = len(robot_coords)
+        self._view.append_log(f"[CAPTURE] {n} target(s) found.")
+        for i, (rx, ry) in enumerate(robot_coords):
+            self._view.append_log(f"  [{i + 1}] robot=({rx:.1f}, {ry:.1f})")
+
+        self._view.set_move_enabled(n > 0)
+        if n == 0:
+            self._view.append_log("[WARN] No contours detected — check camera and lighting.")
+
+    # ── Move ──────────────────────────────────────────────────────────
+
+    def _on_move(self) -> None:
+        if not self._captured_coords:
+            self._view.append_log("[WARN] No captured targets — press Capture first.")
+            return
+        if self._current_worker is not None:
+            return
+        self._view.set_busy(True)
+        self._view.append_log(
+            f"[MOVE] Starting sequence for {len(self._captured_coords)} target(s)..."
+        )
+        worker = _MoveWorker(self._model, list(self._captured_coords), self._view.get_move_delay())
+        self._launch(worker, on_done=self._on_move_done)
+
+    # ── Calibration position ──────────────────────────────────────────
+
+    def _on_go_to_calibration(self) -> None:
+        if self._current_worker is not None:
+            return
+        self._view.set_busy(True)
+        self._view.append_log("[MOVE] Moving to calibration position...")
+        worker = _CalibWorker(self._model)
+        self._launch(worker, on_done=self._on_calib_done)
+
+    # ── Thread helper (mirrors ModbusSettingsController pattern) ──────
+
+    def _launch(self, worker: QObject, on_done: Callable) -> None:
+        thread = QThread()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.log_message.connect(self._on_log_message)
+        worker.finished.connect(on_done)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(self._on_thread_finished)
+        self._active.append((thread, worker))
+        self._current_worker = worker
+        thread.start()
+
+    # ── Annotation ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _annotate(frame: np.ndarray, pixel_centroids: List[Tuple[float, float]]) -> np.ndarray:
+        out = frame.copy()
+        for px, py in pixel_centroids:
+            x, y = int(round(px)), int(round(py))
+            cv2.line(out, (x - 14, y), (x + 14, y), (0, 255, 0), 1)
+            cv2.line(out, (x, y - 14), (x, y + 14), (0, 255, 0), 1)
+        return out
+

@@ -260,8 +260,9 @@ class GlueDashboardController(IApplicationController):
     # ── Initialize ────────────────────────────────────────────────────
 
     def _initialize_view(self) -> None:
-        self._apply_button_state(ProcessState.IDLE.value)
-        self._view.set_process_state(ProcessState.IDLE.value)
+        current_state = self._model.get_process_state()
+        self._apply_button_state(current_state)
+        self._view.set_process_state(current_state)
         self._view.set_system_state("idle")
         self._view.set_active_process("")
         # sync runner mode with the initial button label — single source of truth is the label

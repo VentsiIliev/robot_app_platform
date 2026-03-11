@@ -11,6 +11,11 @@ from src.engine.robot.height_measuring.laser_calibration_data import (
     LaserCalibrationDataSerializer,
     LaserCalibrationRepository,
 )
+from src.engine.robot.height_measuring.depth_map_data import (
+    DepthMapData,
+    DepthMapDataSerializer,
+    DepthMapRepository,
+)
 from src.engine.robot.height_measuring.laser_detector import LaserDetector
 from src.engine.robot.height_measuring.laser_detection_service import LaserDetectionService
 from src.engine.robot.height_measuring.laser_calibration_service import LaserCalibrationService

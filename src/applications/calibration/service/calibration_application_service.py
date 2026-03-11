@@ -25,7 +25,7 @@ class _IRobotService(Protocol):
 
 
 class _IHeightService(Protocol):
-    def get_calibration_data(self): ...
+    def get_depth_map_data(self): ...
 
 
 class _IRobotConfig(Protocol):
@@ -185,4 +185,4 @@ class CalibrationApplicationService(ICalibrationService):
     def get_height_calibration_data(self):
         if self._height_service is None:
             return None
-        return self._height_service.get_calibration_data()
+        return self._height_service.get_depth_map_data()

@@ -1,7 +1,7 @@
 {
   "ROBOT_IP": "192.168.58.2",
-  "ROBOT_TOOL": 1,
-  "ROBOT_USER": 1,
+  "ROBOT_TOOL": 0,
+  "ROBOT_USER": 0,
   "TCP_X_OFFSET": -0.041,
   "TCP_Y_OFFSET": 76.859,
   "TCP_X_STEP_DISTANCE": 50.0,
@@ -15,13 +15,6 @@
     "-Y": true
   },
   "MOVEMENT_GROUPS": {
-    "JHFG": {
-      "velocity": 0,
-      "acceleration": 0,
-      "iterations": 1,
-      "has_iterations": false,
-      "has_trajectory_execution": false
-    },
     "SLOT 11 PICKUP": {
       "velocity": 5,
       "acceleration": 20,
@@ -29,17 +22,21 @@
       "has_iterations": false,
       "has_trajectory_execution": true,
       "points": [
-        "[90.200, -130.000, 300.000, 180.000, 0.000, 0.000]"
+        "[-283.344, -263.900, 574.840, -180.000, 0.000, 90.000]",
+        "[-283.342, -263.901, 524.838, 180.000, -0.000, 90.001]",
+        "[-283.343, -113.901, 524.838, -180.000, -0.000, 90.000]"
       ]
     },
     "SLOT 11 DROPOFF": {
-      "velocity": 0,
-      "acceleration": 0,
+      "velocity": 5,
+      "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
       "points": [
-        "[90.200, -130.000, 300.000, 180.000, 0.000, 0.000]"
+        "[-283.342, -113.903, 524.836, 180.000, -0.000, 90.000]",
+        "[-283.346, -263.904, 524.836, 180.000, -0.000, 90.000]",
+        "[-283.344, -263.899, 574.837, 180.000, -0.000, 90.000]"
       ]
     },
     "SLOT 12 PICKUP": {
@@ -70,7 +67,7 @@
     },
     "HOME": {
       "velocity": 10,
-      "acceleration": 10,
+      "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -91,7 +88,7 @@
     "y_min": -650,
     "y_max": 650,
     "z_min": 270,
-    "z_max": 820,
+    "z_max": 821,
     "rx_min": 170,
     "rx_max": 180,
     "ry_min": -10,

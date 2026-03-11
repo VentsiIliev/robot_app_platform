@@ -12,6 +12,7 @@ class SettingsID(str, Enum):
     TOOL_CHANGER_CONFIG          = "tool_changer_config"
     HEIGHT_MEASURING_SETTINGS    = "height_measuring_settings"
     HEIGHT_MEASURING_CALIBRATION = "height_measuring_calibration"
+    DEPTH_MAP_DATA               = "depth_map_data"
 
     def __str__(self) -> str:
         return self.value

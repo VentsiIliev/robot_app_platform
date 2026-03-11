@@ -26,6 +26,7 @@ from src.robot_systems.glue.service_builders import build_weight_cell_service, b
 from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
+from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
 
 import os
 _WORKPIECES_STORAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "workpieces")
@@ -48,6 +49,7 @@ class GlueRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SERVICE",    display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN",      display_name="Administration"),
+            FolderSpec(folder_id=4, name="Tests",      display_name="Tests"),
         ],
         applications=[
             ApplicationSpec(name="GlueDashboard",   folder_id=1, icon="fa5s.tachometer-alt",  factory=application_wiring._build_dashboard_application),
@@ -57,19 +59,15 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="CellSettings",    folder_id=2, icon="fa5s.weight",           factory=application_wiring._build_glue_cell_settings_application),
             ApplicationSpec(name="CameraSettings",  folder_id=2, icon="fa5s.camera",          factory=application_wiring._build_camera_settings_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",          factory=application_wiring._build_calibration_application),
-            ApplicationSpec(name="BrokerDebug", folder_id=3, icon="fa5s.project-diagram",       factory=application_wiring._build_broker_debug_application),
+            ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",       factory=application_wiring._build_broker_debug_application),
             ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",        factory=application_wiring._build_user_management_application),
             ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
             ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application),
-            ApplicationSpec(name="ContourMatchingTester", folder_id=2, icon="fa6s.shapes",            factory=application_wiring._build_contour_matching_tester),
-            ApplicationSpec(name="HeightMeasuring",       folder_id=2, icon="fa5s.ruler-vertical",   factory=application_wiring._build_height_measuring_application),
-            ApplicationSpec(
-                name="PickAndPlaceVisualizer",
-                folder_id=2,
-                icon="fa5s.map-marked",
-                factory=application_wiring._build_pick_and_place_visualizer,
-            )
+            ApplicationSpec(name="ContourMatchingTester", folder_id=4, icon="fa6s.shapes",            factory=application_wiring._build_contour_matching_tester),
+            ApplicationSpec(name="HeightMeasuring",       folder_id=4, icon="fa5s.ruler-vertical",   factory=application_wiring._build_height_measuring_application),
+            ApplicationSpec(name="PickAndPlaceVisualizer",  folder_id=4, icon="fa5s.map-marked",  factory=application_wiring._build_pick_and_place_visualizer),
+            ApplicationSpec(name="PickTarget",              folder_id=4, icon="fa5s.crosshairs",   factory=application_wiring._build_pick_target_application),
         ],
     )
 
@@ -84,6 +82,7 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,          ToolChangerSettingsSerializer(),         "tools/tool_changer.json"),
         SettingsSpec(SettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
         SettingsSpec(SettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
+        SettingsSpec(SettingsID.DEPTH_MAP_DATA,               DepthMapDataSerializer(),                "height_measuring/depth_map.json"),
     ]
 
     services = [
@@ -118,8 +117,8 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.navigation import GlueNavigationService
         self._robot = self.get_service(ServiceID.ROBOT)
         _nav_engine      = self.get_service(ServiceID.NAVIGATION)
-        self._navigation = GlueNavigationService(_nav_engine)  # ← typed facade
         self._vision = self.get_optional_service(ServiceID.VISION)
+        self._navigation = GlueNavigationService(_nav_engine,vision=self._vision)  # ← typed facade
         self._tools = self.get_optional_service(ServiceID.TOOLS)
         self._robot_config = self.get_settings(SettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(SettingsID.ROBOT_CALIBRATION)

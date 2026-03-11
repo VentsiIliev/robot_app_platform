@@ -55,3 +55,6 @@ class IPickAndPlaceVisualizerService(ABC):
 
     @abstractmethod
     def reset_process(self) -> None: ...
+
+    @abstractmethod
+    def get_process_state(self) -> str: ...

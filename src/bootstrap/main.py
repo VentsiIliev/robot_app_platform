@@ -2,6 +2,8 @@ import logging
 import sys
 from pathlib import Path
 
+from src.engine.robot.drivers.fairino import FairinoRos2Robot
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.bootstrap.logging_config import setup_logging
@@ -31,7 +33,8 @@ def main() -> None:
     robot_app = (
         SystemBuilder()
         # .with_robot(FairinoRobot("192.168.58.2"))
-        .with_robot(TestRobotWrapper())
+        # .with_robot(TestRobotWrapper())
+        .with_robot(FairinoRos2Robot(server_url="http://localhost:5000"))
         .with_messaging_service(ctx.messaging_service)
         .build(GlueRobotSystem)
     )

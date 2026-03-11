@@ -131,6 +131,7 @@ def _build_height_measuring_services(robot_system):
         config=settings.measuring,
         tool=robot_config.robot_tool,
         user=robot_config.robot_user,
+        depth_map_repository=robot_system._settings_service.get_repo(SettingsID.DEPTH_MAP_DATA),
     )
     return measuring_svc, calibration_svc, detection_svc
 

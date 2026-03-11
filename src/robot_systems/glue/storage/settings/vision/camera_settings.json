@@ -3,7 +3,7 @@
   "Width": 1280,
   "Height": 720,
   "Skip frames": 30,
-  "Capture position offset": 0,
+  "Capture position offset": -4,
   "Contour detection": true,
   "Draw contours": true,
   "Threshold": 100,
@@ -29,26 +29,26 @@
     "Skip frames": 30
   },
   "Brightness Control": {
-    "Enable auto adjust": true,
+    "Enable auto adjust": false,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
     "Target brightness": 200.0,
     "Brightness area point 1": [
-      908,
-      657
+      911,
+      633
     ],
     "Brightness area point 2": [
-      1004,
-      666
+      1016,
+      630
     ],
     "Brightness area point 3": [
-      1013,
-      702
+      1016,
+      675
     ],
     "Brightness area point 4": [
-      899,
-      684
+      920,
+      675
     ]
   },
   "Aruco": {

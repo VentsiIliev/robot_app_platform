@@ -1,56 +1,54 @@
 import numpy as np
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSizePolicy
+)
 from PyQt6.QtCore import Qt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 — registers 3d projection
 
 
-def _reconstruct_polynomial(coefficients, intercept, x_values):
-    """Evaluate a polynomial given sklearn-style coefficients (degree N-1 features)."""
-    result = np.full_like(x_values, intercept, dtype=float)
-    for power, coef in enumerate(coefficients, start=1):
-        result += coef * (x_values ** power)
-    return result
+_GRID_RES = 60
 
 
 class DepthMapDialog(QDialog):
-    """Shows a chart of the laser height calibration samples + polynomial fit."""
-
-    def __init__(self, calibration_data, parent=None):
+    def __init__(self, depth_map_data, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Height Calibration — Depth Map")
-        self.setMinimumSize(720, 500)
+        self.setWindowTitle("Robot Calibration — Surface Depth Map")
+        self.setMinimumSize(1100, 560)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self._build_ui(calibration_data)
+        self._build_ui(depth_map_data)
 
     def _build_ui(self, data) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 12)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
-        # ── Info row ──────────────────────────────────────────────────
-        info_row = QHBoxLayout()
-        n_pts = len(data.calibration_points)
-        degree = data.polynomial_degree
-        mse = data.polynomial_mse
-        info_label = QLabel(
-            f"Samples: <b>{n_pts}</b> &nbsp;|&nbsp; "
-            f"Polynomial degree: <b>{degree}</b> &nbsp;|&nbsp; "
-            f"MSE: <b>{mse:.4f} mm</b>"
-        )
-        info_label.setStyleSheet("color: #555; font-size: 9pt;")
-        info_row.addWidget(info_label)
-        info_row.addStretch()
-        layout.addLayout(info_row)
+        n_pts = len(data.points)
+        info = QLabel(f"Surface depth map — <b>{n_pts}</b> measured points")
+        info.setStyleSheet("color: #555; font-size: 9pt;")
+        layout.addWidget(info)
 
-        # ── Matplotlib canvas ─────────────────────────────────────────
-        fig = Figure(figsize=(7, 4.2), tight_layout=True)
-        ax = fig.add_subplot(111)
-        self._populate_chart(ax, data)
+        fig = Figure(figsize=(13, 5.5), tight_layout=True)
+        fig.patch.set_facecolor("#FFFFFF")
+
+        ax3d = fig.add_subplot(121, projection="3d")
+        ax2d = fig.add_subplot(122)
+
+        pts = np.array(data.points) if data.points else None
+        if pts is not None and len(pts) >= 4:
+            self._populate_3d(ax3d, pts)
+            self._populate_2d(ax2d, pts)
+        else:
+            for ax in (ax3d, ax2d):
+                ax.text(0.5, 0.5, "Not enough data (need ≥ 4 points)",
+                        ha="center", va="center", transform=ax.transAxes,
+                        fontsize=11, color="gray")
+
         canvas = FigureCanvasQTAgg(fig)
+        canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(canvas, stretch=1)
 
-        # ── Close button ──────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         close_btn = QPushButton("Close")
@@ -60,33 +58,48 @@ class DepthMapDialog(QDialog):
         layout.addLayout(btn_row)
 
     @staticmethod
-    def _populate_chart(ax, data) -> None:
-        if not data.calibration_points:
-            ax.text(0.5, 0.5, "No calibration data", ha="center", va="center",
-                    transform=ax.transAxes, fontsize=12, color="gray")
-            return
+    def _populate_3d(ax, pts: np.ndarray) -> None:
+        from scipy.interpolate import griddata
 
-        pts = np.array(data.calibration_points)   # shape (N, 2): [height_mm, pixel_delta]
-        heights_mm   = pts[:, 0]
-        pixel_deltas = pts[:, 1]
+        x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
 
-        # Raw scatter
-        ax.scatter(heights_mm, pixel_deltas,
-                   s=18, color="#905BA9", alpha=0.75, zorder=3, label="Measured samples")
+        xi = np.linspace(x.min(), x.max(), _GRID_RES)
+        yi = np.linspace(y.min(), y.max(), _GRID_RES)
+        XI, YI = np.meshgrid(xi, yi)
+        ZI = griddata((x, y), z, (XI, YI), method="cubic")
 
-        # Polynomial curve (reconstructed from stored coefficients)
-        if data.polynomial_coefficients:
-            x_smooth = np.linspace(heights_mm.min(), heights_mm.max(), 300)
-            y_fit = _reconstruct_polynomial(
-                data.polynomial_coefficients, data.polynomial_intercept, x_smooth
-            )
-            ax.plot(x_smooth, y_fit, color="#4CAF50", linewidth=2,
-                    zorder=2, label=f"Polynomial fit (degree {data.polynomial_degree})")
+        surf = ax.plot_surface(
+            XI, YI, ZI,
+            cmap="viridis",
+            linewidth=0,
+            antialiased=True,
+            alpha=0.90,
+        )
 
-        ax.set_xlabel("Height (mm)", fontsize=10)
-        ax.set_ylabel("Laser pixel delta (px)", fontsize=10)
-        ax.set_title("Laser Height Calibration Curve", fontsize=11, fontweight="bold")
-        ax.legend(fontsize=9)
-        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.scatter(x, y, z, c="red", s=40, edgecolors="black", zorder=5)
+
+        ax.figure.colorbar(surf, ax=ax, shrink=0.55, pad=0.1, label="Height (mm)")
+        ax.set_xlabel("X (mm)", fontweight="bold", fontsize=9)
+        ax.set_ylabel("Y (mm)", fontweight="bold", fontsize=9)
+        ax.set_zlabel("Height (mm)", fontweight="bold", fontsize=9)
+        ax.set_title("3D Surface", fontsize=11, fontweight="bold")
+
+    @staticmethod
+    def _populate_2d(ax, pts: np.ndarray) -> None:
+        x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
+
+        sc = ax.scatter(x, y, c=z, cmap="viridis", s=80, zorder=3,
+                        edgecolors="black", linewidths=0.5)
+        ax.figure.colorbar(sc, ax=ax, label="Height (mm)")
+
+        for xi, yi, zi in zip(x, y, z):
+            ax.annotate(f"{zi:.2f}", (xi, yi),
+                        textcoords="offset points", xytext=(5, 5),
+                        fontsize=8, color="#222")
+
+        ax.set_xlabel("X (mm)", fontsize=10)
+        ax.set_ylabel("Y (mm)", fontsize=10)
+        ax.set_title("Top-down view", fontsize=11, fontweight="bold")
+        ax.set_aspect("equal", adjustable="datalim")
+        ax.grid(True, linestyle="--", alpha=0.35)
         ax.set_facecolor("#FAFAFA")
-        ax.figure.patch.set_facecolor("#FFFFFF")

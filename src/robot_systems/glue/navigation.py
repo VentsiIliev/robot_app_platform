@@ -1,5 +1,8 @@
+from typing import Optional
+import logging
 from src.engine.robot.features.navigation_service import NavigationService
-
+from src.engine.vision import IVisionService
+_logger = logging.getLogger(__name__)
 
 class GlueNavigationService:
 
@@ -7,17 +10,30 @@ class GlueNavigationService:
     _GROUP_LOGIN       = "LOGIN"
     _GROUP_CALIBRATION = "CALIBRATION"
 
-    def __init__(self, navigation: NavigationService):
+    def __init__(self, navigation: NavigationService, vision: Optional[IVisionService] = None):
         self._nav = navigation
+        self._vision = vision
 
-    def move_home(self, z_offset: float = 0.0) -> bool:
-        return self._move_with_z_offset(self._GROUP_HOME, z_offset)
+    @property
+    def _capture_z_offset(self) -> float:
+        if self._vision is not None:
+            return self._vision.get_capture_pos_offset()
+        return 0.0
+
+    def move_home(self) -> bool:
+        ok = self._move_with_z_offset(self._GROUP_HOME, self._capture_z_offset)
+        if ok:
+            self._set_area("pickup")
+        return ok
 
     def move_to_login_position(self) -> bool:
         return self._nav.move_to_group(self._GROUP_LOGIN)
 
     def move_to_calibration_position(self, z_offset: float = 0.0) -> bool:
-        return self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset)
+        ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset)
+        if ok:
+            self._set_area("spray")
+        return ok
 
     def move_to(self, group_name: str, z_offset: float = 0.0) -> bool:
         return self._move_with_z_offset(group_name, z_offset) if z_offset else self._nav.move_to_group(group_name)
@@ -45,3 +61,7 @@ class GlueNavigationService:
             traceback.print_exc()
             return False
 
+
+    def _set_area(self, area: str) -> None:
+        if self._vision is not None:
+            self._vision.set_detection_area(area)

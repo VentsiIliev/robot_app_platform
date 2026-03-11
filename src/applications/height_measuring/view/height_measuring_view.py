@@ -18,6 +18,26 @@ from src.applications.height_measuring.view.height_measuring_schema import (
     CALIBRATION_GROUP, DETECTION_GROUP, MEASURING_GROUP,
 )
 
+_CROSSHAIR_COLOR     = (0, 255, 80)
+_CROSSHAIR_THICKNESS = 1
+
+_BTN_OVERLAY_OFF = (
+    "QPushButton {"
+    "  background: transparent; color: #888;"
+    "  border: 1px solid #CCC; border-radius: 4px;"
+    "  padding: 3px 8px; font-size: 8pt;"
+    "}"
+    "QPushButton:hover { background: rgba(0,0,0,0.06); }"
+)
+_BTN_OVERLAY_ON = (
+    "QPushButton {"
+    "  background: #E8F5E9; color: #2E7D32;"
+    "  border: 1px solid #4CAF50; border-radius: 4px;"
+    "  padding: 3px 8px; font-size: 8pt; font-weight: bold;"
+    "}"
+    "QPushButton:hover { background: #DCEDC8; }"
+)
+
 
 class HeightMeasuringView(IApplicationView):
 
@@ -34,6 +54,7 @@ class HeightMeasuringView(IApplicationView):
 
     def __init__(self, parent=None):
         super().__init__("HeightMeasuring", parent)
+        self._crosshair_on = False
 
     # ── IApplicationView contract ─────────────────────────────────────────────
 
@@ -84,7 +105,7 @@ class HeightMeasuringView(IApplicationView):
 
         # Left: vertical split — camera feed on top, mask below
         left = QSplitter(Qt.Orientation.Vertical)
-        outer_splitter.addWidget(left)  # ← was missing: left had no Qt parent → GC'd
+        outer_splitter.addWidget(left)
 
         self._frame_label = QLabel("No frame")
         self._frame_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -102,7 +123,7 @@ class HeightMeasuringView(IApplicationView):
         left.setStretchFactor(0, 2)
         left.setStretchFactor(1, 1)
 
-        right = QWidget()  # ← goes directly into outer_splitter
+        right = QWidget()
         right.setMinimumWidth(280)
         right.setMaximumWidth(400)
         right_layout = QVBoxLayout(right)
@@ -167,6 +188,17 @@ class HeightMeasuringView(IApplicationView):
         form.addRow("Pixel Y:", self._lbl_pixel_y)
         form.addRow("Height:",  self._lbl_height)
         layout.addLayout(form)
+
+        # Overlay divider
+        overlay_divider = QLabel("─── Overlays ────────────────────")
+        overlay_divider.setStyleSheet("color: #888; font-size: 8pt;")
+        layout.addWidget(overlay_divider)
+
+        # Crosshair toggle
+        self._btn_crosshair = QPushButton("⊕  Crosshair")
+        self._btn_crosshair.setStyleSheet(_BTN_OVERLAY_OFF)
+        self._btn_crosshair.clicked.connect(self._toggle_crosshair)
+        layout.addWidget(self._btn_crosshair)
 
         self._btn_laser_on.clicked.connect(self._on_laser_on_clicked)
         self._btn_laser_off.clicked.connect(self._on_laser_off_clicked)
@@ -248,10 +280,15 @@ class HeightMeasuringView(IApplicationView):
     def _on_stop_continuous_clicked(self) -> None:
         self.stop_continuous_requested.emit()
 
+    def _toggle_crosshair(self) -> None:
+        self._crosshair_on = not self._crosshair_on
+        self._btn_crosshair.setStyleSheet(
+            _BTN_OVERLAY_ON if self._crosshair_on else _BTN_OVERLAY_OFF
+        )
+
     # ── Setters ───────────────────────────────────────────────────────────────
 
     def set_mask_frame(self, mask: np.ndarray) -> None:
-        # mask is (H, W) uint8 — convert to RGB for display
         rgb = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
         h, w, ch = rgb.shape
         qimg = QImage(bytes(rgb.data), w, h, ch * w, QImage.Format.Format_RGB888)
@@ -264,6 +301,8 @@ class HeightMeasuringView(IApplicationView):
         )
 
     def set_frame(self, frame: np.ndarray) -> None:
+        if self._crosshair_on:
+            frame = self._draw_crosshair(frame)
         h, w, ch = frame.shape
         qimg = QImage(bytes(frame.data), w, h, ch * w, QImage.Format.Format_RGB888)
         self._frame_label.setPixmap(
@@ -292,8 +331,8 @@ class HeightMeasuringView(IApplicationView):
     def set_calibrating(self, running: bool) -> None:
         self._btn_calibrate.setEnabled(not running)
         self._btn_stop.setEnabled(running)
-        self._btn_detect.setEnabled(not running)  # ← new
-        self._btn_start_live.setEnabled(not running)  # ← new
+        self._btn_detect.setEnabled(not running)
+        self._btn_start_live.setEnabled(not running)
 
     def set_laser_state(self, on: bool) -> None:
         self._btn_laser_on.setEnabled(not on)
@@ -303,7 +342,7 @@ class HeightMeasuringView(IApplicationView):
         self._btn_start_live.setEnabled(not running)
         self._btn_stop_live.setEnabled(running)
         self._btn_detect.setEnabled(not running)
-        self._btn_calibrate.setEnabled(not running)  # ← new
+        self._btn_calibrate.setEnabled(not running)
         self._btn_laser_on.setEnabled(not running)
         self._btn_laser_off.setEnabled(not running)
 
@@ -361,3 +400,14 @@ class HeightMeasuringView(IApplicationView):
     def show_message(self, message: str, is_error: bool = False) -> None:
         colour = "#e55" if is_error else "#5e5"
         self._log.append(f'<span style="color:{colour}">{message}</span>')
+
+    # ── Frame overlays ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _draw_crosshair(image: np.ndarray) -> np.ndarray:
+        frame  = image.copy()
+        h, w   = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        cv2.line(frame, (0, cy), (w, cy), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        cv2.line(frame, (cx, 0), (cx, h), _CROSSHAIR_COLOR, _CROSSHAIR_THICKNESS)
+        return frame

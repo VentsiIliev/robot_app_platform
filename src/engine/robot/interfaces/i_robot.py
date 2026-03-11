@@ -65,3 +65,10 @@ class IRobot(ABC):
     @abstractmethod
     def disable(self) -> None:
         ...
+
+    def clone(self) -> 'IRobot':
+        """Return a new independent connection to the same robot endpoint.
+        Default: returns self (safe for stateless/HTTP transports).
+        Override in drivers that hold exclusive connections (e.g. TCP SDK).
+        """
+        return self

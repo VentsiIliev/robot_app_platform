@@ -63,3 +63,10 @@ class IVisionService(ABC):
     @property
     @abstractmethod
     def camera_to_robot_matrix_path(self) -> str: ...
+
+    @abstractmethod
+    def set_detection_area(self, area: str) -> None:
+        """Switch contour detection filter to 'pickup' or 'spray'."""
+
+    @abstractmethod
+    def get_capture_pos_offset(self) -> float: ...
