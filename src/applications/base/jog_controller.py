@@ -80,4 +80,6 @@ class JogController:
         )
 
     def _on_jog_stop(self, _key: str) -> None:
-        QThreadPool.globalInstance().start(_FireAndForget(self._service.stop_jog))
+        _logger.debug(f"Commented out jod stop: {_key}")
+        #START JOG IS ASYNC SO SHOULD NOT CALL STOP JOG IMMEDIATELY
+        # QThreadPool.globalInstance().start(_FireAndForget(self._service.stop_jog))

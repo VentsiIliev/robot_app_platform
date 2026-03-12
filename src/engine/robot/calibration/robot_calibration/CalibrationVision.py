@@ -199,15 +199,11 @@ class CalibrationVision:
         for i, iter_marker_id in enumerate(ids.flatten()):
             if iter_marker_id != marker_id:
                 continue
-            # update marker top-left corner in pixels
-            top_left_corner_px = tuple(corners[i][0][0].astype(int))
+            top_left_corner_px = corners[i][0][0]  # float32, sub-pixel
             self.marker_top_left_corners[marker_id] = top_left_corner_px
 
-            # Convert to mm relative to bottom-left of chessboard, keep Y downwards!
             x_mm = (top_left_corner_px[0] - self.bottom_left_chessboard_corner_px[0]) / self.PPM
-            y_mm = (top_left_corner_px[1] - self.bottom_left_chessboard_corner_px[1]) / self.PPM  # <-- image-space mm
-
-            # update marker top-left corner in mm
+            y_mm = (top_left_corner_px[1] - self.bottom_left_chessboard_corner_px[1]) / self.PPM
             self.marker_top_left_corners_mm[marker_id] = (x_mm, y_mm)
 
     # def update_marker_top_left_corners(self, marker_id, corners, ids):
@@ -228,10 +224,17 @@ class CalibrationVision:
     def detect_specific_marker(self, frame, marker_id) -> SpecificMarkerDetectionResult:
         marker_found = False
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(image=frame)
-        _logger.debug(f"Detection loop for specific marker {marker_id}")
         if arucoIds is not None and marker_id in arucoIds:
             marker_found = True
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
+            arucoCorners = list(arucoCorners)
+            for idx, mid in enumerate(arucoIds.flatten()):
+                if mid == marker_id:
+                    pts = arucoCorners[idx].reshape(4, 1, 2).astype(np.float32)
+                    arucoCorners[idx] = cv2.cornerSubPix(gray, pts, (5, 5), (-1, -1), criteria).reshape(1, 4, 2)
         return SpecificMarkerDetectionResult(found=marker_found,
                                              aruco_corners=arucoCorners,
                                              aruco_ids=arucoIds,
                                              frame=frame)
+

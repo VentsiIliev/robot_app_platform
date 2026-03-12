@@ -11,18 +11,17 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class MotionService(IMotionService):
-
     _WAIT_THRESHOLD_MM = 2.0
     _WAIT_DELAY_S = 0.1
     _WAIT_TIMEOUT_S = 10.0
 
     def __init__(
-        self,
-        robot: IRobot,
-        safety_checker: ISafetyChecker,
-        jog_velocity: float = 10.0,
-        jog_acceleration: float = 10.0,
-        messaging_service=None,
+            self,
+            robot: IRobot,
+            safety_checker: ISafetyChecker,
+            jog_velocity: float = 10.0,
+            jog_acceleration: float = 10.0,
+            messaging_service=None,
     ):
         self._robot = robot
         self._safety = safety_checker
@@ -72,6 +71,7 @@ class MotionService(IMotionService):
         except Exception:
             self._logger.exception("move_linear failed")
             return False
+
     def start_jog(self, axis: RobotAxis, direction: Direction, step: float) -> int:
         self._logger.debug("start_jog → axis=%s direction=%s step=%s", axis, direction, step)
         try:
@@ -105,7 +105,6 @@ class MotionService(IMotionService):
             self._logger.exception("start_jog failed")
             return -1
 
-
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
         self._last_jog_target = []
@@ -136,20 +135,20 @@ class MotionService(IMotionService):
         cy, sy = math.cos(math.radians(position[4])), math.sin(math.radians(position[4]))
         cz, sz = math.cos(math.radians(position[5])), math.sin(math.radians(position[5]))
         cols = (
-            (cy * cz,               cy * sz,              -sy     ),   # tool X in base
-            (cz*sx*sy - cx*sz,      cx*cz + sx*sy*sz,      cy*sx  ),   # tool Y in base
-            (cx*cz*sy + sx*sz,      cx*sy*sz - cz*sx,      cx*cy  ),   # tool Z in base
+            (cy * cz, cy * sz, -sy),  # tool X in base
+            (cz * sx * sy - cx * sz, cx * cz + sx * sy * sz, cy * sx),  # tool Y in base
+            (cx * cz * sy + sx * sz, cx * sy * sz - cz * sx, cx * cy),  # tool Z in base
         )
         col = cols[axis_idx]
         scale = direction_value * step
         return col[0] * scale, col[1] * scale, col[2] * scale
 
     def _wait_for_position(
-        self,
-        target: List[float],
-        threshold: float = _WAIT_THRESHOLD_MM,
-        delay: float = _WAIT_DELAY_S,
-        timeout: float = _WAIT_TIMEOUT_S,
+            self,
+            target: List[float],
+            threshold: float = _WAIT_THRESHOLD_MM,
+            delay: float = _WAIT_DELAY_S,
+            timeout: float = _WAIT_TIMEOUT_S,
     ) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -161,4 +160,3 @@ class MotionService(IMotionService):
             time.sleep(delay)
         self._logger.warning("Timed out waiting for robot to reach %s", target)
         return False
-

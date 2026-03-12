@@ -17,12 +17,13 @@ class FairinoRos2Client:
             raise ConnectionError(f"Could not connect to ROS2 bridge at {server_url}")
         logger.info("Connected to ROS2 bridge at %s", server_url)
 
+    # AFTER
     @staticmethod
     def _parse_result(raw: dict) -> int:
         value = raw.get("result")
         if isinstance(value, bool):
             return 0 if value else -1
-        return value or 0
+        return value if value is not None else -1
 
     def health_check(self):
         try:
@@ -37,7 +38,7 @@ class FairinoRos2Client:
     # ============ Motion Commands ============
 
     def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
-        payload = {"position": position, "tool": tool, "user": user, "vel": vel, "acc": acc}
+        payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
         logger.debug("move_cartesian → POST /move/cartesian payload=%s", payload)
         try:
             response = requests.post(f"{self.server_url}/move/cartesian", json=payload, timeout=30)
@@ -53,7 +54,7 @@ class FairinoRos2Client:
             return -1
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
-        payload = {"position": position, "tool": tool, "user": user, "vel": vel, "acc": acc}
+        payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
             response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
@@ -68,9 +69,9 @@ class FairinoRos2Client:
             logger.error("move_liner error: %s", e, exc_info=True)
             return -1
 
-
     def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False):
-        payload = {"path": path, "rx": rx, "ry": ry, "rz": rz, "vel": vel, "acc": acc, "blocking": blocking}
+        sanitized_path = [self._to_float_list(p) for p in path] if path else path
+        payload = {"path": sanitized_path, "rx": rx, "ry": ry, "rz": rz, "vel": vel, "acc": acc, "blocking": blocking}
         logger.debug("execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s",
                      len(path) if path else 0, blocking, vel, acc)
         try:
@@ -120,8 +121,7 @@ class FairinoRos2Client:
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
 
-    def StopMotion(self):
-        return self.stop_motion()
+
 
     # ============ State Queries ============
 
@@ -209,3 +209,7 @@ class FairinoRos2Client:
         except Exception as e:
             logger.error("set_workobject error: %s", e, exc_info=True)
             return -1
+
+    @staticmethod
+    def _to_float_list(position):
+        return [float(v) for v in position]
