@@ -28,3 +28,16 @@ class PickTargetModel(IApplicationModel):
 
     def set_use_tcp(self, enabled: bool) -> None:
         self._service.set_use_tcp(enabled)
+
+    def capture_contour_trajectory(self) -> List[np.ndarray]:
+        return self._service.capture_contour_trajectory()
+
+    def execute_contour_trajectory(
+        self,
+        contour_robot_pts: List[np.ndarray],
+        z: float,
+        vel: float,
+        acc: float,
+    ) -> Tuple[bool, str]:
+        return self._service.execute_contour_trajectory(contour_robot_pts, z, vel, acc)
+

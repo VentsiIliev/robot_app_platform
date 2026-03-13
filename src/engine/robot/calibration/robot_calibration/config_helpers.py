@@ -49,7 +49,9 @@ class RobotCalibrationConfig:
                  robot_tool, robot_user,
                  velocity: int = 30, acceleration: int = 10,
                  axis_mapping_config=None,
-                 debug=False, step_by_step=False, live_visualization=False):
+                 debug=False, step_by_step=False, live_visualization=False,
+                 use_marker_centre: bool = False,
+                 use_ransac: bool = False):
         self.vision_service = vision_service
         self.robot_service = robot_service
         self.robot_tool = robot_tool
@@ -64,4 +66,8 @@ class RobotCalibrationConfig:
         self.debug = debug
         self.step_by_step = step_by_step
         self.live_visualization = live_visualization
+        # use mean of all 4 marker corners (rotation-invariant) instead of top-left corner
+        self.use_marker_centre = use_marker_centre
+        # use RANSAC outlier rejection in findHomography instead of plain DLT
+        self.use_ransac = use_ransac
 

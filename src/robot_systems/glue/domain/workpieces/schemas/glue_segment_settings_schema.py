@@ -11,7 +11,7 @@ def build_glue_segment_settings_schema(glue_types: list) -> SegmentSettingsSchem
         fields=[
             # General
             SegmentSettingSpec(GlueSettingKey.SPRAY_WIDTH.value,                     "Spray Width",              "10",    "General"),
-            SegmentSettingSpec(GlueSettingKey.SPRAYING_HEIGHT.value,                 "Spraying Height",          "0",     "General"),
+            SegmentSettingSpec(GlueSettingKey.SPRAYING_HEIGHT.value,                 "Spraying Height",          "20",     "General"),
             SegmentSettingSpec(GlueSettingKey.GLUE_TYPE.value,                       "Glue Type",                "",      "General",   validator="material_type"),
             # Forward Motion
             SegmentSettingSpec(GlueSettingKey.FORWARD_RAMP_STEPS.value,             "Forward Ramp Steps",       "3",     "Forward Motion"),

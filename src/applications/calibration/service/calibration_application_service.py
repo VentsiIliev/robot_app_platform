@@ -45,7 +45,8 @@ class CalibrationApplicationService(ICalibrationService):
     def __init__(self, vision_service: IVisionService, process_controller: _IProcessController,
                  robot_service: _IRobotService = None, height_service: _IHeightService = None,
                  robot_config: _IRobotConfig = None, calib_config: _ICalibConfig = None,
-                 transformer: ICoordinateTransformer = None):
+                 transformer: ICoordinateTransformer = None,
+                 use_marker_centre: bool = False):
         self._vision_service      = vision_service
         self._process_controller  = process_controller
         self._robot_service       = robot_service
@@ -53,6 +54,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._robot_config        = robot_config
         self._calib_config        = calib_config
         self._transformer         = transformer
+        self._use_marker_centre   = use_marker_centre
         self._stop_test           = False
 
     # ── Helpers ───────────────────────────────────────────────────────
@@ -159,8 +161,12 @@ class CalibrationApplicationService(ICalibrationService):
                 _logger.debug("Skipping marker %d — not in required_ids", marker_id)
                 continue
 
-            # Use top-left corner (index 0) of the marker
-            px, py = marker_corners[0][0]
+            # Use marker centre (mean of 4 corners) or top-left corner (index 0)
+            # depending on how the homography was computed.
+            if self._use_marker_centre:
+                px, py = marker_corners[0].mean(axis=0)
+            else:
+                px, py = marker_corners[0][0]
             x_mm, y_mm = self._transformer.transform(float(px), float(py))
 
             _logger.info("Moving to marker %d: (%.2f, %.2f) mm", marker_id, x_mm, y_mm)

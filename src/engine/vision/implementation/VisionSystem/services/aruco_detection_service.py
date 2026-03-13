@@ -4,12 +4,10 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
-from src.engine.vision.implementation.plvision.PLVision.arucoModule import ArucoDictionary, ArucoDetector
+from src.engine.vision.implementation.plvision.PLVision.arucoModule import ArucoDictionary
 from src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings import CameraSettings
 
 _logger = logging.getLogger(__name__)
-
-_SUBPIX_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
 
 
 class ArucoDetectionService:
@@ -38,21 +36,26 @@ class ArucoDetectionService:
             if flip:
                 target = cv2.flip(target, 1)
 
-            aruco_dict = getattr(
+            aruco_dict_entry = getattr(
                 ArucoDictionary,
                 self._settings.get_aruco_dictionary(),
                 ArucoDictionary.DICT_4X4_1000,
             )
-            detector = ArucoDetector(arucoDict=aruco_dict)
-            corners, ids = detector.detectAll(target)
 
-            if corners:
-                gray = target if len(target.shape) == 2 else cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)
-                corners = [
-                    cv2.cornerSubPix(gray, c.reshape(4, 1, 2).astype(np.float32),
-                                     (5, 5), (-1, -1), _SUBPIX_CRITERIA).reshape(1, 4, 2)
-                    for c in corners
-                ]
+            # Build the detector directly so we can control DetectorParameters.
+            # CORNER_REFINE_SUBPIX applies sub-pixel refinement inside the ArUco
+            # pipeline using marker-aware context — much more stable than calling
+            # cv2.cornerSubPix manually on the raw image after detection, which
+            # drifts corners to wrong local gradient minima and degrades detection.
+            dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict_entry.value)
+            params     = cv2.aruco.DetectorParameters()
+            params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            detector   = cv2.aruco.ArucoDetector(dictionary, params)
+
+            corners, ids, _ = detector.detectMarkers(target)
+            # detectMarkers returns None when nothing found — normalise to empty list
+            if ids is None:
+                ids = []
 
             _logger.info("Detected %d ArUco markers", len(ids))
             return corners, ids, target

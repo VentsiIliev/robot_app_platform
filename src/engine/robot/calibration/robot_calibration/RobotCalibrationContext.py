@@ -47,6 +47,8 @@ class RobotCalibrationContext(Context):
         self.live_visualization = True
         self.show_debug_info = True
         self.broadcast_events = False
+        self.use_marker_centre = False   # mean of 4 corners vs top-left corner
+        self.use_ransac = False          # RANSAC vs plain DLT in findHomography
         
         # Event topics
         self.BROADCAST_TOPIC = None

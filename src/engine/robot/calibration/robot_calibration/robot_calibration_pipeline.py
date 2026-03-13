@@ -101,6 +101,8 @@ class RefactoredRobotCalibrationPipeline:
         context.required_ids = set(config.required_ids)
         context.Z_target = config.z_target
         context.axis_mapping_config = config.axis_mapping_config
+        context.use_marker_centre = getattr(config, 'use_marker_centre', False)
+        context.use_ransac = getattr(config, 'use_ransac', False)
 
         # Laser Detection/Height measuring service
         context.height_measuring_service = config.height_measuring_service
@@ -148,7 +150,8 @@ class RefactoredRobotCalibrationPipeline:
             context.square_size_mm,
             context.required_ids,
             context.debug_draw,
-            context.debug
+            context.debug,
+            use_marker_centre=context.use_marker_centre,
         )
 
         # Z-axis calculations
@@ -335,7 +338,8 @@ class RefactoredRobotCalibrationPipeline:
         # Compute homography
         src_pts = np.array(camera_points, dtype=np.float32)
         dst_pts = np.array(robot_positions, dtype=np.float32)
-        H_camera_center, status = cv2.findHomography(src_pts, dst_pts)
+        method = cv2.RANSAC if context.use_ransac else 0
+        H_camera_center, status = cv2.findHomography(src_pts, dst_pts, method, 2.0)
 
         # Test and validate
         average_error_camera_center, _ = metrics.test_calibration(

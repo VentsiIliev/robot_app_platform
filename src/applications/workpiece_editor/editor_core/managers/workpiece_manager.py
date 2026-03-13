@@ -14,10 +14,11 @@ from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 
 class WorkpieceManager:
-    def __init__(self, editor):
+    def __init__(self, editor, default_settings: dict = None):
         self.editor = editor
         self.current_workpiece = None
         self.contours = None
+        self._default_settings = default_settings or {}
 
 
     def load_workpiece(self, workpiece):
@@ -68,14 +69,23 @@ class WorkpieceManager:
                 bezier_segments = self.editor.manager.contour_to_bezier(cnt, close_contour=close_contour)
 
                 for segment in bezier_segments:
-                    # Attach layer metadata + optional settings
                     segment.layer = Layer(layer_name, locked=False, visible=True)
-                    if settings is not None:
-                        segment.settings = settings  # attach settings for later use
-
+                    # Merge: defaults first, then any non-empty per-segment overrides
+                    effective = dict(self._default_settings)
+                    if settings is not None and settings:
+                        effective.update({k: v for k, v in dict(settings).items() if v is not None and v != ""})
+                    segment.settings = effective
                     self.editor.manager.segments.append(segment)
 
         self.editor.pointsUpdated.emit()
+
+    def apply_defaults_to_segments_without_settings(self) -> None:
+        """Assign default settings to any segment that has none (newly drawn segments)."""
+        if not self._default_settings:
+            return
+        for seg in self.editor.manager.get_segments():
+            if not hasattr(seg, 'settings') or not seg.settings:
+                seg.settings = dict(self._default_settings)
 
     def get_current_workpiece(self):
         """Get the currently loaded workpiece"""
@@ -171,6 +181,10 @@ class WorkpieceManager:
         return editor_data
 
     def export_editor_data(self) -> ContourEditorData:
+        # Fill in defaults on any segment that was created programmatically
+        # (e.g. zig-zag / fill generation) without going through init_contour.
+        self.apply_defaults_to_segments_without_settings()
+
         editor_data = ContourEditorData()
         segments = self.editor.manager.get_segments()
         layers_dict = {}

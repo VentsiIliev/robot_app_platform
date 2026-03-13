@@ -25,3 +25,28 @@ class IPickTargetService(ABC):
     @abstractmethod
     def set_use_tcp(self, enabled: bool) -> None:
         """When True, transform() uses TCP offsets; when False, uses raw homography."""
+
+    @abstractmethod
+    def capture_contour_trajectory(self) -> List[np.ndarray]:
+        """
+        Transform the latest detected contours to robot-space waypoints.
+        Returns a list of (N, 2) float32 arrays — one per detected contour.
+        Each row is (robot_x, robot_y) in mm.
+        """
+
+    @abstractmethod
+    def execute_contour_trajectory(
+        self,
+        contour_robot_pts: List[np.ndarray],
+        z: float,
+        vel: float,
+        acc: float,
+    ) -> Tuple[bool, str]:
+        """
+        Execute a robot trajectory that traces the supplied contour waypoints.
+        contour_robot_pts: list of (N, 2) float32 arrays in robot-space mm.
+        z: fixed Z height in mm.
+        vel / acc: normalised 0–1 speed fraction.
+        Returns (success, message).
+        """
+

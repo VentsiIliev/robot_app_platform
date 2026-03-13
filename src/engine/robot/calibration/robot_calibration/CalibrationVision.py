@@ -37,7 +37,8 @@ class FindRequiredMarkersResult:
 
 
 class CalibrationVision:
-    def __init__(self, vision_service, chessboard_size, square_size_mm, required_ids, debug_draw, debug):
+    def __init__(self, vision_service, chessboard_size, square_size_mm, required_ids, debug_draw, debug,
+                 use_marker_centre: bool = False):
         self.bottom_left_chessboard_corner_px = None
         self.chessboard_center_px = None
         self.original_chessboard_corners = None
@@ -51,6 +52,7 @@ class CalibrationVision:
         self.marker_top_left_corners = {}
         self.marker_top_left_corners_mm = {}
         self.PPM = None
+        self.use_marker_centre = use_marker_centre
 
     def find_chessboard_and_compute_ppm(self, frame) -> ChessboardDetectionResult:
         if frame is None:
@@ -177,9 +179,13 @@ class CalibrationVision:
             for i, marker_id in enumerate(arucoIds.flatten()):
                 if marker_id in self.required_ids:
                     self.detected_ids.add(marker_id)
-                    top_left_corner = arucoCorners[i][0][0]  # float32, sub-pixel from service
-                    self.marker_top_left_corners[marker_id] = top_left_corner
-                    cv2.circle(frame, tuple(top_left_corner.astype(int)), 2, (0, 255, 0), -1)
+                    corners_4 = arucoCorners[i][0]          # shape (4, 2) float32
+                    if self.use_marker_centre:
+                        ref_pt = corners_4.mean(axis=0)     # rotation-invariant centre
+                    else:
+                        ref_pt = corners_4[0]               # top-left corner
+                    self.marker_top_left_corners[marker_id] = ref_pt
+                    cv2.circle(frame, tuple(ref_pt.astype(int)), 2, (0, 255, 0), -1)
 
             _logger.debug(f"Currently have: {self.detected_ids}")
             _logger.debug(f"Still missing: {self.required_ids - self.detected_ids}")
@@ -196,11 +202,15 @@ class CalibrationVision:
         for i, iter_marker_id in enumerate(ids.flatten()):
             if iter_marker_id != marker_id:
                 continue
-            top_left_corner_px = corners[i][0][0]  # float32, sub-pixel
-            self.marker_top_left_corners[marker_id] = top_left_corner_px
+            corners_4 = corners[i][0]               # shape (4, 2) float32
+            if self.use_marker_centre:
+                ref_pt = corners_4.mean(axis=0)     # rotation-invariant centre
+            else:
+                ref_pt = corners_4[0]               # top-left corner
+            self.marker_top_left_corners[marker_id] = ref_pt
 
-            x_mm = (top_left_corner_px[0] - self.bottom_left_chessboard_corner_px[0]) / self.PPM
-            y_mm = (top_left_corner_px[1] - self.bottom_left_chessboard_corner_px[1]) / self.PPM
+            x_mm = (ref_pt[0] - self.bottom_left_chessboard_corner_px[0]) / self.PPM
+            y_mm = (ref_pt[1] - self.bottom_left_chessboard_corner_px[1]) / self.PPM
             self.marker_top_left_corners_mm[marker_id] = (x_mm, y_mm)
 
     # def update_marker_top_left_corners(self, marker_id, corners, ids):

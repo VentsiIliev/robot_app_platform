@@ -40,6 +40,7 @@ class WorkpieceEditorController(IApplicationController):
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
+        self._connect_segment_added()
 
     def stop(self) -> None:
         self._active = False
@@ -47,15 +48,29 @@ class WorkpieceEditorController(IApplicationController):
             self._bridge.camera_frame.disconnect()
         except (RuntimeError, TypeError):
             pass
+
         try:
             self._bridge.load_workpiece_raw.disconnect()
         except (RuntimeError, TypeError):
             pass
+
         for topic, cb in reversed(self._subs):
             try:
                 self._broker.unsubscribe(topic, cb)
             except Exception:
                 pass
+
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            bus = getattr(inner, '_event_bus', None)
+            if bus is not None and hasattr(bus, 'segment_added'):
+                try:
+                    bus.segment_added.disconnect(self._on_segment_added)
+                except (RuntimeError, TypeError):
+                    pass
+        except Exception:
+            pass
+
         self._subs.clear()
 
     # ── Capture ───────────────────────────────────────────────────────
@@ -171,7 +186,13 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, "Cannot Save", msg)
 
     def _on_execute(self, data: dict) -> None:
-        ok, msg = self._model.execute_workpiece(data)
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = inner.workpiece_manager.export_editor_data()
+        except Exception:
+            editor_data = None
+        payload = {"form_data": data, "editor_data": editor_data}
+        ok, msg = self._model.execute_workpiece(payload)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
 
     def _sub(self, topic: str, cb: Callable) -> None:
@@ -201,3 +222,21 @@ class WorkpieceEditorController(IApplicationController):
         except Exception as exc:
             self._logger.exception("Failed to load workpiece: %s", exc)
             show_warning(self._view, "Load Failed", str(exc))
+
+    def _connect_segment_added(self) -> None:
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            bus = getattr(inner, '_event_bus', None)
+            if bus is not None and hasattr(bus, 'segment_added'):
+                bus.segment_added.connect(self._on_segment_added)
+        except Exception:
+            self._logger.debug("Could not connect segment_added event", exc_info=True)
+
+    def _on_segment_added(self, *_args) -> None:
+        """Called when the user draws a new segment — assign defaults to it immediately."""
+        try:
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            if hasattr(inner, 'workpiece_manager'):
+                inner.workpiece_manager.apply_defaults_to_segments_without_settings()
+        except Exception:
+            self._logger.debug("_on_segment_added: could not apply defaults", exc_info=True)

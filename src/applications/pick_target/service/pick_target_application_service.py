@@ -101,3 +101,63 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.exception("move_to_calibration_position failed")
             return False
 
+    def capture_contour_trajectory(self) -> List[np.ndarray]:
+        if self._vision is None:
+            return []
+        raw_contours = self._vision.get_latest_contours()
+        result = []
+        for raw in raw_contours:
+            try:
+                cnt = Contour(raw)
+                pts_px = cnt.get()                           # (N, 2) float32 pixel coords
+                robot_pts: List[Tuple[float, float]] = []
+                for px, py in pts_px:
+                    if self._transformer is None:
+                        continue
+                    if self._use_tcp:
+                        rx, ry = self._transformer.transform_to_tcp(float(px), float(py))
+                    else:
+                        rx, ry = self._transformer.transform(float(px), float(py))
+                    robot_pts.append((rx, ry))
+                if robot_pts:
+                    result.append(np.array(robot_pts, dtype=np.float32))
+            except Exception:
+                _logger.exception("Failed to transform contour for trajectory")
+        return result
+
+    def execute_contour_trajectory(
+        self,
+        contour_robot_pts: List[np.ndarray],
+        z: float,
+        vel: float,
+        acc: float,
+    ) -> Tuple[bool, str]:
+        if self._robot is None:
+            return False, "Robot service unavailable"
+        exec_fn = getattr(self._robot, 'execute_trajectory', None)
+        if exec_fn is None:
+            return False, "execute_trajectory not supported by this robot driver"
+        if not contour_robot_pts:
+            return False, "No contour waypoints to execute"
+        try:
+            current = self._robot.get_current_position()
+            rx, ry, rz = (
+                (current[3], current[4], current[5])
+                if current and len(current) >= 6
+                else (180.0, 0.0, 0.0)
+            )
+            total_pts = 0
+            for pts in contour_robot_pts:
+                path = [[float(x), float(y), float(z)] for x, y in pts]
+                if not path:
+                    continue
+                result_code = exec_fn(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=True)
+                if result_code not in (0, True, None):
+                    return False, f"Trajectory failed with code {result_code}"
+                total_pts += len(path)
+            return True, f"Trajectory complete — {len(contour_robot_pts)} contour(s), {total_pts} waypoints"
+        except Exception:
+            _logger.exception("execute_contour_trajectory failed")
+            return False, "Trajectory error — see log"
+
+

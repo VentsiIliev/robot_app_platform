@@ -1,6 +1,7 @@
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.robot.calibration.robot_calibration.config_helpers import AdaptiveMovementConfig, \
     RobotCalibrationEventsConfig
+from src.engine.vision.homography_transformer import HomographyTransformer
 from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
     build_glue_segment_settings_schema
 from src.robot_systems.glue.navigation import GlueNavigationService
@@ -114,6 +115,18 @@ def _build_workpiece_editor_application(robot_system):
 
     settings_service = robot_system._settings_service
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_config = robot_system._robot_config
+
+    transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            tcp_x_offset=robot_config.tcp_x_offset,
+            tcp_y_offset=robot_config.tcp_y_offset,
+        )
+        if vision_service is not None and robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        if vision_service is not None else None
+    )
 
     def _get_glue_types():
         catalog = settings_service.get(SettingsID.GLUE_CATALOG)
@@ -138,6 +151,7 @@ def _build_workpiece_editor_application(robot_system):
         ),
         segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types())),
         id_exists_fn=workpiece_service.workpiece_id_exists,
+        transformer=transformer,
     )
 
     class _PendingLoader:
@@ -241,6 +255,7 @@ def _build_calibration_application(robot_system):
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
+        use_marker_centre=True,
     )
 
     jog_service = RobotJogService(robot_system.get_optional_service(ServiceID.ROBOT))

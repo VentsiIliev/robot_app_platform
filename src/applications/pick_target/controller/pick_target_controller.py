@@ -73,13 +73,32 @@ class _CalibWorker(QObject):
     def run(self) -> None:
         try:
             ok = self._model.move_to_calibration_position()
-            self.log_message.emit(
-                "[OK]   Reached calibration position." if ok
-                else "[FAIL] Could not reach calibration position."
-            )
+            self.log_message.emit("[CALIB] " + ("Reached calibration position." if ok else "Move failed."))
         except Exception as exc:
-            _logger.exception("CalibWorker error")
-            self.log_message.emit(f"[ERROR] {exc}")
+            self.log_message.emit(f"[ERROR] Calibration move failed: {exc}")
+        finally:
+            self.finished.emit()
+
+
+class _TrajectoryWorker(QObject):
+    """Executes a contour trajectory on the robot."""
+    log_message = pyqtSignal(str)
+    finished    = pyqtSignal()
+
+    def __init__(self, model: PickTargetModel, contour_robot_pts, z: float, vel: float, acc: float):
+        super().__init__()
+        self._model = model
+        self._pts   = contour_robot_pts
+        self._z     = z
+        self._vel   = vel
+        self._acc   = acc
+
+    def run(self) -> None:
+        try:
+            ok, msg = self._model.execute_contour_trajectory(self._pts, self._z, self._vel, self._acc)
+            self.log_message.emit(f"[TRAJ] {'✓' if ok else '✗'} {msg}")
+        except Exception as exc:
+            self.log_message.emit(f"[ERROR] Trajectory failed: {exc}")
         finally:
             self.finished.emit()
 
@@ -100,7 +119,8 @@ class PickTargetController(IApplicationController):
         self._active: List[Tuple[QThread, QObject]] = []  # keeps workers alive
         self._current_worker: Optional[QObject] = None
         self._alive   = False
-        self._captured_coords: List[Tuple[float, float]] = []
+        self._captured_coords:      List[Tuple[float, float]] = []
+        self._captured_trajectory:  List = []              # robot-space contour arrays
 
         self._bridge.camera_frame.connect(self._on_camera_frame)
 
@@ -108,6 +128,7 @@ class PickTargetController(IApplicationController):
         self._view.move_requested.connect(self._on_move)
         self._view.calibration_pos_requested.connect(self._on_go_to_calibration)
         self._view.tcp_toggled.connect(self._model.set_use_tcp)
+        self._view.execute_trajectory_requested.connect(self._on_execute_trajectory)
         self._view.destroyed.connect(self.stop)
 
     def load(self) -> None:
@@ -161,11 +182,19 @@ class PickTargetController(IApplicationController):
     def _on_move_done(self) -> None:
         self._view.set_busy(False)
         self._view.set_move_enabled(bool(self._captured_coords))
+        self._view.set_trajectory_enabled(bool(self._captured_trajectory))
         self._current_worker = None
 
     def _on_calib_done(self) -> None:
         self._view.set_busy(False)
         self._view.set_move_enabled(bool(self._captured_coords))
+        self._view.set_trajectory_enabled(bool(self._captured_trajectory))
+        self._current_worker = None
+
+    def _on_trajectory_done(self) -> None:
+        self._view.set_busy(False)
+        self._view.set_move_enabled(bool(self._captured_coords))
+        self._view.set_trajectory_enabled(bool(self._captured_trajectory))
         self._current_worker = None
 
     def _on_thread_finished(self) -> None:
@@ -182,6 +211,13 @@ class PickTargetController(IApplicationController):
 
         self._captured_coords = robot_coords
 
+        # Also capture full contour trajectories (all contour points in robot space)
+        try:
+            self._captured_trajectory = self._model.capture_contour_trajectory()
+        except Exception as exc:
+            self._captured_trajectory = []
+            self._view.append_log(f"[WARN] Trajectory capture failed: {exc}")
+
         if frame is not None and len(frame.shape) == 3:
             self._view.update_captured_frame(self._annotate(frame, pixel_centroids))
 
@@ -190,9 +226,38 @@ class PickTargetController(IApplicationController):
         for i, (rx, ry) in enumerate(robot_coords):
             self._view.append_log(f"  [{i + 1}] robot=({rx:.1f}, {ry:.1f})")
 
+        traj_pts = sum(len(c) for c in self._captured_trajectory)
+        if self._captured_trajectory:
+            self._view.append_log(
+                f"[TRAJ]   {len(self._captured_trajectory)} contour(s), {traj_pts} waypoints ready."
+            )
+
         self._view.set_move_enabled(n > 0)
+        self._view.set_trajectory_enabled(bool(self._captured_trajectory))
         if n == 0:
             self._view.append_log("[WARN] No contours detected — check camera and lighting.")
+
+    # ── Execute Trajectory ────────────────────────────────────────────
+
+    def _on_execute_trajectory(self) -> None:
+        if not self._captured_trajectory:
+            self._view.append_log("[WARN] No trajectory captured — press Capture first.")
+            return
+        if self._current_worker is not None:
+            return
+        self._view.set_busy(True)
+        total = sum(len(c) for c in self._captured_trajectory)
+        self._view.append_log(
+            f"[TRAJ] Executing {len(self._captured_trajectory)} contour(s), {total} waypoints..."
+        )
+        worker = _TrajectoryWorker(
+            self._model,
+            list(self._captured_trajectory),
+            z=self._view.get_trajectory_z(),
+            vel=self._view.get_trajectory_vel(),
+            acc=self._view.get_trajectory_acc(),
+        )
+        self._launch(worker, on_done=self._on_trajectory_done)
 
     # ── Move ──────────────────────────────────────────────────────────
 

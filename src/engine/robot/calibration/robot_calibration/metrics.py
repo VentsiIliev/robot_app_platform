@@ -82,7 +82,8 @@ def test_calibration(homography_matrix, camera_points, robot_points, save_json_p
         # Return average error and transformed points in cv2 format (N, 1, 2)
         return average_error, transformed_pts_cv2
 
-def compute_homography(camera_points_for_homography, robot_positions_for_calibration):
+def compute_homography(camera_points_for_homography, robot_positions_for_calibration,
+                       use_ransac: bool = False):
     # Sort by marker ID
     sorted_robot_items = sorted(robot_positions_for_calibration.items(), key=lambda x: x[0])
     sorted_camera_items = sorted(camera_points_for_homography.items(), key=lambda x: x[0])
@@ -91,8 +92,11 @@ def compute_homography(camera_points_for_homography, robot_positions_for_calibra
     robot_positions = [pos[:2] for _, pos in sorted_robot_items]
     camera_points = [pt for _, pt in sorted_camera_items]
 
-    # Compute homography
+    # Compute homography — RANSAC rejects noisy outlier points before fitting;
+    # plain DLT weights all points equally (one bad point degrades the whole matrix).
     src_pts = np.array(camera_points, dtype=np.float32)
     dst_pts = np.array(robot_positions, dtype=np.float32)
-    H_camera_center, status = cv2.findHomography(src_pts, dst_pts)
-    return H_camera_center,status
+    method = cv2.RANSAC if use_ransac else 0
+    ransac_threshold = 2.0  # px reprojection tolerance for RANSAC inlier/outlier split
+    H_camera_center, status = cv2.findHomography(src_pts, dst_pts, method, ransac_threshold)
+    return H_camera_center, status

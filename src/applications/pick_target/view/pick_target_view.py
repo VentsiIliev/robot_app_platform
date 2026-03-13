@@ -205,10 +205,11 @@ class _ZoomableImageWidget(QWidget):
 
 class PickTargetView(IApplicationView):
 
-    capture_requested         = pyqtSignal()
-    move_requested            = pyqtSignal()
-    calibration_pos_requested = pyqtSignal()
-    tcp_toggled               = pyqtSignal(bool)
+    capture_requested             = pyqtSignal()
+    move_requested                = pyqtSignal()
+    calibration_pos_requested     = pyqtSignal()
+    tcp_toggled                   = pyqtSignal(bool)
+    execute_trajectory_requested  = pyqtSignal()
 
     def __init__(self, parent=None):
         self._magnifier_on = False
@@ -296,6 +297,56 @@ class PickTargetView(IApplicationView):
         self._move_btn.clicked.connect(self.move_requested)
         btn_row.addWidget(self._move_btn)
         layout.addLayout(btn_row)
+
+        # ── Execute Trajectory ────────────────────────────────────────
+        self._traj_btn = QPushButton("⬡ Execute Trajectory")
+        self._traj_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._traj_btn.setEnabled(False)
+        self._traj_btn.clicked.connect(self.execute_trajectory_requested)
+        layout.addWidget(self._traj_btn)
+
+        _spin_style = (
+            "QDoubleSpinBox { border: 1px solid #CCC; border-radius: 3px;"
+            " padding: 2px 4px; font-size: 9pt; }"
+        )
+        traj_params = QHBoxLayout()
+        traj_params.setSpacing(4)
+
+        vel_lbl = QLabel("Vel:")
+        vel_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        self._traj_vel_spin = QDoubleSpinBox()
+        self._traj_vel_spin.setRange(0.01, 1.0)
+        self._traj_vel_spin.setSingleStep(0.05)
+        self._traj_vel_spin.setDecimals(2)
+        self._traj_vel_spin.setValue(0.10)
+        self._traj_vel_spin.setFixedWidth(68)
+        self._traj_vel_spin.setStyleSheet(_spin_style)
+
+        acc_lbl = QLabel("Acc:")
+        acc_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        self._traj_acc_spin = QDoubleSpinBox()
+        self._traj_acc_spin.setRange(0.01, 1.0)
+        self._traj_acc_spin.setSingleStep(0.05)
+        self._traj_acc_spin.setDecimals(2)
+        self._traj_acc_spin.setValue(0.10)
+        self._traj_acc_spin.setFixedWidth(68)
+        self._traj_acc_spin.setStyleSheet(_spin_style)
+
+        z_lbl = QLabel("Z:")
+        z_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        self._traj_z_spin = QDoubleSpinBox()
+        self._traj_z_spin.setRange(50.0, 800.0)
+        self._traj_z_spin.setSingleStep(10.0)
+        self._traj_z_spin.setDecimals(1)
+        self._traj_z_spin.setValue(300.0)
+        self._traj_z_spin.setSuffix(" mm")
+        self._traj_z_spin.setFixedWidth(80)
+        self._traj_z_spin.setStyleSheet(_spin_style)
+
+        for w in (vel_lbl, self._traj_vel_spin, acc_lbl, self._traj_acc_spin, z_lbl, self._traj_z_spin):
+            traj_params.addWidget(w)
+        traj_params.addStretch()
+        layout.addLayout(traj_params)
 
         row2 = QHBoxLayout()
         self._tcp_btn = QPushButton("TCP: OFF")
@@ -392,13 +443,26 @@ class PickTargetView(IApplicationView):
     def set_move_enabled(self, enabled: bool) -> None:
         self._move_btn.setEnabled(enabled)
 
+    def set_trajectory_enabled(self, enabled: bool) -> None:
+        self._traj_btn.setEnabled(enabled)
+
     def set_busy(self, busy: bool) -> None:
         self._capture_btn.setEnabled(not busy)
         self._move_btn.setEnabled(not busy)
         self._calib_btn.setEnabled(not busy)
+        self._traj_btn.setEnabled(not busy)
 
     def get_move_delay(self) -> float:
         return self._delay_spin.value()
+
+    def get_trajectory_vel(self) -> float:
+        return self._traj_vel_spin.value()
+
+    def get_trajectory_acc(self) -> float:
+        return self._traj_acc_spin.value()
+
+    def get_trajectory_z(self) -> float:
+        return self._traj_z_spin.value()
 
     # ── Private ───────────────────────────────────────────────────────
 

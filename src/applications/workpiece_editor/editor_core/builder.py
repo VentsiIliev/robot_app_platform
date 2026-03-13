@@ -33,6 +33,7 @@ class WorkpieceEditorBuilder:
         self._workpiece_manager: Optional[WorkpieceManager] = None
         self._start_handler: Optional[StartHandler] = None
         self._capture_handler: Optional[CaptureHandler] = None
+        self._default_settings: dict = {}
 
     def with_parent(self, parent):
         """Set parent widget"""
@@ -45,8 +46,9 @@ class WorkpieceEditorBuilder:
         return self
 
     def with_settings(self, config, provider=None):
-        """Configure segment settings (optional)"""
         self._base_builder.with_settings(config, provider)
+        if hasattr(config, 'default_settings') and config.default_settings:
+            self._default_settings = dict(config.default_settings)  # ← new
         return self
 
     def with_form(self, form_factory):
@@ -87,7 +89,10 @@ class WorkpieceEditorBuilder:
         # Build the base editor
         self._editor = self._base_builder.build()
         # Inject WorkpieceManager (wraps the editor)
-        self._workpiece_manager = WorkpieceManager(self._editor.contourEditor.editor_with_rulers.editor)
+        self._workpiece_manager = WorkpieceManager(
+            self._editor.contourEditor.editor_with_rulers.editor,
+            default_settings=self._default_settings,  # ← new
+        )
         self._editor.contourEditor.editor_with_rulers.editor.workpiece_manager = self._workpiece_manager
         if self._editor.contourEditor.editor_with_rulers.editor.workpiece_manager is not None:
             print(f"Set workpiece manager OK")

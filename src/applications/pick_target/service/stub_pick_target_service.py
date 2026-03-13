@@ -26,3 +26,21 @@ class StubPickTargetService(IPickTargetService):
 
     def set_use_tcp(self, enabled: bool) -> None:
         _logger.info("[Stub] set_use_tcp(%s)", enabled)
+
+    def capture_contour_trajectory(self) -> List[np.ndarray]:
+        _logger.info("[Stub] capture_contour_trajectory")
+        # Return a simple square contour in robot space
+        pts = np.array([[-250, 420], [-200, 420], [-200, 370], [-250, 370], [-250, 420]], dtype=np.float32)
+        return [pts]
+
+    def execute_contour_trajectory(
+        self,
+        contour_robot_pts: List[np.ndarray],
+        z: float,
+        vel: float,
+        acc: float,
+    ) -> Tuple[bool, str]:
+        total = sum(len(c) for c in contour_robot_pts)
+        _logger.info("[Stub] execute_contour_trajectory: %d contour(s), %d waypoints, z=%.1f vel=%.2f acc=%.2f",
+                     len(contour_robot_pts), total, z, vel, acc)
+        return True, f"Stub: {len(contour_robot_pts)} contour(s), {total} waypoints"

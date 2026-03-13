@@ -80,6 +80,8 @@ def _build_calibration_service(robot_system):
         velocity=calib_settings.velocity,
         acceleration=calib_settings.acceleration,
         axis_mapping_config=calib_settings.axis_mapping,
+        use_ransac=True,
+        use_marker_centre=True
     )
 
     return RobotCalibrationService(

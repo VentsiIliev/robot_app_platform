@@ -19,7 +19,10 @@ class SegmentSettingsSchema:
     combo_options: List[str]   # available options for that combo
 
     def get_defaults(self) -> Dict[str, str]:
-        return {f.key: f.default for f in self.fields}
+        defaults = {f.key: f.default for f in self.fields}
+        if self.combo_key and self.combo_options and not defaults.get(self.combo_key):
+            defaults[self.combo_key] = self.combo_options[0]
+        return defaults
 
     def get_groups(self) -> Dict[str, List[str]]:
         groups: Dict[str, List[str]] = {}
