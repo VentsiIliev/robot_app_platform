@@ -159,14 +159,16 @@ def build_motor_service(ctx):
     from src.engine.hardware.motor.models.motor_config import MotorConfig
     from src.robot_systems.glue.motor.glue_motor_error_decoder import GlueMotorErrorDecoder
     modbus_config = ctx.settings.get(SettingsID.MODBUS_CONFIG)
+    topology      = ctx.settings.get(SettingsID.GLUE_MOTOR_CONFIG)
     return build_modbus_motor_service(
         modbus_config = modbus_config,
         motor_config  = MotorConfig(
             health_check_trigger_register = 17,
             motor_error_count_register    = 20,
             motor_error_registers_start   = 21,
-            motor_addresses               = [0, 2, 4, 6],
-            address_to_error_prefix       = {0: 1, 2: 2, 4: 3, 6: 4},
+            motor_addresses               = topology.get_addresses(),
+            address_to_error_prefix       = topology.get_address_to_error_prefix(),
+            health_check_delay_s          = 0.5,
         ),
         error_decoder = GlueMotorErrorDecoder(),
     )

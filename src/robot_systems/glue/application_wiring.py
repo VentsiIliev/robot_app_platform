@@ -386,13 +386,18 @@ def _build_device_control_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.device_control.device_control_factory import DeviceControlFactory
     from src.applications.device_control.service.device_control_application_service import DeviceControlApplicationService
+    from src.applications.device_control.service.i_device_control_service import MotorEntry
+    from src.robot_systems.glue.settings_ids import SettingsID
+
+    config  = robot_system._settings_service.get(SettingsID.GLUE_MOTOR_CONFIG)
+    motors  = [MotorEntry(name=m.name, address=m.address) for m in config.motors]
 
     service = DeviceControlApplicationService(
-        motor_service=getattr(robot_system, '_motor', None),
-        generator=getattr(robot_system, '_generator', None),
-        laser=getattr(robot_system, '_laser_detection_service', None),
-        vacuum_pump=None,
-        motor_address=0,
+        motors        = motors,
+        motor_service = getattr(robot_system, '_motor', None),
+        generator     = getattr(robot_system, '_generator', None),
+        laser         = getattr(robot_system, '_laser_detection_service', None),
+        vacuum_pump   = None,
     )
     return WidgetApplication(
         widget_factory=lambda _ms: DeviceControlFactory().build(service)

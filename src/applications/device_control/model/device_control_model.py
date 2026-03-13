@@ -1,6 +1,10 @@
 import logging
+from typing import Dict, List
+
 from src.applications.base.i_application_model import IApplicationModel
-from src.applications.device_control.service.i_device_control_service import IDeviceControlService
+from src.applications.device_control.service.i_device_control_service import (
+    IDeviceControlService, MotorEntry,
+)
 
 
 class DeviceControlModel(IApplicationModel):
@@ -15,7 +19,13 @@ class DeviceControlModel(IApplicationModel):
     def save(self, *args, **kwargs) -> None:
         pass
 
-    # ── Availability ──────────────────────────────────────────────────
+    # ── Queries ───────────────────────────────────────────────────────
+
+    def get_motors(self) -> List[MotorEntry]:
+        return self._service.get_motors()
+
+    def get_motor_health_snapshot(self) -> Dict[int, bool]:
+        return self._service.get_motor_health_snapshot()
 
     def is_laser_available(self) -> bool:
         return self._service.is_laser_available()
@@ -43,15 +53,14 @@ class DeviceControlModel(IApplicationModel):
     def vacuum_pump_off(self) -> bool:
         return self._service.vacuum_pump_off()
 
-    def motor_on(self) -> bool:
-        return self._service.motor_on()
+    def motor_on(self, address: int) -> bool:
+        return self._service.motor_on(address)
 
-    def motor_off(self) -> bool:
-        return self._service.motor_off()
+    def motor_off(self, address: int) -> bool:
+        return self._service.motor_off(address)
 
     def generator_on(self) -> bool:
         return self._service.generator_on()
 
     def generator_off(self) -> bool:
         return self._service.generator_off()
-

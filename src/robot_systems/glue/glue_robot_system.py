@@ -28,6 +28,7 @@ from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
 from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
+from src.robot_systems.glue.settings.device_control import GlueMotorConfigSerializer
 
 import os
 _WORKPIECES_STORAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "workpieces")
@@ -85,6 +86,7 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
         SettingsSpec(SettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
         SettingsSpec(SettingsID.DEPTH_MAP_DATA,               DepthMapDataSerializer(),                "height_measuring/depth_map.json"),
+        SettingsSpec(SettingsID.GLUE_MOTOR_CONFIG,            GlueMotorConfigSerializer(),             "hardware/device_control.json"),
     ]
 
     services = [

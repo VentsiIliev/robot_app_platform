@@ -129,7 +129,7 @@ def _make_service(transport: MockMotorTransport) -> MotorService:
         motor_addresses               = [0, 2, 4, 6],
         address_to_error_prefix       = {0: 1, 2: 2, 4: 3, 6: 4},
         ramp_step_delay_s             = 0.0,   # no real delays in mock runner
-        health_check_delay_s          = 0.0,
+        health_check_delay_s          = 0.1,
     )
     return MotorService(transport=transport, config=config)
 

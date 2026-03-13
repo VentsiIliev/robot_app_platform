@@ -13,6 +13,7 @@ class SettingsID(str, Enum):
     HEIGHT_MEASURING_SETTINGS    = "height_measuring_settings"
     HEIGHT_MEASURING_CALIBRATION = "height_measuring_calibration"
     DEPTH_MAP_DATA               = "depth_map_data"
+    GLUE_MOTOR_CONFIG            = "glue_motor_config"
 
     def __str__(self) -> str:
         return self.value

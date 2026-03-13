@@ -1,7 +1,22 @@
-from src.applications.device_control.service.i_device_control_service import IDeviceControlService
+from typing import Dict, List
+
+from src.applications.device_control.service.i_device_control_service import (
+    IDeviceControlService, MotorEntry,
+)
+
+_STUB_MOTORS = [
+    MotorEntry(name="Stub Motor 1", address=0),
+    MotorEntry(name="Stub Motor 2", address=2),
+]
 
 
 class StubDeviceControlService(IDeviceControlService):
+
+    def get_motors(self) -> List[MotorEntry]:
+        return list(_STUB_MOTORS)
+
+    def get_motor_health_snapshot(self) -> Dict[int, bool]:
+        return {m.address: True for m in _STUB_MOTORS}
 
     def laser_on(self) -> None:
         print("[DeviceControl] laser_on")
@@ -17,12 +32,12 @@ class StubDeviceControlService(IDeviceControlService):
         print("[DeviceControl] vacuum_pump_off")
         return True
 
-    def motor_on(self) -> bool:
-        print("[DeviceControl] motor_on")
+    def motor_on(self, address: int) -> bool:
+        print(f"[DeviceControl] motor_on  address={address}")
         return True
 
-    def motor_off(self) -> bool:
-        print("[DeviceControl] motor_off")
+    def motor_off(self, address: int) -> bool:
+        print(f"[DeviceControl] motor_off address={address}")
         return True
 
     def generator_on(self) -> bool:
@@ -44,4 +59,3 @@ class StubDeviceControlService(IDeviceControlService):
 
     def is_generator_available(self) -> bool:
         return True
-

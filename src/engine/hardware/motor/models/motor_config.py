@@ -26,7 +26,7 @@ class MotorConfig:
     motor_addresses: List[int]
 
     # ── Timing ───────────────────────────────────────────────────────
-    health_check_delay_s: float = 0.0
+    health_check_delay_s: float = 0.1
     ramp_step_delay_s:    float = 0.001
 
     # ── Error code filtering (optional) ──────────────────────────────

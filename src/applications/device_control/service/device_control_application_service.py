@@ -1,12 +1,14 @@
 from __future__ import annotations
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
 from src.engine.hardware.generator.interfaces.i_generator_controller import IGeneratorController
 from src.engine.hardware.laser.i_laser_control import ILaserControl
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
-from src.applications.device_control.service.i_device_control_service import IDeviceControlService
+from src.applications.device_control.service.i_device_control_service import (
+    IDeviceControlService, MotorEntry,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -23,17 +25,39 @@ class DeviceControlApplicationService(IDeviceControlService):
 
     def __init__(
         self,
-        motor_service:  Optional[IMotorService]          = None,
-        generator:      Optional[IGeneratorController]   = None,
-        laser:          Optional[ILaserControl]          = None,
-        vacuum_pump:    Optional[IVacuumPumpController]  = None,
-        motor_address:  int = 0,
+        motors:         List[MotorEntry],
+        motor_service:  Optional[IMotorService]         = None,
+        generator:      Optional[IGeneratorController]  = None,
+        laser:          Optional[ILaserControl]         = None,
+        vacuum_pump:    Optional[IVacuumPumpController] = None,
     ) -> None:
-        self._motor        = motor_service
-        self._generator    = generator
-        self._laser        = laser
-        self._vacuum       = vacuum_pump
-        self._motor_addr   = motor_address
+        self._motors    = list(motors)
+        self._motor     = motor_service
+        self._generator = generator
+        self._laser     = laser
+        self._vacuum    = vacuum_pump
+
+    # ── Queries ───────────────────────────────────────────────────────
+
+    def get_motors(self) -> List[MotorEntry]:
+        return list(self._motors)
+
+    def get_motor_health_snapshot(self) -> Dict[int, bool]:
+        if not self._motor or not self._motor.is_healthy():
+            return {m.address: False for m in self._motors}
+        try:
+            snapshot = self._motor.health_check_all_configured()
+            return {
+                m.address: (
+                    snapshot.get_motor(m.address).is_healthy
+                    if snapshot.get_motor(m.address) is not None
+                    else False
+                )
+                for m in self._motors
+            }
+        except Exception:
+            _logger.exception("get_motor_health_snapshot failed")
+            return {m.address: False for m in self._motors}
 
     # ── Laser ─────────────────────────────────────────────────────────
 
@@ -53,35 +77,41 @@ class DeviceControlApplicationService(IDeviceControlService):
     def vacuum_pump_off(self) -> bool:
         return self._vacuum.turn_off() if self._vacuum else False
 
-    # ── Motor (glue pump) ─────────────────────────────────────────────
+    # ── Motor ─────────────────────────────────────────────────────────
 
-    def motor_on(self) -> bool:
+    def motor_on(self, address: int) -> bool:
         if not self._motor:
+            return False
+        if not any(m.address == address for m in self._motors):
+            _logger.warning("motor_on: address %s not in configured motors", address)
             return False
         try:
             return self._motor.turn_on(
-                motor_address               = self._motor_addr,
+                motor_address               = address,
                 speed                       = _MOTOR_SPEED,
                 ramp_steps                  = _MOTOR_RAMP_STEPS,
                 initial_ramp_speed          = _MOTOR_INITIAL_RAMP_SPEED,
                 initial_ramp_speed_duration = _MOTOR_INITIAL_RAMP_DUR,
             )
         except Exception:
-            _logger.exception("motor_on failed")
+            _logger.exception("motor_on failed (address=%s)", address)
             return False
 
-    def motor_off(self) -> bool:
+    def motor_off(self, address: int) -> bool:
         if not self._motor:
+            return False
+        if not any(m.address == address for m in self._motors):
+            _logger.warning("motor_off: address %s not in configured motors", address)
             return False
         try:
             return self._motor.turn_off(
-                motor_address    = self._motor_addr,
+                motor_address    = address,
                 speed_reverse    = _MOTOR_REVERSE_SPEED,
                 reverse_duration = _MOTOR_REVERSE_DUR,
                 ramp_steps       = _MOTOR_REVERSE_RAMP_STEPS,
             )
         except Exception:
-            _logger.exception("motor_off failed")
+            _logger.exception("motor_off failed (address=%s)", address)
             return False
 
     # ── Generator ─────────────────────────────────────────────────────
@@ -113,13 +143,8 @@ class DeviceControlApplicationService(IDeviceControlService):
         return self._vacuum is not None
 
     def is_motor_available(self) -> bool:
-        # IMotorService extends IHealthCheckable — is_healthy() checks the _connected
-        # flag set by open()/close() with no I/O cost.
         return self._motor is not None and self._motor.is_healthy()
 
     def is_generator_available(self) -> bool:
-        # IGeneratorController does not implement IHealthCheckable.
-        # get_state() would confirm health but requires a blocking register read —
-        # use it only on explicit user request, not as an availability gate.
         return self._generator is not None
 

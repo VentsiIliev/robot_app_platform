@@ -92,9 +92,11 @@ class MotorHealthChecker:
 
     def _trigger_health_check(self) -> None:
         self._transport.write_registers(self._config.health_check_trigger_register, [1])
+        self._logger.debug("Health check triggered on address %s", self._config.health_check_trigger_register)
         time.sleep(self._config.health_check_delay_s)
 
     def _read_error_count(self) -> int:
+        self._logger.debug("Reading error count from register %s", self._config.motor_error_count_register)
         return self._transport.read_register(self._config.motor_error_count_register)
 
     def _read_error_values(self, count: int) -> List[int]:
