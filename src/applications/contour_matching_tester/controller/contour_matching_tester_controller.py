@@ -214,7 +214,8 @@ class ContourMatchingTesterController(IApplicationController):
             # 3. Aligned workpiece template (cyan) — behind detected contour
             aligned = self._get_aligned_template(wp)
             if aligned is not None:
-                cv2.drawContours(out, [aligned], -1, _CLR_ALIGNED, 2)
+                # aligned is float32 — cast to int32 only here for drawing
+                cv2.drawContours(out, [aligned.astype(np.int32)], -1, _CLR_ALIGNED, 2)
 
             # 4. Detected contour — ground truth on top (green)
             pts = np.asarray(c, dtype=np.int32).reshape(-1, 1, 2)
@@ -246,7 +247,8 @@ class ContourMatchingTesterController(IApplicationController):
         if raw is None or len(raw) == 0:
             _logger.warning(f"[_get_aligned_template] No contour found")
             return None
-        return np.asarray(raw, dtype=np.int32).reshape(-1, 1, 2)
+        # Keep float32 — cast to int32 only at the drawContours call site (display only).
+        return np.asarray(raw, dtype=np.float32).reshape(-1, 1, 2)
 
     @staticmethod
     def _get_spray_contours(wp) -> list:

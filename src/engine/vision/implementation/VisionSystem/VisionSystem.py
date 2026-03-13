@@ -173,7 +173,9 @@ class VisionSystem:
                 correct_image_fn  = self.correctImage,
                 spray_area_points = self._get_area_points_by_region(self.threshold_by_area),
             )
-            self._latest_contours = contours
+            # `detect()` returns None when no contours pass the area filter.
+            # Guard here so get_latest_contours() never returns None to callers.
+            self._latest_contours = contours or []
             return contours, self.correctedImage, None
 
         if self.cameraMatrix is None:

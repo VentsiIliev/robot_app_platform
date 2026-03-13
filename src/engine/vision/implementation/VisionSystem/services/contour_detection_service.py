@@ -16,6 +16,8 @@ _THRESHOLD_TYPES = {
     "tozero_inv": cv2.THRESH_TOZERO_INV,
 }
 
+_SUBPIX_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
+
 
 class ContourDetectionService:
 
@@ -34,9 +36,10 @@ class ContourDetectionService:
     ) -> Tuple[Optional[List], Optional[np.ndarray], None]:
         corrected = correct_image_fn(image.copy()) if is_calibrated else self._stamp_uncalibrated(image.copy())
 
-        raw      = self._find_contours(corrected, threshold)
-        approxed = self._approx_contours(raw)
-        filtered = self._filter_by_area(approxed)
+        raw, gray  = self._find_contours(corrected, threshold)
+        approxed   = self._approx_contours(raw)
+        refined    = self._refine_subpixel(approxed, gray)
+        filtered   = self._filter_by_area(refined)
 
         inside = filtered if spray_area_points is None else [
             c for c in filtered if self._all_inside(spray_area_points, c)
@@ -49,7 +52,7 @@ class ContourDetectionService:
         final = self._sort_by_proximity(inside) if sort else inside
 
         if self._settings.get_draw_contours():
-            cv2.drawContours(corrected, final, -1, (0, 255, 0), 1)
+            cv2.drawContours(corrected, [c.astype(np.int32) for c in final], -1, (0, 255, 0), 1)
 
         if self._publisher:
             self._publisher.publish_latest_image(corrected)
@@ -58,7 +61,7 @@ class ContourDetectionService:
 
     # ── private ───────────────────────────────────────────────────────
 
-    def _find_contours(self, image: np.ndarray, threshold: int) -> list:
+    def _find_contours(self, image: np.ndarray, threshold: int) -> Tuple[list, np.ndarray]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         if self._settings.get_gaussian_blur():
@@ -85,7 +88,7 @@ class ContourDetectionService:
             thresh = cv2.erode(thresh, kernel, iterations=self._settings.get_erode_iterations())
 
         contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        return list(contours)
+        return list(contours), gray  # gray is pre-blur — sharper gradients for sub-pixel
 
     def _approx_contours(self, contours: list) -> list:
         eps = self._settings.get_epsilon()
@@ -93,6 +96,15 @@ class ContourDetectionService:
             cv2.approxPolyDP(c, eps * cv2.arcLength(c, True), True)
             for c in contours
         ]
+
+    @staticmethod
+    def _refine_subpixel(contours: list, gray: np.ndarray) -> list:
+        refined = []
+        for contour in contours:
+            pts = contour.reshape(-1, 1, 2).astype(np.float32)
+            pts_refined = cv2.cornerSubPix(gray, pts, (5, 5), (-1, -1), _SUBPIX_CRITERIA)
+            refined.append(pts_refined.reshape(-1, 1, 2))
+        return refined
 
     def _filter_by_area(self, contours: list) -> list:
         lo = self._settings.get_min_contour_area()

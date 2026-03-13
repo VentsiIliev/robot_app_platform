@@ -3,23 +3,24 @@ import numpy as np
 
 
 class Contour:
-    def __init__(self, contour_points):
-        """
-        Standardizes and stores contour points in shape (N, 2), dtype=float32.
-        Accepts lists, (N, 2), (N, 1,2) or any OpenCV contour format.
-        """
-        contour_points = np.asarray(contour_points, dtype=np.float32)
+    def __init__(self, contour_points):        # np.array (not np.asarray) — forces a copy even when dtype already matches float32.
+        # This ensures that in-place mutations (translate, scale, rotate) on this Contour
+        # never propagate back to the source array (e.g. _latest_contours in VisionSystem).
+        contour_points = np.array(contour_points, dtype=np.float32)
         if contour_points.ndim == 3 and contour_points.shape[1] == 1:
             contour_points = contour_points[:, 0, :]
         self.contour_points = contour_points.reshape(-1, 2)
 
     # --- Accessors ---
     def get(self):
-        """Return the standardized contour points (N, 2)."""
-        return self.contour_points
+        # Returns a copy — callers (update_workpiece_data, VisionService.run_matching,
+        # MatchInfo, etc.) may freely mutate or store the result without corrupting
+        # this Contour's internal float32 state.
+        return self.contour_points.copy()
 
     def as_cv(self):
-        """Return the contour in OpenCV's (N, 1,2) format."""
+        # Returns a view — read-only use only (geometry queries, cv2 calls).
+        # Cast to int32 at the call site if drawing is needed.
         return self.contour_points.reshape(-1, 1, 2)
 
     # --- Geometry and properties ---

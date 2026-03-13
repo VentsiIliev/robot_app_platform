@@ -20,13 +20,24 @@ def standardize_contour(contour, dtype=np.float32):
 
 
 def to_cv_contour(contour):
-    """
-    Converts a standardized (N, 2) contour back to OpenCV’s (N, 1, 2) format.
-    """
+    # ⚠️  Lossy — truncates float32 sub-pixel coordinates to int32 pixels.
+    # Use ONLY for drawing (cv2.drawContours) and mask rasterisation.
+    # For any data path that must keep sub-pixel precision, use
+    # to_cv_contour_f32() instead.
     contour = np.asarray(contour)
     if contour.size == 0:
         return np.zeros((0, 1, 2), dtype=np.int32)
     return contour.reshape(-1, 1, 2).astype(np.int32)
+
+
+def to_cv_contour_f32(contour):
+    # Precision-preserving version of to_cv_contour.
+    # Returns float32 (N,1,2) — suitable for geometry queries and storage.
+    # Cast to int32 yourself only when you need to draw or rasterise.
+    contour = np.asarray(contour, dtype=np.float32)
+    if contour.size == 0:
+        return np.zeros((0, 1, 2), dtype=np.float32)
+    return contour.reshape(-1, 1, 2)
 
 
 def standardize_point(point, dtype=np.float32):

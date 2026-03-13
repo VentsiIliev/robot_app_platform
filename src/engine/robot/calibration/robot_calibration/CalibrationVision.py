@@ -168,7 +168,6 @@ class CalibrationVision:
         return ppm
 
     def find_required_aruco_markers(self, frame) -> FindRequiredMarkersResult:
-
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(frame)
 
         if arucoIds is not None:
@@ -178,11 +177,9 @@ class CalibrationVision:
             for i, marker_id in enumerate(arucoIds.flatten()):
                 if marker_id in self.required_ids:
                     self.detected_ids.add(marker_id)
-                    # Get top-left corner (first corner) of the ArUco marker
-                    top_left_corner = tuple(arucoCorners[i][0][0].astype(int))
+                    top_left_corner = arucoCorners[i][0][0]  # float32, sub-pixel from service
                     self.marker_top_left_corners[marker_id] = top_left_corner
-                    # Draw top-left corner on frame
-                    cv2.circle(frame, top_left_corner, 2, (0, 255, 0), -1)
+                    cv2.circle(frame, tuple(top_left_corner.astype(int)), 2, (0, 255, 0), -1)
 
             _logger.debug(f"Currently have: {self.detected_ids}")
             _logger.debug(f"Still missing: {self.required_ids - self.detected_ids}")

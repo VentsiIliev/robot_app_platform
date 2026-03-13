@@ -9,7 +9,9 @@ _logger = logging.getLogger(__name__)
 
 
 def _close_contour(contour: np.ndarray) -> np.ndarray:
-    pts = np.asarray(contour, dtype=np.float32).reshape(-1, 2)
+    # np.array (not np.asarray) — forces a copy even when dtype already matches float32,
+    # so callers cannot accidentally mutate _latest_contours through a shared-memory view.
+    pts = np.array(contour, dtype=np.float32).reshape(-1, 2)
     if len(pts) >= 2 and not np.allclose(pts[0], pts[-1], atol=0.5):
         pts = np.vstack([pts, pts[0:1]])
     return pts.reshape(-1, 1, 2)
