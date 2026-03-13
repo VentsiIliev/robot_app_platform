@@ -226,15 +226,9 @@ class CalibrationVision:
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(image=frame)
         if arucoIds is not None and marker_id in arucoIds:
             marker_found = True
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
-            arucoCorners = list(arucoCorners)
-            for idx, mid in enumerate(arucoIds.flatten()):
-                if mid == marker_id:
-                    pts = arucoCorners[idx].reshape(4, 1, 2).astype(np.float32)
-                    arucoCorners[idx] = cv2.cornerSubPix(gray, pts, (5, 5), (-1, -1), criteria).reshape(1, 4, 2)
         return SpecificMarkerDetectionResult(found=marker_found,
                                              aruco_corners=arucoCorners,
                                              aruco_ids=arucoIds,
                                              frame=frame)
+
 

@@ -9,6 +9,8 @@ from src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings 
 
 _logger = logging.getLogger(__name__)
 
+_SUBPIX_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.001)
+
 
 class ArucoDetectionService:
 
@@ -18,7 +20,7 @@ class ArucoDetectionService:
     def detect(
         self,
         corrected_image: Optional[np.ndarray],
-        flip:  Optional[bool] = None,
+        flip: Optional[bool] = None,
         image: Optional[np.ndarray] = None,
     ) -> Tuple:
         if flip is None:
@@ -43,6 +45,15 @@ class ArucoDetectionService:
             )
             detector = ArucoDetector(arucoDict=aruco_dict)
             corners, ids = detector.detectAll(target)
+
+            if corners:
+                gray = target if len(target.shape) == 2 else cv2.cvtColor(target, cv2.COLOR_BGR2GRAY)
+                corners = [
+                    cv2.cornerSubPix(gray, c.reshape(4, 1, 2).astype(np.float32),
+                                     (5, 5), (-1, -1), _SUBPIX_CRITERIA).reshape(1, 4, 2)
+                    for c in corners
+                ]
+
             _logger.info("Detected %d ArUco markers", len(ids))
             return corners, ids, target
         except Exception as exc:
