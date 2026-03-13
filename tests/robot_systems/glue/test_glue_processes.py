@@ -26,6 +26,7 @@ from src.engine.process.process_sequence import ProcessSequence
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
 from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
@@ -39,6 +40,9 @@ from src.shared_contracts.events.process_events import (
 def _ms():   return MagicMock()
 def _robot(): return MagicMock()
 def _navigation_service(): return MagicMock()
+def _motor(): return MagicMock()
+def _resolver(): return MagicMock()
+def _glue_process(): return GlueProcess(robot_service=_robot(), motor_service=_motor(), resolver=_resolver(), config=GlueDispensingConfig(), navigation_service=_navigation_service(), messaging=_ms())
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CleanProcess
@@ -403,18 +407,18 @@ class TestGlueOperationMode(unittest.TestCase):
 class TestGlueProcessIdentity(unittest.TestCase):
 
     def test_process_id_is_glue(self):
-        p = GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+        p = _glue_process()
         self.assertEqual(p.process_id, "glue")
 
     def test_initial_state_is_idle(self):
-        p = GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+        p = _glue_process()
         self.assertEqual(p.state, ProcessState.IDLE)
 
 
 class TestGlueProcessStateTransitions(unittest.TestCase):
 
     def _make(self):
-        return GlueProcess(robot_service=_robot(), navigation_service=_navigation_service(), messaging=_ms())
+        return _glue_process()
 
     def test_start_transitions_to_running(self):
         p = self._make(); p.start()

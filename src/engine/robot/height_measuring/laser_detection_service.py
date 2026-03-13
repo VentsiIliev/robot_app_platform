@@ -83,6 +83,10 @@ class LaserDetectionService:
                 frames.append(frame.copy())
         return frames
 
+    @property
+    def laser(self) -> ILaserControl:
+        return self._laser
+
     def restore(self) -> None:
         try:
             self._laser.turn_off()

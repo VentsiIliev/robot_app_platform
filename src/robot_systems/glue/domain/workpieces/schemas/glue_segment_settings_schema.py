@@ -23,8 +23,8 @@ def build_glue_segment_settings_schema(glue_types: list) -> SegmentSettingsSchem
             SegmentSettingSpec(GlueSettingKey.SPEED_REVERSE.value,                  "Reverse Speed",            "3000",  "Reverse Motion"),
             SegmentSettingSpec(GlueSettingKey.REVERSE_RAMP_STEPS.value,             "Reverse Ramp Steps",       "1",     "Reverse Motion"),
             # Robot
-            SegmentSettingSpec("velocity",                                           "Velocity",                 "60",    "Robot"),
-            SegmentSettingSpec("acceleration",                                       "Acceleration",             "30",    "Robot"),
+            SegmentSettingSpec("velocity",                                           "Velocity",                 "10",    "Robot"),
+            SegmentSettingSpec("acceleration",                                       "Acceleration",             "10",    "Robot"),
             SegmentSettingSpec(GlueSettingKey.RZ_ANGLE.value,                       "Rz Angle",                 "0",     "Robot"),
             SegmentSettingSpec("adaptive_spacing_mm",                                "Adaptive Spacing (mm)",    "10",    "Robot"),
             SegmentSettingSpec("spline_density_multiplier",                          "Spline Density",           "2.0",   "Robot"),

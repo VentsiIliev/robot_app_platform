@@ -9,6 +9,7 @@ from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_process import GlueProcess
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.engine.process.process_requirements import ProcessRequirements
 from src.robot_systems.glue.settings.cells import (
@@ -46,6 +47,20 @@ def _make_robot_service():
 
 def _make_navigation_service():
     return MagicMock()
+
+def _make_motor_service():
+    return MagicMock()
+
+def _make_glue_process(robot_service=None, messaging=None, navigation_service=None, **kwargs):
+    return GlueProcess(
+        robot_service=robot_service or _make_robot_service(),
+        motor_service=_make_motor_service(),
+        resolver=MagicMock(),
+        config=GlueDispensingConfig(),
+        navigation_service=navigation_service or _make_navigation_service(),
+        messaging=messaging or _make_messaging(),
+        **kwargs,
+    )
 
 def _make_settings_service(cells=None, catalog=None):
     ss       = MagicMock()
@@ -333,7 +348,7 @@ class TestGlueProcess(unittest.TestCase):
 
     def _make(self):
         rs = _make_robot_service()
-        p  = GlueProcess(robot_service=rs, messaging=_make_messaging(),navigation_service = _make_navigation_service())
+        p  = _make_glue_process(robot_service=rs)
         return p, rs
 
     # ── Basic state transitions ───────────────────────────────────────
@@ -369,10 +384,8 @@ class TestGlueProcess(unittest.TestCase):
     def test_restart_from_stopped(self):
         p, rs = self._make()
         p.start(); p.stop()
-        rs.reset_mock()
         p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)
-        rs.enable_robot.assert_called_once()
 
     def test_set_error_forces_error_state(self):
         p, _ = self._make()
@@ -398,83 +411,81 @@ class TestGlueProcess(unittest.TestCase):
 
     # ── Robot service hook calls ──────────────────────────────────────
 
-    def test_start_calls_enable_robot(self):
+    def test_start_does_not_call_enable_robot(self):
+        """Robot enabling is the system's responsibility at startup, not per-process."""
         p, rs = self._make()
         p.start()
-        rs.enable_robot.assert_called_once()
+        rs.enable_robot.assert_not_called()
 
-    def test_stop_calls_stop_motion_and_disable_robot(self):
+    def test_stop_calls_stop_motion(self):
         p, rs = self._make()
         p.start(); p.stop()
-        rs.stop_motion.assert_called_once()
-        rs.disable_robot.assert_called_once()
+        rs.stop_motion.assert_called()
 
     def test_pause_calls_stop_motion(self):
         p, rs = self._make()
         p.start(); p.pause()
-        rs.stop_motion.assert_called_once()
+        rs.stop_motion.assert_called()
 
-    def test_resume_calls_enable_robot(self):
+    def test_resume_transitions_state_to_running(self):
         p, rs = self._make()
-        p.start(); p.pause()
-        rs.reset_mock()
-        p.resume()
-        rs.enable_robot.assert_called_once()
+        p.start(); p.pause(); p.resume()
+        self.assertEqual(p.state, ProcessState.RUNNING)
 
     def test_start_from_paused_calls_on_resume_not_on_start(self):
-        """start() from PAUSED must call _on_resume (enable_robot), not _on_start."""
+        """start() from PAUSED must route to _on_resume — stop_motion not called again."""
         p, rs = self._make()
         p.start(); p.pause()
         rs.reset_mock()
         p.start()          # same as resume when paused
-        rs.enable_robot.assert_called_once()
-        rs.stop_motion.assert_not_called()  # _on_start only calls enable, not stop
+        self.assertEqual(p.state, ProcessState.RUNNING)
+        rs.stop_motion.assert_not_called()  # _on_resume doesn't call stop_motion
 
     # ── Hook errors ───────────────────────────────────────────────────
 
     def test_hook_error_forces_error_state(self):
         rs = _make_robot_service()
-        rs.enable_robot.side_effect = RuntimeError("motor fault")
-        p  = GlueProcess(robot_service=rs, messaging=_make_messaging(),navigation_service = _make_navigation_service())
-        p.start()
+        rs.stop_motion.side_effect = RuntimeError("motor fault")
+        p  = _make_glue_process(robot_service=rs)
+        p.start(); p.stop()
         self.assertEqual(p.state, ProcessState.ERROR)
 
     def test_hook_error_does_not_propagate_to_caller(self):
         rs = _make_robot_service()
-        rs.enable_robot.side_effect = RuntimeError("motor fault")
-        p  = GlueProcess(robot_service=rs, messaging=_make_messaging(),navigation_service = _make_navigation_service())
-        p.start()  # must not raise
+        rs.stop_motion.side_effect = RuntimeError("motor fault")
+        p  = _make_glue_process(robot_service=rs)
+        p.start(); p.stop()  # must not raise
 
     def test_hook_error_publishes_error_event_with_message(self):
         ms = _make_messaging()
         rs = _make_robot_service()
-        rs.enable_robot.side_effect = RuntimeError("motor fault")
-        p  = GlueProcess(robot_service=rs, messaging=ms,navigation_service = _make_navigation_service())
-        p.start()
+        rs.stop_motion.side_effect = RuntimeError("motor fault")
+        p  = _make_glue_process(robot_service=rs, messaging=ms)
+        p.start(); p.stop()
         published_events = [c.args[1] for c in ms.publish.call_args_list]
         error_events = [e for e in published_events if e.state == ProcessState.ERROR]
-        self.assertGreaterEqual(len(error_events), 1)   # published to ACTIVE + specific topic
+        self.assertGreaterEqual(len(error_events), 1)
         self.assertIn("motor fault", error_events[0].message)
 
     # ── Broker publishing ─────────────────────────────────────────────
 
     def test_publishes_active_topic_on_start(self):
         ms = _make_messaging()
-        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms,navigation_service = _make_navigation_service())
+        p  = _make_glue_process(messaging=ms)
         p.start()
         topics = [c.args[0] for c in ms.publish.call_args_list]
         self.assertIn(ProcessTopics.ACTIVE, topics)
 
     def test_publishes_process_specific_topic_on_start(self):
         ms = _make_messaging()
-        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms,navigation_service = _make_navigation_service())
+        p  = _make_glue_process(messaging=ms)
         p.start()
         topics = [c.args[0] for c in ms.publish.call_args_list]
         self.assertIn(ProcessTopics.state(ProcessID.GLUE), topics)
 
     def test_active_topic_published_before_specific_topic(self):
         ms = _make_messaging()
-        p  = GlueProcess(robot_service=_make_robot_service(), messaging=ms,navigation_service = _make_navigation_service())
+        p  = _make_glue_process(messaging=ms)
         p.start()
         topics = [c.args[0] for c in ms.publish.call_args_list]
         self.assertLess(
@@ -487,40 +498,28 @@ class TestGlueProcess(unittest.TestCase):
     def test_system_manager_acquire_blocks_start_when_false(self):
         sm = MagicMock(spec=ISystemManager)
         sm.acquire.return_value = False
-        p  = GlueProcess(
-            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm,
-            navigation_service=_make_navigation_service()
-        )
+        p  = _make_glue_process(system_manager=sm)
         p.start()
         self.assertEqual(p.state, ProcessState.IDLE)
 
     def test_system_manager_acquire_called_with_process_id(self):
         sm = MagicMock(spec=ISystemManager)
         sm.acquire.return_value = True
-        p  = GlueProcess(
-            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm,
-            navigation_service=_make_navigation_service()
-        )
+        p  = _make_glue_process(system_manager=sm)
         p.start()
         sm.acquire.assert_called_once_with("glue")
 
     def test_system_manager_release_called_on_stop(self):
         sm = MagicMock(spec=ISystemManager)
         sm.acquire.return_value = True
-        p  = GlueProcess(
-            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm,
-        navigation_service = _make_navigation_service()
-        )
+        p  = _make_glue_process(system_manager=sm)
         p.start(); p.stop()
         sm.release.assert_called_with("glue")
 
     def test_system_manager_release_called_on_reset_errors_idle(self):
         sm = MagicMock(spec=ISystemManager)
         sm.acquire.return_value = True
-        p  = GlueProcess(
-            robot_service=_make_robot_service(), messaging=_make_messaging(), system_manager=sm,
-            navigation_service=_make_navigation_service()
-        )
+        p  = _make_glue_process(system_manager=sm)
         p.start(); p.stop(); p.reset_errors()
         # release called at STOPPED and again at IDLE
         release_calls = [c.args[0] for c in sm.release.call_args_list]
@@ -529,23 +528,17 @@ class TestGlueProcess(unittest.TestCase):
     # ── ProcessRequirements ───────────────────────────────────────────
 
     def test_requirements_blocks_start_when_service_missing(self):
-        p = GlueProcess(
-            robot_service   = _make_robot_service(),
-            messaging       = _make_messaging(),
-            requirements    = ProcessRequirements.requires("vision"),
-            service_checker = lambda _: False,
-            navigation_service=_make_navigation_service()
+        p = _make_glue_process(
+            requirements=ProcessRequirements.requires("vision"),
+            service_checker=lambda _: False,
         )
         p.start()
         self.assertEqual(p.state, ProcessState.IDLE)
 
     def test_requirements_allows_start_when_services_available(self):
-        p = GlueProcess(
-            robot_service   = _make_robot_service(),
-            messaging       = _make_messaging(),
-            requirements    = ProcessRequirements.requires("robot"),
-            service_checker = lambda _: True,
-            navigation_service=_make_navigation_service()
+        p = _make_glue_process(
+            requirements=ProcessRequirements.requires("robot"),
+            service_checker=lambda _: True,
         )
         p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)

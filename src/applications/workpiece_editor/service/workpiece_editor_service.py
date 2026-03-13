@@ -32,7 +32,9 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  form_schema:    WorkpieceFormSchema,
                  segment_config: SegmentEditorConfig,
                  id_exists_fn:   Callable[[str], bool] = None,
-                 transformer:    Optional[ICoordinateTransformer] = None):
+                 transformer:    Optional[ICoordinateTransformer] = None,
+                 z_min:          float = 0.0,
+                 robot_service=None):
         self._vision             = vision_service
         self._save_fn            = save_fn
         self._update_fn          = update_fn
@@ -40,6 +42,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._form_schema        = form_schema
         self._segment_config     = segment_config
         self._transformer        = transformer
+        self._z_min              = z_min
+        self._robot_service      = robot_service
         self._editing_storage_id = None
 
     def set_editing(self, storage_id) -> None:
@@ -165,20 +169,29 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             for j, pt in enumerate(spline[:3]):
                 _logger.debug("[EXECUTE] %s spline[%d]: %s", pattern_type, j, pt)
 
-            # ── robot command would go here ──────────────────────────────
-            # result = robot_service.execute_trajectory(spline, vel=vel, acc=acc, blocking=True)
-            _logger.info("[EXECUTE] [DRY RUN] Would send %d waypoints to robot (vel=%.0f acc=%.0f)",
-                         len(spline), vel, acc)
+            # ── robot command ────────────────────────────────────────────
+            if self._robot_service is not None:
+                result = self._robot_service.execute_trajectory(spline, vel=vel, acc=acc, blocking=True)
+                if result not in (0, True, None):
+                    return False, f"Trajectory execution failed with code {result}"
+                _logger.info("[EXECUTE] Sent %d waypoints to robot (vel=%.0f acc=%.0f)",
+                             len(spline), vel, acc)
+            else:
+                _logger.info("[EXECUTE] [DRY RUN] Would send %d waypoints to robot (vel=%.0f acc=%.0f)",
+                             len(spline), vel, acc)
 
-        _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints [DRY RUN]",
+        run_label = "Dry run" if self._robot_service is None else "Executed"
+        _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
                      len(robot_paths), total_spline_pts)
-        return True, f"Dry run: {len(robot_paths)} path(s), {total_spline_pts} waypoints logged"
+        return True, f"{run_label}: {len(robot_paths)} path(s), {total_spline_pts} waypoints"
 
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
         """Convert (N, 2) pixel points + segment settings → [[x, y, z, rx, ry, rz], ...]."""
         try:
-            z  = float(str(settings.get("spraying_height", "0")).replace(",", ""))
-            rz = float(settings.get("rz_angle", 0))
+            _defaults = self._segment_config.schema.get_defaults()
+            spray_height = float(str(settings.get("spraying_height", _defaults.get("spraying_height", "0"))).replace(",", ""))
+            z  = self._z_min + spray_height
+            rz = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
         except (ValueError, TypeError):
             z, rz = 0.0, 0.0
         rx, ry = 180.0, 0.0

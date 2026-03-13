@@ -1,6 +1,7 @@
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.robot.calibration.robot_calibration.config_helpers import AdaptiveMovementConfig, \
     RobotCalibrationEventsConfig
+from src.engine.robot.configuration.robot_settings import SafetyLimits
 from src.engine.vision.homography_transformer import HomographyTransformer
 from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
     build_glue_segment_settings_schema
@@ -152,6 +153,8 @@ def _build_workpiece_editor_application(robot_system):
         segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types())),
         id_exists_fn=workpiece_service.workpiece_id_exists,
         transformer=transformer,
+        z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
+        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
     )
 
     class _PendingLoader:
@@ -377,6 +380,23 @@ def _build_pick_target_application(robot_system):
         navigation=robot_system._navigation,
     )
     return WidgetApplication(widget_factory=lambda ms: PickTargetFactory(ms).build(service))
+
+
+def _build_device_control_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.device_control.device_control_factory import DeviceControlFactory
+    from src.applications.device_control.service.device_control_application_service import DeviceControlApplicationService
+
+    service = DeviceControlApplicationService(
+        motor_service=getattr(robot_system, '_motor', None),
+        generator=getattr(robot_system, '_generator', None),
+        laser=getattr(robot_system, '_laser_detection_service', None),
+        vacuum_pump=None,
+        motor_address=0,
+    )
+    return WidgetApplication(
+        widget_factory=lambda _ms: DeviceControlFactory().build(service)
+    )
 
 
 def _build_height_measuring_application(robot_app):

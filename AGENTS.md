@@ -113,8 +113,16 @@ Current implementors:
 | Service | `is_healthy()` semantics |
 |---|---|
 | `IRobotService` | `get_state()` not in `("error", "disconnected", "fault")` |
-| `IMotorService` | `self._connected` flag — set by `open()` / cleared by `close()` |
+| `IMotorService` | `self._connected` flag — set by `open()` / cleared by `close()` — **no I/O** |
 | `IWeightCellService` | `len(get_connected_cell_ids()) > 0` |
+
+Non-`IHealthCheckable` hardware that still exposes health information:
+
+| Service | Health access | Cost |
+|---|---|---|
+| `IGeneratorController` | `get_state().is_healthy` — `True` when last register read succeeded | **Blocking I/O** — use only on explicit user request, not as an availability gate |
+| `ILaserControl` | None — write-only interface | — |
+| `IVacuumPumpController` | None — write-only interface | — |
 
 **`ServiceHealthRegistry`** (`src/engine/process/service_health_registry.py`) auto-wires health checks into `BaseProcess`:
 
@@ -215,6 +223,36 @@ class MyController(IApplicationController):
 ```
 Reference: `ModbusSettingsController`
 
+### View Styling — always use the shared style system
+
+All views **must** import style constants from `pl_gui.settings.settings_view.styles` — never hard-code hex colours in a view.
+
+```python
+from pl_gui.settings.settings_view.styles import (
+    BG_COLOR,          # #F8F9FA — widget / content background
+    BORDER,            # #E0E0E0 — borders, dividers
+    PRIMARY,           # #905BA9 — primary accent colour
+    PRIMARY_DARK,      # darker shade for hover/pressed
+    GROUP_STYLE,       # QGroupBox stylesheet
+    ACTION_BTN_STYLE,  # filled primary button (44 px tall, 8 px radius, 11 pt bold)
+    GHOST_BTN_STYLE,   # outlined primary button — secondary actions
+    SAVE_BUTTON_STYLE, # large save/confirm button (52 px tall)
+    LABEL_STYLE,       # bold 11 pt label
+)
+```
+
+| Element | Rule |
+|---------|------|
+| Widget background | `self.setStyleSheet(f"background-color: {BG_COLOR};")`  |
+| `QGroupBox` | `box.setStyleSheet(GROUP_STYLE)` |
+| Primary action button | `btn.setStyleSheet(ACTION_BTN_STYLE)` |
+| Secondary action button | `btn.setStyleSheet(GHOST_BTN_STYLE)` |
+| Save / confirm button | `btn.setStyleSheet(SAVE_BUTTON_STYLE)` |
+| Semantic status buttons (ON=green / OFF=red) | Define local `_BTN_ON` / `_BTN_OFF` constants that **match the same dimensions** as `ACTION_BTN_STYLE` (`border-radius: 8px`, `font-size: 11pt`, `font-weight: bold`, `min-height: 44px`, `padding: 0 16px`) using `#2E7D32` / `#C62828` |
+| All clickable buttons | `btn.setCursor(Qt.CursorShape.PointingHandCursor)` |
+
+Reference: `ModbusSettingsView` (imports + ACTION/GHOST usage), `DeviceControlView` (semantic ON/OFF pattern).
+
 ### Process state machine (`BaseProcess`)
 - Override `_on_start`, `_on_pause`, `_on_resume`, `_on_stop`
 - Hooks are called **while the lock is held** — must be non-blocking
@@ -277,6 +315,7 @@ def run_standalone():
 | `ModbusSettings` | `QThread + _Worker` for port scan / connection test | No |
 | `GlueCellSettings` | `_Bridge(QObject)` for cross-thread weight readings | Yes |
 | `GlueDashboard` | `ProcessRequirements`, `SystemManager` integration | Yes |
+| `DeviceControl` | `QThread + _Worker` for all 8 device commands (motor ramp blocks ~1s); `IMotorService.is_healthy()` as availability gate | No |
 
 ---
 

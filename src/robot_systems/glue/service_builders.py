@@ -137,6 +137,17 @@ def _build_height_measuring_services(robot_system):
     )
     return measuring_svc, calibration_svc, detection_svc
 
+def _build_generator_service(robot_system):
+    from src.engine.hardware.generator.modbus.modbus_generator_factory import build_modbus_generator_controller
+    try:
+        modbus_config = robot_system.get_settings(SettingsID.MODBUS_CONFIG)
+        return build_modbus_generator_controller(modbus_config)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Generator service could not be built — continuing without it")
+        return None
+
+
 def build_weight_cell_service(ctx):
     from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service
     cells_config = ctx.settings.get(SettingsID.GLUE_CELLS)
@@ -181,6 +192,34 @@ def build_vision_service(ctx):
         service           = service,
     )
     return VisionService(vision_system)
+
+
+from src.robot_systems.glue.processes.glue_dispensing.i_glue_type_resolver import IGlueTypeResolver
+
+
+class GlueCellTypeResolver(IGlueTypeResolver):
+    """Maps glue_type string → motor_address int from the live GlueCellsConfig."""
+
+    def __init__(self, glue_cells_config) -> None:
+        self._config = glue_cells_config
+
+    def resolve(self, glue_type: str) -> int:
+        try:
+            for cell in getattr(self._config, "cells", []):
+                cell_type = (
+                    getattr(cell, "glue_type", None)
+                    or getattr(cell, "glueType", None)
+                    or getattr(cell, "type", None)
+                )
+                addr = (
+                    getattr(cell, "motor_address", None)
+                    or getattr(cell, "motorAddress", None)
+                )
+                if cell_type == glue_type and addr is not None:
+                    return int(addr)
+        except Exception:
+            pass
+        return -1
 
 
 def build_tool_service(ctx):

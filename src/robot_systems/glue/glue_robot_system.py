@@ -22,7 +22,8 @@ from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
 from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    build_vision_service, build_tool_service, _build_calibration_service, _build_height_measuring_services
+    build_vision_service, build_tool_service, _build_calibration_service, _build_height_measuring_services, \
+    _build_generator_service
 from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
@@ -58,6 +59,7 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="ModbusSettings",  folder_id=2, icon="fa5s.network-wired",    factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="CellSettings",    folder_id=2, icon="fa5s.weight",           factory=application_wiring._build_glue_cell_settings_application),
             ApplicationSpec(name="CameraSettings",  folder_id=2, icon="fa5s.camera",          factory=application_wiring._build_camera_settings_application),
+            ApplicationSpec(name="DeviceControl",   folder_id=2, icon="fa5s.sliders-h",       factory=application_wiring._build_device_control_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",          factory=application_wiring._build_calibration_application),
             ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",       factory=application_wiring._build_broker_debug_application),
             ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",   factory=application_wiring._build_workpiece_editor_application),
@@ -141,7 +143,7 @@ class GlueRobotSystem(BaseRobotSystem):
             self._laser_detection_service = _build_height_measuring_services(self)
 
         self._calibration_service = _build_calibration_service(self)
-
+        self._generator           = _build_generator_service(self)
 
         self._coordinator         = self._build_coordinator()
 
@@ -170,6 +172,8 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.processes.clean_process import CleanProcess
         from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
         from src.robot_systems.glue.processes.glue_process import GlueProcess
+        from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
+        from src.robot_systems.glue.service_builders import GlueCellTypeResolver
         from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
         from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
         from src.robot_systems.glue.domain.matching.matching_service import MatchingService
@@ -195,7 +199,14 @@ class GlueRobotSystem(BaseRobotSystem):
         return GlueOperationCoordinator(
             glue_process=GlueProcess(
                 robot_service=self._robot,
+                motor_service=self._motor,
+                resolver=GlueCellTypeResolver(self._glue_cells),
+                config=GlueDispensingConfig(
+                    robot_tool=self._robot_config.robot_tool,
+                    robot_user=self._robot_config.robot_user,
+                ),
                 navigation_service=self._navigation,
+                generator=self._generator,
                 messaging=self._messaging_service,
                 system_manager=self._system_manager,
                 requirements=glue_requirements,
