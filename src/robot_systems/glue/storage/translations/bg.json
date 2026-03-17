@@ -49,5 +49,32 @@
     "Live": "На живо",
     "Progress": "Прогрес",
     "Inset": "Мини изглед"
+  },
+  "Login": {
+    "Login": "Вход",
+    "QR Login": "QR Вход",
+    "Press the blue button on the machine to continue.": "Натиснете синия бутон на машината, за да продължите.",
+    "⬤  Simulate Blue Button": "⬤  Симулирай синия бутон",
+    "First-time setup": "Първоначална настройка",
+    "No users found. Create the first admin account.": "Няма намерени потребители. Създайте първия администраторски акаунт.",
+    "User ID:": "Потребителски ID:",
+    "First name:": "Собствено име:",
+    "Last name:": "Фамилия:",
+    "Password:": "Парола:",
+    "Create Admin & Login": "Създай администратор и влез",
+    "Numeric user ID": "Числов потребителски ID",
+    "Numeric ID": "Числов ID",
+    "Password": "Парола",
+    "First name": "Собствено име",
+    "Last name": "Фамилия",
+    "Point the camera at a user QR code to log in automatically.": "Насочете камерата към QR кода на потребителя за автоматичен вход.",
+    "Warning": "Предупреждение",
+    "The robot will move to the login position.\nPlease ensure the area is clear before proceeding.": "Роботът ще се премести в позиция за вход.\nМоля, уверете се, че зоната е свободна преди да продължите.",
+    "Invalid credentials. Please try again.": "Невалидни данни. Моля, опитайте отново.",
+    "QR login failed. Please try again.": "QR входът неуспешен. Моля, опитайте отново.",
+    "Admin created but login failed. Please retry.": "Администраторът е създаден, но входът е неуспешен. Моля, опитайте отново.",
+    "User id is required.": "Потребителският ID е задължителен.",
+    "User id must be numeric.": "Потребителският ID трябва да е числов.",
+    "Password is required.": "Паролата е задължителна."
   }
 }

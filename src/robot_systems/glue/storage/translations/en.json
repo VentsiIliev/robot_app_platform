@@ -49,5 +49,32 @@
     "Live": "Live",
     "Progress": "Progress",
     "Inset": "Inset"
+  },
+  "Login": {
+    "Login": "Login",
+    "QR Login": "QR Login",
+    "Press the blue button on the machine to continue.": "Press the blue button on the machine to continue.",
+    "⬤  Simulate Blue Button": "⬤  Simulate Blue Button",
+    "First-time setup": "First-time setup",
+    "No users found. Create the first admin account.": "No users found. Create the first admin account.",
+    "User ID:": "User ID:",
+    "First name:": "First name:",
+    "Last name:": "Last name:",
+    "Password:": "Password:",
+    "Create Admin & Login": "Create Admin & Login",
+    "Numeric user ID": "Numeric user ID",
+    "Numeric ID": "Numeric ID",
+    "Password": "Password",
+    "First name": "First name",
+    "Last name": "Last name",
+    "Point the camera at a user QR code to log in automatically.": "Point the camera at a user QR code to log in automatically.",
+    "Warning": "Warning",
+    "The robot will move to the login position.\nPlease ensure the area is clear before proceeding.": "The robot will move to the login position.\nPlease ensure the area is clear before proceeding.",
+    "Invalid credentials. Please try again.": "Invalid credentials. Please try again.",
+    "QR login failed. Please try again.": "QR login failed. Please try again.",
+    "Admin created but login failed. Please retry.": "Admin created but login failed. Please retry.",
+    "User id is required.": "User id is required.",
+    "User id must be numeric.": "User id must be numeric.",
+    "Password is required.": "Password is required."
   }
 }

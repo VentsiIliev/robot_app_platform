@@ -2,7 +2,7 @@ import os
 from typing import Optional
 
 import cv2
-from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal, QEvent, QCoreApplication
 from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
@@ -80,9 +80,6 @@ class LoginView(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Login")
         self.setMinimumSize(700, 460)
-        self.setWindowFlags(
-            Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint
-        )
         self._allow_close = False
         self._result_user: Optional[IAuthenticatedUser] = None
 
@@ -137,6 +134,7 @@ class LoginView(QDialog):
 
         root.addWidget(self._build_logo_panel(), stretch=1)
         root.addWidget(self._build_right_panel(), stretch=2)
+        self.retranslateUi()
 
     # ── Logo panel ───────────────────────────────────────────────────────────
 
@@ -228,20 +226,20 @@ class LoginView(QDialog):
         layout.addWidget(self._machine_label)
 
         # Instruction
-        instruction = QLabel("Press the blue button on the machine to continue.")
-        instruction.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        instruction.setWordWrap(True)
+        self._setup_instruction = QLabel()
+        self._setup_instruction.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._setup_instruction.setWordWrap(True)
         f = QFont(); f.setPointSize(13)
-        instruction.setFont(f)
-        layout.addWidget(instruction)
+        self._setup_instruction.setFont(f)
+        layout.addWidget(self._setup_instruction)
 
         layout.addStretch(1)
 
         # TODO: remove once physical blue-button signal is wired
-        btn_sim = QPushButton("⬤  Simulate Blue Button")
-        btn_sim.setFixedHeight(44)
-        btn_sim.setToolTip("Temporary — simulates the physical blue button press")
-        btn_sim.setStyleSheet("""
+        self._btn_sim = QPushButton()
+        self._btn_sim.setFixedHeight(44)
+        self._btn_sim.setToolTip("Temporary — simulates the physical blue button press")
+        self._btn_sim.setStyleSheet("""
             QPushButton {
                 background-color: #1565C0; color: white;
                 border: none; border-radius: 6px;
@@ -249,8 +247,8 @@ class LoginView(QDialog):
             }
             QPushButton:hover { background-color: #0D47A1; }
         """)
-        btn_sim.clicked.connect(self._on_setup_next_clicked)
-        layout.addWidget(btn_sim)
+        self._btn_sim.clicked.connect(self._on_setup_next_clicked)
+        layout.addWidget(self._btn_sim)
 
         return page
 
@@ -262,33 +260,33 @@ class LoginView(QDialog):
         layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(14)
 
-        title = QLabel("First-time setup")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._fr_title = QLabel()
+        self._fr_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont(); f.setPointSize(15); f.setBold(True)
-        title.setFont(f)
-        layout.addRow(title)
+        self._fr_title.setFont(f)
+        layout.addRow(self._fr_title)
 
-        subtitle = QLabel("No users found. Create the first admin account.")
-        subtitle.setWordWrap(True)
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addRow(subtitle)
+        self._fr_subtitle = QLabel()
+        self._fr_subtitle.setWordWrap(True)
+        self._fr_subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addRow(self._fr_subtitle)
 
-        self._fa_uid   = QLineEdit(); self._fa_uid.setPlaceholderText("Numeric ID");   self._fa_uid.setFixedHeight(40)
-        self._fa_first = QLineEdit(); self._fa_first.setPlaceholderText("First name"); self._fa_first.setFixedHeight(40)
-        self._fa_last  = QLineEdit(); self._fa_last.setPlaceholderText("Last name");   self._fa_last.setFixedHeight(40)
-        self._fa_pw    = QLineEdit(); self._fa_pw.setPlaceholderText("Password");       self._fa_pw.setFixedHeight(40)
+        self._fa_uid   = QLineEdit(); self._fa_uid.setFixedHeight(40)
+        self._fa_first = QLineEdit(); self._fa_first.setFixedHeight(40)
+        self._fa_last  = QLineEdit(); self._fa_last.setFixedHeight(40)
+        self._fa_pw    = QLineEdit(); self._fa_pw.setFixedHeight(40)
         self._fa_pw.setEchoMode(QLineEdit.EchoMode.Password)
 
-        layout.addRow("User ID:",    self._fa_uid)
-        layout.addRow("First name:", self._fa_first)
-        layout.addRow("Last name:",  self._fa_last)
-        layout.addRow("Password:",   self._fa_pw)
+        self._fr_label_uid   = QLabel(); layout.addRow(self._fr_label_uid,   self._fa_uid)
+        self._fr_label_first = QLabel(); layout.addRow(self._fr_label_first, self._fa_first)
+        self._fr_label_last  = QLabel(); layout.addRow(self._fr_label_last,  self._fa_last)
+        self._fr_label_pw    = QLabel(); layout.addRow(self._fr_label_pw,    self._fa_pw)
 
-        btn = self._primary_btn("Create Admin & Login")
-        btn.setMinimumHeight(48)
-        btn.clicked.connect(self._on_first_admin_clicked)
+        self._fr_btn = self._primary_btn("")
+        self._fr_btn.setMinimumHeight(48)
+        self._fr_btn.clicked.connect(self._on_first_admin_clicked)
         self._fa_pw.returnPressed.connect(self._on_first_admin_clicked)
-        layout.addRow(btn)
+        layout.addRow(self._fr_btn)
         return page
 
     # ── Login / QR tabs ───────────────────────────────────────────────────────
@@ -306,31 +304,31 @@ class LoginView(QDialog):
         layout.setContentsMargins(40, 30, 40, 30)
         layout.setSpacing(14)
 
-        title = QLabel("Login")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._login_title = QLabel()
+        self._login_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont(); f.setPointSize(16); f.setBold(True)
-        title.setFont(f)
-        layout.addWidget(title)
+        self._login_title.setFont(f)
+        layout.addWidget(self._login_title)
 
-        layout.addWidget(QLabel("User ID:"))
+        self._uid_label = QLabel()
+        layout.addWidget(self._uid_label)
         self._uid_input = QLineEdit()
-        self._uid_input.setPlaceholderText("Numeric user ID")
         self._uid_input.setFixedHeight(40)
         layout.addWidget(self._uid_input)
 
-        layout.addWidget(QLabel("Password:"))
+        self._pw_label = QLabel()
+        layout.addWidget(self._pw_label)
         self._pw_input = QLineEdit()
-        self._pw_input.setPlaceholderText("Password")
         self._pw_input.setEchoMode(QLineEdit.EchoMode.Password)
         self._pw_input.setFixedHeight(40)
         layout.addWidget(self._pw_input)
 
-        btn = self._primary_btn("Login")
-        btn.setFixedHeight(52)
-        btn.clicked.connect(self._on_login_clicked)
+        self._login_btn = self._primary_btn("")
+        self._login_btn.setFixedHeight(52)
+        self._login_btn.clicked.connect(self._on_login_clicked)
         self._uid_input.returnPressed.connect(self._on_login_clicked)
         self._pw_input.returnPressed.connect(self._on_login_clicked)
-        layout.addWidget(btn)
+        layout.addWidget(self._login_btn)
         layout.addStretch(1)
         return page
 
@@ -340,10 +338,10 @@ class LoginView(QDialog):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(8)
 
-        info = QLabel("Point the camera at a user QR code to log in automatically.")
-        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info.setWordWrap(True)
-        layout.addWidget(info)
+        self._qr_info = QLabel()
+        self._qr_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._qr_info.setWordWrap(True)
+        layout.addWidget(self._qr_info)
 
         self._camera_view = _FeedOnlyCameraView()
         self._camera_view.setSizePolicy(
@@ -357,10 +355,13 @@ class LoginView(QDialog):
         """Push a BGR numpy frame to the camera view. Called from the controller."""
         if frame is None:
             return
-        rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgb.shape
-        qimg  = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
-        self._camera_view.set_frame(QPixmap.fromImage(qimg))
+        try:
+            rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            qimg  = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+            self._camera_view.set_frame(QPixmap.fromImage(qimg))
+        except RuntimeError:
+            pass  # C++ widget already deleted — queued signal arrived after teardown
 
     # ── Internal slots ───────────────────────────────────────────────────────
 
@@ -373,9 +374,9 @@ class LoginView(QDialog):
         if index == _TAB_QR:
             confirmed = QMessageBox.warning(
                 self,
-                "Warning",
-                "The robot will move to the login position.\n"
-                "Please ensure the area is clear before proceeding.",
+                self._t("Warning"),
+                self._t("The robot will move to the login position.\n"
+                        "Please ensure the area is clear before proceeding."),
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
             )
             if confirmed == QMessageBox.StandardButton.Ok:
@@ -405,6 +406,43 @@ class LoginView(QDialog):
     def _stop_qr_scanning(self) -> None:
         if self._qr_timer.isActive():
             self._qr_timer.stop()
+
+    # ── Localization ─────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("Login", text)
+        return translated or text
+
+    def retranslateUi(self, *_) -> None:
+        self.setWindowTitle(self._t("Login"))
+        self._setup_instruction.setText(self._t("Press the blue button on the machine to continue."))
+        self._btn_sim.setText(self._t("⬤  Simulate Blue Button"))
+        self._fr_title.setText(self._t("First-time setup"))
+        self._fr_subtitle.setText(self._t("No users found. Create the first admin account."))
+        self._fr_label_uid.setText(self._t("User ID:"))
+        self._fr_label_first.setText(self._t("First name:"))
+        self._fr_label_last.setText(self._t("Last name:"))
+        self._fr_label_pw.setText(self._t("Password:"))
+        self._fr_btn.setText(self._t("Create Admin & Login"))
+        self._login_title.setText(self._t("Login"))
+        self._uid_label.setText(self._t("User ID:"))
+        self._pw_label.setText(self._t("Password:"))
+        self._login_btn.setText(self._t("Login"))
+        self._qr_info.setText(self._t("Point the camera at a user QR code to log in automatically."))
+        self._tabs.setTabText(_TAB_LOGIN, self._t("Login"))
+        self._tabs.setTabText(_TAB_QR,    self._t("QR Login"))
+        self._uid_input.setPlaceholderText(self._t("Numeric user ID"))
+        self._pw_input.setPlaceholderText(self._t("Password"))
+        self._fa_uid.setPlaceholderText(self._t("Numeric ID"))
+        self._fa_first.setPlaceholderText(self._t("First name"))
+        self._fa_last.setPlaceholderText(self._t("Last name"))
+        self._fa_pw.setPlaceholderText(self._t("Password"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
     # ── Block ESC / accidental close ─────────────────────────────────────────
 

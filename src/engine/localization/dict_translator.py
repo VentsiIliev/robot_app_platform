@@ -13,8 +13,9 @@ class DictTranslator(QTranslator):
     def isEmpty(self) -> bool:
         return len(self._translations) == 0
 
-    def translate(self, context, source_text, disambiguation=None, n=-1) -> str:
+    def translate(self, context, source_text, disambiguation=None, n=-1):
         ctx = self._translations.get(context)
         if ctx is None:
-            return ""
-        return ctx.get(source_text, "")
+            return None
+        result = ctx.get(source_text)
+        return result  # None → null QString → Qt falls back to source text

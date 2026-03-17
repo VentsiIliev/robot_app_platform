@@ -1,6 +1,6 @@
 from typing import Optional
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QCoreApplication
 
 from src.applications.login.model.login_model import LoginModel
 from src.engine.core.i_messaging_service import IMessagingService
@@ -42,6 +42,11 @@ class LoginController:
 
     # ── Camera frame delivery ────────────────────────────────────────────────
 
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("Login", text)
+        return translated or text
+
     def _on_camera_frame_raw(self, msg) -> None:
         """Broker thread — must not touch Qt. Forward via bridge signal."""
         frame = msg.get("image") if isinstance(msg, dict) else msg
@@ -65,11 +70,11 @@ class LoginController:
     def _on_login_submitted(self, user_id: str, password: str) -> None:
         error = self._model.validate_login_input(user_id, password)
         if error:
-            self._view.show_error(error)
+            self._view.show_error(self._t(error))
             return
         user = self._model.authenticate(user_id, password)
         if user is None:
-            self._view.show_error("Invalid credentials. Please try again.")
+            self._view.show_error(self._t("Invalid credentials. Please try again."))
             return
         self._view.accept_login(user)
 
@@ -83,7 +88,7 @@ class LoginController:
         user_id, password = result
         user = self._model.authenticate(user_id, password)
         if user is None:
-            self._view.show_error("QR login failed. Please try again.")
+            self._view.show_error(self._t("QR login failed. Please try again."))
             return
         self._view.stop_qr_scanning()
         self._view.accept_login(user)
@@ -97,6 +102,6 @@ class LoginController:
             return
         user = self._model.authenticate(user_id, password)
         if user is None:
-            self._view.show_error("Admin created but login failed. Please retry.")
+            self._view.show_error(self._t("Admin created but login failed. Please retry."))
             return
         self._view.accept_login(user)

@@ -15,7 +15,7 @@ from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
 from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
 from src.robot_systems.system_builder import SystemBuilder
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QWidget
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
@@ -43,25 +43,89 @@ def main() -> None:
     # 3 — shell folder layout from app metadata
     ShellConfigurator.configure(GlueRobotSystem)
 
-    # 4 — Qt must exist before any widgets
+    # 4 — Qt app + localization
     qt_app = QApplication(sys.argv)
     localization_svc = _build_localization_service(robot_app, ctx.messaging_service)
     localization_svc.set_language(localization_svc.get_language())
 
-    # 4b — login gate (blocks until authenticated or user quits)
+    # 4b — Create shell BEFORE login (empty content area, header + language selector visible)
+    shell = AppShell(
+        app_descriptors=[],
+        widget_factory=lambda _: QWidget(),   # placeholder, never invoked during login
+        languages=localization_svc.available_languages(),
+    )
+    localization_svc.sync_selector(shell.header.language_selector)
+    shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
+
+    # Wire broker → shell navigation
+    # Used to automatically open the workpiece editor when the "open in editor"
+    # button is clicked in the library
+    def _on_navigate(payload: dict) -> None:
+        app_name = payload.get("app") if isinstance(payload, dict) else str(payload)
+        if app_name:
+            shell.show_app(app_name)
+
+    ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
+    shell.show()
+
+    # 4c — Login gate
     if _DEV_SKIP_LOGIN:
         from src.applications.login.stub_login_application_service import _StubUser
         from src.engine.auth.user_session import UserSession
         session = UserSession()
         session.login(_StubUser())
         _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
+        _load_apps_into_shell(shell, session, robot_app, ctx)
     else:
-        session = _run_login(ctx, robot_app)
-        if session is None:
-            _LOGGER.info("Login cancelled — exiting.")
-            sys.exit(0)
+        login_view = _create_login_dialog(ctx, robot_app)   # parent=None; stacked_widget becomes parent
+        shell.stacked_widget.addWidget(login_view)          # → index 1
+        shell.stacked_widget.setCurrentIndex(1)             # show login in shell content area
 
-    # 5 — load applications (filtered by logged-in user's role)
+        # LanguageChange events only reach top-level windows; wire retranslation directly.
+        shell.header.language_selector.languageChanged.connect(login_view.retranslateUi)
+
+        def _on_login_accepted():
+            from src.engine.auth.user_session import UserSession
+            shell.header.language_selector.languageChanged.disconnect(login_view.retranslateUi)
+            session = UserSession()
+            session.login(login_view.result_user())
+            shell.stacked_widget.removeWidget(login_view)
+            login_view.deleteLater()
+            _load_apps_into_shell(shell, session, robot_app, ctx)
+
+        login_view.accepted.connect(_on_login_accepted)
+
+    # # 7 — broker debug window (temporary — remove when no longer needed)
+    # _debug_window = _build_broker_debug_window(ctx.messaging_service)
+    # _debug_window.show()
+
+    try:
+        sys.exit(qt_app.exec())
+    finally:
+        robot_app.stop()
+
+
+def _create_login_dialog(ctx, robot_app):
+    """Build and return the login view (without exec-ing it)."""
+    from src.applications.login.login_application_service import LoginApplicationService
+    from src.applications.login.login_factory import LoginFactory
+    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
+    from src.robot_systems.glue.application_wiring import _USERS_STORAGE
+    from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
+    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
+    from src.robot_systems.glue.service_ids import ServiceID
+
+    user_repo     = CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA)
+    auth_service  = AuthenticationService(user_repo)
+    robot_service = robot_app.get_optional_service(ServiceID.ROBOT)
+    login_service = LoginApplicationService(
+        auth_service=auth_service, user_repository=user_repo, robot_service=robot_service
+    )
+    return LoginFactory.build(login_service, messaging=ctx.messaging_service)
+
+
+def _load_apps_into_shell(shell, session, robot_app, ctx):
+    """Load role-filtered apps and reload the shell's folder page."""
     from src.engine.auth.authorization_service import AuthorizationService
     from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
     from src.robot_systems.glue.application_wiring import _PERMISSIONS_STORAGE
@@ -80,66 +144,11 @@ def main() -> None:
         except Exception:
             _LOGGER.exception("Failed to build application '%s'", spec.name)
 
-    # 6 — build widget registry and launch shell
     descriptors, widget_factory = loader.build_registry()
-    shell = AppShell(
-        app_descriptors=descriptors,
-        widget_factory=widget_factory,
-        languages=localization_svc.available_languages(),
-    )
-    localization_svc.sync_selector(shell.header.language_selector)
-    shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
-
-    # Wire broker → shell navigation # used to automatically
-    # open the workpiece editor when the "open in editor" button is clicked in the library
-    def _on_navigate(payload: dict) -> None:
-        app_name = payload.get("app") if isinstance(payload, dict) else str(payload)
-        if app_name:
-            shell.show_app(app_name)
-
-    ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
-    shell.show()
-
-    # # 7 — broker debug window (temporary — remove when no longer needed)
-    # _debug_window = _build_broker_debug_window(ctx.messaging_service)
-    # _debug_window.show()
-
-    try:
-        sys.exit(qt_app.exec())
-    finally:
-        robot_app.stop()
-
-
-def _run_login(ctx, robot_app):
-    """Show the login dialog and return a populated UserSession, or None if cancelled."""
-    from src.applications.login.login_application_service import LoginApplicationService
-    from src.applications.login.login_factory import LoginFactory
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.engine.auth.user_session import UserSession
-    from src.robot_systems.glue.application_wiring import _USERS_STORAGE
-    from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
-    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
-    from src.robot_systems.glue.service_ids import ServiceID
-
-    user_repo    = CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA)
-    auth_service = AuthenticationService(user_repo)
-    robot_service = robot_app.get_optional_service(ServiceID.ROBOT)
-
-    login_service = LoginApplicationService(
-        auth_service=auth_service,
-        user_repository=user_repo,
-        robot_service=robot_service,
-    )
-
-    dialog = LoginFactory.build(login_service, messaging=ctx.messaging_service)
-    result = dialog.exec()
-
-    if result != dialog.DialogCode.Accepted:
-        return None
-
-    session = UserSession()
-    session.login(dialog.result_user())
-    return session
+    shell._app_descriptors = descriptors
+    shell._widget_factory   = widget_factory
+    shell.create_folders_page()
+    shell.stacked_widget.setCurrentIndex(0)
 
 
 def _build_localization_service(robot_app, messaging_service) -> LocalizationService:
