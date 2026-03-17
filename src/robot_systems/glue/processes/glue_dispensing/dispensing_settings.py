@@ -11,6 +11,7 @@ class DispensingSegmentSettings:
     glue_type: str | None = None
     velocity: float | None = None
     acceleration: float | None = None
+    time_between_generator_and_glue: float = 0.0
     reach_start_threshold: float = 1.0
     reach_end_threshold: float = 1.0
     motor_speed: int = 0
@@ -34,6 +35,7 @@ class DispensingSegmentSettings:
             GlueSettingKey.GLUE_TYPE.value,
             "velocity",
             "acceleration",
+            GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value,
             GlueSettingKey.REACH_START_THRESHOLD.value,
             GlueSettingKey.REACH_END_THRESHOLD.value,
             GlueSettingKey.MOTOR_SPEED.value,
@@ -50,6 +52,9 @@ class DispensingSegmentSettings:
             glue_type=data.get(GlueSettingKey.GLUE_TYPE.value),
             velocity=_optional_float(data.get("velocity")),
             acceleration=_optional_float(data.get("acceleration")),
+            time_between_generator_and_glue=float(
+                data.get(GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value, 0.0)
+            ),
             reach_start_threshold=float(data.get(GlueSettingKey.REACH_START_THRESHOLD.value, 1.0)),
             reach_end_threshold=float(data.get(GlueSettingKey.REACH_END_THRESHOLD.value, 1.0)),
             motor_speed=int(float(data.get(GlueSettingKey.MOTOR_SPEED.value, 0))),
@@ -69,6 +74,7 @@ class DispensingSegmentSettings:
             GlueSettingKey.GLUE_TYPE.value: self.glue_type,
             "velocity": self.velocity,
             "acceleration": self.acceleration,
+            GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value: self.time_between_generator_and_glue,
             GlueSettingKey.REACH_START_THRESHOLD.value: self.reach_start_threshold,
             GlueSettingKey.REACH_END_THRESHOLD.value: self.reach_end_threshold,
             GlueSettingKey.MOTOR_SPEED.value: self.motor_speed,

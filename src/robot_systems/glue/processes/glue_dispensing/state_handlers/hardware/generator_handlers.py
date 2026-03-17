@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_error import (
     DispensingErrorCode,
@@ -28,6 +29,16 @@ def handle_turning_on_generator(context) -> GlueDispensingState:
                 message="Failed to start generator",
                 exc=exc,
             )
+
+    settings = context.get_segment_settings()
+    delay_s = settings.time_between_generator_and_glue if settings is not None else 0.0
+    if delay_s > 0:
+        _logger.debug(
+            "Waiting %.3fs between generator start and pump start for path %s",
+            delay_s,
+            context.current_path_index,
+        )
+        time.sleep(delay_s)
 
     return S.TURNING_ON_PUMP
 

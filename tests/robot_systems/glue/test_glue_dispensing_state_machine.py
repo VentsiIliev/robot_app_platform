@@ -69,6 +69,7 @@ def _settings(**overrides):
         GlueSettingKey.GLUE_TYPE.value: "Type A",
         "velocity": 55.0,
         "acceleration": 66.0,
+        GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value: 0.0,
         GlueSettingKey.REACH_START_THRESHOLD.value: 1.0,
         GlueSettingKey.REACH_END_THRESHOLD.value: 1.0,
         GlueSettingKey.MOTOR_SPEED.value: 10000,
@@ -762,11 +763,30 @@ class TestHandleGeneratorStates(unittest.TestCase):
         ctx.spray_on = True
         ctx.generator_started = False
 
-        state = handle_turning_on_generator(ctx)
+        with patch(
+            "src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.generator_handlers.time.sleep"
+        ) as sleep_mock:
+            state = handle_turning_on_generator(ctx)
 
         self.assertEqual(state, GlueDispensingState.TURNING_ON_PUMP)
         self.assertTrue(ctx.generator_started)
         ctx.generator.turn_on.assert_called_once_with()
+        sleep_mock.assert_not_called()
+
+    def test_turning_on_generator_waits_before_starting_pump_when_configured(self):
+        ctx = _make_context()
+        ctx.spray_on = True
+        ctx.generator_started = False
+        ctx.current_settings = _settings(time_between_generator_and_glue=1.25)
+
+        with patch(
+            "src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.generator_handlers.time.sleep"
+        ) as sleep_mock:
+            state = handle_turning_on_generator(ctx)
+
+        self.assertEqual(state, GlueDispensingState.TURNING_ON_PUMP)
+        ctx.generator.turn_on.assert_called_once_with()
+        sleep_mock.assert_called_once_with(1.25)
 
     def test_completed_keeps_pump_cleanup_and_routes_to_generator_shutdown(self):
         ctx = _make_context()

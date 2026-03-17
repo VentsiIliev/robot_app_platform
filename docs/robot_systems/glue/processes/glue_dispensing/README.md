@@ -146,10 +146,14 @@ Supported input shapes are:
 
 `DispensingSegmentSettings` is the internal typed settings model. It exposes named fields for:
 - glue type
+- motion velocity and acceleration
+- `time_between_generator_and_glue`
 - reach thresholds
 - pump forward parameters
 - pump reverse parameters
 - dynamic pump-speed coefficients
+
+`time_between_generator_and_glue` is now used at runtime. After `TURNING_ON_GENERATOR` successfully turns the generator on for the active segment, the state handler waits for that configured delay before advancing to `TURNING_ON_PUMP`.
 
 If a raw settings dict is still assigned directly to `context.current_settings`, `DispensingContext.get_segment_settings()` coerces it into `DispensingSegmentSettings` on first use. This keeps older call sites working while the package migrates to the typed model.
 
