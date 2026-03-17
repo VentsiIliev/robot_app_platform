@@ -35,9 +35,11 @@ class IGlueDashboardService(ABC):
 class GlueDashboardService(IGlueDashboardService):
     def __init__(
         self,
-        robot_service:    IRobotService,
+        runner:           GlueOperationCoordinator,
         settings_service: ISettingsService,
         weight_service:   Optional[IWeightCellService] = None,
+        execution_service: Optional[GlueJobExecutionService] = None,
+        messaging_service: Optional[IMessagingService] = None,
     ): ...
 ```
 
@@ -45,20 +47,23 @@ The only file in the dashboard that imports platform services. Dependencies:
 
 | Dependency | Used for |
 |-----------|---------|
-| `IRobotService` | `start` → `enable_robot()`, `stop` → `stop_motion() + disable_robot()`, `pause` → `stop_motion()` |
+| `GlueOperationCoordinator` | normal production lifecycle: start / stop / pause / resume / clean / reset |
 | `ISettingsService` | `change_glue` → reads/writes `"glue_cells"`; `get_cell_capacity/glue_type` → reads `"glue_cells"`; `get_all_glue_types` → reads `"glue_catalog"` |
 | `IWeightCellService` (optional) | `get_cell_connection_state` → `weight.get_cell_state(cell_id).value`; returns `"disconnected"` if `None` |
+| `GlueJobExecutionService` (optional) | shared glue preparation flow: move to capture pose + wait + capture + match + build + load |
+| `IMessagingService` (optional) | publishes a warning message when automated glue-only start fails |
 
 ### Method Implementations
 
 | Method | Implementation |
 |--------|---------------|
-| `start()` | `robot_service.enable_robot()` |
-| `stop()` | `robot_service.stop_motion()` + `robot_service.disable_robot()` |
-| `pause()` | `robot_service.stop_motion()` |
-| `clean()` | Logs only (hardware command to be wired) |
-| `reset_errors()` | Logs only |
-| `set_mode(mode)` | Logs only |
+| `start()` | delegates to `runner.start()` |
+| `stop()` | `runner.stop()` |
+| `pause()` | `runner.pause()` |
+| `resume()` | `runner.resume()` |
+| `clean()` | `runner.clean()` |
+| `reset_errors()` | `runner.reset_errors()` |
+| `set_mode(mode)` | parses label to `GlueOperationMode` and calls `runner.set_mode(...)` |
 | `change_glue(cell_id, glue_type)` | Loads `GlueCellsConfig`, replaces `cell.type`, saves back |
 | `get_cell_capacity(cell_id)` | Reads `"glue_cells"` → `cell.capacity` |
 | `get_cell_glue_type(cell_id)` | Reads `"glue_cells"` → `cell.type` |
@@ -79,4 +84,9 @@ Returns hardcoded values for all queries. Commands are no-ops that log. Used by 
 ## Design Notes
 
 - **`get_initial_cell_state` returns `None`**: The initial state is determined at startup by reading from `IWeightCellService` via `get_cell_connection_state()`. The `get_initial_cell_state()` method is kept in the interface for future use (e.g., returning a cached state snapshot from before startup).
-- **`clean` and `reset_errors` log only**: Hardware command wiring (e.g., Modbus output, robot I/O) is not yet implemented. The method stubs exist so the controller can call them and the broker can publish the command events.
+- **Coordinator-owned startup**: The dashboard service always delegates `start()` to `GlueOperationCoordinator`. In `SPRAY_ONLY`, the coordinator performs glue preparation before starting the glue sequence. In `PICK_AND_SPRAY`, preparation happens later in the sequence transition hook.
+- **Settings-driven spray enable**: For automated glue preparation, the coordinator reads `GlueSettings.spray_on` via `ISettingsService.get(SettingsID.GLUE_SETTINGS)` and passes that configured value into `GlueJobExecutionService.prepare_and_load(...)`.
+- **Mandatory positioning stage**: The execution service always starts by moving the robot to the calibration capture pose with the current vision capture offset, then waiting briefly for stabilization. If that step fails, the result stage is `positioning` and the glue flow does not proceed to matching.
+- **Pick-and-spray handoff stays in the coordinator**: In `PICK_AND_SPRAY`, the dashboard still delegates to `GlueOperationCoordinator.start()`. Glue preparation happens later inside the sequence transition hook, after pick-and-place stops.
+- **Cancellable pre-start preparation**: If `stop()` is called while glue preparation is still running, the coordinator cancels the pending preparation and requests robot stop before glue starts.
+- **Failure feedback**: On glue-only preparation failure, the service publishes `ProcessTopics.busy(ProcessID.COORDINATOR)` with a human-readable failure message so the dashboard status widget shows the reason immediately.

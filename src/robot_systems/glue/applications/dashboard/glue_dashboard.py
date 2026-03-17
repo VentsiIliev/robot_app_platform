@@ -14,6 +14,7 @@ from src.robot_systems.glue.applications.dashboard import config
 from src.robot_systems.glue.applications.dashboard.controller.glue_dashboard_controller import GlueDashboardController
 from src.robot_systems.glue.applications.dashboard.model.glue_dashboard_model import GlueDashboardModel
 from src.robot_systems.glue.applications.dashboard.service.glue_dashboard_service import GlueDashboardService
+from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
 
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 
@@ -26,12 +27,15 @@ class GlueDashboard:
         settings_service:  ISettingsService,
         messaging_service: IMessagingService,
         weight_service:    Optional[IWeightCellService] = None,
+        execution_service: GlueJobExecutionService | None = None,
     ) -> QWidget:
 
         service = GlueDashboardService(
             runner           = coordinator,
             settings_service = settings_service,
             weight_service   = weight_service,
+            execution_service= execution_service,
+            messaging_service= messaging_service,
         )
 
         cells_count = service.get_cells_count()

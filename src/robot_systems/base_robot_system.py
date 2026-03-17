@@ -34,6 +34,11 @@ class ApplicationSpec:
     folder_id: int
     icon: str = "fa5s.cog"
     factory: Optional[Callable] = field(default=None, compare=False)
+    app_id: str = ""    # stable snake_case key used in permissions — set once, never change
+
+    def __post_init__(self):
+        if not self.app_id:
+            object.__setattr__(self, "app_id", self.name.lower().replace(" ", "_"))
 
 
 @dataclass(frozen=True)

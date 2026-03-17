@@ -17,8 +17,9 @@ from src.shared_contracts.events.robot_events import RobotCalibrationTopics
 # Single definition — used by both editor (write) and library (read).
 _logger = logging.getLogger(__name__)
 _SYSTEM_DIR = os.path.dirname(os.path.abspath(__file__))
-_WORKPIECES_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
-_USERS_STORAGE = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
+_WORKPIECES_STORAGE   = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
+_USERS_STORAGE        = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
+_PERMISSIONS_STORAGE  = os.path.join(_SYSTEM_DIR, "storage", "settings", "permissions.json")
 
 def _build_pick_and_place_visualizer(robot_system):
     from src.applications.base.widget_application import WidgetApplication
@@ -73,6 +74,7 @@ def _build_glue_process_driver_application(robot_system):
         GlueProcessDriverService,
     )
     from src.robot_systems.glue.domain.glue_job_builder_service import GlueJobBuilderService
+    from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
     from src.robot_systems.glue.domain.matching.matching_service import MatchingService
     from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
@@ -98,6 +100,16 @@ def _build_glue_process_driver_application(robot_system):
         vision_service=vision_service,
         workpiece_service=workpiece_service,
     )
+    execution_service = GlueJobExecutionService(
+        matching_service=matching_service,
+        job_builder=GlueJobBuilderService(
+            transformer=transformer,
+            z_min=z_min,
+        ),
+        glue_process=robot_system.coordinator.glue_process,
+        navigation_service=robot_system.coordinator.glue_process.navigation_service,
+        vision_service=vision_service,
+    )
     service = GlueProcessDriverService(
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
@@ -105,6 +117,7 @@ def _build_glue_process_driver_application(robot_system):
             z_min=z_min,
         ),
         glue_process=robot_system.coordinator.glue_process,
+        execution_service=execution_service,
     )
     return WidgetApplication(widget_factory=lambda ms: GlueProcessDriverFactory(ms).build(service))
 
@@ -252,9 +265,18 @@ def _build_user_management_application(robot_system):
         UserManagementApplicationService
     from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
     from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
+    from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
+    from src.engine.auth.authorization_service import AuthorizationService
 
-    service = UserManagementApplicationService(CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA))
-    return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
+    service     = UserManagementApplicationService(CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA))
+    perm_repo   = PermissionsRepository(_PERMISSIONS_STORAGE)
+    perm_svc    = AuthorizationService(perm_repo)
+    known_ids   = [spec.app_id for spec in robot_system.shell.applications]
+
+    def _build(messaging_service):
+        return UserManagementFactory().build(service, perm_svc, known_ids)
+
+    return WidgetApplication(widget_factory=_build)
 
 
 def _build_camera_settings_application(robot_system):
@@ -313,11 +335,51 @@ def _build_calibration_application(robot_system):
 
 def _build_dashboard_application(system):
     from src.applications.base.widget_application import WidgetApplication
+    from src.engine.vision.homography_transformer import HomographyTransformer
     from src.robot_systems.glue.applications.dashboard.glue_dashboard import GlueDashboard
+    from src.robot_systems.glue.domain.glue_job_builder_service import GlueJobBuilderService
+    from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
+    from src.robot_systems.glue.domain.matching.matching_service import MatchingService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
 
     coordinator = system.coordinator
     settings_service = system._settings_service
     weight_service = system.get_optional_service(ServiceID.WEIGHT)
+    vision_service = system.get_optional_service(ServiceID.VISION)
+    robot_config = getattr(system, "_robot_config", None)
+
+    try:
+        z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
+    except Exception:
+        z_min = 0.0
+
+    transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            tcp_x_offset=robot_config.tcp_x_offset,
+            tcp_y_offset=robot_config.tcp_y_offset,
+        )
+        if vision_service is not None and robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        if vision_service is not None else None
+    )
+    execution_service = (
+        GlueJobExecutionService(
+            matching_service=MatchingService(
+                vision_service=vision_service,
+                workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+            ),
+            job_builder=GlueJobBuilderService(
+                transformer=transformer,
+                z_min=z_min,
+            ),
+            glue_process=coordinator.glue_process,
+            navigation_service=coordinator.glue_process.navigation_service,
+            vision_service=vision_service,
+        )
+        if vision_service is not None else None
+    )
 
     return WidgetApplication(
         widget_factory=lambda ms: GlueDashboard.create(
@@ -325,6 +387,7 @@ def _build_dashboard_application(system):
             settings_service=settings_service,
             messaging_service=ms,
             weight_service=weight_service,
+            execution_service=execution_service,
         )
     )
 

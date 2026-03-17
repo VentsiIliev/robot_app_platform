@@ -95,3 +95,11 @@ class IRobot(ABC):
     def get_last_trajectory_command_info(self):
         """Optional metadata about the last submitted trajectory command."""
         return None
+
+    def get_connection_state(self) -> str:
+        """Optional lifecycle/availability state for the underlying transport."""
+        return "idle"
+
+    def get_connection_details(self) -> dict:
+        """Optional diagnostic details about the underlying transport state."""
+        return {}

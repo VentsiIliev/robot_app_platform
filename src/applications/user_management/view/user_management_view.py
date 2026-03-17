@@ -3,7 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QGroupBox, QSizePolicy, QWidget, QLineEdit, QPushButton,
+    QGroupBox, QSizePolicy, QWidget, QLineEdit, QPushButton, QTabWidget,
 )
 from PyQt6.QtGui import QFont
 
@@ -32,19 +32,35 @@ class UserManagementView(IApplicationView):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
 
+        self._tabs = QTabWidget()
+        self._tabs.addTab(self._build_users_tab(), "Users")
+        root.addWidget(self._tabs)
+        self.setStyleSheet(self._stylesheet())
+
+    def add_permissions_tab(self, permissions_widget: QWidget) -> None:
+        """Attach the App Permissions tab. Called by the factory when the
+        permissions service is available."""
+        self._tabs.addTab(permissions_widget, "App Permissions")
+
+    def _build_users_tab(self) -> QWidget:
+        container = QWidget()
+        layout    = QVBoxLayout(container)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(8)
+
         title = QLabel("User Management")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont(); f.setPointSize(16); f.setBold(True)
         title.setFont(f)
-        root.addWidget(title)
+        layout.addWidget(title)
 
-        root.addWidget(self._build_filter_bar())
-        root.addWidget(self._build_table())
-        root.addWidget(self._build_buttons())
+        layout.addWidget(self._build_filter_bar())
+        layout.addWidget(self._build_table())
+        layout.addWidget(self._build_buttons())
 
         self._status = QLabel()
-        root.addWidget(self._status)
-        self.setStyleSheet(self._stylesheet())
+        layout.addWidget(self._status)
+        return container
 
     def clean_up(self) -> None:
         pass

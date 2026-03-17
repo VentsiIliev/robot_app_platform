@@ -77,6 +77,15 @@ class TestGlueProcessDriverApplicationFactory(unittest.TestCase):
 
         self.assertIs(widget._controller._broker, messaging_service)
 
+    def test_widget_factory_configures_execution_service(self):
+        application = _spec().factory(_make_robot_system())
+        messaging_service = MagicMock()
+
+        application.register(messaging_service)
+        widget = application.create_widget()
+
+        self.assertIsNotNone(widget._controller._model._service._execution_service)
+
 
 if __name__ == "__main__":
     unittest.main()

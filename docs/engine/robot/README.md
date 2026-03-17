@@ -97,6 +97,31 @@ The factory:
 
 ---
 
+## Robot Availability States
+
+`RobotStateManager` publishes `RobotStateSnapshot` on `RobotTopics.STATE`.
+
+The important `snapshot.state` values are:
+
+| State | Meaning |
+|---|---|
+| `idle` | Robot transport is reachable and no higher-level fault is being reported |
+| `disconnected` | The underlying robot transport/bridge is unavailable |
+| `error` | State polling itself failed unexpectedly |
+
+For the ROS bridge driver:
+- [FairinoRos2Client](/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/fairino/fairino_ros2_client.py) no longer raises during startup when `http://localhost:5000` is unavailable
+- instead it reports `disconnected`
+- `RobotStateManager` publishes that state through the normal broker topic
+
+This means application startup can continue even when the bridge is down, and subscribers should treat `disconnected` as a first-class availability state, not as an exception path.
+
+`RobotStateSnapshot.extra` may include transport diagnostics such as:
+- `server_url`
+- `last_error`
+
+---
+
 ## Subpackage Documentation
 
 | Subpackage | Key Classes | Docs |
@@ -117,3 +142,4 @@ The factory:
 - **State monitoring runs in a daemon thread**: `RobotStateManager` polls the robot at 0.5s intervals. The thread is daemonized and doesn't block process exit.
 - **Position format**: All positions are `List[float]` with 6 elements: `[x, y, z, rx, ry, rz]` in mm and degrees.
 - **Return codes vs booleans**: `IRobot` methods return `int` (0 = success, SDK error code otherwise). `IMotionService` wraps these and returns `bool` (`True` = success). This distinction is maintained at the interface boundary.
+- **Bridge-down is not bootstrap-fatal**: for the ROS bridge transport, unavailable hardware should surface as `robot/state = disconnected`, allowing the rest of the platform to boot and show degraded availability.

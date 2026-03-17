@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import threading
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.i_process import IProcess
@@ -31,6 +31,7 @@ class ProcessSequence:
         self,
         processes: List[IProcess],
         messaging: IMessagingService,
+        before_next_start: Optional[Callable[[IProcess, IProcess], bool]] = None,
     ) -> None:
         if not processes:
             raise ValueError("ProcessSequence requires at least one process")
@@ -38,6 +39,7 @@ class ProcessSequence:
         self._messaging     = messaging
         self._current_index = 0
         self._current:      Optional[IProcess] = None
+        self._before_next_start = before_next_start
         self._lock          = threading.Lock()
         self._logger        = logging.getLogger(self.__class__.__name__)
 
@@ -102,6 +104,7 @@ class ProcessSequence:
             return
 
         with self._lock:
+            completed_process = self._current
             self._unsubscribe_current()
             next_index = self._current_index + 1
 
@@ -119,6 +122,18 @@ class ProcessSequence:
             "Sequence advancing [%d/%d] → '%s'",
             next_index + 1, len(self._processes), next_process.process_id,
         )
+        if self._before_next_start is not None:
+            try:
+                should_start = self._before_next_start(completed_process, next_process)
+            except Exception:
+                self._logger.exception("Sequence before_next_start hook failed")
+                return
+            if not should_start:
+                self._logger.warning(
+                    "Sequence before_next_start hook blocked '%s'",
+                    next_process.process_id,
+                )
+                return
         next_process.start()
 
     @property

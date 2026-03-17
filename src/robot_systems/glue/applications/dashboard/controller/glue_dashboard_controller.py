@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, List, Tuple
 
-from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThread, pyqtSignal
 
 from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.core.i_messaging_service import IMessagingService
@@ -32,6 +32,20 @@ class _DashboardBridge(QObject):
     camera_image    = pyqtSignal(object)    # ← add this
 
 
+class _Worker(QObject):
+    finished = pyqtSignal()
+
+    def __init__(self, fn):
+        super().__init__()
+        self._fn = fn
+
+    def run(self):
+        try:
+            self._fn()
+        finally:
+            self.finished.emit()
+
+
 
 
 class GlueDashboardController(IApplicationController):
@@ -46,6 +60,7 @@ class GlueDashboardController(IApplicationController):
         self._active        = False
         self._logger        = logging.getLogger(self.__class__.__name__)
         self._bridge        = _DashboardBridge()
+        self._workers: List[Tuple[QThread, _Worker]] = []
 
     def load(self) -> None:
         self._active = True
@@ -197,7 +212,7 @@ class GlueDashboardController(IApplicationController):
 
     def _on_start(self) -> None:
         if not self._active: return
-        self._model.start()
+        self._run_blocking(self._model.start)
 
     def _on_stop(self) -> None:
         if not self._active: return
@@ -256,6 +271,24 @@ class GlueDashboardController(IApplicationController):
             self._view.set_action_button_enabled("mode_toggle", cfg["mode_toggle"])
             self._view.set_action_button_enabled("clean", cfg["clean"])
             self._view.set_action_button_enabled("reset_errors", cfg["reset_errors"])
+
+    def _run_blocking(self, fn) -> None:
+        thread = QThread()
+        worker = _Worker(fn)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(lambda: self._release_worker(thread, worker))
+        self._workers.append((thread, worker))
+        thread.start()
+
+    def _release_worker(self, thread: QThread, worker: _Worker) -> None:
+        try:
+            self._workers.remove((thread, worker))
+        except ValueError:
+            pass
+        worker.deleteLater()
+        thread.deleteLater()
 
     # ── Initialize ────────────────────────────────────────────────────
 

@@ -62,6 +62,32 @@ class StubGlueProcessDriverService(IGlueProcessDriverService):
     def load_latest_job(self, spray_on: bool) -> None:
         return None
 
+    def prepare_and_load(self, spray_on: bool):
+        self._snapshot["process_state"] = "idle"
+        return {
+            "success": True,
+            "stage": "load",
+            "message": "stub loaded",
+            "matched_ids": ["stub-workpiece"],
+            "workpiece_count": 1,
+            "segment_count": 1,
+            "loaded": True,
+            "started": False,
+        }
+
+    def prepare_load_and_start(self, spray_on: bool):
+        self._snapshot["process_state"] = "running"
+        return {
+            "success": True,
+            "stage": "start",
+            "message": "stub started",
+            "matched_ids": ["stub-workpiece"],
+            "workpiece_count": 1,
+            "segment_count": 1,
+            "loaded": True,
+            "started": True,
+        }
+
     def get_process_snapshot(self):
         return dict(self._snapshot)
 

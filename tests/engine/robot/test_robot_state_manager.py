@@ -92,6 +92,25 @@ class TestRobotStateManager(unittest.TestCase):
         self.assertEqual(snap.acceleration, 5.0)
         self.assertEqual(snap.position, [1.0, 2.0, 3.0, 0.0, 0.0, 0.0])
 
+    def test_disconnected_robot_publishes_disconnected_state(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.get_connection_state.return_value = "disconnected"
+        robot.get_connection_details.return_value = {"state": "disconnected", "last_error": "bridge down"}
+        mgr = RobotStateManager(robot, publisher=publisher)
+        mgr._POLL_INTERVAL_S = 0.05
+
+        mgr.start_monitoring()
+        time.sleep(0.15)
+        mgr.stop_monitoring()
+
+        self.assertEqual(mgr.state, "disconnected")
+        publisher.publish.assert_called()
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertEqual(snapshot.state, "disconnected")
+        self.assertEqual(snapshot.extra["last_error"], "bridge down")
+        robot.get_current_position.assert_not_called()
+
     def test_poll_exception_does_not_stop_thread(self):
         robot = MagicMock()
         robot.get_current_position.side_effect = RuntimeError("connection lost")

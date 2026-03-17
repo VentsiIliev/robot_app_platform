@@ -28,6 +28,10 @@ class StateMachineSnapshot:
     last_state: Any = None
     last_next_state: Any = None
     last_error: Optional[str] = None
+    last_enter_duration_s: Optional[float] = None
+    last_handler_duration_s: Optional[float] = None
+    last_exit_duration_s: Optional[float] = None
+    last_step_duration_s: Optional[float] = None
 
 
 class StateRegistry:
@@ -64,6 +68,10 @@ class ExecutableStateMachine:
         self._last_state = None
         self._last_next_state = None
         self._last_error = None
+        self._last_enter_duration_s = None
+        self._last_handler_duration_s = None
+        self._last_exit_duration_s = None
+        self._last_step_duration_s = None
 
     @property
     def current_state(self):
@@ -76,6 +84,10 @@ class ExecutableStateMachine:
         self._last_state = None
         self._last_next_state = None
         self._last_error = None
+        self._last_enter_duration_s = None
+        self._last_handler_duration_s = None
+        self._last_exit_duration_s = None
+        self._last_step_duration_s = None
 
     def get_snapshot(self) -> StateMachineSnapshot:
         return StateMachineSnapshot(
@@ -86,6 +98,10 @@ class ExecutableStateMachine:
             last_state=self._last_state,
             last_next_state=self._last_next_state,
             last_error=self._last_error,
+            last_enter_duration_s=self._last_enter_duration_s,
+            last_handler_duration_s=self._last_handler_duration_s,
+            last_exit_duration_s=self._last_exit_duration_s,
+            last_step_duration_s=self._last_step_duration_s,
         )
 
     def stop_execution(self) -> None:
@@ -98,6 +114,11 @@ class ExecutableStateMachine:
         self._last_state = current_state
         self._last_next_state = None
         self._last_error = None
+        self._last_enter_duration_s = None
+        self._last_handler_duration_s = None
+        self._last_exit_duration_s = None
+        self._last_step_duration_s = None
+        step_started_at = time.perf_counter()
 
         state_obj = self._registry.get(current_state)
         if state_obj is None:
@@ -113,27 +134,38 @@ class ExecutableStateMachine:
                 _logger.warning("Failed to publish state change: %s", exc)
 
         if state_obj.on_enter:
+            enter_started_at = time.perf_counter()
             try:
                 state_obj.on_enter(self._context, current_state)
             except Exception as exc:
                 _logger.warning("on_enter error for %s: %s", current_state, exc)
+            finally:
+                self._last_enter_duration_s = time.perf_counter() - enter_started_at
 
+        handler_started_at = time.perf_counter()
         try:
             next_state = state_obj.handler(self._context)
         except Exception as exc:
+            self._last_handler_duration_s = time.perf_counter() - handler_started_at
+            self._last_step_duration_s = time.perf_counter() - step_started_at
             self._last_error = f"Unhandled error in state {current_state!r}: {exc}"
             _logger.error(self._last_error, exc_info=True)
             self._running = False
             return False
+        self._last_handler_duration_s = time.perf_counter() - handler_started_at
 
         if state_obj.on_exit:
+            exit_started_at = time.perf_counter()
             try:
                 state_obj.on_exit(self._context, current_state)
             except Exception as exc:
                 _logger.warning("on_exit error for %s: %s", current_state, exc)
+            finally:
+                self._last_exit_duration_s = time.perf_counter() - exit_started_at
 
         allowed = self._transition_rules.get(current_state, set())
         if next_state not in allowed:
+            self._last_step_duration_s = time.perf_counter() - step_started_at
             self._last_error = (
                 f"Invalid transition {current_state!r} -> {next_state!r} "
                 f"(allowed: {allowed!r})"
@@ -145,6 +177,16 @@ class ExecutableStateMachine:
         self._current_state = next_state
         self._last_next_state = next_state
         self._step_count += 1
+        self._last_step_duration_s = time.perf_counter() - step_started_at
+        _logger.debug(
+            "State %s timing: enter=%.4fs handler=%.4fs exit=%.4fs total=%.4fs next=%s",
+            getattr(current_state, "name", current_state),
+            self._last_enter_duration_s or 0.0,
+            self._last_handler_duration_s or 0.0,
+            self._last_exit_duration_s or 0.0,
+            self._last_step_duration_s or 0.0,
+            getattr(next_state, "name", next_state),
+        )
         return True
 
     def start_execution(self, delay: float = 0.0) -> None:

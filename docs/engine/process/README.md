@@ -15,7 +15,7 @@ The `process` package defines a **thread-safe, broker-integrated state machine**
 | `base_process.py` | `BaseProcess` | Thread-safe implementation with template hooks |
 | `executable_state_machine.py` | `ExecutableStateMachine` | Small handler-driven state machine used by long-running process internals such as glue dispensing |
 | `process_requirements.py` | `ProcessRequirements` | Declares which services must be available before a process can start |
-| `process_sequence.py` | `ProcessSequence` | Executes a list of `IProcess` objects in order, auto-advancing on each stop |
+| `process_sequence.py` | `ProcessSequence` | Executes a list of `IProcess` objects in order, auto-advancing on each stop, with an optional transition hook before the next process starts |
 
 ---
 
@@ -59,8 +59,13 @@ Important methods:
 - `last_state`
 - `last_next_state`
 - `last_error`
+- `last_enter_duration_s`
+- `last_handler_duration_s`
+- `last_exit_duration_s`
+- `last_step_duration_s`
 
 This makes it possible to build interactive debugging tools without forking the machine logic.
+Each `step()` also logs per-state timing at debug level, which is useful for finding slow handlers and segment-transition bottlenecks.
 
 ---
 
@@ -216,6 +221,24 @@ Subscriber (dashboard controller):
 
 ---
 
+## Interaction With Service Availability
+
+`BaseProcess` lifecycle state and `robot/state` are separate channels:
+
+- `process/.../state` describes process lifecycle: `idle`, `running`, `paused`, `stopped`, `error`
+- `robot/state` describes robot availability: for example `idle`, `disconnected`, `error`
+
+Subscribers should not assume these are the same state machine.
+
+Typical case:
+- the platform may be fully booted
+- a process may still be `idle`
+- while `robot/state` is `disconnected` because the ROS bridge or robot transport is unavailable
+
+UI/controllers should therefore handle `disconnected` explicitly instead of expecting robot unavailability to appear only as a thrown exception during startup.
+
+---
+
 ## Usage Example
 
 ```python
@@ -271,6 +294,7 @@ class ProcessSequence:
         self,
         processes: List[IProcess],   # must be non-empty
         messaging: IMessagingService,
+        before_next_start: Optional[Callable[[IProcess, IProcess], bool]] = None,
     ) -> None: ...
 
     def start(self)        -> None: ...   # fresh start, or resume if current is PAUSED
@@ -290,6 +314,7 @@ When processes[0] publishes ProcessStateEvent(state=STOPPED):
   → _on_current_stopped() fires
   → unsubscribes from processes[0] topic
   → subscribes to processes[1] topic
+  → optionally runs before_next_start(processes[0], processes[1])
   → processes[1].start()
   ... repeats until last process stops
 
@@ -326,6 +351,7 @@ from src.engine.process.process_sequence import ProcessSequence
 sequence = ProcessSequence(
     processes = [pick_and_place_process, glue_process],
     messaging = messaging_service,
+    before_next_start = prepare_glue_after_pick,   # optional transition hook
 )
 
 sequence.start()   # starts pick_and_place; when it stops, glue starts automatically
@@ -337,6 +363,7 @@ sequence.stop()    # stops current process; cancels pending auto-advance
 ### Design Notes
 
 - **Broker-driven chaining**: the advance is triggered by a published `ProcessStateEvent` — the same event that updates the dashboard. No polling or separate thread needed.
+- **Optional transition hook**: `before_next_start(current_process, next_process)` lets a caller prepare the next process before it is started. Returning `False` blocks the transition; raising logs and also blocks the next start.
 - **Bound method subscription**: `_on_current_stopped` is a bound method kept alive by `self`. No lambda risk. The subscription is unsubscribed before advancing to avoid double-firing.
 - **Thread-safe index management**: `_lock` guards `_current`, `_current_index`, and the subscribe/unsubscribe pair so concurrent stop/advance calls cannot corrupt state.
 - **`GlueOperationCoordinator` uses one sequence per mode**: `SPRAY_ONLY` → `[GlueProcess]`, `PICK_AND_SPRAY` → `[PickAndPlaceProcess, GlueProcess]`. Adding a mode means adding one entry to the sequences dict — no logic changes in the runner.

@@ -5,10 +5,11 @@ from src.robot_systems.glue.applications.glue_process_driver.service.i_glue_proc
 )
 
 class GlueProcessDriverService(IGlueProcessDriverService):
-    def __init__(self, matching_service, job_builder, glue_process) -> None:
+    def __init__(self, matching_service, job_builder, glue_process, execution_service=None) -> None:
         self._matching = matching_service
         self._job_builder = job_builder
         self._glue_process = glue_process
+        self._execution_service = execution_service
         self._latest_match_result = None
         self._latest_no_match_count = 0
         self._latest_matched = []
@@ -62,6 +63,16 @@ class GlueProcessDriverService(IGlueProcessDriverService):
             raise RuntimeError("No job available")
         process_paths = self._job_builder.to_process_paths(self._latest_job)
         self._glue_process.set_paths(process_paths, spray_on=spray_on)
+
+    def prepare_and_load(self, spray_on: bool):
+        if self._execution_service is None:
+            raise RuntimeError("Execution service is not configured")
+        return self._execution_service.prepare_and_load(spray_on=spray_on)
+
+    def prepare_load_and_start(self, spray_on: bool):
+        if self._execution_service is None:
+            raise RuntimeError("Execution service is not configured")
+        return self._execution_service.prepare_load_and_start(spray_on=spray_on)
 
     def get_latest_job(self):
         return self._latest_job

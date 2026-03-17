@@ -10,13 +10,35 @@ class FairinoRos2Client:
         self.server_url = server_url.rstrip('/')
         self.ip = ip or "ros2_bridge"
         self._last_execute_path_response = None
+        self._available = False
+        self._last_error = None
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
         health = self.health_check()
         logger.debug("health_check response: %s", health)
         if health.get("status") != "ok":
             logger.error("Bridge health check failed: %s", health)
-            raise ConnectionError(f"Could not connect to ROS2 bridge at {server_url}")
-        logger.info("Connected to ROS2 bridge at %s", server_url)
+            self._mark_unavailable(health.get("message") or f"Could not connect to ROS2 bridge at {server_url}")
+        else:
+            self._mark_available()
+            logger.info("Connected to ROS2 bridge at %s", server_url)
+
+    def _mark_available(self):
+        self._available = True
+        self._last_error = None
+
+    def _mark_unavailable(self, message):
+        self._available = False
+        self._last_error = str(message) if message else "unknown bridge error"
+
+    def get_connection_state(self):
+        return "idle" if self._available else "disconnected"
+
+    def get_connection_details(self):
+        return {
+            "server_url": self.server_url,
+            "state": self.get_connection_state(),
+            "last_error": self._last_error,
+        }
 
     # AFTER
     @staticmethod
@@ -31,9 +53,14 @@ class FairinoRos2Client:
             response = requests.get(f"{self.server_url}/health", timeout=2)
             data = response.json()
             logger.debug("health_check ← status=%s body=%s", response.status_code, data)
+            if data.get("status") == "ok":
+                self._mark_available()
+            else:
+                self._mark_unavailable(data.get("message") or data)
             return data
         except Exception as e:
             logger.warning("health_check error: %s", e)
+            self._mark_unavailable(e)
             return {"status": "error", "message": str(e)}
 
     # ============ Motion Commands ============
@@ -44,6 +71,7 @@ class FairinoRos2Client:
         try:
             response = requests.post(f"{self.server_url}/move/cartesian", json=payload, timeout=30)
             raw = response.json()
+            self._mark_available()
             result_code = self._parse_result(raw)
             logger.debug(
                 "move_cartesian ← http=%s raw=%s result_code=%s",
@@ -51,6 +79,7 @@ class FairinoRos2Client:
             )
             return result_code
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("move_cartesian error: %s", e, exc_info=True)
             return -1
 
@@ -67,6 +96,7 @@ class FairinoRos2Client:
         try:
             response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
             raw = response.json()
+            self._mark_available()
             result_code = self._parse_result(raw)
             logger.debug(
                 "move_liner ← http=%s raw=%s result_code=%s",
@@ -74,6 +104,7 @@ class FairinoRos2Client:
             )
             return result_code
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("move_liner error: %s", e, exc_info=True)
             return -1
 
@@ -85,6 +116,7 @@ class FairinoRos2Client:
         try:
             response = requests.post(f"{self.server_url}/execute/path", json=payload, timeout=120)
             raw = response.json()
+            self._mark_available()
             result_code = self._parse_result(raw)
             self._last_execute_path_response = {
                 "http_status": response.status_code,
@@ -100,6 +132,7 @@ class FairinoRos2Client:
             )
             return result_code
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("execute_path error: %s", e, exc_info=True)
             return -1
 
@@ -114,6 +147,7 @@ class FairinoRos2Client:
         try:
             response = requests.post(f"{self.server_url}/jog", json=payload, timeout=10)
             raw = response.json()
+            self._mark_available()
             result_code = self._parse_result(raw)
             logger.debug(
                 "start_jog ← http=%s raw=%s result_code=%s",
@@ -121,6 +155,7 @@ class FairinoRos2Client:
             )
             return result_code
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("start_jog error: %s", e, exc_info=True)
             return -1
 
@@ -130,6 +165,7 @@ class FairinoRos2Client:
         try:
             response = requests.post(f"{self.server_url}/stop", timeout=5)
             raw = response.json()
+            self._mark_available()
             result_code = 0 if raw.get("success") else -1
             logger.debug(
                 "stop_motion ← http=%s raw=%s result_code=%s",
@@ -137,6 +173,7 @@ class FairinoRos2Client:
             )
             return result_code
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
 
@@ -149,6 +186,7 @@ class FairinoRos2Client:
         try:
             response = requests.get(f"{self.server_url}/position/current", timeout=2)
             data = response.json()
+            self._mark_available()
             position = data.get("position")
             # logger.debug(
             #     "get_current_position ← http=%s raw=%s position=%s",
@@ -159,6 +197,7 @@ class FairinoRos2Client:
                 return None
             return position
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("get_current_position error: %s", e, exc_info=True)
             return None
 
@@ -172,9 +211,11 @@ class FairinoRos2Client:
         try:
             response = requests.get(f"{self.server_url}/status", timeout=2)
             data = response.json()
+            self._mark_available()
             logger.debug("get_status ← http=%s raw=%s", response.status_code, data)
             return data
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("get_status error: %s", e, exc_info=True)
             return None
 
@@ -183,6 +224,7 @@ class FairinoRos2Client:
         try:
             response = requests.get(f"{self.server_url}/velocity/current", timeout=2)
             data = response.json()
+            self._mark_available()
             velocity = data.get("velocity")
             # logger.debug(
             #     "get_current_velocity ← http=%s raw=%s velocity=%s",
@@ -192,6 +234,7 @@ class FairinoRos2Client:
                 return None
             return (0, velocity)
         except Exception as e:
+            self._mark_unavailable(e)
             logger.error("get_current_velocity error: %s", e, exc_info=True)
             return None
 

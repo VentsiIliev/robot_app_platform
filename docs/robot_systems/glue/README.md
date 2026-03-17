@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/` — Glue Robot Application
 
-`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It currently declares 17 applications, 12 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
+`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It currently declares 18 applications, 12 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
 
 ---
 
@@ -63,7 +63,7 @@ Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotS
 | Production | 1 | `GlueDashboard`, `WorkpieceEditor`, `WorkpieceLibrary` |
 | Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `CellSettings`, `CameraSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
 | Administration | 3 | `UserManagement` |
-| Tests | 4 | `BrokerDebug`, `ContourMatchingTester`, `HeightMeasuring`, `PickAndPlaceVisualizer`, `PickTarget` |
+| Tests | 4 | `BrokerDebug`, `ContourMatchingTester`, `GlueProcessDriver`, `HeightMeasuring`, `PickAndPlaceVisualizer`, `PickTarget` |
 
 ### Application Factory Functions
 
@@ -86,6 +86,7 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `HeightMeasuring` | `_build_height_measuring_application` | `HeightMeasuringApplicationService(height_measuring, calibration, vision)` |
 | `PickAndPlaceVisualizer` | `_build_pick_and_place_visualizer` | `PickAndPlaceVisualizerService(coordinator)` |
 | `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, settings, workpieces)` |
+| `GlueProcessDriver` | `_build_glue_process_driver_application` | `GlueProcessDriverService(GlueProcess, MatchingService, GlueJobBuilderService, GlueJobExecutionService)` |
 | `BrokerDebug` | `_build_broker_debug_application` | `BrokerDebugApplicationService(messaging)` |
 | `UserManagement` | `_build_user_management_application` | `UserManagementApplicationService(CsvUserRepository)` |
 
@@ -139,6 +140,46 @@ def on_stop(self) -> None:
 | `PickAndPlaceProcess` | `ROBOT`, `VISION` |
 | `CleanProcess` | `ROBOT` |
 | `RobotCalibrationProcess` | `ROBOT`, `VISION` |
+
+The coordinator owns the runtime mode selection:
+- `SPRAY_ONLY`
+- `PICK_AND_SPRAY`
+
+`GlueRobotSystem` also builds a reusable `GlueJobExecutionService` during coordinator setup. That service encapsulates:
+
+1. move the robot to the `CALIBRATION` position using the vision capture offset
+2. wait briefly for the camera/scene to stabilize
+3. capture latest contours
+4. run contour matching
+5. build the glue job from matched workpieces
+6. load the job into `GlueProcess`
+7. optionally start `GlueProcess`
+
+It is reused in two places:
+- dashboard `SPRAY_ONLY` start
+- `PICK_AND_SPRAY` handoff after pick-and-place finishes
+
+### `SPRAY_ONLY`
+
+In dashboard spray-only mode, pressing Start still goes through `GlueOperationCoordinator.start()`. The coordinator reads `GlueSettings.spray_on` from `SettingsID.GLUE_SETTINGS`, passes that value into `GlueJobExecutionService.prepare_and_load(...)`, and starts the spray sequence only if preparation succeeds.
+
+### `PICK_AND_SPRAY`
+
+In pick-and-spray mode, the coordinator still owns the sequence:
+
+1. `PickAndPlaceProcess` starts
+2. when it stops, the `ProcessSequence.before_next_start(...)` hook runs
+3. the hook reads `GlueSettings.spray_on` from `SettingsID.GLUE_SETTINGS`
+4. the hook calls `GlueJobExecutionService.prepare_and_load(spray_on=<configured value>)`
+5. `GlueProcess` starts only if preparation succeeds
+
+If preparation fails, the transition is blocked and the glue process is marked with an error message.
+
+The mandatory capture-position step is shared by all callers of `GlueJobExecutionService`, so the behavior is the same whether glue is started from the dashboard, from the glue driver backend, or from the pick-and-spray sequence.
+
+The preparation phase is also cancellable. If the operator presses Stop while glue is still moving to the capture position, stabilizing, matching, building, or loading, the coordinator cancels the pending preparation and the robot stop command is issued before glue starts.
+
+The spray-enable behavior for this automated path is not hardcoded. It comes from `GlueSettings.spray_on` in `src/robot_systems/glue/storage/settings/glue/settings.json`, accessed through the shared settings service.
 
 ---
 

@@ -5,7 +5,9 @@ from typing import Dict, Optional
 
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.process_sequence import ProcessSequence
+from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.settings_ids import SettingsID
 from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
@@ -28,19 +30,30 @@ class GlueOperationCoordinator:
         clean_process:          CleanProcess,
         calibration_process:    RobotCalibrationProcess,
         messaging:              IMessagingService,
+        execution_service=None,
+        settings_service:       ISettingsService | None = None,
     ) -> None:
+        self._glue_process = glue_process
+        self._pick_and_place_process = pick_and_place_process
         self._sequences: Dict[GlueOperationMode, ProcessSequence] = {
-            GlueOperationMode.SPRAY_ONLY:     ProcessSequence([glue_process],                         messaging),
-            GlueOperationMode.PICK_AND_SPRAY: ProcessSequence([pick_and_place_process, glue_process], messaging),
+            GlueOperationMode.SPRAY_ONLY:     ProcessSequence([glue_process], messaging),
+            GlueOperationMode.PICK_AND_SPRAY: ProcessSequence(
+                [pick_and_place_process, glue_process],
+                messaging,
+                before_next_start=self._prepare_glue_after_pick,
+            ),
         }
         self._clean_sequence       = ProcessSequence([clean_process], messaging)
         self._calibration_process  = calibration_process
         self._messaging            = messaging
+        self._execution_service    = execution_service
+        self._settings_service     = settings_service
         self._mode                 = GlueOperationMode.SPRAY_ONLY
         self._active_sequence: Optional[ProcessSequence] = None
         self._active_process:  Optional[IProcess]        = None
         self._lock             = threading.Lock()
         self._logger           = logging.getLogger(self.__class__.__name__)
+        self._preparing_glue   = False
 
     @property
     def _active(self) -> Optional[ProcessSequence]:
@@ -48,11 +61,11 @@ class GlueOperationCoordinator:
 
     @property
     def pick_and_place_process(self) -> PickAndPlaceProcess:
-        return self._sequences[GlueOperationMode.PICK_AND_SPRAY]._processes[0]
+        return self._pick_and_place_process
 
     @property
     def glue_process(self) -> GlueProcess:
-        return self._sequences[GlueOperationMode.SPRAY_ONLY]._processes[0]
+        return self._glue_process
 
 
     def _any_running(self) -> bool:
@@ -63,6 +76,13 @@ class GlueOperationCoordinator:
         ):
             return True
         return False
+
+    def _get_configured_spray_on(self) -> bool:
+        if self._settings_service is None:
+            return True
+
+        settings = self._settings_service.get(SettingsID.GLUE_SETTINGS)
+        return bool(getattr(settings, "spray_on", True))
 
     def _reject_if_busy(self, requester: str) -> bool:
         if self._any_running():
@@ -81,13 +101,51 @@ class GlueOperationCoordinator:
 
     def start(self) -> None:
         with self._lock:
-            self._active_sequence = self._sequences[self._mode]
-            sequence = self._active_sequence
+            mode = self._mode
+            sequence = self._sequences[mode]
+            active_sequence = self._active_sequence
+
+        should_prepare = (
+            mode == GlueOperationMode.SPRAY_ONLY
+            and self._execution_service is not None
+            and active_sequence is not sequence
+        )
+
+        if should_prepare:
+            with self._lock:
+                self._preparing_glue = True
+            try:
+                result = self._execution_service.prepare_and_load(
+                    spray_on=self._get_configured_spray_on()
+                )
+            finally:
+                with self._lock:
+                    self._preparing_glue = False
+            if not result.success:
+                self._messaging.publish(
+                    ProcessTopics.busy(ProcessID.COORDINATOR),
+                    ProcessBusyEvent(
+                        requested_by=ProcessID.GLUE,
+                        message=f"Glue spray-only start failed at {result.stage}: {result.message}",
+                    ),
+                )
+                self._logger.error(
+                    "Glue spray-only start failed at %s: %s",
+                    result.stage,
+                    result.message,
+                )
+                return
+
+        with self._lock:
+            self._active_sequence = sequence
         sequence.start()
 
     def stop(self) -> None:
         with self._lock:
             sequence = self._active_sequence
+            preparing_glue = self._preparing_glue
+        if preparing_glue and self._execution_service is not None:
+            self._execution_service.cancel_pending()
         if sequence is not None:
             sequence.stop()
 
@@ -126,6 +184,36 @@ class GlueOperationCoordinator:
     def set_mode(self, mode: GlueOperationMode) -> None:
         with self._lock:
             self._mode = mode
+
+    def get_mode(self) -> GlueOperationMode:
+        with self._lock:
+            return self._mode
+
+    def _prepare_glue_after_pick(self, current_process: IProcess, next_process: IProcess) -> bool:
+        if (
+            self._execution_service is None
+            or current_process is not self.pick_and_place_process
+            or next_process is not self.glue_process
+        ):
+            return True
+
+        with self._lock:
+            self._preparing_glue = True
+        try:
+            result = self._execution_service.prepare_and_load(
+                spray_on=self._get_configured_spray_on()
+            )
+        finally:
+            with self._lock:
+                self._preparing_glue = False
+        if result.success:
+            return True
+
+        message = f"Glue preparation failed at {result.stage}: {result.message}"
+        if hasattr(self.glue_process, "set_error"):
+            self.glue_process.set_error(message)
+        self._logger.error(message)
+        return False
 
     # ── Standalone single-process operations ──────────────────────────
 

@@ -202,7 +202,13 @@ class GlueProcessDriverView(IApplicationView):
         super().changeEvent(event)
 
     def clean_up(self) -> None:
-        pass
+        controller = getattr(self, "_controller", None)
+        if controller is None:
+            return
+        try:
+            controller.stop()
+        except Exception:
+            pass
 
     def _format_workpiece_label(self, index: int, workpiece) -> str:
         if isinstance(workpiece, dict):

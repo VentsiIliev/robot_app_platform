@@ -25,6 +25,7 @@ class GlueProcessDriverController(IApplicationController):
         self._view = view
         self._broker = broker
         self._subs = []
+        self._active = True
         self._logger = logging.getLogger(self.__class__.__name__)
         self._bridge = _DriverBridge()
 
@@ -39,59 +40,86 @@ class GlueProcessDriverController(IApplicationController):
         view.stop_requested.connect(self._on_stop)
         view.reset_errors_requested.connect(self._on_reset_errors)
         view.refresh_requested.connect(self._on_refresh)
-        view.destroyed.connect(self.stop)
-        self._bridge.process_snapshot_updated.connect(self._view.set_process_snapshot)
+        view.destroyed.connect(self._on_view_destroyed)
+        self._bridge.process_snapshot_updated.connect(self._safe_set_process_snapshot)
 
     def load(self) -> None:
         snapshot = self._model.load()
-        self._view.set_process_snapshot(snapshot)
-        self._view.set_manual_mode_enabled(bool(snapshot.get("manual_mode")))
+        self._safe_set_process_snapshot(snapshot)
+        if self._view_ok():
+            self._view.set_manual_mode_enabled(bool(snapshot.get("manual_mode")))
         self._subscribe()
 
     def stop(self) -> None:
+        if not self._active and not self._subs:
+            return
+        self._active = False
         for topic, callback in reversed(self._subs):
             try:
-                self._broker.unsubscribe(topic, callback)
+                if self._broker is not None:
+                    self._broker.unsubscribe(topic, callback)
             except Exception:
                 pass
         self._subs.clear()
 
     def _on_capture_and_match(self) -> None:
+        if not self._active:
+            return
         self._model.capture_and_match()
         self._view.set_match_summary(self._model.get_match_summary())
         self._view.set_matched_workpieces(self._model.get_latest_matched_workpieces())
 
     def _on_build_job(self) -> None:
+        if not self._active:
+            return
         self._model.build_job(selected_indexes=self._view.get_selected_match_indexes())
         self._view.set_job_summary(self._model.get_latest_job_summary())
 
     def _on_load_job(self, spray_on: bool) -> None:
+        if not self._active:
+            return
         self._model.load_job(spray_on=spray_on)
 
     def _on_manual_mode_toggled(self, enabled: bool) -> None:
+        if not self._active:
+            return
         self._model.set_manual_mode(enabled)
-        self._view.set_process_snapshot(self._model.get_process_snapshot())
+        self._safe_set_process_snapshot(self._model.get_process_snapshot())
 
     def _on_step(self) -> None:
-        self._view.set_process_snapshot(self._model.step_once())
+        if not self._active:
+            return
+        self._safe_set_process_snapshot(self._model.step_once())
 
     def _on_start(self) -> None:
+        if not self._active:
+            return
         self._model.start()
 
     def _on_pause(self) -> None:
+        if not self._active:
+            return
         self._model.pause()
 
     def _on_resume(self) -> None:
+        if not self._active:
+            return
         self._model.resume()
 
     def _on_stop(self) -> None:
+        if not self._active:
+            return
         self._model.stop()
 
     def _on_reset_errors(self) -> None:
+        if not self._active:
+            return
         self._model.reset_errors()
 
     def _on_refresh(self) -> None:
-        self._view.set_process_snapshot(self._model.refresh_process_snapshot())
+        if not self._active:
+            return
+        self._safe_set_process_snapshot(self._model.refresh_process_snapshot())
 
     def _subscribe(self) -> None:
         if self._broker is None:
@@ -106,7 +134,28 @@ class GlueProcessDriverController(IApplicationController):
         self._subs.append((topic, callback))
 
     def _on_process_state_event(self, _event) -> None:
+        if not self._active:
+            return
         self._bridge.process_snapshot_updated.emit(self._model.refresh_process_snapshot())
 
     def _on_diagnostics(self, snapshot: dict) -> None:
+        if not self._active:
+            return
         self._bridge.process_snapshot_updated.emit(snapshot)
+
+    def _on_view_destroyed(self, *_args) -> None:
+        self.stop()
+
+    def _view_ok(self) -> bool:
+        if not self._active:
+            return False
+        try:
+            self._view.objectName()
+            return True
+        except RuntimeError:
+            return False
+
+    def _safe_set_process_snapshot(self, snapshot: dict) -> None:
+        if not self._view_ok():
+            return
+        self._view.set_process_snapshot(snapshot)

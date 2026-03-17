@@ -7,7 +7,7 @@ The Glue Dashboard is the production-mode GUI for the glue dispensing applicatio
 ## Architecture
 
 ```
-GlueDashboard.create(service, messaging_service)
+GlueDashboard.create(service, messaging_service, execution_service=None)
   ├─ GlueDashboardConfig   ← cells count, dashboard layout
   ├─ GlueDashboardModel    ← IApplicationModel facade over IGlueDashboardService
   ├─ GlueCardFactory       ← builds GlueMeterCard per cell
@@ -23,9 +23,9 @@ GlueDashboard.create(service, messaging_service)
 
 | Class | File | Role |
 |-------|------|------|
-| `GlueDashboard` | `glue_dashboard.py` | Static factory: `create(service, messaging_service) → QWidget` |
+| `GlueDashboard` | `glue_dashboard.py` | Static factory: `create(coordinator, settings_service, messaging_service, ..., execution_service=None) → QWidget` |
 | `IGlueDashboardService` | `service/i_glue_dashboard_service.py` | ABC: 7 commands + 5 queries |
-| `GlueDashboardService` | `service/glue_dashboard_service.py` | Wraps `IRobotService` + `ISettingsService` + `IWeightCellService` |
+| `GlueDashboardService` | `service/glue_dashboard_service.py` | Wraps `GlueOperationCoordinator`, settings, optional weight service, and the reusable glue execution service |
 | `StubGlueDashboardService` | `service/stub_glue_dashboard_service.py` | Stub for development |
 | `GlueDashboardModel` | `model/glue_dashboard_model.py` | Thin `IApplicationModel` facade — no state, delegates to service |
 | `GlueDashboardView` | `view/glue_dashboard_view.py` | Main widget with card grid + control row |
@@ -75,7 +75,7 @@ Keys are `ProcessState.*.value` strings (`"idle"`, `"running"`, etc.). `_apply_b
 ### Startup
 
 ```
-GlueDashboard.create(service, messaging_service)
+GlueDashboard.create(service, messaging_service, execution_service)
   → cells_count = service.get_cells_count()
   → config.GLUE_CELLS = [CardConfig(card_id=i+1) for i in range(cells_count)]
   → model = GlueDashboardModel(service, GlueDashboardConfig())
@@ -103,11 +103,26 @@ WeightCellService daemon thread
 User clicks Start
   → GlueDashboardView.start_requested.emit()
   → GlueDashboardController._on_start()
-  → model.start() → GlueDashboardService.start() (implements BaseProcess)
-  → BaseProcess._transition(RUNNING, _on_start)
-  → messaging.publish("process/glue/state", ProcessStateEvent(state=RUNNING))
-  → GlueDashboardController._on_process_state_str("running")
-  → _apply_button_state("running")
+  → run model.start() on a worker thread
+  → GlueDashboardService.start()
+
+SPRAY_ONLY mode:
+  → GlueOperationCoordinator.start()
+  → read GlueSettings.spray_on from SettingsID.GLUE_SETTINGS
+  → GlueJobExecutionService.prepare_and_load(spray_on=<configured value>)
+  → move robot to CALIBRATION with capture offset
+  → wait for camera stabilization
+  → capture latest contours
+  → run matching
+  → build job from matched workpieces
+  → load GlueProcess
+  → ProcessSequence starts GlueProcess
+
+PICK_AND_SPRAY mode:
+  → GlueOperationCoordinator.start()
+  → ProcessSequence starts PickAndPlaceProcess
+  → when pick-and-place stops, the sequence transition hook prepares and loads glue
+  → GlueProcess starts only if that preparation succeeds
 ```
 
 ---
@@ -121,6 +136,7 @@ User clicks Start
 | `glue/cell/{card_id}/glue_type` | `str` | `set_cell_glue_type(card_id, glue_type)` |
 | `robot/state` | `RobotStateSnapshot` | `_apply_button_state` (only when process is IDLE) |
 | `process/glue/state` | `ProcessStateEvent` | `_apply_button_state(event.state.value)` |
+| `process/coordinator/busy` | `ProcessBusyEvent` | `set_service_warning(message)` |
 
 Note: broker `card_id = cell_id + 1` (cards are 1-indexed, cells 0-indexed).
 
@@ -151,5 +167,11 @@ GlueMeterCard.change_glue_requested.emit(card_id)
 - **`GlueDashboard.create()` is not a `ApplicationFactory` subclass**: The dashboard requires cell count at build time (to construct the right number of cards), which `ApplicationFactory._create_view()` can't easily support. The static `create()` method replicates the GC fix (`view._controller = controller`) manually.
 - **`_view_ok()` guard**: The controller checks both `self._active` and tests the C++ pointer validity via `self._view.isVisible()`. This prevents crashes when the view is destroyed before all broker callbacks complete.
 - **`MODE_TOGGLE_LABELS`**: `("Pick And Spray", "Spray Only")` — toggled by index. State managed in `_mode_index`.
+- **Background Start action**: The dashboard controller dispatches Start on a worker thread so the camera view and other live UI updates remain responsive while the robot moves to the capture position and preparation runs.
+- **Automated glue-only start**: In `SPRAY_ONLY`, the coordinator performs the reusable glue preparation flow before starting the glue sequence, instead of starting glue immediately with preloaded paths.
+- **Mandatory capture positioning**: The shared execution service first moves the robot to the calibration capture pose with the vision capture offset, then waits briefly before matching. If that move fails, the glue flow stops at the `positioning` stage and nothing is matched or loaded.
+- **Cancellable pre-start preparation**: If the operator presses Stop during capture positioning, stabilization, matching, build, or load, the pending glue preparation is cancelled and `robot.stop_motion()` is issued before glue starts.
+- **Settings-driven spray flag**: The automated dashboard path does not hardcode spray enable. The coordinator reads `GlueSettings.spray_on` from the shared settings service and passes that configured value into the execution service.
+- **Operator failure feedback**: If automated glue-only preparation fails, `GlueDashboardService` publishes a coordinator busy/warning event with the failure stage and message so the controller surfaces it in the system status widget.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)

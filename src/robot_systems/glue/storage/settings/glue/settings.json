@@ -17,5 +17,5 @@
   "forward_ramp_steps": 1,
   "reverse_ramp_steps": 1,
   "initial_ramp_speed_duration": 1.0,
-  "spray_on": true
+  "spray_on": false
 }

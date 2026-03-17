@@ -140,7 +140,7 @@ class GlueProcess(BaseProcess):
             self._worker_thread = None
         else:
             self._worker_thread = threading.Thread(
-                target=machine.start_execution,
+                target=self._run_machine_until_completion,
                 daemon=True,
                 name="GlueDispensingMachine",
             )
@@ -215,3 +215,27 @@ class GlueProcess(BaseProcess):
         except Exception:
             self._logger.exception("Failed to publish glue diagnostics")
         return snapshot
+
+    def _run_machine_until_completion(self) -> None:
+        machine = self._machine
+        if machine is None:
+            return
+
+        machine.start_execution()
+
+        with self._lock:
+            self._worker_thread = None
+
+            if self._state != ProcessState.RUNNING:
+                self._publish_diagnostics()
+                return
+
+            snapshot = machine.get_snapshot()
+            current_state = getattr(snapshot.current_state, "name", snapshot.current_state)
+
+            if current_state == "IDLE" and snapshot.last_error is None:
+                self._transition(ProcessState.STOPPED, self._on_stop)
+            elif snapshot.last_error is not None:
+                self.set_error(snapshot.last_error)
+            else:
+                self._publish_diagnostics()

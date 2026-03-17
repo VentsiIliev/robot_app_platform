@@ -1,5 +1,23 @@
 # Role-Based Authorization — Design Plan
 
+## Implementation Status
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | `IAuthenticatedUser` — engine-level user base interface | ✅ Done |
+| 2 | `IPermissionsRepository` + `PermissionsRepository` | ✅ Done |
+| 3 | `IAuthorizationService` + `IPermissionsAdminService` + `AuthorizationService` | ✅ Done |
+| 4 | `IAuthenticationService` + `AuthenticatedUser` adapter + `AuthenticationService` | ✅ Done |
+| 5 | Add `app_id` to `ApplicationSpec` | ✅ Done |
+| 6 | `ISessionService` + `UserSession` | ✅ Done |
+| 7 | Permissions migration (`ensure_permissions_current`) | ✅ Done |
+| 8a | `ILoginApplicationService` + `LoginApplicationService` + `StubLoginApplicationService` | ✅ Done |
+| 8b | `LoginWindow` — MVC login application (`LoginModel`, `LoginView`, `LoginController`, `LoginFactory`) | ✅ Done |
+| 9 | Permissions editor in `UserManagement` (`PermissionsModel`, `PermissionsController`, `PermissionsView`, factory wiring) | ✅ Done |
+| 10 | Filter specs at startup in `main.py` | ⬜ Pending |
+
+---
+
 ## Context
 
 The platform already has a `Role` enum (`ADMIN`, `OPERATOR`, `VIEWER`) and a `UserManagement` application backed by a CSV repository. What's missing is:
@@ -9,13 +27,14 @@ The platform already has a `Role` enum (`ADMIN`, `OPERATOR`, `VIEWER`) and a `Us
 
 `pl_gui/` is treated as read-only, so **all filtering must happen before `AppShell` receives its descriptor list**. `AppShell.create_folders_page()` already drops any folder whose `filtered_apps` list is empty — so filtering at the descriptor level automatically hides empty folders too.
 
-**Three resolved design decisions:**
+**Four resolved design decisions:**
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| First-run bootstrap | **"Create first admin" wizard** — no default credentials | A default `admin/admin` is a known attack vector; forcing the operator to set their own password on first boot is safer and more explicit |
+| First-run bootstrap | **"Create first admin" wizard — no default credentials** | A default `admin/admin` is a known attack vector; forcing the operator to set their own password on first boot is safer and more explicit |
 | Role serialization | **`Role.value` strings** (`"Admin"`, `"Operator"`, `"Viewer"`) everywhere | Consistent with the existing `User.to_dict()` / `User.from_dict()` pattern already in the codebase |
 | Permission keys | **`app_id: str` field on `ApplicationSpec`** (stable snake_case) | Decouples the display `name` from the storage key — renaming a display name won't silently break `permissions.json` |
+| Engine/app boundary | **`IAuthenticatedUser` at engine level** | Engine services (`IAuthenticationService`, `ISessionService`, `IAuthorizationService`) operate on this interface; application-level `User` implements it. No upward imports from engine into applications. |
 
 ---
 
@@ -25,39 +44,52 @@ The platform already has a `Role` enum (`ADMIN`, `OPERATOR`, `VIEWER`) and a `Us
 LoginWindow (QDialog)
        │ credentials / QR scan
        ↓
-IAuthenticationService               ← "who are you?"
-  └─ AuthenticationService
-       │ returns Optional[User]
+ILoginApplicationService              ← application-level service boundary
+  └─ LoginApplicationService
+       │ delegates auth ──────────→  IAuthenticationService
+       │                               └─ AuthenticationService   (robot-system level)
+       │                                    └─ IUserRepository     (app-level interface)
+       │                                         └─ CsvUserRepository
+       │ robot positioning ────────→  IRobotService
+       │ QR scanning ──────────────→  ICameraService
        ↓
-UserSession (singleton)              ← holds current User + Role
+ISessionService                       ← holds current IAuthenticatedUser
+  └─ UserSession (singleton)
        │
        ↓
-IAuthorizationService                ← "what can you do?"
-  └─ AuthorizationService
-       │ asks PermissionsRepository
-       ↓
-PermissionsRepository (JSON)         ← maps app_id → [Role.value strings], admin-editable
+IAuthorizationService                 ← read-only: get_visible_apps, can_access
+IPermissionsAdminService              ← extends with get_all_permissions, set_permissions
+  └─ AuthorizationService             (engine level — depends only on IPermissionsRepository)
+       └─ IPermissionsRepository      ← engine-level interface
+            └─ PermissionsRepository  (robot-system level — JSON-backed)
        │
        ↓
-main.py filter                       ← visible_specs = authz.get_visible_apps(role, all_specs)
+main.py filter                        ← visible_specs = authz.get_visible_apps(user, all_specs)
        ↓
-AppShell                             ← receives pre-filtered descriptors (no changes needed)
+AppShell                              ← receives pre-filtered descriptors (no changes needed)
 ```
 
 **Authentication** answers: *"Are these credentials valid? Who is this user?"*
 **Authorization** answers: *"Given this user's role, which apps are they allowed to see?"*
 They are intentionally separate services with separate interfaces.
 
+**Layer placement:**
+- `IAuthenticatedUser`, `IAuthenticationService`, `IAuthorizationService`, `IPermissionsAdminService`, `IPermissionsRepository`, `ISessionService` → `src/engine/auth/` (Platform — Level 1)
+- `AuthorizationService`, `UserSession` → `src/engine/auth/` (engine-level concrete, depends only on engine interfaces)
+- `AuthenticationService`, `PermissionsRepository` → `src/robot_systems/glue/` (RobotSystem — Level 2, may import from applications)
+- `ILoginApplicationService`, `LoginApplicationService`, `LoginWindow` → `src/applications/login/` (Application — Level 3)
+
 ---
 
 ## Storage: `permissions.json`
 
-**Path:** `src/robot_systems/glue/storage/settings/permissions.json`
+**Path:** `<runtime_storage>/glue/settings/permissions.json`
+(same runtime storage root used by all other settings files — not the `src/` tree)
 
 Keys are `app_id` values (stable snake_case, never change even if display name changes).
 Values are arrays of `Role.value` strings — consistent with how roles are stored in `users.csv`.
 
-Default content (generated on first run if missing, defaulting to Admin-only for safety):
+Default content (written on first run if missing, defaulting to Admin-only for safety):
 
 ```json
 {
@@ -87,74 +119,136 @@ Any `app_id` not listed defaults to `["Admin"]` — safe fallback.
 
 ## Implementation Steps
 
-### Step 1 — `IAuthenticationService` + `AuthenticationService`
+### Step 1 — `IAuthenticatedUser`
 
-**New files:**
-- `src/engine/auth/i_authentication_service.py`
-- `src/engine/auth/authentication_service.py`
+**New file:** `src/engine/auth/i_authenticated_user.py`
 
 ```python
-class IAuthenticationService(ABC):
-
+class IAuthenticatedUser(ABC):
+    @property
     @abstractmethod
-    def authenticate(self, user_id: str, password: str) -> Optional[User]:
-        """Verify credentials. Returns User on success, None on failure."""
+    def user_id(self) -> str:
+        """Stable identifier for this user."""
 
+    @property
     @abstractmethod
-    def authenticate_qr(self, qr_payload: str) -> Optional[User]:
-        """Decode a QR payload and verify the embedded credentials."""
-
-    @abstractmethod
-    def record_failed_attempt(self, user_id: str) -> None:
-        """Increment failed login counter — used for throttling."""
-
-    @abstractmethod
-    def is_locked_out(self, user_id: str) -> bool:
-        """Returns True if the account is temporarily locked."""
+    def role(self) -> Enum:
+        """The user's role. Compared via .value — no concrete Role type assumed."""
 ```
 
-`AuthenticationService` implements this against `CsvUserRepository` + bcrypt password check.
-It owns the lockout counter (in-memory dict or persisted CSV column).
-
-**Stub:** `StubAuthenticationService` — accepts any credentials, returns a fixed `User`.
-Used in tests and standalone runners.
+**Why:** Engine-level services must not import `User` or `Role` from the application layer.
+All engine interfaces (`IAuthenticationService`, `ISessionService`, `IAuthorizationService`) operate exclusively on `IAuthenticatedUser`. The application-level `User` class implements this interface by adding `(IAuthenticatedUser)` as a base and exposing `user_id = property(lambda self: str(self.id))`.
 
 ---
 
-### Step 2 — `IAuthorizationService` + `AuthorizationService`
+### Step 2 — `IPermissionsRepository` + `PermissionsRepository`
+
+**New files:**
+- `src/engine/auth/i_permissions_repository.py` — engine-level interface
+- `src/robot_systems/glue/domain/permissions/permissions_repository.py` — concrete implementation
+
+```python
+# src/engine/auth/i_permissions_repository.py
+class IPermissionsRepository(ABC):
+
+    @abstractmethod
+    def get_allowed_role_values(self, app_id: str) -> List[str]:
+        """Returns role value strings for this app_id. Defaults to ['Admin'] if missing."""
+
+    @abstractmethod
+    def set_allowed_role_values(self, app_id: str, role_values: List[str]) -> None:
+        """Persists immediately. Caller is responsible for enforcing Admin invariant."""
+
+    @abstractmethod
+    def get_all(self) -> Dict[str, List[str]]:
+        """Full mapping keyed by app_id — used by the admin permissions editor."""
+```
+
+`PermissionsRepository` (robot-system level) implements this interface against a JSON file.
+It works exclusively with `str` values — it never imports `Role`. Serialization and deserialization
+use plain strings matching `Role.value` (`"Admin"`, `"Operator"`, `"Viewer"`).
+
+**Why:** `AuthorizationService` lives at the engine level and must not depend on a robot-system
+concrete class. DIP — depend on the abstraction, not the implementation.
+
+---
+
+### Step 3 — `IAuthorizationService` + `IPermissionsAdminService` + `AuthorizationService`
 
 **New files:**
 - `src/engine/auth/i_authorization_service.py`
 - `src/engine/auth/authorization_service.py`
 
 ```python
+# Read-only interface — used by main.py and any runtime guard
 class IAuthorizationService(ABC):
 
     @abstractmethod
-    def get_visible_apps(self, role: Role, all_specs: List[ApplicationSpec]) -> List[ApplicationSpec]:
-        """Filter specs to only those the given role may access."""
+    def get_visible_apps(self, user: IAuthenticatedUser, all_specs: List[ApplicationSpec]) -> List[ApplicationSpec]:
+        """Filter specs to only those the given user's role may access."""
 
     @abstractmethod
-    def can_access(self, role: Role, app_id: str) -> bool:
+    def can_access(self, user: IAuthenticatedUser, app_id: str) -> bool:
         """Single app check by stable app_id — used for runtime guards."""
 
-    @abstractmethod
-    def get_all_permissions(self) -> Dict[str, List[Role]]:
-        """Full map keyed by app_id — used by the admin permissions editor UI."""
+
+# Extends with admin write operations — used only by the permissions editor
+class IPermissionsAdminService(IAuthorizationService):
 
     @abstractmethod
-    def set_permissions(self, app_id: str, roles: List[Role]) -> None:
-        """Admin updates role access for an app_id. Persisted immediately."""
+    def get_all_permissions(self) -> Dict[str, List[str]]:
+        """Full map keyed by app_id with role value strings — used by the permissions editor UI."""
+
+    @abstractmethod
+    def set_permissions(self, app_id: str, role_values: List[str]) -> None:
+        """Admin updates role access for an app_id. Persisted immediately.
+        Enforces invariant: 'user_management' always retains 'Admin'."""
 ```
 
-`AuthorizationService` implements this against `PermissionsRepository`.
-Enforces the invariant: `UserManagement` always includes `Role.ADMIN`.
+`AuthorizationService` implements `IPermissionsAdminService` (which extends `IAuthorizationService`).
+Comparison inside is done on `user.role.value` — no import of `Role` needed.
 
-**Stub:** `StubAuthorizationService` — returns all specs visible, `can_access` always `True`.
+**Caller access levels:**
+- `main.py` holds `IAuthorizationService` — read-only, cannot call `set_permissions`
+- Permissions editor model holds `IPermissionsAdminService` — full access
+
+**Stub:** `StubAuthorizationService(IAuthorizationService)` — `get_visible_apps` returns all specs, `can_access` always `True`. Used in tests and standalone runners.
 
 ---
 
-### Step 3 — Add `app_id` to `ApplicationSpec`
+### Step 4 — `IAuthenticationService` + `AuthenticationService`
+
+**New files:**
+- `src/engine/auth/i_authentication_service.py` — engine-level interface
+- `src/robot_systems/glue/domain/auth/authentication_service.py` — concrete implementation
+
+```python
+# src/engine/auth/i_authentication_service.py
+class IAuthenticationService(ABC):
+
+    @abstractmethod
+    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]:
+        """Verify credentials. Returns IAuthenticatedUser on success, None on failure."""
+
+    @abstractmethod
+    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]:
+        """Decode a QR payload and verify the embedded credentials."""
+```
+
+Lockout tracking (`record_failed_attempt`, `is_locked_out`) is **not on the interface** — it is an
+internal implementation concern of `AuthenticationService`. No external caller should manipulate
+lockout state directly.
+
+`AuthenticationService` (robot-system level) implements this against `IUserRepository` +
+`CsvUserRepository`. It is concrete at the robot-system level because it needs to import
+application-layer types (`User`, `CsvUserRepository`), which robot-system code is permitted to do.
+
+**Stub:** `StubAuthenticationService(IAuthenticationService)` — accepts any credentials, returns a
+fixed `IAuthenticatedUser`. Used in tests and standalone runners.
+
+---
+
+### Step 5 — Add `app_id` to `ApplicationSpec`
 
 **File:** `src/robot_systems/base_robot_system.py`
 
@@ -165,7 +259,7 @@ class ApplicationSpec:
     folder_id: int
     icon: str = "fa5s.cog"
     factory: Optional[Callable] = field(default=None, compare=False)
-    app_id: str = ""    # stable snake_case key used in permissions.json — never change once set
+    app_id: str = ""    # stable snake_case key used in permissions.json — set once, never change
 ```
 
 `__post_init__` auto-derives `app_id` from `name` if not provided:
@@ -177,65 +271,127 @@ def __post_init__(self):
 
 All existing `ApplicationSpec(name="GlueDashboard", ...)` calls auto-derive `app_id="glue_dashboard"` — **no changes needed to `glue_robot_system.py`**.
 
-### Step 4 — `PermissionsRepository`
+---
 
-**New file:** `src/robot_systems/glue/domain/permissions/permissions_repository.py`
+### Step 6 — `ISessionService` + `UserSession`
 
-```python
-class PermissionsRepository:
-    def __init__(self, file_path: str, known_app_ids: List[str]): ...
-
-    def get_allowed_roles(self, app_id: str) -> List[Role]:
-        """Returns roles for this app_id. Defaults to [Role.ADMIN] if not in file."""
-
-    def set_allowed_roles(self, app_id: str, roles: List[Role]) -> None:
-        """Serializes as Role.value strings. Persists immediately."""
-
-    def get_all(self) -> Dict[str, List[Role]]:
-        """Full mapping keyed by app_id — used by the admin permissions editor."""
-```
-
-Serialization rule: **always `Role.value` strings** — same convention as `User.to_dict()`.
-Deserialization: `Role(value_string)` with fallback to `Role.ADMIN` on unknown value — same pattern as `User.from_dict()`.
-
-On load, auto-migrates stale files: adds missing `app_id`s with `["Admin"]`, removes unknown keys.
-
-### Step 2 — `UserSession` singleton
-
-**New file:** `src/engine/system/user_session.py`
+**New files:**
+- `src/engine/auth/i_session_service.py`
+- `src/engine/auth/user_session.py`
 
 ```python
-class UserSession:
-    """Thread-safe singleton holding the currently logged-in user."""
+# src/engine/auth/i_session_service.py
+class ISessionService(ABC):
 
-    @classmethod
-    def get(cls) -> 'UserSession': ...
+    @abstractmethod
+    def login(self, user: IAuthenticatedUser) -> None: ...
 
-    def login(self, user: User) -> None: ...
+    @abstractmethod
     def logout(self) -> None: ...
 
     @property
-    def current_user(self) -> Optional[User]: ...
+    @abstractmethod
+    def current_user(self) -> Optional[IAuthenticatedUser]: ...
 
     @property
-    def current_role(self) -> Optional[Role]: ...
+    @abstractmethod
+    def current_role(self) -> Optional[Enum]: ...
+
+    @abstractmethod
+    def is_authenticated(self) -> bool: ...
 ```
 
-### Step 3 — `LoginWindow`
+`UserSession` implements `ISessionService`. Internally it is a singleton (one global instance),
+but it is **always injected as `ISessionService`** — never accessed via `UserSession.get()` in
+production code. `main.py` constructs the singleton once and passes it down.
 
-**New file:** `src/applications/login/login_window.py`
+Thread safety: a `threading.Lock` guards all reads and writes to `_current_user`.
 
-A `QDialog` subclass — shown from `main.py` before `AppShell` is built. Not registered in `GlueRobotSystem.shell`.
+**Why:** A bare singleton is a hidden global dependency that makes tests share mutable state.
+Injecting `ISessionService` lets tests pass a `StubSessionService` with a preset user.
 
-#### 3a — Setup Wizard step (first run / onboarding)
+**Stub:** `StubSessionService(ISessionService)` — pre-loaded with a fixed `IAuthenticatedUser`.
+
+---
+
+### Step 7 — Permissions migration
+
+**New file:** `src/robot_systems/glue/domain/permissions/permissions_migrator.py`
+
+```python
+def ensure_permissions_current(
+    repo: IPermissionsRepository,
+    known_app_ids: List[str],
+) -> None:
+    """
+    Reconcile permissions.json against the live set of app_ids.
+    - Adds missing app_ids with default ["Admin"].
+    - Removes keys for apps that no longer exist.
+    - Saves back to disk only if changes were made.
+    Called once in main.py after PermissionsRepository is built.
+    """
+```
+
+**Why:** Loading data and migrating schema are separate responsibilities (SRP). The repository's
+job is persistence — it loads and saves faithfully. Migration logic lives in its own function and
+is called explicitly at startup. This keeps `PermissionsRepository.__init__` simple and
+`ensure_permissions_current` independently testable.
+
+---
+
+### Step 8 — `ILoginApplicationService` + `LoginApplicationService` + `LoginWindow`
+
+**New files:**
+- `src/applications/login/i_login_application_service.py`
+- `src/applications/login/login_application_service.py`
+- `src/applications/login/stub_login_application_service.py`
+- `src/applications/login/login_window.py`
+
+```python
+# src/applications/login/i_login_application_service.py
+class ILoginApplicationService(ABC):
+
+    @abstractmethod
+    def authenticate(self, user_id: str, password: str) -> Optional[IAuthenticatedUser]: ...
+
+    @abstractmethod
+    def authenticate_qr(self, qr_payload: str) -> Optional[IAuthenticatedUser]: ...
+
+    @abstractmethod
+    def try_qr_login(self) -> Optional[Tuple[str, str]]:
+        """Poll the camera for a QR code. Returns (user_id, password) or None."""
+
+    @abstractmethod
+    def move_to_login_pos(self) -> None:
+        """Move robot to QR scan position."""
+
+    @abstractmethod
+    def is_first_run(self) -> bool:
+        """True if users.csv is empty — setup wizard should be shown instead of login tabs."""
+
+    @abstractmethod
+    def create_first_admin(self, record: UserRecord) -> Tuple[bool, str]:
+        """Create the initial admin user on first run. Returns (success, message)."""
+```
+
+`LoginApplicationService` wraps `IAuthenticationService` and adds robot/camera operations.
+It is the **only** point where `LoginWindow` touches business logic.
+`LoginWindow` depends only on `ILoginApplicationService` — fully testable with the stub.
+
+**`LoginWindow`** is a `QDialog` subclass — shown from `main.py` before `AppShell` is built.
+Not registered in `GlueRobotSystem.shell`.
+
+#### 8a — Setup Wizard step (first run / onboarding)
 
 Before the login tabs appear, a `SetupStepsWidget` is shown full-width:
 - Displays a machine/instruction image + translatable instructions text
 - **NEXT** button → transitions to the login tabs
 - Optional: poll for a physical hardware button press (`check_physical_button()` on 500ms `QTimer`)
-- **First-run detection**: if `users.csv` is empty, replace the login tabs with a "Create first admin" wizard (collect name, ID, password → write to CSV → set session → proceed). No default credentials ever created.
+- **First-run detection**: calls `service.is_first_run()` — if `True`, replace login tabs with
+  a "Create first admin" wizard (collect name, ID, password → `service.create_first_admin(record)`
+  → set session → proceed). No default credentials ever created.
 
-#### 3b — Login tabs (two methods)
+#### 8b — Login tabs (two methods)
 
 `QTabWidget` with two tabs, icon-driven (responsive icon sizing: 30–80px, ~8% of window width):
 
@@ -245,25 +401,25 @@ Before the login tabs appear, a `SetupStepsWidget` is shown full-width:
 - `MaterialButton` → LOGIN
 - Error feedback via `ToastWidget` (2-second display)
 - Validation: both fields required, ID must be digits
-- Error codes: empty fields / non-numeric ID / wrong password / user not found
+- Error codes: empty fields / non-numeric ID / wrong credentials / user not found
 
 **Tab 1 — QR Code**
 - **Safety warning dialog** on tab switch: *"Robot will move to login position — ensure area is clear"* → OK / CANCEL
-- On OK: calls `LoginApplicationService.move_to_login_pos()` (robot moves to QR scan position)
+- On OK: calls `service.move_to_login_pos()`
 - On CANCEL: reverts silently to Tab 0
 - Live `CameraFeed` widget (640×360, 30 fps)
-- `QTimer` polls every 2000ms → `LoginApplicationService.try_qr_login()` → returns `(user_id, password)` or None
-- On detection: emergency-stop scanning → authenticate → proceed
-- Multiple race-condition guards: `qr_scanning_active` flag + timer-active check + emergency stop function
+- `QTimer` polls every 2000ms → `service.try_qr_login()` → returns `(user_id, password)` or None
+- On detection: emergency-stop scanning → `service.authenticate(user_id, password)` → proceed
+- Multiple race-condition guards: `qr_scanning_active` flag + timer-active check + emergency stop
 - On window close or tab switch away: `force_stop_scanning()` + restore contour detection
 
-#### 3c — Window behaviour
+#### 8c — Window behaviour
 - ESC key and window close button **disabled** (`_allow_close` flag, only set `True` after successful auth)
 - Default tab (Normal or QR) configurable via `loginWindowConfig.json` (`DEFAULT_LOGIN: "NORMAL"` or `"QR"`)
 - Layout: logo panel left (purple gradient, responsive scaling) + login panel right (`QStackedLayout`)
-- On success: `UserSession.get().login(user)` → `dialog.accept()` → `main.py` proceeds
+- On success: `session_service.login(user)` → `dialog.accept()` → `main.py` proceeds
 
-#### 3d — QR code generation (admin side — existing feature, just needs wiring)
+#### 8d — QR code generation (admin side — existing feature, just needs wiring)
 
 `UserManagementApplicationService.generate_qr(record)` already generates a per-user QR image.
 Wire a **"Generate QR"** button per user row in the `UserManagement` view that:
@@ -272,7 +428,9 @@ Wire a **"Generate QR"** button per user row in the `UserManagement` view that:
 
 No new service code needed — only a UI button in `user_management_view.py`.
 
-### Step 4 — Permissions editor in `UserManagement`
+---
+
+### Step 9 — Permissions editor in `UserManagement`
 
 Extend the existing `UserManagement` application with a second tab: **"App Permissions"**.
 
@@ -285,34 +443,48 @@ The tab shows a table:
 | RobotSettings | ✅ | ☐ | ☐ |
 | ... | | | |
 
-Each checkbox calls `PermissionsRepository.set_allowed_roles(app_name, roles)`.
-Changes take effect on next login.
+Each checkbox calls `IPermissionsAdminService.set_permissions(app_id, role_values)` — using
+the stable `app_id`, not the display name.
+
+`IUserManagementService` is **not modified**. The permissions tab model/controller receives
+`IPermissionsAdminService` as a separate constructor argument, injected in `application_wiring.py`.
+
+Changes take effect on next login. The UI shows a notice: *"Changes apply at next login."*
 
 **Files to modify:**
-- `src/applications/user_management/view/user_management_view.py` — add tab
-- `src/applications/user_management/service/i_user_management_service.py` — add `get_permissions()` / `set_permissions()` methods
-- `src/applications/user_management/service/user_management_application_service.py` — implement
-- `src/robot_systems/glue/application_wiring.py` — inject `PermissionsRepository` into service
+- `src/applications/user_management/view/user_management_view.py` — add tab widget
+- `src/applications/user_management/model/user_management_model.py` — add permissions model
+- `src/applications/user_management/controller/user_management_controller.py` — wire permissions tab
+- `src/robot_systems/glue/application_wiring.py` — inject `IPermissionsAdminService` into the factory
 
-### Step 5 — Filter specs at startup in `main.py`
+**`IUserManagementService` is not modified** — user CRUD and permission management are separate
+responsibilities with separate interfaces.
+
+---
+
+### Step 10 — Filter specs at startup in `main.py`
 
 **File:** `src/bootstrap/main.py`
 
 Modified startup sequence:
 ```
-1. EngineContext.build()
-2. SystemBuilder ... .build(GlueRobotSystem)
-3. ShellConfigurator.configure(GlueRobotSystem)
-4. QApplication(sys.argv)
-5. Show LoginWindow (blocking QDialog)
-   ├─ SetupStepsWidget (onboarding / first-run wizard)
-   ├─ Tab 0: Username + Password login
-   └─ Tab 1: QR code auto-scan login (camera + robot positioning)
-   → on success: UserSession.get().login(user)
-6. Build AuthorizationService(PermissionsRepository(permissions_path))
-7. visible_specs = authz_service.get_visible_apps(session.current_role, all_specs)
-8. ApplicationLoader — load only visible specs
-9. AppShell — receives pre-filtered descriptors
+1.  EngineContext.build()
+2.  SystemBuilder ... .build(GlueRobotSystem)
+3.  ShellConfigurator.configure(GlueRobotSystem)
+4.  QApplication(sys.argv)
+5.  Build PermissionsRepository(permissions_path)
+6.  ensure_permissions_current(repo, known_app_ids)        ← migration, once at startup
+7.  Build AuthorizationService(repo)                       ← IPermissionsAdminService
+8.  Build UserSession()                                    ← ISessionService
+9.  Build LoginApplicationService(auth_service, robot_system)
+10. Show LoginWindow(login_service, session_service)       ← blocking QDialog
+    ├─ SetupStepsWidget (onboarding / first-run wizard)
+    ├─ Tab 0: Username + Password login
+    └─ Tab 1: QR code auto-scan login (camera + robot positioning)
+    → on success: session_service.login(user)
+11. visible_specs = authz.get_visible_apps(session.current_user, all_specs)
+12. ApplicationLoader — load only visible specs
+13. AppShell — receives pre-filtered descriptors
 ```
 
 ---
@@ -321,53 +493,76 @@ Modified startup sequence:
 
 | File | Change |
 |------|--------|
-| `src/engine/auth/i_authentication_service.py` | **New** — authentication interface |
-| `src/engine/auth/authentication_service.py` | **New** — bcrypt credential check + lockout logic |
-| `src/engine/auth/i_authorization_service.py` | **New** — authorization interface |
-| `src/engine/auth/authorization_service.py` | **New** — role-based app filtering via `PermissionsRepository` |
-| `src/engine/system/user_session.py` | **New** — thread-safe session singleton |
-| `src/robot_systems/glue/domain/permissions/permissions_repository.py` | **New** — JSON-backed permissions store |
+| `src/engine/auth/i_authenticated_user.py` | **New** — engine-level user base interface |
+| `src/engine/auth/i_authentication_service.py` | **New** — authentication interface (returns `IAuthenticatedUser`) |
+| `src/engine/auth/i_permissions_repository.py` | **New** — permissions persistence interface (strings only, no `Role` import) |
+| `src/engine/auth/i_authorization_service.py` | **New** — read-only authorization interface |
+| `src/engine/auth/i_permissions_admin_service.py` | **New** — extends `IAuthorizationService` with admin write operations |
+| `src/engine/auth/authorization_service.py` | **New** — implements `IPermissionsAdminService` via `IPermissionsRepository` |
+| `src/engine/auth/i_session_service.py` | **New** — session interface |
+| `src/engine/auth/user_session.py` | **New** — thread-safe singleton implementing `ISessionService` |
+| `src/robot_systems/glue/domain/auth/authentication_service.py` | **New** — concrete auth against `CsvUserRepository` |
+| `src/robot_systems/glue/domain/permissions/permissions_repository.py` | **New** — JSON-backed `IPermissionsRepository` implementation |
+| `src/robot_systems/glue/domain/permissions/permissions_migrator.py` | **New** — `ensure_permissions_current()` migration function |
 | `src/robot_systems/glue/storage/settings/permissions.json` | **New** — default permissions config |
-| `src/bootstrap/main.py` | Show login first, filter specs via `IAuthorizationService` |
-| `src/applications/login/login_window.py` | **New** — `QDialog` with setup wizard + dual-tab login (password + QR) |
+| `src/robot_systems/base_robot_system.py` | Add `app_id: str` field to `ApplicationSpec` with auto-derive in `__post_init__` |
+| `src/bootstrap/main.py` | Show login first, run migration, filter specs via `IAuthorizationService` |
+| `src/applications/login/i_login_application_service.py` | **New** — login service interface |
 | `src/applications/login/login_application_service.py` | **New** — wraps `IAuthenticationService`, adds `try_qr_login()` + `move_to_login_pos()` |
-| `src/applications/user_management/` | Extend with "App Permissions" tab; inject `IAuthorizationService` |
-| `src/robot_systems/glue/application_wiring.py` | Wire `AuthenticationService` + `AuthorizationService` with concrete dependencies |
-
-**`ApplicationSpec` is NOT modified** — permissions are fully external to the code.
+| `src/applications/login/stub_login_application_service.py` | **New** — test/standalone stub |
+| `src/applications/login/login_window.py` | **New** — `QDialog` with setup wizard + dual-tab login |
+| `src/applications/user_management/` | Add "App Permissions" tab; inject `IPermissionsAdminService` separately |
+| `src/robot_systems/glue/application_wiring.py` | Wire all new concrete services with their dependencies |
 
 ---
 
 ## Key Design Decisions
 
+- **No layer violations**: engine interfaces operate on `IAuthenticatedUser` and `IPermissionsRepository`; concrete types (`User`, `CsvUserRepository`, `PermissionsRepository`) stay at application/robot-system level.
+- **ISP — two authorization interfaces**: `IAuthorizationService` (read-only, used by `main.py`) and `IPermissionsAdminService` (extends with write ops, used only by the permissions editor). No caller gets more power than it needs.
+- **ISP — `IUserManagementService` unchanged**: user CRUD and permission management are separate concerns with separate interfaces. The permissions tab injects `IPermissionsAdminService` directly.
+- **ISP — lockout is internal**: `record_failed_attempt` / `is_locked_out` are not on `IAuthenticationService`. Lockout is an implementation detail of `AuthenticationService`, not a contract for callers.
+- **DIP — `UserSession` injected as `ISessionService`**: never accessed via a bare `UserSession.get()` global in production code. Tests pass a `StubSessionService`.
+- **SRP — migration is separate from persistence**: `PermissionsRepository` loads and saves faithfully; `ensure_permissions_current()` handles schema reconciliation and is called once at startup.
 - **Admin-configurable at runtime**: no code changes needed to adjust who can see what — admin edits it via the UI.
-- **Safe default**: any app not listed in `permissions.json` defaults to `["Admin"]` only.
+- **Safe default**: any app not listed in `permissions.json` defaults to `["Admin"]` only — including newly added apps.
 - **Changes take effect on next login**: simplest approach; no need to rebuild `AppShell` at runtime.
 - **No `pl_gui/` changes**: filtering happens before `AppShell`, which already handles empty folders.
-- **Shared repository path**: `LoginWindow` and `UserManagement` share the same `_USERS_STORAGE` path — no duplication.
 
 ---
 
 ## Verification
 
 1. Log in as ADMIN → open UserManagement → "App Permissions" tab → uncheck Operator from WorkpieceEditor → save
-2. Log out, log in as OPERATOR → verify WorkpieceEditor is gone
+2. Log out, log in as OPERATOR → verify WorkpieceEditor is gone from the shell
 3. Log in as ADMIN again → re-enable → log in as OPERATOR → verify it's back
 4. Delete `permissions.json` → restart → verify all apps default to Admin-only
-5. Run: `python tests/run_tests.py` — all existing tests pass unchanged
+5. Add a new `ApplicationSpec` to `GlueRobotSystem.shell` without updating `permissions.json` → verify it is Admin-only by default
+6. Run: `python tests/run_tests.py` — all existing tests pass unchanged
 
 ---
 
 ## Additional Good Practices
 
-### 1 — Password hashing (security critical)
-Passwords must never be stored in plain text in `users.csv`. Use `bcrypt` or `argon2-cffi` to hash on creation and verify on login. The `CsvUserRepository` should store only the hash; the `LoginWindow` compares via `bcrypt.checkpw()`.
+### 1 — Password hashing
+Passwords must never be stored in plain text in `users.csv`. Use `bcrypt` or `argon2-cffi` to hash
+on creation and verify on login. The `CsvUserRepository` should store only the hash; `AuthenticationService`
+compares via `bcrypt.checkpw()`. Existing plain-text passwords need a migration strategy (e.g.
+re-hash on first successful plain-text login, then overwrite the stored value).
 
-### 2 — Inactivity timeout / auto-logout
-For an industrial robot platform, an unattended logged-in session is a safety risk. Add a `QTimer` in the shell that resets on any mouse/keyboard event. On timeout: hide the shell, show the `LoginWindow` again, call `UserSession.logout()`. The `AppShell` is rebuilt after re-login with potentially different filtered specs.
+### 2 — Login attempt throttling
+After N consecutive failed logins (e.g. 5), lock the account for M minutes. Tracked entirely inside
+`AuthenticationService` — not exposed on the interface. `IUserManagementService` should expose
+`reset_lockout(user_id)` for the admin to unblock a user manually.
 
-### 3 — Audit log
-Record every login, logout, and permission change to a `audit.log` file (append-only). Minimum fields: `timestamp | user_id | action | detail`. This is required in most industrial/compliance environments and is invaluable for debugging access issues.
+### 3 — Inactivity timeout / auto-logout
+For an industrial robot platform, an unattended logged-in session is a safety risk. Add a `QTimer`
+that resets on any mouse/keyboard event. On timeout: call `session_service.logout()`, hide `AppShell`,
+re-show `LoginWindow`, then rebuild with the new role's filtered specs on success.
+
+### 4 — Audit log
+Record every login, logout, and permission change to an `audit.log` file (append-only).
+Minimum fields: `timestamp | user_id | action | detail`.
 
 ```
 2026-03-16 09:14:22 | user_id=3  | LOGIN        | role=Operator
@@ -375,39 +570,20 @@ Record every login, logout, and permission change to a `audit.log` file (append-
 2026-03-16 10:02:15 | user_id=3  | LOGOUT       | reason=timeout
 ```
 
-### 4 — Login attempt throttling
-After N consecutive failed logins (e.g. 5), lock the account for M minutes. Track failed attempts in memory (or persist to CSV). The `UserManagementApplicationService` should expose `reset_lockout(user_id)` for the admin.
-
-### 5 — Bootstrap admin account (first-run wizard, no default credentials)
-On first run, if `users.csv` is empty, skip the login tabs entirely and show a **"Create first admin" wizard** instead:
-1. Prompt: First Name, Last Name, numeric ID, Password, Confirm Password
-2. Validate: passwords match, ID not already taken (can't be — file is empty), all fields filled
-3. Create the user with `Role.ADMIN` and write to `users.csv`
-4. Proceed directly to the shell (no need to log in again — session is set immediately)
-
-**No default `admin/admin` is ever created.** A known default credential is a security liability — every industrial deployment would need to remember to change it.
+### 5 — Logout button in shell
+The shell header/toolbar should have a logout button visible to all users. Since `pl_gui/` is
+read-only, this button lives in a thin wrapper widget created in `main.py` that wraps `AppShell`.
+On click: `session_service.logout()` → hide shell → show `LoginWindow` → rebuild with new role's
+filtered specs.
 
 ### 6 — Admin is always protected
-`UserManagement` and the `Admin` role itself must never be removable from `permissions.json` via the UI — enforce this in `PermissionsRepository.set_allowed_roles()`:
+`set_permissions()` in `AuthorizationService` enforces the invariant: `user_management` always
+retains `"Admin"` regardless of what is passed in. This is the single enforcement point — not
+duplicated in the repository.
 
 ```python
-if app_id == "user_management":
-    roles = list(set(roles) | {Role.ADMIN})  # Admin can never lose access
+def set_permissions(self, app_id: str, role_values: List[str]) -> None:
+    if app_id == "user_management":
+        role_values = list(set(role_values) | {"Admin"})
+    self._repo.set_allowed_role_values(app_id, role_values)
 ```
-
-### 7 — Logout button in shell
-The shell header/toolbar should have a logout button visible to all users. On click: `UserSession.logout()` → hide `AppShell` → show `LoginWindow` → rebuild with new role's filtered specs. Since `pl_gui/` is read-only, this button can live in a thin wrapper widget created in `main.py` that wraps `AppShell`.
-
-### 8 — New apps default to Admin-only
-When a new `ApplicationSpec` is added to `GlueRobotSystem.shell` but has no entry in `permissions.json`, `PermissionsRepository.get_allowed_roles()` returns `[Role.ADMIN]`. This means new features are invisible to other roles until the admin explicitly grants access — a secure default.
-
-### 9 — Permissions schema versioning
-If a new app is added or an app is renamed, old `permissions.json` files will have stale keys. On load, `PermissionsRepository` should:
-1. Add missing apps with default `["Admin"]`
-2. Remove keys for apps that no longer exist in `GlueRobotSystem.shell`
-3. Save the migrated file back
-
-This keeps the JSON in sync with the codebase automatically.
-
-### 10 — Separate login service from user management service
-`LoginApplicationService` and `UserManagementApplicationService` share the same `CsvUserRepository` but have different responsibilities. Keep them as two separate services — don't merge them. Login only needs `authenticate(username, password) -> Optional[User]`; user management needs full CRUD. This keeps the login path minimal and easy to audit.

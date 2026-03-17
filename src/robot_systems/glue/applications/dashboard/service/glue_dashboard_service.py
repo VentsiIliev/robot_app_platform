@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Dict, List, Optional
 
 from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.glue.applications.dashboard.service.i_glue_dashboard_service import IGlueDashboardService
@@ -11,6 +12,8 @@ from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMo
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.settings.cells import GlueCellsConfig
 from src.robot_systems.glue.settings.glue_types import GlueCatalog
+from src.robot_systems.glue.process_ids import ProcessID
+from src.shared_contracts.events.process_events import ProcessBusyEvent, ProcessTopics
 
 
 class GlueDashboardService(IGlueDashboardService):
@@ -20,15 +23,20 @@ class GlueDashboardService(IGlueDashboardService):
         runner:           GlueOperationCoordinator,
         settings_service: ISettingsService,
         weight_service:   Optional[IWeightCellService] = None,
+        execution_service = None,
+        messaging_service: IMessagingService | None = None,
     ):
         self._runner   = runner
         self._settings = settings_service
         self._weight   = weight_service
+        self._execution_service = execution_service
+        self._messaging = messaging_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
     # ── Commands — delegated to GlueOperationCoordinator ─────────────
 
-    def start(self)        -> None: self._runner.start()
+    def start(self) -> None:
+        self._runner.start()
     def stop(self)         -> None: self._runner.stop()
     def pause(self)        -> None: self._runner.pause()
     def resume(self)       -> None: self._runner.resume()

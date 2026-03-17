@@ -179,6 +179,8 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.service_builders import GlueCellTypeResolver
         from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
         from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
+        from src.robot_systems.glue.domain.glue_job_builder_service import GlueJobBuilderService
+        from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
         from src.robot_systems.glue.domain.matching.matching_service import MatchingService
         from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
             JsonWorkpieceRepository
@@ -198,23 +200,37 @@ class GlueRobotSystem(BaseRobotSystem):
             vision_service=vision_service,
             workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
         ) if vision_service else None
+        glue_process = GlueProcess(
+            robot_service=self._robot,
+            motor_service=self._motor,
+            resolver=GlueCellTypeResolver(self._glue_cells),
+            config=GlueDispensingConfig(
+                robot_tool=self._robot_config.robot_tool,
+                robot_user=self._robot_config.robot_user,
+            ),
+            navigation_service=self._navigation,
+            generator=self._generator,
+            messaging=self._messaging_service,
+            system_manager=self._system_manager,
+            requirements=glue_requirements,
+            service_checker=service_checker,
+        )
+        execution_service = (
+            GlueJobExecutionService(
+                matching_service=matching_service,
+                job_builder=GlueJobBuilderService(
+                    transformer=transformer,
+                    z_min=float(self._robot_config.safety_limits.z_min),
+                ),
+                glue_process=glue_process,
+                navigation_service=self._navigation,
+                vision_service=vision_service,
+            )
+            if matching_service is not None else None
+        )
 
         return GlueOperationCoordinator(
-            glue_process=GlueProcess(
-                robot_service=self._robot,
-                motor_service=self._motor,
-                resolver=GlueCellTypeResolver(self._glue_cells),
-                config=GlueDispensingConfig(
-                    robot_tool=self._robot_config.robot_tool,
-                    robot_user=self._robot_config.robot_user,
-                ),
-                navigation_service=self._navigation,
-                generator=self._generator,
-                messaging=self._messaging_service,
-                system_manager=self._system_manager,
-                requirements=glue_requirements,
-                service_checker=service_checker,
-            ),
+            glue_process=glue_process,
             pick_and_place_process=PickAndPlaceProcess(
                 robot_service=self._robot,
                 navigation_service=self._navigation,
@@ -243,5 +259,6 @@ class GlueRobotSystem(BaseRobotSystem):
                 service_checker=service_checker,
             ),
             messaging=self._messaging_service,
+            execution_service=execution_service,
+            settings_service=self._settings_service,
         )
-

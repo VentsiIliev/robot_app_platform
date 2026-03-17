@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.robot_systems.glue.applications.dashboard.service.glue_dashboard_service import GlueDashboardService
+from src.robot_systems.glue.domain.glue_job_execution_service import GlueExecutionResult
 from src.robot_systems.glue.process_ids import ProcessID
 from src.applications.base.widget_application import WidgetApplication
 from src.engine.system.i_system_manager import ISystemManager
@@ -75,11 +76,18 @@ def _make_settings_service(cells=None, catalog=None):
 def _make_runner():
     return MagicMock(spec=GlueOperationCoordinator)
 
-def _make_dashboard_service(cells=None, catalog=None, runner=None, weight_service=None):
+def _make_dashboard_service(cells=None, catalog=None, runner=None, weight_service=None, execution_service=None):
     ss, _c, _cat = _make_settings_service(cells, catalog)
     _runner      = runner or _make_runner()
-    svc          = GlueDashboardService(runner=_runner, settings_service=ss, weight_service=weight_service)
-    return svc, _runner, ss, _c, _cat
+    messaging    = MagicMock()
+    svc          = GlueDashboardService(
+        runner=_runner,
+        settings_service=ss,
+        weight_service=weight_service,
+        execution_service=execution_service,
+        messaging_service=messaging,
+    )
+    return svc, _runner, ss, _c, _cat, messaging
 
 def _make_robot_system(cells=None, catalog=None):
     ss, _, _ = _make_settings_service(cells, catalog)
@@ -155,6 +163,35 @@ class TestDashboardApplicationFactory(unittest.TestCase):
             _, kwargs = mock_create.call_args
             self.assertIs(kwargs.get("messaging_service"), ms)
 
+    def test_widget_factory_passes_execution_service(self):
+        app, _, _ = _make_robot_system()
+        vision = MagicMock()
+        vision.camera_to_robot_matrix_path = "/tmp/fake_matrix.npy"
+        app._robot_config = MagicMock()
+        app._robot_config.safety_limits.z_min = 100.0
+        app._robot_config.tcp_x_offset = 0.0
+        app._robot_config.tcp_y_offset = 0.0
+        app.get_optional_service.side_effect = lambda service_id: vision if service_id == "vision" else None
+        spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
+        application = spec.factory(app)
+        ms = MagicMock()
+        application.register(ms)
+        with patch("src.robot_systems.glue.applications.dashboard.glue_dashboard.GlueDashboard.create") as mock_create:
+            mock_create.return_value = MagicMock()
+            application.create_widget()
+            _, kwargs = mock_create.call_args
+            self.assertIsNotNone(kwargs.get("execution_service"))
+
+    def test_widget_factory_without_vision_passes_no_execution_service(self):
+        application, _, _ = self._build()
+        ms = MagicMock()
+        application.register(ms)
+        with patch("src.robot_systems.glue.applications.dashboard.glue_dashboard.GlueDashboard.create") as mock_create:
+            mock_create.return_value = MagicMock()
+            application.create_widget()
+            _, kwargs = mock_create.call_args
+            self.assertIsNone(kwargs.get("execution_service"))
+
 
 # ---------------------------------------------------------------------------
 # GlueDashboardService — command delegation to GlueOperationCoordinator
@@ -166,6 +203,28 @@ class TestGlueDashboardServiceCommands(unittest.TestCase):
         svc, runner, *_ = _make_dashboard_service()
         svc.start()
         runner.start.assert_called_once()
+
+    def test_start_in_spray_only_mode_still_delegates_to_runner(self):
+        runner = _make_runner()
+        runner.get_mode.return_value = GlueOperationMode.SPRAY_ONLY
+        execution_service = MagicMock()
+        svc, runner, *_ = _make_dashboard_service(runner=runner, execution_service=execution_service)
+
+        svc.start()
+
+        runner.start.assert_called_once()
+        execution_service.prepare_load_and_start.assert_not_called()
+
+    def test_start_in_pick_and_spray_mode_keeps_runner_sequence(self):
+        runner = _make_runner()
+        runner.get_mode.return_value = GlueOperationMode.PICK_AND_SPRAY
+        execution_service = MagicMock()
+        svc, runner, *_ = _make_dashboard_service(runner=runner, execution_service=execution_service)
+
+        svc.start()
+
+        runner.start.assert_called_once()
+        execution_service.prepare_load_and_start.assert_not_called()
 
     def test_stop_delegates_to_runner(self):
         svc, runner, *_ = _make_dashboard_service()

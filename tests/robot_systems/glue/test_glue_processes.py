@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.process.process_sequence import ProcessSequence
+from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
@@ -41,6 +42,8 @@ from src.shared_contracts.events.glue_process_events import GlueProcessTopics
 from src.shared_contracts.events.process_events import (
     ProcessState, ProcessStateEvent, ProcessTopics,
 )
+from src.robot_systems.glue.domain.glue_job_execution_service import GlueExecutionResult
+from src.robot_systems.glue.settings.glue import GlueSettings
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -204,7 +207,7 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 # GlueOperationCoordinator helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _make_runner_mocks():
+def _make_runner_mocks(execution_service=None, spray_on=True):
     """
     Build a GlueOperationCoordinator with real processes (needed for construction),
     then replace the internal ProcessSequence objects with mocks so tests can
@@ -223,6 +226,8 @@ def _make_runner_mocks():
         clean_process          = clean,
         calibration_process    = calib,
         messaging              = _ms(),
+        execution_service      = execution_service,
+        settings_service       = MagicMock(get=MagicMock(return_value=GlueSettings(spray_on=spray_on))),
     )
 
     # Replace internal sequences with mocks — tests verify runner's delegation
@@ -292,6 +297,71 @@ class TestGlueOperationCoordinatorSprayOnly(unittest.TestCase):
         runner.start()
         self.assertIs(runner._active, spray_seq)
 
+    def test_start_in_spray_only_prepares_glue_before_sequence_start(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = GlueExecutionResult(
+            success=True,
+            stage="load",
+            message="loaded",
+            matched_ids=["wp-1"],
+            workpiece_count=1,
+            segment_count=2,
+            loaded=True,
+            started=False,
+        )
+        runner, spray_seq, _, _ = _make_runner_mocks(
+            execution_service=execution_service,
+            spray_on=False,
+        )
+
+        runner.start()
+
+        execution_service.prepare_and_load.assert_called_once_with(spray_on=False)
+        spray_seq.start.assert_called_once()
+
+    def test_start_in_spray_only_blocks_sequence_when_preparation_fails(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = GlueExecutionResult(
+            success=False,
+            stage="positioning",
+            message="Robot could not move to calibration capture position",
+            matched_ids=[],
+            workpiece_count=0,
+            segment_count=0,
+            loaded=False,
+            started=False,
+        )
+        runner, spray_seq, _, _ = _make_runner_mocks(execution_service=execution_service)
+        runner._messaging = MagicMock()
+
+        runner.start()
+
+        spray_seq.start.assert_not_called()
+        runner._messaging.publish.assert_called_once()
+        topic, event = runner._messaging.publish.call_args.args
+        self.assertEqual(topic, ProcessTopics.busy(ProcessID.COORDINATOR))
+        self.assertIn("Glue spray-only start failed at positioning", event.message)
+
+    def test_stop_cancels_pending_spray_only_preparation(self):
+        execution_service = MagicMock()
+        runner, spray_seq, _, _ = _make_runner_mocks(execution_service=execution_service)
+        runner._preparing_glue = True
+
+        runner.stop()
+
+        execution_service.cancel_pending.assert_called_once_with()
+        spray_seq.stop.assert_not_called()
+
+    def test_resume_in_spray_only_does_not_reprepare_glue(self):
+        execution_service = MagicMock()
+        runner, spray_seq, _, _ = _make_runner_mocks(execution_service=execution_service)
+        runner._active_sequence = spray_seq
+
+        runner.resume()
+
+        spray_seq.start.assert_called_once()
+        execution_service.prepare_and_load.assert_not_called()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # GlueOperationCoordinator — PICK_AND_SPRAY start
@@ -311,6 +381,50 @@ class TestGlueOperationCoordinatorPickAndSpray(unittest.TestCase):
         runner.set_mode(GlueOperationMode.PICK_AND_SPRAY)
         runner.start()
         self.assertIs(runner._active, pick_seq)
+
+    def test_pick_and_spray_sequence_prepares_glue_before_starting_it(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = GlueExecutionResult(
+            success=True,
+            stage="load",
+            message="loaded",
+            matched_ids=["wp-1"],
+            workpiece_count=1,
+            segment_count=2,
+            loaded=True,
+            started=False,
+        )
+        runner, _, _, _ = _make_runner_mocks(
+            execution_service=execution_service,
+            spray_on=False,
+        )
+        runner.set_mode(GlueOperationMode.PICK_AND_SPRAY)
+
+        self.assertTrue(runner._prepare_glue_after_pick(runner.pick_and_place_process, runner.glue_process))
+        execution_service.prepare_and_load.assert_called_once_with(spray_on=False)
+
+    def test_pick_and_spray_sequence_sets_glue_error_when_preparation_fails(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = GlueExecutionResult(
+            success=False,
+            stage="matching",
+            message="No matched workpieces available for glue execution",
+            matched_ids=[],
+            workpiece_count=0,
+            segment_count=0,
+            loaded=False,
+            started=False,
+        )
+        runner, _, _, _ = _make_runner_mocks(execution_service=execution_service)
+        runner.set_mode(GlueOperationMode.PICK_AND_SPRAY)
+        runner.glue_process.set_error = MagicMock()
+
+        result = runner._prepare_glue_after_pick(runner.pick_and_place_process, runner.glue_process)
+
+        self.assertFalse(result)
+        runner.glue_process.set_error.assert_called_once_with(
+            "Glue preparation failed at matching: No matched workpieces available for glue execution"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -552,6 +666,28 @@ class TestGlueProcessStateTransitions(unittest.TestCase):
             p.start()
 
         p._messaging.publish.assert_any_call(GlueProcessTopics.DIAGNOSTICS, p.get_dispensing_snapshot())
+
+    def test_completed_worker_run_transitions_outer_process_to_stopped(self):
+        p = self._make()
+        p.set_paths([([[1.0, 2.0], [3.0, 4.0]], {"glue_type": "Type A", "motor_speed": "500"}, {})], spray_on=False)
+        machine = MagicMock()
+        machine.get_snapshot.return_value = MagicMock(
+            initial_state=GlueDispensingState.STARTING,
+            current_state=GlueDispensingState.IDLE,
+            is_running=False,
+            step_count=10,
+            last_state=GlueDispensingState.COMPLETED,
+            last_next_state=GlueDispensingState.IDLE,
+            last_error=None,
+        )
+
+        with patch("src.robot_systems.glue.processes.glue_process.DispensingMachineFactory.build", return_value=machine):
+            p.start()
+            p._worker_thread.join(timeout=1.0)
+
+        self.assertEqual(p.state, ProcessState.STOPPED)
+        self.assertIsNone(p._worker_thread)
+        machine.start_execution.assert_called_once_with()
 
     def test_step_once_delegates_to_machine_in_manual_mode(self):
         p = self._make()

@@ -496,16 +496,33 @@ class TestHandlePathCompletionWait(unittest.TestCase):
     def test_pause_waiting_for_final_position_preserves_segment_start_for_resume(self):
         ctx = _make_context()
         ctx.current_path = ctx.paths[0][0]
-        ctx.current_settings = ctx.paths[0][1]
+        ctx.current_entry = ctx.path_ops.get_current_path_entry()
+        ctx.current_settings = ctx.current_entry.settings
         ctx.current_segment_start_index = 1
         ctx.segment_trajectory_submitted = True
         ctx.run_allowed.clear()
+        ctx.robot_service.get_current_position.return_value = _point(3)
 
         state = handle_waiting_for_final_position(ctx)
 
         self.assertEqual(state, GlueDispensingState.PAUSED)
         self.assertEqual(ctx.paused_from_state, GlueDispensingState.WAITING_FOR_FINAL_POSITION)
-        self.assertEqual(ctx.current_point_index, 1)
+        self.assertEqual(ctx.current_point_index, 3)
+
+    def test_resume_waiting_for_final_position_uses_saved_mid_segment_progress(self):
+        ctx = _make_context()
+        full_path, settings = ctx.paths[0]
+        ctx.paused_from_state = GlueDispensingState.WAITING_FOR_FINAL_POSITION
+        ctx.current_point_index = 3
+        ctx.current_segment_start_index = 1
+        ctx.segment_trajectory_submitted = True
+        ctx.segment_trajectory_completed = False
+
+        state = handle_resuming(ctx)
+
+        self.assertEqual(state, GlueDispensingState.TURNING_ON_GENERATOR)
+        self.assertEqual(ctx.current_path, full_path[3:])
+        self.assertEqual(ctx.current_segment_start_index, 3)
 
     def test_waiting_for_final_position_fails_when_reported_task_finishes_with_error(self):
         ctx = _make_context()

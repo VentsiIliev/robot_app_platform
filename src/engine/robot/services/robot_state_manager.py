@@ -76,11 +76,19 @@ class RobotStateManager(IRobotStateProvider):
 
     def _build_snapshot(self) -> RobotStateSnapshot:
         with self._lock:
+            extra = {}
+            details_getter = getattr(self._robot, "get_connection_details", None)
+            if callable(details_getter):
+                try:
+                    extra = details_getter() or {}
+                except Exception:
+                    self._logger.debug("Failed to collect robot connection details", exc_info=True)
             return RobotStateSnapshot(
                 state=self._state,
                 position=list(self._position),
                 velocity=self._velocity,
                 acceleration=self._acceleration,
+                extra=extra,
             )
 
     # ------------------------------------------------------------------
@@ -90,6 +98,19 @@ class RobotStateManager(IRobotStateProvider):
     def _poll_loop(self) -> None:
         while self._running:
             try:
+                state_getter = getattr(self._robot, "get_connection_state", None)
+                connection_state = state_getter() if callable(state_getter) else "idle"
+
+                if connection_state == "disconnected":
+                    with self._lock:
+                        self._state = "disconnected"
+
+                    if self._publisher:
+                        self._publisher.publish(self._build_snapshot())
+
+                    time.sleep(self._POLL_INTERVAL_S)
+                    continue
+
                 pos  = self._robot.get_current_position()
                 vel  = self._robot.get_current_velocity()
                 acc  = self._robot.get_current_acceleration()
@@ -98,11 +119,14 @@ class RobotStateManager(IRobotStateProvider):
                     self._position     = pos or self._position
                     self._velocity     = vel or self._velocity
                     self._acceleration = acc or self._acceleration
+                    self._state        = connection_state or "idle"
 
                 if self._publisher:
                     self._publisher.publish(self._build_snapshot())
 
             except Exception:
+                with self._lock:
+                    self._state = "error"
                 self._logger.warning("State poll failed", exc_info=True)
 
             time.sleep(self._POLL_INTERVAL_S)

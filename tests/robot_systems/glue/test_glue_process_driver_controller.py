@@ -127,6 +127,16 @@ class TestGlueProcessDriverController(unittest.TestCase):
     def test_stop_does_not_raise(self):
         ctrl, _, _, _ = self._make()
         ctrl.stop()
+        ctrl.stop()
+
+    def test_view_destroyed_stops_controller(self):
+        ctrl, _, _, broker = self._make()
+        ctrl.load()
+
+        ctrl._on_view_destroyed()
+
+        broker.unsubscribe.assert_any_call(ProcessTopics.state(ProcessID.GLUE), ctrl._on_process_state_event)
+        broker.unsubscribe.assert_any_call(GlueProcessTopics.DIAGNOSTICS, ctrl._on_diagnostics)
 
     def test_process_state_event_refreshes_snapshot_through_broker_path(self):
         ctrl, model, view, _ = self._make()

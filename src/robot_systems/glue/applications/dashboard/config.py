@@ -42,6 +42,7 @@ BUTTON_STATE_MAP: dict = {
     ProcessState.PAUSED.value:  {"start": False, "stop": True,  "pause": True,  "pause_text": "Resume",  "mode_toggle": False, "clean": False, "reset_errors": False},
     ProcessState.STOPPED.value: {"start": True,  "stop": False, "pause": False, "pause_text": "Pause",   "mode_toggle": True,  "clean": True,  "reset_errors": False},
     ProcessState.ERROR.value:   {"start": False, "stop": True,  "pause": False, "pause_text": "Pause",   "mode_toggle": False, "clean": False, "reset_errors": True},
+    "disconnected":             {"start": False, "stop": False, "pause": False, "pause_text": "Pause",   "mode_toggle": True,  "clean": True,  "reset_errors": False},
 }
 
 

@@ -220,6 +220,36 @@ class TestGlueProcessDriverService(unittest.TestCase):
         self.assertEqual(snapshot["manual_mode"], True)
         self.assertTrue(service.is_manual_mode_enabled())
 
+    def test_prepare_and_load_delegates_to_execution_service(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = {"success": True, "stage": "load"}
+        service = GlueProcessDriverService(
+            matching_service=MagicMock(),
+            job_builder=MagicMock(),
+            glue_process=MagicMock(),
+            execution_service=execution_service,
+        )
+
+        result = service.prepare_and_load(spray_on=True)
+
+        execution_service.prepare_and_load.assert_called_once_with(spray_on=True)
+        self.assertEqual(result["stage"], "load")
+
+    def test_prepare_load_and_start_delegates_to_execution_service(self):
+        execution_service = MagicMock()
+        execution_service.prepare_load_and_start.return_value = {"success": True, "stage": "start"}
+        service = GlueProcessDriverService(
+            matching_service=MagicMock(),
+            job_builder=MagicMock(),
+            glue_process=MagicMock(),
+            execution_service=execution_service,
+        )
+
+        result = service.prepare_load_and_start(spray_on=True)
+
+        execution_service.prepare_load_and_start.assert_called_once_with(spray_on=True)
+        self.assertEqual(result["stage"], "start")
+
     def test_getters_expose_latest_job_and_process_snapshot(self):
         process = MagicMock()
         process.get_dispensing_snapshot.return_value = {"state": "STARTING"}

@@ -138,6 +138,18 @@ class TestExecutableStateMachineExecution(unittest.TestCase):
         self.assertEqual(ctx.visited, ["A"])
         self.assertEqual(machine.get_snapshot().step_count, 1)
 
+    def test_step_records_timing_in_snapshot(self):
+        ctx = _FakeContext()
+        machine = _build_simple(context=ctx)
+
+        machine.step()
+
+        snapshot = machine.get_snapshot()
+        self.assertIsNotNone(snapshot.last_handler_duration_s)
+        self.assertIsNotNone(snapshot.last_step_duration_s)
+        self.assertGreaterEqual(snapshot.last_handler_duration_s, 0.0)
+        self.assertGreaterEqual(snapshot.last_step_duration_s, 0.0)
+
     def test_reset_restores_initial_state_and_clears_snapshot(self):
         ctx = _FakeContext()
         machine = _build_simple(context=ctx)
@@ -151,6 +163,7 @@ class TestExecutableStateMachineExecution(unittest.TestCase):
         self.assertIsNone(snapshot.last_state)
         self.assertIsNone(snapshot.last_next_state)
         self.assertIsNone(snapshot.last_error)
+        self.assertIsNone(snapshot.last_step_duration_s)
 
     def test_simple_run_visits_all_states(self):
         ctx = _FakeContext()

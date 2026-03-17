@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import MagicMock
 
 from PyQt6.QtWidgets import QApplication
 
@@ -43,6 +44,14 @@ class TestGlueProcessDriverView(unittest.TestCase):
             view._machine_state_summary.text(),
             "Previous: LOADING_PATH | Current: ISSUING_MOVE_TO_FIRST_POINT | Next: MOVING_TO_FIRST_POINT",
         )
+
+    def test_clean_up_stops_controller_if_present(self):
+        view = GlueProcessDriverView()
+        view._controller = MagicMock()
+
+        view.clean_up()
+
+        view._controller.stop.assert_called_once_with()
 
 
 if __name__ == "__main__":

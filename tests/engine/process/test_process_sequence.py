@@ -367,5 +367,52 @@ class TestProcessSequenceChaining(unittest.TestCase):
         self.assertEqual(seq._current_index, 0)
 
 
+class TestProcessSequenceTransitionHook(unittest.TestCase):
+
+    def test_before_next_start_hook_runs_before_starting_next_process(self):
+        proc_a = _make_proc("a")
+        proc_b = _make_proc("b")
+        ms = _ms()
+        hook = MagicMock(return_value=True)
+        seq = ProcessSequence([proc_a, proc_b], ms, before_next_start=hook)
+        seq.start()
+
+        cb_a = _get_callback(ms, ProcessTopics.state("a"))
+        cb_a(_stopped("a"))
+
+        hook.assert_called_once_with(proc_a, proc_b)
+        proc_b.start.assert_called_once()
+
+    def test_before_next_start_hook_false_blocks_next_process_start(self):
+        proc_a = _make_proc("a")
+        proc_b = _make_proc("b")
+        ms = _ms()
+        hook = MagicMock(return_value=False)
+        seq = ProcessSequence([proc_a, proc_b], ms, before_next_start=hook)
+        seq.start()
+
+        cb_a = _get_callback(ms, ProcessTopics.state("a"))
+        cb_a(_stopped("a"))
+
+        hook.assert_called_once_with(proc_a, proc_b)
+        proc_b.start.assert_not_called()
+        self.assertIs(seq._current, proc_b)
+        self.assertEqual(seq._current_index, 1)
+
+    def test_before_next_start_hook_exception_blocks_next_process_start(self):
+        proc_a = _make_proc("a")
+        proc_b = _make_proc("b")
+        ms = _ms()
+        hook = MagicMock(side_effect=RuntimeError("hook failed"))
+        seq = ProcessSequence([proc_a, proc_b], ms, before_next_start=hook)
+        seq.start()
+
+        cb_a = _get_callback(ms, ProcessTopics.state("a"))
+        cb_a(_stopped("a"))
+
+        proc_b.start.assert_not_called()
+        self.assertIs(seq._current, proc_b)
+
+
 if __name__ == "__main__":
     unittest.main()

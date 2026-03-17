@@ -68,6 +68,12 @@ class FairinoRos2Robot(IRobot):
     def get_last_trajectory_command_info(self):
         return self._client.get_last_execute_path_response()
 
+    def get_connection_state(self) -> str:
+        return self._client.get_connection_state()
+
+    def get_connection_details(self) -> dict:
+        return self._client.get_connection_details()
+
     def enable(self) -> None:
         logger.info("enable →")
         self._client.enable()

@@ -56,4 +56,3 @@ class IGlueDashboardService(ABC):
 
     @abstractmethod
     def get_process_state(self) -> str: ...
-

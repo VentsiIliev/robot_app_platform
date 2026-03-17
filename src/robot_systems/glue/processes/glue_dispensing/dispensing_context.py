@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import asdict
+import math
 import logging
 import threading
 from typing import Optional, Any
@@ -24,6 +25,10 @@ from src.robot_systems.glue.processes.glue_dispensing.context_ops.pump_thread_op
 )
 
 _logger = logging.getLogger(__name__)
+
+
+def _dist(a, b) -> float:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a[:3], b[:3])))
 
 
 class DispensingContext:
@@ -119,11 +124,47 @@ class DispensingContext:
         self.segment_trajectory_completed = False
 
     def pause_current_segment_execution(self, state) -> None:
-        self.current_point_index = self.current_segment_start_index
+        self.current_point_index = self.estimate_resume_point_index_for_current_segment()
         self.pause_from(state)
 
     def stop_current_segment_execution(self) -> None:
         self.current_point_index = self.current_segment_start_index
+
+    def estimate_resume_point_index_for_current_segment(self) -> int:
+        entry = self.current_entry
+        if entry is None:
+            return self.current_segment_start_index
+
+        points = entry.points
+        if not points:
+            return self.current_segment_start_index
+
+        start_index = max(0, min(self.current_segment_start_index, len(points) - 1))
+        robot_service = self.robot_service
+        if robot_service is None:
+            return start_index
+
+        try:
+            position = robot_service.get_current_position()
+        except Exception:
+            return start_index
+
+        if not position:
+            return start_index
+
+        best_index = start_index
+        best_distance = float("inf")
+        for index in range(start_index, len(points)):
+            distance = _dist(position, points[index])
+            if distance < best_distance:
+                best_distance = distance
+                best_index = index
+
+        settings = self.get_segment_settings()
+        threshold = float(settings.reach_end_threshold) if settings is not None else 1.0
+        if best_distance <= threshold:
+            return min(best_index + 1, len(points))
+        return best_index
 
     def mark_generator_stopped(self) -> None:
         self.generator_started = False
