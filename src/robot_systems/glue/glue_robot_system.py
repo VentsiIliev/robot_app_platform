@@ -123,7 +123,7 @@ class GlueRobotSystem(BaseRobotSystem):
         self._robot = self.get_service(ServiceID.ROBOT)
         _nav_engine      = self.get_service(ServiceID.NAVIGATION)
         self._vision = self.get_optional_service(ServiceID.VISION)
-        self._navigation = GlueNavigationService(_nav_engine,vision=self._vision)  # ← typed facade
+        self._navigation = GlueNavigationService(_nav_engine, vision=self._vision, robot_service=self._robot)  # ← typed facade
         self._tools = self.get_optional_service(ServiceID.TOOLS)
         self._robot_config = self.get_settings(SettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(SettingsID.ROBOT_CALIBRATION)

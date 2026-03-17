@@ -8,6 +8,7 @@ class Plane:
         self.yMin = config.y_min
         self.yMax = config.y_max
         self.spacing       = config.spacing
+        self.rowGap        = config.row_gap
         self.xOffset       = 0.0
         self.yOffset       = 0.0
         self.tallestContour = 0.0

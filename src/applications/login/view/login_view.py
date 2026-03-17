@@ -1,44 +1,76 @@
+import os
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont
+import cv2
+from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
+from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton,
-    QStackedWidget, QTabWidget, QWidget, QMessageBox,
+    QSizePolicy, QStackedWidget, QTabWidget, QWidget, QMessageBox,
 )
+
+from pl_gui.utils.utils_widgets.camera_view import CameraView
+
+
+class _FeedOnlyCameraView(CameraView):
+    """CameraView with zoom, pan, and toolbar disabled — feed display only."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._toolbar.hide()
+
+    def wheelEvent(self, event) -> None:
+        event.ignore()
+
+    def mousePressEvent(self, event) -> None:
+        event.ignore()
+
+    def mouseMoveEvent(self, event) -> None:
+        event.ignore()
+
+    def mouseReleaseEvent(self, event) -> None:
+        event.ignore()
 
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 
+# ── Asset paths ───────────────────────────────────────────────────────────────
+_RESOURCES = os.path.join(os.path.dirname(__file__), "..", "..", "base", "resources")
+_LOGO_PATH          = os.path.join(_RESOURCES, "logo.ico")
+_MACHINE_IMAGE_PATH = os.path.join(_RESOURCES, "MACHINE_BUTTONS_1.png")
+
 # ── Stack page indices ────────────────────────────────────────────────────────
-_PAGE_FIRST_RUN = 0
-_PAGE_TABS      = 1
+_PAGE_SETUP     = 0
+_PAGE_FIRST_RUN = 1
+_PAGE_TABS      = 2
 
 # ── Tab indices ───────────────────────────────────────────────────────────────
 _TAB_LOGIN = 0
 _TAB_QR    = 1
 
-_QR_POLL_MS = 2000   # poll interval for automatic QR scanning
+_QR_POLL_MS = 2000
 
 
 class LoginView(QDialog):
     """
-    Login dialog matching the legacy layout:
+    Login dialog layout:
 
-      ┌──────────────┬──────────────────────────────────┐
-      │              │  [first-run page]                │
-      │  Logo panel  │   ── or ──                       │
-      │  (gradient)  │  [Tab: Normal login | QR login]  │
-      └──────────────┴──────────────────────────────────┘
+      ┌──────────────┬──────────────────────────────────────┐
+      │              │  Page 0: Setup steps                 │
+      │  Logo panel  │  Page 1: First-admin creation        │
+      │  (gradient)  │  Page 2: [Login tab | QR login tab]  │
+      └──────────────┴──────────────────────────────────────┘
 
     Signals
     -------
-    login_submitted(user_id, password)       — normal login button
-    qr_scan_requested()                      — fired by QTimer while QR tab is visible
-    qr_tab_activated()                       — user switched to QR tab (triggers robot move)
+    setup_confirmed()                        — user clicked "Next" on setup page
+    login_submitted(user_id, password)       — normal login button / Enter
+    qr_scan_requested()                      — fired by QTimer while QR tab active
+    qr_tab_activated()                       — user confirmed QR tab switch
     first_admin_submitted(id, fn, ln, pw)    — first-run form submit
     """
 
+    setup_confirmed       = pyqtSignal()
     login_submitted       = pyqtSignal(str, str)
     qr_scan_requested     = pyqtSignal()
     qr_tab_activated      = pyqtSignal()
@@ -47,7 +79,7 @@ class LoginView(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Login")
-        self.setMinimumSize(700, 440)
+        self.setMinimumSize(700, 460)
         self.setWindowFlags(
             Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint
         )
@@ -58,18 +90,21 @@ class LoginView(QDialog):
         self._qr_timer.setInterval(_QR_POLL_MS)
         self._qr_timer.timeout.connect(self.qr_scan_requested)
 
+        self._logo_pixmap: Optional[QPixmap] = None
+
         self._setup_ui()
         self.setStyleSheet(self._stylesheet())
 
     # ── Controller-facing API ────────────────────────────────────────────────
 
+    def show_setup(self) -> None:
+        self._stack.setCurrentIndex(_PAGE_SETUP)
+
     def show_login(self) -> None:
-        """Show the normal-login/QR tab panel (not first-run)."""
         self._stack.setCurrentIndex(_PAGE_TABS)
         self._tabs.setCurrentIndex(_TAB_LOGIN)
 
     def show_first_run(self) -> None:
-        """Show the first-admin creation panel."""
         self._stack.setCurrentIndex(_PAGE_FIRST_RUN)
 
     def show_error(self, message: str) -> None:
@@ -85,8 +120,6 @@ class LoginView(QDialog):
 
     def result_user(self) -> Optional[IAuthenticatedUser]:
         return self._result_user
-
-    # ── QR scanning control (called by controller) ───────────────────────────
 
     def start_qr_scanning(self) -> None:
         if not self._qr_timer.isActive():
@@ -105,101 +138,132 @@ class LoginView(QDialog):
         root.addWidget(self._build_logo_panel(), stretch=1)
         root.addWidget(self._build_right_panel(), stretch=2)
 
+    # ── Logo panel ───────────────────────────────────────────────────────────
+
     def _build_logo_panel(self) -> QWidget:
         panel  = QWidget()
         layout = QVBoxLayout(panel)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setContentsMargins(16, 16, 16, 16)
 
-        self._logo_label = QLabel("Robot\nPlatform")
+        self._logo_label = QLabel()
         self._logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        f = QFont(); f.setPointSize(22); f.setBold(True)
-        self._logo_label.setFont(f)
-        self._logo_label.setStyleSheet("color: #4a2060;")
+
+        pixmap = QPixmap(_LOGO_PATH)
+        if not pixmap.isNull():
+            self._logo_pixmap = pixmap
+            self._logo_label.setPixmap(
+                pixmap.scaled(150, 150,
+                              Qt.AspectRatioMode.KeepAspectRatio,
+                              Qt.TransformationMode.SmoothTransformation)
+            )
+        else:
+            # Fallback text if asset not found
+            f = QFont(); f.setPointSize(22); f.setBold(True)
+            self._logo_label.setFont(f)
+            self._logo_label.setText("Robot\nPlatform")
+            self._logo_label.setStyleSheet("color: #4a2060;")
+
         layout.addWidget(self._logo_label)
 
         panel.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(
-                    x1: 0, y1: 0, x2: 1, y2: 1,
-                    stop: 0 #d5c6f6, stop: 1 #b8b5e0
-                );
-            }
+            background: qlineargradient(
+                x1: 0, y1: 0, x2: 1, y2: 1,
+                stop: 0 #d5c6f6, stop: 1 #b8b5e0
+            );
         """)
         return panel
 
+    # ── Right panel (stacked) ─────────────────────────────────────────────────
+
     def _build_right_panel(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("QWidget { background-color: white; }")
+        container.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         self._stack = QStackedWidget()
-        self._stack.addWidget(self._build_first_run_page())   # _PAGE_FIRST_RUN = 0
-        self._stack.addWidget(self._build_tabs_widget())      # _PAGE_TABS      = 1
+        self._stack.addWidget(self._build_setup_page())      # _PAGE_SETUP     = 0
+        self._stack.addWidget(self._build_first_run_page())  # _PAGE_FIRST_RUN = 1
+        self._stack.addWidget(self._build_tabs_widget())     # _PAGE_TABS      = 2
         layout.addWidget(self._stack)
 
         self._error_label = QLabel()
         self._error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_label.setStyleSheet("color: #c0392b; font-weight: bold; padding: 4px;")
+        self._error_label.setStyleSheet(
+            "color: #c0392b; font-weight: bold; padding: 4px;"
+        )
         self._error_label.setVisible(False)
         layout.addWidget(self._error_label)
 
         return container
 
-    def _build_tabs_widget(self) -> QTabWidget:
-        self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_login_tab(), "Login")
-        self._tabs.addTab(self._build_qr_tab(),    "QR Login")
-        self._tabs.currentChanged.connect(self._on_tab_changed)
-        return self._tabs
+    # ── Setup page ────────────────────────────────────────────────────────────
 
-    def _build_login_tab(self) -> QWidget:
-        page   = QWidget()
-        layout = QFormLayout(page)
-        layout.setContentsMargins(40, 30, 40, 30)
-        layout.setSpacing(16)
-
-        title = QLabel("Login")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        f = QFont(); f.setPointSize(16); f.setBold(True)
-        title.setFont(f)
-        layout.addRow(title)
-
-        self._uid_input = QLineEdit()
-        self._uid_input.setPlaceholderText("Numeric user ID")
-        self._uid_input.setFixedHeight(40)
-        layout.addRow("User ID:", self._uid_input)
-
-        self._pw_input = QLineEdit()
-        self._pw_input.setPlaceholderText("Password")
-        self._pw_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self._pw_input.setFixedHeight(40)
-        layout.addRow("Password:", self._pw_input)
-
-        btn = QPushButton("Login")
-        btn.setMinimumHeight(48)
-        btn.clicked.connect(self._on_login_clicked)
-        self._uid_input.returnPressed.connect(self._on_login_clicked)
-        self._pw_input.returnPressed.connect(self._on_login_clicked)
-        layout.addRow(btn)
-        return page
-
-    def _build_qr_tab(self) -> QWidget:
+    def _build_setup_page(self) -> QWidget:
         page   = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setContentsMargins(30, 20, 30, 20)
+        layout.setSpacing(12)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(16)
 
-        info = QLabel("Scanning for QR code…\nPoint the camera at a user QR code to log in.")
-        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info.setWordWrap(True)
+        layout.addStretch(1)
+
+        # Machine image
+        self._machine_label = QLabel()
+        self._machine_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        machine_px = QPixmap(_MACHINE_IMAGE_PATH)
+        if not machine_px.isNull():
+            self._machine_pixmap = machine_px
+            self._machine_label.setPixmap(
+                machine_px.scaled(300, 300,
+                                  Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation)
+            )
+        else:
+            self._machine_pixmap = None
+            self._machine_label.setText("[Machine image not found]")
+            self._machine_label.setStyleSheet("color: grey; font-size: 12px;")
+        layout.addWidget(self._machine_label)
+
+        # Instruction
+        instruction = QLabel("Press the blue button on the machine to continue.")
+        instruction.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        instruction.setWordWrap(True)
         f = QFont(); f.setPointSize(13)
-        info.setFont(f)
+        instruction.setFont(f)
+        layout.addWidget(instruction)
+
         layout.addStretch(1)
-        layout.addWidget(info)
-        layout.addStretch(1)
+
+        # TODO: remove once physical blue-button signal is wired
+        btn_sim = QPushButton("⬤  Simulate Blue Button")
+        btn_sim.setFixedHeight(44)
+        btn_sim.setToolTip("Temporary — simulates the physical blue button press")
+        btn_sim.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0; color: white;
+                border: none; border-radius: 6px;
+                font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #0D47A1; }
+        """)
+        btn_sim.clicked.connect(self._on_setup_next_clicked)
+        layout.addWidget(btn_sim)
+
+        # Next button (right-aligned)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_next = QPushButton("Next")
+        btn_next.setFixedSize(160, 50)
+        btn_next.clicked.connect(self._on_setup_next_clicked)
+        btn_row.addWidget(btn_next)
+        layout.addLayout(btn_row)
+
         return page
+
+    # ── First-run page ────────────────────────────────────────────────────────
 
     def _build_first_run_page(self) -> QWidget:
         page   = QWidget()
@@ -218,11 +282,11 @@ class LoginView(QDialog):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addRow(subtitle)
 
-        self._fa_uid   = QLineEdit(); self._fa_uid.setPlaceholderText("Numeric ID");    self._fa_uid.setFixedHeight(40)
-        self._fa_first = QLineEdit(); self._fa_first.setPlaceholderText("First name");  self._fa_first.setFixedHeight(40)
-        self._fa_last  = QLineEdit(); self._fa_last.setPlaceholderText("Last name");    self._fa_last.setFixedHeight(40)
-        self._fa_pw    = QLineEdit(); self._fa_pw.setEchoMode(QLineEdit.EchoMode.Password); self._fa_pw.setFixedHeight(40)
-        self._fa_pw.setPlaceholderText("Password")
+        self._fa_uid   = QLineEdit(); self._fa_uid.setPlaceholderText("Numeric ID");   self._fa_uid.setFixedHeight(40)
+        self._fa_first = QLineEdit(); self._fa_first.setPlaceholderText("First name"); self._fa_first.setFixedHeight(40)
+        self._fa_last  = QLineEdit(); self._fa_last.setPlaceholderText("Last name");   self._fa_last.setFixedHeight(40)
+        self._fa_pw    = QLineEdit(); self._fa_pw.setPlaceholderText("Password");       self._fa_pw.setFixedHeight(40)
+        self._fa_pw.setEchoMode(QLineEdit.EchoMode.Password)
 
         layout.addRow("User ID:",    self._fa_uid)
         layout.addRow("First name:", self._fa_first)
@@ -236,7 +300,85 @@ class LoginView(QDialog):
         layout.addRow(btn)
         return page
 
+    # ── Login / QR tabs ───────────────────────────────────────────────────────
+
+    def _build_tabs_widget(self) -> QTabWidget:
+        self._tabs = QTabWidget()
+        self._tabs.addTab(self._build_login_tab(), "Login")
+        self._tabs.addTab(self._build_qr_tab(),    "QR Login")
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        return self._tabs
+
+    def _build_login_tab(self) -> QWidget:
+        page   = QWidget()
+        outer  = QVBoxLayout(page)
+        outer.setContentsMargins(40, 30, 40, 30)
+        outer.setSpacing(16)
+        outer.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        title = QLabel("Login")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        f = QFont(); f.setPointSize(16); f.setBold(True)
+        title.setFont(f)
+        outer.addWidget(title)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        self._uid_input = QLineEdit()
+        self._uid_input.setPlaceholderText("Numeric user ID")
+        self._uid_input.setFixedHeight(40)
+        form.addRow("User ID:", self._uid_input)
+
+        self._pw_input = QLineEdit()
+        self._pw_input.setPlaceholderText("Password")
+        self._pw_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._pw_input.setFixedHeight(40)
+        form.addRow("Password:", self._pw_input)
+
+        outer.addLayout(form)
+
+        btn = QPushButton("Login")
+        btn.setMinimumHeight(52)
+        btn.clicked.connect(self._on_login_clicked)
+        self._uid_input.returnPressed.connect(self._on_login_clicked)
+        self._pw_input.returnPressed.connect(self._on_login_clicked)
+        outer.addWidget(btn)
+        return page
+
+    def _build_qr_tab(self) -> QWidget:
+        page   = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+
+        info = QLabel("Point the camera at a user QR code to log in automatically.")
+        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self._camera_view = _FeedOnlyCameraView()
+        self._camera_view.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        layout.addWidget(self._camera_view, stretch=1)
+
+        return page
+
+    def update_camera_frame(self, frame) -> None:
+        """Push a BGR numpy frame to the camera view. Called from the controller."""
+        if frame is None:
+            return
+        rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        qimg  = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
+        self._camera_view.set_frame(QPixmap.fromImage(qimg))
+
     # ── Internal slots ───────────────────────────────────────────────────────
+
+    def _on_setup_next_clicked(self) -> None:
+        self._error_label.setVisible(False)
+        self.setup_confirmed.emit()
 
     def _on_tab_changed(self, index: int) -> None:
         self._error_label.setVisible(False)
@@ -290,16 +432,30 @@ class LoginView(QDialog):
             return
         super().closeEvent(event)
 
-    # ── Responsive logo ──────────────────────────────────────────────────────
+    # ── Responsive resize ─────────────────────────────────────────────────────
 
     def resizeEvent(self, event) -> None:
-        size = max(14, min(int(self.width() * 0.04), 26))
-        f = self._logo_label.font()
-        f.setPointSize(size)
-        self._logo_label.setFont(f)
+        if self._logo_pixmap:
+            size = int(min(self.width() * 0.18, 180))
+            self._logo_label.setPixmap(
+                self._logo_pixmap.scaled(
+                    size, size,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        if hasattr(self, "_machine_pixmap") and self._machine_pixmap:
+            size = int(min(self.height() * 0.45, 320))
+            self._machine_label.setPixmap(
+                self._machine_pixmap.scaled(
+                    size, size,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
         super().resizeEvent(event)
 
-    # ── Stylesheet ───────────────────────────────────────────────────────────
+    # ── Stylesheet ────────────────────────────────────────────────────────────
 
     @staticmethod
     def _stylesheet() -> str:
@@ -315,7 +471,10 @@ class LoginView(QDialog):
                 background: #f0f0f0; color: black;
                 padding: 10px 20px; font-size: 13px;
             }
-            QTabBar::tab:selected { background: white; font-weight: bold; border-bottom: 2px solid #905BA9; }
+            QTabBar::tab:selected {
+                background: white; font-weight: bold;
+                border-bottom: 2px solid #905BA9;
+            }
             QPushButton {
                 background-color: #905BA9; border: none; color: white;
                 padding: 8px 16px; font-size: 14px; border-radius: 4px;

@@ -234,12 +234,14 @@ class CameraFeed(QLabel):
 FONT = "Arial"
 
 
-# ── Icon path stubs (None = no icon) ─────────────────────────────────────────
+# ── Asset paths ──────────────────────────────────────────────────────────────
 
-LOGO                = None
-LOGIN_BUTTON        = None
-LOGIN_QR_BUTTON     = None
-MACHINE_BUTTONS_IMAGE = None
+_RESOURCES = os.path.join(os.path.dirname(__file__), "..", "src", "applications", "base", "resources")
+
+LOGO                  = os.path.join(_RESOURCES, "logo.ico")
+MACHINE_BUTTONS_IMAGE = os.path.join(_RESOURCES, "MACHINE_BUTTONS_1.png")
+LOGIN_BUTTON          = None   # no icon file for tab buttons
+LOGIN_QR_BUTTON       = None
 
 
 # ── MessageBroker stub ────────────────────────────────────────────────────────

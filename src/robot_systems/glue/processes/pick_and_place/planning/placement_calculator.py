@@ -1,12 +1,10 @@
-import math
-
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
-from src.robot_systems.glue.processes.pick_and_place.models import (
+from src.robot_systems.glue.processes.pick_and_place.planning.models import (
     Position, DropOffPositions, WorkpieceDimensions, PlacementTarget,
     WorkpiecePlacement, PlacementResult,
 )
-from src.robot_systems.glue.processes.pick_and_place.plane_management import PlaneManagementService
+from src.robot_systems.glue.processes.pick_and_place.plane import PlaneManagementService
 
 
 class PlacementCalculator:
@@ -22,11 +20,12 @@ class PlacementCalculator:
         workpiece_height: float,
         gripper_id: int,
     ) -> PlacementResult:
+        contour = Contour(cnt_obj.get())
         # Align contour with X-axis for dimension measurement
-        centroid = cnt_obj.getCentroid()
-        cnt_obj.rotate(-orientation, centroid)
+        centroid = contour.getCentroid()
+        contour.rotate(-orientation, centroid)
 
-        min_rect   = cnt_obj.getMinAreaRect()
+        min_rect   = contour.getMinAreaRect()
         w, h       = min_rect[1]
         if w < h:
             w, h = h, w
@@ -44,8 +43,8 @@ class PlacementCalculator:
         # Translate contour to target
         tx = target.x - bbox_center[0]
         ty = target.y - bbox_center[1]
-        cnt_obj.translate(tx, ty)
-        new_centroid = cnt_obj.getCentroid()
+        contour.translate(tx, ty)
+        new_centroid = contour.getCentroid()
 
         drop_off = self._build_drop_off(new_centroid, workpiece_height, gripper_id)
 
@@ -65,6 +64,6 @@ class PlacementCalculator:
         cx, cy = centroid
 
         return DropOffPositions(
-            approach = Position(cx, cy, z_app,  180, 0, cfg.rz_orientation),
-            drop     = Position(cx, cy, z_drop, 180, 0, cfg.rz_orientation),
+            approach = Position(cx, cy, z_app,  cfg.orientation_rx, cfg.orientation_ry, cfg.rz_orientation),
+            drop     = Position(cx, cy, z_drop, cfg.orientation_rx, cfg.orientation_ry, cfg.rz_orientation),
         )

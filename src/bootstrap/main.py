@@ -45,6 +45,12 @@ def main() -> None:
     # 4 — Qt must exist before any widgets
     qt_app = QApplication(sys.argv)
 
+    # 4b — login gate (blocks until authenticated or user quits)
+    session = _run_login(ctx, robot_app)
+    if session is None:
+        _LOGGER.info("Login cancelled — exiting.")
+        sys.exit(0)
+
     # 5 — load applications
     loader = ApplicationLoader(ctx.messaging_service)
     for spec in GlueRobotSystem.shell.applications:
@@ -79,6 +85,38 @@ def main() -> None:
         sys.exit(qt_app.exec())
     finally:
         robot_app.stop()
+
+
+def _run_login(ctx, robot_app):
+    """Show the login dialog and return a populated UserSession, or None if cancelled."""
+    from src.applications.login.login_application_service import LoginApplicationService
+    from src.applications.login.login_factory import LoginFactory
+    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
+    from src.engine.auth.user_session import UserSession
+    from src.robot_systems.glue.application_wiring import _USERS_STORAGE
+    from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
+    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
+    from src.robot_systems.glue.service_ids import ServiceID
+
+    user_repo    = CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA)
+    auth_service = AuthenticationService(user_repo)
+    robot_service = robot_app.get_optional_service(ServiceID.ROBOT)
+
+    login_service = LoginApplicationService(
+        auth_service=auth_service,
+        user_repository=user_repo,
+        robot_service=robot_service,
+    )
+
+    dialog = LoginFactory.build(login_service, messaging=ctx.messaging_service)
+    result = dialog.exec()
+
+    if result != dialog.DialogCode.Accepted:
+        return None
+
+    session = UserSession()
+    session.login(dialog.result_user())
+    return session
 
 
 def _build_broker_debug_window(messaging_service):

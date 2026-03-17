@@ -1,5 +1,5 @@
-from src.robot_systems.glue.processes.pick_and_place.models import PlacementTarget, WorkpieceDimensions
-from src.robot_systems.glue.processes.pick_and_place.plane import Plane
+from src.robot_systems.glue.processes.pick_and_place.planning.models import PlacementTarget, WorkpieceDimensions
+from src.robot_systems.glue.processes.pick_and_place.plane.plane import Plane
 
 
 class PlaneManagementService:
@@ -22,7 +22,7 @@ class PlaneManagementService:
 
         self._plane.rowCount  += 1
         self._plane.xOffset    = 0.0
-        self._plane.yOffset   += self._plane.tallestContour + 50
+        self._plane.yOffset   += self._plane.tallestContour + self._plane.rowGap
         self._plane.tallestContour = height
 
         target.x = self._plane.xMin + (width / 2)

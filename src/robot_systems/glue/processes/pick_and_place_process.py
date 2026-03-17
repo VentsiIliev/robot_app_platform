@@ -15,7 +15,7 @@ from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
-from src.shared_contracts.events.pick_and_place_events import PickAndPlaceTopics
+from src.shared_contracts.events.pick_and_place_events import PickAndPlaceDiagnosticsEvent, PickAndPlaceTopics
 
 
 class PickAndPlaceProcess(BaseProcess):
@@ -47,7 +47,7 @@ class PickAndPlaceProcess(BaseProcess):
         self._tools      = tool_service
         self._height     = height_service
         self._transformer = transformer
-        self._config     = config
+        self._config     = config or PickAndPlaceConfig()
 
         self._simulation  = False
         self._run_allowed = threading.Event()
@@ -67,6 +67,13 @@ class PickAndPlaceProcess(BaseProcess):
         self._robot.enable_robot()
         # Signal visualizer to clear the plane canvas before the new run
         self._messaging.publish(PickAndPlaceTopics.PLANE_RESET, {})
+        self._publish_diagnostics(
+            {
+                "stage": "startup",
+                "last_message": "Pick-and-place started",
+                "simulation": self._simulation,
+            }
+        )
         self._worker = threading.Thread(
             target=self._run_workflow, daemon=True, name="PickAndPlaceWorker"
         )
@@ -77,20 +84,24 @@ class PickAndPlaceProcess(BaseProcess):
         self._robot.stop_motion()
         self._stop_event.set()
         self._run_allowed.set()   # unblock worker if it is paused
+        self._publish_diagnostics({"stage": "cancelled", "last_message": "Pick-and-place stopping"})
         self._logger.info("Pick-and-place stopping")
 
     def _on_pause(self) -> None:
         self._robot.stop_motion()
         self._run_allowed.clear()
+        self._publish_diagnostics({"last_message": "Pick-and-place paused"})
         self._logger.info("Pick-and-place paused")
 
     def _on_resume(self) -> None:
         self._run_allowed.set()
+        self._publish_diagnostics({"last_message": "Pick-and-place resumed"})
         self._logger.info("Pick-and-place resumed")
 
     def _on_reset_errors(self) -> None:
         self._stop_event.clear()
         self._run_allowed.set()
+        self._publish_diagnostics({"last_message": "Pick-and-place errors reset", "last_error": None})
 
     # ── Worker ────────────────────────────────────────────────────────
 
@@ -130,6 +141,9 @@ class PickAndPlaceProcess(BaseProcess):
                 ]
                 self._messaging.publish(PickAndPlaceTopics.MATCH_RESULT, items)
 
+            def _on_diagnostics(snapshot):
+                self._publish_diagnostics(snapshot)
+
             workflow = PickAndPlaceWorkflow(
                 robot=self._robot,
                 navigation=self._navigation,
@@ -141,19 +155,32 @@ class PickAndPlaceProcess(BaseProcess):
                 logger=self._logger,
                 on_workpiece_placed=_on_placed,
                 on_match_result=_on_match_result,
+                on_diagnostics=_on_diagnostics,
                 simulation=self._simulation,
             )
-            status, message = workflow.run(
+            result = workflow.run(
                 stop_event=self._stop_event,
                 run_allowed=self._run_allowed,
             )
             if self._stop_event.is_set():
                 return
-            if status == ProcessState.ERROR:
-                self.set_error(message)
+            if result.state == ProcessState.ERROR:
+                if result.error is not None:
+                    self._logger.error(
+                        "Pick-and-place failed [%s/%s]: %s",
+                        result.error.stage.value,
+                        result.error.code.value,
+                        result.error.message,
+                    )
+                self.set_error(result.message)
             else:
                 self.stop()
         except Exception:
             self._logger.exception("Pick-and-place workflow error")
             self.set_error("Unexpected error in pick-and-place workflow")
 
+    def _publish_diagnostics(self, snapshot: dict) -> None:
+        self._messaging.publish(
+            PickAndPlaceTopics.DIAGNOSTICS,
+            PickAndPlaceDiagnosticsEvent(snapshot=dict(snapshot)),
+        )

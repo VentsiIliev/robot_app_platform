@@ -145,6 +145,8 @@ The coordinator owns the runtime mode selection:
 - `SPRAY_ONLY`
 - `PICK_AND_SPRAY`
 
+`PickAndPlaceProcess` now also publishes structured diagnostics on `PickAndPlaceTopics.DIAGNOSTICS` while it runs. Those snapshots expose the current workflow stage, active workpiece/gripper, resolved height source, plane state, and the last typed error.
+
 `GlueRobotSystem` also builds a reusable `GlueJobExecutionService` during coordinator setup. That service encapsulates:
 
 1. move the robot to the `CALIBRATION` position using the vision capture offset
@@ -181,6 +183,8 @@ The preparation phase is also cancellable. If the operator presses Stop while gl
 
 The spray-enable behavior for this automated path is not hardcoded. It comes from `GlueSettings.spray_on` in `src/robot_systems/glue/storage/settings/glue/settings.json`, accessed through the shared settings service.
 
+The glue navigation facade also applies a conservative safe-home route: when `move_home()` is requested from a live pose that is not already near `HOME` or `CALIBRATION`, it first routes through `CALIBRATION` and only then moves to `HOME`.
+
 ---
 
 ## Settings Shim Files
@@ -198,4 +202,4 @@ The spray-enable behavior for this automated path is not hardcoded. It comes fro
 | `tools.py` | Defines `ToolChangerSettingsSerializer` |
 | `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
-→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md)
+→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [pick_and_place/](processes/pick_and_place/README.md)

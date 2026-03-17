@@ -39,6 +39,7 @@ from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
 from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
 from src.shared_contracts.events.glue_process_events import GlueProcessTopics
+from src.shared_contracts.events.pick_and_place_events import PickAndPlaceDiagnosticsEvent, PickAndPlaceTopics
 from src.shared_contracts.events.process_events import (
     ProcessState, ProcessStateEvent, ProcessTopics,
 )
@@ -200,6 +201,21 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
         p = self._make()
         p.set_error(); p.reset_errors()
         self.assertEqual(p.state, ProcessState.IDLE)
+
+    def test_start_publishes_pick_and_place_diagnostics(self):
+        messaging = MagicMock()
+        p = PickAndPlaceProcess(robot_service=_robot(), messaging=messaging, navigation_service=_navigation_service())
+
+        p.start()
+
+        published_topics = [call.args[0] for call in messaging.publish.call_args_list]
+        self.assertIn(PickAndPlaceTopics.PLANE_RESET, published_topics)
+        self.assertIn(PickAndPlaceTopics.DIAGNOSTICS, published_topics)
+        diagnostics_call = next(
+            call for call in messaging.publish.call_args_list
+            if call.args[0] == PickAndPlaceTopics.DIAGNOSTICS
+        )
+        self.assertIsInstance(diagnostics_call.args[1], PickAndPlaceDiagnosticsEvent)
 
 
 

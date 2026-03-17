@@ -3,9 +3,8 @@ from typing import Tuple, Optional
 
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
-from src.robot_systems.glue.processes.pick_and_place.plane import Plane
-from src.robot_systems.glue.processes.pick_and_place.plane_management import PlaneManagementService
-from src.robot_systems.glue.processes.pick_and_place.placement_calculator import PlacementCalculator
+from src.robot_systems.glue.processes.pick_and_place.plane import Plane, PlaneManagementService
+from src.robot_systems.glue.processes.pick_and_place.planning import PlacementCalculator
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from src.engine.process.i_process import IProcess
 from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visualizer_service import (

@@ -1,8 +1,8 @@
-import math
-from typing import Tuple
 import logging
+import math
+
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
-from src.robot_systems.glue.processes.pick_and_place.models import Position, PickupPositions
+from src.robot_systems.glue.processes.pick_and_place.planning.models import Position, PickupPositions
 
 _logger = logging.getLogger(__name__)
 
@@ -40,9 +40,9 @@ class PickupCalculator:
 
 
         pickup_positions = PickupPositions(
-            descent = Position(px, py, z_descent, 180, 0, rz_final),
-            pickup  = Position(px, py, z_pickup,  180, 0, rz_final),
-            lift    = Position(px, py, z_descent, 180, 0, rz_final),
+            descent = Position(px, py, z_descent, cfg.orientation_rx, cfg.orientation_ry, rz_final),
+            pickup  = Position(px, py, z_pickup,  cfg.orientation_rx, cfg.orientation_ry, rz_final),
+            lift    = Position(px, py, z_descent, cfg.orientation_rx, cfg.orientation_ry, rz_final),
         )
 
 

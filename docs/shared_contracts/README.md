@@ -29,6 +29,7 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 | `events/robot_events.py` | Implemented | `RobotTopics` — 4 robot state topics |
 | `events/weight_events.py` | Implemented | `WeightTopics`, `WeightReading`, `CellStateEvent`, `CellState` |
 | `events/process_events.py` | Implemented | `ProcessState`, `ProcessStateEvent`, `ProcessTopics` — process lifecycle state machine contract |
+| `events/pick_and_place_events.py` | Implemented | Pick-and-place visualizer and diagnostics topics |
 | `events/vision_events.py` | **Placeholder** | Empty — reserved for vision / camera events |
 | `enums.py` | **Placeholder** | Empty — reserved for shared platform enums |
 | `constants.py` | **Placeholder** | Empty — reserved for shared platform constants |
@@ -64,6 +65,15 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 ```python
 from src.shared_contracts.events.process_events import ProcessTopics, ProcessState, ProcessStateEvent
 ```
+
+### Pick-And-Place Topics (`pick_and_place_events.py`)
+
+| Constant | Topic String | Payload | Published By |
+|----------|--------------|---------|-------------|
+| `PickAndPlaceTopics.WORKPIECE_PLACED` | `"pick_and_place/workpiece_placed"` | `WorkpiecePlacedEvent` | `PickAndPlaceProcess` |
+| `PickAndPlaceTopics.PLANE_RESET` | `"pick_and_place/plane_reset"` | `dict` (currently `{}`) | `PickAndPlaceProcess` |
+| `PickAndPlaceTopics.MATCH_RESULT` | `"pick_and_place/match_result"` | `list[MatchedWorkpieceInfo]` | `PickAndPlaceProcess` |
+| `PickAndPlaceTopics.DIAGNOSTICS` | `"pick_and_place/diagnostics"` | `PickAndPlaceDiagnosticsEvent` | `PickAndPlaceProcess` |
 
 ### App-Specific Topics (not in shared_contracts)
 
@@ -125,6 +135,48 @@ class RobotStateSnapshot:
     acceleration: float
     extra:        Dict[str, Any]
 ```
+
+### `WorkpiecePlacedEvent`
+
+Published when a placement succeeds:
+
+```python
+@dataclass(frozen=True)
+class WorkpiecePlacedEvent:
+    workpiece_name: str
+    gripper_id:     int
+    plane_x:        float
+    plane_y:        float
+    width:          float
+    height:         float
+    timestamp:      datetime
+```
+
+### `MatchedWorkpieceInfo`
+
+Published as part of `PickAndPlaceTopics.MATCH_RESULT`:
+
+```python
+@dataclass(frozen=True)
+class MatchedWorkpieceInfo:
+    workpiece_name: str
+    workpiece_id:   str
+    gripper_id:     int
+    orientation:    float
+```
+
+### `PickAndPlaceDiagnosticsEvent`
+
+Published on `PickAndPlaceTopics.DIAGNOSTICS`:
+
+```python
+@dataclass(frozen=True)
+class PickAndPlaceDiagnosticsEvent:
+    snapshot: dict[str, Any]
+    timestamp: datetime
+```
+
+The `snapshot` currently includes the workflow stage, active workpiece/gripper, resolved height source, pickup points, plane state, and last typed error.
 
 ---
 

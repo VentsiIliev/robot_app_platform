@@ -35,6 +35,7 @@ def _make_model(
 
 def _make_view():
     v = MagicMock()
+    v.setup_confirmed       = MagicMock()
     v.login_submitted       = MagicMock()
     v.qr_scan_requested     = MagicMock()
     v.qr_tab_activated      = MagicMock()
@@ -46,39 +47,56 @@ def _make_view():
 
 class TestLoginControllerLoad(unittest.TestCase):
 
-    def test_load_connects_login_signal(self):
-        ctrl = LoginController(_make_model(), _make_view())
-        view = ctrl._view
+    def _loaded(self, **kwargs):
+        ctrl = LoginController(_make_model(**kwargs), _make_view())
         ctrl.load()
-        view.login_submitted.connect.assert_called_once()
+        return ctrl
 
-    def test_load_connects_qr_scan_signal(self):
-        ctrl = LoginController(_make_model(), _make_view())
-        view = ctrl._view
-        ctrl.load()
-        view.qr_scan_requested.connect.assert_called_once()
+    def test_load_shows_setup_page(self):
+        ctrl = self._loaded()
+        ctrl._view.show_setup.assert_called_once()
 
-    def test_load_connects_qr_tab_activated_signal(self):
-        ctrl = LoginController(_make_model(), _make_view())
-        view = ctrl._view
-        ctrl.load()
-        view.qr_tab_activated.connect.assert_called_once()
+    def test_load_connects_setup_confirmed(self):
+        ctrl = self._loaded()
+        ctrl._view.setup_confirmed.connect.assert_called_once()
 
-    def test_load_connects_first_admin_signal(self):
-        ctrl = LoginController(_make_model(), _make_view())
-        view = ctrl._view
-        ctrl.load()
-        view.first_admin_submitted.connect.assert_called_once()
+    def test_load_connects_login_submitted(self):
+        ctrl = self._loaded()
+        ctrl._view.login_submitted.connect.assert_called_once()
 
-    def test_load_shows_first_run_when_first_run(self):
-        ctrl = LoginController(_make_model(first_run=True), _make_view())
-        ctrl.load()
-        ctrl._view.show_first_run.assert_called_once()
+    def test_load_connects_qr_scan_requested(self):
+        ctrl = self._loaded()
+        ctrl._view.qr_scan_requested.connect.assert_called_once()
 
-    def test_load_shows_login_when_not_first_run(self):
+    def test_load_connects_qr_tab_activated(self):
+        ctrl = self._loaded()
+        ctrl._view.qr_tab_activated.connect.assert_called_once()
+
+    def test_load_connects_first_admin_submitted(self):
+        ctrl = self._loaded()
+        ctrl._view.first_admin_submitted.connect.assert_called_once()
+
+    def test_load_does_not_call_show_login_or_first_run(self):
+        ctrl = self._loaded()
+        ctrl._view.show_login.assert_not_called()
+        ctrl._view.show_first_run.assert_not_called()
+
+
+# ── _on_setup_confirmed ───────────────────────────────────────────────────────
+
+class TestOnSetupConfirmed(unittest.TestCase):
+
+    def test_shows_login_when_not_first_run(self):
         ctrl = LoginController(_make_model(first_run=False), _make_view())
-        ctrl.load()
+        ctrl._on_setup_confirmed()
         ctrl._view.show_login.assert_called_once()
+        ctrl._view.show_first_run.assert_not_called()
+
+    def test_shows_first_run_when_first_run(self):
+        ctrl = LoginController(_make_model(first_run=True), _make_view())
+        ctrl._on_setup_confirmed()
+        ctrl._view.show_first_run.assert_called_once()
+        ctrl._view.show_login.assert_not_called()
 
 
 # ── _on_login_submitted ───────────────────────────────────────────────────────
@@ -122,8 +140,7 @@ class TestOnQrTabActivated(unittest.TestCase):
 class TestOnQrScanRequested(unittest.TestCase):
 
     def test_no_result_does_nothing(self):
-        model = _make_model(qr_result=None)
-        ctrl  = LoginController(model, _make_view())
+        ctrl = LoginController(_make_model(qr_result=None), _make_view())
         ctrl._on_qr_scan_requested()
         ctrl._view.accept_login.assert_not_called()
         ctrl._view.show_error.assert_not_called()
@@ -136,7 +153,7 @@ class TestOnQrScanRequested(unittest.TestCase):
         model.authenticate.assert_called_once_with("1", "pw")
         ctrl._view.accept_login.assert_called_once_with(user)
 
-    def test_qr_result_bad_credentials_shows_error(self):
+    def test_qr_bad_credentials_shows_error(self):
         model = _make_model(user=None, qr_result=("1", "bad"))
         ctrl  = LoginController(model, _make_view())
         ctrl._on_qr_scan_requested()

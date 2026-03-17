@@ -140,6 +140,43 @@ class ProcessTopics:
 
 ---
 
+## `pick_and_place_events.py` — Pick-And-Place Events
+
+These topics are used by `PickAndPlaceProcess`, the pick-and-place visualizer, and any future diagnostics subscribers.
+
+### Topics
+
+```python
+class PickAndPlaceTopics:
+    WORKPIECE_PLACED = "pick_and_place/workpiece_placed"
+    PLANE_RESET      = "pick_and_place/plane_reset"
+    MATCH_RESULT     = "pick_and_place/match_result"
+    DIAGNOSTICS      = "pick_and_place/diagnostics"
+```
+
+### Payloads
+
+#### `WorkpiecePlacedEvent`
+
+Published after a successful place step.
+
+#### `MatchedWorkpieceInfo`
+
+Published as a list on `MATCH_RESULT` after each matching pass.
+
+#### `PickAndPlaceDiagnosticsEvent`
+
+Published on `DIAGNOSTICS` with a `snapshot` dict describing:
+- current workflow stage
+- active workpiece and gripper
+- resolved height source and pickup points
+- current plane offsets/state
+- last typed error, if any
+
+This diagnostics topic is intended for operator-facing tooling and debugging, not for commanding behavior.
+
+---
+
 ## `vision_events.py` — Vision Events
 
 Defines `VisionTopics` — the topic-string constants for the `VisionSystem` messaging integration.
