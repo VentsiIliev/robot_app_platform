@@ -28,17 +28,18 @@ class UserManagementFactory(ApplicationFactory):
         service: IUserManagementService,
         permissions_service: Optional[IPermissionsAdminService] = None,
         known_app_ids: Optional[List[str]] = None,
+        messaging=None,
     ):
         model      = self._create_model(service)
         view       = UserManagementView(schema=model.schema)
-        controller = UserManagementController(model, view)
+        controller = UserManagementController(model, view, messaging=messaging)
         controller.load()
         view._controller = controller
 
         if permissions_service is not None and known_app_ids is not None:
             perm_model      = PermissionsModel(permissions_service, known_app_ids)
             perm_view       = PermissionsView()
-            perm_controller = PermissionsController(perm_model, perm_view)
+            perm_controller = PermissionsController(perm_model, perm_view, messaging=messaging)
             perm_controller.load()
             perm_view._controller = perm_controller
             view.add_permissions_tab(perm_view)

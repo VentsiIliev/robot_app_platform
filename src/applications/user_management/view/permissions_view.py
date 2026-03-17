@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QCoreApplication
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QCheckBox, QHeaderView, QWidget,
@@ -33,7 +33,7 @@ class PermissionsView(QWidget):
         try:
             self._table.setRowCount(len(app_ids))
             self._table.setColumnCount(len(role_values))
-            self._table.setHorizontalHeaderLabels(role_values)
+            self._table.setHorizontalHeaderLabels([self._t(r) for r in role_values])
             self._table.setVerticalHeaderLabels(app_ids)
 
             for row, app_id in enumerate(app_ids):
@@ -56,6 +56,21 @@ class PermissionsView(QWidget):
     def set_notice(self, text: str) -> None:
         self._notice.setText(text)
 
+    # ── Localization ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("UserManagement", text)
+        return translated or text
+
+    def retranslateUi(self, *_) -> None:
+        self._title_label.setText(self._t("App Permissions"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
     # ── UI construction ────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
@@ -63,11 +78,11 @@ class PermissionsView(QWidget):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
 
-        title = QLabel("App Permissions")
+        self._title_label = QLabel()
         f = QFont(); f.setPointSize(14); f.setBold(True)
-        title.setFont(f)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(title)
+        self._title_label.setFont(f)
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        root.addWidget(self._title_label)
 
         self._table = QTableWidget()
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -79,6 +94,8 @@ class PermissionsView(QWidget):
         self._notice.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._notice.setStyleSheet("color: gray; font-style: italic;")
         root.addWidget(self._notice)
+
+        self.retranslateUi()
 
     def _make_toggle_handler(self, app_id: str, role_value: str, cb: QCheckBox):
         def _on_state_changed(_state):

@@ -99,8 +99,48 @@ return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().buil
 
 ---
 
+## Localization
+
+Both `UserManagementView` and `PermissionsView` use `QCoreApplication.translate("UserManagement", ...)` (exposed as `_t()`).
+
+### Users table headers
+
+Column headers come from `FieldDescriptor.label` (e.g. `"ID"`, `"First Name"`, …). They are set once at widget construction via `make_table(schema.get_table_headers())` and refreshed in `retranslateUi()`:
+
+```python
+def retranslateUi(self, *_) -> None:
+    ...
+    self._table.setHorizontalHeaderLabels(
+        [self._t(h) for h in self._schema.get_table_headers()]
+    )
+```
+
+`changeEvent` calls `retranslateUi()` on `QEvent.Type.LanguageChange`, so headers update immediately when the language is switched.
+
+### Permissions table headers
+
+Column headers are the `Role` enum values (`"Admin"`, `"Operator"`, `"Viewer"`, `"Developer"`). They are translated inline inside `set_permissions()`:
+
+```python
+self._table.setHorizontalHeaderLabels([self._t(r) for r in role_values])
+```
+
+Because `PermissionsController._refresh()` calls `set_permissions()` on every language-change event (via broker subscription), no additional `changeEvent` hook is needed in `PermissionsView`.
+
+### Translation catalog keys (context `"UserManagement"`)
+
+Field labels and role values must exist as keys in every catalog under
+`src/robot_systems/<system>/storage/translations/`. The glue system catalogs (`en.json`, `bg.json`) include:
+
+```
+"ID", "First Name", "Last Name", "Password", "Role", "Email"
+"Admin", "Operator", "Viewer", "Developer"
+```
+
+---
+
 ## Design Notes
 
 - **No robot/vision dependency**: `UserManagement` is wired without calling `get_service()` or `get_optional_service()`. It is purely settings + persistence.
-- **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes.
+- **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes. The same field `label` is used as both the table column header and the translation key — keep them consistent.
 - **CSV persistence**: straightforward for operator-level access management; not intended for high-security production use.

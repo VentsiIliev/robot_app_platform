@@ -275,7 +275,7 @@ def _build_user_management_application(robot_system):
     known_ids   = [spec.app_id for spec in robot_system.shell.applications]
 
     def _build(messaging_service):
-        return UserManagementFactory().build(service, perm_svc, known_ids)
+        return UserManagementFactory().build(service, perm_svc, known_ids, messaging=messaging_service)
 
     return WidgetApplication(widget_factory=_build)
 

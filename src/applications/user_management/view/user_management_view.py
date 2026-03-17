@@ -1,5 +1,5 @@
 from typing import List, Optional
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QCoreApplication
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
@@ -33,14 +33,16 @@ class UserManagementView(IApplicationView):
         root.setSpacing(8)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_users_tab(), "Users")
+        self._tabs.addTab(self._build_users_tab(), "")
         root.addWidget(self._tabs)
         self.setStyleSheet(self._stylesheet())
+        self.retranslateUi()
 
     def add_permissions_tab(self, permissions_widget: QWidget) -> None:
         """Attach the App Permissions tab. Called by the factory when the
         permissions service is available."""
-        self._tabs.addTab(permissions_widget, "App Permissions")
+        self._perm_tab_idx = self._tabs.addTab(permissions_widget, "")
+        self.retranslateUi()
 
     def _build_users_tab(self) -> QWidget:
         container = QWidget()
@@ -48,11 +50,11 @@ class UserManagementView(IApplicationView):
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(8)
 
-        title = QLabel("User Management")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._title_label = QLabel()
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont(); f.setPointSize(16); f.setBold(True)
-        title.setFont(f)
-        layout.addWidget(title)
+        self._title_label.setFont(f)
+        layout.addWidget(self._title_label)
 
         layout.addWidget(self._build_filter_bar())
         layout.addWidget(self._build_table())
@@ -92,29 +94,61 @@ class UserManagementView(IApplicationView):
         item = self._table.item(row, 0)
         return item.data(Qt.ItemDataRole.UserRole) if item else None
 
+    # ── Localization ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("UserManagement", text)
+        return translated or text
+
+    def retranslateUi(self, *_) -> None:
+        self._tabs.setTabText(0, self._t("Users"))
+        if hasattr(self, "_perm_tab_idx"):
+            self._tabs.setTabText(self._perm_tab_idx, self._t("App Permissions"))
+        self._title_label.setText(self._t("User Management"))
+        self._filter_group.setTitle(self._t("Filter"))
+        self._filter_label.setText(self._t("Filter by:"))
+        self._filter_input.setPlaceholderText(self._t("Enter filter value…"))
+        self._btn_filter.setText(self._t("Filter"))
+        self._btn_clear.setText(self._t("Clear"))
+        self._btn_add.setText(self._t("Add User"))
+        self._btn_edit.setText(self._t("Edit User"))
+        self._btn_delete.setText(self._t("Delete User"))
+        self._btn_refresh.setText(self._t("Refresh"))
+        self._btn_qr.setText(self._t("Generate QR"))
+        self._table.setHorizontalHeaderLabels(
+            [self._t(h) for h in self._schema.get_table_headers()]
+        )
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
     # ── Builders ─────────────────────────────────────────────────────
 
     def _build_filter_bar(self) -> QWidget:
-        group  = QGroupBox("Filter")
-        layout = QHBoxLayout(group)
-        layout.addWidget(QLabel("Filter by:"))
+        self._filter_group  = QGroupBox()
+        layout = QHBoxLayout(self._filter_group)
+
+        self._filter_label = QLabel()
+        layout.addWidget(self._filter_label)
 
         self._filter_col = QComboBox()
         self._filter_col.addItems(self._schema.get_filterable_labels())
         layout.addWidget(self._filter_col)
 
         self._filter_input = QLineEdit()
-        self._filter_input.setPlaceholderText("Enter filter value…")
         layout.addWidget(self._filter_input)
 
-        btn_apply = QPushButton("Filter")
-        btn_clear = QPushButton("Clear")
-        btn_apply.clicked.connect(self._emit_filter)
-        btn_clear.clicked.connect(self._clear_filter)
+        self._btn_filter = QPushButton()
+        self._btn_clear  = QPushButton()
+        self._btn_filter.clicked.connect(self._emit_filter)
+        self._btn_clear.clicked.connect(self._clear_filter)
         self._filter_input.returnPressed.connect(self._emit_filter)
-        layout.addWidget(btn_apply)
-        layout.addWidget(btn_clear)
-        return group
+        layout.addWidget(self._btn_filter)
+        layout.addWidget(self._btn_clear)
+        return self._filter_group
 
     def _build_table(self) -> QTableWidget:
         self._table = make_table(self._schema.get_table_headers(), min_height=200)
@@ -127,11 +161,11 @@ class UserManagementView(IApplicationView):
         group  = QGroupBox()
         layout = QHBoxLayout(group)
 
-        self._btn_add     = QPushButton("Add User")
-        self._btn_edit    = QPushButton("Edit User")
-        self._btn_delete  = QPushButton("Delete User")
-        self._btn_refresh = QPushButton("Refresh")
-        self._btn_qr      = QPushButton("Generate QR")
+        self._btn_add     = QPushButton()
+        self._btn_edit    = QPushButton()
+        self._btn_delete  = QPushButton()
+        self._btn_refresh = QPushButton()
+        self._btn_qr      = QPushButton()
 
         for btn in (self._btn_add, self._btn_edit, self._btn_delete, self._btn_refresh, self._btn_qr):
             btn.setMinimumHeight(48)
