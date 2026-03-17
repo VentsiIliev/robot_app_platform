@@ -217,6 +217,22 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
         )
         self.assertIsInstance(diagnostics_call.args[1], PickAndPlaceDiagnosticsEvent)
 
+    def test_step_mode_can_be_toggled(self):
+        p = self._make()
+
+        p.set_step_mode(True)
+        self.assertTrue(p.is_step_mode_enabled())
+
+        p.set_step_mode(False)
+        self.assertFalse(p.is_step_mode_enabled())
+
+    def test_step_once_requires_running_process(self):
+        p = self._make()
+        p.set_step_mode(True)
+
+        with self.assertRaisesRegex(RuntimeError, "must be running"):
+            p.step_once()
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════

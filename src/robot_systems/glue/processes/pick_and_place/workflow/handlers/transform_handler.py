@@ -6,6 +6,15 @@ from src.robot_systems.glue.processes.pick_and_place.errors import WorkpieceProc
 def transform_pickup_point(workflow, pickup_px):
     workflow._context.set_stage(workflow._stage.TRANSFORM, "Transforming pickup point")
     workflow._publish_diagnostics()
+    if not workflow._checkpoint("transform.pickup_point"):
+        error = workflow._make_error(
+            workflow._error_code.CANCELLED,
+            workflow._stage.CANCELLED,
+            "Pick-and-place cancelled",
+        )
+        workflow._context.mark_error(error)
+        workflow._publish_diagnostics()
+        return None, None, WorkpieceProcessResult.fail(error)
     try:
         robot_x, robot_y = workflow._transformer.transform(pickup_px[0], pickup_px[1])
         workflow._context.current_pickup_point_robot = (float(robot_x), float(robot_y))

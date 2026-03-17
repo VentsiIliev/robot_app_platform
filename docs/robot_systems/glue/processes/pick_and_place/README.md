@@ -114,6 +114,7 @@ This keeps the geometry logic unchanged while making tool/user/speed changes loc
 `PickAndPlaceProcess` now publishes structured diagnostics snapshots during startup, matching, transform, tooling, height resolution, pick, place, plane planning, and shutdown.
 
 The snapshot currently includes:
+- process state
 - workflow stage
 - match attempt count
 - processed workpiece count
@@ -123,18 +124,38 @@ The snapshot currently includes:
 - resolved height source and value
 - plane offsets/state
 - last typed error
+- step-mode enabled flag
+- queued step budget
+- whether the workflow is currently waiting for a step
+- the current checkpoint id
 
 This gives visualizers and future dashboards a broker-native way to inspect progress without scraping logs.
+
+The visualizer now uses these diagnostics to drive a stage-by-stage operator flow. The main checkpoints are:
+- `startup.move_home`
+- `matching.run`
+- `preparation.begin`
+- `transform.pickup_point`
+- `tooling.ensure_gripper`
+- `tooling.return_home`
+- `height.resolve`
+- `plane.plan`
+- `pick.execute`
+- `place.execute`
+- `placement.finalize`
+- `placement.move_to_calibration`
+- `placement.return_home`
+- `shutdown.drop_gripper`
 
 ---
 
 ## Routing Note
 
-`GlueNavigationService.move_home()` now uses a conservative safe-home route:
-- if the live robot pose is already near `HOME` or `CALIBRATION`, it goes directly home
-- otherwise it first moves through `CALIBRATION`, then to `HOME`
+`GlueNavigationService.move_home()` now goes directly to `HOME`. It may still apply the configured vision capture Z offset, but it no longer inserts a `CALIBRATION` waypoint automatically.
 
-This is intentionally narrow and conservative. It does not yet classify all areas, but it prevents direct “far away workspace -> home” jumps in the common case.
+Pick-and-place now requests calibration moves explicitly where the workflow needs them:
+- after a real gripper pickup/change, the tooling stage returns home before continuing
+- after a workpiece is dropped on the plane, the workflow moves to `CALIBRATION`, then `HOME`, and only then starts the next matching cycle
 
 ---
 

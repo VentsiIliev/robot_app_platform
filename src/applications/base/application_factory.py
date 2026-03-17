@@ -15,9 +15,10 @@ class ApplicationFactory(ABC):
 
     Subclasses implement the three abstract factory methods.
     This base class owns:
-      - the wiring order  (model → view → controller)
-      - the GC fix        (view._controller = controller)
-      - the load call     (controller.load())
+      - the wiring order        (model → view → controller)
+      - the GC fix              (view._controller = controller)
+      - the load call           (controller.load())
+      - the teardown wiring     (view.clean_up → controller.stop())
 
     Usage:
         class MyApplicationFactory(ApplicationFactory):
@@ -45,6 +46,16 @@ class ApplicationFactory(ABC):
         controller = self._create_controller(model, view)
         controller.load()
         view._controller = controller  # transfers ownership — prevents GC killing signal connections
+
+        # Wire clean_up → controller.stop() so broker subscriptions are always
+        # removed when the shell destroys the widget.  The view's own clean_up
+        # logic (if any) still runs afterwards.
+        _original_clean_up = view.clean_up
+        def _clean_up():
+            controller.stop()
+            _original_clean_up()
+        view.clean_up = _clean_up
+
         self._logger.debug(
             "%s built: %s / %s / %s",
             self.__class__.__name__,

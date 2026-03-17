@@ -31,8 +31,10 @@ class PickAndPlaceConfig:
     orientation_rx:       float              = 180.0
     orientation_ry:       float              = 0.0
     rz_orientation:       float              = 90.0
-    gripper_x_offset:     float              = 100.429
-    gripper_y_offset:     float              =   1.991
+    # gripper_x_offset:     float              = 100.429
+    # gripper_y_offset:     float              =   1.991
+    gripper_x_offset:     float              = 0
+    gripper_y_offset:     float              =   0
     gripper_z_offsets:    Dict[int, float]   = field(default_factory=dict)  # gripper_id → z_offset
     max_vision_retries:   int                = 10
     vision_retry_delay_s: float              = 1.0

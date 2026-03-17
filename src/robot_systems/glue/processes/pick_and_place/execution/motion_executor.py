@@ -20,10 +20,11 @@ from src.robot_systems.glue.processes.pick_and_place.planning.models import Drop
 class MotionExecutionResult:
     success: bool
     error: Optional[PickAndPlaceErrorInfo] = None
+    tool_changed: bool = False
 
     @classmethod
-    def ok(cls) -> "MotionExecutionResult":
-        return cls(success=True, error=None)
+    def ok(cls, tool_changed: bool = False) -> "MotionExecutionResult":
+        return cls(success=True, error=None, tool_changed=tool_changed)
 
     @classmethod
     def fail(
@@ -83,6 +84,7 @@ class PickAndPlaceMotionExecutor:
             return MotionExecutionResult.ok()
         if self._tools.current_gripper == gripper_id:
             return MotionExecutionResult.ok()
+        tool_changed = True
         if self._tools.current_gripper is not None:
             ok, msg = self._tools.drop_off_gripper(self._tools.current_gripper)
             if not ok:
@@ -95,7 +97,7 @@ class PickAndPlaceMotionExecutor:
                 )
         ok, msg = self._tools.pickup_gripper(gripper_id)
         if ok:
-            return MotionExecutionResult.ok()
+            return MotionExecutionResult.ok(tool_changed=tool_changed)
         self._logger.error("pickup_gripper(%d) failed: %s — aborting", gripper_id, msg)
         return MotionExecutionResult.fail(
             PickAndPlaceErrorCode.TOOL_CHANGE_FAILED,
@@ -147,6 +149,18 @@ class PickAndPlaceMotionExecutor:
                 detail=str(pos),
             )
         return MotionExecutionResult.ok()
+
+    def move_to_calibration_position(self) -> MotionExecutionResult:
+        if self._simulation:
+            self._logger.info("[SIM] move_to_calibration_position skipped")
+            return MotionExecutionResult.ok()
+        if self._navigation.move_to_calibration_position():
+            return MotionExecutionResult.ok()
+        return MotionExecutionResult.fail(
+            PickAndPlaceErrorCode.MOVE_HOME_FAILED,
+            PickAndPlaceStage.PLACE,
+            "Failed to move to calibration position",
+        )
 
     def drop_gripper_if_held(self) -> MotionExecutionResult:
         if self._simulation:

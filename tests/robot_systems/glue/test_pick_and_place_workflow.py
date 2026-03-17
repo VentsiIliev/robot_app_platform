@@ -93,14 +93,16 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         robot.move_linear.side_effect = [True, True, True, True, False]
         navigation = MagicMock()
         navigation.move_home.return_value = True
+        navigation.move_to_calibration_position.return_value = True
         matching = MagicMock()
         matching.run_matching.side_effect = [
             ({"workpieces": [self._make_workpiece()], "orientations": [0.0]}, 0, [], []),
             ({"workpieces": [], "orientations": []}, 1, [], []),
         ]
         tools = MagicMock()
-        tools.current_gripper = 1
+        tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
+        tools.pickup_gripper.return_value = (True, "")
         transformer = MagicMock()
         transformer.transform.return_value = (10.0, 20.0)
         run_allowed = threading.Event()
@@ -130,14 +132,16 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         robot.move_linear.side_effect = [True, True, True, True, True]
         navigation = MagicMock()
         navigation.move_home.return_value = True
+        navigation.move_to_calibration_position.return_value = True
         matching = MagicMock()
         matching.run_matching.side_effect = [
             ({"workpieces": [self._make_workpiece()], "orientations": [0.0]}, 0, [], []),
             ({"workpieces": [], "orientations": []}, 1, [], []),
         ]
         tools = MagicMock()
-        tools.current_gripper = 1
+        tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
+        tools.pickup_gripper.return_value = (True, "")
         transformer = MagicMock()
         transformer.transform.return_value = (10.0, 20.0)
         config = PickAndPlaceConfig()
@@ -161,6 +165,87 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         pickup_call = robot.move_linear.call_args_list[1]
         pickup_pos = pickup_call.args[0]
         self.assertAlmostEqual(pickup_pos[2], config.z_safe + config.height_adjustment_mm)
+
+    def test_workflow_reports_step_checkpoints_in_order(self):
+        checkpoints = []
+        robot = MagicMock()
+        robot.move_linear.side_effect = [True, True, True, True, True]
+        navigation = MagicMock()
+        navigation.move_home.return_value = True
+        navigation.move_to_calibration_position.return_value = True
+        matching = MagicMock()
+        matching.run_matching.side_effect = [
+            ({"workpieces": [self._make_workpiece()], "orientations": [0.0]}, 0, [], []),
+            ({"workpieces": [], "orientations": []}, 1, [], []),
+        ]
+        tools = MagicMock()
+        tools.current_gripper = None
+        tools.drop_off_gripper.return_value = (True, "")
+        tools.pickup_gripper.return_value = (True, "")
+        transformer = MagicMock()
+        transformer.transform.return_value = (10.0, 20.0)
+        run_allowed = threading.Event()
+        run_allowed.set()
+
+        workflow = PickAndPlaceWorkflow(
+            robot=robot,
+            navigation=navigation,
+            matching=matching,
+            tools=tools,
+            height=None,
+            transformer=transformer,
+            config=PickAndPlaceConfig(),
+            logger=logging.getLogger("pick-and-place-test"),
+            step_gate=lambda name, _snapshot: checkpoints.append(name) or True,
+        )
+
+        result = workflow.run(stop_event=threading.Event(), run_allowed=run_allowed)
+
+        self.assertEqual(result.state, ProcessState.STOPPED)
+        self.assertEqual(
+            checkpoints[:9],
+            [
+                "startup.move_home",
+                "matching.run",
+                "preparation.begin",
+                "transform.pickup_point",
+                "tooling.ensure_gripper",
+                "tooling.return_home",
+                "height.resolve",
+                "plane.plan",
+                "pick.execute",
+            ],
+        )
+        self.assertIn("place.execute", checkpoints)
+        self.assertIn("placement.finalize", checkpoints)
+        self.assertIn("placement.move_to_calibration", checkpoints)
+        self.assertIn("placement.return_home", checkpoints)
+
+    def test_workflow_can_stop_from_step_gate(self):
+        robot = MagicMock()
+        navigation = MagicMock()
+        matching = MagicMock()
+        tools = MagicMock()
+        transformer = MagicMock()
+        run_allowed = threading.Event()
+        run_allowed.set()
+
+        workflow = PickAndPlaceWorkflow(
+            robot=robot,
+            navigation=navigation,
+            matching=matching,
+            tools=tools,
+            height=None,
+            transformer=transformer,
+            config=PickAndPlaceConfig(),
+            logger=logging.getLogger("pick-and-place-test"),
+            step_gate=lambda _name, _snapshot: False,
+        )
+
+        result = workflow.run(stop_event=threading.Event(), run_allowed=run_allowed)
+
+        self.assertEqual(result.state, ProcessState.STOPPED)
+        navigation.move_home.assert_not_called()
 
 
 class TestPickAndPlacePolicies(unittest.TestCase):

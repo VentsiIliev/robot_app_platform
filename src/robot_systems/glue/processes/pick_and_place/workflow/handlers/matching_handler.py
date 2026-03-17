@@ -12,6 +12,8 @@ def run_matching_cycle(workflow):
         workflow._context.match_attempt += 1
         workflow._context.set_stage(workflow._stage.MATCHING, "Running contour matching")
         workflow._publish_diagnostics()
+        if not workflow._checkpoint("matching.run"):
+            return None, PickAndPlaceWorkflowResult.stopped("")
         result, no_match_count, _, _ = workflow._matching.run_matching()
     except Exception as exc:
         workflow._logger.exception("Matching failed")

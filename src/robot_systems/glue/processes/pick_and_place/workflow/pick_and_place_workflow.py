@@ -50,6 +50,7 @@ class PickAndPlaceWorkflow:
         on_workpiece_placed:  Optional[Callable] = None,
         on_match_result:      Optional[Callable] = None,
         on_diagnostics:       Optional[Callable[[dict], None]] = None,
+        step_gate:            Optional[Callable[[str, dict], bool]] = None,
         simulation:           bool = False,
     ):
         self._robot              = robot
@@ -63,6 +64,7 @@ class PickAndPlaceWorkflow:
         self._on_workpiece_placed = on_workpiece_placed
         self._on_match_result     = on_match_result
         self._on_diagnostics      = on_diagnostics
+        self._step_gate           = step_gate
         self._simulation          = simulation
         self._plane              = Plane(config.plane)
         self._plane_mgr          = PlaneManagementService(self._plane)
@@ -110,6 +112,8 @@ class PickAndPlaceWorkflow:
                     workpiece_result = prep_result
                 else:
                     workpiece_result = plan_and_execute_placement(self, item.workpiece, prepared)
+                if stop_event.is_set():
+                    break
                 if workpiece_result.error is not None:
                     shutdown_workflow(self)
                     error = workpiece_result.error
@@ -164,3 +168,12 @@ class PickAndPlaceWorkflow:
                 self._on_diagnostics(self._context.snapshot())
             except Exception:
                 self._logger.warning("on_diagnostics callback failed", exc_info=True)
+
+    def _checkpoint(self, name: str) -> bool:
+        if self._step_gate is None:
+            return True
+        try:
+            return bool(self._step_gate(name, self._context.snapshot()))
+        except Exception:
+            self._logger.warning("step_gate callback failed", exc_info=True)
+            return True

@@ -54,6 +54,14 @@ def prepare_workpiece(workflow, workpiece, orientation: float):
     )
     workflow._context.holding_gripper_id = getattr(workflow._tools, "current_gripper", None)
     workflow._publish_diagnostics("Preparing workpiece")
+    if not workflow._checkpoint("preparation.begin"):
+        return None, WorkpieceProcessResult.fail(
+            workflow._make_error(
+                workflow._error_code.CANCELLED,
+                workflow._stage.CANCELLED,
+                "Pick-and-place cancelled",
+            )
+        )
 
     robot_x, robot_y, transform_result = transform_pickup_point(workflow, pickup_px)
     if transform_result is not None:

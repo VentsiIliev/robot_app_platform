@@ -51,10 +51,12 @@ _MATCH_COLS = ["WP Name", "ID", "Gripper", "Orientation"]
 class PickAndPlaceVisualizerView(IApplicationView):
 
     simulation_toggled = pyqtSignal(bool)
+    step_mode_toggled = pyqtSignal(bool)
     start_process_requested = pyqtSignal()
     stop_process_requested  = pyqtSignal()
     pause_process_requested = pyqtSignal()
     reset_process_requested = pyqtSignal()
+    step_process_requested  = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__("PickAndPlaceVisualizer", parent)
@@ -151,6 +153,18 @@ class PickAndPlaceVisualizerView(IApplicationView):
         self._sim_toggle_btn.toggled.connect(self._on_sim_toggled)
         row.addWidget(self._sim_toggle_btn)
 
+        self._step_mode_btn = QPushButton("Step Mode: OFF")
+        self._step_mode_btn.setCheckable(True)
+        self._step_mode_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._step_mode_btn.toggled.connect(self._on_step_mode_toggled)
+        row.addWidget(self._step_mode_btn)
+
+        self._step_btn = QPushButton("Step")
+        self._step_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._step_btn.setEnabled(False)
+        self._step_btn.clicked.connect(self._on_step_clicked)
+        row.addWidget(self._step_btn)
+
         return row
 
     def _build_camera_panel(self) -> QWidget:
@@ -206,6 +220,10 @@ class PickAndPlaceVisualizerView(IApplicationView):
         self._summary_label.setStyleSheet("color: #888; font-size: 9pt; background: transparent;")
         hdr_row.addWidget(self._summary_label)
         layout.addLayout(hdr_row)
+
+        self._step_status_label = QLabel("Current step: -")
+        self._step_status_label.setStyleSheet("color: #666; font-size: 9pt; background: transparent;")
+        layout.addWidget(self._step_status_label)
 
         self._match_table = QTableWidget(0, len(_MATCH_COLS))
         self._match_table.setHorizontalHeaderLabels(_MATCH_COLS)
@@ -316,11 +334,34 @@ class PickAndPlaceVisualizerView(IApplicationView):
         self._pause_btn.setEnabled(running)
         self._stop_btn.setEnabled(running or paused)
         self._reset_btn.setEnabled(error)
+        self._step_btn.setEnabled(self._step_mode_btn.isChecked() and running)
+
+    def set_step_mode(self, enabled: bool) -> None:
+        self._step_mode_btn.blockSignals(True)
+        self._step_mode_btn.setChecked(enabled)
+        self._step_mode_btn.setText("Step Mode: ON" if enabled else "Step Mode: OFF")
+        self._step_mode_btn.blockSignals(False)
+        self._step_btn.setEnabled(enabled and self._state_label.text() == "● RUNNING")
+
+    def set_step_status(
+        self,
+        checkpoint: Optional[str],
+        waiting: bool,
+        step_budget: int,
+        current_workpiece: Optional[str] = None,
+    ) -> None:
+        checkpoint_text = checkpoint or "-"
+        waiting_text = "waiting" if waiting else "ready"
+        workpiece_text = f" | workpiece: {current_workpiece}" if current_workpiece else ""
+        self._step_status_label.setText(
+            f"Current step: {checkpoint_text} | {waiting_text} | queued: {step_budget}{workpiece_text}"
+        )
 
     def _on_start_clicked(self):  self.start_process_requested.emit()
     def _on_pause_clicked(self):  self.pause_process_requested.emit()
     def _on_stop_clicked(self):   self.stop_process_requested.emit()
     def _on_reset_clicked(self):  self.reset_process_requested.emit()
+    def _on_step_clicked(self):   self.step_process_requested.emit()
 
     def add_placed_item(self, item) -> None:
         self._plane_canvas.add_item(item)
@@ -364,6 +405,11 @@ class PickAndPlaceVisualizerView(IApplicationView):
     def _on_sim_toggled(self, checked: bool) -> None:
         self._sim_toggle_btn.setText("Simulation: ON" if checked else "Simulation: OFF")
         self.simulation_toggled.emit(checked)
+
+    def _on_step_mode_toggled(self, checked: bool) -> None:
+        self._step_mode_btn.setText("Step Mode: ON" if checked else "Step Mode: OFF")
+        self._step_btn.setEnabled(checked and self._state_label.text() == "● RUNNING")
+        self.step_mode_toggled.emit(checked)
 
     def _on_clear_log(self) -> None:
         self._log_text.clear()

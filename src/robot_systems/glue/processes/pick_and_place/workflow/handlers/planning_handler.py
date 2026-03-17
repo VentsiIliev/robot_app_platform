@@ -6,6 +6,15 @@ from src.robot_systems.glue.processes.pick_and_place.errors import WorkpieceProc
 def plan_placement(workflow, prepared):
     workflow._context.set_stage(workflow._stage.PLANE, "Planning placement")
     workflow._publish_diagnostics()
+    if not workflow._checkpoint("plane.plan"):
+        error = workflow._make_error(
+            workflow._error_code.CANCELLED,
+            workflow._stage.CANCELLED,
+            "Pick-and-place cancelled",
+        )
+        workflow._context.mark_error(error)
+        workflow._publish_diagnostics()
+        return None, WorkpieceProcessResult.fail(error)
     result = workflow._placement_strategy.plan(
         prepared.contour,
         workflow._context.current_orientation,

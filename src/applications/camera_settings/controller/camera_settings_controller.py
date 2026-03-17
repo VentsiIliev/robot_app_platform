@@ -41,7 +41,7 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
         self._active = True
         self._wire_bridge()
         self._connect_signals()
-        self._subscribe()
+        self._setup_subscriptions()
         settings = self._model.load()
         self._view.settings_view.set_values(CameraSettingsMapper.to_flat_dict(settings))
 
@@ -67,7 +67,7 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
 
     # ── Broker → Bridge (background thread) ──────────────────────────
 
-    def _subscribe(self) -> None:
+    def _setup_subscriptions(self) -> None:
         self._subscribe(VisionTopics.LATEST_IMAGE,    self._on_latest_image_raw)
         self._subscribe(VisionTopics.THRESHOLD_IMAGE, self._on_threshold_image_raw)
         self._subscribe(VisionTopics.SERVICE_STATE,   self._on_service_state_raw)

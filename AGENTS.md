@@ -157,11 +157,23 @@ process = GlueProcess(
 
 ## Critical Patterns
 
-### MessageBroker — weak refs, no lambdas
+### MessageBroker — weak refs, no lambdas, always unsubscribe
 - `MessageBroker` uses `WeakMethod` — dead subscribers are auto-cleaned
 - **Never** pass `lambda` or bare `.emit` as a broker callback — GC silently drops them
 - Always use named bound methods: `broker.subscribe(topic, self._on_event)`
 - Inject `IMessagingService`; never import `MessageBroker` directly
+- **Every `subscribe` in `load()` must have a matching `unsubscribe` in `stop()`.**
+  The controller stays alive via `view._controller` — weak references do NOT auto-clean it.
+  Without `unsubscribe`, callbacks fire on deleted Qt widgets → `RuntimeError: wrapped C/C++ object … has been deleted`.
+  ```python
+  def load(self) -> None:
+      self._messaging.subscribe(SomeTopic.EVENT, self._on_event)
+
+  def stop(self) -> None:
+      self._messaging.unsubscribe(SomeTopic.EVENT, self._on_event)
+  ```
+- `ApplicationFactory.build()` automatically wires `view.clean_up → controller.stop()`.
+  `stop()` is therefore guaranteed to run when the shell destroys the widget — never omit it.
 
 ### Signal forwarding in views — named methods only
 ```python

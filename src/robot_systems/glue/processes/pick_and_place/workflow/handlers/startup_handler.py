@@ -6,6 +6,8 @@ from src.robot_systems.glue.processes.pick_and_place.errors import PickAndPlaceW
 def run_startup(workflow) -> PickAndPlaceWorkflowResult | None:
     workflow._context.set_stage(workflow._stage.STARTUP, "Moving to home")
     workflow._publish_diagnostics()
+    if not workflow._checkpoint("startup.move_home"):
+        return PickAndPlaceWorkflowResult.stopped("")
     move_home = workflow._motion.move_home()
     if move_home.success:
         return None

@@ -202,7 +202,7 @@ Within the glue dispensing process, robot motion can now be configured independe
 - `use_segment_motion_settings=True` makes `move_to_first_point` and `execute_trajectory` use per-segment `velocity` / `acceleration` when those fields exist in the workpiece segment settings
 - if segment motion values are missing, or the flag is disabled, the process falls back to `global_velocity` / `global_acceleration`
 
-The glue navigation facade also applies a conservative safe-home route: when `move_home()` is requested from a live pose that is not already near `HOME` or `CALIBRATION`, it first routes through `CALIBRATION` and only then moves to `HOME`.
+The glue navigation facade now treats `move_home()` literally: it moves directly to the `HOME` group, applying the vision capture Z offset when configured, but it does not insert an automatic calibration waypoint. Any required move to `CALIBRATION` must be requested explicitly by the caller.
 
 ---
 

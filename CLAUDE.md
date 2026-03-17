@@ -123,6 +123,18 @@ Six ordered steps — order matters:
 
 **Critical:** Never use `lambda` or bare `.emit` as PyQt6 signal slot targets — they are silently GC'd. Always use named bound methods.
 
+**Critical:** Every `messaging.subscribe(...)` call in `load()` **must** have a matching `messaging.unsubscribe(...)` call in `stop()`. The controller is kept alive by `view._controller` — weak references do NOT clean it up automatically. Failing to unsubscribe causes callbacks to fire on deleted Qt widgets after the app is closed, producing `RuntimeError: wrapped C/C++ object … has been deleted`.
+
+```python
+def load(self) -> None:
+    self._messaging.subscribe(SomeTopic.EVENT, self._on_event)
+
+def stop(self) -> None:
+    self._messaging.unsubscribe(SomeTopic.EVENT, self._on_event)
+```
+
+`ApplicationFactory.build()` automatically wires `view.clean_up → controller.stop()`, so `stop()` is always called when the shell destroys the widget. Subclasses must never skip implementing `stop()` even if it currently has nothing to do — subscriptions may be added later.
+
 `ApplicationFactory` assigns `view._controller = controller` automatically to keep the controller alive as long as the view. Never write this line in a factory subclass.
 
 ### Cross-thread delivery

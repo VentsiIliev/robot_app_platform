@@ -25,6 +25,7 @@ class _Bridge(QObject):
     workpiece_placed = pyqtSignal(object)
     plane_reset      = pyqtSignal()
     match_result     = pyqtSignal(object)
+    diagnostics      = pyqtSignal(object)
 
 
 class _BridgeLogHandler(logging.Handler):
@@ -74,8 +75,11 @@ class PickAndPlaceVisualizerController(IApplicationController):
         self._bridge.workpiece_placed.connect(self._on_workpiece_placed)
         self._bridge.plane_reset.connect(self._on_plane_reset)
         self._bridge.match_result.connect(self._on_match_result)
+        self._bridge.diagnostics.connect(self._on_diagnostics)
 
         self._view.simulation_toggled.connect(self._on_simulation_toggled)
+        self._view.step_mode_toggled.connect(self._on_step_mode_toggled)
+        self._view.step_process_requested.connect(self._on_step_process)
         self._view.destroyed.connect(self.stop)
 
     def load(self) -> None:
@@ -89,6 +93,7 @@ class PickAndPlaceVisualizerController(IApplicationController):
         self._view.stop_process_requested.connect(self._on_stop_process)
         self._view.pause_process_requested.connect(self._on_pause_process)
         self._view.reset_process_requested.connect(self._on_reset_process)
+        self._view.set_step_mode(self._model.is_step_mode_enabled())
 
         if self._broker:
             self._subscribe()
@@ -145,6 +150,15 @@ class PickAndPlaceVisualizerController(IApplicationController):
     def _on_reset_process(self) -> None:
         self._model.reset_process()
 
+    def _on_step_mode_toggled(self, value: bool) -> None:
+        self._model.set_step_mode(value)
+        self._view.append_log(f"[STEP] Step mode {'ON' if value else 'OFF'}")
+
+    def _on_step_process(self) -> None:
+        try:
+            self._model.step_process()
+        except Exception as exc:
+            self._view.append_log(f"[STEP] {exc}")
 
     def stop(self) -> None:
         self._active = False
@@ -159,22 +173,38 @@ class PickAndPlaceVisualizerController(IApplicationController):
     # ── Broker subscriptions ──────────────────────────────────────────
 
     def _subscribe(self) -> None:
-        self._sub(VisionTopics.LATEST_IMAGE,
-                  lambda msg: self._bridge.camera_frame.emit(msg.get("image")) if isinstance(msg, dict) else None)
-        self._sub(ProcessTopics.state(ProcessID.PICK_AND_PLACE),
-                  lambda e: self._bridge.process_state.emit(e.state.value))
         from src.shared_contracts.events.pick_and_place_events import PickAndPlaceTopics
-        self._sub(PickAndPlaceTopics.WORKPIECE_PLACED,
-                  lambda e: self._bridge.workpiece_placed.emit(e))
-        self._sub(PickAndPlaceTopics.PLANE_RESET,
-                  lambda _: self._bridge.plane_reset.emit())
-        self._sub(PickAndPlaceTopics.MATCH_RESULT,
-                  lambda items: self._bridge.match_result.emit(items))
+        self._sub(VisionTopics.LATEST_IMAGE, self._handle_latest_image)
+        self._sub(ProcessTopics.state(ProcessID.PICK_AND_PLACE), self._handle_process_state_event)
+        self._sub(PickAndPlaceTopics.WORKPIECE_PLACED, self._handle_workpiece_placed)
+        self._sub(PickAndPlaceTopics.PLANE_RESET, self._handle_plane_reset)
+        self._sub(PickAndPlaceTopics.MATCH_RESULT, self._handle_match_result)
+        self._sub(PickAndPlaceTopics.DIAGNOSTICS, self._handle_diagnostics)
 
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)
         self._subs.append((topic, cb))
+
+    def _handle_latest_image(self, msg) -> None:
+        if isinstance(msg, dict):
+            self._bridge.camera_frame.emit(msg.get("image"))
+
+    def _handle_process_state_event(self, event) -> None:
+        self._bridge.process_state.emit(event.state.value)
+
+    def _handle_workpiece_placed(self, event) -> None:
+        self._bridge.workpiece_placed.emit(event)
+
+    def _handle_plane_reset(self, _event) -> None:
+        self._bridge.plane_reset.emit()
+
+    def _handle_match_result(self, items) -> None:
+        self._bridge.match_result.emit(items)
+
+    def _handle_diagnostics(self, event) -> None:
+        snapshot = getattr(event, "snapshot", event)
+        self._bridge.diagnostics.emit(snapshot)
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
 
@@ -197,3 +227,14 @@ class PickAndPlaceVisualizerController(IApplicationController):
     def _on_simulation_toggled(self, value: bool) -> None:
         self._model.set_simulation(value)
         self._view.append_log(f"[SIM] Simulation mode {'ON' if value else 'OFF'}")
+
+    def _on_diagnostics(self, snapshot: dict) -> None:
+        if not self._active or not isinstance(snapshot, dict):
+            return
+        self._view.set_step_mode(bool(snapshot.get("step_mode", False)))
+        self._view.set_step_status(
+            checkpoint=snapshot.get("current_checkpoint"),
+            waiting=bool(snapshot.get("waiting_for_step", False)),
+            step_budget=int(snapshot.get("step_budget", 0) or 0),
+            current_workpiece=snapshot.get("current_workpiece_name"),
+        )

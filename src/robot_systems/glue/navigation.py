@@ -1,9 +1,7 @@
 from typing import Callable, Optional
-import logging
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision import IVisionService
-_logger = logging.getLogger(__name__)
 
 class GlueNavigationService:
 
@@ -28,7 +26,7 @@ class GlueNavigationService:
         return 0.0
 
     def move_home(self) -> bool:
-        ok = self._move_home_safely()
+        ok = self._move_with_z_offset(self._GROUP_HOME, self._capture_z_offset)
         if ok:
             self._set_area("pickup")
         return ok
@@ -83,44 +81,6 @@ class GlueNavigationService:
         except Exception:
             import traceback
             traceback.print_exc()
-            return False
-
-    def _move_home_safely(self) -> bool:
-        if self._should_route_home_via_calibration():
-            if not self._move_with_z_offset(self._GROUP_CALIBRATION, self._capture_z_offset):
-                return False
-        return self._move_with_z_offset(self._GROUP_HOME, self._capture_z_offset)
-
-    def _should_route_home_via_calibration(self) -> bool:
-        if self._robot is None:
-            return False
-        try:
-            current = self._robot.get_current_position()
-            if not current or len(current) < 3:
-                return False
-            current_xyz = current[:3]
-            calibration = self._get_group_position(self._GROUP_CALIBRATION)
-            home = self._get_group_position(self._GROUP_HOME)
-            if calibration is None or home is None:
-                return False
-            return not self._is_near(current_xyz, home[:3]) and not self._is_near(current_xyz, calibration[:3])
-        except Exception:
-            _logger.exception("Failed to evaluate safe home routing")
-            return False
-
-    def _get_group_position(self, group_name: str):
-        config = self._nav._get_config()
-        group = self._nav._get_group(config, group_name)
-        return group.parse_position()
-
-    @staticmethod
-    def _is_near(current_xyz, target_xyz, tolerance_mm: float = 25.0) -> bool:
-        try:
-            dx = float(current_xyz[0]) - float(target_xyz[0])
-            dy = float(current_xyz[1]) - float(target_xyz[1])
-            dz = float(current_xyz[2]) - float(target_xyz[2])
-            return (dx * dx + dy * dy + dz * dz) ** 0.5 <= tolerance_mm
-        except Exception:
             return False
 
 

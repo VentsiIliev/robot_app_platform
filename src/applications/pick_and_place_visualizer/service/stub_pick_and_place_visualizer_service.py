@@ -4,6 +4,9 @@ from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visuali
 
 
 class StubPickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
+    def __init__(self):
+        self._step_mode = False
+
 
     def run_simulation(self) -> SimResult:
         return SimResult(
@@ -40,3 +43,13 @@ class StubPickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
 
     def get_process_state(self) -> str:
         return "idle"
+
+    def set_step_mode(self, value: bool) -> None:
+        self._step_mode = bool(value)
+        print(f"[Stub] set_step_mode({value})")
+
+    def is_step_mode_enabled(self) -> bool:
+        return self._step_mode
+
+    def step_process(self) -> None:
+        print("[Stub] step_process")

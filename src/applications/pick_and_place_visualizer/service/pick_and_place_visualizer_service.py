@@ -51,6 +51,19 @@ class PickAndPlaceVisualizerService(IPickAndPlaceVisualizerService):
             return self._process.state.value
         return "idle"
 
+    def set_step_mode(self, value: bool) -> None:
+        if self._process and hasattr(self._process, "set_step_mode"):
+            self._process.set_step_mode(value)
+
+    def is_step_mode_enabled(self) -> bool:
+        if self._process and hasattr(self._process, "is_step_mode_enabled"):
+            return bool(self._process.is_step_mode_enabled())
+        return False
+
+    def step_process(self) -> None:
+        if self._process and hasattr(self._process, "step_once"):
+            self._process.step_once()
+
     def run_simulation(self) -> SimResult:
         try:
             result, no_match_count, _, _ = self._matching.run_matching()
