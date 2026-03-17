@@ -1,0 +1,33 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+
+# Test / coverage output
+.coverage
+.coverage.*
+.coveragerc
+.pytest_cache/
+htmlcov/
+
+# IDE files
+.idea/
+*.iml
+
+# Runtime-generated debug artifacts
+src/bootstrap/robot_calibration_chessboard_detection_debug.png
+src/bootstrap/transformation_to_camera_center.json
+
+# Vision debug/runtime storage
+src/engine/vision/implementation/VisionSystem/features/contour_matching/alignment/debug/
+src/engine/vision/implementation/VisionSystem/features/contour_matching/storage/
+
+# Runtime-generated glue data
+src/robot_systems/glue/storage/users/
+src/robot_systems/glue/storage/workpieces/
+src/robot_systems/glue/storage/settings/height_measuring/
+src/robot_systems/glue/storage/settings/tools/
+src/robot_systems/glue/storage/settings/vision/data/*.npz
+src/robot_systems/glue/storage/settings/vision/data/*.npy

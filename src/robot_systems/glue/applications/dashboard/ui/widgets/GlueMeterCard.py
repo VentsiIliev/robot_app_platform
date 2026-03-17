@@ -69,6 +69,7 @@ class GlueMeterCard(QFrame):
         header_layout = QHBoxLayout()
         header_layout.setSpacing(10)
         self.title_label = QLabel(self.label_text)
+        self._apply_title_text()
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setStyleSheet(CARD_HEADER_STYLE)
         header_layout.addWidget(self.title_label, 1)
@@ -114,13 +115,19 @@ class GlueMeterCard(QFrame):
     # ------------------------------------------------------------------ #
 
     def retranslateUi(self) -> None:
+        self._apply_title_text()
         self.change_glue_button.setText(self.tr("⚙ Change"))
         self._update_indicator(self._current_state_str)
         if self._current_glue_type is None:
             self.glue_type_label.setText(self.tr("🧪 Loading..."))
 
+    def _apply_title_text(self) -> None:
+        if self.label_text.startswith("Cell "):
+            self.title_label.setText(self.tr("Cell {index}").format(index=self.index))
+            return
+        self.title_label.setText(self.tr(self.label_text))
+
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:
             self.retranslateUi()
         super().changeEvent(event)
-

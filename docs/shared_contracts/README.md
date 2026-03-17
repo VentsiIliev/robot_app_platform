@@ -29,6 +29,8 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 | `events/robot_events.py` | Implemented | `RobotTopics` — 4 robot state topics |
 | `events/weight_events.py` | Implemented | `WeightTopics`, `WeightReading`, `CellStateEvent`, `CellState` |
 | `events/process_events.py` | Implemented | `ProcessState`, `ProcessStateEvent`, `ProcessTopics` — process lifecycle state machine contract |
+| `events/notification_events.py` | Implemented | `UserNotificationEvent`, `NotificationSeverity`, `NotificationTopics` — generic operator notification contract |
+| `events/localization_events.py` | Implemented | `LanguageChangedEvent`, `LocalizationTopics` — runtime language-change notification |
 | `events/pick_and_place_events.py` | Implemented | Pick-and-place visualizer and diagnostics topics |
 | `events/vision_events.py` | **Placeholder** | Empty — reserved for vision / camera events |
 | `enums.py` | **Placeholder** | Empty — reserved for shared platform enums |
@@ -65,6 +67,26 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 ```python
 from src.shared_contracts.events.process_events import ProcessTopics, ProcessState, ProcessStateEvent
 ```
+
+### Notification Topics (`notification_events.py`)
+
+| Constant | Topic String | Payload | Published By |
+|----------|--------------|---------|-------------|
+| `NotificationTopics.USER` | `"ui/notification"` | `UserNotificationEvent` | Processes, coordinators, services, controllers |
+
+```python
+from src.shared_contracts.events.notification_events import (
+    NotificationSeverity,
+    NotificationTopics,
+    UserNotificationEvent,
+)
+```
+
+### Localization Topics (`localization_events.py`)
+
+| Constant | Topic String | Payload | Published By |
+|----------|--------------|---------|-------------|
+| `LocalizationTopics.LANGUAGE_CHANGED` | `"localization/language_changed"` | `LanguageChangedEvent` | `LocalizationService` |
 
 ### Pick-And-Place Topics (`pick_and_place_events.py`)
 
@@ -178,6 +200,30 @@ class PickAndPlaceDiagnosticsEvent:
 
 The `snapshot` currently includes the workflow stage, active workpiece/gripper, resolved height source, pickup points, plane state, and last typed error.
 
+### `UserNotificationEvent`
+
+Published on `NotificationTopics.USER`:
+
+```python
+@dataclass(frozen=True)
+class UserNotificationEvent:
+    source: str
+    severity: NotificationSeverity
+    title_key: str = ""
+    message_key: str = ""
+    params: Mapping[str, object] = field(default_factory=dict)
+    fallback_title: str = ""
+    fallback_message: str = ""
+    detail: str | None = None
+    dedupe_key: str | None = None
+    timestamp: datetime
+```
+
+This contract is localization-ready:
+- backend layers can provide stable keys plus params
+- UI presenters can translate later
+- fallback text keeps the event usable before translations are implemented
+
 ---
 
 ## Adding New Events
@@ -185,6 +231,11 @@ The `snapshot` currently includes the workflow stage, active workpiece/gripper, 
 1. Add a frozen dataclass payload to the appropriate `events/*.py` file
 2. Add a topic string constant or static method to the corresponding `Topics` class
 3. Import and use from both the publisher and subscriber — the import error at build/start time will catch mismatches
+
+For user-facing notifications:
+- publish `UserNotificationEvent` from backend layers
+- render it in the application layer with a presenter such as `UserNotificationPresenter`
+- do not import Qt or message-box helpers into engine or robot-system code
 
 ---
 

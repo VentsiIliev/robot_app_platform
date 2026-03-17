@@ -9,7 +9,8 @@ This package contains the planning and execution pieces used by [PickAndPlacePro
 | File | Responsibility |
 |------|----------------|
 | [config/pick_and_place_config.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/config/pick_and_place_config.py) | Runtime config for plane layout, motion profiles, orientation, and height source |
-| [workflow/pick_and_place_workflow.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/pick_and_place_workflow.py) | Orchestrates home move, matching loop, transform, tooling, pick/place execution, and plane updates |
+| [workflow/pick_and_place_workflow.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/pick_and_place_workflow.py) | Thin workflow orchestrator over small stage handlers |
+| [workflow/handlers](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/handlers) | Stage-level handlers for startup, matching, transform, tooling, height, planning, pick, place, completion, and shutdown |
 | [context/pick_and_place_context.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/context/pick_and_place_context.py) | Runtime execution context and diagnostics snapshot state |
 | [execution/motion_executor.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/execution/motion_executor.py) | Centralizes robot/tool motions and converts failures into typed results |
 | [errors/pick_and_place_error.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) | Typed workflow stages, error codes, and workflow results |
@@ -27,6 +28,16 @@ This package contains the planning and execution pieces used by [PickAndPlacePro
 ## Workflow Contract
 
 `PickAndPlaceWorkflow.run(stop_event, run_allowed)` now returns a typed [PickAndPlaceWorkflowResult](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/errors/pick_and_place_error.py) instead of only an ad hoc `(state, message)` pair internally.
+
+The workflow entrypoint is intentionally thin. Its main job is to:
+- run startup
+- wait on `run_allowed`
+- run a matching cycle
+- prepare one workpiece
+- plan and execute placement
+- shut down cleanly on terminal conditions
+
+The detailed work for those steps lives under [workflow/handlers](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/processes/pick_and_place/workflow/handlers), so no single handler owns transform, tooling, height, planning, pick, place, and completion at once.
 
 The outer process still behaves the same:
 - `STOPPED` on normal completion

@@ -102,3 +102,4 @@ class YourRobotApp(BaseRobotSystem):
 - **Layer separation**: Each layer has strict import rules — see `APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`.
 - **Cross-thread safety**: When broker callbacks arrive from background threads (e.g., weight readings), controllers use a `_Bridge(QObject)` with `pyqtSignal` attributes to marshal data back to the Qt main thread safely. See `glue_cell_settings/controller/`.
 - **Blocking service calls**: When a service call may block the GUI (e.g., serial port detection), controllers dispatch a `QThread + _Worker` pair and track them in `_active: List[Tuple[QThread, _Worker]]`. See `modbus_settings/controller/`.
+- **Localization**: Views should prefer `self.tr(...)` for static strings and refresh text on `QEvent.LanguageChange`. Controllers should re-read dynamic strings via `QCoreApplication.translate(...)` or a localization service helper when the view emits its language-changed signal.

@@ -24,6 +24,10 @@ src/engine/
 │   ├── process_requirements.py ← Service pre-condition declarations
 │   └── process_sequence.py     ← Auto-advancing ordered process chain
 │   (ProcessState, ProcessStateEvent, ProcessTopics → src/shared_contracts/events/process_events.py)
+├── localization/               ← Runtime language service over Qt translators
+│   ├── i_localization_service.py
+│   ├── dict_translator.py
+│   └── localization_service.py
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
@@ -92,6 +96,7 @@ src/engine/
 | Modbus | `ModbusActionService` | [hardware/communication/modbus/](hardware/communication/modbus/README.md) |
 | Weight cells | `WeightCellService` | [hardware/weight/](hardware/weight/README.md) |
 | Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
+| Localization | `LocalizationService` | [localization/](localization/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
 | Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |
@@ -122,3 +127,5 @@ All engine objects are created once and injected as interfaces — no engine mod
 - **Interface-first** — all cross-module calls go through abstract base classes (`IRobotService`, `ISettingsService`, `IMessagingService`). Concrete classes are an implementation detail.
 - **Dependency injection** — factories wire dependencies explicitly; no global state except the `MessageBroker` singleton.
 - **Daemon threads** — background polling loops (`RobotStateManager`, `WeightCellService`) use daemon threads so they don't block process exit.
+
+Note: `engine/localization/` is the one engine subsystem that intentionally touches Qt core translation APIs (`QCoreApplication`, `QTranslator`). It still remains GUI-agnostic: it does not import views, widgets, or application-specific code. It also persists the selected language in a small JSON state file so the shell selector and installed translator stay in sync across restarts.

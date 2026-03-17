@@ -10,6 +10,7 @@ from src.bootstrap.logging_config import setup_logging
 from src.bootstrap.build_engine import EngineContext
 from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
+from src.engine.localization.localization_service import LocalizationService
 from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
 from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
 from src.robot_systems.system_builder import SystemBuilder
@@ -44,6 +45,8 @@ def main() -> None:
 
     # 4 — Qt must exist before any widgets
     qt_app = QApplication(sys.argv)
+    localization_svc = _build_localization_service(robot_app, ctx.messaging_service)
+    localization_svc.set_language(localization_svc.get_language())
 
     # 4b — login gate (blocks until authenticated or user quits)
     session = _run_login(ctx, robot_app)
@@ -51,9 +54,16 @@ def main() -> None:
         _LOGGER.info("Login cancelled — exiting.")
         sys.exit(0)
 
-    # 5 — load applications
+    # 5 — load applications (filtered by logged-in user's role)
+    from src.engine.auth.authorization_service import AuthorizationService
+    from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
+    from src.robot_systems.glue.application_wiring import _PERMISSIONS_STORAGE
+
+    auth_svc      = AuthorizationService(PermissionsRepository(_PERMISSIONS_STORAGE))
+    visible_specs = auth_svc.get_visible_apps(session.current_user, GlueRobotSystem.shell.applications)
+
     loader = ApplicationLoader(ctx.messaging_service)
-    for spec in GlueRobotSystem.shell.applications:
+    for spec in visible_specs:
         if spec.factory is None:
             _LOGGER.warning("ApplicationSpec '%s' has no factory — skipping", spec.name)
             continue
@@ -65,7 +75,13 @@ def main() -> None:
 
     # 6 — build widget registry and launch shell
     descriptors, widget_factory = loader.build_registry()
-    shell = AppShell(app_descriptors=descriptors, widget_factory=widget_factory)
+    shell = AppShell(
+        app_descriptors=descriptors,
+        widget_factory=widget_factory,
+        languages=localization_svc.available_languages(),
+    )
+    localization_svc.sync_selector(shell.header.language_selector)
+    shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
 
     # Wire broker → shell navigation # used to automatically
     # open the workpiece editor when the "open in editor" button is clicked in the library
@@ -117,6 +133,17 @@ def _run_login(ctx, robot_app):
     session = UserSession()
     session.login(dialog.result_user())
     return session
+
+
+def _build_localization_service(robot_app, messaging_service) -> LocalizationService:
+    module_path = Path(sys.modules[robot_app.__class__.__module__].__file__).resolve().parent
+    translations_dir = module_path / robot_app.metadata.translations_root
+    state_file = module_path / robot_app.metadata.settings_root / "localization.json"
+    return LocalizationService(
+        str(translations_dir),
+        messaging_service=messaging_service,
+        state_file=str(state_file),
+    )
 
 
 def _build_broker_debug_window(messaging_service):

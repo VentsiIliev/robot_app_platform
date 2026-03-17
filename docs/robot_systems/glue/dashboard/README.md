@@ -137,6 +137,7 @@ PICK_AND_SPRAY mode:
 | `robot/state` | `RobotStateSnapshot` | `_apply_button_state` (only when process is IDLE) |
 | `process/glue/state` | `ProcessStateEvent` | `_apply_button_state(event.state.value)` |
 | `process/coordinator/busy` | `ProcessBusyEvent` | `set_service_warning(message)` |
+| `ui/notification` | `UserNotificationEvent` | `UserNotificationPresenter` shows a styled dialog |
 
 Note: broker `card_id = cell_id + 1` (cards are 1-indexed, cells 0-indexed).
 
@@ -173,5 +174,7 @@ GlueMeterCard.change_glue_requested.emit(card_id)
 - **Cancellable pre-start preparation**: If the operator presses Stop during capture positioning, stabilization, matching, build, or load, the pending glue preparation is cancelled and `robot.stop_motion()` is issued before glue starts.
 - **Settings-driven spray flag**: The automated dashboard path does not hardcode spray enable. The coordinator reads `GlueSettings.spray_on` from the shared settings service and passes that configured value into the execution service.
 - **Operator failure feedback**: If automated glue-only preparation fails, `GlueDashboardService` publishes a coordinator busy/warning event with the failure stage and message so the controller surfaces it in the system status widget.
+- **Reusable notification path**: The dashboard controller now owns a `UserNotificationPresenter` from `src/applications/base/`. It subscribes to `NotificationTopics.USER` and displays user-facing dialogs through the shared styled message box instead of hardcoding dialog rendering in the controller.
+- **Localization pilot**: The dashboard is the first translated production view. Runtime language changes now update dashboard action labels, system status labels, card titles/tooltips, and the shared start/stop/pause controls through the engine localization service.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)

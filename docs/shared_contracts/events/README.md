@@ -140,6 +140,83 @@ class ProcessTopics:
 
 ---
 
+## `notification_events.py` — User Notifications
+
+Defines the generic operator-notification contract used for application-wide dialogs. This is intentionally platform-level and reusable across robot systems.
+
+### Topics
+
+```python
+class NotificationTopics:
+    USER = "ui/notification"
+```
+
+### Payload
+
+#### `UserNotificationEvent`
+
+```python
+@dataclass(frozen=True)
+class UserNotificationEvent:
+    source: str
+    severity: NotificationSeverity
+    title_key: str = ""
+    message_key: str = ""
+    params: Mapping[str, object] = field(default_factory=dict)
+    fallback_title: str = ""
+    fallback_message: str = ""
+    detail: str | None = None
+    dedupe_key: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+Design intent:
+- `title_key` / `message_key` make the contract localization-ready
+- `fallback_title` / `fallback_message` allow immediate use before translations exist
+- `params` is formatted by the UI presenter, not by backend layers
+- `dedupe_key` lets presenters suppress repeated dialogs from the same failure loop
+
+### `NotificationSeverity`
+
+```python
+class NotificationSeverity(str, Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+```
+
+The UI layer maps severities to presentation:
+- `info` → informational dialog
+- `warning` → warning dialog
+- `error` / `critical` → critical dialog
+
+---
+
+## `localization_events.py` — Language Changes
+
+Defines the shared language-change event emitted by the runtime localization service.
+
+### Topics
+
+```python
+class LocalizationTopics:
+    LANGUAGE_CHANGED = "localization/language_changed"
+```
+
+### Payload
+
+```python
+@dataclass(frozen=True)
+class LanguageChangedEvent:
+    language_code: str
+    timestamp: datetime
+```
+
+This topic is useful for non-widget consumers that need to refresh localized dynamic text when the active language changes.
+
+---
+
 ## `pick_and_place_events.py` — Pick-And-Place Events
 
 These topics are used by `PickAndPlaceProcess`, the pick-and-place visualizer, and any future diagnostics subscribers.
@@ -214,3 +291,4 @@ See `docs/engine/vision/README.md` for the full `VisionSystem` API.
 - **Timestamps use UTC**: `datetime.now(timezone.utc)` — always timezone-aware, safe for logging and comparison.
 - **`WeightTopics` uses static methods, not constants**: Because cell IDs are runtime values, generating topics programmatically is cleaner than declaring `CELL_0_STATE = "weight/cell/0/state"` for each possible ID.
 - **Payloads cross thread boundaries**: Both `WeightReading` and `CellStateEvent` are published from daemon threads. Using frozen dataclasses (immutable) means no locking is needed for read access.
+- **Notification events are semantic, not UI-specific**: Publishers send severity, keys, params, and fallback text. They do not import Qt or decide how a dialog looks. Presentation happens in the application layer.

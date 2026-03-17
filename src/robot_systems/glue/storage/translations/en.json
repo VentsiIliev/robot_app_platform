@@ -1,0 +1,48 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "GlueDashboard": {
+    "Clean": "Clean",
+    "Reset Errors": "Reset Errors",
+    "Pick And Spray": "Pick And Spray",
+    "Spray Only": "Spray Only",
+    "Pause": "Pause",
+    "Resume": "Resume",
+    "Process Error": "Process Error",
+    "An unexpected error occurred.": "An unexpected error occurred."
+  },
+  "GlueMeterCard": {
+    "Cell {index}": "Cell {index}",
+    "No glue configured": "No glue configured",
+    "Unknown": "Unknown",
+    "Initializing...": "Initializing...",
+    "Connecting...": "Connecting...",
+    "Connected": "Connected",
+    "Ready": "Ready",
+    "Low Weight": "Low Weight",
+    "Empty": "Empty",
+    "Error": "Error",
+    "Disconnected": "Disconnected",
+    "🧪 Loading...": "🧪 Loading...",
+    "⚙ Change": "⚙ Change"
+  },
+  "SystemStatusWidget": {
+    "Process": "Process",
+    "Active": "Active",
+    "System": "System",
+    "Warning": "Warning",
+    "Idle": "Idle",
+    "Running": "Running",
+    "Paused": "Paused",
+    "Stopped": "Stopped",
+    "Error": "Error",
+    "Busy": "Busy",
+    "Unknown": "Unknown"
+  },
+  "ControlButtonsWidget": {
+    "Start": "Start",
+    "Stop": "Stop",
+    "Pause": "Pause"
+  }
+}

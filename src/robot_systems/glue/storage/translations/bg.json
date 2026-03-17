@@ -1,0 +1,48 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "GlueDashboard": {
+    "Clean": "Почистване",
+    "Reset Errors": "Нулирай грешките",
+    "Pick And Spray": "Вземи и пръскай",
+    "Spray Only": "Само пръскане",
+    "Pause": "Пауза",
+    "Resume": "Продължи",
+    "Process Error": "Грешка в процеса",
+    "An unexpected error occurred.": "Възникна неочаквана грешка."
+  },
+  "GlueMeterCard": {
+    "Cell {index}": "Клетка {index}",
+    "No glue configured": "Няма конфигурирано лепило",
+    "Unknown": "Неизвестно",
+    "Initializing...": "Инициализация...",
+    "Connecting...": "Свързване...",
+    "Connected": "Свързано",
+    "Ready": "Готово",
+    "Low Weight": "Ниско тегло",
+    "Empty": "Празно",
+    "Error": "Грешка",
+    "Disconnected": "Прекъснато",
+    "🧪 Loading...": "🧪 Зареждане...",
+    "⚙ Change": "⚙ Смени"
+  },
+  "SystemStatusWidget": {
+    "Process": "Процес",
+    "Active": "Активен",
+    "System": "Система",
+    "Warning": "Предупреждение",
+    "Idle": "Изчакване",
+    "Running": "Работи",
+    "Paused": "Пауза",
+    "Stopped": "Спрян",
+    "Error": "Грешка",
+    "Busy": "Заета",
+    "Unknown": "Неизвестно"
+  },
+  "ControlButtonsWidget": {
+    "Start": "Старт",
+    "Stop": "Стоп",
+    "Pause": "Пауза"
+  }
+}

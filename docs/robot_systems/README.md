@@ -55,7 +55,7 @@ class BaseRobotSystem(ABC):
 
 | Class | Fields | Purpose |
 |-------|--------|---------|
-| `SystemMetadata` | `name`, `version`, `description`, `author`, `settings_root` | App identity; `settings_root` is the base path for all JSON files |
+| `SystemMetadata` | `name`, `version`, `description`, `author`, `settings_root`, `translations_root` | App identity; `settings_root` is the base path for settings, `translations_root` is the robot-system translation catalog directory |
 | `SettingsSpec` | `name`, `serializer`, `storage_key`, `required` | Declares one settings file; `name` = retrieval key; `storage_key` = relative JSON path |
 | `ServiceSpec` | `name`, `service_type`, `required`, `description`, `builder` | Declares one service contract; optional `builder` overrides the default registry builder |
 | `ShellSetup` | `folders: List[FolderSpec]`, `applications: List[ApplicationSpec]` | GUI shell structure |
@@ -146,6 +146,8 @@ app   = (
 ## Design Notes
 
 - **Class-level specs**: `metadata`, `services`, `settings_specs`, and `shell` are `ClassVar` — they describe the *type*, not any instance. This allows `SystemBuilder` to inspect them before instantiation.
+- **`translations_root` is robot-system owned**: The engine localization service is generic, but the actual catalogs live with the robot system. Bootstrap resolves the active robot system's translation directory from `metadata.translations_root`.
+- **Language persistence uses robot-system storage**: Bootstrap also stores the selected language under the active robot system's `settings_root`, so localization state follows the robot system instead of using a hardcoded global file.
 - **`SystemBuilder.register()`**: Allows overriding or extending the default service registry at the call site. Use when a service requires dependencies not available in the standard context.
 - **`required=False` in `ServiceSpec`**: The app starts successfully even if an optional service fails to build. `on_start()` uses `get_optional_service()` and checks for `None` before using optional services.
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.

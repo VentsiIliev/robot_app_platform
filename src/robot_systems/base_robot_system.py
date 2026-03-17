@@ -64,6 +64,7 @@ class SystemMetadata:
     description: str = ""
     author: str = ""
     settings_root: str = os.path.join("storage", "settings")  # base dir: "storage/settings/glue/" resolved at build time
+    translations_root: str = os.path.join("storage", "translations")
 
 @dataclass(frozen=True)
 class SettingsSpec:

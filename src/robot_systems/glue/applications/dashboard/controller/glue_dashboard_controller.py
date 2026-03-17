@@ -4,10 +4,16 @@ from typing import Callable, List, Tuple
 
 from PyQt6.QtCore import QCoreApplication, QObject, QThread, pyqtSignal
 
+from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.robot_systems.glue.process_ids import ProcessID
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.system import SystemTopics
 from src.applications.base.i_application_controller import IApplicationController
+from src.shared_contracts.events.notification_events import (
+    NotificationSeverity,
+    NotificationTopics,
+    UserNotificationEvent,
+)
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.weight_events import WeightTopics
@@ -61,9 +67,11 @@ class GlueDashboardController(IApplicationController):
         self._logger        = logging.getLogger(self.__class__.__name__)
         self._bridge        = _DashboardBridge()
         self._workers: List[Tuple[QThread, _Worker]] = []
+        self._notifications = UserNotificationPresenter(view, broker, translate=self._t)
 
     def load(self) -> None:
         self._active = True
+        self._notifications.start()
         self._wire_bridge()
         self._subscribe()
         self._connect_signals()
@@ -72,6 +80,7 @@ class GlueDashboardController(IApplicationController):
 
     def stop(self) -> None:
         self._active = False
+        self._notifications.stop()
         for topic, cb in reversed(self._subs):
             try: self._broker.unsubscribe(topic, cb)
             except Exception: pass
@@ -168,11 +177,16 @@ class GlueDashboardController(IApplicationController):
             if state == ProcessState.RUNNING.value:
                 self._view.set_service_warning("")
             if state == ProcessState.ERROR.value:
-                from src.applications.base.styled_message_box import show_critical
-                show_critical(
-                    self._view,
-                    self._t("Process Error"),
-                    message or self._t("An unexpected error occurred."),
+                self._broker.publish(
+                    NotificationTopics.USER,
+                    UserNotificationEvent(
+                        source=process_id,
+                        severity=NotificationSeverity.CRITICAL,
+                        title_key="notification.process_error.title",
+                        fallback_title=self._t("Process Error"),
+                        fallback_message=message or self._t("An unexpected error occurred."),
+                        dedupe_key=f"process-error:{process_id}:{message}",
+                    ),
                 )
 
     def _on_system_state(self, state: str, active_process: str) -> None:  # ← was missing
@@ -326,4 +340,5 @@ class GlueDashboardController(IApplicationController):
 
     @staticmethod
     def _t(text: str) -> str:
-        return QCoreApplication.translate("GlueDashboard", text)
+        translated = QCoreApplication.translate("GlueDashboard", text)
+        return translated or text

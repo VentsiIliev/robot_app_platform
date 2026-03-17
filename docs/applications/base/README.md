@@ -2,6 +2,8 @@
 
 This package defines the abstract contracts and the generic wiring implementation shared by all applications. No application-specific logic lives here — only the interfaces and the template-method factory.
 
+It also contains reusable UI infrastructure that is safe to share across applications, such as styled dialogs and the broker-backed user notification presenter.
+
 ---
 
 ## Class Hierarchy
@@ -144,6 +146,53 @@ class IApplicationController(ABC):
 
 ---
 
+### `UserNotificationPresenter`
+
+**File:** `notification_presenter.py`
+
+Reusable application-layer presenter for user-facing notifications published on the message broker.
+
+Responsibilities:
+- subscribe to `NotificationTopics.USER`
+- resolve localization-ready notification keys into display text
+- fall back to provided English text when no translation is available
+- present the notification with the shared [styled message box](/home/ilv/Desktop/robot_app_platform/src/applications/base/styled_message_box.py)
+
+The presenter intentionally lives in `src/applications/base/` because it depends on Qt and dialog rendering. Backend layers must not import it.
+
+Use it from controllers:
+
+```python
+self._notifications = UserNotificationPresenter(self._view, broker, translate=self._t)
+self._notifications.start()
+...
+self._notifications.stop()
+```
+
+For now it shows modal dialogs via:
+- `show_info(...)`
+- `show_warning(...)`
+- `show_critical(...)`
+
+It also supports simple consecutive deduplication via `dedupe_key`.
+
+---
+
+### `NotificationTextResolver`
+
+**File:** `notification_presenter.py`
+
+Small helper used by `UserNotificationPresenter` to make the notification mechanism localization-ready.
+
+Resolution order:
+1. use `title_key` / `message_key` if a translation function returns a localized template
+2. otherwise use `fallback_title` / `fallback_message`
+3. apply `str.format(**params)` if formatting parameters are provided
+
+This keeps translation at the UI boundary instead of pushing localized strings into engine or robot-system code.
+
+---
+
 ## Data Flow
 
 ```
@@ -166,3 +215,4 @@ ApplicationFactory.build(service)
 - **`IApplicationView` extends `AppWidget`**: Required for shell integration. `AppWidget` provides `on_language_changed()` and the hooks `AppShell` uses to show/hide panels.
 - **`WidgetApplication` is the universal adapter**: The bootstrap works with `IApplication` references. `WidgetApplication` decouples the typed factory from the bootstrap protocol, enabling lazy widget creation.
 - **`build()` is the only entry point**: Subclasses implement `_create_model`, `_create_view`, `_create_controller` only. The wiring order and GC fix are handled by the base class exactly once.
+- **Notifications stay out of backend layers**: Processes, coordinators, and services should publish typed notification events via the broker. Controllers render them through `UserNotificationPresenter`. This avoids Qt imports in engine or robot-system code and keeps the mechanism reusable across robot systems.

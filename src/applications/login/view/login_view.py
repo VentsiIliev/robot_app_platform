@@ -252,15 +252,6 @@ class LoginView(QDialog):
         btn_sim.clicked.connect(self._on_setup_next_clicked)
         layout.addWidget(btn_sim)
 
-        # Next button (right-aligned)
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        btn_next = QPushButton("Next")
-        btn_next.setFixedSize(160, 50)
-        btn_next.clicked.connect(self._on_setup_next_clicked)
-        btn_row.addWidget(btn_next)
-        layout.addLayout(btn_row)
-
         return page
 
     # ── First-run page ────────────────────────────────────────────────────────
@@ -293,7 +284,7 @@ class LoginView(QDialog):
         layout.addRow("Last name:",  self._fa_last)
         layout.addRow("Password:",   self._fa_pw)
 
-        btn = QPushButton("Create Admin & Login")
+        btn = self._primary_btn("Create Admin & Login")
         btn.setMinimumHeight(48)
         btn.clicked.connect(self._on_first_admin_clicked)
         self._fa_pw.returnPressed.connect(self._on_first_admin_clicked)
@@ -311,39 +302,36 @@ class LoginView(QDialog):
 
     def _build_login_tab(self) -> QWidget:
         page   = QWidget()
-        outer  = QVBoxLayout(page)
-        outer.setContentsMargins(40, 30, 40, 30)
-        outer.setSpacing(16)
-        outer.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setSpacing(14)
 
         title = QLabel("Login")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         f = QFont(); f.setPointSize(16); f.setBold(True)
         title.setFont(f)
-        outer.addWidget(title)
+        layout.addWidget(title)
 
-        form = QFormLayout()
-        form.setSpacing(12)
-
+        layout.addWidget(QLabel("User ID:"))
         self._uid_input = QLineEdit()
         self._uid_input.setPlaceholderText("Numeric user ID")
         self._uid_input.setFixedHeight(40)
-        form.addRow("User ID:", self._uid_input)
+        layout.addWidget(self._uid_input)
 
+        layout.addWidget(QLabel("Password:"))
         self._pw_input = QLineEdit()
         self._pw_input.setPlaceholderText("Password")
         self._pw_input.setEchoMode(QLineEdit.EchoMode.Password)
         self._pw_input.setFixedHeight(40)
-        form.addRow("Password:", self._pw_input)
+        layout.addWidget(self._pw_input)
 
-        outer.addLayout(form)
-
-        btn = QPushButton("Login")
-        btn.setMinimumHeight(52)
+        btn = self._primary_btn("Login")
+        btn.setFixedHeight(52)
         btn.clicked.connect(self._on_login_clicked)
         self._uid_input.returnPressed.connect(self._on_login_clicked)
         self._pw_input.returnPressed.connect(self._on_login_clicked)
-        outer.addWidget(btn)
+        layout.addWidget(btn)
+        layout.addStretch(1)
         return page
 
     def _build_qr_tab(self) -> QWidget:
@@ -454,6 +442,22 @@ class LoginView(QDialog):
                 )
             )
         super().resizeEvent(event)
+
+    # ── Button factory ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _primary_btn(text: str) -> QPushButton:
+        """Purple-styled button — style applied directly to avoid cascade issues."""
+        btn = QPushButton(text)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #905BA9; border: none; color: white;
+                padding: 8px 16px; font-size: 14px; border-radius: 4px;
+            }
+            QPushButton:hover    { background-color: #7A4D92; }
+            QPushButton:disabled { background-color: #cccccc; color: #666666; }
+        """)
+        return btn
 
     # ── Stylesheet ────────────────────────────────────────────────────────────
 
