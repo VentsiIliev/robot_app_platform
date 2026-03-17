@@ -9,6 +9,8 @@ from src.robot_systems.glue.settings.glue import GlueSettingKey
 @dataclass(slots=True)
 class DispensingSegmentSettings:
     glue_type: str | None = None
+    velocity: float | None = None
+    acceleration: float | None = None
     reach_start_threshold: float = 1.0
     reach_end_threshold: float = 1.0
     motor_speed: int = 0
@@ -30,6 +32,8 @@ class DispensingSegmentSettings:
         data = dict(raw_settings or {})
         used_keys = {
             GlueSettingKey.GLUE_TYPE.value,
+            "velocity",
+            "acceleration",
             GlueSettingKey.REACH_START_THRESHOLD.value,
             GlueSettingKey.REACH_END_THRESHOLD.value,
             GlueSettingKey.MOTOR_SPEED.value,
@@ -44,6 +48,8 @@ class DispensingSegmentSettings:
         }
         return cls(
             glue_type=data.get(GlueSettingKey.GLUE_TYPE.value),
+            velocity=_optional_float(data.get("velocity")),
+            acceleration=_optional_float(data.get("acceleration")),
             reach_start_threshold=float(data.get(GlueSettingKey.REACH_START_THRESHOLD.value, 1.0)),
             reach_end_threshold=float(data.get(GlueSettingKey.REACH_END_THRESHOLD.value, 1.0)),
             motor_speed=int(float(data.get(GlueSettingKey.MOTOR_SPEED.value, 0))),
@@ -61,6 +67,8 @@ class DispensingSegmentSettings:
     def to_dict(self) -> dict[str, Any]:
         return {
             GlueSettingKey.GLUE_TYPE.value: self.glue_type,
+            "velocity": self.velocity,
+            "acceleration": self.acceleration,
             GlueSettingKey.REACH_START_THRESHOLD.value: self.reach_start_threshold,
             GlueSettingKey.REACH_END_THRESHOLD.value: self.reach_end_threshold,
             GlueSettingKey.MOTOR_SPEED.value: self.motor_speed,
@@ -87,3 +95,12 @@ class DispensingSegmentSettings:
         if isinstance(other, DispensingSegmentSettings):
             return self.to_dict() == other.to_dict()
         return NotImplemented
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None

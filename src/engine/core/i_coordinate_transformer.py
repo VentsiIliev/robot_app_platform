@@ -29,3 +29,9 @@ class ICoordinateTransformer(ABC):
         Raises RuntimeError if the matrix is not loaded or if no TCP offset was
         provided at construction time."""
         ...
+
+    @abstractmethod
+    def inverse_transform(self, x: float, y: float) -> Tuple[float, float]:
+        """Return (x_out, y_out) in the source/image space.
+        Raises RuntimeError if the inverse mapping is not available."""
+        ...

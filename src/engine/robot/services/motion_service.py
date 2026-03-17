@@ -1,7 +1,7 @@
 import math
 import logging
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from ..interfaces.i_motion_service import IMotionService
 from ..interfaces.i_robot import IRobot
@@ -14,6 +14,8 @@ class MotionService(IMotionService):
     _WAIT_THRESHOLD_MM = 2.0
     _WAIT_DELAY_S = 0.1
     _WAIT_TIMEOUT_S = 10.0
+    _STOP_RETRY_DELAY_S = 0.05
+    _STOP_ATTEMPTS = 3
 
     def __init__(
             self,
@@ -36,7 +38,16 @@ class MotionService(IMotionService):
     def _on_position(self, position: List[float]) -> None:
         self._cached_position = position
 
-    def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
+    def move_ptp(
+            self,
+            position,
+            tool,
+            user,
+            velocity,
+            acceleration,
+            wait_to_reach=False,
+            wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
         violations = self._safety.get_violations(position)
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
@@ -54,14 +65,24 @@ class MotionService(IMotionService):
             )
             success = ret == 0
             if wait_to_reach and success:
-                self._wait_for_position(position)
+                success = self._wait_for_position(position, cancelled=wait_cancelled)
             self._logger.debug("move_ptp ← success=%s", success)
             return success
         except Exception:
             self._logger.exception("move_ptp failed")
             return False
 
-    def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
+    def move_linear(
+            self,
+            position,
+            tool,
+            user,
+            velocity,
+            acceleration,
+            blendR=0.0,
+            wait_to_reach=False,
+            wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
         violations = self._safety.get_violations(position)
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
@@ -80,7 +101,7 @@ class MotionService(IMotionService):
             )
             success = ret == 0
             if wait_to_reach and success:
-                self._wait_for_position(position)
+                success = self._wait_for_position(position, cancelled=wait_cancelled)
             self._logger.debug("move_linear ← success=%s", success)
             return success
         except Exception:
@@ -123,13 +144,19 @@ class MotionService(IMotionService):
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
         self._last_jog_target = []
-        try:
-            success = self._robot.stop_motion() == 0
-            self._logger.debug("stop_motion ← success=%s", success)
-            return success
-        except Exception:
-            self._logger.exception("stop_motion failed")
-            return False
+        for attempt in range(1, self._STOP_ATTEMPTS + 1):
+            try:
+                success = self._robot.stop_motion() == 0
+                if success:
+                    self._logger.debug("stop_motion ← success=True attempts=%s", attempt)
+                    return True
+            except Exception:
+                self._logger.exception("stop_motion failed")
+                return False
+            if attempt < self._STOP_ATTEMPTS:
+                time.sleep(self._STOP_RETRY_DELAY_S)
+        self._logger.debug("stop_motion ← success=False attempts=%s", self._STOP_ATTEMPTS)
+        return False
 
     def get_current_position(self) -> List[float]:
         return self._robot.get_current_position()
@@ -164,9 +191,13 @@ class MotionService(IMotionService):
             threshold: float = _WAIT_THRESHOLD_MM,
             delay: float = _WAIT_DELAY_S,
             timeout: float = _WAIT_TIMEOUT_S,
+            cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            if cancelled is not None and cancelled():
+                self._logger.debug("wait_for_position cancelled while waiting for %s", target)
+                return False
             current = self._cached_position or self._robot.get_current_position()
             if current and len(current) >= 3:
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))

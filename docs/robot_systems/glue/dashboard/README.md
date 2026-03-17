@@ -12,6 +12,7 @@ GlueDashboard.create(service, messaging_service, execution_service=None)
   ├─ GlueDashboardModel    ← IApplicationModel facade over IGlueDashboardService
   ├─ GlueCardFactory       ← builds GlueMeterCard per cell
   ├─ GlueDashboardView     ← main widget with cards + control buttons
+  ├─ DashboardPreviewWidget ← live/progress preview compositor with optional inset
   └─ GlueDashboardController
         ├─ _DashboardBridge(QObject)  ← cross-thread signal dispatch
         └─ subscriptions to: robot/state, weight/cell/*/reading, weight/cell/*/state
@@ -29,6 +30,7 @@ GlueDashboard.create(service, messaging_service, execution_service=None)
 | `StubGlueDashboardService` | `service/stub_glue_dashboard_service.py` | Stub for development |
 | `GlueDashboardModel` | `model/glue_dashboard_model.py` | Thin `IApplicationModel` facade — no state, delegates to service |
 | `GlueDashboardView` | `view/glue_dashboard_view.py` | Main widget with card grid + control row |
+| `DashboardPreviewWidget` | `ui/dashboard_preview_widget.py` | Main/inset preview that can switch between live feed and static job progress |
 | `GlueDashboardController` | `controller/glue_dashboard_controller.py` | `_DashboardBridge`, broker subscriptions, state machine |
 | `GlueDashboardConfig` | `config.py` | `DashboardConfig` subclass + topic namespaces + state map |
 
@@ -118,6 +120,10 @@ SPRAY_ONLY mode:
   → load GlueProcess
   → ProcessSequence starts GlueProcess
 
+Resume/restart rule in `SPRAY_ONLY`:
+  → if the active glue process is `paused`, Start/Resume resumes the current run and skips preparation
+  → if glue is `stopped` or the previous run already completed, Start performs a fresh preparation pass and reloads the job before starting
+
 PICK_AND_SPRAY mode:
   → GlueOperationCoordinator.start()
   → ProcessSequence starts PickAndPlaceProcess
@@ -138,6 +144,7 @@ PICK_AND_SPRAY mode:
 | `process/glue/state` | `ProcessStateEvent` | `_apply_button_state(event.state.value)` |
 | `process/coordinator/busy` | `ProcessBusyEvent` | `set_service_warning(message)` |
 | `ui/notification` | `UserNotificationEvent` | `UserNotificationPresenter` shows a styled dialog |
+| `glue/overlay/job_loaded` | `GlueOverlayJobLoadedEvent` | `set_preview_overlay(image, segments)` |
 
 Note: broker `card_id = cell_id + 1` (cards are 1-indexed, cells 0-indexed).
 
@@ -170,11 +177,24 @@ GlueMeterCard.change_glue_requested.emit(card_id)
 - **`MODE_TOGGLE_LABELS`**: `("Pick And Spray", "Spray Only")` — toggled by index. State managed in `_mode_index`.
 - **Background Start action**: The dashboard controller dispatches Start on a worker thread so the camera view and other live UI updates remain responsive while the robot moves to the capture position and preparation runs.
 - **Automated glue-only start**: In `SPRAY_ONLY`, the coordinator performs the reusable glue preparation flow before starting the glue sequence, instead of starting glue immediately with preloaded paths.
+- **Resume vs restart in spray-only mode**: The coordinator only skips preparation for a truly paused glue run. If the previous spray-only run ended in `stopped`, the next Start is treated as a fresh run and goes back through capture/match/build/load.
 - **Mandatory capture positioning**: The shared execution service first moves the robot to the calibration capture pose with the vision capture offset, then waits briefly before matching. If that move fails, the glue flow stops at the `positioning` stage and nothing is matched or loaded.
-- **Cancellable pre-start preparation**: If the operator presses Stop during capture positioning, stabilization, matching, build, or load, the pending glue preparation is cancelled and `robot.stop_motion()` is issued before glue starts.
+- **Cancellable pre-start preparation**: If the operator presses Stop or Pause during capture positioning, stabilization, matching, build, or load, the pending glue preparation is cancelled and `robot.stop_motion()` is issued before glue starts.
+- **Cancellable capture-position move**: The move to the calibration capture pose now uses a cancellable wait path. Stop/Pause no longer have to wait for the navigation move to finish or time out before the dashboard becomes responsive again.
 - **Settings-driven spray flag**: The automated dashboard path does not hardcode spray enable. The coordinator reads `GlueSettings.spray_on` from the shared settings service and passes that configured value into the execution service.
 - **Operator failure feedback**: If automated glue-only preparation fails, `GlueDashboardService` publishes a coordinator busy/warning event with the failure stage and message so the controller surfaces it in the system status widget.
 - **Reusable notification path**: The dashboard controller now owns a `UserNotificationPresenter` from `src/applications/base/`. It subscribes to `NotificationTopics.USER` and displays user-facing dialogs through the shared styled message box instead of hardcoding dialog rendering in the controller.
 - **Localization pilot**: The dashboard is the first translated production view. Runtime language changes now update dashboard action labels, system status labels, card titles/tooltips, and the shared start/stop/pause controls through the engine localization service.
+- **Initial localization pass**: The dashboard has two localization paths:
+  - `ControlButtonsWidget` translates itself through `self.tr(...)`
+  - dashboard action buttons are created from raw config labels in `pl_gui`
+  Because of that, [GlueDashboardController](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/applications/dashboard/controller/glue_dashboard_controller.py) must call `_retranslate()` from `_initialize_view()` so the initial render is translated correctly when the app starts in a non-English language.
+- **Preview modes**: The dashboard preview now supports a primary mode plus an optional inset:
+  - primary `Live` + static progress inset
+  - primary `Progress` + live inset
+  - inset enabled/disabled without changing the primary mode
+- **Static progress source**: `GlueJobExecutionService` publishes `GlueOverlayJobLoadedEvent` once a glue job is prepared and loaded. That event carries the static capture image and the glue segments in image coordinates.
+- **Progress source of truth**: The dashboard does not guess completion from the image. It polls `GlueProcess.get_dispensing_snapshot()` through the model/service and uses `current_path_index` / `current_point_index` from the glue process snapshot to color completed vs pending path portions.
+- **Continuous update**: The dashboard service also polls the live robot TCP, converts it back into image coordinates through `HomographyTransformer.inverse_transform(...)`, and passes that projected point into the preview widget. The widget uses that point to advance the active segment continuously between waypoints instead of only updating when the segment starts or ends.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)

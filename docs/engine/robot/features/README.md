@@ -10,7 +10,7 @@ The `features` package provides high-level, business-logic-aware robot capabilit
 
 **File:** `navigation_service.py`
 
-Moves the robot to pre-configured named positions stored in `RobotSettings.movement_groups`. All navigation calls use `wait_to_reach=True`, so they block until the robot arrives (or times out after 10s).
+Moves the robot to pre-configured named positions stored in `RobotSettings.movement_groups`. Navigation calls normally use `wait_to_reach=True`, so they block until the robot arrives (or times out after 10s), but callers can now also pass a wait-cancel callback to interrupt that wait early.
 
 ```python
 class NavigationService:
@@ -32,7 +32,7 @@ Each method:
 1. Reads `RobotSettings` via `settings_service.get("robot_config")`
 2. Looks up the named `MovementGroup`
 3. Parses the position string: `"[x, y, z, rx, ry, rz]"` → `List[float]`
-4. Calls `motion.move_ptp(position, tool, user, velocity, acceleration, wait_to_reach=True)`
+4. Calls `motion.move_ptp(position, tool, user, velocity, acceleration, wait_to_reach=True, wait_cancelled=...)`
 
 Returns `False` if the position is not configured, the movement group is missing, or the move fails.
 

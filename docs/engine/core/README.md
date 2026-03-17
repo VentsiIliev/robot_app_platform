@@ -155,6 +155,8 @@ Platform-level interface for 2D point transformations (canonical use: camera pix
 ```python
 class ICoordinateTransformer(ABC):
     def transform(self, x: float, y: float) -> Tuple[float, float]: ...
+    def transform_to_tcp(self, x: float, y: float) -> Tuple[float, float]: ...
+    def inverse_transform(self, x: float, y: float) -> Tuple[float, float]: ...
     def is_available(self) -> bool: ...
     def reload(self) -> bool: ...
 ```
@@ -163,6 +165,7 @@ class ICoordinateTransformer(ABC):
 |--------|-------------|
 | `transform(x, y)` | Convert pixel to robot mm relative to **camera center**. Raises `RuntimeError` if matrix not loaded. |
 | `transform_to_tcp(x, y)` | Same as `transform`, then adds TCP offset (camera → tool tip). Raises `RuntimeError` if matrix not loaded **or** if no TCP offsets were provided at construction. |
+| `inverse_transform(x, y)` | Convert robot/output coordinates back into image space. Used for overlays and diagnostics that need to project live robot positions onto a captured image. |
 | `is_available()` | `True` if the transformation matrix is loaded and usable. |
 | `reload()` | Re-read the matrix from its source. Returns `True` if now available. Call after a calibration run writes a new matrix file. |
 

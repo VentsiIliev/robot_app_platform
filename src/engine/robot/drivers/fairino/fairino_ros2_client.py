@@ -5,11 +5,16 @@ logger = logging.getLogger(__name__)
 
 
 class FairinoRos2Client:
+    _STOP_STATE_STOPPED = "STOPPED"
+    _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
+    _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
+    _STOP_STATE_ERROR = "ERROR"
 
     def __init__(self, server_url="http://localhost:5000", ip=None):
         self.server_url = server_url.rstrip('/')
         self.ip = ip or "ros2_bridge"
         self._last_execute_path_response = None
+        self._last_stop_response = None
         self._available = False
         self._last_error = None
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
@@ -166,16 +171,31 @@ class FairinoRos2Client:
             response = requests.post(f"{self.server_url}/stop", timeout=5)
             raw = response.json()
             self._mark_available()
-            result_code = 0 if raw.get("success") else -1
+            self._last_stop_response = raw
+            stop_state = raw.get("stop_state")
+            result_code = self._parse_stop_result(raw)
             logger.debug(
-                "stop_motion ← http=%s raw=%s result_code=%s",
-                response.status_code, raw, result_code,
+                "stop_motion ← http=%s raw=%s stop_state=%s result_code=%s",
+                response.status_code, raw, stop_state, result_code,
             )
             return result_code
         except Exception as e:
             self._mark_unavailable(e)
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
+
+    def get_last_stop_response(self):
+        return self._last_stop_response
+
+    def _parse_stop_result(self, raw: dict) -> int:
+        stop_state = raw.get("stop_state")
+        if stop_state in (self._STOP_STATE_STOPPED, self._STOP_STATE_NO_ACTIVE_MOTION):
+            return 0
+        if stop_state == self._STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED:
+            return -2
+        if stop_state == self._STOP_STATE_ERROR:
+            return raw.get("result", -1)
+        return 0 if raw.get("success") else -1
 
 
 

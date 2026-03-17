@@ -69,12 +69,13 @@ glue_dispensing/
 | Field | Default | Effect |
 |---|---|---|
 | `use_segment_settings` | `True` | Segment settings are passed through for pump behavior |
+| `use_segment_motion_settings` | `True` | Robot motion uses per-segment `velocity` / `acceleration` when present; otherwise falls back to globals |
 | `turn_off_pump_between_paths` | `True` | `TURNING_OFF_PUMP` actually stops the pump between paths |
 | `adjust_pump_speed_while_spray` | `True` | Starts the dynamic pump-speed thread |
 | `robot_tool` | `0` | Tool index for robot motions |
 | `robot_user` | `0` | User frame index for robot motions |
-| `global_velocity` | `10.0` | Default velocity for `move_ptp` and `move_linear` |
-| `global_acceleration` | `30.0` | Default acceleration for `move_ptp` and `move_linear` |
+| `global_velocity` | `10.0` | Fallback velocity for robot motion when segment motion settings are disabled or missing |
+| `global_acceleration` | `30.0` | Fallback acceleration for robot motion when segment motion settings are disabled or missing |
 | `move_to_first_point_poll_s` | `0.02` | Poll interval while waiting for the robot to reach the first point |
 | `move_to_first_point_timeout_s` | `30.0` | Timeout for reaching the first point |
 | `pump_thread_wait_poll_s` | `0.1` | Poll interval while waiting for the pump adjustment thread to finish |
@@ -99,6 +100,7 @@ All handlers share one `DispensingContext`. Important fields:
 | `current_entry` | typed path entry for the active segment |
 | `current_path` | full path or sliced remainder during resume |
 | `current_settings` | typed `DispensingSegmentSettings` for the active path |
+| `use_segment_motion_settings` | whether robot motion should read per-segment `velocity` / `acceleration` |
 | `spray_on` | whether generator / pump should run |
 | `is_resuming` | set by `GlueProcess._on_resume()` |
 | `paused_from_state` | state that last returned `PAUSED` |
@@ -117,6 +119,8 @@ Important direct context methods used by the handlers:
 | `stop_with_progress(path_idx, point_idx)` | save progress before stop/error return |
 | `pause_with_progress(state, path_idx, point_idx)` | save progress and record pause origin |
 | `get_valid_motor_address_for_current_path()` | returns resolved address or `None` |
+| `get_motion_velocity()` | resolves robot velocity from segment settings or global fallback |
+| `get_motion_acceleration()` | resolves robot acceleration from segment settings or global fallback |
 | `fail(kind, code, state, operation, message, exc=None, recoverable=False)` | records `last_error`, logs, and returns `ERROR` |
 | `clear_error()` | clears `last_error` |
 | `build_debug_snapshot()` | returns a serializable context summary for manual inspection |

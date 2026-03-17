@@ -13,6 +13,7 @@ class HomographyTransformer(ICoordinateTransformer):
                  tcp_y_offset: float = _MISSING):
         self._matrix_path = matrix_path
         self._H: np.ndarray | None = None
+        self._H_inv: np.ndarray | None = None
         self._logger = logging.getLogger(self.__class__.__name__)
         self._tcp_x: float | None = None if tcp_x_offset is _MISSING else float(tcp_x_offset)
         self._tcp_y: float | None = None if tcp_y_offset is _MISSING else float(tcp_y_offset)
@@ -22,11 +23,13 @@ class HomographyTransformer(ICoordinateTransformer):
     def _load(self) -> None:
         try:
             self._H = np.load(self._matrix_path)
+            self._H_inv = np.linalg.inv(self._H)
             self._logger.info("Homography matrix loaded from %s", self._matrix_path)
         except Exception as exc:
             self._logger.warning("Homography matrix not available at %s: %s",
                                  self._matrix_path, exc)
             self._H = None
+            self._H_inv = None
 
     def is_available(self) -> bool:
         return self._H is not None
@@ -51,3 +54,11 @@ class HomographyTransformer(ICoordinateTransformer):
             )
         cx, cy = self.transform(x, y)
         return cx + self._tcp_x, cy + self._tcp_y
+
+    def inverse_transform(self, x: float, y: float) -> Tuple[float, float]:
+        if self._H_inv is None:
+            raise RuntimeError("Homography inverse matrix not loaded")
+        pt = np.array([x, y, 1.0])
+        image_pt = self._H_inv @ pt
+        image_pt /= image_pt[2]
+        return float(image_pt[0]), float(image_pt[1])

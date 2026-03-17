@@ -40,6 +40,8 @@ class GlueDashboardModel(IApplicationModel):
         return self._service.get_cell_connection_state(cell_id)
 
     def get_process_state(self) -> str:               return self._service.get_process_state()
+    def get_process_snapshot(self) -> Optional[Dict]: return self._service.get_process_snapshot()
+    def get_current_robot_image_position(self):       return self._service.get_current_robot_image_position()
 
     def start(self)                                   -> None: self._service.start()
     def stop(self)                                    -> None: self._service.stop()
@@ -48,4 +50,3 @@ class GlueDashboardModel(IApplicationModel):
     def reset_errors(self)                            -> None: self._service.reset_errors()
     def set_mode(self, mode: str)                     -> None: self._service.set_mode(mode)
     def change_glue(self, cell_id: int, glue_type: str) -> None: self._service.change_glue(cell_id, glue_type)
-

@@ -81,6 +81,7 @@ class DispensingContext:
         self.robot_user: int = 0
         self.global_velocity: float = 10.0
         self.global_acceleration: float = 30.0
+        self.use_segment_motion_settings: bool = True
         self.move_to_first_point_poll_s: float = 0.02
         self.move_to_first_point_timeout_s: float = 30.0
         self.pump_thread_wait_poll_s: float = 0.1
@@ -293,3 +294,15 @@ class DispensingContext:
         if motor_address == -1:
             return None
         return motor_address
+
+    def get_motion_velocity(self) -> float:
+        settings = self.get_segment_settings()
+        if self.use_segment_motion_settings and settings is not None and settings.velocity is not None:
+            return float(settings.velocity)
+        return float(self.global_velocity)
+
+    def get_motion_acceleration(self) -> float:
+        settings = self.get_segment_settings()
+        if self.use_segment_motion_settings and settings is not None and settings.acceleration is not None:
+            return float(settings.acceleration)
+        return float(self.global_acceleration)

@@ -1,5 +1,6 @@
 import logging
 from enum import Enum
+from typing import Callable
 
 from ..interfaces.i_motion_service import IMotionService
 
@@ -17,7 +18,7 @@ class NavigationService:
         self._settings = settings_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
-    def move_to_group(self, group_name: str) -> bool:
+    def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
         try:
             config   = self._get_config()
             group    = self._get_group(config, group_name)
@@ -32,6 +33,7 @@ class NavigationService:
                 velocity=group.velocity,
                 acceleration=group.acceleration,
                 wait_to_reach=True,
+                wait_cancelled=wait_cancelled,
             )
         except Exception:
             import traceback
@@ -83,7 +85,12 @@ class NavigationService:
             )
         return group
 
-    def move_to_position(self, position: list, group_name: str) -> bool:
+    def move_to_position(
+        self,
+        position: list,
+        group_name: str,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
         """Move to an explicit position using the velocity/acceleration of the named group."""
         try:
             config = self._get_config()
@@ -95,6 +102,7 @@ class NavigationService:
                 velocity=group.velocity,
                 acceleration=group.acceleration,
                 wait_to_reach=True,
+                wait_cancelled=wait_cancelled,
             )
         except Exception:
             self._logger.exception("move_to_position (group='%s') failed", group_name)

@@ -97,6 +97,14 @@ class GlueOperationCoordinator:
             return True
         return False
 
+    def _is_resuming_active_spray_sequence(self) -> bool:
+        with self._lock:
+            sequence = self._active_sequence
+        return (
+            sequence is self._sequences[GlueOperationMode.SPRAY_ONLY]
+            and self._glue_process.state == ProcessState.PAUSED
+        )
+
     # ── Operation sequences ───────────────────────────────────────────
 
     def start(self) -> None:
@@ -108,7 +116,7 @@ class GlueOperationCoordinator:
         should_prepare = (
             mode == GlueOperationMode.SPRAY_ONLY
             and self._execution_service is not None
-            and active_sequence is not sequence
+            and not self._is_resuming_active_spray_sequence()
         )
 
         if should_prepare:
@@ -152,6 +160,9 @@ class GlueOperationCoordinator:
     def pause(self) -> None:
         with self._lock:
             sequence = self._active_sequence
+            preparing_glue = self._preparing_glue
+        if preparing_glue and self._execution_service is not None:
+            self._execution_service.cancel_pending()
         if sequence is not None:
             sequence.pause()
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal, QEvent, Qt
 from PyQt6.QtWidgets import QVBoxLayout
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from src.robot_systems.glue.applications.dashboard.ui.system_status_widget import SystemStatusWidget
+from src.robot_systems.glue.applications.dashboard.ui.dashboard_preview_widget import DashboardPreviewWidget
 from src.applications.base.i_application_view import IApplicationView
 
 
@@ -36,9 +37,31 @@ class GlueDashboardView(IApplicationView):
         self._dashboard.stop_requested.connect(self._on_inner_stop)
         self._dashboard.pause_requested.connect(self._on_inner_pause)
         self._dashboard.action_requested.connect(self._on_inner_action)
+        self._replace_preview_widget()
 
         self._system_status = SystemStatusWidget()
         self._inject_aux_widget(self._system_status)
+
+    def _replace_preview_widget(self) -> None:
+        old_widget = self._dashboard.trajectory_widget
+        width, height = old_widget.get_image_dimensions()
+        preview_widget = DashboardPreviewWidget(image_width=width, image_height=height)
+        try:
+            main_layout = self._dashboard.layout_manager.main_layout
+            top_section = main_layout.itemAt(0).layout()
+            preview_container = top_section.itemAt(0).widget()
+            preview_layout = preview_container.layout()
+            preview_layout.removeWidget(old_widget)
+            old_widget.setParent(None)
+            preview_layout.insertWidget(
+                0,
+                preview_widget,
+                0,
+                Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            )
+        except Exception:
+            preview_widget.setParent(self._dashboard)
+        self._dashboard.trajectory_widget = preview_widget
 
     def _inject_aux_widget(self, widget) -> None:
         """
@@ -91,6 +114,9 @@ class GlueDashboardView(IApplicationView):
     def break_trajectory(self, _=None) -> None:                          self._dashboard.break_trajectory()
     def enable_trajectory_drawing(self, _=None) -> None:                 self._dashboard.enable_trajectory_drawing()
     def disable_trajectory_drawing(self, _=None) -> None:                self._dashboard.disable_trajectory_drawing()
+    def set_preview_overlay(self, image, segments: list[dict]) -> None:  self._dashboard.trajectory_widget.set_progress_snapshot(image, segments)
+    def set_preview_progress(self, snapshot: dict | None) -> None:        self._dashboard.trajectory_widget.set_progress_state(snapshot)
+    def set_preview_robot_point(self, point) -> None:                    self._dashboard.trajectory_widget.set_progress_robot_point(point)
     def set_start_enabled(self, enabled: bool) -> None:                  self._dashboard.set_start_enabled(enabled)
     def set_stop_enabled(self, enabled: bool) -> None:                   self._dashboard.set_stop_enabled(enabled)
     def set_pause_enabled(self, enabled: bool) -> None:                  self._dashboard.set_pause_enabled(enabled)

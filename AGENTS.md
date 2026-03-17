@@ -253,6 +253,48 @@ from pl_gui.settings.settings_view.styles import (
 
 Reference: `ModbusSettingsView` (imports + ACTION/GHOST usage), `DeviceControlView` (semantic ON/OFF pattern).
 
+### Localization — initial translation and retranslation
+
+The platform now has an engine-level localization service under `src/engine/localization/`. Use it consistently.
+
+Rules:
+- Catalogs live per robot system under `src/robot_systems/<system>/storage/translations/`
+- Widget-owned static text should use `self.tr("...")`
+- Long-lived widgets must handle `QEvent.LanguageChange` and call `retranslateUi()`
+- Controller-owned or config-driven text must be retranslated explicitly
+- If text is not created by `self.tr(...)`, do an explicit initial `_retranslate()` after view initialization
+
+Example for a widget:
+```python
+def retranslateUi(self) -> None:
+    self._save_btn.setText(self.tr("Save"))
+
+def changeEvent(self, event) -> None:
+    if event.type() == QEvent.Type.LanguageChange:
+        self.retranslateUi()
+    super().changeEvent(event)
+```
+
+Example for a controller:
+```python
+def _initialize_view(self) -> None:
+    ...
+    self._retranslate()   # required initial pass for raw/config-driven labels
+
+def _retranslate(self) -> None:
+    self._view.set_action_button_text("reset", self._t("Reset Errors"))
+
+@staticmethod
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("MyContext", text)
+    return translated or text
+```
+
+Notes:
+- `QCoreApplication.translate(...)` can return `""` for a miss with the custom translator, so always use `translated or source_text`
+- Initial render and runtime language change are different paths; verify both
+- If a controller/view exposes a language-change signal, connect it to the controller `_retranslate()` for dynamic text
+
 ### Process state machine (`BaseProcess`)
 - Override `_on_start`, `_on_pause`, `_on_resume`, `_on_stop`
 - Hooks are called **while the lock is held** — must be non-blocking
@@ -322,6 +364,11 @@ def run_standalone():
 ## Adding a New Robot System
 
 Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables. Wire it in `src/bootstrap/main.py` via `SystemBuilder().with_robot(...).build(MyRobotSystem)`.
+
+If the robot system supports localization:
+- set `metadata.translations_root`
+- add `en.json` and any other catalogs under `storage/translations/`
+- keep context names stable once published
 
 ---
 

@@ -44,5 +44,10 @@
     "Start": "Старт",
     "Stop": "Стоп",
     "Pause": "Пауза"
+  },
+  "DashboardPreviewWidget": {
+    "Live": "На живо",
+    "Progress": "Прогрес",
+    "Inset": "Мини изглед"
   }
 }

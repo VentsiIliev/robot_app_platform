@@ -109,6 +109,7 @@ def _build_glue_process_driver_application(robot_system):
         glue_process=robot_system.coordinator.glue_process,
         navigation_service=robot_system.coordinator.glue_process.navigation_service,
         vision_service=vision_service,
+        messaging_service=robot_system._messaging_service,
     )
     service = GlueProcessDriverService(
         matching_service=matching_service,
@@ -347,6 +348,7 @@ def _build_dashboard_application(system):
     settings_service = system._settings_service
     weight_service = system.get_optional_service(ServiceID.WEIGHT)
     vision_service = system.get_optional_service(ServiceID.VISION)
+    robot_service = system.get_optional_service(ServiceID.ROBOT)
     robot_config = getattr(system, "_robot_config", None)
 
     try:
@@ -377,6 +379,7 @@ def _build_dashboard_application(system):
             glue_process=coordinator.glue_process,
             navigation_service=coordinator.glue_process.navigation_service,
             vision_service=vision_service,
+            messaging_service=system._messaging_service,
         )
         if vision_service is not None else None
     )
@@ -388,6 +391,8 @@ def _build_dashboard_application(system):
             messaging_service=ms,
             weight_service=weight_service,
             execution_service=execution_service,
+            robot_service=robot_service,
+            preview_transformer=transformer,
         )
     )
 

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Callable, List
 from ..enums import axis
 
 
@@ -14,7 +14,8 @@ class IMotionService(ABC):
         user: int,
         velocity: float,
         acceleration: float,
-        wait_to_reach: bool = False
+        wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         """
         Point-to-point motion (joint/cartesian PTP).
@@ -31,7 +32,8 @@ class IMotionService(ABC):
         velocity: float,
         acceleration: float,
         blendR: float,
-        wait_to_reach: bool = False
+        wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         """
         Linear TCP motion (straight-line in Cartesian space).

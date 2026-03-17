@@ -103,6 +103,11 @@ class TestMotionService(unittest.TestCase):
         self.robot.stop_motion.return_value = 0
         self.assertTrue(self.service.stop_motion())
 
+    def test_stop_motion_retries_until_success(self):
+        self.robot.stop_motion.side_effect = [-1, -1, 0]
+        self.assertTrue(self.service.stop_motion())
+        self.assertEqual(self.robot.stop_motion.call_count, 3)
+
     def test_stop_motion_exception_returns_false(self):
         self.robot.stop_motion.side_effect = RuntimeError
         self.assertFalse(self.service.stop_motion())
@@ -128,4 +133,15 @@ class TestMotionService(unittest.TestCase):
     def test_wait_for_position_returns_false_on_timeout(self):
         self.robot.get_current_position.return_value = [0.0, 0.0, 0.0]
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=0.05)
+        self.assertFalse(result)
+
+    def test_wait_for_position_returns_false_when_cancelled(self):
+        self.robot.get_current_position.return_value = [0.0, 0.0, 0.0]
+        result = self.service._wait_for_position(
+            [100.0, 0.0, 300.0],
+            threshold=2.0,
+            delay=0.01,
+            timeout=1.0,
+            cancelled=lambda: True,
+        )
         self.assertFalse(result)

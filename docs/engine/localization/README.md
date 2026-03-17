@@ -117,6 +117,26 @@ QCoreApplication.translate("GlueDashboard", "Reset Errors")
 
 That is how the dashboard controller currently re-translates action labels and pause/resume text.
 
+### 7. Initial render and runtime retranslation are separate concerns
+
+There are two different localization moments:
+
+1. initial widget creation
+2. later `QEvent.LanguageChange` updates
+
+Qt only re-sends `LanguageChange` after a translator swap. That means:
+- text created through `self.tr(...)` is translated correctly during initial widget construction if the translator is already installed
+- text created from raw config strings or controller-owned strings is **not** translated automatically on first render
+
+For those cases, controllers must do one explicit initial translation pass after the view is initialized.
+
+The glue dashboard bug came from exactly this:
+- action buttons were created from raw config labels in `pl_gui`
+- they stayed English on startup
+- they only became Bulgarian after a later language change
+
+The fix was an explicit controller `_retranslate()` call from `_initialize_view()`.
+
 ---
 
 ## JSON Catalog Format
@@ -225,6 +245,16 @@ Examples:
 - or via `changeEvent(QEvent.LanguageChange)`
 - or for app views, via `on_language_changed()` if that view pattern is already used
 
+6. If the text is **not** owned by a widget `self.tr(...)` call:
+- retranslate it explicitly during initial screen setup
+- retranslate it again when the language changes
+
+Examples:
+- action buttons built from raw config labels
+- controller-managed pause/resume labels
+- tab names built outside the widget itself
+- notification titles/messages resolved in presenters
+
 ### Wire a new application
 
 1. Make sure the robot system has `metadata.translations_root` pointing to its catalog directory.
@@ -257,6 +287,82 @@ def changeEvent(self, event) -> None:
 
 ---
 
+## Localization Checklist For Applications
+
+Use this checklist whenever you add localization to a new or existing screen.
+
+### A. Static widget-owned text
+
+Use `self.tr(...)` in the widget:
+
+```python
+self._save_btn.setText(self.tr("Save"))
+self._title_lbl.setText(self.tr("Connection"))
+```
+
+If the widget can stay open while language changes, add:
+
+```python
+def retranslateUi(self) -> None:
+    self._save_btn.setText(self.tr("Save"))
+    self._title_lbl.setText(self.tr("Connection"))
+
+def changeEvent(self, event) -> None:
+    if event.type() == QEvent.Type.LanguageChange:
+        self.retranslateUi()
+    super().changeEvent(event)
+```
+
+### B. Controller-owned or config-driven text
+
+If the text is not created through `self.tr(...)`, the controller must own retranslation.
+
+Pattern:
+
+```python
+def _initialize_view(self) -> None:
+    ...
+    self._retranslate()   # required initial pass
+
+def _retranslate(self) -> None:
+    self._view.set_action_button_text("reset", self._t("Reset Errors"))
+    self._view.set_pause_text(self._t("Pause"))
+```
+
+And connect the view's language-change signal:
+
+```python
+self._view.language_changed.connect(self._retranslate)
+```
+
+Use a safe helper:
+
+```python
+@staticmethod
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("MyContext", text)
+    return translated or text
+```
+
+The `or text` fallback is important because a custom translator returns `""` on a miss so Qt can continue its fallback chain.
+
+### C. Catalog entries
+
+For every translatable screen:
+- add keys to `en.json`
+- add translated values to other language catalogs
+- keep context names stable
+
+### D. Initial-load verification
+
+Always verify both:
+- opening the screen directly when the persisted language is already non-English
+- changing the language live while the screen is open
+
+These cover different code paths and both can fail independently.
+
+---
+
 ## Dashboard Pilot
 
 The first translated production slice is the glue dashboard.
@@ -266,6 +372,10 @@ Currently translated:
 - system status labels and state badges
 - glue meter card titles and state tooltips
 - shared `ControlButtonsWidget` start/stop/pause labels from `pl_gui`
+
+Important:
+- `ControlButtonsWidget` works from `self.tr(...)` inside the widget
+- dashboard action buttons require a controller `_retranslate()` call during initial load because they come from raw config labels
 
 This is intentionally a pilot slice to validate the full path before translating the rest of the application set.
 

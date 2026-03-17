@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 import logging
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
@@ -36,14 +36,26 @@ class GlueNavigationService:
     def move_to_login_position(self) -> bool:
         return self._nav.move_to_group(self._GROUP_LOGIN)
 
-    def move_to_calibration_position(self, z_offset: float = 0.0) -> bool:
-        ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset)
+    def move_to_calibration_position(
+        self,
+        z_offset: float = 0.0,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset, wait_cancelled=wait_cancelled)
         if ok:
             self._set_area("spray")
         return ok
 
-    def move_to(self, group_name: str, z_offset: float = 0.0) -> bool:
-        return self._move_with_z_offset(group_name, z_offset) if z_offset else self._nav.move_to_group(group_name)
+    def move_to(
+        self,
+        group_name: str,
+        z_offset: float = 0.0,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        return (
+            self._move_with_z_offset(group_name, z_offset, wait_cancelled=wait_cancelled)
+            if z_offset else self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
+        )
 
     def move_linear(self, group_name: str) -> bool:
         return self._nav.move_linear_group(group_name)
@@ -51,9 +63,14 @@ class GlueNavigationService:
     def get_group_names(self) -> list[str]:
         return self._nav.get_group_names()
 
-    def _move_with_z_offset(self, group_name: str, z_offset: float) -> bool:
+    def _move_with_z_offset(
+        self,
+        group_name: str,
+        z_offset: float,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
         if not z_offset:
-            return self._nav.move_to_group(group_name)
+            return self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
         try:
             config = self._nav._get_config()  # still needed to read position
             group = self._nav._get_group(config, group_name)
@@ -62,7 +79,7 @@ class GlueNavigationService:
                 return False
             position = list(position)
             position[2] += z_offset
-            return self._nav.move_to_position(position, group_name)
+            return self._nav.move_to_position(position, group_name, wait_cancelled=wait_cancelled)
         except Exception:
             import traceback
             traceback.print_exc()

@@ -55,8 +55,8 @@ If `messaging_service` is provided, `MotionService` subscribes to `RobotTopics.P
 
 | Method | Safety checked | Returns |
 |--------|---------------|---------|
-| `move_ptp(position, tool, user, velocity, acceleration, wait_to_reach=False)` | Yes | `bool` |
-| `move_linear(position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False)` | Yes | `bool` |
+| `move_ptp(position, tool, user, velocity, acceleration, wait_to_reach=False, wait_cancelled=None)` | Yes | `bool` |
+| `move_linear(position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False, wait_cancelled=None)` | Yes | `bool` |
 | `start_jog(axis, direction, step)` | Yes (pre-flight) | `int` (SDK code) |
 | `stop_motion()` | No | `bool` |
 | `get_current_position()` | No | `List[float]` |
@@ -67,9 +67,15 @@ When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position
 - Euclidean distance on (x, y, z) only: `√(Σ(aᵢ − bᵢ)²)` ≤ `_WAIT_THRESHOLD_MM = 2.0mm`
 - Or timeout after `_WAIT_TIMEOUT_S = 10.0s` (logs warning, returns `False`)
 
+If `wait_cancelled` is provided, `_wait_for_position` also checks that callback on each poll loop and aborts the wait immediately when it returns `True`.
+
 Position is read from `self._cached_position` (updated by the `"robot/position"` subscription). If the cache is empty (subscription not yet received), it falls back to `self._robot.get_current_position()` directly. This avoids a concurrent XML-RPC connection to the robot while the poll thread is already reading the same endpoint.
 
 Rotation axes (rx, ry, rz) are not included in the distance calculation.
+
+**`stop_motion()` retries:**
+
+`MotionService.stop_motion()` now retries the low-level stop command a few times with a short delay. This makes pause/stop more reliable when the transport reports a transient failed stop on the first attempt.
 
 **`start_jog` safety pre-flight:**
 

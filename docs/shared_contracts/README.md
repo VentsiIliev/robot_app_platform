@@ -32,6 +32,7 @@ This guarantees that renaming a topic (in the contracts file) immediately causes
 | `events/notification_events.py` | Implemented | `UserNotificationEvent`, `NotificationSeverity`, `NotificationTopics` — generic operator notification contract |
 | `events/localization_events.py` | Implemented | `LanguageChangedEvent`, `LocalizationTopics` — runtime language-change notification |
 | `events/pick_and_place_events.py` | Implemented | Pick-and-place visualizer and diagnostics topics |
+| `events/glue_overlay_events.py` | Implemented | Glue job preview overlay contract for the production dashboard |
 | `events/vision_events.py` | **Placeholder** | Empty — reserved for vision / camera events |
 | `enums.py` | **Placeholder** | Empty — reserved for shared platform enums |
 | `constants.py` | **Placeholder** | Empty — reserved for shared platform constants |
@@ -96,6 +97,12 @@ from src.shared_contracts.events.notification_events import (
 | `PickAndPlaceTopics.PLANE_RESET` | `"pick_and_place/plane_reset"` | `dict` (currently `{}`) | `PickAndPlaceProcess` |
 | `PickAndPlaceTopics.MATCH_RESULT` | `"pick_and_place/match_result"` | `list[MatchedWorkpieceInfo]` | `PickAndPlaceProcess` |
 | `PickAndPlaceTopics.DIAGNOSTICS` | `"pick_and_place/diagnostics"` | `PickAndPlaceDiagnosticsEvent` | `PickAndPlaceProcess` |
+
+### Glue Overlay Topics (`glue_overlay_events.py`)
+
+| Constant | Topic String | Payload | Published By |
+|----------|--------------|---------|-------------|
+| `GlueOverlayTopics.JOB_LOADED` | `"glue/overlay/job_loaded"` | `GlueOverlayJobLoadedEvent` | `GlueJobExecutionService` |
 
 ### App-Specific Topics (not in shared_contracts)
 

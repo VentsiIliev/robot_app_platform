@@ -33,6 +33,8 @@ def handle_sending_path_points(context) -> GlueDispensingState:
     rx = float(first_point[3]) if len(first_point) > 3 else 180.0
     ry = float(first_point[4]) if len(first_point) > 4 else 0.0
     rz = float(first_point[5]) if len(first_point) > 5 else 0.0
+    velocity = context.get_motion_velocity()
+    acceleration = context.get_motion_acceleration()
 
     try:
         ok = context.robot_service.execute_trajectory(
@@ -40,8 +42,8 @@ def handle_sending_path_points(context) -> GlueDispensingState:
             rx=rx,
             ry=ry,
             rz=rz,
-            vel=context.global_velocity,
-            acc=context.global_acceleration,
+            vel=velocity,
+            acc=acceleration,
             blocking=False,
         )
     except Exception as exc:

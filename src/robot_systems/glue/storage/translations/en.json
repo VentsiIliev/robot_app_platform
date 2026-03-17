@@ -44,5 +44,10 @@
     "Start": "Start",
     "Stop": "Stop",
     "Pause": "Pause"
+  },
+  "DashboardPreviewWidget": {
+    "Live": "Live",
+    "Progress": "Progress",
+    "Inset": "Inset"
   }
 }

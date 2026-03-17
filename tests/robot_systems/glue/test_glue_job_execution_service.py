@@ -2,11 +2,14 @@ import unittest
 import threading
 from unittest.mock import MagicMock
 
+import numpy as np
+
 from src.robot_systems.glue.domain.glue_job_execution_service import (
     GlueExecutionResult,
     GlueJobExecutionService,
 )
 from src.robot_systems.glue.domain.glue_job_builder_service import GlueJob, GlueJobSegment
+from src.shared_contracts.events.glue_overlay_events import GlueOverlayJobLoadedEvent, GlueOverlayTopics
 
 
 def _matched_workpiece(workpiece_id="wp-1"):
@@ -33,6 +36,7 @@ def _job() -> GlueJob:
                 pattern_type="Contour",
                 segment_index=0,
                 points=[[10.0, 20.0, 30.0, 180.0, 0.0, 0.0]],
+                image_points=[(1.0, 2.0), (3.0, 4.0)],
                 settings={"glue_type": "Type A", "motor_speed": "500"},
             )
         ]
@@ -145,9 +149,54 @@ class TestGlueJobExecutionService(unittest.TestCase):
         result = service.prepare_and_load(spray_on=True)
 
         self.assertTrue(result.success)
-        navigation.move_to_calibration_position.assert_called_once_with(z_offset=-4.0)
+        navigation.move_to_calibration_position.assert_called_once()
+        _, kwargs = navigation.move_to_calibration_position.call_args
+        self.assertEqual(kwargs["z_offset"], -4.0)
+        self.assertTrue(callable(kwargs["wait_cancelled"]))
         self.assertAlmostEqual(sum(slept), 0.25, places=6)
         matching.run_matching.assert_called_once_with()
+
+    def test_prepare_and_load_publishes_overlay_snapshot_when_job_loads(self):
+        matching = MagicMock()
+        matching.run_matching.return_value = (
+            {"workpieces": [_matched_workpiece("wp-1")]},
+            0,
+            [],
+            [],
+        )
+        builder = MagicMock()
+        builder.build_job.return_value = _job()
+        builder.to_process_paths.return_value = [
+            ([[10.0, 20.0, 30.0, 180.0, 0.0, 0.0]], {"glue_type": "Type A"}, {"segment_index": 0})
+        ]
+        glue_process = MagicMock()
+        navigation = MagicMock()
+        navigation.move_to_calibration_position.return_value = True
+        vision = MagicMock()
+        vision.get_capture_pos_offset.return_value = -4.0
+        vision.get_latest_frame.return_value = np.zeros((120, 160, 3), dtype=np.uint8)
+        messaging = MagicMock()
+
+        service = GlueJobExecutionService(
+            matching,
+            builder,
+            glue_process,
+            navigation_service=navigation,
+            vision_service=vision,
+            messaging_service=messaging,
+            sleep_fn=lambda _seconds: None,
+        )
+
+        result = service.prepare_and_load(spray_on=True)
+
+        self.assertTrue(result.success)
+        messaging.publish.assert_called_once()
+        topic, event = messaging.publish.call_args[0]
+        self.assertEqual(topic, GlueOverlayTopics.JOB_LOADED)
+        self.assertIsInstance(event, GlueOverlayJobLoadedEvent)
+        self.assertEqual(event.image_width, 160)
+        self.assertEqual(event.image_height, 120)
+        self.assertEqual(event.segments[0].points, [(1.0, 2.0), (3.0, 4.0)])
 
     def test_prepare_and_load_returns_cancelled_when_cancelled_during_stabilization(self):
         matching = MagicMock()
@@ -171,6 +220,40 @@ class TestGlueJobExecutionService(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertEqual(result.stage, "positioning")
         self.assertEqual(result.message, "Cancelled by operator")
+        matching.run_matching.assert_not_called()
+
+    def test_prepare_and_load_returns_cancelled_when_navigation_wait_is_cancelled(self):
+        matching = MagicMock()
+        builder = MagicMock()
+        glue_process = MagicMock()
+        vision = MagicMock()
+        vision.get_capture_pos_offset.return_value = -4.0
+        robot = MagicMock()
+
+        def _move_to_calibration_position(*, z_offset, wait_cancelled):
+            self.assertEqual(z_offset, -4.0)
+            service.cancel_pending()
+            self.assertTrue(wait_cancelled())
+            return False
+
+        navigation = MagicMock()
+        navigation.move_to_calibration_position.side_effect = _move_to_calibration_position
+        service = GlueJobExecutionService(
+            matching,
+            builder,
+            glue_process,
+            navigation_service=navigation,
+            vision_service=vision,
+            robot_service=robot,
+            sleep_fn=lambda _seconds: None,
+        )
+
+        result = service.prepare_and_load(spray_on=True)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.stage, "positioning")
+        self.assertEqual(result.message, "Cancelled by operator")
+        robot.stop_motion.assert_called()
         matching.run_matching.assert_not_called()
 
     def test_prepare_and_load_fails_when_no_workpieces_match(self):

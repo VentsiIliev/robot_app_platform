@@ -165,6 +165,11 @@ It is reused in two places:
 
 In dashboard spray-only mode, pressing Start still goes through `GlueOperationCoordinator.start()`. The coordinator reads `GlueSettings.spray_on` from `SettingsID.GLUE_SETTINGS`, passes that value into `GlueJobExecutionService.prepare_and_load(...)`, and starts the spray sequence only if preparation succeeds.
 
+This path now distinguishes clearly between resume and restart:
+
+1. if the glue process is `paused`, `SPRAY_ONLY` Start/Resume continues the already active run in place and does **not** re-run capture/match/build/load
+2. if the previous glue run is `stopped` or has already completed, `SPRAY_ONLY` Start is treated as a fresh run and goes back through the full preparation flow again before glue motion starts
+
 ### `PICK_AND_SPRAY`
 
 In pick-and-spray mode, the coordinator still owns the sequence:
@@ -179,9 +184,23 @@ If preparation fails, the transition is blocked and the glue process is marked w
 
 The mandatory capture-position step is shared by all callers of `GlueJobExecutionService`, so the behavior is the same whether glue is started from the dashboard, from the glue driver backend, or from the pick-and-spray sequence.
 
-The preparation phase is also cancellable. If the operator presses Stop while glue is still moving to the capture position, stabilizing, matching, building, or loading, the coordinator cancels the pending preparation and the robot stop command is issued before glue starts.
+When a glue job is prepared and loaded successfully, the same execution service now also publishes a static preview overlay event for the production dashboard:
+
+1. capture image used for glue preparation
+2. image-space glue segments preserved before robot-coordinate conversion
+3. `GlueOverlayJobLoadedEvent` published on `GlueOverlayTopics.JOB_LOADED`
+
+The dashboard uses that to render a static progress image and color completed vs pending segments while glue runs.
+
+The preparation phase is also cancellable. If the operator presses Stop or Pause while glue is still moving to the capture position, stabilizing, matching, building, or loading, the coordinator cancels the pending preparation and the robot stop command is issued before glue starts.
+
+The capture-position move now uses a cancellable navigation wait path, so cancellation interrupts the move wait immediately instead of waiting for the navigation timeout to expire.
 
 The spray-enable behavior for this automated path is not hardcoded. It comes from `GlueSettings.spray_on` in `src/robot_systems/glue/storage/settings/glue/settings.json`, accessed through the shared settings service.
+
+Within the glue dispensing process, robot motion can now be configured independently from pump behavior:
+- `use_segment_motion_settings=True` makes `move_to_first_point` and `execute_trajectory` use per-segment `velocity` / `acceleration` when those fields exist in the workpiece segment settings
+- if segment motion values are missing, or the flag is disabled, the process falls back to `global_velocity` / `global_acceleration`
 
 The glue navigation facade also applies a conservative safe-home route: when `move_home()` is requested from a live pose that is not already near `HOME` or `CALIBRATION`, it first routes through `CALIBRATION` and only then moves to `HOME`.
 

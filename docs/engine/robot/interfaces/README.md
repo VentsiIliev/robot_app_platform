@@ -95,6 +95,7 @@ class IMotionService(ABC):
         position: List[float], tool: int, user: int,
         velocity: float, acceleration: float,
         wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool: ...
 
     def move_linear(self,
@@ -102,6 +103,7 @@ class IMotionService(ABC):
         velocity: float, acceleration: float,
         blendR: float,
         wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool: ...
 
     def start_jog(self,
@@ -113,6 +115,7 @@ class IMotionService(ABC):
 ```
 
 - `wait_to_reach=True`: blocks until the robot reaches the target position (Euclidean distance ≤ 2mm on x,y,z) or times out after 10s.
+- `wait_cancelled`: optional callback checked during that wait loop; when it returns `True`, the wait aborts early.
 
 Implementation: `MotionService`
 

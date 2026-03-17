@@ -5,6 +5,13 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from src.engine.core.i_messaging_service import IMessagingService
+from src.shared_contracts.events.glue_overlay_events import (
+    GlueOverlayJobLoadedEvent,
+    GlueOverlaySegment,
+    GlueOverlayTopics,
+)
+
 
 GlueExecutionStage = Literal["positioning", "matching", "job_build", "load", "start"]
 
@@ -31,6 +38,7 @@ class GlueJobExecutionService:
         navigation_service=None,
         vision_service=None,
         robot_service=None,
+        messaging_service: IMessagingService | None = None,
         stabilization_delay_s: float = 0.5,
         sleep_fn=time.sleep,
     ) -> None:
@@ -40,6 +48,7 @@ class GlueJobExecutionService:
         self._navigation = navigation_service
         self._vision = vision_service
         self._robot = robot_service
+        self._messaging = messaging_service
         self._stabilization_delay_s = max(0.0, float(stabilization_delay_s))
         self._sleep = sleep_fn
         self._cancel_event = threading.Event()
@@ -58,11 +67,8 @@ class GlueJobExecutionService:
             if was_running:
                 self._cancel_event.set()
 
-        if was_running and self._robot is not None:
-            try:
-                self._robot.stop_motion()
-            except Exception:
-                pass
+        if was_running:
+            self._request_robot_stop()
 
         return was_running
 
@@ -83,6 +89,7 @@ class GlueJobExecutionService:
             if cancelled is not None:
                 return cancelled
 
+            overlay_image = self._capture_overlay_image()
             result, _no_match_count, _matched, _unmatched = self._matching.run_matching()
             workpieces = list(result.get("workpieces", [])) if isinstance(result, dict) else []
             matched_ids = [self._get_workpiece_id(workpiece) for workpiece in workpieces]
@@ -134,6 +141,7 @@ class GlueJobExecutionService:
             try:
                 process_paths = self._job_builder.to_process_paths(job)
                 self._glue_process.set_paths(process_paths, spray_on=spray_on)
+                self._publish_overlay_loaded(job, overlay_image)
             except Exception as exc:
                 return GlueExecutionResult(
                     success=False,
@@ -207,6 +215,7 @@ class GlueJobExecutionService:
                     "pattern_type": segment.pattern_type,
                     "segment_index": segment.segment_index,
                     "point_count": len(segment.points),
+                    "image_point_count": len(segment.image_points),
                 }
                 for segment in getattr(job, "segments", [])
             ],
@@ -231,7 +240,12 @@ class GlueJobExecutionService:
             return f"Failed to resolve capture offset: {exc}"
 
         try:
-            moved = bool(self._navigation.move_to_calibration_position(z_offset=capture_offset))
+            moved = bool(
+                self._navigation.move_to_calibration_position(
+                    z_offset=capture_offset,
+                    wait_cancelled=lambda: self._cancel_event.is_set(),
+                )
+            )
         except Exception as exc:
             return f"Failed to move robot to calibration capture position: {exc}"
 
@@ -250,6 +264,52 @@ class GlueJobExecutionService:
                 remaining -= interval
 
         return None
+
+    def _request_robot_stop(self) -> None:
+        if self._robot is None:
+            return
+        for _ in range(3):
+            try:
+                if self._robot.stop_motion():
+                    return
+            except Exception:
+                return
+            self._sleep(0.05)
+
+    def _capture_overlay_image(self):
+        if self._vision is None:
+            return None
+        try:
+            return self._vision.get_latest_frame()
+        except Exception:
+            return None
+
+    def _publish_overlay_loaded(self, job, image) -> None:
+        if self._messaging is None or image is None:
+            return
+        try:
+            height, width = image.shape[:2]
+        except Exception:
+            return
+        event = GlueOverlayJobLoadedEvent(
+            image=image,
+            image_width=int(width),
+            image_height=int(height),
+            segments=[
+                GlueOverlaySegment(
+                    path_index=index,
+                    workpiece_id=segment.workpiece_id,
+                    pattern_type=segment.pattern_type,
+                    segment_index=segment.segment_index,
+                    points=list(segment.image_points),
+                )
+                for index, segment in enumerate(getattr(job, "segments", []))
+            ],
+        )
+        try:
+            self._messaging.publish(GlueOverlayTopics.JOB_LOADED, event)
+        except Exception:
+            pass
 
     def _begin_prepare(self) -> None:
         with self._state_lock:

@@ -56,3 +56,9 @@ class IGlueDashboardService(ABC):
 
     @abstractmethod
     def get_process_state(self) -> str: ...
+
+    @abstractmethod
+    def get_process_snapshot(self) -> Optional[Dict]: ...
+
+    @abstractmethod
+    def get_current_robot_image_position(self) -> Optional[tuple[float, float]]: ...

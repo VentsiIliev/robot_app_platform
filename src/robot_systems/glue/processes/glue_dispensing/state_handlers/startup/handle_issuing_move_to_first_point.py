@@ -11,13 +11,15 @@ def handle_issuing_move_to_first_point(context) -> GlueDispensingState:
     S = GlueDispensingState
 
     target = context.path_ops.get_current_path_start_point()
+    velocity = context.get_motion_velocity()
+    acceleration = context.get_motion_acceleration()
     try:
         ok = context.robot_service.move_ptp(
             position=target,
             tool=context.robot_tool,
             user=context.robot_user,
-            velocity=context.global_velocity,
-            acceleration=context.global_acceleration,
+            velocity=velocity,
+            acceleration=acceleration,
             wait_to_reach=False,
         )
     except Exception as exc:

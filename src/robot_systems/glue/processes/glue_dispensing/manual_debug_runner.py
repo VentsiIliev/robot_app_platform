@@ -155,6 +155,7 @@ class DispensingManualDriver:
         ctx.robot_user = self._config.robot_user
         ctx.global_velocity = self._config.global_velocity
         ctx.global_acceleration = self._config.global_acceleration
+        ctx.use_segment_motion_settings = self._config.use_segment_motion_settings
         ctx.move_to_first_point_poll_s = self._config.move_to_first_point_poll_s
         ctx.move_to_first_point_timeout_s = self._config.move_to_first_point_timeout_s
         ctx.pump_thread_wait_poll_s = self._config.pump_thread_wait_poll_s

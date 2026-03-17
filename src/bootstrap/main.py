@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import QApplication
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
-
+_DEV_SKIP_LOGIN = True
 
 def main() -> None:
     setup_logging()
@@ -49,10 +49,17 @@ def main() -> None:
     localization_svc.set_language(localization_svc.get_language())
 
     # 4b — login gate (blocks until authenticated or user quits)
-    session = _run_login(ctx, robot_app)
-    if session is None:
-        _LOGGER.info("Login cancelled — exiting.")
-        sys.exit(0)
+    if _DEV_SKIP_LOGIN:
+        from src.applications.login.stub_login_application_service import _StubUser
+        from src.engine.auth.user_session import UserSession
+        session = UserSession()
+        session.login(_StubUser())
+        _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
+    else:
+        session = _run_login(ctx, robot_app)
+        if session is None:
+            _LOGGER.info("Login cancelled — exiting.")
+            sys.exit(0)
 
     # 5 — load applications (filtered by logged-in user's role)
     from src.engine.auth.authorization_service import AuthorizationService

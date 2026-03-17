@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, List, Tuple
 
-from PyQt6.QtCore import QCoreApplication, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
 from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.robot_systems.glue.process_ids import ProcessID
@@ -17,6 +17,7 @@ from src.shared_contracts.events.notification_events import (
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 from src.shared_contracts.events.weight_events import WeightTopics
+from src.shared_contracts.events.glue_overlay_events import GlueOverlayTopics
 from src.robot_systems.glue.applications.dashboard import (
     ACTION_BUTTONS, BUTTON_STATE_MAP, GLUE_CELLS,
     GlueCellTopics, MODE_TOGGLE_LABELS,
@@ -36,6 +37,7 @@ class _DashboardBridge(QObject):
     system_state    = pyqtSignal(str, str)
     service_warning = pyqtSignal(str)
     camera_image    = pyqtSignal(object)    # ← add this
+    overlay_loaded  = pyqtSignal(object)
 
 
 class _Worker(QObject):
@@ -68,6 +70,9 @@ class GlueDashboardController(IApplicationController):
         self._bridge        = _DashboardBridge()
         self._workers: List[Tuple[QThread, _Worker]] = []
         self._notifications = UserNotificationPresenter(view, broker, translate=self._t)
+        self._progress_timer = QTimer()
+        self._progress_timer.setInterval(150)
+        self._progress_timer.timeout.connect(self._poll_preview_progress)
 
     def load(self) -> None:
         self._active = True
@@ -76,10 +81,15 @@ class GlueDashboardController(IApplicationController):
         self._subscribe()
         self._connect_signals()
         self._initialize_view()
+        self._progress_timer.start()
         self._view.destroyed.connect(self.stop)
 
     def stop(self) -> None:
         self._active = False
+        try:
+            self._progress_timer.stop()
+        except RuntimeError:
+            pass
         self._notifications.stop()
         for topic, cb in reversed(self._subs):
             try: self._broker.unsubscribe(topic, cb)
@@ -109,6 +119,7 @@ class GlueDashboardController(IApplicationController):
         self._bridge.system_state.connect(self._on_system_state)      # ← was missing
         self._bridge.service_warning.connect(self._on_service_warning)
         self._bridge.camera_image.connect(self._on_camera_image)
+        self._bridge.overlay_loaded.connect(self._on_overlay_loaded)
 
     # ── Broker → Bridge ───────────────────────────────────────────────
 
@@ -142,6 +153,8 @@ class GlueDashboardController(IApplicationController):
 
         self._sub(VisionTopics.LATEST_IMAGE,
               lambda msg: self._bridge.camera_image.emit(msg))
+        self._sub(GlueOverlayTopics.JOB_LOADED,
+                  lambda event: self._bridge.overlay_loaded.emit(event))
 
         self._sub(
             ProcessTopics.busy(ProcessID.COORDINATOR),
@@ -152,6 +165,22 @@ class GlueDashboardController(IApplicationController):
     def _on_camera_image(self, message: object) -> None:
         if self._view_ok():
             self._view.set_trajectory_image(message)
+
+    def _on_overlay_loaded(self, event: object) -> None:
+        if not self._view_ok():
+            return
+        segments = [
+            {
+                "path_index": segment.path_index,
+                "workpiece_id": segment.workpiece_id,
+                "pattern_type": segment.pattern_type,
+                "segment_index": segment.segment_index,
+                "points": list(segment.points),
+            }
+            for segment in getattr(event, "segments", [])
+        ]
+        self._view.set_preview_overlay(getattr(event, "image", None), segments)
+        self._poll_preview_progress()
 
     def _on_weight(self, card_id: int, grams: float) -> None:
         if self._view_ok():
@@ -343,3 +372,10 @@ class GlueDashboardController(IApplicationController):
     def _t(text: str) -> str:
         translated = QCoreApplication.translate("GlueDashboard", text)
         return translated or text
+
+    def _poll_preview_progress(self) -> None:
+        if not self._view_ok():
+            return
+        snapshot = self._model.get_process_snapshot()
+        self._view.set_preview_progress(snapshot)
+        self._view.set_preview_robot_point(self._model.get_current_robot_image_position())

@@ -254,6 +254,49 @@ This diagnostics topic is intended for operator-facing tooling and debugging, no
 
 ---
 
+## `glue_overlay_events.py` — Glue Preview Overlay
+
+These topics are used by the glue execution flow and the production dashboard preview.
+
+### Topics
+
+```python
+class GlueOverlayTopics:
+    JOB_LOADED = "glue/overlay/job_loaded"
+```
+
+### Payloads
+
+#### `GlueOverlaySegment`
+
+Represents one planned glue segment in image coordinates.
+
+Fields:
+- `path_index`
+- `workpiece_id`
+- `pattern_type`
+- `segment_index`
+- `points`
+
+#### `GlueOverlayJobLoadedEvent`
+
+Published after a glue job is prepared and loaded successfully.
+
+Fields:
+- `image`
+- `image_width`
+- `image_height`
+- `segments`
+
+Design intent:
+- the image is the static capture background used during matching/job preparation
+- the segment points stay in image space
+- the dashboard can render pending/completed progress without reconstructing robot-space paths
+
+This event is intentionally glue-specific, but still lives in `shared_contracts` because it is the canonical broker contract between the glue backend and the production dashboard.
+
+---
+
 ## `vision_events.py` — Vision Events
 
 Defines `VisionTopics` — the topic-string constants for the `VisionSystem` messaging integration.

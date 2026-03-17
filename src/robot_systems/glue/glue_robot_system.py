@@ -225,6 +225,7 @@ class GlueRobotSystem(BaseRobotSystem):
                 glue_process=glue_process,
                 navigation_service=self._navigation,
                 vision_service=vision_service,
+                messaging_service=self._messaging_service,
             )
             if matching_service is not None else None
         )

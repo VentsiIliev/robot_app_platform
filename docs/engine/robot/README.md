@@ -114,6 +114,11 @@ For the ROS bridge driver:
 - instead it reports `disconnected`
 - `RobotStateManager` publishes that state through the normal broker topic
 
+For motion stop requests against the ROS bridge:
+- the bridge now returns an explicit `stop_state`
+- `STOPPED` and `NO_ACTIVE_MOTION` are treated as benign stop outcomes by the platform client
+- `STOP_REQUESTED_BUT_UNCONFIRMED` and `ERROR` are treated as failed stop outcomes and can trigger retries or operator warnings
+
 This means application startup can continue even when the bridge is down, and subscribers should treat `disconnected` as a first-class availability state, not as an exception path.
 
 `RobotStateSnapshot.extra` may include transport diagnostics such as:

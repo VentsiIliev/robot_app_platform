@@ -16,6 +16,7 @@ class GlueJobSegment:
     pattern_type: str
     segment_index: int
     points: list[list[float]]
+    image_points: list[tuple[float, float]]
     settings: dict[str, Any]
 
 
@@ -60,6 +61,7 @@ class GlueJobBuilderService:
                             pattern_type=pattern_type,
                             segment_index=segment_index,
                             points=points,
+                            image_points=self._extract_image_points(raw_segment),
                             settings=settings,
                         )
                     )
@@ -103,6 +105,20 @@ class GlueJobBuilderService:
         if not settings:
             raise GlueJobBuildError("Spray segment settings are missing")
         return settings
+
+    def _extract_image_points(self, raw_segment: dict[str, Any]) -> list[tuple[float, float]]:
+        raw_points = raw_segment.get("contour")
+        if raw_points is None:
+            raw_points = []
+        points: list[tuple[float, float]] = []
+        for raw_point in raw_points:
+            point = raw_point
+            while self._is_singleton_container(point):
+                point = point[0]
+            if not self._is_coordinate_pair(point):
+                continue
+            points.append((float(point[0]), float(point[1])))
+        return points
 
     def _get_workpiece_id(self, workpiece: Any) -> str:
         if isinstance(workpiece, dict):

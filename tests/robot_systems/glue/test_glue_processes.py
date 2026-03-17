@@ -372,11 +372,36 @@ class TestGlueOperationCoordinatorSprayOnly(unittest.TestCase):
         execution_service = MagicMock()
         runner, spray_seq, _, _ = _make_runner_mocks(execution_service=execution_service)
         runner._active_sequence = spray_seq
+        runner.glue_process.state = ProcessState.PAUSED
 
         runner.resume()
 
         spray_seq.start.assert_called_once()
         execution_service.prepare_and_load.assert_not_called()
+
+    def test_start_again_after_stopped_spray_run_reprepares_glue(self):
+        execution_service = MagicMock()
+        execution_service.prepare_and_load.return_value = GlueExecutionResult(
+            success=True,
+            stage="load",
+            message="loaded",
+            matched_ids=["wp-1"],
+            workpiece_count=1,
+            segment_count=2,
+            loaded=True,
+            started=False,
+        )
+        runner, spray_seq, _, _ = _make_runner_mocks(
+            execution_service=execution_service,
+            spray_on=False,
+        )
+        runner._active_sequence = spray_seq
+        runner.glue_process.state = ProcessState.STOPPED
+
+        runner.start()
+
+        execution_service.prepare_and_load.assert_called_once_with(spray_on=False)
+        spray_seq.start.assert_called_once()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -475,6 +500,17 @@ class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
     def test_pause_when_no_active_does_not_raise(self):
         runner, *_ = _make_runner_mocks()
         runner.pause()
+
+    def test_pause_cancels_pending_spray_only_preparation(self):
+        execution_service = MagicMock()
+        runner, spray_seq, *_ = _make_runner_mocks(execution_service=execution_service)
+        runner._active_sequence = spray_seq
+        runner._preparing_glue = True
+
+        runner.pause()
+
+        execution_service.cancel_pending.assert_called_once_with()
+        spray_seq.pause.assert_called_once()
 
     def test_resume_calls_start_on_active_sequence(self):
         runner, spray_seq, *_ = _make_runner_mocks()

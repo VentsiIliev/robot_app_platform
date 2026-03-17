@@ -67,6 +67,8 @@ from src.robot_systems.glue.settings.glue import GlueSettingKey
 def _settings(**overrides):
     values = {
         GlueSettingKey.GLUE_TYPE.value: "Type A",
+        "velocity": 55.0,
+        "acceleration": 66.0,
         GlueSettingKey.REACH_START_THRESHOLD.value: 1.0,
         GlueSettingKey.REACH_END_THRESHOLD.value: 1.0,
         GlueSettingKey.MOTOR_SPEED.value: 10000,
@@ -97,6 +99,7 @@ def _make_context():
     ctx.robot_user = 7
     ctx.global_velocity = 12.5
     ctx.global_acceleration = 34.0
+    ctx.use_segment_motion_settings = True
     ctx.paths = [
         ([_point(1), _point(2), _point(3), _point(4)], _settings()),
         ([_point(10)], _settings(glue_type="Type B")),
@@ -182,9 +185,28 @@ class TestHandleLoadingCurrentPath(unittest.TestCase):
 
 
 class TestHandleIssuingMoveToFirstPoint(unittest.TestCase):
-    def test_commands_move_to_first_point(self):
+    def test_commands_move_to_first_point_using_segment_motion_settings(self):
         ctx = _make_context()
         ctx.current_path = ctx.paths[0][0]
+        ctx.current_settings = ctx.paths[0][1]
+
+        state = handle_issuing_move_to_first_point(ctx)
+
+        self.assertEqual(state, GlueDispensingState.MOVING_TO_FIRST_POINT)
+        ctx.robot_service.move_ptp.assert_called_once_with(
+            position=ctx.paths[0][0][0],
+            tool=3,
+            user=7,
+            velocity=55.0,
+            acceleration=66.0,
+            wait_to_reach=False,
+        )
+
+    def test_commands_move_to_first_point_using_global_motion_settings_when_segment_disabled(self):
+        ctx = _make_context()
+        ctx.current_path = ctx.paths[0][0]
+        ctx.current_settings = ctx.paths[0][1]
+        ctx.use_segment_motion_settings = False
 
         state = handle_issuing_move_to_first_point(ctx)
 
@@ -336,8 +358,8 @@ class TestHandleSendingPathPoints(unittest.TestCase):
             rx=0.0,
             ry=0.0,
             rz=0.0,
-            vel=12.5,
-            acc=34.0,
+            vel=55.0,
+            acc=66.0,
             blocking=False,
         )
         self.assertTrue(ctx.segment_trajectory_submitted)
@@ -847,8 +869,8 @@ class TestDispensingMachineIntegration(unittest.TestCase):
             rx=0.0,
             ry=0.0,
             rz=0.0,
-            vel=12.5,
-            acc=34.0,
+            vel=55.0,
+            acc=66.0,
             blocking=False,
         )
         ctx.robot_service.move_linear.assert_not_called()
@@ -926,3 +948,23 @@ class TestDispensingMachineIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+    def test_submits_trajectory_using_global_motion_settings_when_segment_disabled(self):
+        ctx = _make_context()
+        ctx.current_path_index = 0
+        ctx.current_path = ctx.paths[0][0]
+        ctx.current_settings = ctx.paths[0][1]
+        ctx.current_point_index = 1
+        ctx.use_segment_motion_settings = False
+
+        state = handle_sending_path_points(ctx)
+
+        self.assertEqual(state, GlueDispensingState.ROUTING_PATH_COMPLETION_WAIT)
+        ctx.robot_service.execute_trajectory.assert_called_once_with(
+            path=ctx.current_path[1:],
+            rx=0.0,
+            ry=0.0,
+            rz=0.0,
+            vel=12.5,
+            acc=34.0,
+            blocking=False,
+        )

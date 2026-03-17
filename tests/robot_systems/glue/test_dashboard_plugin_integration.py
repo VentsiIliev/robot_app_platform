@@ -328,6 +328,23 @@ class TestGlueDashboardServiceQueries(unittest.TestCase):
         svc, *_ = _make_dashboard_service()
         self.assertIsNone(svc.get_initial_cell_state(1))
 
+    def test_get_current_robot_image_position_uses_inverse_transformer(self):
+        ss, _, _ = _make_settings_service()
+        runner = _make_runner()
+        robot = MagicMock()
+        robot.get_current_position.return_value = [100.0, 200.0, 0.0, 0.0, 0.0, 0.0]
+        transformer = MagicMock()
+        transformer.inverse_transform.return_value = (25.0, 50.0)
+
+        svc = GlueDashboardService(
+            runner=runner,
+            settings_service=ss,
+            robot_service=robot,
+            preview_transformer=transformer,
+        )
+
+        self.assertEqual(svc.get_current_robot_image_position(), (25.0, 50.0))
+
 
 # ---------------------------------------------------------------------------
 # GlueDashboardService — connection state (weight service integration)

@@ -129,6 +129,50 @@ Six ordered steps — order matters:
 
 When a broker callback must update Qt widgets, use `_Bridge(QObject)` with `pyqtSignal` (see `GlueCellSettingsController`). For blocking service calls (port scan, connection test), use `QThread + _Worker` tracked in `_active` list (see `ModbusSettingsController`).
 
+### Localization
+
+The project now has an engine-level localization mechanism in `src/engine/localization/`.
+
+Rules:
+- Translation catalogs live per robot system under `src/robot_systems/<system>/storage/translations/`
+- Widget-owned static text should use `self.tr("...")`
+- Long-lived widgets must handle `QEvent.LanguageChange` and call `retranslateUi()`
+- Controller-owned or config-driven text must be retranslated explicitly
+- If a screen contains raw/config-driven labels, the controller must do an initial `_retranslate()` after `_initialize_view()` so startup in a persisted non-English language is correct
+
+Widget pattern:
+
+```python
+def retranslateUi(self) -> None:
+    self._save_btn.setText(self.tr("Save"))
+
+def changeEvent(self, event) -> None:
+    if event.type() == QEvent.Type.LanguageChange:
+        self.retranslateUi()
+    super().changeEvent(event)
+```
+
+Controller pattern:
+
+```python
+def _initialize_view(self) -> None:
+    ...
+    self._retranslate()   # required initial pass for raw/config-driven labels
+
+def _retranslate(self) -> None:
+    self._view.set_action_button_text("reset", self._t("Reset Errors"))
+
+@staticmethod
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("MyContext", text)
+    return translated or text
+```
+
+Important:
+- `QCoreApplication.translate(...)` may return `""` on a miss with the custom translator; always use a source-text fallback
+- Initial render and live language-change paths are different; verify both
+- If the view emits a language-changed signal, connect it to controller `_retranslate()` for dynamic text
+
 ### Settings
 
 JSON-based persistence. Each setting is declared with a `SettingsSerializer` (implements `get_default()`, `to_dict()`, `from_dict()`). Files are stored under `storage/settings/<system_name>/`. Access via `settings_service.get("key")`.
@@ -152,6 +196,11 @@ See `src/applications/APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD` for the full s
 ## Adding a New Robot System
 
 Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables. Wire it in `src/bootstrap/main.py` via `SystemBuilder().with_robot(...).build(MyRobotSystem)`.
+
+If the robot system supports runtime localization:
+- set `metadata.translations_root`
+- add `en.json` plus any additional language catalogs under `storage/translations/`
+- keep translation contexts stable once they are used in code and catalogs
 
 ---
 
