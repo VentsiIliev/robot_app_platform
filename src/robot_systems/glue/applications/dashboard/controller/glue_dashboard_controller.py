@@ -322,6 +322,7 @@ class GlueDashboardController(IApplicationController):
                 self._view.set_cell_glue_type(card_id, glue_type)
             state = self._model.get_cell_connection_state(cell_id)
             self._view.set_cell_state(card_id, state)
+        self._retranslate()
 
     # ── Localization ──────────────────────────────────────────────────
 
