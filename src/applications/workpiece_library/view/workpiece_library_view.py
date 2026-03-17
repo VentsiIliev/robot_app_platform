@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 
+from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.workpiece_library.domain.workpiece_schema import WorkpieceSchema, WorkpieceRecord
 
@@ -228,16 +229,9 @@ class WorkpieceLibraryView(IApplicationView):
         group = QGroupBox("Workpieces")
         layout = QVBoxLayout(group)
 
-        fields = self._schema.get_table_fields()
-        self._table = QTableWidget()
-        self._table.setColumnCount(len(fields))
-        self._table.setHorizontalHeaderLabels(self._schema.get_table_headers())
+        self._table = make_table(self._schema.get_table_headers(),
+                                 sortable=True, min_height=300)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.setAlternatingRowColors(True)
-        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setSortingEnabled(True)
-        self._table.setMinimumHeight(300)
         self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
 

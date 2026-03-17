@@ -28,19 +28,32 @@ def _make_model(config=None, calibration=None):
     return model
 
 
+def _make_messaging():
+    return MagicMock()
+
+
+def _make_jog():
+    return MagicMock()
+
+
+def _make_ctrl(model=None, view=None):
+    return RobotSettingsController(model or _make_model(), view or _make_view(),
+                                   _make_messaging(), _make_jog())
+
+
 
 class TestRobotSettingsControllerInit(unittest.TestCase):
 
     def test_wires_save_requested_signal(self):
         view  = _make_view()
         model = _make_model()
-        RobotSettingsController(model, view)
+        RobotSettingsController(model, view, _make_messaging(), _make_jog())
         view.save_requested.connect.assert_called_once()
 
     def test_wires_destroyed_signal(self):
         view  = _make_view()
         model = _make_model()
-        RobotSettingsController(model, view)
+        RobotSettingsController(model, view, _make_messaging(), _make_jog())
         view.destroyed.connect.assert_called_once()
 
 
@@ -49,7 +62,7 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
     def test_load_calls_model_load(self):
         view  = _make_view()
         model = _make_model(RobotSettings(robot_ip="1.2.3.4"))
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         model.load.assert_called_once()
 
@@ -57,7 +70,7 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
         cfg   = RobotSettings(robot_ip="5.5.5.5")
         view  = _make_view()
         model = _make_model(cfg)
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.load_config.assert_called_once()
         flat = view.load_config.call_args[0][0]
@@ -69,7 +82,7 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
         cfg.movement_groups = {"HOME_POS": MovementGroup(velocity=100)}
         view = _make_view()
         model = _make_model(cfg)
-        ctrl = RobotSettingsController(model, view)
+        ctrl = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.load_movement_groups.assert_called_once_with(cfg.movement_groups, extra_defs={})
 
@@ -81,7 +94,7 @@ class TestRobotSettingsControllerSave(unittest.TestCase):
         calib = calibration or RobotCalibrationSettings()
         view  = _make_view()
         model = _make_model(cfg, calib)
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
 
         flat    = RobotSettingsMapper.to_flat_dict(cfg)
@@ -115,34 +128,34 @@ class TestRobotSettingsControllerSave(unittest.TestCase):
     def test_stop_does_not_raise(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.stop()   # should be a no-op, must not raise
 
 class TestRobotSettingsControllerInitSignals(unittest.TestCase):
 
     def test_wires_add_group_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view)
+        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         view.add_group_requested.connect.assert_called_once()
 
     def test_wires_remove_group_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view)
+        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         view.remove_group_requested.connect.assert_called_once()
 
     def test_wires_set_current_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view)
+        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         view.set_current_requested.connect.assert_called_once()
 
     def test_wires_move_to_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view)
+        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         view.move_to_requested.connect.assert_called_once()
 
     def test_wires_execute_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view)
+        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         view.execute_requested.connect.assert_called_once()
 
 
@@ -151,7 +164,7 @@ class TestRobotSettingsControllerAutoSave(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -187,7 +200,7 @@ class TestRobotSettingsControllerSetCurrent(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -232,13 +245,13 @@ class TestRobotSettingsControllerMotionDone(unittest.TestCase):
 
     @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
     def test_shows_warning_on_failure(self, mock_warn):
-        ctrl = RobotSettingsController(_make_model(), _make_view())
+        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging(), _make_jog())
         ctrl._on_motion_done(False, "HOME")
         mock_warn.assert_called_once()
 
     @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
     def test_no_warning_on_success(self, mock_warn):
-        ctrl = RobotSettingsController(_make_model(), _make_view())
+        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging(), _make_jog())
         ctrl._on_motion_done(True, "HOME")
         mock_warn.assert_not_called()
 
@@ -248,7 +261,7 @@ class TestRobotSettingsControllerAddGroup(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -300,7 +313,7 @@ class TestRobotSettingsControllerRemoveGroup(unittest.TestCase):
     @patch("src.applications.robot_settings.controller.robot_settings_controller.ask_yes_no")
     def test_calls_remove_on_confirm(self, mock_ask):
         view = _make_view()
-        ctrl = RobotSettingsController(_make_model(), view)
+        ctrl = RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         mock_ask.return_value = True
         ctrl._on_remove_group("HOME")
         view.remove_movement_group.assert_called_once_with("HOME")
@@ -308,7 +321,7 @@ class TestRobotSettingsControllerRemoveGroup(unittest.TestCase):
     @patch("src.applications.robot_settings.controller.robot_settings_controller.ask_yes_no")
     def test_does_nothing_on_cancel(self, mock_ask):
         view = _make_view()
-        ctrl = RobotSettingsController(_make_model(), view)
+        ctrl = RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
         mock_ask.return_value = False
         ctrl._on_remove_group("HOME")
         view.remove_movement_group.assert_not_called()
@@ -318,7 +331,7 @@ class TestRobotSettingsControllerMoveTo(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -379,7 +392,7 @@ class TestRobotSettingsControllerExecute(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view)
+        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}

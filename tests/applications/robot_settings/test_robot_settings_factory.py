@@ -24,28 +24,31 @@ class TestRobotSettingsFactory(unittest.TestCase):
         from PyQt6.QtWidgets import QApplication
         cls._app = QApplication.instance() or QApplication(sys.argv)
 
+    def _make_factory(self):
+        return RobotSettingsFactory(MagicMock(), MagicMock())
+
     def test_build_returns_robot_settings_view(self):
-        result = RobotSettingsFactory().build(_make_service())
+        result = self._make_factory().build(_make_service())
         self.assertIsInstance(result, RobotSettingsView)
 
     def test_build_attaches_controller_to_view(self):
-        view = RobotSettingsFactory().build(_make_service())
+        view = self._make_factory().build(_make_service())
         self.assertIsInstance(view._controller, RobotSettingsController)
 
     def test_build_calls_load_config_on_service(self):
         svc = _make_service()
-        RobotSettingsFactory().build(svc)
+        self._make_factory().build(svc)
         svc.load_config.assert_called_once()
 
     def test_build_calls_load_calibration_on_service(self):
         svc = _make_service()
-        RobotSettingsFactory().build(svc)
+        self._make_factory().build(svc)
         svc.load_calibration.assert_called_once()
 
     def test_two_builds_produce_independent_views(self):
         svc  = _make_service()
-        v1   = RobotSettingsFactory().build(svc)
-        v2   = RobotSettingsFactory().build(_make_service())
+        v1   = self._make_factory().build(svc)
+        v2   = self._make_factory().build(_make_service())
         self.assertIsNot(v1, v2)
         self.assertIsNot(v1._controller, v2._controller)
 

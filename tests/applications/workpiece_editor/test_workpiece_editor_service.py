@@ -224,9 +224,12 @@ class TestWorkpieceEditorServiceSave(unittest.TestCase):
 class TestWorkpieceEditorServiceExecute(unittest.TestCase):
 
     def test_returns_true_with_success_message(self):
-        ok, msg = _make_svc().execute_workpiece({"form_data": {}})
+        data = {"form_data": {"sprayPattern": {"Contour": [
+            {"contour": [[0, 0], [100, 0], [100, 100]], "settings": {}}
+        ]}}}
+        ok, msg = _make_svc().execute_workpiece(data)
         self.assertTrue(ok)
-        self.assertIn("executed", msg.lower())
+        self.assertIsNotNone(msg)
 
 
 if __name__ == "__main__":

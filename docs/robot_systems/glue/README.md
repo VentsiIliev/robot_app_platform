@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/` — Glue Robot Application
 
-`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It declares 13 applications, 8 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
+`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It currently declares 17 applications, 12 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
 
 ---
 
@@ -32,8 +32,12 @@ class GlueRobotSystem(BaseRobotSystem):
 | `MODBUS_CONFIG` | `ModbusConfigSerializer` | `hardware/modbus.json` | `ModbusConfig` |
 | `VISION_CAMERA_SETTINGS` | `CameraSettingsSerializer` | `vision/camera_settings.json` | Camera settings |
 | `TOOL_CHANGER_CONFIG` | `ToolChangerSettingsSerializer` | `tools/tool_changer.json` | Tool changer config |
+| `HEIGHT_MEASURING_SETTINGS` | `HeightMeasuringSettingsSerializer` | `height_measuring/settings.json` | Height-measuring settings |
+| `HEIGHT_MEASURING_CALIBRATION` | `LaserCalibrationDataSerializer` | `height_measuring/calibration_data.json` | Laser calibration data |
+| `DEPTH_MAP_DATA` | `DepthMapDataSerializer` | `height_measuring/depth_map.json` | Stored depth-map data |
+| `GLUE_MOTOR_CONFIG` | `GlueMotorConfigSerializer` | `hardware/motors.json` | Glue motor board config + motor topology |
 
-All files are stored under `storage/settings/GlueSystem/`. Defaults are auto-created on first run.
+Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotSystem.describe()` reports this as `storage/settings/gluesystem/` because it combines `settings_root` with `metadata.name.lower()`, but the actual checked-in glue system defaults live in the robot-system package under `storage/settings/`.
 
 ---
 
@@ -57,8 +61,9 @@ All files are stored under `storage/settings/GlueSystem/`. Defaults are auto-cre
 | Folder | `folder_id` | Applications |
 |--------|------------|--------------|
 | Production | 1 | `GlueDashboard`, `WorkpieceEditor`, `WorkpieceLibrary` |
-| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `CellSettings`, `CameraSettings`, `Calibration`, `ToolSettings`, `ContourMatchingTester` |
-| Administration | 3 | `BrokerDebug`, `UserManagement` |
+| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `CellSettings`, `CameraSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
+| Administration | 3 | `UserManagement` |
+| Tests | 4 | `BrokerDebug`, `ContourMatchingTester`, `HeightMeasuring`, `PickAndPlaceVisualizer`, `PickTarget` |
 
 ### Application Factory Functions
 
@@ -75,8 +80,12 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `CellSettings` | `_build_glue_cell_settings_application` | `GlueCellSettingsService(settings, weight)` |
 | `CameraSettings` | `_build_camera_settings_application` | `CameraSettingsApplicationService(settings, vision)` |
 | `Calibration` | `_build_calibration_application` | `CalibrationApplicationService(vision, coordinator)` |
+| `DeviceControl` | `_build_device_control_application` | `DeviceControlApplicationService(motor, settings)` |
 | `ToolSettings` | `_build_tool_settings_application` | `ToolSettingsApplicationService(settings)` |
 | `ContourMatchingTester` | `_build_contour_matching_tester` | `ContourMatchingTesterService(vision, WorkpieceService)` |
+| `HeightMeasuring` | `_build_height_measuring_application` | `HeightMeasuringApplicationService(height_measuring, calibration, vision)` |
+| `PickAndPlaceVisualizer` | `_build_pick_and_place_visualizer` | `PickAndPlaceVisualizerService(coordinator)` |
+| `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, settings, workpieces)` |
 | `BrokerDebug` | `_build_broker_debug_application` | `BrokerDebugApplicationService(messaging)` |
 | `UserManagement` | `_build_user_management_application` | `UserManagementApplicationService(CsvUserRepository)` |
 
@@ -146,5 +155,6 @@ def on_stop(self) -> None:
 | `glue.py` | Defines `GlueSettings` dataclass + `GlueSettingsSerializer` |
 | `glue_types.py` | Defines `Glue`, `GlueCatalog` dataclasses + `GlueCatalogSerializer` |
 | `tools.py` | Defines `ToolChangerSettingsSerializer` |
+| `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
 → Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md)

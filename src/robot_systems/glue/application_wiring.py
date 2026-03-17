@@ -65,6 +65,50 @@ def _build_contour_matching_tester(robot_system):
     return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory().build(service, ms))
 
 
+def _build_glue_process_driver_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.engine.vision.homography_transformer import HomographyTransformer
+    from src.robot_systems.glue.applications.glue_process_driver import (
+        GlueProcessDriverFactory,
+        GlueProcessDriverService,
+    )
+    from src.robot_systems.glue.domain.glue_job_builder_service import GlueJobBuilderService
+    from src.robot_systems.glue.domain.matching.matching_service import MatchingService
+    from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
+    from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
+
+    workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
+    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_config = getattr(robot_system, "_robot_config", None)
+    try:
+        z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
+    except Exception:
+        z_min = 0.0
+    transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            tcp_x_offset=robot_config.tcp_x_offset,
+            tcp_y_offset=robot_config.tcp_y_offset,
+        )
+        if vision_service is not None and robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        if vision_service is not None else None
+    )
+    matching_service = MatchingService(
+        vision_service=vision_service,
+        workpiece_service=workpiece_service,
+    )
+    service = GlueProcessDriverService(
+        matching_service=matching_service,
+        job_builder=GlueJobBuilderService(
+            transformer=transformer,
+            z_min=z_min,
+        ),
+        glue_process=robot_system.coordinator.glue_process,
+    )
+    return WidgetApplication(widget_factory=lambda ms: GlueProcessDriverFactory(ms).build(service))
+
+
 def _get_tools(robot_system) -> list:
     tc = robot_system._settings_service.get(SettingsID.TOOL_CHANGER_CONFIG)
     return tc.get_tool_options() if tc else []
@@ -422,4 +466,3 @@ def _build_height_measuring_application(robot_app):
     )
     jog_service = RobotJogService(robot_app.get_optional_service(ServiceID.ROBOT))
     return WidgetApplication(widget_factory=lambda ms: HeightMeasuringFactory(ms, jog_service).build(service))
-

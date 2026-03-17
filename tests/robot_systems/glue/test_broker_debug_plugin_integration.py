@@ -32,7 +32,7 @@ class TestBrokerDebugApplicationSpec(unittest.TestCase):
         self.assertIsNotNone(_spec(), "BrokerDebug ApplicationSpec missing")
 
     def test_spec_folder_id(self):
-        self.assertEqual(_spec().folder_id, 3)
+        self.assertEqual(_spec().folder_id, 4)
 
     def test_spec_has_factory(self):
         self.assertIsNotNone(_spec().factory)

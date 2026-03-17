@@ -1,39 +1,18 @@
 import logging
-from typing import List, Tuple
 
-from PyQt6.QtCore import QThread, pyqtSignal, QObject
-
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.modbus_settings.model.modbus_settings_model import ModbusSettingsModel
 from src.applications.modbus_settings.view.modbus_settings_view import ModbusSettingsView
 
 
-class _Worker(QObject):
-    """Runs a blocking call off the GUI thread."""
-    finished = pyqtSignal(object)
-    failed   = pyqtSignal(str)
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self) -> None:
-        try:
-            self.finished.emit(self._fn())
-        except Exception as exc:
-            self.failed.emit(str(exc))
-
-
-class ModbusSettingsController(IApplicationController):
+class ModbusSettingsController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: ModbusSettingsModel, view: ModbusSettingsView):
+        BackgroundWorker.__init__(self)
         self._model  = model
         self._view   = view
         self._logger = logging.getLogger(self.__class__.__name__)
-        # Store (thread, worker) tuples — worker MUST be kept alive here.
-        # worker is a local in _run_in_thread; without a strong reference
-        # Python GC drops it immediately after the call, killing thread.started.
-        self._active: List[Tuple[QThread, _Worker]] = []
 
         self._view.save_requested.connect(self._on_save)
         self._view.detect_ports_requested.connect(self._on_detect_ports)
@@ -45,10 +24,7 @@ class ModbusSettingsController(IApplicationController):
         self._view.load_config(config)
 
     def stop(self) -> None:
-        for thread, _ in self._active:
-            thread.quit()
-            thread.wait()
-        self._active.clear()
+        self._stop_threads()
 
     # ── Save ─────────────────────────────────────────────────────────────
 
@@ -96,23 +72,3 @@ class ModbusSettingsController(IApplicationController):
     def _on_test_failed(self, msg: str) -> None:
         self._logger.error("Test connection failed: %s", msg)
         self._view.set_connection_result(False, "")
-
-    # ── Thread helper ─────────────────────────────────────────────────────
-
-    def _run_in_thread(self, fn, on_done, on_error) -> None:
-        thread = QThread()
-        worker = _Worker(fn)
-        worker.moveToThread(thread)
-
-        thread.started.connect(worker.run)
-        worker.finished.connect(on_done)
-        worker.failed.connect(on_error)
-        worker.finished.connect(thread.quit)
-        worker.failed.connect(thread.quit)
-        thread.finished.connect(self._on_thread_finished)
-
-        self._active.append((thread, worker))   # ← strong ref keeps worker alive
-        thread.start()
-
-    def _on_thread_finished(self) -> None:
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]

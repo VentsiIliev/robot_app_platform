@@ -1,22 +1,22 @@
 from __future__ import annotations
 import logging
-from typing import Callable, List, Tuple
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.engine.core.i_messaging_service import IMessagingService
+from src.applications.base.broker_subscription_mixin import BrokerSubscriptionMixin, SignalBridge
 from src.applications.base.i_application_controller import IApplicationController
 from src.shared_contracts.events.weight_events import WeightTopics
 from src.applications.glue_cell_settings.model.glue_cell_settings_model import GlueCellSettingsModel
 from src.applications.glue_cell_settings.view.glue_cell_settings_view import GlueCellSettingsView
 
 
-class _Bridge(QObject):
+class _Bridge(SignalBridge):
     weight_updated = pyqtSignal(int, float)
     state_updated  = pyqtSignal(int, str)
 
 
-class GlueCellSettingsController(IApplicationController):
+class GlueCellSettingsController(IApplicationController, BrokerSubscriptionMixin):
 
     def __init__(
         self,
@@ -24,10 +24,10 @@ class GlueCellSettingsController(IApplicationController):
         view:    GlueCellSettingsView,
         broker:  IMessagingService,
     ):
+        BrokerSubscriptionMixin.__init__(self)
         self._model  = model
         self._view   = view
         self._broker = broker
-        self._subs:  List[Tuple[str, Callable]] = []
         self._active = False
         self._logger = logging.getLogger(self.__class__.__name__)
         self._bridge = _Bridge()
@@ -51,20 +51,17 @@ class GlueCellSettingsController(IApplicationController):
 
     def stop(self) -> None:
         self._active = False
-        for topic, cb in reversed(self._subs):
-            try: self._broker.unsubscribe(topic, cb)
-            except Exception: pass
-        self._subs.clear()
+        self._unsubscribe_all()
 
     # ── Broker → Bridge (background-thread safe) ──────────────────────
 
     def _subscribe(self) -> None:
         for cell_id in self._model.get_cell_ids():
-            self._sub(
+            self._subscribe(
                 WeightTopics.reading(cell_id),
                 lambda r, cid=cell_id: self._bridge.weight_updated.emit(cid, r.value),
             )
-            self._sub(
+            self._subscribe(
                 WeightTopics.state(cell_id),
                 lambda e, cid=cell_id: self._bridge.state_updated.emit(cid, e.state.value),
             )
@@ -87,6 +84,3 @@ class GlueCellSettingsController(IApplicationController):
         except Exception:
             self._logger.exception("Tare failed for cell %s", cell_id)
 
-    def _sub(self, topic: str, cb: Callable) -> None:
-        self._broker.subscribe(topic, cb)
-        self._subs.append((topic, cb))

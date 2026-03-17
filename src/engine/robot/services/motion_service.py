@@ -44,7 +44,14 @@ class MotionService(IMotionService):
         try:
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
                                acceleration)
-            ret = self._robot.move_ptp(position, tool, user, velocity, acceleration)
+            ret = self._robot.move_ptp(
+                position,
+                tool,
+                user,
+                velocity,
+                acceleration,
+                blocking=wait_to_reach,
+            )
             success = ret == 0
             if wait_to_reach and success:
                 self._wait_for_position(position)
@@ -62,7 +69,15 @@ class MotionService(IMotionService):
         try:
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
                                velocity, acceleration, blendR)
-            ret = self._robot.move_linear(position, tool, user, velocity, acceleration, blendR)
+            ret = self._robot.move_linear(
+                position,
+                tool,
+                user,
+                velocity,
+                acceleration,
+                blendR,
+                blocking=wait_to_reach,
+            )
             success = ret == 0
             if wait_to_reach and success:
                 self._wait_for_position(position)

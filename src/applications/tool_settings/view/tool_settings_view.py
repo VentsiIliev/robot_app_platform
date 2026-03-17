@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QGroupBox, QWidget, QSplitter,
 )
+from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 
 _logger = logging.getLogger(__name__)
@@ -89,12 +90,8 @@ class ToolSettingsView(IApplicationView):
         box.setStyleSheet(f"QGroupBox {{ font-weight: bold; color: {_TEXT}; }}")
         layout = QVBoxLayout(box)
 
-        self._tools_table = QTableWidget(0, 2)
-        self._tools_table.setHorizontalHeaderLabels(["ID", "Name"])
+        self._tools_table = make_table(["ID", "Name"])
         self._tools_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._tools_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._tools_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._tools_table.setStyleSheet(_TABLE)
         layout.addWidget(self._tools_table)
 
         btn_row = QHBoxLayout()
@@ -121,12 +118,8 @@ class ToolSettingsView(IApplicationView):
         box.setStyleSheet(f"QGroupBox {{ font-weight: bold; color: {_TEXT}; }}")
         layout = QVBoxLayout(box)
 
-        self._slots_table = QTableWidget(0, 2)
-        self._slots_table.setHorizontalHeaderLabels(["Slot ID", "Assigned Tool"])
+        self._slots_table = make_table(["Slot ID", "Assigned Tool"])
         self._slots_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._slots_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._slots_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._slots_table.setStyleSheet(_TABLE)
         self._slots_table.itemSelectionChanged.connect(self._on_slot_selection)
         layout.addWidget(self._slots_table)
 

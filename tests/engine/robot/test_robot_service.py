@@ -41,7 +41,7 @@ class TestRobotService(unittest.TestCase):
         self.assertTrue(self.service.stop_motion())
 
     def test_get_current_position_delegates_to_motion(self):
-        self.motion.get_current_position.return_value = [1, 2, 3, 0, 0, 0]
+        self.state.position = [1, 2, 3, 0, 0, 0]
         self.assertEqual(self.service.get_current_position(), [1, 2, 3, 0, 0, 0])
 
     # --- lifecycle delegation ---

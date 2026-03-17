@@ -14,12 +14,12 @@ class TestRobotWrapper(IRobot):
         print("⚙️  TestRobot initialized (mock robot).")
 
     # --- Motion commands ---
-    def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float) -> int:
+    def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         return 0
 
     def move_linear(
         self, position: List[float], tool: int, user: int,
-        vel: float, acc: float, blend_radius: float = 0.0
+        vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True
     ) -> int:
         return 0
 

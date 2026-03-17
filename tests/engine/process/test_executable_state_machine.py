@@ -13,6 +13,7 @@ from src.engine.process.executable_state_machine import (
     ExecutableStateMachine,
     ExecutableStateMachineBuilder,
     State,
+    StateMachineSnapshot,
     StateRegistry,
 )
 
@@ -126,6 +127,31 @@ class TestExecutableStateMachineStop(unittest.TestCase):
 
 class TestExecutableStateMachineExecution(unittest.TestCase):
 
+    def test_step_executes_single_transition_without_resetting(self):
+        ctx = _FakeContext()
+        machine = _build_simple(context=ctx)
+
+        stepped = machine.step()
+
+        self.assertTrue(stepped)
+        self.assertEqual(machine.current_state, S.B)
+        self.assertEqual(ctx.visited, ["A"])
+        self.assertEqual(machine.get_snapshot().step_count, 1)
+
+    def test_reset_restores_initial_state_and_clears_snapshot(self):
+        ctx = _FakeContext()
+        machine = _build_simple(context=ctx)
+        machine.step()
+
+        machine.reset()
+
+        snapshot = machine.get_snapshot()
+        self.assertEqual(machine.current_state, S.A)
+        self.assertEqual(snapshot.step_count, 0)
+        self.assertIsNone(snapshot.last_state)
+        self.assertIsNone(snapshot.last_next_state)
+        self.assertIsNone(snapshot.last_error)
+
     def test_simple_run_visits_all_states(self):
         ctx = _FakeContext()
         machine = _build_simple(context=ctx)
@@ -232,6 +258,38 @@ class TestExecutableStateMachineExecution(unittest.TestCase):
         t.start()
         t.join(timeout=2.0)
         self.assertFalse(t.is_alive())
+
+    def test_step_records_invalid_transition_error(self):
+        ctx = _FakeContext()
+
+        registry = StateRegistry()
+        registry.register_state(State(S.A, lambda c: S.B))
+
+        machine = (
+            ExecutableStateMachineBuilder()
+            .with_initial_state(S.A)
+            .with_transition_rules({S.A: {S.ERROR}})
+            .with_state_registry(registry)
+            .with_context(ctx)
+            .build()
+        )
+
+        stepped = machine.step()
+
+        self.assertFalse(stepped)
+        self.assertEqual(machine.current_state, S.A)
+        self.assertIn("Invalid transition", machine.get_snapshot().last_error)
+
+    def test_get_snapshot_returns_machine_state_details(self):
+        machine = _build_simple()
+
+        snapshot = machine.get_snapshot()
+
+        self.assertIsInstance(snapshot, StateMachineSnapshot)
+        self.assertEqual(snapshot.initial_state, S.A)
+        self.assertEqual(snapshot.current_state, S.A)
+        self.assertFalse(snapshot.is_running)
+        self.assertEqual(snapshot.step_count, 0)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

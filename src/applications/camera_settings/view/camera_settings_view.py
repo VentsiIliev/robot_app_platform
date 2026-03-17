@@ -4,7 +4,7 @@ from PyQt6.QtCore import pyqtSignal, pyqtSlot, Qt
 from PyQt6.QtGui import QImage, QPixmap
 
 from pl_gui.settings.settings_view.settings_view import SettingsView
-from pl_gui.utils.utils_widgets.clickable_label import ClickableLabel
+from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.camera_settings.view.camera_controls_widget import CameraControlsWidget
 
@@ -72,7 +72,7 @@ class CameraSettingsView(IApplicationView):
         live_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         live_caption.setStyleSheet(_CAPTION_STYLE)
         live_caption.setFixedHeight(16)
-        self._preview_label = ClickableLabel()
+        self._preview_label = CameraView()
         self._preview_label.add_area("pickup_area")
         self._preview_label.add_area("spray_area")
         self._preview_label.add_area("brightness_area")
@@ -85,7 +85,7 @@ class CameraSettingsView(IApplicationView):
         thresh_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         thresh_caption.setStyleSheet(_CAPTION_STYLE)
         thresh_caption.setFixedHeight(16)
-        self._threshold_label = ClickableLabel()
+        self._threshold_label = CameraView()
         self._threshold_label.setMaximumHeight(280)
         layout.addWidget(thresh_caption, stretch=0)
         layout.addWidget(self._threshold_label, stretch=1)
@@ -149,7 +149,7 @@ class CameraSettingsView(IApplicationView):
     # ── Properties ───────────────────────────────────────────────────
 
     @property
-    def preview_label(self) -> ClickableLabel | None:
+    def preview_label(self) -> CameraView | None:
         return self._preview_label
 
     @property

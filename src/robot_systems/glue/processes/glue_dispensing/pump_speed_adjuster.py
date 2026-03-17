@@ -17,9 +17,11 @@ from typing import Optional, Tuple
 
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_settings import (
+    DispensingSegmentSettings,
+)
 
 _logger      = logging.getLogger(__name__)
-_POLL_S      = 0.01
 _CHECKPOINT_THRESHOLD_MM = 1.0
 
 
@@ -78,6 +80,11 @@ def adjust_pump_speed_dynamically(
     if ready_event is not None:
         ready_event.set()
 
+    poll_s = (
+        float(getattr(context, "pump_adjuster_poll_s", 0.01))
+        if context is not None else 0.01
+    )
+
     remaining = path[start_point_index:]
     if not remaining:
         return True, start_point_index
@@ -95,7 +102,7 @@ def adjust_pump_speed_dynamically(
 
         pos = robot_service.get_current_position()
         if not pos:
-            time.sleep(_POLL_S)
+            time.sleep(poll_s)
             continue
 
         if not first_reached:
@@ -103,7 +110,7 @@ def adjust_pump_speed_dynamically(
                 first_reached = True
                 _logger.debug("First point %s reached", start_point_index)
             else:
-                time.sleep(_POLL_S)
+                time.sleep(poll_s)
                 continue
 
         if _final_reached(pos, final_point, remaining, furthest, threshold):
@@ -138,7 +145,7 @@ class PumpThreadWithResult(threading.Thread):
 def start_pump_speed_adjustment_thread(
     motor_service:       IMotorService,
     robot_service:       IRobotService,
-    settings:            dict,
+    settings:            DispensingSegmentSettings | None,
     motor_address:       int,
     path:                list,
     reach_end_threshold: float,
@@ -151,8 +158,8 @@ def start_pump_speed_adjustment_thread(
         args=(
             motor_service,
             robot_service,
-            settings.get("glue_speed_coefficient", 5),
-            settings.get("glue_acceleration_coefficient", 0),
+            settings.glue_speed_coefficient if settings is not None else 5.0,
+            settings.glue_acceleration_coefficient if settings is not None else 0.0,
             motor_address,
             path,
             reach_end_threshold,
@@ -166,4 +173,3 @@ def start_pump_speed_adjustment_thread(
     thread.start()
     _logger.debug("Pump speed adjuster started (start_idx=%s)", start_point_index)
     return thread
-

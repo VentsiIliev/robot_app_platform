@@ -20,10 +20,12 @@ class WorkpieceAdapter:
     LAYER_FILL      = "Fill"
 
     @classmethod
-    def _ensure_complete_settings(cls, segment_settings: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        if segment_settings is None:
-            return {}
-        return {k: v for k, v in segment_settings.items() if v is not None}
+    def _ensure_complete_settings(cls, segment_settings: Optional[Dict[str, Any]],
+                                  defaults: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        base = dict(defaults) if defaults else {}
+        if segment_settings:
+            base.update({k: v for k, v in segment_settings.items() if v is not None})
+        return base
 
     @classmethod
     def from_workpiece(cls, workpiece) -> ContourEditorData:
@@ -39,7 +41,8 @@ class WorkpieceAdapter:
         return ContourEditorData.from_legacy_format(cls._normalize_layer_data(layer_data))
 
     @classmethod
-    def to_workpiece_data(cls, editor_data: ContourEditorData) -> Dict[str, Any]:
+    def to_workpiece_data(cls, editor_data: ContourEditorData,
+                          default_settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         result = {}
 
         workpiece_layer = (
@@ -76,7 +79,8 @@ class WorkpieceAdapter:
                     spray_pattern["Contour"].append({
                         "contour": arr,
                         "settings": cls._ensure_complete_settings(
-                            seg.settings if hasattr(seg, "settings") else None
+                            seg.settings if hasattr(seg, "settings") else None,
+                            default_settings,
                         ),
                     })
 
@@ -87,7 +91,8 @@ class WorkpieceAdapter:
                     spray_pattern["Fill"].append({
                         "contour": arr,
                         "settings": cls._ensure_complete_settings(
-                            seg.settings if hasattr(seg, "settings") else None
+                            seg.settings if hasattr(seg, "settings") else None,
+                            default_settings,
                         ),
                     })
 

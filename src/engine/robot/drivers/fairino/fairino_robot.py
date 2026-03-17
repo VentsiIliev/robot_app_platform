@@ -21,6 +21,7 @@ class FairinoRobot(IRobot):
         user: int,
         vel: float,
         acc: float,
+        blocking: bool = True,
     ) -> int:
         return self.robot.MoveCart(position, tool, user, vel=vel, acc=acc) or 0
 
@@ -32,6 +33,7 @@ class FairinoRobot(IRobot):
         vel: float,
         acc: float,
         blend_radius: float = 0.0,
+        blocking: bool = True,
     ) -> int:
         return self.robot.MoveL(position, tool, user, vel=vel, acc=acc, blendR=blend_radius) or 0
 
@@ -67,6 +69,22 @@ class FairinoRobot(IRobot):
 
     def get_current_acceleration(self) -> float:
         return 0.0
+
+    def get_execution_status(self):
+        try:
+            result = self.robot.GetMotionQueueLength()
+        except Exception:
+            return None
+        if not isinstance(result, tuple) or len(result) < 2:
+            return None
+        _, queue_len = result
+        return {
+            "is_executing": bool(queue_len and queue_len > 0),
+            "queue_size": int(queue_len or 0),
+        }
+
+    def get_last_trajectory_command_info(self):
+        return None
 
     def enable(self) -> None:
         self.robot.RobotEnable(1)

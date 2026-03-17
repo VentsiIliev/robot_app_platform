@@ -9,6 +9,7 @@ class FairinoRos2Client:
     def __init__(self, server_url="http://localhost:5000", ip=None):
         self.server_url = server_url.rstrip('/')
         self.ip = ip or "ros2_bridge"
+        self._last_execute_path_response = None
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
         health = self.health_check()
         logger.debug("health_check response: %s", health)
@@ -53,8 +54,15 @@ class FairinoRos2Client:
             logger.error("move_cartesian error: %s", e, exc_info=True)
             return -1
 
-    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
-        payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True):
+        payload = {
+            "position": self._to_float_list(position),
+            "tool": tool,
+            "user": user,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+        }
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
             response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
@@ -78,6 +86,14 @@ class FairinoRos2Client:
             response = requests.post(f"{self.server_url}/execute/path", json=payload, timeout=120)
             raw = response.json()
             result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
             logger.debug(
                 "execute_path ← http=%s raw=%s result_code=%s",
                 response.status_code, raw, result_code,
@@ -86,6 +102,9 @@ class FairinoRos2Client:
         except Exception as e:
             logger.error("execute_path error: %s", e, exc_info=True)
             return -1
+
+    def get_last_execute_path_response(self):
+        return self._last_execute_path_response
 
     def start_jog(self, axis, direction, step, vel, acc):
         axis_val = axis.value if hasattr(axis, 'value') else axis
@@ -148,6 +167,16 @@ class FairinoRos2Client:
         if position is None:
             return (-1, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         return (0, position)
+
+    def get_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/status", timeout=2)
+            data = response.json()
+            logger.debug("get_status ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            logger.error("get_status error: %s", e, exc_info=True)
+            return None
 
     def get_current_velocity(self):
         # logger.debug("get_current_velocity → GET /velocity/current")

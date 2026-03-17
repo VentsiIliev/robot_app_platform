@@ -11,6 +11,7 @@ This package contains all settings dataclasses and serializers specific to the `
 | `glue.py` | Settings dataclass + serializer | Application-level glue dispenser parameters |
 | `glue_types.py` | Domain model + serializer | Glue type catalog (`GlueCatalog`, `Glue`) |
 | `cells.py` | Serializer subclass | `GlueCellsConfigSerializer` with glue-specific cell defaults |
+| `device_control.py` | Settings dataclass + serializer | `GlueMotorConfig` / `GlueMotorConfigSerializer` for glue motor board settings |
 | `modbus.py` | Re-export shim | `ModbusConfig`, `ModbusConfigSerializer` from engine layer |
 | `robot.py` | Re-export shim | `RobotSettings`, `RobotSettingsSerializer` etc. from engine layer |
 | `robot_calibration.py` | Legacy class | `RobotCalibrationConfig` — runtime config object (not a serializer) |
@@ -83,6 +84,24 @@ Subclasses `CellsConfigSerializer` (from engine layer). The only glue-specific c
 - `settings_type = "glue_cells"`
 - Default 3 cells: IPs `192.168.222.143/weight1..3`, capacity 1000g, motor addresses 0/2/4
 
+## `GlueMotorConfig` (`device_control.py`)
+
+Persisted under key `"glue_motor_config"` → `hardware/motors.json`.
+
+```python
+@dataclass
+class GlueMotorConfig:
+    motors: List[MotorSpec]
+    health_check_trigger_register: int = 17
+    motor_error_count_register: int = 20
+    motor_error_registers_start: int = 21
+    health_check_delay_s: float = 3.0
+```
+
+`GlueMotorConfigSerializer` stores the register map under a top-level `"board"` object and the motor topology under `"motors"`. Default topology is four glue pumps at addresses `0/2/4/6` with error prefixes `1/2/3/4`.
+
+`build_motor_service()` reads this settings object and maps it into the generic engine-layer `MotorConfig`, so board register changes no longer require editing `service_builders.py`.
+
 ---
 
 ## Re-export Shims
@@ -95,3 +114,4 @@ Subclasses `CellsConfigSerializer` (from engine layer). The only glue-specific c
 
 - **`GlueSettingKey` enum**: All 19 field names are declared as enum values. This prevents typos in key access (`GlueSettingKey.FAN_SPEED.value` rather than `"fan_speed"`). The `GlueSettings.from_dict()` and `to_dict()` methods use enum values as keys.
 - **`robot_calibration.py` is a legacy runtime config**: `RobotCalibrationConfig` is an old-style class used in calibration procedures (takes `vision_system`, `robot_service`, etc.). It is distinct from `RobotCalibrationSettings` (the persisted dataclass). Do not confuse the two.
+- **`device_control.py` keeps the old alias names alive**: `DeviceControlConfig` and `DeviceControlConfigSerializer` are backwards-compatible aliases for `GlueMotorConfig` and `GlueMotorConfigSerializer`.

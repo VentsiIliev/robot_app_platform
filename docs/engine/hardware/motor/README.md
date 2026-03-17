@@ -77,7 +77,7 @@ class MotorConfig:
     motor_addresses: List[int]   # e.g. [0, 2, 4, 6] for 4 motors
 
     # Optional — timing
-    health_check_delay_s: float = 0.0
+    health_check_delay_s: float = 0.1
     ramp_step_delay_s:    float = 0.001
 
     # Optional — error code filtering (empty = no per-motor filtering)
@@ -175,5 +175,6 @@ Scenarios: `turn_on/off`, `persistent_connection`, `health_check_healthy`, `heal
 ## Design Notes
 
 - **No board-specific knowledge** — register addresses, motor counts, and error tables all live in the robot system, not here.
+- **Robot-system settings can own the register map** — for the glue system, `src/robot_systems/glue/settings/device_control.py` persists board registers and motor topology in `hardware/motors.json`, then `build_motor_service()` maps that into `MotorConfig`.
 - **`IHealthCheckable` integration** — `MotorService` is automatically registered in `ServiceHealthRegistry` by `BaseRobotSystem._build_health_registry()`. No manual wiring needed.
 - **Error decoder placement** — `ModbusMotorErrorDecoder` and `ModbusMotorErrorCode` live in `src/robot_systems/glue/motor/`, not here. The glue system owns the board firmware knowledge.

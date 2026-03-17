@@ -14,7 +14,8 @@ from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, TEXT_COLOR,
     PRIMARY, PRIMARY_LIGHT,
 )
-from pl_gui.utils.utils_widgets.clickable_label import ClickableLabel
+from pl_gui.utils.utils_widgets.camera_view import CameraView
+from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 
 _LIST_STYLE = f"""
@@ -143,11 +144,7 @@ class ContourMatchingTesterView(IApplicationView):
 
         layout.addLayout(header_row)
 
-        self._feed_label = ClickableLabel()
-        self._feed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._feed_label.setStyleSheet(
-            f"color: #888; background: white; border: 1px solid {BORDER}; border-radius: 4px;"
-        )
+        self._feed_label = CameraView()
         self._feed_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._feed_label.setMinimumSize(320, 240)
         layout.addWidget(self._feed_label)
@@ -221,12 +218,8 @@ class ContourMatchingTesterView(IApplicationView):
         self._summary_label.setWordWrap(True)
         layout.addWidget(self._summary_label)
 
-        self._results_table = QTableWidget(0, len(_COLS))
-        self._results_table.setHorizontalHeaderLabels(_COLS)
+        self._results_table = make_table(_COLS)
         self._results_table.setStyleSheet(_TABLE_STYLE)
-        self._results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._results_table.verticalHeader().setVisible(False)
         hdr = self._results_table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)

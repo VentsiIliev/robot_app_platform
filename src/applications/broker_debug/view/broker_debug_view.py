@@ -7,10 +7,11 @@ from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QWidget, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QTextEdit, QLineEdit, QPushButton, QSplitter,
-    QSizePolicy, QAbstractItemView,
+    QSizePolicy,
 )
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
+from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.broker_debug.view.graph_widget import GraphWidget
 
@@ -144,18 +145,13 @@ class BrokerDebugView(IApplicationView):
         vl.addLayout(hdr)
 
         # Topic table
-        self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(["Topic", "Subscribers", "Actions"])
+        self._table = make_table(["Topic", "Subscribers", "Actions"], fixed_height=280)
         self._table.setStyleSheet(_TABLE_STYLE)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self._table.setColumnWidth(1, 90)
         self._table.setColumnWidth(2, 160)
-        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self._table.verticalHeader().setVisible(False)
-        self._table.setFixedHeight(280)
         vl.addWidget(self._table)
 
         vl.addWidget(_divider())

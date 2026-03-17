@@ -19,6 +19,17 @@ class State:
     on_exit: Optional[Callable] = field(default=None)
 
 
+@dataclass(frozen=True)
+class StateMachineSnapshot:
+    initial_state: Any
+    current_state: Any
+    is_running: bool
+    step_count: int
+    last_state: Any = None
+    last_next_state: Any = None
+    last_error: Optional[str] = None
+
+
 class StateRegistry:
     def __init__(self):
         self._states: Dict[Any, State] = {}
@@ -49,59 +60,100 @@ class ExecutableStateMachine:
         self._state_topic = state_topic
         self._current_state = initial_state
         self._running = False
+        self._step_count = 0
+        self._last_state = None
+        self._last_next_state = None
+        self._last_error = None
 
     @property
     def current_state(self):
         return self._current_state
+
+    def reset(self) -> None:
+        self._current_state = self._initial_state
+        self._running = False
+        self._step_count = 0
+        self._last_state = None
+        self._last_next_state = None
+        self._last_error = None
+
+    def get_snapshot(self) -> StateMachineSnapshot:
+        return StateMachineSnapshot(
+            initial_state=self._initial_state,
+            current_state=self._current_state,
+            is_running=self._running,
+            step_count=self._step_count,
+            last_state=self._last_state,
+            last_next_state=self._last_next_state,
+            last_error=self._last_error,
+        )
 
     def stop_execution(self) -> None:
         self._running = False
         if self._context is not None and hasattr(self._context, "stop_event"):
             self._context.stop_event.set()
 
+    def step(self) -> bool:
+        current_state = self._current_state
+        self._last_state = current_state
+        self._last_next_state = None
+        self._last_error = None
+
+        state_obj = self._registry.get(current_state)
+        if state_obj is None:
+            self._last_error = f"No handler registered for state {current_state!r}"
+            _logger.error("%s — stopping.", self._last_error)
+            self._running = False
+            return False
+
+        if self._broker and self._state_topic:
+            try:
+                self._broker.publish(self._state_topic, current_state.name)
+            except Exception as exc:
+                _logger.warning("Failed to publish state change: %s", exc)
+
+        if state_obj.on_enter:
+            try:
+                state_obj.on_enter(self._context, current_state)
+            except Exception as exc:
+                _logger.warning("on_enter error for %s: %s", current_state, exc)
+
+        try:
+            next_state = state_obj.handler(self._context)
+        except Exception as exc:
+            self._last_error = f"Unhandled error in state {current_state!r}: {exc}"
+            _logger.error(self._last_error, exc_info=True)
+            self._running = False
+            return False
+
+        if state_obj.on_exit:
+            try:
+                state_obj.on_exit(self._context, current_state)
+            except Exception as exc:
+                _logger.warning("on_exit error for %s: %s", current_state, exc)
+
+        allowed = self._transition_rules.get(current_state, set())
+        if next_state not in allowed:
+            self._last_error = (
+                f"Invalid transition {current_state!r} -> {next_state!r} "
+                f"(allowed: {allowed!r})"
+            )
+            _logger.error("%s — stopping.", self._last_error)
+            self._running = False
+            return False
+
+        self._current_state = next_state
+        self._last_next_state = next_state
+        self._step_count += 1
+        return True
+
     def start_execution(self, delay: float = 0.0) -> None:
+        self.reset()
         self._running = True
-        self._current_state = self._initial_state
 
         while self._running:
-            state_obj = self._registry.get(self._current_state)
-            if state_obj is None:
-                _logger.error("No handler registered for state %s — stopping.", self._current_state)
+            if not self.step():
                 break
-
-            if self._broker and self._state_topic:
-                try:
-                    self._broker.publish(self._state_topic, self._current_state.name)
-                except Exception as exc:
-                    _logger.warning("Failed to publish state change: %s", exc)
-
-            if state_obj.on_enter:
-                try:
-                    state_obj.on_enter(self._context, self._current_state)
-                except Exception as exc:
-                    _logger.warning("on_enter error for %s: %s", self._current_state, exc)
-
-            try:
-                next_state = state_obj.handler(self._context)
-            except Exception as exc:
-                _logger.error("Unhandled error in state %s: %s", self._current_state, exc, exc_info=True)
-                break
-
-            if state_obj.on_exit:
-                try:
-                    state_obj.on_exit(self._context, self._current_state)
-                except Exception as exc:
-                    _logger.warning("on_exit error for %s: %s", self._current_state, exc)
-
-            allowed = self._transition_rules.get(self._current_state, set())
-            if next_state not in allowed:
-                _logger.error(
-                    "Invalid transition %s -> %s (allowed: %s) — stopping.",
-                    self._current_state, next_state, allowed,
-                )
-                break
-
-            self._current_state = next_state
 
             if delay > 0:
                 time.sleep(delay)
@@ -154,4 +206,3 @@ class ExecutableStateMachineBuilder:
             message_broker=self._broker,
             state_topic=self._state_topic,
         )
-

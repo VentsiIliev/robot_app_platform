@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont
 
+from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.user_management.domain.user_schema import UserRecord, UserSchema
 
@@ -100,14 +101,8 @@ class UserManagementView(IApplicationView):
         return group
 
     def _build_table(self) -> QTableWidget:
-        self._table = QTableWidget()
-        self._table.setColumnCount(len(self._schema.get_table_fields()))
-        self._table.setHorizontalHeaderLabels(self._schema.get_table_headers())
+        self._table = make_table(self._schema.get_table_headers(), min_height=200)
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.setAlternatingRowColors(True)
-        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setMinimumHeight(200)
         self._table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
         return self._table

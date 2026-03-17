@@ -1,12 +1,12 @@
 import logging
 import threading
-from typing import List, Tuple
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import QObject, QRunnable, QThread, QThreadPool, QTimer, pyqtSignal, Qt
+from PyQt6.QtCore import QObject, QRunnable, QThreadPool, QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QPixmap
 
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.jog_controller import JogController
 from src.applications.base.robot_jog_service import RobotJogService
@@ -25,21 +25,6 @@ class _Bridge(QObject):
     laser_off_finished   = pyqtSignal(object)
 
 
-class _Worker(QObject):
-    finished = pyqtSignal(object)
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self):
-        try:
-            self.finished.emit(self._fn())
-        except Exception as e:
-            _logger.error("Worker unhandled exception: %s", e, exc_info=True)
-            self.finished.emit((False, str(e)))
-
-
 class _FireAndForget(QRunnable):
     def __init__(self, fn):
         super().__init__()
@@ -49,15 +34,15 @@ class _FireAndForget(QRunnable):
         self._fn()
 
 
-class HeightMeasuringController(IApplicationController):
+class HeightMeasuringController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model, view, messaging, jog_service):
+        BackgroundWorker.__init__(self)
         self._model           = model
         self._view            = view
         self._jog             = JogController(view, jog_service, messaging)
         self._bridge          = _Bridge()
-        self._active: List[Tuple[QThread, _Worker]] = []
-        self._stopped         = False                    # ← add
+        self._stopped         = False
         self._frame_timer     = QTimer()
         self._frame_timer.setInterval(100)
         self._laser_on_state  = False
@@ -103,11 +88,8 @@ class HeightMeasuringController(IApplicationController):
         self._detect_timer.stop()
         self._jog.stop()
         self._frame_timer.stop()
-        self._model.cleanup()  # ← replaces the laser_off block
-        for thread, _ in self._active:
-            thread.quit()
-            thread.wait(3000)
-        self._active.clear()
+        self._model.cleanup()
+        self._stop_threads()
 
     # ── Frame polling ─────────────────────────────────────────────────────────
 
@@ -131,7 +113,6 @@ class HeightMeasuringController(IApplicationController):
         self._run_blocking(self._model.run_calibration, self._bridge.calibration_finished)
 
     def _on_calibration_done(self, result):
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]
         ok, msg = result
         self._view.set_calibrating(False)
         self._view.show_message(msg, is_error=not ok)
@@ -164,7 +145,6 @@ class HeightMeasuringController(IApplicationController):
         self._run_blocking(self._model.laser_off, self._bridge.laser_off_finished)
 
     def _on_laser_on_done(self, result):
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]
         ok, msg = result
         if ok:
             self._laser_on_state = True
@@ -173,7 +153,6 @@ class HeightMeasuringController(IApplicationController):
             self._view.show_message(f"Laser error: {msg}", is_error=True)
 
     def _on_laser_off_done(self, result):
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]
         ok, msg = result
         if ok:
             self._laser_on_state = False
@@ -215,9 +194,8 @@ class HeightMeasuringController(IApplicationController):
                 self._is_detecting = False
 
     def _on_detect_done(self, result):
-        if self._stopped:  # ← guard
+        if self._stopped:
             return
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]
         self._view.set_detect_result(result)
         if result.debug_image is not None:
             rgb = cv2.cvtColor(result.debug_image, cv2.COLOR_BGR2RGB)
@@ -238,17 +216,6 @@ class HeightMeasuringController(IApplicationController):
 
     # ── Thread helper ─────────────────────────────────────────────────────────
 
-    def _run_blocking(self, fn, on_done: pyqtSignal) -> None:
-        thread = QThread()
-        worker = _Worker(fn)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(on_done)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._remove_thread(thread))  # ← keep ref alive until fully done
-        self._active.append((thread, worker))
-        thread.start()
-
-    def _remove_thread(self, thread: QThread) -> None:
-        self._active = [(t, w) for t, w in self._active if t is not thread]
+    def _run_blocking(self, fn, on_done) -> None:
+        self._run_in_thread(fn=fn, on_done=on_done)
 

@@ -37,15 +37,6 @@ _WORKPIECES_STORAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "
 # ── System ───────────────────────────────────────────────────────────────────────
 
 class GlueRobotSystem(BaseRobotSystem):
-
-    metadata = SystemMetadata(
-        name="GlueSystem",
-        version="1.0.0",
-        description="Automated glue dispensing vision_service",
-        author="Platform Team",
-        settings_root=os.path.join("storage", "settings"),
-    )
-
     shell = ShellSetup(
         folders=[
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
@@ -68,11 +59,21 @@ class GlueRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.book-open",   factory=application_wiring._build_workpiece_library_application),
             ApplicationSpec(name="ToolSettings", folder_id=2, icon="fa5s.tools", factory=application_wiring._build_tool_settings_application),
             ApplicationSpec(name="ContourMatchingTester", folder_id=4, icon="fa6s.shapes",            factory=application_wiring._build_contour_matching_tester),
+            ApplicationSpec(name="GlueProcessDriver",     folder_id=4, icon="fa5s.vials",             factory=application_wiring._build_glue_process_driver_application),
             ApplicationSpec(name="HeightMeasuring",       folder_id=4, icon="fa5s.ruler-vertical",   factory=application_wiring._build_height_measuring_application),
             ApplicationSpec(name="PickAndPlaceVisualizer",  folder_id=4, icon="fa5s.map-marked",  factory=application_wiring._build_pick_and_place_visualizer),
             ApplicationSpec(name="PickTarget",              folder_id=4, icon="fa5s.crosshairs",   factory=application_wiring._build_pick_target_application),
         ],
     )
+
+    metadata = SystemMetadata(
+        name="GlueSystem",
+        version="1.0.0",
+        description="Automated glue dispensing vision_service",
+        author="Platform Team",
+        settings_root=os.path.join("storage", "settings"),
+    )
+
 
     settings_specs = [
         SettingsSpec(SettingsID.ROBOT_CONFIG,      RobotSettingsSerializer(),             "robot/config.json"),
@@ -86,7 +87,7 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
         SettingsSpec(SettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
         SettingsSpec(SettingsID.DEPTH_MAP_DATA,               DepthMapDataSerializer(),                "height_measuring/depth_map.json"),
-        SettingsSpec(SettingsID.GLUE_MOTOR_CONFIG,            GlueMotorConfigSerializer(),             "hardware/device_control.json"),
+        SettingsSpec(SettingsID.GLUE_MOTOR_CONFIG,            GlueMotorConfigSerializer(),             "hardware/motors.json"),
     ]
 
     services = [
@@ -243,5 +244,4 @@ class GlueRobotSystem(BaseRobotSystem):
             ),
             messaging=self._messaging_service,
         )
-
 

@@ -19,7 +19,7 @@ PICK_AND_SPRAY mode) is implemented inside ProcessSequence and is tested
 separately in tests/engine/process/test_process_sequence.py.
 """
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.process.process_sequence import ProcessSequence
@@ -27,9 +27,17 @@ from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_context import DispensingContext
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_error import (
+    DispensingErrorCode,
+    DispensingErrorInfo,
+    DispensingErrorKind,
+)
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_state import GlueDispensingState
 from src.robot_systems.glue.processes.glue_process import GlueProcess
 from src.robot_systems.glue.processes.pick_and_place_process import PickAndPlaceProcess
 from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
+from src.shared_contracts.events.glue_process_events import GlueProcessTopics
 from src.shared_contracts.events.process_events import (
     ProcessState, ProcessStateEvent, ProcessTopics,
 )
@@ -249,6 +257,23 @@ class TestGlueOperationCoordinatorMode(unittest.TestCase):
         runner.set_mode(GlueOperationMode.SPRAY_ONLY)
         self.assertEqual(runner._mode, GlueOperationMode.SPRAY_ONLY)
 
+    def test_glue_process_property_returns_spray_only_process(self):
+        glue = MagicMock()
+        glue.process_id = "glue"
+        pick = MagicMock()
+        pick.process_id = "pick_and_place"
+        clean = MagicMock()
+        calib = MagicMock()
+        runner = GlueOperationCoordinator(
+            glue_process=glue,
+            pick_and_place_process=pick,
+            clean_process=clean,
+            calibration_process=calib,
+            messaging=_ms(),
+        )
+
+        self.assertIs(runner.glue_process, glue)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # GlueOperationCoordinator — SPRAY_ONLY start
@@ -443,6 +468,114 @@ class TestGlueProcessStateTransitions(unittest.TestCase):
     def test_reset_errors_returns_to_idle(self):
         p = self._make(); p.set_error(); p.reset_errors()
         self.assertEqual(p.state, ProcessState.IDLE)
+
+    def test_reset_errors_clears_dispensing_last_error(self):
+        p = self._make()
+        p._context = DispensingContext()
+        p._context.last_error = DispensingErrorInfo(
+            kind=DispensingErrorKind.PUMP,
+            code=DispensingErrorCode.PUMP_ON_FAILED,
+            state=GlueDispensingState.TURNING_ON_PUMP,
+            operation="pump_on",
+            message="pump_on failed",
+            exception_type="RuntimeError",
+            path_index=1,
+            point_index=2,
+        )
+
+        p.set_error()
+        p.reset_errors()
+
+        self.assertEqual(p.state, ProcessState.IDLE)
+        self.assertIsNone(p._context.last_error)
+
+    def test_get_dispensing_snapshot_returns_idle_summary_without_context(self):
+        p = self._make()
+
+        snapshot = p.get_dispensing_snapshot()
+
+        self.assertEqual(snapshot["process_state"], ProcessState.IDLE.value)
+        self.assertFalse(snapshot["manual_mode"])
+        self.assertIsNone(snapshot["machine"])
+        self.assertIsNone(snapshot["dispensing"])
+
+    def test_get_dispensing_snapshot_includes_context_debug_snapshot(self):
+        p = self._make()
+        p._context = DispensingContext()
+        p._context.current_path_index = 2
+        p._context.current_point_index = 5
+
+        snapshot = p.get_dispensing_snapshot()
+
+        self.assertEqual(snapshot["process_state"], ProcessState.IDLE.value)
+        self.assertEqual(snapshot["dispensing"]["current_path_index"], 2)
+        self.assertEqual(snapshot["dispensing"]["current_point_index"], 5)
+
+    def test_start_in_manual_mode_builds_machine_without_worker_thread(self):
+        p = self._make()
+        p.set_manual_mode(True)
+        p.set_paths([([[1.0, 2.0], [3.0, 4.0]], {"glue_type": "Type A", "motor_speed": "500"}, {})], spray_on=True)
+        machine = MagicMock()
+        machine.get_snapshot.return_value = MagicMock(
+            initial_state=GlueDispensingState.STARTING,
+            current_state=GlueDispensingState.STARTING,
+            is_running=False,
+            step_count=0,
+            last_state=None,
+            last_next_state=None,
+            last_error=None,
+        )
+
+        with patch("src.robot_systems.glue.processes.glue_process.DispensingMachineFactory.build", return_value=machine):
+            p.start()
+
+        self.assertEqual(p.state, ProcessState.RUNNING)
+        machine.reset.assert_called_once_with()
+        self.assertIsNone(p._worker_thread)
+
+    def test_start_publishes_diagnostics_snapshot(self):
+        p = self._make()
+        p.set_manual_mode(True)
+        p.set_paths([([[1.0, 2.0], [3.0, 4.0]], {"glue_type": "Type A", "motor_speed": "500"}, {})], spray_on=True)
+        machine = MagicMock()
+        machine.get_snapshot.return_value = MagicMock(
+            initial_state=GlueDispensingState.STARTING,
+            current_state=GlueDispensingState.STARTING,
+            is_running=False,
+            step_count=0,
+            last_state=None,
+            last_next_state=None,
+            last_error=None,
+        )
+
+        with patch("src.robot_systems.glue.processes.glue_process.DispensingMachineFactory.build", return_value=machine):
+            p.start()
+
+        p._messaging.publish.assert_any_call(GlueProcessTopics.DIAGNOSTICS, p.get_dispensing_snapshot())
+
+    def test_step_once_delegates_to_machine_in_manual_mode(self):
+        p = self._make()
+        p.set_manual_mode(True)
+        p._context = DispensingContext()
+        p._machine = MagicMock()
+        p._machine.step.return_value = True
+        p._machine.get_snapshot.return_value = MagicMock(
+            initial_state=GlueDispensingState.STARTING,
+            current_state=GlueDispensingState.LOADING_PATH,
+            is_running=False,
+            step_count=1,
+            last_state=GlueDispensingState.STARTING,
+            last_next_state=GlueDispensingState.LOADING_PATH,
+            last_error=None,
+        )
+        p._state = ProcessState.RUNNING
+
+        snapshot = p.step_once()
+
+        p._machine.step.assert_called_once_with()
+        self.assertTrue(snapshot["manual_mode"])
+        self.assertTrue(snapshot["step_result"])
+        self.assertEqual(snapshot["machine"]["current_state"], "LOADING_PATH")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

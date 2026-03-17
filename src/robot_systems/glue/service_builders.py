@@ -163,12 +163,12 @@ def build_motor_service(ctx):
     return build_modbus_motor_service(
         modbus_config = modbus_config,
         motor_config  = MotorConfig(
-            health_check_trigger_register = 17,
-            motor_error_count_register    = 20,
-            motor_error_registers_start   = 21,
+            health_check_trigger_register = topology.health_check_trigger_register,
+            motor_error_count_register    = topology.motor_error_count_register,
+            motor_error_registers_start   = topology.motor_error_registers_start,
             motor_addresses               = topology.get_addresses(),
             address_to_error_prefix       = topology.get_address_to_error_prefix(),
-            health_check_delay_s          = 0.5,
+            health_check_delay_s          = topology.health_check_delay_s,
         ),
         error_decoder = GlueMotorErrorDecoder(),
     )
@@ -213,15 +213,19 @@ class GlueCellTypeResolver(IGlueTypeResolver):
                     or getattr(cell, "glueType", None)
                     or getattr(cell, "type", None)
                 )
-                addr = (
-                    getattr(cell, "motor_address", None)
-                    or getattr(cell, "motorAddress", None)
-                )
+                addr = self._first_present_attr(cell, "motor_address", "motorAddress")
                 if cell_type == glue_type and addr is not None:
                     return int(addr)
         except Exception:
             pass
         return -1
+
+    def _first_present_attr(self, obj, *names):
+        for name in names:
+            value = getattr(obj, name, None)
+            if value is not None:
+                return value
+        return None
 
 
 def build_tool_service(ctx):
@@ -237,4 +241,3 @@ def build_tool_service(ctx):
         tool_changer   = tool_changer,
         robot_config   = robot_config,
     )
-

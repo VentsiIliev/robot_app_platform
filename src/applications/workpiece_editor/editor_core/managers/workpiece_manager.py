@@ -81,11 +81,9 @@ class WorkpieceManager:
 
     def apply_defaults_to_segments_without_settings(self) -> None:
         """Assign default settings to any segment that has none (newly drawn segments)."""
-        if not self._default_settings:
-            return
         for seg in self.editor.manager.get_segments():
             if not hasattr(seg, 'settings') or not seg.settings:
-                seg.settings = dict(self._default_settings)
+                seg.settings = dict(self._default_settings) if self._default_settings else {}
 
     def get_current_workpiece(self):
         """Get the currently loaded workpiece"""

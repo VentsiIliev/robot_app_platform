@@ -1,12 +1,11 @@
 import logging
-from typing import List, Tuple, Callable
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import QDialog, QLineEdit, QComboBox, QCheckBox, QVBoxLayout, QLabel
 
 from src.applications.base.app_dialog import (
     AppDialog, DIALOG_INPUT_STYLE, DIALOG_COMBO_STYLE, DIALOG_CHECKBOX_STYLE,
 )
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.jog_controller import JogController
 from src.applications.base.robot_jog_service import RobotJogService
@@ -19,24 +18,14 @@ from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.robot.configuration import MovementGroup
 
 
-class _Worker(QObject):
-    finished = pyqtSignal(object)
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self):
-        self.finished.emit(self._fn())
-
-class RobotSettingsController(IApplicationController):
+class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: RobotSettingsModel, view: RobotSettingsView,
                  messaging: IMessagingService, jog_service: RobotJogService):
+        BackgroundWorker.__init__(self)
         self._model    = model
         self._view     = view
         self._jog      = JogController(view, jog_service, messaging)
-        self._active: List[Tuple[QThread, _Worker]] = []
         self._logger   = logging.getLogger(self.__class__.__name__)
 
         self._view.save_requested.connect(self._on_save)
@@ -77,6 +66,7 @@ class RobotSettingsController(IApplicationController):
         self._jog.start()
 
     def stop(self) -> None:
+        self._stop_threads()
         self._jog.stop()
 
     def _on_save(self, _values: dict) -> None:
@@ -163,16 +153,10 @@ class RobotSettingsController(IApplicationController):
             self._logger.exception("Auto-save before motion failed")
 
     def _run_blocking(self, fn, label: str) -> None:
-        thread = QThread()
-        worker = _Worker(fn)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: self._on_motion_done(result, label))
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._active.remove((thread, worker))
-        if (thread, worker) in self._active else None)
-        self._active.append((thread, worker))
-        thread.start()
+        self._run_in_thread(
+            fn=fn,
+            on_done=lambda result: self._on_motion_done(result, label),
+        )
 
     def _on_motion_done(self, result, label: str) -> None:
         ok, reason = result if isinstance(result, tuple) else (bool(result), "")

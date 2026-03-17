@@ -211,7 +211,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def _merge(self, form_data: dict, editor_data) -> dict:
         if not isinstance(editor_data, ContourEditorData):
             return dict(form_data)
-        merged    = {**WorkpieceAdapter.to_workpiece_data(editor_data), **form_data}
+        segment_defaults = self._segment_config.schema.get_defaults()
+        merged    = {**WorkpieceAdapter.to_workpiece_data(editor_data, default_settings=segment_defaults), **form_data}
         combo_key = self._schema().combo_key
         if combo_key:
             val = form_data.get(combo_key) or form_data.get("glue_type") or form_data.get("glueType")

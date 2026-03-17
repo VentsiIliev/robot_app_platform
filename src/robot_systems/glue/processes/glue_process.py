@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, List, Optional, Tuple
 
+from src.engine.process.executable_state_machine import StateMachineSnapshot
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.hardware.generator.interfaces.i_generator_controller import IGeneratorController
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
@@ -13,9 +14,15 @@ from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_context import DispensingContext
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_machine_factory import DispensingMachineFactory
+from src.robot_systems.glue.processes.glue_dispensing.dispensing_path import (
+    DispensingPathEntry,
+    normalize_dispensing_paths,
+)
 from src.robot_systems.glue.processes.glue_dispensing.glue_pump_controller import GluePumpController
 from src.robot_systems.glue.processes.glue_dispensing.i_glue_type_resolver import IGlueTypeResolver
 from src.engine.system import ISystemManager
+from src.shared_contracts.events.glue_process_events import GlueProcessTopics
+from src.shared_contracts.events.process_events import ProcessState
 
 
 class GlueProcess(BaseProcess):
@@ -47,16 +54,49 @@ class GlueProcess(BaseProcess):
         self._config            = config
         self.navigation_service = navigation_service
 
-        self._paths:         Optional[List[Tuple]] = None
+        self._paths:         Optional[list[DispensingPathEntry]] = None
         self._spray_on:      bool = False
         self._context:       Optional[DispensingContext] = None
+        self._machine = None
         self._worker_thread: Optional[threading.Thread] = None
+        self._manual_mode: bool = False
 
     # ── Public pre-start setter ───────────────────────────────────────
 
     def set_paths(self, paths: List[Tuple], spray_on: bool) -> None:
-        self._paths    = paths
+        self._paths    = normalize_dispensing_paths(paths)
         self._spray_on = spray_on
+
+    def set_manual_mode(self, enabled: bool) -> None:
+        self._manual_mode = bool(enabled)
+
+    def is_manual_mode_enabled(self) -> bool:
+        return self._manual_mode
+
+    def step_once(self) -> dict:
+        with self._lock:
+            if not self._manual_mode:
+                raise RuntimeError("Manual mode is disabled")
+            if self.state != ProcessState.RUNNING:
+                raise RuntimeError("GlueProcess must be running to step manually")
+            if self._machine is None or self._context is None:
+                raise RuntimeError("GlueProcess has not been started")
+            progressed = self._machine.step()
+            snapshot = self._publish_diagnostics()
+            snapshot["step_result"] = progressed
+            return snapshot
+
+    def get_dispensing_snapshot(self) -> dict:
+        return {
+            "process_state": self.state.value,
+            "manual_mode": self._manual_mode,
+            "worker_alive": bool(self._worker_thread and self._worker_thread.is_alive()),
+            "machine": self._serialize_machine_snapshot(),
+            "dispensing": (
+                self._context.build_debug_snapshot()
+                if self._context is not None else None
+            ),
+        }
 
     # ── BaseProcess hooks (called while lock is held — must be fast) ──
 
@@ -79,6 +119,13 @@ class GlueProcess(BaseProcess):
         ctx.robot_user          = self._config.robot_user
         ctx.global_velocity     = self._config.global_velocity
         ctx.global_acceleration = self._config.global_acceleration
+        ctx.move_to_first_point_poll_s = self._config.move_to_first_point_poll_s
+        ctx.move_to_first_point_timeout_s = self._config.move_to_first_point_timeout_s
+        ctx.pump_thread_wait_poll_s = self._config.pump_thread_wait_poll_s
+        ctx.final_position_poll_s = self._config.final_position_poll_s
+        ctx.pump_ready_timeout_s = self._config.pump_ready_timeout_s
+        ctx.pump_thread_join_timeout_s = self._config.pump_thread_join_timeout_s
+        ctx.pump_adjuster_poll_s = self._config.pump_adjuster_poll_s
         ctx.pump_controller     = GluePumpController(
             self._motor_service,
             use_segment_settings=self._config.use_segment_settings,
@@ -86,43 +133,34 @@ class GlueProcess(BaseProcess):
 
         machine = DispensingMachineFactory().build(ctx, self._config)
         self._context = ctx
+        self._machine = machine
 
-        self._worker_thread = threading.Thread(
-            target=machine.start_execution,
-            daemon=True,
-            name="GlueDispensingMachine",
-        )
-        self._worker_thread.start()
+        if self._manual_mode:
+            machine.reset()
+            self._worker_thread = None
+        else:
+            self._worker_thread = threading.Thread(
+                target=machine.start_execution,
+                daemon=True,
+                name="GlueDispensingMachine",
+            )
+            self._worker_thread.start()
+        self._publish_diagnostics()
         self._logger.info("GlueProcess started (%s paths, spray_on=%s)", len(self._paths), self._spray_on)
 
     def _on_pause(self) -> None:
-        try:
-            self._robot.stop_motion()
-        except Exception:
-            self._logger.exception("stop_motion failed in _on_pause")
-
         ctx = self._context
         if ctx is None:
+            try:
+                self._robot.stop_motion()
+            except Exception:
+                self._logger.exception("stop_motion failed in _on_pause")
             return
 
         ctx.run_allowed.clear()
+        ctx.cleanup.shutdown_best_effort()
 
-        if ctx.motor_started and ctx.spray_on and ctx.pump_controller:
-            addr = ctx.get_motor_address_for_current_path()
-            if addr != -1:
-                try:
-                    ctx.pump_controller.pump_off(addr, ctx.current_settings)
-                except Exception:
-                    self._logger.exception("pump_off failed in _on_pause")
-            ctx.motor_started = False
-
-        if ctx.generator_started and self._generator is not None:
-            try:
-                self._generator.turn_off()
-            except Exception:
-                self._logger.exception("generator turn_off failed in _on_pause")
-            ctx.generator_started = False
-
+        self._publish_diagnostics()
         self._logger.info("GlueProcess paused")
 
     def _on_resume(self) -> None:
@@ -131,6 +169,7 @@ class GlueProcess(BaseProcess):
             return
         ctx.is_resuming = True
         ctx.run_allowed.set()
+        self._publish_diagnostics()
         self._logger.info("GlueProcess resumed")
 
     def _on_stop(self) -> None:
@@ -139,29 +178,40 @@ class GlueProcess(BaseProcess):
             ctx.stop_event.set()
             ctx.run_allowed.set()          # unblock handle_paused if waiting
 
-        try:
+        if ctx is None:
             self._robot.stop_motion()
-        except Exception:
-            self._logger.exception("stop_motion failed in _on_stop")
+        else:
+            ctx.cleanup.shutdown_best_effort()
 
-        if ctx is not None:
-            if ctx.motor_started and ctx.spray_on and ctx.pump_controller:
-                addr = ctx.get_motor_address_for_current_path()
-                if addr != -1:
-                    try:
-                        ctx.pump_controller.pump_off(addr, ctx.current_settings)
-                    except Exception:
-                        self._logger.exception("pump_off failed in _on_stop")
-                ctx.motor_started = False
-
-            if ctx.generator_started and self._generator is not None:
-                try:
-                    self._generator.turn_off()
-                except Exception:
-                    self._logger.exception("generator turn_off failed in _on_stop")
-                ctx.generator_started = False
-
+        self._publish_diagnostics()
         self._logger.info("GlueProcess stopped")
 
     def _on_reset_errors(self) -> None:
+        if self._context is not None:
+            self._context.clear_error()
+        self._publish_diagnostics()
         self._logger.info("GlueProcess errors reset")
+
+    def _serialize_machine_snapshot(self) -> dict | None:
+        if self._machine is None:
+            return None
+        return self._state_machine_snapshot_to_dict(self._machine.get_snapshot())
+
+    def _state_machine_snapshot_to_dict(self, snapshot: StateMachineSnapshot) -> dict:
+        return {
+            "initial_state": getattr(snapshot.initial_state, "name", snapshot.initial_state),
+            "current_state": getattr(snapshot.current_state, "name", snapshot.current_state),
+            "is_running": snapshot.is_running,
+            "step_count": snapshot.step_count,
+            "last_state": getattr(snapshot.last_state, "name", snapshot.last_state),
+            "last_next_state": getattr(snapshot.last_next_state, "name", snapshot.last_next_state),
+            "last_error": snapshot.last_error,
+        }
+
+    def _publish_diagnostics(self) -> dict:
+        snapshot = self.get_dispensing_snapshot()
+        try:
+            self._messaging.publish(GlueProcessTopics.DIAGNOSTICS, snapshot)
+        except Exception:
+            self._logger.exception("Failed to publish glue diagnostics")
+        return snapshot

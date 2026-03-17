@@ -1,4 +1,10 @@
 {
+  "board": {
+    "health_check_trigger_register": 17,
+    "motor_error_count_register": 20,
+    "motor_error_registers_start": 21,
+    "health_check_delay_s": 3.0
+  },
   "motors": [
     {
       "name": "Glue Pump 1",

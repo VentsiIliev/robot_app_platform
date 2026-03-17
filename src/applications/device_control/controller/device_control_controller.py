@@ -1,33 +1,20 @@
 from __future__ import annotations
 from functools import partial
 import logging
-from typing import List, Tuple
 
-from PyQt6.QtCore import QThread, QObject, pyqtSignal
-
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.device_control.model.device_control_model import DeviceControlModel
 from src.applications.device_control.view.device_control_view import DeviceControlView
 
 
-class _Worker(QObject):
-    finished = pyqtSignal(object)
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self):
-        self.finished.emit(self._fn())
-
-
-class DeviceControlController(IApplicationController):
+class DeviceControlController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: DeviceControlModel, view: DeviceControlView) -> None:
+        BackgroundWorker.__init__(self)
         self._model  = model
         self._view   = view
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._active: List[Tuple[QThread, _Worker]] = []
 
         view.laser_on_requested.connect(self._on_laser_on)
         view.laser_off_requested.connect(self._on_laser_off)
@@ -56,7 +43,7 @@ class DeviceControlController(IApplicationController):
             self._view.set_device_available(f"motor_{address}", healthy)
 
     def stop(self) -> None:
-        pass
+        self._stop_threads()
 
     # ── Laser ─────────────────────────────────────────────────────────
 
@@ -123,12 +110,4 @@ class DeviceControlController(IApplicationController):
     # ── Helpers ───────────────────────────────────────────────────────
 
     def _run(self, fn, on_done) -> None:
-        thread = QThread()
-        worker = _Worker(fn)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(on_done)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(lambda: self._active.remove((thread, worker)))
-        self._active.append((thread, worker))
-        thread.start()
+        self._run_in_thread(fn=fn, on_done=on_done)

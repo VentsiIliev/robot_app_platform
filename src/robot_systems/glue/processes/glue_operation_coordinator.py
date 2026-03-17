@@ -50,6 +50,10 @@ class GlueOperationCoordinator:
     def pick_and_place_process(self) -> PickAndPlaceProcess:
         return self._sequences[GlueOperationMode.PICK_AND_SPRAY]._processes[0]
 
+    @property
+    def glue_process(self) -> GlueProcess:
+        return self._sequences[GlueOperationMode.SPRAY_ONLY]._processes[0]
+
 
     def _any_running(self) -> bool:
         if self._active_sequence is not None and self._active_sequence.is_running:
@@ -154,4 +158,3 @@ class GlueOperationCoordinator:
                 process = None
         if process is not None:
             process.stop()
-

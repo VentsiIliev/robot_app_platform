@@ -13,8 +13,54 @@ The `process` package defines a **thread-safe, broker-integrated state machine**
 |------|-----------|------|
 | `i_process.py` | `IProcess` | Abstract lifecycle contract |
 | `base_process.py` | `BaseProcess` | Thread-safe implementation with template hooks |
+| `executable_state_machine.py` | `ExecutableStateMachine` | Small handler-driven state machine used by long-running process internals such as glue dispensing |
 | `process_requirements.py` | `ProcessRequirements` | Declares which services must be available before a process can start |
 | `process_sequence.py` | `ProcessSequence` | Executes a list of `IProcess` objects in order, auto-advancing on each stop |
+
+---
+
+## `ExecutableStateMachine` — Handler-Driven Internal Flow
+
+`ExecutableStateMachine` is a lower-level helper than `BaseProcess`. It is used when one process needs its own internal state graph with many sub-states and explicit transition rules.
+
+Current main user:
+- `src/robot_systems/glue/processes/glue_dispensing/`
+
+Core API:
+
+```python
+machine = (
+    ExecutableStateMachineBuilder()
+    .with_initial_state(MyState.START)
+    .with_transition_rules(rules)
+    .with_state_registry(registry)
+    .with_context(context)
+    .build()
+)
+```
+
+Important methods:
+
+| Method | Meaning |
+|---|---|
+| `reset()` | restore the machine to its initial state and clear step/snapshot metadata |
+| `step()` | execute exactly one state handler and advance once |
+| `start_execution(delay=0.0)` | reset, then run continuously until stop/error/invalid transition |
+| `stop_execution()` | stop looped execution and set `context.stop_event` if present |
+| `get_snapshot()` | return `StateMachineSnapshot` with current state, last transition, and last machine-level error |
+
+`step()` is the main API used for manual process driving and state-machine debugging.
+
+`StateMachineSnapshot` exposes:
+- `initial_state`
+- `current_state`
+- `is_running`
+- `step_count`
+- `last_state`
+- `last_next_state`
+- `last_error`
+
+This makes it possible to build interactive debugging tools without forking the machine logic.
 
 ---
 

@@ -13,6 +13,7 @@ from src.applications.base.styled_message_box import show_warning
 from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.settings.settings_view.settings_view import SettingsView
+from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.base.robot_jog_widget import RobotJogWidget
 from src.applications.height_measuring.view.height_measuring_schema import (
     CALIBRATION_GROUP, DETECTION_GROUP, MEASURING_GROUP,
@@ -107,11 +108,9 @@ class HeightMeasuringView(IApplicationView):
         left = QSplitter(Qt.Orientation.Vertical)
         outer_splitter.addWidget(left)
 
-        self._frame_label = QLabel("No frame")
-        self._frame_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._frame_label = CameraView()
         self._frame_label.setMinimumSize(480, 270)
         self._frame_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self._frame_label.setStyleSheet("background: #111; color: #888;")
         left.addWidget(self._frame_label)
 
         self._mask_label = QLabel("No mask")
@@ -305,13 +304,7 @@ class HeightMeasuringView(IApplicationView):
             frame = self._draw_crosshair(frame)
         h, w, ch = frame.shape
         qimg = QImage(bytes(frame.data), w, h, ch * w, QImage.Format.Format_RGB888)
-        self._frame_label.setPixmap(
-            QPixmap.fromImage(qimg).scaled(
-                self._frame_label.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        self._frame_label.set_frame(QPixmap.fromImage(qimg))
 
     def set_calibration_status(self, is_calibrated: bool, info: Optional[dict]) -> None:
         if is_calibrated:

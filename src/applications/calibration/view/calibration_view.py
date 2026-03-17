@@ -9,7 +9,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QPixmap, QTextCursor
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
-from pl_gui.utils.utils_widgets.clickable_label import ClickableLabel
+from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.robot_jog_widget import RobotJogWidget
@@ -208,7 +208,7 @@ class CalibrationView(IApplicationView):
         caption.setFixedHeight(24)
         caption.setStyleSheet(_CAPTION)
 
-        self._preview_label = ClickableLabel()
+        self._preview_label = CameraView()
         self._preview_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )

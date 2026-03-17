@@ -10,7 +10,7 @@ class TestMotionService(unittest.TestCase):
     def setUp(self):
         self.robot = MagicMock()
         self.safety = MagicMock()
-        self.safety.is_within_safety_limits.return_value = True
+        self.safety.get_violations.return_value = []
         self.service = MotionService(self.robot, self.safety)
 
     # ------------------------------------------------------------------
@@ -23,8 +23,14 @@ class TestMotionService(unittest.TestCase):
         self.assertTrue(result)
         self.robot.move_ptp.assert_called_once()
 
+    def test_move_ptp_uses_non_blocking_robot_call_when_not_waiting(self):
+        self.robot.move_ptp.return_value = 0
+        self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30, wait_to_reach=False)
+        _, kwargs = self.robot.move_ptp.call_args
+        self.assertEqual(kwargs.get("blocking"), False)
+
     def test_move_ptp_blocked_by_safety(self):
-        self.safety.is_within_safety_limits.return_value = False
+        self.safety.get_violations.return_value = ["out of bounds"]
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
         self.robot.move_ptp.assert_not_called()
@@ -48,8 +54,14 @@ class TestMotionService(unittest.TestCase):
         result = self.service.move_linear([100, 50, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertTrue(result)
 
+    def test_move_linear_uses_non_blocking_robot_call_when_not_waiting(self):
+        self.robot.move_linear.return_value = 0
+        self.service.move_linear([100, 50, 300, 0, 0, 0], 0, 0, 20, 20, wait_to_reach=False)
+        _, kwargs = self.robot.move_linear.call_args
+        self.assertEqual(kwargs.get("blocking"), False)
+
     def test_move_linear_blocked_by_safety(self):
-        self.safety.is_within_safety_limits.return_value = False
+        self.safety.get_violations.return_value = ["out of bounds"]
         result = self.service.move_linear([100, 50, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)
         self.robot.move_linear.assert_not_called()

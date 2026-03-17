@@ -1,9 +1,9 @@
 import logging
 import dataclasses
-from typing import List, Tuple, Callable
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 
+from src.applications.base.broker_subscription_mixin import BrokerSubscriptionMixin, SignalBridge
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.camera_settings.mapper import CameraSettingsMapper
 from src.applications.camera_settings.model.camera_settings_model import CameraSettingsModel
@@ -12,7 +12,7 @@ from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
 
 
-class _Bridge(QObject):
+class _Bridge(SignalBridge):
     camera_frame    = pyqtSignal(object)
     threshold_frame = pyqtSignal(object)
     vision_state    = pyqtSignal(str)
@@ -25,15 +25,15 @@ _TOGGLE_KEYS = {
 }
 
 
-class CameraSettingsController(IApplicationController):
+class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
 
     def __init__(self, model: CameraSettingsModel, view: CameraSettingsView,
                  messaging: IMessagingService):
+        BrokerSubscriptionMixin.__init__(self)
         self._model  = model
         self._view   = view
         self._broker = messaging
         self._bridge = _Bridge()
-        self._subs:  List[Tuple[str, Callable]] = []
         self._active = False
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -56,12 +56,7 @@ class CameraSettingsController(IApplicationController):
 
     def stop(self) -> None:
         self._active = False
-        for topic, cb in reversed(self._subs):
-            try:
-                self._broker.unsubscribe(topic, cb)
-            except Exception:
-                pass
-        self._subs.clear()
+        self._unsubscribe_all()
 
     # ── Bridge ────────────────────────────────────────────────────────
 
@@ -73,9 +68,9 @@ class CameraSettingsController(IApplicationController):
     # ── Broker → Bridge (background thread) ──────────────────────────
 
     def _subscribe(self) -> None:
-        self._sub(VisionTopics.LATEST_IMAGE,    self._on_latest_image_raw)
-        self._sub(VisionTopics.THRESHOLD_IMAGE, self._on_threshold_image_raw)
-        self._sub(VisionTopics.SERVICE_STATE,   self._on_service_state_raw)
+        self._subscribe(VisionTopics.LATEST_IMAGE,    self._on_latest_image_raw)
+        self._subscribe(VisionTopics.THRESHOLD_IMAGE, self._on_threshold_image_raw)
+        self._subscribe(VisionTopics.SERVICE_STATE,   self._on_service_state_raw)
 
     def _on_latest_image_raw(self, msg) -> None:
         if isinstance(msg, dict):
@@ -148,6 +143,3 @@ class CameraSettingsController(IApplicationController):
                 self._view.set_area_corners(area_name, points)
                 self._logger.debug("Loaded %d corners for %s", len(points), area_name)
 
-    def _sub(self, topic: str, cb: Callable) -> None:
-        self._broker.subscribe(topic, cb)
-        self._subs.append((topic, cb))

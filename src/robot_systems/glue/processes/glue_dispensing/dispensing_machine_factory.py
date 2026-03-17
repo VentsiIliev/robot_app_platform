@@ -12,31 +12,59 @@ from src.robot_systems.glue.processes.glue_dispensing.dispensing_state import (
     GlueDispensingState,
     GlueDispensingTransitions,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_idle import handle_idle
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_starting import handle_starting
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_moving_to_first_point import (
+from src.robot_systems.glue.processes.glue_dispensing.handler_guards import guard_pause, guard_stop
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.terminal.terminal_handlers import (
+    handle_completed,
+    handle_error,
+    handle_idle,
+    handle_paused,
+    handle_stopped,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.startup.handle_loading_path import (
+    handle_loading_path,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.startup.handle_loading_current_path import (
+    handle_loading_current_path,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.startup.handle_issuing_move_to_first_point import (
+    handle_issuing_move_to_first_point,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.startup.handle_resuming import (
+    handle_resuming,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.startup.handle_starting import handle_starting
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.motion.handle_moving_to_first_point import (
     handle_moving_to_first_point,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_executing_path import handle_executing_path
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_pump_initial_boost import (
-    handle_pump_initial_boost,
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.generator_handlers import (
+    handle_turning_off_generator,
+    handle_turning_on_generator,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_starting_pump_adjustment_thread import (
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.pump_handlers import (
+    handle_turning_off_pump,
+    handle_turning_on_pump,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.handle_starting_pump_adjustment_thread import (
     handle_starting_pump_adjustment_thread,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_sending_path_points import (
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.hardware.handle_waiting_for_pump_thread_ready import (
+    handle_waiting_for_pump_thread_ready,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.motion.handle_sending_path_points import (
     handle_sending_path_points,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_wait_for_path_completion import (
-    handle_wait_for_path_completion,
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.waiting.handle_routing_path_completion_wait import (
+    handle_routing_path_completion_wait,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_transition_between_paths import (
-    handle_transition_between_paths,
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.waiting.handle_waiting_for_pump_thread import (
+    handle_waiting_for_pump_thread,
 )
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_paused import handle_paused
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_stopped import handle_stopped
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_completed import handle_completed
-from src.robot_systems.glue.processes.glue_dispensing.state_handlers.handle_error import handle_error
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.waiting.handle_waiting_for_final_position import (
+    handle_waiting_for_final_position,
+)
+from src.robot_systems.glue.processes.glue_dispensing.state_handlers.motion.handle_advancing_path import (
+    handle_advancing_path,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -52,22 +80,45 @@ class DispensingMachineFactory:
         adjust = config.adjust_pump_speed_while_spray
         turn_off_between = config.turn_off_pump_between_paths
 
+        def _with_default_guards(state, handler):
+            def _wrapped(ctx):
+                next_state = guard_stop(ctx)
+                if next_state is not None:
+                    return next_state
+
+                next_state = guard_pause(ctx, state)
+                if next_state is not None:
+                    return next_state
+
+                return handler(ctx)
+
+            return _wrapped
+
         def _pump_adj_handler(ctx):
             return handle_starting_pump_adjustment_thread(ctx, adjust)
 
-        def _transition_handler(ctx):
-            return handle_transition_between_paths(ctx, turn_off_between)
+        def _pump_off_handler(ctx):
+            return handle_turning_off_pump(ctx, turn_off_between)
 
         handlers = {
             S.IDLE:                            handle_idle,
-            S.STARTING:                        handle_starting,
+            S.STARTING:                        _with_default_guards(S.STARTING, handle_starting),
+            S.LOADING_PATH:                    _with_default_guards(S.LOADING_PATH, handle_loading_path),
+            S.LOADING_CURRENT_PATH:            _with_default_guards(S.LOADING_CURRENT_PATH, handle_loading_current_path),
+            S.ISSUING_MOVE_TO_FIRST_POINT:     _with_default_guards(S.ISSUING_MOVE_TO_FIRST_POINT, handle_issuing_move_to_first_point),
             S.MOVING_TO_FIRST_POINT:           handle_moving_to_first_point,
-            S.EXECUTING_PATH:                  handle_executing_path,
-            S.PUMP_INITIAL_BOOST:              handle_pump_initial_boost,
-            S.STARTING_PUMP_ADJUSTMENT_THREAD: _pump_adj_handler,
+            S.TURNING_ON_GENERATOR:            _with_default_guards(S.TURNING_ON_GENERATOR, handle_turning_on_generator),
+            S.TURNING_ON_PUMP:                 _with_default_guards(S.TURNING_ON_PUMP, handle_turning_on_pump),
+            S.STARTING_PUMP_ADJUSTMENT_THREAD: _with_default_guards(S.STARTING_PUMP_ADJUSTMENT_THREAD, _pump_adj_handler),
+            S.WAITING_FOR_PUMP_THREAD_READY:   _with_default_guards(S.WAITING_FOR_PUMP_THREAD_READY, handle_waiting_for_pump_thread_ready),
             S.SENDING_PATH_POINTS:             handle_sending_path_points,
-            S.WAIT_FOR_PATH_COMPLETION:        handle_wait_for_path_completion,
-            S.TRANSITION_BETWEEN_PATHS:        _transition_handler,
+            S.ROUTING_PATH_COMPLETION_WAIT:    _with_default_guards(S.ROUTING_PATH_COMPLETION_WAIT, handle_routing_path_completion_wait),
+            S.WAITING_FOR_PUMP_THREAD:         handle_waiting_for_pump_thread,
+            S.WAITING_FOR_FINAL_POSITION:      handle_waiting_for_final_position,
+            S.TURNING_OFF_PUMP:                _with_default_guards(S.TURNING_OFF_PUMP, _pump_off_handler),
+            S.ADVANCING_PATH:                  _with_default_guards(S.ADVANCING_PATH, handle_advancing_path),
+            S.TURNING_OFF_GENERATOR:           handle_turning_off_generator,
+            S.RESUMING:                        _with_default_guards(S.RESUMING, handle_resuming),
             S.PAUSED:                          handle_paused,
             S.STOPPED:                         handle_stopped,
             S.COMPLETED:                       handle_completed,
@@ -90,4 +141,3 @@ class DispensingMachineFactory:
         context.state_machine = machine
         _logger.debug("DispensingMachine built (adjust=%s, turn_off_between=%s)", adjust, turn_off_between)
         return machine
-

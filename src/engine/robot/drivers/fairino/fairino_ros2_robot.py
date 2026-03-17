@@ -16,16 +16,16 @@ class FairinoRos2Robot(IRobot):
         self._client = FairinoRos2Client(server_url=server_url)
         logger.info("FairinoRos2Robot ready")
 
-    def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float) -> int:
+    def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
         # Calling move_liner here is intentional !!!
-        ret = self._client.move_liner(position, tool, user, vel, acc) or 0
+        ret = self._client.move_liner(position, tool, user, vel, acc, blocking=blocking) or 0
         logger.debug("move_ptp ← raw_ret=%s normalised=%s success=%s", ret, ret, ret == 0)
         return ret
 
-    def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0) -> int:
+    def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True) -> int:
         logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blend=%s", position, tool, user, vel, acc, blend_radius)
-        ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius) or 0
+        ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius, blocking=blocking) or 0
         logger.debug("move_linear ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
@@ -61,6 +61,12 @@ class FairinoRos2Robot(IRobot):
 
     def get_current_acceleration(self) -> float:
         return 0.0
+
+    def get_execution_status(self):
+        return self._client.get_status()
+
+    def get_last_trajectory_command_info(self):
+        return self._client.get_last_execute_path_response()
 
     def enable(self) -> None:
         logger.info("enable →")
