@@ -1,7 +1,6 @@
 from typing import Any, Tuple
 
-from frontend.core.utils.localization import TranslationKeys, TranslatableObject
-from communication_layer.api.v1.endpoints import camera_endpoints
+from login._compat import TranslationKeys, TranslatableObject, camera_endpoints
 
 
 class LoginController(TranslatableObject):

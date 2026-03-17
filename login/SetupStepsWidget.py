@@ -4,19 +4,21 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QWidget
 
-from frontend.core.utils.localization import TranslationKeys, TranslatableWidget
+from login._compat import (
+    TranslationKeys, TranslatableWidget,
+    MaterialButton, FONT, MACHINE_BUTTONS_IMAGE,
+)
 
 if TYPE_CHECKING:
     pass
-from frontend.core.utils.IconLoader import MACHINE_BUTTONS_IMAGE
-from frontend.widgets.MaterialButton import MaterialButton
-from frontend.core.utils.styles.globalStyles import FONT
+
+
 class SetupStepsWidget(TranslatableWidget):
     """Initial setup steps widget."""
 
     def __init__(
         self,
-        controller: Any,  # could be narrowed with a Protocol if needed
+        controller: Any,
         parent=None
     ) -> None:
         super().__init__(parent, auto_retranslate=False)
@@ -33,7 +35,7 @@ class SetupStepsWidget(TranslatableWidget):
 
         self.setStyleSheet("background-color: white;")
         self.setup_ui()
-        
+
         # Initialize translations after UI is created
         self.init_translations()
 
@@ -50,16 +52,20 @@ class SetupStepsWidget(TranslatableWidget):
         # Spacer to center vertically
         outer_layout.addStretch()
 
-        # Center content - image
+        # Center content - image (skipped when no asset available)
         self.image_label = QLabel()
-        self.image_label.setPixmap(
-            QPixmap(MACHINE_BUTTONS_IMAGE).scaled(
-                400,
-                400,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
+        if MACHINE_BUTTONS_IMAGE:
+            self.image_label.setPixmap(
+                QPixmap(MACHINE_BUTTONS_IMAGE).scaled(
+                    400,
+                    400,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
             )
-        )
+        else:
+            self.image_label.setText("[Machine image not available]")
+            self.image_label.setStyleSheet("color: grey; font-size: 12px;")
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         outer_layout.addWidget(self.image_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -76,8 +82,6 @@ class SetupStepsWidget(TranslatableWidget):
         bottom_buttons_layout: QHBoxLayout = QHBoxLayout()
         bottom_buttons_layout.setContentsMargins(0, 0, 0, 20)
 
-        # Next button (text set in retranslate())
-        # self.confirm_blue_button = QPushButton()
         self.confirm_blue_button = MaterialButton(
             self.tr(TranslationKeys.Navigation.NEXT)
         )
@@ -106,7 +110,7 @@ class SetupStepsWidget(TranslatableWidget):
         if self.controller.is_blue_button_pressed():
             if self.instructions:
                 self.instructions.setText(self.tr(TranslationKeys.Setup.SETUP_FIRST_STEP))
-            if hasattr(self, "home_button") and self.home_button:  # if defined elsewhere
+            if hasattr(self, "home_button") and self.home_button:
                 self.home_button.setVisible(True)
         else:
             QTimer.singleShot(500, self.check_physical_button)

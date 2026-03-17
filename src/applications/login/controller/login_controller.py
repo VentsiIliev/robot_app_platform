@@ -9,9 +9,10 @@ class LoginController:
 
     def load(self) -> None:
         self._view.login_submitted.connect(self._on_login_submitted)
-        self._view.qr_login_requested.connect(self._on_qr_login_requested)
+        self._view.qr_scan_requested.connect(self._on_qr_scan_requested)
+        self._view.qr_tab_activated.connect(self._on_qr_tab_activated)
         self._view.first_admin_submitted.connect(self._on_first_admin_submitted)
-        self._model.move_to_login_pos()
+
         if self._model.is_first_run():
             self._view.show_first_run()
         else:
@@ -30,11 +31,21 @@ class LoginController:
             return
         self._view.accept_login(user)
 
-    def _on_qr_login_requested(self, qr_payload: str) -> None:
-        user = self._model.authenticate_qr(qr_payload)
+    def _on_qr_tab_activated(self) -> None:
+        """Robot moves to login position when the QR tab is selected."""
+        self._model.move_to_login_pos()
+
+    def _on_qr_scan_requested(self) -> None:
+        """Called by the view's QTimer on each poll tick."""
+        result = self._model.try_qr_login()
+        if result is None:
+            return
+        user_id, password = result
+        user = self._model.authenticate(user_id, password)
         if user is None:
             self._view.show_error("QR login failed. Please try again.")
             return
+        self._view.stop_qr_scanning()
         self._view.accept_login(user)
 
     def _on_first_admin_submitted(

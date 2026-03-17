@@ -6,11 +6,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout
 )
 
-
-from frontend.core.utils.localization import TranslationKeys, TranslatableWidget
-from frontend.virtualKeyboard.VirtualKeyboard import FocusLineEdit
-from frontend.widgets.MaterialButton import MaterialButton
-from frontend.core.utils.styles.globalStyles import FONT
+from login._compat import TranslationKeys, TranslatableWidget, FocusLineEdit, MaterialButton, FONT
 
 
 class LoginTab(TranslatableWidget):
@@ -27,7 +23,7 @@ class LoginTab(TranslatableWidget):
         self.password_input: FocusLineEdit
         self.login_button: QPushButton
         self.setup_ui()
-        
+
         # Initialize translations after UI is created
         self.init_translations()
 
@@ -74,7 +70,6 @@ class LoginTab(TranslatableWidget):
 
         # Login button
         button_layout: QHBoxLayout = QHBoxLayout()
-        # self.login_button = QPushButton()
         self.login_button = MaterialButton(
             text=self.tr(TranslationKeys.Auth.LOGIN))
         self.login_button.clicked.connect(self.handle_field_login)
@@ -101,6 +96,7 @@ class LoginTab(TranslatableWidget):
         self.username_input.setPlaceholderText(self.tr(TranslationKeys.Auth.ID))
         self.password_input.setPlaceholderText(self.tr(TranslationKeys.Auth.PASSWORD))
         self.login_button.setText(self.tr(TranslationKeys.Auth.LOGIN))
+
     def resize_elements(self, window_width: int, window_height: int) -> None:
         """Handle responsive design for button sizing"""
         button_width: int = max(160, min(int(window_width * 0.3), 300))

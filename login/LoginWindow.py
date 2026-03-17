@@ -9,18 +9,18 @@ from PyQt6.QtWidgets import (
     QTabWidget, QLabel, QDialog
 )
 
-from frontend.core.utils.localization import TranslationKeys, TranslatableDialog
-
-from frontend.dialogs.CustomFeedbackDialog import CustomFeedbackDialog, DialogType
-from frontend.widgets.Header import Header
-from frontend.widgets.ToastWidget import ToastWidget
-from frontend.legacy_ui.windows.login.LoginController import LoginController
-from frontend.legacy_ui.windows.login.LoginTab import LoginTab
-from frontend.legacy_ui.windows.login.QRLoginTab import QRLoginTab
-from frontend.legacy_ui.windows.login.SetupStepsWidget import SetupStepsWidget
-from frontend.core.utils.IconLoader import LOGIN_BUTTON, LOGIN_QR_BUTTON, LOGO
-from modules.shared.MessageBroker import MessageBroker
-from modules.shared.utils.jsonUtils import load_json_file
+from login._compat import (
+    TranslationKeys, TranslatableDialog,
+    CustomFeedbackDialog, DialogType,
+    Header, ToastWidget,
+    MessageBroker,
+    load_json_file,
+    LOGIN_BUTTON, LOGIN_QR_BUTTON, LOGO,
+)
+from login.LoginController import LoginController
+from login.LoginTab import LoginTab
+from login.QRLoginTab import QRLoginTab
+from login.SetupStepsWidget import SetupStepsWidget
 
 # Suppress specific DeprecationWarning
 warnings.filterwarnings("ignore", category=DeprecationWarning, message="sipPyTypeDict() is deprecated")
@@ -47,11 +47,11 @@ class LoginWindow(TranslatableDialog):
         self.setGeometry(100, 100, 600, 400)
         self.setStyleSheet("background-color: white;")
         self.setup_ui()
-        
+
         # Initialize translations after UI is created
         self.init_translations()
         broker = MessageBroker()
-        broker.publish("vison-auto-brightness","stop")
+        broker.publish("vison-auto-brightness", "stop")
 
     def setup_ui(self) -> None:
         outer_layout = QVBoxLayout()
@@ -99,12 +99,11 @@ class LoginWindow(TranslatableDialog):
             warning_dialog = CustomFeedbackDialog(
                 parent=self,
                 dialog_type=DialogType.WARNING,
-                # 👈 key addition: use one of ['warning', 'info', 'success', 'error', 'feedback']
                 title=self.tr(TranslationKeys.Warning.WARNING),
                 message=self.tr(TranslationKeys.Warning.THE_ROBOT_WILL_START_MOVING_TO_THE_LOGIN_POSITION),
                 info_text=self.tr(TranslationKeys.Warning.PLEASE_ENSURE_THE_AREA_IS_CLEAR_BEFORE_PROCEEDING),
-                ok_text="OK",  # optional
-                cancel_text=self.tr(TranslationKeys.Warning.CANCEL)  # optional
+                ok_text="OK",
+                cancel_text=self.tr(TranslationKeys.Warning.CANCEL)
             )
 
             result = warning_dialog.exec()
@@ -124,10 +123,17 @@ class LoginWindow(TranslatableDialog):
         logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.logo_label = QLabel()
-        pixmap = QPixmap(LOGO)
-        self.original_logo_pixmap: QPixmap = pixmap
-        self.logo_label.setPixmap(
-            pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        if LOGO:
+            pixmap = QPixmap(LOGO)
+            self.original_logo_pixmap: QPixmap = pixmap
+            self.logo_label.setPixmap(
+                pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            self.original_logo_pixmap = None
+            self.logo_label.setText("Robot\nPlatform")
+            f = QFont("Arial", 20, QFont.Weight.Bold)
+            self.logo_label.setFont(f)
+            self.logo_label.setStyleSheet("color: #4a2060;")
         self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(self.logo_label)
         logo_container.setLayout(logo_layout)
@@ -147,12 +153,17 @@ class LoginWindow(TranslatableDialog):
         self.tabs.setIconSize(QSize(40, 40))
 
         self.login_tab: LoginTab = LoginTab(self.handle_login, parent=self)
-        # Signal connection removed - already connected via constructor callback
-        # QRLoginTab now using new localization system
         self.qr_tab: QRLoginTab = QRLoginTab(self.controller, self.handle_login, parent=self)
 
-        self.tabs.addTab(self.login_tab, QIcon(LOGIN_BUTTON), "")
-        self.tabs.addTab(self.qr_tab, QIcon(LOGIN_QR_BUTTON), "")
+        if LOGIN_BUTTON:
+            self.tabs.addTab(self.login_tab, QIcon(LOGIN_BUTTON), "")
+        else:
+            self.tabs.addTab(self.login_tab, "Login")
+
+        if LOGIN_QR_BUTTON:
+            self.tabs.addTab(self.qr_tab, QIcon(LOGIN_QR_BUTTON), "")
+        else:
+            self.tabs.addTab(self.qr_tab, "QR Login")
 
         default_login: str = self.ui_settings.get("DEFAULT_LOGIN", "NORMAL").upper()
         if default_login == "QR":
@@ -170,7 +181,6 @@ class LoginWindow(TranslatableDialog):
         """Load UI settings from JSON file"""
         return load_json_file(SETTINGS_PATH, {}, debug=True)
 
-
     def resizeEvent(self, event: QEvent) -> None:
         """Handle window resize events"""
         new_width = self.width()
@@ -180,12 +190,11 @@ class LoginWindow(TranslatableDialog):
         logo_max_height = int(new_height * 0.4)
         logo_size = QSize(logo_max_width, logo_max_height)
 
-        if hasattr(self, "original_logo_pixmap"):
+        if self.original_logo_pixmap and hasattr(self, "original_logo_pixmap"):
             scaled_pixmap = self.original_logo_pixmap.scaled(
                 logo_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.logo_label.setPixmap(scaled_pixmap)
 
-        # self.login_tab.resize_elements(new_width, new_height)
         self.qr_tab.resize_elements(new_width, new_height)
 
         tab_icon_size = QSize(
@@ -205,12 +214,12 @@ class LoginWindow(TranslatableDialog):
         print(f"[{timestamp}] LoginController result: {result}, Message: {message}")
         if result is True:
             print(f"[{timestamp}] Login successful, stopping QR scanning and completing login...")
-            
+
             # CRITICAL: Stop QR scanning immediately upon ANY successful login
             if hasattr(self, 'qr_tab') and self.qr_tab:
                 print(f"[{timestamp}] Calling force_stop_scanning() on QR tab...")
                 self.qr_tab.force_stop_scanning()
-            
+
             print(f"[{timestamp}] Calling onLogEventCallback()...")
             self.onLogEventCallback()
             print(f"[{timestamp}] Callback completed, calling accept()...")
@@ -225,7 +234,6 @@ class LoginWindow(TranslatableDialog):
     def keyPressEvent(self, event):
         """Override to prevent ESC from closing the login window"""
         if event.key() == Qt.Key.Key_Escape:
-            # Ignore ESC key - do nothing
             event.ignore()
             return
 
@@ -238,39 +246,3 @@ class LoginWindow(TranslatableDialog):
             event.ignore()
             return
         super().closeEvent(event)
-
-
-if __name__ == "__main__":
-    import sys
-    import os
-
-    # Add src directory to a path for imports to work when running directly
-    src_path = os.path.join(os.path.dirname(__file__), '..', '..', '..')
-    sys.path.insert(0, os.path.abspath(src_path))
-
-    from PyQt6.QtWidgets import QApplication
-
-    class MockController:
-        def handleLoginPos(self):
-            print("Mock: Robot moving to login position")
-
-        def handle(self,endpoint):
-            print(f"Mock: {endpoint}")
-
-        def handleLogin(self,username,password):
-            print(f"Mock: logging in with {username} and {password}")
-
-    def on_login_success():
-        print("Login successful! Main application would start here.")
-
-    app = QApplication(sys.argv)
-
-    mock_controller = MockController()
-    login_window = LoginWindow(
-        controller=mock_controller,
-        onLogEventCallback=on_login_success
-    )
-
-    login_window.show()
-    sys.exit(app.exec())
-

@@ -1,10 +1,11 @@
 """
 Standalone runner for the Login application.
 
-Runs two demo scenarios back-to-back:
-  1. Normal login  — StubLoginApplicationService always authenticates.
-  2. First-run     — service reports is_first_run()=True, so the first-admin
-                     creation page is shown instead.
+Demonstrates two scenarios:
+  1. Normal login   — stub always accepts any numeric ID + password.
+  2. First-run      — is_first_run()=True, so the first-admin creation form is shown.
+  3. QR auto-login  — try_qr_login() returns credentials after a short delay,
+                      simulating automatic QR code detection.
 
 Run from the project root:
     python src/applications/login/example_usage.py
@@ -16,45 +17,66 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 import logging
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)-8s] %(name)s — %(message)s")
 
-from PyQt6.QtWidgets import QApplication, QLabel, QMessageBox
+from typing import Optional, Tuple
+
+from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from src.applications.login.login_factory import LoginFactory
 from src.applications.login.stub_login_application_service import StubLoginApplicationService
+from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 
 
-# ── Scenario helpers ─────────────────────────────────────────────────────────
+# ── Stub variants ─────────────────────────────────────────────────────────────
 
 class _FirstRunStub(StubLoginApplicationService):
-    """Stub that pretends no users exist yet (first-run flow)."""
+    """Pretends no users exist — triggers the first-admin creation page."""
     def is_first_run(self) -> bool:
         return True
 
 
-def _run_scenario(service, title: str) -> None:
+class _QrAutoStub(StubLoginApplicationService):
+    """Simulates a QR code being detected on the first poll tick."""
+    _scanned = False
+
+    def try_qr_login(self) -> Optional[Tuple[str, str]]:
+        if not self._scanned:
+            self._scanned = True
+            return "1", "stubpassword"
+        return None
+
+    def move_to_login_pos(self) -> None:
+        print("[Stub] Robot moving to login position…")
+
+
+# ── Runner helper ─────────────────────────────────────────────────────────────
+
+def _run(service, title: str) -> None:
     dialog = LoginFactory.build(service)
     dialog.setWindowTitle(title)
-    result = dialog.exec()
-    if result == dialog.DialogCode.Accepted:
-        user = dialog.result_user()
+    accepted = dialog.exec() == dialog.DialogCode.Accepted
+    if accepted:
+        user: IAuthenticatedUser = dialog.result_user()
         QMessageBox.information(
-            None,
-            "Logged in",
+            None, "Logged in",
             f"User ID : {user.user_id}\nRole     : {user.role}",
         )
     else:
-        QMessageBox.warning(None, "Cancelled", "Login dialog was closed.")
+        QMessageBox.warning(None, "Closed", "Login dialog was closed without logging in.")
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 def run_standalone() -> None:
     app = QApplication(sys.argv)
 
-    # Scenario 1: normal login page
-    _run_scenario(StubLoginApplicationService(), "Login — Normal flow (stub)")
+    # 1. Normal login (password tab)
+    _run(StubLoginApplicationService(), "Login — Normal flow")
 
-    # Scenario 2: first-run admin creation page
-    _run_scenario(_FirstRunStub(), "Login — First-run flow (stub)")
+    # 2. First-run: first-admin creation page
+    _run(_FirstRunStub(), "Login — First-run setup")
+
+    # 3. QR auto-login: switch to QR tab; stub returns credentials on first poll
+    _run(_QrAutoStub(), "Login — QR auto-login (switch to QR tab to trigger)")
 
     sys.exit(0)
 
