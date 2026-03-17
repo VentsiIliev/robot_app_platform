@@ -6,9 +6,11 @@ from typing import Optional
 
 
 class Role(Enum):
-    ADMIN    = "Admin"
-    OPERATOR = "Operator"
-    VIEWER   = "Viewer"
+    ADMIN     = "Admin"
+    OPERATOR  = "Operator"
+    VIEWER    = "Viewer"
+    DEVELOPER = "Developer"
+
 
 
 class UserField(Enum):

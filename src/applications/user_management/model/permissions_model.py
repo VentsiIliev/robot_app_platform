@@ -1,7 +1,8 @@
+from src.applications.user_management.domain.user import Role
 from src.engine.auth.i_permissions_admin_service import IPermissionsAdminService
 
 _DEFAULT_ROLES = ["Admin"]
-_ALL_ROLE_VALUES = ["Admin", "Operator", "Viewer"]
+_ALL_ROLE_VALUES = [r.value for r in Role]
 
 
 class PermissionsModel:

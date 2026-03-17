@@ -119,6 +119,18 @@ For motion stop requests against the ROS bridge:
 - `STOPPED` and `NO_ACTIVE_MOTION` are treated as benign stop outcomes by the platform client
 - `STOP_REQUESTED_BUT_UNCONFIRMED` and `ERROR` are treated as failed stop outcomes and can trigger retries or operator warnings
 
+For queued motion requests against the ROS bridge:
+- queueable motion types are:
+  - single-target linear/PTP moves
+  - multi-waypoint trajectory execution
+- both share one server-side motion queue, so mixed ordering is preserved:
+  - single move -> trajectory
+  - trajectory -> single move
+- `jog` is explicitly not queueable
+- the platform motion layer treats `ret >= 0` as an accepted motion command:
+  - `0` = started immediately
+  - `>0` = accepted and queued by the bridge
+
 This means application startup can continue even when the bridge is down, and subscribers should treat `disconnected` as a first-class availability state, not as an exception path.
 
 `RobotStateSnapshot.extra` may include transport diagnostics such as:
@@ -146,5 +158,5 @@ This means application startup can continue even when the bridge is down, and su
 - **No Qt in `robot/`**: Every class in this package is pure Python. Qt widgets subscribe to topics on the messaging bus to receive robot state updates.
 - **State monitoring runs in a daemon thread**: `RobotStateManager` polls the robot at 0.5s intervals. The thread is daemonized and doesn't block process exit.
 - **Position format**: All positions are `List[float]` with 6 elements: `[x, y, z, rx, ry, rz]` in mm and degrees.
-- **Return codes vs booleans**: `IRobot` methods return `int` (0 = success, SDK error code otherwise). `IMotionService` wraps these and returns `bool` (`True` = success). This distinction is maintained at the interface boundary.
+- **Return codes vs booleans**: `IRobot` methods return `int` (`0` = started immediately, `>0` = accepted and queued, negative = error). `IMotionService` wraps these and returns `bool` (`True` = accepted motion command). This distinction is maintained at the interface boundary.
 - **Bridge-down is not bootstrap-fatal**: for the ROS bridge transport, unavailable hardware should surface as `robot/state = disconnected`, allowing the rest of the platform to boot and show degraded availability.

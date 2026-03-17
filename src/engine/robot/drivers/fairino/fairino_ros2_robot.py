@@ -20,13 +20,13 @@ class FairinoRos2Robot(IRobot):
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
         # Calling move_liner here is intentional !!!
         ret = self._client.move_liner(position, tool, user, vel, acc, blocking=blocking) or 0
-        logger.debug("move_ptp ← raw_ret=%s normalised=%s success=%s", ret, ret, ret == 0)
+        logger.debug("move_ptp ← raw_ret=%s normalised=%s accepted=%s", ret, ret, ret >= 0)
         return ret
 
     def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True) -> int:
         logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blend=%s", position, tool, user, vel, acc, blend_radius)
         ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius, blocking=blocking) or 0
-        logger.debug("move_linear ← raw_ret=%s success=%s", ret, ret == 0)
+        logger.debug("move_linear ← raw_ret=%s accepted=%s", ret, ret >= 0)
         return ret
 
     def start_jog(self, axis: RobotAxis, direction: Direction, step: float, vel: float, acc: float) -> int:

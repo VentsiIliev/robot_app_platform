@@ -8,7 +8,7 @@ GLUE_USER_SCHEMA = UserSchema(
         FieldDescriptor(key="lastName",  label="Last Name",  widget="text",     required=True),
         FieldDescriptor(key="password",  label="Password",   widget="password", required=True,  mask_in_table=True),
         FieldDescriptor(key="role",      label="Role",       widget="combo",    required=True,
-                        options=["Admin", "Operator", "Viewer"]),
+                        options=["Admin", "Operator", "Viewer", "Developer"]),
         FieldDescriptor(key="email",     label="Email",      widget="email",    required=False),
 
     ],

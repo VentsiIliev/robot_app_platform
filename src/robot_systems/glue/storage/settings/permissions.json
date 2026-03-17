@@ -1,56 +1,69 @@
 {
   "gluedashboard": [
-    "Admin"
+    "Admin",
+    "Operator",
+    "Developer"
   ],
   "robotsettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "pickandplacevisualizer": [
-    "Admin"
+    "Developer"
   ],
   "heightmeasuring": [
-    "Admin"
+    "Developer"
   ],
   "glueprocessdriver": [
-    "Admin"
+    "Developer"
   ],
   "contourmatchingtester": [
-    "Admin"
+    "Developer"
   ],
   "picktarget": [
-    "Admin"
+    "Developer"
   ],
   "gluesettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "modbussettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "cellsettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "camerasettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "devicecontrol": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "calibration": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "workpieceeditor": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "brokerdebug": [
-    "Admin"
+    "Developer"
   ],
   "usermanagement": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "workpiecelibrary": [
-    "Admin"
+    "Admin",
+    "Developer"
   ],
   "toolsettings": [
-    "Admin"
+    "Admin",
+    "Developer"
   ]
 }

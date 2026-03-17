@@ -157,6 +157,43 @@ Supported input shapes are:
 
 If a raw settings dict is still assigned directly to `context.current_settings`, `DispensingContext.get_segment_settings()` coerces it into `DispensingSegmentSettings` on first use. This keeps older call sites working while the package migrates to the typed model.
 
+### Segment Settings Reference
+
+The table below describes how segment-level settings from a workpiece JSON are handled by the current glue job build and dispensing runtime.
+
+| Setting | Status | Actual behavior |
+|---|---|---|
+| `glue_type` | `Used` | Runtime. Resolves the motor / pump address for the active segment through `DispensingContext.get_valid_motor_address_for_current_path()`. |
+| `velocity` | `Used` | Runtime. Robot motion velocity for `move_ptp` to the first point and `execute_trajectory` for the segment. Only used when `GlueDispensingConfig.use_segment_motion_settings=True`; otherwise global motion settings are used. |
+| `acceleration` | `Used` | Runtime. Robot motion acceleration for start move and trajectory execution, with the same per-segment vs global fallback behavior as `velocity`. |
+| `spraying_height` | `Used` | Build time. Used in `GlueJobBuilderService` to compute the Z coordinate of the robot-space glue path. It does not change anything inside the dispensing state machine after the job has already been built. |
+| `rz_angle` | `Used` | Build time. Used in `GlueJobBuilderService` as the robot end-effector rotation for the generated path points. |
+| `reach_start_threshold` | `Used` | Runtime. Tolerance for the glue process’s own “wait until the first point is reached” check in `MOVING_TO_FIRST_POINT`. This is the threshold used by the polling logic in `context.motion_ops`, not a controller-level robot tolerance. |
+| `reach_end_threshold` | `Used` | Runtime. Tolerance for end-of-segment completion checks. Used when deciding whether the final point has been reached and when starting the dynamic pump-adjustment thread with the correct end threshold. |
+| `motor_speed` | `Used` | Runtime. Target steady pump speed for `pump_on()`. |
+| `forward_ramp_steps` | `Used` | Runtime. Number of ramp-up steps used during pump start. |
+| `initial_ramp_speed` | `Used` | Runtime. Initial startup speed used during pump turn-on. |
+| `initial_ramp_speed_duration` | `Used` | Runtime. Duration of the initial pump startup / ramp phase during pump turn-on. |
+| `speed_reverse` | `Used` | Runtime. Reverse speed used during `pump_off()` cleanup. |
+| `reverse_duration` | `Used` | Runtime. Reverse phase duration used during `pump_off()`. |
+| `reverse_ramp_steps` | `Used` | Runtime. Number of reverse ramp steps used during `pump_off()`. |
+| `glue_speed_coefficient` | `Used` | Runtime. Dynamic pump-speed coefficient used by `pump_speed_adjuster.py` to convert robot linear velocity into pump-speed correction. |
+| `glue_acceleration_coefficient` | `Used` | Runtime. Dynamic pump-speed coefficient used by `pump_speed_adjuster.py` to incorporate robot acceleration into pump-speed correction. |
+| `time_between_generator_and_glue` | `Used` | Runtime. After `TURNING_ON_GENERATOR` successfully turns the generator on, the state handler waits this long before advancing to `TURNING_ON_PUMP`. |
+| `spray_width` | `Unused` | Stored in segment settings and exposed in editors, but not consumed by the current job builder or dispensing runtime. |
+| `fan_speed` | `Unused` | Stored in settings and editor schemas, but the current generator control path does not read or apply it. |
+| `generator_timeout` | `Unused` | Present in settings and UI schemas, but not enforced by the current dispensing runtime. |
+| `time_before_motion` | `Unused` | Present in settings and UI schemas, but there is currently no explicit dwell between pump-on and robot trajectory motion that uses this value. |
+| `time_before_stop` | `Unused` | Present in settings and UI schemas, but the current stop / shutdown flow does not wait on this value before pump or generator shutdown. |
+| `adaptive_spacing_mm` | `Unused` | Present in the workpiece segment schema, but the current job builder and dispensing runtime do not read it. |
+| `spline_density_multiplier` | `Unused` | Present in the workpiece segment schema, but the current job builder and dispensing runtime do not read it. |
+| `smoothing_lambda` | `Unused` | Present in the workpiece segment schema, but the current job builder and dispensing runtime do not read it. |
+
+Notes:
+- `Used` means the setting currently affects either job construction or live dispensing behavior.
+- `Unused` means the setting may still appear in JSON, editors, or schemas, but changing it does not currently change glue execution behavior.
+- Settings marked as build-time only, such as `spraying_height` and `rz_angle`, affect the generated robot path before `GlueProcess` starts; they are not read again by the dispensing machine once the job is loaded.
+
 `last_error` stores a `DispensingErrorInfo` record with:
 - `kind`
 - `code`

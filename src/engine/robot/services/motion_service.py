@@ -63,7 +63,7 @@ class MotionService(IMotionService):
                 acceleration,
                 blocking=wait_to_reach,
             )
-            success = ret == 0
+            success = ret >= 0
             if wait_to_reach and success:
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
             self._logger.debug("move_ptp ← success=%s", success)
@@ -99,7 +99,7 @@ class MotionService(IMotionService):
                 blendR,
                 blocking=wait_to_reach,
             )
-            success = ret == 0
+            success = ret >= 0
             if wait_to_reach and success:
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
             self._logger.debug("move_linear ← success=%s", success)

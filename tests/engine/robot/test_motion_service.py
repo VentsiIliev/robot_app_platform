@@ -29,6 +29,11 @@ class TestMotionService(unittest.TestCase):
         _, kwargs = self.robot.move_ptp.call_args
         self.assertEqual(kwargs.get("blocking"), False)
 
+    def test_move_ptp_accepts_queued_result(self):
+        self.robot.move_ptp.return_value = 2
+        result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
+        self.assertTrue(result)
+
     def test_move_ptp_blocked_by_safety(self):
         self.safety.get_violations.return_value = ["out of bounds"]
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
@@ -59,6 +64,11 @@ class TestMotionService(unittest.TestCase):
         self.service.move_linear([100, 50, 300, 0, 0, 0], 0, 0, 20, 20, wait_to_reach=False)
         _, kwargs = self.robot.move_linear.call_args
         self.assertEqual(kwargs.get("blocking"), False)
+
+    def test_move_linear_accepts_queued_result(self):
+        self.robot.move_linear.return_value = 3
+        result = self.service.move_linear([100, 50, 300, 0, 0, 0], 0, 0, 20, 20)
+        self.assertTrue(result)
 
     def test_move_linear_blocked_by_safety(self):
         self.safety.get_violations.return_value = ["out of bounds"]
