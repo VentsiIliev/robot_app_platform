@@ -23,6 +23,8 @@ RobotSettings
 
 RobotCalibrationSettings
   ├── adaptive_movement: AdaptiveMovementConfig
+  ├── axis_mapping: AxisMappingConfig
+  ├── camera_tcp_offset: CameraTcpOffsetCalibrationConfig
   ├── z_target: int
   └── required_ids: List[int]
         ─────────────────────
@@ -181,9 +183,36 @@ Retrieved via `settings_service.get("robot_calibration")`.
 @dataclass
 class RobotCalibrationSettings:
     adaptive_movement: AdaptiveMovementConfig = ...
+    axis_mapping: AxisMappingConfig = ...
+    camera_tcp_offset: CameraTcpOffsetCalibrationConfig = ...
     z_target: int = 300
     required_ids: List[int] = [0, 1, 2, 3, 4, 5, 6, 8]
 ```
+
+### `CameraTcpOffsetCalibrationConfig`
+
+**File:** `robot_calibration_settings.py`
+
+Persisted settings for the standalone camera-TCP offset calibration routine.
+
+```python
+@dataclass
+class CameraTcpOffsetCalibrationConfig:
+    marker_id: int = 4
+    rotation_step_deg: float = 15.0
+    iterations: int = 6
+    approach_z: float = 300.0
+    approach_rx: float = 180.0
+    approach_ry: float = 0.0
+    approach_rz: float = 0.0
+    velocity: int = 20
+    acceleration: int = 10
+    settle_time_s: float = 1.0
+    detection_attempts: int = 20
+    retry_delay_s: float = 0.1
+```
+
+These values are edited in the Robot Settings calibration tab and consumed by `CameraTcpOffsetCalibrationService`.
 
 ---
 

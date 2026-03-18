@@ -16,7 +16,27 @@ def transform_pickup_point(workflow, pickup_px):
         workflow._publish_diagnostics()
         return None, None, WorkpieceProcessResult.fail(error)
     try:
-        robot_x, robot_y = workflow._transformer.transform(pickup_px[0], pickup_px[1])
+        calibration_x, calibration_y = workflow._transformer.transform(pickup_px[0], pickup_px[1])
+        workflow._logger.debug(
+            "Homography transformed pickup point %s -> calibration-plane robot point (%.3f, %.3f)",
+            pickup_px,
+            calibration_x,
+            calibration_y,
+        )
+        if workflow._calibration_to_pickup_mapper is not None:
+            robot_x, robot_y = workflow._calibration_to_pickup_mapper(calibration_x, calibration_y)
+            workflow._logger.debug(
+                "Calibration-plane robot point (%.3f, %.3f) -> pickup-plane robot point (%.3f, %.3f)",
+                calibration_x,
+                calibration_y,
+                robot_x,
+                robot_y,
+            )
+        else:
+            robot_x, robot_y = calibration_x, calibration_y
+            workflow._logger.debug(
+                "No calibration-to-pickup mapper configured; using calibration-plane robot point directly"
+            )
         workflow._context.current_pickup_point_robot = (float(robot_x), float(robot_y))
         return robot_x, robot_y, None
     except Exception as exc:

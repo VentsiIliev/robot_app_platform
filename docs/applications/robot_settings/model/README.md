@@ -80,6 +80,10 @@ class RobotCalibrationMapper:
 | `calib_min_step_mm`, `calib_max_step_mm`, `calib_target_error_mm`, `calib_max_error_ref`, `calib_k`, `calib_derivative_scaling` | `settings.adaptive_movement.*` | `float` |
 | `calib_z_target` | `settings.z_target` | `int` |
 | `calib_required_ids` | `settings.required_ids` | unchanged (list) |
+| `calib_axis_*` | `settings.axis_mapping.*` | `int` / `float` |
+| `calib_tcp_*` | `settings.camera_tcp_offset.*` | `int` / `float` |
+
+`calib_tcp_*` holds the persisted configuration for the standalone camera-TCP offset calibration routine. These values are edited in the Robot Settings calibration tab and later consumed by the calibration application when the user runs `Calibrate Camera TCP Offset`.
 
 ---
 

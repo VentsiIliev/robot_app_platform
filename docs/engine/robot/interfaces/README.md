@@ -114,7 +114,7 @@ class IMotionService(ABC):
     def get_current_position(self) -> List[float]: ...
 ```
 
-- `wait_to_reach=True`: blocks until the robot reaches the target position (Euclidean distance ≤ 2mm on x,y,z) or times out after 10s.
+- `wait_to_reach=True`: blocks until the robot reaches the target pose. The default `MotionService` implementation requires Euclidean position error ≤ 2mm on `x,y,z` and, when the target includes orientation, wrapped angular error ≤ 1.0° on `rx,ry,rz`, or it times out after 10s.
 - `wait_cancelled`: optional callback checked during that wait loop; when it returns `True`, the wait aborts early.
 
 Implementation: `MotionService`

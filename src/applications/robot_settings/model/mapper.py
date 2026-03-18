@@ -90,6 +90,7 @@ class RobotCalibrationMapper:
     def to_flat_dict(settings: RobotCalibrationSettings) -> dict:
         am = settings.adaptive_movement
         ax = settings.axis_mapping
+        tcp = settings.camera_tcp_offset
         return {
             "calib_min_step_mm":           am.min_step_mm,
             "calib_max_step_mm":           am.max_step_mm,
@@ -105,6 +106,18 @@ class RobotCalibrationMapper:
             "calib_axis_move_mm":          ax.move_mm,
             "calib_axis_max_attempts":     ax.max_attempts,
             "calib_axis_delay_after_move": ax.delay_after_move_s,
+            "calib_tcp_marker_id":         tcp.marker_id,
+            "calib_tcp_rotation_step_deg": tcp.rotation_step_deg,
+            "calib_tcp_iterations":        tcp.iterations,
+            "calib_tcp_approach_z":        tcp.approach_z,
+            "calib_tcp_approach_rx":       tcp.approach_rx,
+            "calib_tcp_approach_ry":       tcp.approach_ry,
+            "calib_tcp_approach_rz":       tcp.approach_rz,
+            "calib_tcp_velocity":          tcp.velocity,
+            "calib_tcp_acceleration":      tcp.acceleration,
+            "calib_tcp_settle_time_s":     tcp.settle_time_s,
+            "calib_tcp_detection_attempts": tcp.detection_attempts,
+            "calib_tcp_retry_delay_s":     tcp.retry_delay_s,
         }
 
     @staticmethod
@@ -112,6 +125,7 @@ class RobotCalibrationMapper:
         s  = deepcopy(base)
         am = s.adaptive_movement
         ax = s.axis_mapping
+        tcp = s.camera_tcp_offset
 
         am.min_step_mm        = float(flat.get("calib_min_step_mm",        am.min_step_mm))
         am.max_step_mm        = float(flat.get("calib_max_step_mm",        am.max_step_mm))
@@ -128,4 +142,17 @@ class RobotCalibrationMapper:
         ax.move_mm            = float(flat.get("calib_axis_move_mm",        ax.move_mm))
         ax.max_attempts       = int(flat.get("calib_axis_max_attempts",     ax.max_attempts))
         ax.delay_after_move_s = float(flat.get("calib_axis_delay_after_move", ax.delay_after_move_s))
+
+        tcp.marker_id         = int(flat.get("calib_tcp_marker_id",          tcp.marker_id))
+        tcp.rotation_step_deg = float(flat.get("calib_tcp_rotation_step_deg", tcp.rotation_step_deg))
+        tcp.iterations        = int(flat.get("calib_tcp_iterations",         tcp.iterations))
+        tcp.approach_z        = float(flat.get("calib_tcp_approach_z",       tcp.approach_z))
+        tcp.approach_rx       = float(flat.get("calib_tcp_approach_rx",      tcp.approach_rx))
+        tcp.approach_ry       = float(flat.get("calib_tcp_approach_ry",      tcp.approach_ry))
+        tcp.approach_rz       = float(flat.get("calib_tcp_approach_rz",      tcp.approach_rz))
+        tcp.velocity          = int(flat.get("calib_tcp_velocity",           tcp.velocity))
+        tcp.acceleration      = int(flat.get("calib_tcp_acceleration",       tcp.acceleration))
+        tcp.settle_time_s     = float(flat.get("calib_tcp_settle_time_s",    tcp.settle_time_s))
+        tcp.detection_attempts = int(flat.get("calib_tcp_detection_attempts", tcp.detection_attempts))
+        tcp.retry_delay_s     = float(flat.get("calib_tcp_retry_delay_s",    tcp.retry_delay_s))
         return s

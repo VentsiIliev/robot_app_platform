@@ -136,7 +136,7 @@ class TestMotionService(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_wait_for_position_returns_true_when_within_threshold(self):
-        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0]
+        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 0.0, 0.0, 0.0]
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=1.0)
         self.assertTrue(result)
 
@@ -155,3 +155,25 @@ class TestMotionService(unittest.TestCase):
             cancelled=lambda: True,
         )
         self.assertFalse(result)
+
+    def test_wait_for_position_waits_for_orientation_when_target_contains_rpy(self):
+        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, 0.0]
+        result = self.service._wait_for_position(
+            [100.0, 0.0, 300.0, 180.0, 0.0, 15.0],
+            threshold=2.0,
+            orientation_threshold_deg=1.0,
+            delay=0.01,
+            timeout=0.05,
+        )
+        self.assertFalse(result)
+
+    def test_wait_for_position_accepts_orientation_when_within_wrapped_threshold(self):
+        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, -179.5]
+        result = self.service._wait_for_position(
+            [100.0, 0.0, 300.0, 180.0, 0.0, 179.8],
+            threshold=2.0,
+            orientation_threshold_deg=1.0,
+            delay=0.01,
+            timeout=1.0,
+        )
+        self.assertTrue(result)

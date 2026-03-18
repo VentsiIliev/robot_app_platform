@@ -78,22 +78,26 @@ class TestCleanProcessStateTransitions(unittest.TestCase):
 
     def test_start_transitions_to_running(self):
         p = self._make()
-        p.start()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
     def test_stop_from_running_transitions_to_stopped(self):
         p = self._make()
-        p.start(); p.stop()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.stop()
         self.assertEqual(p.state, ProcessState.STOPPED)
 
     def test_pause_from_running_transitions_to_paused(self):
         p = self._make()
-        p.start(); p.pause()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.pause()
         self.assertEqual(p.state, ProcessState.PAUSED)
 
     def test_resume_from_paused_transitions_to_running(self):
         p = self._make()
-        p.start(); p.pause(); p.resume()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.pause(); p.resume()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
     def test_stop_from_idle_is_blocked(self):

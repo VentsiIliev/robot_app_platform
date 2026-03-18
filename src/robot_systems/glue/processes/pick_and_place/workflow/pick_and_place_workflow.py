@@ -51,6 +51,7 @@ class PickAndPlaceWorkflow:
         on_match_result:      Optional[Callable] = None,
         on_diagnostics:       Optional[Callable[[dict], None]] = None,
         step_gate:            Optional[Callable[[str, dict], bool]] = None,
+        calibration_to_pickup_mapper: Optional[Callable[[float, float], tuple[float, float]]] = None,
         simulation:           bool = False,
     ):
         self._robot              = robot
@@ -65,6 +66,7 @@ class PickAndPlaceWorkflow:
         self._on_match_result     = on_match_result
         self._on_diagnostics      = on_diagnostics
         self._step_gate           = step_gate
+        self._calibration_to_pickup_mapper = calibration_to_pickup_mapper
         self._simulation          = simulation
         self._plane              = Plane(config.plane)
         self._plane_mgr          = PlaneManagementService(self._plane)

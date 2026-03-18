@@ -1,6 +1,6 @@
 # `src/applications/robot_settings/` — Robot Settings Application
 
-The `robot_settings` application provides a GUI for editing all robot configuration: network settings, global motion parameters, TCP offsets, safety limits, offset direction map, movement groups (named positions), and calibration parameters. It follows the standard application MVC pattern.
+The `robot_settings` application provides a GUI for editing all robot configuration: network settings, global motion parameters, TCP offsets, safety limits, offset direction map, movement groups (named positions), and calibration parameters. It now also exposes the persisted settings for the camera-TCP offset calibration routine. It follows the standard application MVC pattern.
 
 ---
 
@@ -74,7 +74,7 @@ User clicks Save
 | General | `ROBOT_INFO_GROUP`, `GLOBAL_MOTION_GROUP`, `TCP_STEP_GROUP`, `OFFSET_DIRECTION_GROUP` | IP, tool, user, global vel/acc, jog step, TCP steps, direction map |
 | Safety | `SAFETY_LIMITS_GROUP` | x/y/z/rx/ry/rz min+max bounds |
 | Movement Groups | `MovementGroupsTab` (raw) | Named positions: name, position string, vel, acc |
-| Calibration | `CALIBRATION_ADAPTIVE_GROUP`, `CALIBRATION_MARKER_GROUP` | Adaptive movement params, z target, required IDs |
+| Calibration | `CALIBRATION_ADAPTIVE_GROUP`, `CALIBRATION_MARKER_GROUP`, `CALIBRATION_AXIS_MAPPING_GROUP`, `CALIBRATION_CAMERA_TCP_GROUP` | Adaptive movement params, marker/z settings, axis-mapping settings, and camera-TCP offset calibration settings |
 
 ---
 

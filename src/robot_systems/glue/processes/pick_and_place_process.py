@@ -15,6 +15,7 @@ from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
+from src.robot_systems.glue.processes.pick_and_place.execution import CalibrationToPickupPlaneMapper
 from src.shared_contracts.events.process_events import ProcessState
 from src.shared_contracts.events.pick_and_place_events import PickAndPlaceDiagnosticsEvent, PickAndPlaceTopics
 
@@ -192,6 +193,21 @@ class PickAndPlaceProcess(BaseProcess):
             def _on_diagnostics(snapshot):
                 self._publish_diagnostics(snapshot)
 
+            calibration_position = self._navigation.get_group_position("CALIBRATION")
+            home_position = self._navigation.get_group_position("HOME")
+            mapper = None
+            if calibration_position is not None and home_position is not None:
+                mapper = CalibrationToPickupPlaneMapper.from_positions(
+                    calibration_position=calibration_position,
+                    pickup_position=home_position,
+                )
+            else:
+                self._logger.warning(
+                    "Calibration-to-pickup mapper unavailable: calibration=%s home=%s",
+                    calibration_position,
+                    home_position,
+                )
+
             workflow = PickAndPlaceWorkflow(
                 robot=self._robot,
                 navigation=self._navigation,
@@ -205,6 +221,7 @@ class PickAndPlaceProcess(BaseProcess):
                 on_match_result=_on_match_result,
                 on_diagnostics=_on_diagnostics,
                 step_gate=self._wait_for_step_checkpoint,
+                calibration_to_pickup_mapper=mapper.map_point if mapper is not None else None,
                 simulation=self._simulation,
             )
             result = workflow.run(

@@ -66,6 +66,33 @@ class PickAndPlaceMotionExecutor:
         self._place_motion = place_motion
         self._simulation = simulation
 
+    def _move_linear(
+        self,
+        pos,
+        profile: MotionProfile,
+        code: PickAndPlaceErrorCode,
+        stage: PickAndPlaceStage,
+        message: str,
+    ) -> MotionExecutionResult:
+        ok = self._robot.move_linear(
+            pos.to_list(),
+            tool=profile.tool,
+            user=profile.user,
+            velocity=profile.velocity,
+            acceleration=profile.acceleration,
+            blendR=profile.blend_radius,
+            wait_to_reach=not self._simulation,
+        )
+        if ok:
+            return MotionExecutionResult.ok()
+        self._logger.warning("%s at %s", message, pos)
+        return MotionExecutionResult.fail(
+            code,
+            stage,
+            message,
+            detail=str(pos),
+        )
+
     def move_home(self) -> MotionExecutionResult:
         if self._simulation:
             self._logger.info("[SIM] move_home skipped")
@@ -107,48 +134,68 @@ class PickAndPlaceMotionExecutor:
         )
 
     def execute_pick(self, positions: PickupPositions) -> MotionExecutionResult:
-        for pos in [positions.descent, positions.pickup, positions.lift]:
-            ok = self._robot.move_linear(
-                pos.to_list(),
-                tool=self._pick_motion.tool,
-                user=self._pick_motion.user,
-                velocity=self._pick_motion.velocity,
-                acceleration=self._pick_motion.acceleration,
-                blendR=self._pick_motion.blend_radius,
-                wait_to_reach=not self._simulation,
-            )
-            if ok:
-                continue
-            self._logger.warning("Pick motion failed at %s", pos)
-            return MotionExecutionResult.fail(
-                PickAndPlaceErrorCode.PICK_MOTION_FAILED,
-                PickAndPlaceStage.PICK,
-                "Pick motion failed",
-                detail=str(pos),
-            )
+        for move in (
+            self.execute_pick_descent(positions),
+            self.execute_pickup_contact(positions),
+            self.execute_pick_lift(positions),
+        ):
+            if not move.success:
+                return move
         return MotionExecutionResult.ok()
 
     def execute_place(self, positions: DropOffPositions) -> MotionExecutionResult:
-        for pos in [positions.approach, positions.drop]:
-            ok = self._robot.move_linear(
-                pos.to_list(),
-                tool=self._place_motion.tool,
-                user=self._place_motion.user,
-                velocity=self._place_motion.velocity,
-                acceleration=self._place_motion.acceleration,
-                blendR=self._place_motion.blend_radius,
-                wait_to_reach=not self._simulation,
-            )
-            if ok:
-                continue
-            self._logger.warning("Place motion failed at %s", pos)
-            return MotionExecutionResult.fail(
-                PickAndPlaceErrorCode.PLACE_MOTION_FAILED,
-                PickAndPlaceStage.PLACE,
-                "Place motion failed",
-                detail=str(pos),
-            )
+        for move in (
+            self.execute_place_approach(positions),
+            self.execute_place_drop(positions),
+        ):
+            if not move.success:
+                return move
         return MotionExecutionResult.ok()
+
+    def execute_pick_descent(self, positions: PickupPositions) -> MotionExecutionResult:
+        return self._move_linear(
+            positions.descent,
+            self._pick_motion,
+            PickAndPlaceErrorCode.PICK_MOTION_FAILED,
+            PickAndPlaceStage.PICK,
+            "Pick descent failed",
+        )
+
+    def execute_pickup_contact(self, positions: PickupPositions) -> MotionExecutionResult:
+        return self._move_linear(
+            positions.pickup,
+            self._pick_motion,
+            PickAndPlaceErrorCode.PICK_MOTION_FAILED,
+            PickAndPlaceStage.PICK,
+            "Pick contact failed",
+        )
+
+    def execute_pick_lift(self, positions: PickupPositions) -> MotionExecutionResult:
+        return self._move_linear(
+            positions.lift,
+            self._pick_motion,
+            PickAndPlaceErrorCode.PICK_MOTION_FAILED,
+            PickAndPlaceStage.PICK,
+            "Pick lift failed",
+        )
+
+    def execute_place_approach(self, positions: DropOffPositions) -> MotionExecutionResult:
+        return self._move_linear(
+            positions.approach,
+            self._place_motion,
+            PickAndPlaceErrorCode.PLACE_MOTION_FAILED,
+            PickAndPlaceStage.PLACE,
+            "Place approach failed",
+        )
+
+    def execute_place_drop(self, positions: DropOffPositions) -> MotionExecutionResult:
+        return self._move_linear(
+            positions.drop,
+            self._place_motion,
+            PickAndPlaceErrorCode.PLACE_MOTION_FAILED,
+            PickAndPlaceStage.PLACE,
+            "Place drop failed",
+        )
 
     def move_to_calibration_position(self) -> MotionExecutionResult:
         if self._simulation:

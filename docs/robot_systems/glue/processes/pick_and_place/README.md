@@ -109,6 +109,27 @@ This keeps the geometry logic unchanged while making tool/user/speed changes loc
 
 ---
 
+## Coordinate Transform Flow
+
+Pickup-point conversion is now split into three explicit layers:
+- `HomographyTransformer.transform(...)` converts camera pixels into calibration-plane robot XY
+- `CalibrationToPickupPlaneMapper` converts calibration-plane XY into pickup-plane / home-frame XY using the declared `CALIBRATION` and `HOME` movement-group poses
+- `PickupCalculator` applies gripper XY offsets, gripper Z offsets, safe heights, and final `rz`
+
+This replaces the older implicit `(-y, x)` rotation inside `PickupCalculator`. The 90 degree relationship between the calibration and pickup planes is now handled as a proper rigid frame conversion with both:
+- rotation from `CALIBRATION.rz` to `HOME.rz`
+- translation from the `CALIBRATION` origin to the `HOME` origin
+
+As a result:
+- the homography remains valid only for the calibration plane
+- the pickup-plane conversion is explicit, logged, and testable independently
+- gripper compensation stays isolated from plane-frame conversion
+
+The transform handler now logs the full chain:
+- image pickup point
+- calibration-plane robot point from homography
+- pickup-plane robot point after calibration-to-pickup mapping
+
 ## Diagnostics
 
 `PickAndPlaceProcess` now publishes structured diagnostics snapshots during startup, matching, transform, tooling, height resolution, pick, place, plane planning, and shutdown.
@@ -140,8 +161,11 @@ The visualizer now uses these diagnostics to drive a stage-by-stage operator flo
 - `tooling.return_home`
 - `height.resolve`
 - `plane.plan`
-- `pick.execute`
-- `place.execute`
+- `pick.descent`
+- `pick.pickup`
+- `pick.lift`
+- `place.approach`
+- `place.drop`
 - `placement.finalize`
 - `placement.move_to_calibration`
 - `placement.return_home`
@@ -161,8 +185,10 @@ Pick-and-place now requests calibration moves explicitly where the workflow need
 
 ## Preservation Notes
 
-The pickup and placement math was kept intentionally compatible:
-- the pickup calculator still performs the same XY rotation/alignment and offset calculation
+The pickup and placement math was intentionally separated by responsibility:
+- homography remains the camera-to-calibration-plane transform
+- pickup-plane conversion is now handled by a dedicated calibration-to-pickup mapper
+- pickup calculation now assumes its input XY is already in the pickup-plane frame and only applies gripper offsets / heights / final orientation
 - placement still uses the same contour orientation handling and plane packing logic
 - only the execution seams and failure reporting were tightened
 

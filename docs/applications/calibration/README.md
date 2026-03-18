@@ -9,9 +9,9 @@ Single-screen workflow for calibrating the camera lens and the robot-to-camera s
 ```
 calibration/
 ├── service/
-│   ├── i_calibration_service.py              ← ICalibrationService (9 methods)
+│   ├── i_calibration_service.py              ← ICalibrationService (10 methods)
 │   ├── stub_calibration_service.py           ← In-memory stub (always returns success)
-│   └── calibration_application_service.py   ← Bridges vision_service + process_controller + transformer
+│   └── calibration_application_service.py   ← Bridges vision_service + process_controller + transformer + camera TCP offset calibrator
 ├── model/
 │   └── calibration_model.py                  ← Thin delegation to ICalibrationService
 ├── view/
@@ -31,6 +31,7 @@ class ICalibrationService(ABC):
     def calibrate_camera(self)             -> tuple[bool, str]: ...
     def calibrate_robot(self)              -> tuple[bool, str]: ...
     def calibrate_camera_and_robot(self)   -> tuple[bool, str]: ...
+    def calibrate_camera_tcp_offset(self)  -> tuple[bool, str]: ...
     def stop_calibration(self)             -> None: ...
     def is_calibrated(self)                -> bool: ...
     def test_calibration(self)             -> tuple[bool, str]: ...
@@ -53,6 +54,7 @@ CalibrationApplicationService(
     robot_config:        _IRobotConfig    = None,
     calib_config:        _ICalibConfig    = None,
     transformer:         ICoordinateTransformer = None,  # pixel → robot mm
+    camera_tcp_offset_calibrator: _ICameraTcpOffsetCalibrator = None,
 )
 ```
 
@@ -62,7 +64,8 @@ CalibrationApplicationService(
 | `calibrate_camera()` | `vision_service.calibrate_camera()` |
 | `calibrate_robot()` | `process_controller.calibrate()` → returns `(True, "started")` |
 | `calibrate_camera_and_robot()` | `calibrate_camera()` first; if success → `process_controller.calibrate()` |
-| `stop_calibration()` | `process_controller.stop_calibration()` |
+| `calibrate_camera_tcp_offset()` | Requires `is_calibrated() == True`; then runs the dedicated camera-TCP offset calibration service |
+| `stop_calibration()` | `process_controller.stop_calibration()` and stops the camera-TCP offset calibrator if one is active |
 | `is_calibrated()` | Checks that both matrix files exist on disk |
 | `test_calibration()` | Detects ArUco markers, converts pixels to robot mm via `transformer`, moves robot to each marker |
 | `stop_test_calibration()` | Sets `_stop_test = True` to abort an in-progress test |
@@ -105,6 +108,12 @@ User presses "Calibrate Robot"
   → starts RobotCalibrationProcess (see engine/robot/calibration/)
   → publishes process state events — controller subscribes via broker
 
+User presses "Calibrate Camera TCP Offset"
+  → service.calibrate_camera_tcp_offset()
+  → requires existing camera + robot calibration files
+  → runs the dedicated camera-to-TCP offset calibration routine
+  → saves solved `tcp_x_offset` / `tcp_y_offset` back into `robot_config`
+
 User presses "Test Calibration"
   → service.test_calibration()
   → transformer.reload() picks up latest matrix
@@ -123,6 +132,7 @@ transformer = (
     HomographyTransformer(vision_service.camera_to_robot_matrix_path)
     if vision_service is not None else None
 )
+camera_tcp_offset_calibrator = CameraTcpOffsetCalibrationService(...)
 service = CalibrationApplicationService(
     vision_service     = vision_service,
     process_controller = robot_system.coordinator,
@@ -131,6 +141,7 @@ service = CalibrationApplicationService(
     robot_config       = robot_system._robot_config,
     calib_config       = robot_system._robot_calibration,
     transformer        = transformer,
+    camera_tcp_offset_calibrator = camera_tcp_offset_calibrator,
 )
 return WidgetApplication(widget_factory=lambda ms: CalibrationFactory(ms, jog_service).build(service))
 ```

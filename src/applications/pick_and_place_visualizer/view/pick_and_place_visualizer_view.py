@@ -46,6 +46,24 @@ _STATE_STOPPED = "color: #888;    font-size: 9pt; font-weight: bold; background:
 _STATE_ERROR   = "color: #C62828; font-size: 9pt; font-weight: bold; background: transparent;"
 
 _MATCH_COLS = ["WP Name", "ID", "Gripper", "Orientation"]
+_SMALL_TOGGLE_STYLE = """
+QPushButton {
+    background: white;
+    color: #1A1A2E;
+    border: 1px solid #CFCFCF;
+    border-radius: 4px;
+    font-size: 9pt;
+    padding: 4px 10px;
+}
+QPushButton:checked {
+    background: #E6F4EA;
+    border-color: #2E7D32;
+    color: #1E4620;
+}
+QPushButton:hover {
+    background: #F6F6F6;
+}
+"""
 
 
 class PickAndPlaceVisualizerView(IApplicationView):
@@ -60,6 +78,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def __init__(self, parent=None):
         super().__init__("PickAndPlaceVisualizer", parent)
+        self._crosshair_enabled = False
 
     def setup_ui(self) -> None:
         self.setStyleSheet(f"background-color: {BG_COLOR};")
@@ -174,9 +193,18 @@ class PickAndPlaceVisualizerView(IApplicationView):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
 
+        hdr_row = QHBoxLayout()
         hdr = QLabel("Camera Feed")
         hdr.setStyleSheet(LABEL_STYLE)
-        layout.addWidget(hdr)
+        hdr_row.addWidget(hdr)
+        hdr_row.addStretch()
+        self._crosshair_btn = QPushButton("Crosshair")
+        self._crosshair_btn.setCheckable(True)
+        self._crosshair_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._crosshair_btn.setStyleSheet(_SMALL_TOGGLE_STYLE)
+        self._crosshair_btn.toggled.connect(self._on_crosshair_toggled)
+        hdr_row.addWidget(self._crosshair_btn)
+        layout.addLayout(hdr_row)
 
         self._feed_label = QLabel("No feed")
         self._feed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -272,7 +300,15 @@ class PickAndPlaceVisualizerView(IApplicationView):
     # ── Inbound setters ───────────────────────────────────────────────
 
     def update_camera_frame(self, frame: np.ndarray) -> None:
-        rgb  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        display_frame = frame.copy()
+        if self._crosshair_enabled:
+            height, width = display_frame.shape[:2]
+            cx = width // 2
+            cy = height // 2
+            cv2.line(display_frame, (0, cy), (width - 1, cy), (0, 255, 0), 1)
+            cv2.line(display_frame, (cx, 0), (cx, height - 1), (0, 255, 0), 1)
+
+        rgb  = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb.shape
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
         px   = QPixmap.fromImage(qimg).scaled(
@@ -413,6 +449,9 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _on_clear_log(self) -> None:
         self._log_text.clear()
+
+    def _on_crosshair_toggled(self, checked: bool) -> None:
+        self._crosshair_enabled = checked
 
     def changeEvent(self, event: QEvent) -> None:
         if event.type() == QEvent.Type.LanguageChange:

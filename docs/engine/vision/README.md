@@ -106,6 +106,8 @@ class IVisionService(ABC):
     def detect_aruco_markers(self, image) -> tuple: ...
 ```
 
+`set_draw_contours(False)` is used by calibration routines that need a clean image stream for marker or chessboard detection. The camera-TCP offset calibration now snapshots the current contour-drawing state, disables it for the duration of the routine, and restores it afterward if it had originally been enabled.
+
 ---
 
 ## `HomographyTransformer`

@@ -61,6 +61,15 @@ class GlueNavigationService:
     def get_group_names(self) -> list[str]:
         return self._nav.get_group_names()
 
+    def get_group_position(self, group_name: str) -> list[float] | None:
+        try:
+            config = self._nav._get_config()
+            group = self._nav._get_group(config, group_name)
+            position = group.parse_position()
+            return list(position) if position is not None else None
+        except Exception:
+            return None
+
     def _move_with_z_offset(
         self,
         group_name: str,

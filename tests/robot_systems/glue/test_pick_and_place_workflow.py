@@ -32,8 +32,8 @@ class TestPickupCalculator(unittest.TestCase):
             orientation=0.0,
         )
 
-        self.assertAlmostEqual(positions.descent.x, -21.990999999999993)
-        self.assertAlmostEqual(positions.descent.y, 110.429)
+        self.assertAlmostEqual(positions.descent.x, 10.0)
+        self.assertAlmostEqual(positions.descent.y, 20.0)
         self.assertAlmostEqual(positions.pickup.z, 352.0)
         self.assertEqual(positions.descent.rx, 180.0)
         self.assertEqual(positions.descent.ry, 0.0)
@@ -203,7 +203,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
 
         self.assertEqual(result.state, ProcessState.STOPPED)
         self.assertEqual(
-            checkpoints[:9],
+            checkpoints[:11],
             [
                 "startup.move_home",
                 "matching.run",
@@ -213,10 +213,13 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
                 "tooling.return_home",
                 "height.resolve",
                 "plane.plan",
-                "pick.execute",
+                "pick.descent",
+                "pick.pickup",
+                "pick.lift",
             ],
         )
-        self.assertIn("place.execute", checkpoints)
+        self.assertIn("place.approach", checkpoints)
+        self.assertIn("place.drop", checkpoints)
         self.assertIn("placement.finalize", checkpoints)
         self.assertIn("placement.move_to_calibration", checkpoints)
         self.assertIn("placement.return_home", checkpoints)

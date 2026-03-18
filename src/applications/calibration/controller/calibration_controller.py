@@ -37,6 +37,7 @@ class _Bridge(QObject):
     camera_process_finished = pyqtSignal(bool, str)
     stop_btn_enabled        = pyqtSignal(bool)
     test_btn_enabled        = pyqtSignal(bool)
+    camera_tcp_btn_enabled  = pyqtSignal(bool)
     test_finished           = pyqtSignal(bool, str)
     depth_map_btn_enabled   = pyqtSignal(bool)
 
@@ -54,15 +55,18 @@ class CalibrationController(IApplicationController):
         self._subs:    List[Tuple[str, Callable]] = []
         self._threads: List[Tuple[QThread, _Worker]] = []
         self._running               = False
+        self._active                = False
         self._robot_process_running = False   # ← tracks robot calibration process state
         self._logger   = logging.getLogger(self.__class__.__name__)
 
     def load(self) -> None:
         self._running = True
+        self._active = True
         self._bridge.camera_frame.connect(self._on_camera_frame)
         self._bridge.log_received.connect(self._on_log_received)
         self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
         self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
+        self._bridge.camera_tcp_btn_enabled.connect(self._view.set_camera_tcp_offset_enabled)
         self._bridge.test_finished.connect(self._on_test_finished)
         self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
         self._view.stop_calibration_requested.connect(self._on_stop_calibration)
@@ -70,11 +74,12 @@ class CalibrationController(IApplicationController):
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
-        self._view.set_test_calibration_enabled(self._model.is_calibrated())
+        self._refresh_calibration_dependent_actions()
         self._view.set_depth_map_enabled(self._model.get_height_calibration_data() is not None)
 
     def stop(self) -> None:
         self._running = False
+        self._active = False
         self._model.stop_calibration()
         self._model.stop_test_calibration()
         for topic, cb in reversed(self._subs):
@@ -111,7 +116,7 @@ class CalibrationController(IApplicationController):
         self._bridge.stop_btn_enabled.emit(False)
 
     def _on_camera_frame(self, frame) -> None:
-        if self._running and frame is not None:
+        if self._active and frame is not None:
             self._view.update_camera_view(frame)
 
     def _on_log_received(self, msg: str) -> None:
@@ -125,6 +130,7 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_camera_requested.connect(self._on_calibrate_camera)
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
+        self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
         self._view.view_depth_map_requested.connect(self._on_view_depth_map)
 
@@ -140,11 +146,17 @@ class CalibrationController(IApplicationController):
 
     def _on_calibrate_robot(self) -> None:
         self._view.set_buttons_enabled(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
         _, msg = self._model.calibrate_robot()
         self._view.append_log(f"▶ {msg}")
 
     def _on_calibrate_sequence(self) -> None:
         self._run_in_thread(self._model.calibrate_camera_and_robot)
+
+    def _on_calibrate_camera_tcp_offset(self) -> None:
+        self._view.set_buttons_enabled(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._run_in_thread(self._model.calibrate_camera_tcp_offset, manage_buttons=False)
 
     def _on_task_done(self, result) -> None:
         if not self._running:
@@ -152,6 +164,7 @@ class CalibrationController(IApplicationController):
         ok, msg = result
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
         self._view.set_buttons_enabled(True)
+        self._refresh_calibration_dependent_actions()
 
     def _on_task_failed(self, error: str) -> None:
         if not self._running:
@@ -159,6 +172,7 @@ class CalibrationController(IApplicationController):
         self._logger.error("Calibration task failed: %s", error)
         self._view.append_log(f"✗ {error}")
         self._view.set_buttons_enabled(True)
+        self._refresh_calibration_dependent_actions()
 
     # main-thread bridge slot:
     def _on_process_finished(self, ok: bool, msg: str) -> None:
@@ -175,19 +189,19 @@ class CalibrationController(IApplicationController):
             self._robot_process_running = True
             self._bridge.stop_btn_enabled.emit(True)
             self._bridge.test_btn_enabled.emit(False)
+            self._bridge.camera_tcp_btn_enabled.emit(False)
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
             self._robot_process_running = False
             self._bridge.stop_btn_enabled.emit(False)
+            self._refresh_calibration_dependent_actions()
 
         if event.state == ProcessState.STOPPED:
             self._bridge.process_finished.emit(True, "Robot calibration complete")
-            self._bridge.test_btn_enabled.emit(True)
             self._bridge.depth_map_btn_enabled.emit(
                 self._model.get_height_calibration_data() is not None
             )
         elif event.state == ProcessState.ERROR:
             self._bridge.process_finished.emit(False, event.message or "Robot calibration failed")
-            self._bridge.test_btn_enabled.emit(False)
 
     def _on_view_depth_map(self) -> None:
         from src.applications.calibration.view.depth_map_dialog import DepthMapDialog
@@ -201,6 +215,7 @@ class CalibrationController(IApplicationController):
     def _on_test_calibration(self) -> None:
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
         worker = _Worker(self._model.test_calibration)
@@ -227,12 +242,14 @@ class CalibrationController(IApplicationController):
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
         self._view.set_buttons_enabled(True)
         self._bridge.stop_btn_enabled.emit(False)
-        self._bridge.test_btn_enabled.emit(True)
+        self._refresh_calibration_dependent_actions()
 
     # ── Thread helper ─────────────────────────────────────────────────
 
-    def _run_in_thread(self, fn: Callable) -> None:
-        self._view.set_buttons_enabled(False)
+    def _run_in_thread(self, fn: Callable, manage_buttons: bool = True) -> None:
+        if manage_buttons:
+            self._view.set_buttons_enabled(False)
+            self._bridge.camera_tcp_btn_enabled.emit(False)
         thread = QThread()
         worker = _Worker(fn)
         worker.moveToThread(thread)
@@ -252,3 +269,7 @@ class CalibrationController(IApplicationController):
         self._broker.subscribe(topic, cb)
         self._subs.append((topic, cb))
 
+    def _refresh_calibration_dependent_actions(self) -> None:
+        calibrated = self._model.is_calibrated()
+        self._bridge.test_btn_enabled.emit(calibrated)
+        self._bridge.camera_tcp_btn_enabled.emit(calibrated and not self.is_calibrating())

@@ -159,4 +159,5 @@ This means application startup can continue even when the bridge is down, and su
 - **State monitoring runs in a daemon thread**: `RobotStateManager` polls the robot at 0.5s intervals. The thread is daemonized and doesn't block process exit.
 - **Position format**: All positions are `List[float]` with 6 elements: `[x, y, z, rx, ry, rz]` in mm and degrees.
 - **Return codes vs booleans**: `IRobot` methods return `int` (`0` = started immediately, `>0` = accepted and queued, negative = error). `IMotionService` wraps these and returns `bool` (`True` = accepted motion command). This distinction is maintained at the interface boundary.
+- **Blocking waits are pose-aware**: when `wait_to_reach=True`, the default `MotionService` waits for Cartesian convergence and, for 6D targets, orientation convergence with wrapped-angle handling. This prevents orientation-only moves from being acknowledged early.
 - **Bridge-down is not bootstrap-fatal**: for the ROS bridge transport, unavailable hardware should surface as `robot/state = disconnected`, allowing the rest of the platform to boot and show degraded availability.

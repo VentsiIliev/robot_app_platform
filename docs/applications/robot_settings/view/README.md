@@ -41,7 +41,9 @@ RobotSettingsView
        │                           TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP
        ├─ "Safety" tab          → SAFETY_LIMITS_GROUP
        ├─ "Movement Groups" tab → MovementGroupsTab (raw QWidget tab)
-       └─ "Calibration" tab     → CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP
+       └─ "Calibration" tab     → CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,
+                                   CALIBRATION_AXIS_MAPPING_GROUP,
+                                   CALIBRATION_CAMERA_TCP_GROUP
 ```
 
 ---
@@ -58,7 +60,9 @@ Defines the field group constants consumed by `RobotSettingsView.setup_ui()`:
 | `OFFSET_DIRECTION_GROUP` | `offset_pos_x`, `offset_neg_x`, `offset_pos_y`, `offset_neg_y` |
 | `SAFETY_LIMITS_GROUP` | all 12 `safety_*_min/max` fields |
 | `CALIBRATION_ADAPTIVE_GROUP` | all 6 `calib_*` adaptive movement fields |
-| `CALIBRATION_MARKER_GROUP` | `calib_z_target`, `calib_required_ids` |
+| `CALIBRATION_MARKER_GROUP` | `calib_z_target`, `calib_required_ids`, `calib_velocity`, `calib_acceleration` |
+| `CALIBRATION_AXIS_MAPPING_GROUP` | `calib_axis_marker_id`, `calib_axis_move_mm`, `calib_axis_max_attempts`, `calib_axis_delay_after_move` |
+| `CALIBRATION_CAMERA_TCP_GROUP` | `calib_tcp_marker_id`, `calib_tcp_rotation_step_deg`, `calib_tcp_iterations`, `calib_tcp_approach_z`, `calib_tcp_approach_rx`, `calib_tcp_approach_ry`, `calib_tcp_approach_rz`, `calib_tcp_velocity`, `calib_tcp_acceleration`, `calib_tcp_settle_time_s`, `calib_tcp_detection_attempts`, `calib_tcp_retry_delay_s` |
 
 ---
 

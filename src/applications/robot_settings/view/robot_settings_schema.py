@@ -66,3 +66,18 @@ CALIBRATION_AXIS_MAPPING_GROUP = SettingGroup("Axis Mapping", [
     SettingField("calib_axis_max_attempts",    "Max Detect Attempts",  "spinbox",        default=100,   min_val=1,   max_val=1000, step=10,  step_options=[10, 50, 100]),
     SettingField("calib_axis_delay_after_move","Delay After Move",     "double_spinbox", default=1.0,   min_val=0.0, max_val=10.0, decimals=2, suffix=" s", step=0.1, step_options=[0.1, 0.5, 1.0]),
 ])
+
+CALIBRATION_CAMERA_TCP_GROUP = SettingGroup("Camera TCP Offset Calibration", [
+    SettingField("calib_tcp_marker_id",          "Marker ID",           "spinbox",        default=4,     min_val=0,   max_val=255,  step=1,   step_options=[1]),
+    SettingField("calib_tcp_rotation_step_deg",  "Rotation Step",       "double_spinbox", default=15.0,  min_val=0.1, max_val=180.0, decimals=2, suffix=" °", step=0.1, step_options=[0.1, 1.0, 5.0, 15.0]),
+    SettingField("calib_tcp_iterations",         "Iterations",          "spinbox",        default=6,     min_val=1,   max_val=100,  step=1,   step_options=[1, 2, 5, 10]),
+    SettingField("calib_tcp_approach_z",         "Approach Z",          "double_spinbox", default=300.0, min_val=0.0, max_val=1000.0, decimals=3, suffix=" mm", step=0.1, step_options=[0.1, 1.0, 10.0, 50.0]),
+    SettingField("calib_tcp_approach_rx",        "Approach RX",         "double_spinbox", default=180.0, min_val=-180.0, max_val=180.0, decimals=3, suffix=" °", step=0.1, step_options=[0.1, 1.0, 5.0, 10.0]),
+    SettingField("calib_tcp_approach_ry",        "Approach RY",         "double_spinbox", default=0.0,   min_val=-180.0, max_val=180.0, decimals=3, suffix=" °", step=0.1, step_options=[0.1, 1.0, 5.0, 10.0]),
+    SettingField("calib_tcp_approach_rz",        "Reference RZ",        "double_spinbox", default=0.0,   min_val=-180.0, max_val=180.0, decimals=3, suffix=" °", step=0.1, step_options=[0.1, 1.0, 5.0, 10.0]),
+    SettingField("calib_tcp_velocity",           "Velocity",            "spinbox",        default=20,    min_val=1,   max_val=1000, suffix=" mm/s",  step=1, step_options=[1, 5, 10, 50]),
+    SettingField("calib_tcp_acceleration",       "Acceleration",        "spinbox",        default=10,    min_val=1,   max_val=1000, suffix=" mm/s²", step=1, step_options=[1, 5, 10, 50]),
+    SettingField("calib_tcp_settle_time_s",      "Settle Time",         "double_spinbox", default=1.0,   min_val=0.0, max_val=10.0, decimals=2, suffix=" s", step=0.1, step_options=[0.1, 0.5, 1.0, 2.0]),
+    SettingField("calib_tcp_detection_attempts", "Detection Attempts",  "spinbox",        default=20,    min_val=1,   max_val=1000, step=1, step_options=[1, 5, 10, 20, 50]),
+    SettingField("calib_tcp_retry_delay_s",      "Retry Delay",         "double_spinbox", default=0.1,   min_val=0.0, max_val=10.0, decimals=2, suffix=" s", step=0.01, step_options=[0.01, 0.1, 0.5, 1.0]),
+])

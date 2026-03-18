@@ -10,7 +10,7 @@ from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.robot_jog_widget import RobotJogWidget
 
 from src.applications.robot_settings.view.robot_settings_schema import (
-    CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_MARKER_GROUP,
+    CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_CAMERA_TCP_GROUP, CALIBRATION_MARKER_GROUP,
     GLOBAL_MOTION_GROUP, OFFSET_DIRECTION_GROUP, ROBOT_INFO_GROUP,
     SAFETY_LIMITS_GROUP, TCP_STEP_GROUP,
 )
@@ -50,7 +50,15 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("General",             [ROBOT_INFO_GROUP, GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP])
         self._settings_view.add_tab("Safety",              [SAFETY_LIMITS_GROUP])
         self._settings_view.add_raw_tab("Movement Groups", self._movement_tab)
-        self._settings_view.add_tab("Calibration",         [CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,CALIBRATION_AXIS_MAPPING_GROUP])
+        self._settings_view.add_tab(
+            "Calibration",
+            [
+                CALIBRATION_ADAPTIVE_GROUP,
+                CALIBRATION_MARKER_GROUP,
+                CALIBRATION_AXIS_MAPPING_GROUP,
+                CALIBRATION_CAMERA_TCP_GROUP,
+            ],
+        )
         layout.addWidget(self._settings_view)
 
         self._drawer = DrawerToggle(self, side="right", width=320)

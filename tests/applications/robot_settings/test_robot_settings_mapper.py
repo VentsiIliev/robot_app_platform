@@ -161,6 +161,12 @@ class TestRobotCalibrationMapperToFlatDict(unittest.TestCase):
             "calib_velocity", "calib_acceleration",
             "calib_axis_marker_id", "calib_axis_move_mm",
             "calib_axis_max_attempts", "calib_axis_delay_after_move",
+            "calib_tcp_marker_id", "calib_tcp_rotation_step_deg",
+            "calib_tcp_iterations", "calib_tcp_approach_z",
+            "calib_tcp_approach_rx", "calib_tcp_approach_ry",
+            "calib_tcp_approach_rz", "calib_tcp_velocity",
+            "calib_tcp_acceleration", "calib_tcp_settle_time_s",
+            "calib_tcp_detection_attempts", "calib_tcp_retry_delay_s",
         }
         self.assertEqual(expected, set(flat.keys()))
 
@@ -170,6 +176,8 @@ class TestRobotCalibrationMapperToFlatDict(unittest.TestCase):
         self.assertEqual(flat["calib_max_step_mm"],   25.0)
         self.assertEqual(flat["calib_z_target"],      300)
         self.assertEqual(flat["calib_required_ids"],  [0, 1, 2, 3, 4, 5, 6, 8])
+        self.assertEqual(flat["calib_tcp_marker_id"], 4)
+        self.assertEqual(flat["calib_tcp_rotation_step_deg"], 15.0)
 
 
 class TestRobotCalibrationMapperFromFlatDict(unittest.TestCase):
@@ -193,6 +201,36 @@ class TestRobotCalibrationMapperFromFlatDict(unittest.TestCase):
         self.assertEqual(result.adaptive_movement.max_step_mm, 50.0)
         self.assertEqual(result.adaptive_movement.k,           3.0)
 
+    def test_roundtrip_camera_tcp_calibration_config(self):
+        flat = RobotCalibrationMapper.to_flat_dict(self.base)
+        flat["calib_tcp_marker_id"] = 8
+        flat["calib_tcp_rotation_step_deg"] = 22.5
+        flat["calib_tcp_iterations"] = 9
+        flat["calib_tcp_approach_z"] = 345.5
+        flat["calib_tcp_approach_rx"] = 179.0
+        flat["calib_tcp_approach_ry"] = 1.5
+        flat["calib_tcp_approach_rz"] = 90.0
+        flat["calib_tcp_velocity"] = 33
+        flat["calib_tcp_acceleration"] = 12
+        flat["calib_tcp_settle_time_s"] = 1.75
+        flat["calib_tcp_detection_attempts"] = 44
+        flat["calib_tcp_retry_delay_s"] = 0.25
+
+        result = RobotCalibrationMapper.from_flat_dict(flat, self.base)
+
+        self.assertEqual(result.camera_tcp_offset.marker_id, 8)
+        self.assertEqual(result.camera_tcp_offset.rotation_step_deg, 22.5)
+        self.assertEqual(result.camera_tcp_offset.iterations, 9)
+        self.assertEqual(result.camera_tcp_offset.approach_z, 345.5)
+        self.assertEqual(result.camera_tcp_offset.approach_rx, 179.0)
+        self.assertEqual(result.camera_tcp_offset.approach_ry, 1.5)
+        self.assertEqual(result.camera_tcp_offset.approach_rz, 90.0)
+        self.assertEqual(result.camera_tcp_offset.velocity, 33)
+        self.assertEqual(result.camera_tcp_offset.acceleration, 12)
+        self.assertEqual(result.camera_tcp_offset.settle_time_s, 1.75)
+        self.assertEqual(result.camera_tcp_offset.detection_attempts, 44)
+        self.assertEqual(result.camera_tcp_offset.retry_delay_s, 0.25)
+
     def test_missing_keys_fall_back_to_base(self):
         result = RobotCalibrationMapper.from_flat_dict({}, self.base)
         self.assertEqual(result.z_target, self.base.z_target)
@@ -208,6 +246,7 @@ class TestRobotCalibrationMapperFromFlatDict(unittest.TestCase):
         self.assertEqual(result.z_target,                      self.base.z_target)
         self.assertEqual(result.adaptive_movement.min_step_mm, self.base.adaptive_movement.min_step_mm)
         self.assertEqual(result.required_ids,                  self.base.required_ids)
+        self.assertEqual(result.camera_tcp_offset.marker_id,   self.base.camera_tcp_offset.marker_id)
 
 
 if __name__ == "__main__":

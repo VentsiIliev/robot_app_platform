@@ -33,11 +33,12 @@ IRobotService (public interface)
 
 **File:** `motion_service.py`
 
-Implements `IMotionService`. Wraps `IRobot` calls with safety checking and optional blocking position wait.
+Implements `IMotionService`. Wraps `IRobot` calls with safety checking and optional blocking pose wait.
 
 ```python
 class MotionService(IMotionService):
     _WAIT_THRESHOLD_MM = 2.0
+    _WAIT_THRESHOLD_DEG = 1.0
     _WAIT_DELAY_S      = 0.1
     _WAIT_TIMEOUT_S    = 10.0
 
@@ -63,15 +64,16 @@ If `messaging_service` is provided, `MotionService` subscribes to `RobotTopics.P
 
 **`wait_to_reach` semantics:**
 
-When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position` checks position every `_WAIT_DELAY_S = 0.1s` until:
-- Euclidean distance on (x, y, z) only: `√(Σ(aᵢ − bᵢ)²)` ≤ `_WAIT_THRESHOLD_MM = 2.0mm`
-- Or timeout after `_WAIT_TIMEOUT_S = 10.0s` (logs warning, returns `False`)
+When `wait_to_reach=True`, after issuing the motion command, `_wait_for_position` checks the robot pose every `_WAIT_DELAY_S = 0.1s` until:
+- Euclidean distance on `(x, y, z)` is ≤ `_WAIT_THRESHOLD_MM = 2.0mm`
+- and, when the target includes orientation, the wrapped angular error on `(rx, ry, rz)` is ≤ `_WAIT_THRESHOLD_DEG = 1.0°`
+- or timeout after `_WAIT_TIMEOUT_S = 10.0s` (logs warning, returns `False`)
 
 If `wait_cancelled` is provided, `_wait_for_position` also checks that callback on each poll loop and aborts the wait immediately when it returns `True`.
 
 Position is read from `self._cached_position` (updated by the `"robot/position"` subscription). If the cache is empty (subscription not yet received), it falls back to `self._robot.get_current_position()` directly. This avoids a concurrent XML-RPC connection to the robot while the poll thread is already reading the same endpoint.
 
-Rotation axes (rx, ry, rz) are not included in the distance calculation.
+Angular error uses wrapped-angle comparison, so targets around `-180° / 180°` are treated correctly. Example: current `rz=-179.5°` and target `rz=179.8°` is treated as `0.7°`, not `359.3°`.
 
 **`stop_motion()` retries:**
 

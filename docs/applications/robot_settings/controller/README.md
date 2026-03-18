@@ -35,7 +35,7 @@ load()
   → view.load_movement_groups(config.movement_groups)
 ```
 
-Note: `_calibration` is loaded inside `model.load()` but not passed to the view separately. Calibration fields appear in the "Calibration" tab via the unified flat dict that `RobotSettingsMapper.to_flat_dict()` produces from the combined `RobotSettings` object. The calibration values are merged into the flat dict at save time by `RobotCalibrationMapper`.
+Note: `_calibration` is loaded inside `model.load()` but not passed to the view separately. Calibration fields appear in the "Calibration" tab via the unified flat dict that `RobotSettingsMapper.to_flat_dict()` produces from the combined `RobotSettings` object. The calibration values, including the camera-TCP offset calibration settings, are merged into the flat dict at save time by `RobotCalibrationMapper`.
 
 ---
 

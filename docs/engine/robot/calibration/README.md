@@ -2,12 +2,15 @@
 
 Engine-level service for robot-to-camera spatial calibration. Moves the robot through a structured ArUco-marker grid, records robot positions and corresponding camera pixel coordinates, and computes the homography (image-to-robot mapping matrix) that allows the vision system to express workpiece positions in robot space.
 
+The package also contains a separate camera-TCP offset calibration routine. That routine assumes the homography already exists, repeatedly centers one configured ArUco marker under the camera, samples several wrist `rz` rotations, solves the rotating local XY offset between the camera center and the real robot TCP, and saves the result back into `RobotSettings.tcp_x_offset` / `tcp_y_offset`.
+
 ---
 
 ## Package Structure
 
 ```
 src/engine/robot/calibration/
+├── camera_tcp_offset_calibration_service.py ← Standalone camera-center → TCP XY offset calibration
 ├── i_robot_calibration_service.py         ← IRobotCalibrationService ABC
 ├── robot_calibration_service.py           ← Concrete implementation (runs pipeline)
 └── robot_calibration/
@@ -63,6 +66,34 @@ RobotCalibrationService(
 `run_calibration()` builds a `RefactoredRobotCalibrationPipeline`, calls `pipeline.run()` (blocking), and returns `(success, message)`. Log messages from the calibration package are forwarded to the broker via a `_BrokerLogHandler` if `events_config` is provided.
 
 `stop_calibration()` calls `pipeline.calibration_state_machine.stop_execution()` and `robot_service.stop_motion()`.
+
+---
+
+## `CameraTcpOffsetCalibrationService`
+
+Standalone calibration service for solving the XY offset between the camera optical center and the robot TCP.
+
+High-level flow:
+
+1. Reload the homography from `vision_service.camera_to_robot_matrix_path`
+2. Move to calibration position
+3. Detect one configured ArUco marker and transform its center to robot XY with the homography
+4. Move to that center at the configured approach pose
+5. Repeat for several `rz` samples:
+   - rotate to the next sample angle
+   - detect the same marker again
+   - transform its detected center with the homography
+   - compare the transformed camera-center point to the current robot XY
+   - back-rotate that world correction into the reference tool frame
+6. Average the local XY corrections and save them into `RobotSettings.tcp_x_offset` / `tcp_y_offset`
+
+Operational details:
+
+- Uses the raw homography result, not `transform_to_tcp()`
+- Temporarily disables `draw_contours` on the vision system while the routine runs
+- Restores `draw_contours` afterward only if it had been enabled before the run
+- Uses blocking robot moves with pose convergence enabled, so each sample waits for both XYZ and wrist orientation to settle before the next marker measurement is taken
+- Supports stop requests by setting an internal `threading.Event` and calling `robot_service.stop_motion()`
 
 ---
 

@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Protocol
+from typing import Optional, Protocol
 
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
@@ -40,12 +40,19 @@ class _ICalibConfig(Protocol):
     acceleration: int
 
 
+class _ICameraTcpOffsetCalibrator(Protocol):
+    def calibrate(self) -> tuple[bool, str]: ...
+
+    def stop(self) -> None: ...
+
+
 class CalibrationApplicationService(ICalibrationService):
 
     def __init__(self, vision_service: IVisionService, process_controller: _IProcessController,
                  robot_service: _IRobotService = None, height_service: _IHeightService = None,
                  robot_config: _IRobotConfig = None, calib_config: _ICalibConfig = None,
                  transformer: ICoordinateTransformer = None,
+                 camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  use_marker_centre: bool = False):
         self._vision_service      = vision_service
         self._process_controller  = process_controller
@@ -54,6 +61,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._robot_config        = robot_config
         self._calib_config        = calib_config
         self._transformer         = transformer
+        self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._use_marker_centre   = use_marker_centre
         self._stop_test           = False
 
@@ -99,8 +107,17 @@ class CalibrationApplicationService(ICalibrationService):
         self._process_controller.calibrate()
         return True, "Camera calibrated — robot calibration started"
 
+    def calibrate_camera_tcp_offset(self) -> tuple[bool, str]:
+        if not self.is_calibrated():
+            return False, "System not calibrated — run robot calibration first"
+        if self._camera_tcp_offset_calibrator is None:
+            return False, "Camera TCP offset calibration is not configured"
+        return self._camera_tcp_offset_calibrator.calibrate()
+
     def stop_calibration(self) -> None:
         self._process_controller.stop_calibration()
+        if self._camera_tcp_offset_calibrator is not None:
+            self._camera_tcp_offset_calibrator.stop()
 
     def is_calibrated(self) -> bool:
         if self._vision_service is None:

@@ -12,6 +12,7 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 class MotionService(IMotionService):
     _WAIT_THRESHOLD_MM = 2.0
+    _WAIT_THRESHOLD_DEG = 1.0
     _WAIT_DELAY_S = 0.1
     _WAIT_TIMEOUT_S = 10.0
     _STOP_RETRY_DELAY_S = 0.05
@@ -189,6 +190,7 @@ class MotionService(IMotionService):
             self,
             target: List[float],
             threshold: float = _WAIT_THRESHOLD_MM,
+            orientation_threshold_deg: float = _WAIT_THRESHOLD_DEG,
             delay: float = _WAIT_DELAY_S,
             timeout: float = _WAIT_TIMEOUT_S,
             cancelled: Callable[[], bool] | None = None,
@@ -201,8 +203,23 @@ class MotionService(IMotionService):
             current = self._cached_position or self._robot.get_current_position()
             if current and len(current) >= 3:
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))
-                if dist <= threshold:
+                orientation_delta = 0.0
+                if len(target) >= 6 and len(current) >= 6:
+                    orientation_delta = max(
+                        self._wrapped_angle_delta_deg(current[i], target[i])
+                        for i in range(3, 6)
+                    )
+                if dist <= threshold and orientation_delta <= orientation_threshold_deg:
                     return True
             time.sleep(delay)
-        self._logger.warning("Timed out waiting for robot to reach %s", target)
+        self._logger.warning(
+            "Timed out waiting for robot to reach %s within %.3fmm / %.3fdeg",
+            target,
+            threshold,
+            orientation_threshold_deg,
+        )
         return False
+
+    @staticmethod
+    def _wrapped_angle_delta_deg(current: float, target: float) -> float:
+        return abs((current - target + 180.0) % 360.0 - 180.0)

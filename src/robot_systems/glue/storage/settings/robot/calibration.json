@@ -13,6 +13,20 @@
     "max_attempts": 100,
     "delay_after_move_s": 1.0
   },
+  "camera_tcp_offset_config": {
+    "marker_id": 4,
+    "rotation_step_deg": 15.0,
+    "iterations": 6,
+    "approach_z": 300.0,
+    "approach_rx": 180.0,
+    "approach_ry": 0.0,
+    "approach_rz": 0.0,
+    "velocity": 20,
+    "acceleration": 10,
+    "settle_time_s": 1.0,
+    "detection_attempts": 20,
+    "retry_delay_s": 0.1
+  },
   "z_target": 300,
   "required_ids": [
     0,

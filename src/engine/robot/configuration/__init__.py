@@ -9,6 +9,7 @@ from .robot_settings import (
 from .robot_calibration_settings import (
     AdaptiveMovementConfig,
     AxisMappingConfig,
+    CameraTcpOffsetCalibrationConfig,
     RobotCalibrationSettings,
     RobotCalibrationSettingsSerializer,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "RobotSettingsSerializer",
     "AdaptiveMovementConfig",
     "AxisMappingConfig",
+    "CameraTcpOffsetCalibrationConfig",
     "RobotCalibrationSettings",
     "RobotCalibrationSettingsSerializer",
 ]

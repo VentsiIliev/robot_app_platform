@@ -302,10 +302,19 @@ def _build_calibration_application(robot_system):
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
     from src.applications.base.robot_jog_service import RobotJogService
+    from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
+        CameraTcpOffsetCalibrationService,
+    )
     from src.engine.vision.homography_transformer import HomographyTransformer
+    from src.robot_systems.glue.navigation import GlueNavigationService
 
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_service = robot_system.get_optional_service(ServiceID.ROBOT)
     robot_config = robot_system._robot_config
+    navigation_service = GlueNavigationService(
+        robot_system.get_service(ServiceID.NAVIGATION),
+        vision=vision_service,
+    )
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
@@ -316,19 +325,34 @@ def _build_calibration_application(robot_system):
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
         if vision_service is not None else None
     )
+    camera_tcp_offset_calibrator = (
+        CameraTcpOffsetCalibrationService(
+            vision_service=vision_service,
+            robot_service=robot_service,
+            navigation_service=navigation_service,
+            settings_service=robot_system._settings_service,
+            robot_config_key=SettingsID.ROBOT_CONFIG,
+            robot_config=robot_system._robot_config,
+            calibration_settings=robot_system._robot_calibration,
+            robot_tool=robot_system._robot_config.robot_tool,
+            robot_user=robot_system._robot_config.robot_user,
+        )
+        if vision_service is not None and robot_service is not None and robot_config is not None else None
+    )
 
     service = CalibrationApplicationService(
         vision_service=vision_service,
         process_controller=robot_system.coordinator,
-        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
+        robot_service=robot_service,
         height_service=getattr(robot_system, '_height_measuring_service', None),
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
+        camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         use_marker_centre=True,
     )
 
-    jog_service = RobotJogService(robot_system.get_optional_service(ServiceID.ROBOT))
+    jog_service = RobotJogService(robot_service)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationFactory(ms,jog_service).build(service)
     )

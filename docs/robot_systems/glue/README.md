@@ -204,6 +204,11 @@ Within the glue dispensing process, robot motion can now be configured independe
 
 The glue navigation facade now treats `move_home()` literally: it moves directly to the `HOME` group, applying the vision capture Z offset when configured, but it does not insert an automatic calibration waypoint. Any required move to `CALIBRATION` must be requested explicitly by the caller.
 
+Within pick-and-place, camera-to-robot conversion is now also split explicitly by plane:
+- homography maps image points into calibration-plane robot coordinates
+- a dedicated calibration-to-pickup mapper converts those coordinates into the pickup/home-plane frame using the declared `CALIBRATION` and `HOME` movement-group poses
+- pickup gripper offsets are applied only after that frame conversion
+
 ---
 
 ## Settings Shim Files

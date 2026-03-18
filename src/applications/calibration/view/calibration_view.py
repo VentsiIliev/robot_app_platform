@@ -154,6 +154,7 @@ class CalibrationView(IApplicationView):
     calibrate_camera_requested   = pyqtSignal()
     calibrate_robot_requested    = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
+    calibrate_camera_tcp_offset_requested = pyqtSignal()
     stop_calibration_requested   = pyqtSignal()
     test_calibration_requested   = pyqtSignal()
     view_depth_map_requested     = pyqtSignal()
@@ -255,6 +256,11 @@ class CalibrationView(IApplicationView):
         self._calibrate_robot_btn.setStyleSheet(_BTN_PRIMARY)
         layout.addWidget(self._calibrate_robot_btn)
 
+        self._calibrate_camera_tcp_offset_btn = MaterialButton("Calibrate Camera TCP Offset")
+        self._calibrate_camera_tcp_offset_btn.setStyleSheet(_BTN_PRIMARY)
+        self._calibrate_camera_tcp_offset_btn.setEnabled(False)
+        layout.addWidget(self._calibrate_camera_tcp_offset_btn)
+
         layout.addWidget(_divider())
 
         self._stop_robot_btn = MaterialButton("⏹  Stop Robot Calibration")
@@ -302,6 +308,9 @@ class CalibrationView(IApplicationView):
         self._calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
         self._calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
         self._calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
+        self._calibrate_camera_tcp_offset_btn.clicked.connect(
+            self.calibrate_camera_tcp_offset_requested.emit
+        )
         self._test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
         self._view_depth_map_btn.clicked.connect(self.view_depth_map_requested.emit)
         self._crosshair_btn.clicked.connect(self._toggle_crosshair)
@@ -327,6 +336,9 @@ class CalibrationView(IApplicationView):
 
     def set_test_calibration_enabled(self, enabled: bool) -> None:
         self._test_calibration_btn.setEnabled(enabled)
+
+    def set_camera_tcp_offset_enabled(self, enabled: bool) -> None:
+        self._calibrate_camera_tcp_offset_btn.setEnabled(enabled)
 
     def set_depth_map_enabled(self, enabled: bool) -> None:
         self._view_depth_map_btn.setEnabled(enabled)

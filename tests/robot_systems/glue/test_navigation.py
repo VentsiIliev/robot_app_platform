@@ -37,3 +37,14 @@ class TestGlueNavigationService(unittest.TestCase):
             "HOME",
             wait_cancelled=None,
         )
+
+    def test_get_group_position_returns_parsed_position(self):
+        navigation = MagicMock()
+        navigation._get_config.return_value = object()
+        group = MagicMock()
+        group.parse_position.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        navigation._get_group.return_value = group
+
+        service = GlueNavigationService(navigation=navigation)
+
+        self.assertEqual(service.get_group_position("HOME"), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])

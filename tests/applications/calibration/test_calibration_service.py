@@ -10,13 +10,14 @@ def _make_vision(capture=None, calibrate=None):
     vs = MagicMock()
     vs.capture_calibration_image.return_value = capture or (True, "ok")
     vs.calibrate_camera.return_value = calibrate or (True, "ok")
+    vs.camera_to_robot_matrix_path = "/tmp/cameraToRobotMatrix_camera_center.npy"
     return vs
 
 
-def _make_svc(capture=None, calibrate=None):
+def _make_svc(capture=None, calibrate=None, calibrator=None):
     vs = _make_vision(capture=capture, calibrate=calibrate)
     pc = MagicMock()
-    return CalibrationApplicationService(vs, pc), vs, pc
+    return CalibrationApplicationService(vs, pc, camera_tcp_offset_calibrator=calibrator), vs, pc
 
 
 class TestStubCalibrationService(unittest.TestCase):
@@ -44,6 +45,11 @@ class TestStubCalibrationService(unittest.TestCase):
 
     def test_calibrate_camera_and_robot_returns_success(self):
         ok, msg = self._stub.calibrate_camera_and_robot()
+        self.assertTrue(ok)
+        self.assertIsInstance(msg, str)
+
+    def test_calibrate_camera_tcp_offset_returns_success(self):
+        ok, msg = self._stub.calibrate_camera_tcp_offset()
         self.assertTrue(ok)
         self.assertIsInstance(msg, str)
 
@@ -92,6 +98,33 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         svc, vs, pc = _make_svc(calibrate=(False, "fail"))
         svc.calibrate_camera_and_robot()
         pc.calibrate.assert_not_called()
+
+    def test_calibrate_camera_tcp_offset_requires_existing_calibration(self):
+        svc, vs, _ = _make_svc()
+        ok, msg = svc.calibrate_camera_tcp_offset()
+        self.assertFalse(ok)
+        self.assertIn("System not calibrated", msg)
+
+    def test_calibrate_camera_tcp_offset_delegates_to_calibrator_when_calibrated(self):
+        calibrator = MagicMock()
+        calibrator.calibrate.return_value = (True, "tcp ok")
+        svc, vs, _ = _make_svc(calibrator=calibrator)
+        svc.is_calibrated = MagicMock(return_value=True)
+
+        ok, msg = svc.calibrate_camera_tcp_offset()
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "tcp ok")
+        calibrator.calibrate.assert_called_once()
+
+    def test_stop_calibration_stops_camera_tcp_calibrator(self):
+        calibrator = MagicMock()
+        svc, _, pc = _make_svc(calibrator=calibrator)
+
+        svc.stop_calibration()
+
+        pc.stop_calibration.assert_called_once()
+        calibrator.stop.assert_called_once()
 
     def test_service_with_none_vision_raises_on_call(self):
         svc = CalibrationApplicationService(None, MagicMock())
