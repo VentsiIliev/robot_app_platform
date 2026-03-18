@@ -79,11 +79,28 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
             matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
             np.save(matrix_path, np.eye(3, dtype=np.float32))
 
+            expected_local_x = 12.0
+            expected_local_y = -5.0
+
+            def world_shift(sample_deg: float) -> tuple[float, float]:
+                theta = np.deg2rad(sample_deg)
+                cos_theta = float(np.cos(theta))
+                sin_theta = float(np.sin(theta))
+                return (
+                    (1.0 - cos_theta) * expected_local_x + sin_theta * expected_local_y,
+                    -sin_theta * expected_local_x + (1.0 - cos_theta) * expected_local_y,
+                )
+
+            target_x = 100.0
+            target_y = 200.0
+            sample_1_dx, sample_1_dy = world_shift(15.0)
+            sample_2_dx, sample_2_dy = world_shift(30.0)
+            sample_3_dx, sample_3_dy = world_shift(45.0)
             detections = [
-                (100.0, 200.0),  # initial target acquisition
-                (110.0, 200.0),  # rz=0   -> world correction (10, 0)
-                (100.0, 210.0),  # rz=90  -> world correction (0, 10)
-                (90.0, 200.0),   # rz=180 -> world correction (-10, 0)
+                (target_x, target_y),  # initial target acquisition
+                (target_x + sample_1_dx, target_y + sample_1_dy),
+                (target_x + sample_2_dx, target_y + sample_2_dy),
+                (target_x + sample_3_dx, target_y + sample_3_dy),
             ]
             vision = _FakeVisionService(matrix_path=matrix_path, detections=detections)
             robot = _FakeRobotService()
@@ -94,7 +111,7 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
             cfg = calibration_settings.camera_tcp_offset
             cfg.marker_id = 4
             cfg.iterations = 3
-            cfg.rotation_step_deg = 90.0
+            cfg.rotation_step_deg = 15.0
             cfg.approach_z = 300.0
             cfg.approach_rx = 180.0
             cfg.approach_ry = 0.0
@@ -121,8 +138,8 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
 
             self.assertTrue(ok)
             self.assertIn("Camera TCP offset calibrated", msg)
-            self.assertAlmostEqual(robot_config.tcp_x_offset, 10.0, places=3)
-            self.assertAlmostEqual(robot_config.tcp_y_offset, 0.0, places=3)
+            self.assertAlmostEqual(robot_config.tcp_x_offset, expected_local_x, places=3)
+            self.assertAlmostEqual(robot_config.tcp_y_offset, expected_local_y, places=3)
             self.assertEqual(navigation.called, 1)
             self.assertEqual(len(settings.saved), 1)
             saved_key, saved_config = settings.saved[0]

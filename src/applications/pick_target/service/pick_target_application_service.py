@@ -8,10 +8,13 @@ from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
+from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+from src.robot_systems.glue.processes.pick_and_place.execution import CalibrationToPickupPlaneMapper
 
 _logger = logging.getLogger(__name__)
 
 _Z = 300.0
+_CALIB_RZ = 0.0
 
 
 class PickTargetApplicationService(IPickTargetService):
@@ -30,15 +33,67 @@ class PickTargetApplicationService(IPickTargetService):
         self._robot_config  = robot_config
         self._navigation    = navigation
         self._use_tcp       = False
+        self._use_pickup_plane = False
+        self._pickup_plane_rz = 90.0
+        self._pickup_mapper = self._build_pickup_mapper()
+        self._point_transformer = (
+            TargetPointTransformer(
+                base_transformer=self._transformer,
+                calibration_to_pickup_mapper=self._pickup_mapper.map_point if self._pickup_mapper is not None else None,
+                camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
+            )
+            if self._transformer is not None else None
+        )
 
     def set_use_tcp(self, enabled: bool) -> None:
         self._use_tcp = enabled
+
+    def set_use_pickup_plane(self, enabled: bool) -> None:
+        self._use_pickup_plane = enabled
+
+    def set_pickup_plane_rz(self, rz: float) -> None:
+        self._pickup_plane_rz = float(rz)
 
     def _tool(self) -> int:
         return self._robot_config.robot_tool if self._robot_config else 0
 
     def _user(self) -> int:
         return self._robot_config.robot_user if self._robot_config else 0
+
+    def _build_pickup_mapper(self) -> Optional[CalibrationToPickupPlaneMapper]:
+        if self._navigation is None:
+            return None
+        try:
+            calibration_position = self._navigation.get_group_position("CALIBRATION")
+            pickup_position = self._navigation.get_group_position("HOME")
+            if calibration_position is None or pickup_position is None:
+                return None
+            return CalibrationToPickupPlaneMapper.from_positions(
+                calibration_position=calibration_position,
+                pickup_position=pickup_position,
+            )
+        except Exception:
+            _logger.exception("Failed to initialize calibration-to-pickup mapper")
+            return None
+
+    def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
+        if self._point_transformer is None:
+            raise RuntimeError("Coordinate transformer is not available")
+        plane = "pickup" if self._use_pickup_plane else "calibration"
+        if self._use_tcp:
+            result = self._point_transformer.transform_to_tool(px, py, plane=plane)
+        else:
+            result = self._point_transformer.transform_to_camera_center(
+                px,
+                py,
+                plane=plane,
+                current_rz=self._pickup_plane_rz if self._use_pickup_plane else None,
+            )
+        return result.final_xy
+
+    def _target_orientation(self) -> Tuple[float, float, float]:
+        return 180.0, 0.0, (self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ)
 
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
         if self._vision is None:
@@ -57,10 +112,7 @@ class PickTargetApplicationService(IPickTargetService):
                 px, py = cnt.getCentroid()
                 pixel_centroids.append((px, py))
                 if self._transformer is not None:
-                    if self._use_tcp:
-                        rx, ry = self._transformer.transform_to_tcp(px, py)
-                    else:
-                        rx, ry = self._transformer.transform(px, py)
+                    rx, ry = self._transform_point(px, py)
                     robot_centroids.append((rx, ry))
             except Exception:
                 _logger.exception("Failed to process contour centroid")
@@ -72,12 +124,7 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.warning("Robot service not available — cannot move")
             return False
         try:
-            current = self._robot.get_current_position()
-            if not current or len(current) < 6:
-                _logger.warning("get_current_position returned %s — using default orientation", current)
-                rx, ry, rz = 180.0, 0.0, 0.0
-            else:
-                rx, ry, rz = current[3], current[4], current[5]
+            rx, ry, rz = self._target_orientation()
             return self._robot.move_ptp(
                 [robot_x, robot_y, _Z, rx, ry, rz],
                 tool=self._tool(),
@@ -95,6 +142,8 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.warning("Navigation service not available")
             return False
         try:
+            if self._use_pickup_plane:
+                return self._navigation.move_home()
             z_offset = self._vision.get_capture_pos_offset() if self._vision is not None else 0.0
             return self._navigation.move_to_calibration_position(z_offset=z_offset)
         except Exception:
@@ -112,12 +161,7 @@ class PickTargetApplicationService(IPickTargetService):
                 pts_px = cnt.get()                           # (N, 2) float32 pixel coords
                 robot_pts: List[Tuple[float, float]] = []
                 for px, py in pts_px:
-                    if self._transformer is None:
-                        continue
-                    if self._use_tcp:
-                        rx, ry = self._transformer.transform_to_tcp(float(px), float(py))
-                    else:
-                        rx, ry = self._transformer.transform(float(px), float(py))
+                    rx, ry = self._transform_point(float(px), float(py))
                     robot_pts.append((rx, ry))
                 if robot_pts:
                     result.append(np.array(robot_pts, dtype=np.float32))
@@ -140,12 +184,7 @@ class PickTargetApplicationService(IPickTargetService):
         if not contour_robot_pts:
             return False, "No contour waypoints to execute"
         try:
-            current = self._robot.get_current_position()
-            rx, ry, rz = (
-                (current[3], current[4], current[5])
-                if current and len(current) >= 6
-                else (180.0, 0.0, 0.0)
-            )
+            rx, ry, rz = self._target_orientation()
             total_pts = 0
             for pts in contour_robot_pts:
                 path = [[float(x), float(y), float(z)] for x, y in pts]
@@ -159,5 +198,3 @@ class PickTargetApplicationService(IPickTargetService):
         except Exception:
             _logger.exception("execute_contour_trajectory failed")
             return False, "Trajectory error — see log"
-
-

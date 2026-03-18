@@ -209,10 +209,15 @@ class PickTargetView(IApplicationView):
     move_requested                = pyqtSignal()
     calibration_pos_requested     = pyqtSignal()
     tcp_toggled                   = pyqtSignal(bool)
+    pickup_plane_toggled          = pyqtSignal(bool)
+    pickup_plane_rz_changed       = pyqtSignal(float)
     execute_trajectory_requested  = pyqtSignal()
 
     def __init__(self, parent=None):
         self._magnifier_on = False
+        self._move_available = False
+        self._pickup_plane_mode = False
+        self._trajectory_available = False
         super().__init__("PickTarget", parent)
 
     def setup_ui(self) -> None:
@@ -348,6 +353,23 @@ class PickTargetView(IApplicationView):
         traj_params.addStretch()
         layout.addLayout(traj_params)
 
+        rz_row = QHBoxLayout()
+        rz_lbl = QLabel("Pickup RZ:")
+        rz_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        self._pickup_rz_spin = QDoubleSpinBox()
+        self._pickup_rz_spin.setRange(-180.0, 180.0)
+        self._pickup_rz_spin.setSingleStep(5.0)
+        self._pickup_rz_spin.setDecimals(1)
+        self._pickup_rz_spin.setValue(90.0)
+        self._pickup_rz_spin.setSuffix(" deg")
+        self._pickup_rz_spin.setFixedWidth(96)
+        self._pickup_rz_spin.setStyleSheet(_spin_style)
+        self._pickup_rz_spin.valueChanged.connect(self.pickup_plane_rz_changed)
+        rz_row.addWidget(rz_lbl)
+        rz_row.addWidget(self._pickup_rz_spin)
+        rz_row.addStretch()
+        layout.addLayout(rz_row)
+
         row2 = QHBoxLayout()
         self._tcp_btn = QPushButton("TCP: OFF")
         self._tcp_btn.setCheckable(True)
@@ -355,7 +377,13 @@ class PickTargetView(IApplicationView):
         self._tcp_btn.toggled.connect(self._on_tcp_toggled)
         row2.addWidget(self._tcp_btn)
 
-        self._calib_btn = QPushButton("↩ Calib Pos")
+        self._pickup_plane_btn = QPushButton("Plane: CALIB")
+        self._pickup_plane_btn.setCheckable(True)
+        self._pickup_plane_btn.setStyleSheet(_TCP_OFF_STYLE)
+        self._pickup_plane_btn.toggled.connect(self._on_pickup_plane_toggled)
+        row2.addWidget(self._pickup_plane_btn)
+
+        self._calib_btn = QPushButton("↩ Start")
         self._calib_btn.setStyleSheet(ACTION_BTN_STYLE)
         self._calib_btn.clicked.connect(self.calibration_pos_requested)
         row2.addWidget(self._calib_btn)
@@ -441,16 +469,20 @@ class PickTargetView(IApplicationView):
         self._log_text.appendPlainText(text)
 
     def set_move_enabled(self, enabled: bool) -> None:
+        self._move_available = enabled
         self._move_btn.setEnabled(enabled)
 
     def set_trajectory_enabled(self, enabled: bool) -> None:
-        self._traj_btn.setEnabled(enabled)
+        self._trajectory_available = enabled
+        self._traj_btn.setEnabled(enabled and not self._pickup_plane_mode)
 
     def set_busy(self, busy: bool) -> None:
         self._capture_btn.setEnabled(not busy)
-        self._move_btn.setEnabled(not busy)
+        self._move_btn.setEnabled(not busy and self._move_available)
         self._calib_btn.setEnabled(not busy)
-        self._traj_btn.setEnabled(not busy)
+        self._traj_btn.setEnabled(
+            not busy and self._trajectory_available and not self._pickup_plane_mode
+        )
 
     def get_move_delay(self) -> float:
         return self._delay_spin.value()
@@ -464,12 +496,22 @@ class PickTargetView(IApplicationView):
     def get_trajectory_z(self) -> float:
         return self._traj_z_spin.value()
 
+    def get_pickup_plane_rz(self) -> float:
+        return self._pickup_rz_spin.value()
+
     # ── Private ───────────────────────────────────────────────────────
 
     def _on_tcp_toggled(self, checked: bool) -> None:
         self._tcp_btn.setText("TCP: ON" if checked else "TCP: OFF")
         self._tcp_btn.setStyleSheet(_TCP_ON_STYLE if checked else _TCP_OFF_STYLE)
         self.tcp_toggled.emit(checked)
+
+    def _on_pickup_plane_toggled(self, checked: bool) -> None:
+        self._pickup_plane_mode = checked
+        self._pickup_plane_btn.setText("Plane: PICKUP" if checked else "Plane: CALIB")
+        self._pickup_plane_btn.setStyleSheet(_TCP_ON_STYLE if checked else _TCP_OFF_STYLE)
+        self._traj_btn.setEnabled(self._trajectory_available and not checked)
+        self.pickup_plane_toggled.emit(checked)
 
     def _on_magnifier_toggled(self, checked: bool) -> None:
         self._magnifier_on = checked

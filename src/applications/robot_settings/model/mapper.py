@@ -14,8 +14,10 @@ class RobotSettingsMapper:
             "robot_ip":            settings.robot_ip,
             "robot_tool":          settings.robot_tool,
             "robot_user":          settings.robot_user,
-            "tcp_x_offset":        settings.tcp_x_offset,
-            "tcp_y_offset":        settings.tcp_y_offset,
+            "camera_to_tcp_x_offset":  settings.camera_to_tcp_x_offset,
+            "camera_to_tcp_y_offset":  settings.camera_to_tcp_y_offset,
+            "camera_to_tool_x_offset": settings.camera_to_tool_x_offset,
+            "camera_to_tool_y_offset": settings.camera_to_tool_y_offset,
             "global_velocity":     gm.global_velocity,
             "global_acceleration": gm.global_acceleration,
             "emergency_decel":     gm.emergency_decel,
@@ -52,8 +54,10 @@ class RobotSettingsMapper:
         c.robot_ip            = flat.get("robot_ip",            c.robot_ip)
         c.robot_tool          = int(flat.get("robot_tool",      c.robot_tool))
         c.robot_user          = int(flat.get("robot_user",      c.robot_user))
-        c.tcp_x_offset        = float(flat.get("tcp_x_offset",  c.tcp_x_offset))
-        c.tcp_y_offset        = float(flat.get("tcp_y_offset",  c.tcp_y_offset))
+        c.camera_to_tcp_x_offset = float(flat.get("camera_to_tcp_x_offset", c.camera_to_tcp_x_offset))
+        c.camera_to_tcp_y_offset = float(flat.get("camera_to_tcp_y_offset", c.camera_to_tcp_y_offset))
+        c.camera_to_tool_x_offset = float(flat.get("camera_to_tool_x_offset", c.camera_to_tool_x_offset))
+        c.camera_to_tool_y_offset = float(flat.get("camera_to_tool_y_offset", c.camera_to_tool_y_offset))
         c.tcp_x_step_distance = float(flat.get("tcp_x_step_distance", c.tcp_x_step_distance))
         c.tcp_x_step_offset   = float(flat.get("tcp_x_step_offset",   c.tcp_x_step_offset))
         c.tcp_y_step_distance = float(flat.get("tcp_y_step_distance", c.tcp_y_step_distance))
@@ -98,6 +102,7 @@ class RobotCalibrationMapper:
             "calib_max_error_ref":         am.max_error_ref,
             "calib_k":                     am.k,
             "calib_derivative_scaling":    am.derivative_scaling,
+            "calib_run_height_measurement": settings.run_height_measurement,
             "calib_z_target":              settings.z_target,
             "calib_required_ids":          settings.required_ids,
             "calib_velocity":              settings.velocity,
@@ -107,6 +112,8 @@ class RobotCalibrationMapper:
             "calib_axis_max_attempts":     ax.max_attempts,
             "calib_axis_delay_after_move": ax.delay_after_move_s,
             "calib_tcp_marker_id":         tcp.marker_id,
+            "calib_tcp_run_during_main":   tcp.run_during_robot_calibration,
+            "calib_tcp_max_markers":       tcp.max_markers_for_tcp_capture,
             "calib_tcp_rotation_step_deg": tcp.rotation_step_deg,
             "calib_tcp_iterations":        tcp.iterations,
             "calib_tcp_approach_z":        tcp.approach_z,
@@ -118,6 +125,9 @@ class RobotCalibrationMapper:
             "calib_tcp_settle_time_s":     tcp.settle_time_s,
             "calib_tcp_detection_attempts": tcp.detection_attempts,
             "calib_tcp_retry_delay_s":     tcp.retry_delay_s,
+            "calib_tcp_recenter_max_iterations": tcp.recenter_max_iterations,
+            "calib_tcp_min_samples":       tcp.min_samples,
+            "calib_tcp_max_acceptance_std_mm": tcp.max_acceptance_std_mm,
         }
 
     @staticmethod
@@ -133,6 +143,10 @@ class RobotCalibrationMapper:
         am.max_error_ref      = float(flat.get("calib_max_error_ref",      am.max_error_ref))
         am.k                  = float(flat.get("calib_k",                  am.k))
         am.derivative_scaling = float(flat.get("calib_derivative_scaling", am.derivative_scaling))
+        s.run_height_measurement = flat.get(
+            "calib_run_height_measurement",
+            s.run_height_measurement,
+        ) in ("True", "true", True)
         s.z_target            = int(flat.get("calib_z_target",             s.z_target))
         s.required_ids        = flat.get("calib_required_ids",             s.required_ids)
         s.velocity            = int(flat.get("calib_velocity",             s.velocity))
@@ -144,6 +158,11 @@ class RobotCalibrationMapper:
         ax.delay_after_move_s = float(flat.get("calib_axis_delay_after_move", ax.delay_after_move_s))
 
         tcp.marker_id         = int(flat.get("calib_tcp_marker_id",          tcp.marker_id))
+        tcp.run_during_robot_calibration = flat.get(
+            "calib_tcp_run_during_main",
+            tcp.run_during_robot_calibration,
+        ) in ("True", "true", True)
+        tcp.max_markers_for_tcp_capture = int(flat.get("calib_tcp_max_markers", tcp.max_markers_for_tcp_capture))
         tcp.rotation_step_deg = float(flat.get("calib_tcp_rotation_step_deg", tcp.rotation_step_deg))
         tcp.iterations        = int(flat.get("calib_tcp_iterations",         tcp.iterations))
         tcp.approach_z        = float(flat.get("calib_tcp_approach_z",       tcp.approach_z))
@@ -155,4 +174,7 @@ class RobotCalibrationMapper:
         tcp.settle_time_s     = float(flat.get("calib_tcp_settle_time_s",    tcp.settle_time_s))
         tcp.detection_attempts = int(flat.get("calib_tcp_detection_attempts", tcp.detection_attempts))
         tcp.retry_delay_s     = float(flat.get("calib_tcp_retry_delay_s",    tcp.retry_delay_s))
+        tcp.recenter_max_iterations = int(flat.get("calib_tcp_recenter_max_iterations", tcp.recenter_max_iterations))
+        tcp.min_samples       = int(flat.get("calib_tcp_min_samples",        tcp.min_samples))
+        tcp.max_acceptance_std_mm = float(flat.get("calib_tcp_max_acceptance_std_mm", tcp.max_acceptance_std_mm))
         return s

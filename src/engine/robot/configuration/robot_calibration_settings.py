@@ -62,6 +62,8 @@ class AxisMappingConfig:
 
 @dataclass
 class CameraTcpOffsetCalibrationConfig:
+    run_during_robot_calibration: bool = False
+    max_markers_for_tcp_capture: int = 2
     marker_id: int = 4
     rotation_step_deg: float = 15.0
     iterations: int = 6
@@ -74,10 +76,15 @@ class CameraTcpOffsetCalibrationConfig:
     settle_time_s: float = 1.0
     detection_attempts: int = 20
     retry_delay_s: float = 0.1
+    recenter_max_iterations: int = 20
+    min_samples: int = 3
+    max_acceptance_std_mm: float = 10.0
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'CameraTcpOffsetCalibrationConfig':
         return cls(
+            run_during_robot_calibration=bool(data.get("run_during_robot_calibration", False)),
+            max_markers_for_tcp_capture=int(data.get("max_markers_for_tcp_capture", 2)),
             marker_id=int(data.get("marker_id", 4)),
             rotation_step_deg=float(data.get("rotation_step_deg", 15.0)),
             iterations=int(data.get("iterations", 6)),
@@ -90,10 +97,15 @@ class CameraTcpOffsetCalibrationConfig:
             settle_time_s=float(data.get("settle_time_s", 1.0)),
             detection_attempts=int(data.get("detection_attempts", 20)),
             retry_delay_s=float(data.get("retry_delay_s", 0.1)),
+            recenter_max_iterations=int(data.get("recenter_max_iterations", 20)),
+            min_samples=int(data.get("min_samples", 3)),
+            max_acceptance_std_mm=float(data.get("max_acceptance_std_mm", 10.0)),
         )
 
     def to_dict(self) -> Dict:
         return {
+            "run_during_robot_calibration": self.run_during_robot_calibration,
+            "max_markers_for_tcp_capture": self.max_markers_for_tcp_capture,
             "marker_id": self.marker_id,
             "rotation_step_deg": self.rotation_step_deg,
             "iterations": self.iterations,
@@ -106,6 +118,9 @@ class CameraTcpOffsetCalibrationConfig:
             "settle_time_s": self.settle_time_s,
             "detection_attempts": self.detection_attempts,
             "retry_delay_s": self.retry_delay_s,
+            "recenter_max_iterations": self.recenter_max_iterations,
+            "min_samples": self.min_samples,
+            "max_acceptance_std_mm": self.max_acceptance_std_mm,
         }
 
 
@@ -114,6 +129,7 @@ class RobotCalibrationSettings:
     adaptive_movement: AdaptiveMovementConfig = field(default_factory=AdaptiveMovementConfig)
     axis_mapping: AxisMappingConfig = field(default_factory=AxisMappingConfig)
     camera_tcp_offset: CameraTcpOffsetCalibrationConfig = field(default_factory=CameraTcpOffsetCalibrationConfig)
+    run_height_measurement: bool = True
     z_target: int = 300
     required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
     velocity: int = 30
@@ -127,6 +143,7 @@ class RobotCalibrationSettings:
             camera_tcp_offset=CameraTcpOffsetCalibrationConfig.from_dict(
                 data.get("camera_tcp_offset_config", {})
             ),
+            run_height_measurement=bool(data.get("run_height_measurement", True)),
             z_target=data.get("z_target", 300),
             required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
             velocity=int(data.get("velocity", 30)),
@@ -138,6 +155,7 @@ class RobotCalibrationSettings:
             "adaptive_movement_config": self.adaptive_movement.to_dict(),
             "axis_mapping_config": self.axis_mapping.to_dict(),
             "camera_tcp_offset_config": self.camera_tcp_offset.to_dict(),
+            "run_height_measurement": self.run_height_measurement,
             "z_target": self.z_target,
             "required_ids": self.required_ids,
             "velocity": self.velocity,

@@ -62,7 +62,7 @@ class _MoveWorker(QObject):
 
 
 class _CalibWorker(QObject):
-    """Moves robot to the calibration position."""
+    """Moves robot to the mode-appropriate start position."""
     log_message = pyqtSignal(str)
     finished    = pyqtSignal()
 
@@ -73,9 +73,9 @@ class _CalibWorker(QObject):
     def run(self) -> None:
         try:
             ok = self._model.move_to_calibration_position()
-            self.log_message.emit("[CALIB] " + ("Reached calibration position." if ok else "Move failed."))
+            self.log_message.emit("[START] " + ("Reached start position." if ok else "Move failed."))
         except Exception as exc:
-            self.log_message.emit(f"[ERROR] Calibration move failed: {exc}")
+            self.log_message.emit(f"[ERROR] Start move failed: {exc}")
         finally:
             self.finished.emit()
 
@@ -128,8 +128,11 @@ class PickTargetController(IApplicationController):
         self._view.move_requested.connect(self._on_move)
         self._view.calibration_pos_requested.connect(self._on_go_to_calibration)
         self._view.tcp_toggled.connect(self._model.set_use_tcp)
+        self._view.pickup_plane_toggled.connect(self._model.set_use_pickup_plane)
+        self._view.pickup_plane_rz_changed.connect(self._model.set_pickup_plane_rz)
         self._view.execute_trajectory_requested.connect(self._on_execute_trajectory)
         self._view.destroyed.connect(self.stop)
+        self._model.set_pickup_plane_rz(self._view.get_pickup_plane_rz())
 
     def load(self) -> None:
         self._alive = True
@@ -274,13 +277,13 @@ class PickTargetController(IApplicationController):
         worker = _MoveWorker(self._model, list(self._captured_coords), self._view.get_move_delay())
         self._launch(worker, on_done=self._on_move_done)
 
-    # ── Calibration position ──────────────────────────────────────────
+    # ── Start position ────────────────────────────────────────────────
 
     def _on_go_to_calibration(self) -> None:
         if self._current_worker is not None:
             return
         self._view.set_busy(True)
-        self._view.append_log("[MOVE] Moving to calibration position...")
+        self._view.append_log("[MOVE] Moving to start position...")
         worker = _CalibWorker(self._model)
         self._launch(worker, on_done=self._on_calib_done)
 
@@ -308,4 +311,3 @@ class PickTargetController(IApplicationController):
             cv2.line(out, (x - 14, y), (x + 14, y), (0, 255, 0), 1)
             cv2.line(out, (x, y - 14), (x, y + 14), (0, 255, 0), 1)
         return out
-

@@ -43,6 +43,7 @@ from src.engine.robot.calibration.robot_calibration.states.all_aruco_found_handl
 from src.engine.robot.calibration.robot_calibration.states.compute_offsets_handler import handle_compute_offsets_state
 from src.engine.robot.calibration.robot_calibration.states.remaining_handlers import (
     handle_align_robot_state,
+    handle_capture_tcp_offset_state,
     handle_iterate_alignment_state,
     handle_done_state,
     handle_error_state
@@ -103,6 +104,11 @@ class RefactoredRobotCalibrationPipeline:
         context.axis_mapping_config = config.axis_mapping_config
         context.use_marker_centre = getattr(config, 'use_marker_centre', False)
         context.use_ransac = getattr(config, 'use_ransac', False)
+        context.camera_tcp_offset_config = getattr(config, "camera_tcp_offset_config", None)
+        context.run_height_measurement = getattr(config, "run_height_measurement", True)
+        context.settings_service = getattr(config, "settings_service", None)
+        context.robot_config = getattr(config, "robot_config", None)
+        context.robot_config_key = getattr(config, "robot_config_key", None)
 
         # Laser Detection/Height measuring service
         context.height_measuring_service = config.height_measuring_service
@@ -175,6 +181,7 @@ class RefactoredRobotCalibrationPipeline:
             RobotCalibrationStates.COMPUTE_OFFSETS: self._handle_compute_offsets,
             RobotCalibrationStates.ALIGN_ROBOT: self._handle_align_robot,
             RobotCalibrationStates.ITERATE_ALIGNMENT: self._handle_iterate_alignment,
+            RobotCalibrationStates.CAPTURE_TCP_OFFSET: self._handle_capture_tcp_offset,
             RobotCalibrationStates.SAMPLE_HEIGHT: self._take_height_sample,
             RobotCalibrationStates.DONE: self._handle_done,
             RobotCalibrationStates.ERROR: self._handle_error,
@@ -250,6 +257,9 @@ class RefactoredRobotCalibrationPipeline:
     def _take_height_sample(self,context):
 
         return handle_height_sample_state(context)
+
+    def _handle_capture_tcp_offset(self, context):
+        return handle_capture_tcp_offset_state(context)
 
     def _handle_done(self, context):
         next_state = handle_done_state(context)

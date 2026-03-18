@@ -240,7 +240,10 @@ class GlueRobotSystem(BaseRobotSystem):
                 tool_service=tool_service,
                 height_service=height_service,
                 transformer=transformer,
-                config=PickAndPlaceConfig(),
+                config=PickAndPlaceConfig(
+                    camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
+                    camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
+                ),
                 system_manager=self._system_manager,
                 requirements=pick_and_place_requirements,
                 service_checker=service_checker,

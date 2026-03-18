@@ -14,9 +14,11 @@
     "delay_after_move_s": 1.0
   },
   "camera_tcp_offset_config": {
+    "run_during_robot_calibration": true,
+    "max_markers_for_tcp_capture": 4,
     "marker_id": 4,
-    "rotation_step_deg": 15.0,
-    "iterations": 6,
+    "rotation_step_deg": 25.0,
+    "iterations": 2,
     "approach_z": 300.0,
     "approach_rx": 180.0,
     "approach_ry": 0.0,
@@ -25,8 +27,12 @@
     "acceleration": 10,
     "settle_time_s": 1.0,
     "detection_attempts": 20,
-    "retry_delay_s": 0.1
+    "retry_delay_s": 0.1,
+    "recenter_max_iterations": 50,
+    "min_samples": 3,
+    "max_acceptance_std_mm": 1.0
   },
+  "run_height_measurement": false,
   "z_target": 300,
   "required_ids": [
     0,

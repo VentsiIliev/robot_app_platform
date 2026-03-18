@@ -44,6 +44,7 @@ class RobotCalibrationService(IRobotCalibrationService):
         self._status  = "running"
         handler       = self._attach_log_handler()
         try:
+            self._refresh_runtime_settings()
             self._pipeline = RefactoredRobotCalibrationPipeline(
                 self._config, self._adaptive_config, self._events_config
             )
@@ -87,3 +88,29 @@ class RobotCalibrationService(IRobotCalibrationService):
             return
         logging.getLogger(_CALIBRATION_ROOT).removeHandler(handler)
         handler.close()
+
+    def _refresh_runtime_settings(self) -> None:
+        settings = getattr(self._config, "settings_service", None)
+        if settings is None:
+            return
+
+        calibration_key = getattr(self._config, "calibration_settings_key", None)
+        if calibration_key is not None:
+            live_calibration = settings.get(calibration_key)
+            if live_calibration is not None:
+                self._config.required_ids = live_calibration.required_ids
+                self._config.z_target = live_calibration.z_target
+                self._config.velocity = live_calibration.velocity
+                self._config.acceleration = live_calibration.acceleration
+                self._config.run_height_measurement = live_calibration.run_height_measurement
+                self._config.camera_tcp_offset_config = live_calibration.camera_tcp_offset
+                self._config.axis_mapping_config = live_calibration.axis_mapping
+                self._adaptive_config = live_calibration.adaptive_movement
+
+        robot_config_key = getattr(self._config, "robot_config_key", None)
+        if robot_config_key is not None:
+            live_robot_config = settings.get(robot_config_key)
+            if live_robot_config is not None:
+                self._config.robot_config = live_robot_config
+                self._config.robot_tool = live_robot_config.robot_tool
+                self._config.robot_user = live_robot_config.robot_user

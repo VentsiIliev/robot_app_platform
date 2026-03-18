@@ -9,15 +9,26 @@ _MISSING = object()  # sentinel — distinguishes "not provided" from None
 
 class HomographyTransformer(ICoordinateTransformer):
     def __init__(self, matrix_path: str,
-                 tcp_x_offset: float = _MISSING,
-                 tcp_y_offset: float = _MISSING):
+                 camera_to_tcp_x_offset: float = _MISSING,
+                 camera_to_tcp_y_offset: float = _MISSING,
+                 camera_to_tool_x_offset: float = _MISSING,
+                 camera_to_tool_y_offset: float = _MISSING):
         self._matrix_path = matrix_path
         self._H: np.ndarray | None = None
         self._H_inv: np.ndarray | None = None
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._tcp_x: float | None = None if tcp_x_offset is _MISSING else float(tcp_x_offset)
-        self._tcp_y: float | None = None if tcp_y_offset is _MISSING else float(tcp_y_offset)
-        self._has_tcp = (tcp_x_offset is not _MISSING) and (tcp_y_offset is not _MISSING)
+        self._camera_to_tcp_x: float | None = None if camera_to_tcp_x_offset is _MISSING else float(camera_to_tcp_x_offset)
+        self._camera_to_tcp_y: float | None = None if camera_to_tcp_y_offset is _MISSING else float(camera_to_tcp_y_offset)
+        self._camera_to_tool_x: float | None = None if camera_to_tool_x_offset is _MISSING else float(camera_to_tool_x_offset)
+        self._camera_to_tool_y: float | None = None if camera_to_tool_y_offset is _MISSING else float(camera_to_tool_y_offset)
+        self._has_camera_to_tcp = (
+            (camera_to_tcp_x_offset is not _MISSING) and
+            (camera_to_tcp_y_offset is not _MISSING)
+        )
+        self._has_camera_to_tool = (
+            (camera_to_tool_x_offset is not _MISSING) and
+            (camera_to_tool_y_offset is not _MISSING)
+        )
         self._load()
 
     def _load(self) -> None:
@@ -47,13 +58,22 @@ class HomographyTransformer(ICoordinateTransformer):
         return float(robot_pt[0]), float(robot_pt[1])
 
     def transform_to_tcp(self, x: float, y: float) -> Tuple[float, float]:
-        if not self._has_tcp:
+        if not self._has_camera_to_tcp:
             raise RuntimeError(
-                "TCP offsets were not provided at construction — "
-                "pass tcp_x_offset and tcp_y_offset to HomographyTransformer"
+                "Camera-to-TCP offsets were not provided at construction — "
+                "pass camera_to_tcp_x_offset and camera_to_tcp_y_offset to HomographyTransformer"
             )
         cx, cy = self.transform(x, y)
-        return cx + self._tcp_x, cy + self._tcp_y
+        return cx + self._camera_to_tcp_x, cy + self._camera_to_tcp_y
+
+    def transform_to_tool(self, x: float, y: float) -> Tuple[float, float]:
+        if not self._has_camera_to_tool:
+            raise RuntimeError(
+                "Camera-to-tool offsets were not provided at construction — "
+                "pass camera_to_tool_x_offset and camera_to_tool_y_offset to HomographyTransformer"
+            )
+        cx, cy = self.transform(x, y)
+        return cx + self._camera_to_tool_x, cy + self._camera_to_tool_y
 
     def inverse_transform(self, x: float, y: float) -> Tuple[float, float]:
         if self._H_inv is None:

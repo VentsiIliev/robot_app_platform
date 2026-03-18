@@ -7,6 +7,10 @@ from src.engine.robot.calibration.robot_calibration.states.robot_calibration_sta
 
 
 def handle_height_sample_state(context: RobotCalibrationContext):
+    if not getattr(context, "run_height_measurement", True):
+        _logger.info("Height measurement disabled for this robot calibration run — skipping height sample")
+        return RobotCalibrationStates.DONE
+
     if context.height_measuring_service is None:
         _logger.warning("No HeightMeasuringService provided — skipping height sample")
         return RobotCalibrationStates.DONE

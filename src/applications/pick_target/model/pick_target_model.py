@@ -29,6 +29,12 @@ class PickTargetModel(IApplicationModel):
     def set_use_tcp(self, enabled: bool) -> None:
         self._service.set_use_tcp(enabled)
 
+    def set_use_pickup_plane(self, enabled: bool) -> None:
+        self._service.set_use_pickup_plane(enabled)
+
+    def set_pickup_plane_rz(self, rz: float) -> None:
+        self._service.set_pickup_plane_rz(rz)
+
     def capture_contour_trajectory(self) -> List[np.ndarray]:
         return self._service.capture_contour_trajectory()
 
@@ -40,4 +46,3 @@ class PickTargetModel(IApplicationModel):
         acc: float,
     ) -> Tuple[bool, str]:
         return self._service.execute_contour_trajectory(contour_robot_pts, z, vel, acc)
-

@@ -153,7 +153,7 @@ class CameraTcpOffsetCalibrationService:
                 return False, "Failed to move to initial marker-centered pose"
 
             samples: list[_MarkerSample] = []
-            for index in range(cfg.iterations):
+            for index in range(1, cfg.iterations + 1):
                 if self._stop_event.is_set():
                     return False, "Camera TCP offset calibration stopped"
 
@@ -172,9 +172,13 @@ class CameraTcpOffsetCalibrationService:
                 if self._interruptible_sleep(cfg.settle_time_s):
                     return False, "Camera TCP offset calibration stopped"
 
-                sample = self._measure_sample(index=index, sample_rz=sample_rz, reference_rz=cfg.approach_rz)
+                sample = self._measure_sample(
+                    index=index - 1,
+                    sample_rz=sample_rz,
+                    reference_rz=cfg.approach_rz,
+                )
                 if sample is None:
-                    return False, f"Marker {cfg.marker_id} not detected for sample {index + 1}"
+                    return False, f"Marker {cfg.marker_id} not detected for sample {index}"
                 samples.append(sample)
 
             if not samples:
@@ -186,7 +190,7 @@ class CameraTcpOffsetCalibrationService:
             std_y = float(np.std([s.local_dy for s in samples]))
 
             _logger.info(
-                "Solved camera TCP offset from %d samples: tcp_x_offset=%.6f tcp_y_offset=%.6f std=(%.6f, %.6f)",
+                "Solved camera-to-TCP offset from %d samples: camera_to_tcp_x_offset=%.6f camera_to_tcp_y_offset=%.6f std=(%.6f, %.6f)",
                 len(samples),
                 offset_x,
                 offset_y,
@@ -194,17 +198,17 @@ class CameraTcpOffsetCalibrationService:
                 std_y,
             )
 
-            self._robot_config.tcp_x_offset = offset_x
-            self._robot_config.tcp_y_offset = offset_y
+            self._robot_config.camera_to_tcp_x_offset = offset_x
+            self._robot_config.camera_to_tcp_y_offset = offset_y
             self._settings.save(self._robot_config_key, self._robot_config)
             _logger.info(
-                "Saved camera TCP offsets to robot config: tcp_x_offset=%.6f tcp_y_offset=%.6f",
+                "Saved camera-to-TCP offsets to robot config: camera_to_tcp_x_offset=%.6f camera_to_tcp_y_offset=%.6f",
                 offset_x,
                 offset_y,
             )
 
             return True, (
-                f"Camera TCP offset calibrated: X={offset_x:.3f} mm, Y={offset_y:.3f} mm "
+                f"Camera-to-TCP offset calibrated: X={offset_x:.3f} mm, Y={offset_y:.3f} mm "
                 f"(std X={std_x:.3f}, Y={std_y:.3f})"
             )
         finally:
@@ -225,8 +229,12 @@ class CameraTcpOffsetCalibrationService:
 
         world_dx = float(desired_x - current_pose[0])
         world_dy = float(desired_y - current_pose[1])
-        delta_rad = math.radians(sample_rz - reference_rz)
-        local_dx, local_dy = self._rotate(world_dx, world_dy, -delta_rad)
+        local_dx, local_dy = self._solve_local_offset(
+            world_dx,
+            world_dy,
+            reference_rz_deg=reference_rz,
+            sample_rz_deg=sample_rz,
+        )
 
         image_cx = self._vision.get_camera_width() / 2.0
         image_cy = self._vision.get_camera_height() / 2.0
@@ -348,10 +356,30 @@ class CameraTcpOffsetCalibrationService:
             return False
 
     @staticmethod
-    def _rotate(x: float, y: float, angle_rad: float) -> tuple[float, float]:
-        cos_a = math.cos(angle_rad)
-        sin_a = math.sin(angle_rad)
-        return (
-            x * cos_a - y * sin_a,
-            x * sin_a + y * cos_a,
-        )
+    def _solve_local_offset(
+        world_dx: float,
+        world_dy: float,
+        *,
+        reference_rz_deg: float,
+        sample_rz_deg: float,
+    ) -> tuple[float, float]:
+        ref_rad = math.radians(reference_rz_deg)
+        sample_rad = math.radians(sample_rz_deg)
+        cos_ref = math.cos(ref_rad)
+        sin_ref = math.sin(ref_rad)
+        cos_sample = math.cos(sample_rad)
+        sin_sample = math.sin(sample_rad)
+
+        a = cos_ref - cos_sample
+        b = -sin_ref + sin_sample
+        c = sin_ref - sin_sample
+        d = cos_ref - cos_sample
+        det = a * d - b * c
+        if math.isclose(det, 0.0, abs_tol=1e-9):
+            raise ValueError(
+                "TCP offset sample rotation is too small to solve a camera-to-TCP offset"
+            )
+
+        local_dx = (d * world_dx - b * world_dy) / det
+        local_dy = (-c * world_dx + a * world_dy) / det
+        return float(local_dx), float(local_dy)

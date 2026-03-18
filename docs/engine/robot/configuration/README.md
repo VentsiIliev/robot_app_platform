@@ -11,7 +11,8 @@ RobotSettings
   ├── robot_ip: str
   ├── robot_tool: int
   ├── robot_user: int
-  ├── tcp_x_offset / tcp_y_offset: float
+  ├── camera_to_tcp_x_offset / camera_to_tcp_y_offset: float
+  ├── camera_to_tool_x_offset / camera_to_tool_y_offset: float
   ├── tcp_x/y_step_distance / offset: float
   ├── offset_direction_map: OffsetDirectionMap
   ├── movement_groups: Dict[str, MovementGroup]
@@ -129,8 +130,10 @@ class RobotSettings:
     robot_ip: str = "192.168.58.2"
     robot_tool: int = 0
     robot_user: int = 0
-    tcp_x_offset: float = 0.0
-    tcp_y_offset: float = 0.0
+    camera_to_tcp_x_offset: float = 0.0
+    camera_to_tcp_y_offset: float = 0.0
+    camera_to_tool_x_offset: float = 0.0
+    camera_to_tool_y_offset: float = 0.0
     tcp_x_step_distance: float = 50.0
     tcp_x_step_offset: float = 0.1
     tcp_y_step_distance: float = 50.0
@@ -198,6 +201,7 @@ Persisted settings for the standalone camera-TCP offset calibration routine.
 ```python
 @dataclass
 class CameraTcpOffsetCalibrationConfig:
+    run_during_robot_calibration: bool = False
     marker_id: int = 4
     rotation_step_deg: float = 15.0
     iterations: int = 6
@@ -210,9 +214,35 @@ class CameraTcpOffsetCalibrationConfig:
     settle_time_s: float = 1.0
     detection_attempts: int = 20
     retry_delay_s: float = 0.1
+    recenter_max_iterations: int = 20
+    min_samples: int = 3
+    max_acceptance_std_mm: float = 10.0
 ```
 
-These values are edited in the Robot Settings calibration tab and consumed by `CameraTcpOffsetCalibrationService`.
+These values are edited in the Robot Settings calibration tab and consumed by two flows:
+- `CameraTcpOffsetCalibrationService` for the standalone camera-TCP calibration action
+- the main robot calibration pipeline when `run_during_robot_calibration=True`
+
+Sampling semantics:
+- `approach_rz` is the reference wrist angle used to establish the local tool frame
+- the reference pose at `approach_rz` is not counted as a saved TCP-offset sample
+- `iterations = N` means take `N` rotated samples after the reference pose
+- with `rotation_step_deg = 15` and `iterations = 2`, the capture sequence is:
+  - reference at `approach_rz`
+  - sample 1 at `approach_rz + 15`
+  - sample 2 at `approach_rz + 30`
+
+Solve semantics:
+- each rotated sample first measures a world-space robot correction `(world_dx, world_dy)` needed to re-center the camera on the same marker
+- the saved local camera-to-TCP offset is solved from `t_world = (R_ref - R_sample) * c_local`
+- larger `rotation_step_deg` values generally produce a better-conditioned solve than very small wrist rotations
+
+The extra main-pipeline fields mean:
+- `run_during_robot_calibration`: enable TCP-offset capture during the normal marker-calibration run
+- `max_markers_for_tcp_capture`: limit how many successfully aligned markers are used for in-main TCP-offset capture
+- `recenter_max_iterations`: maximum iterative re-centering attempts per rotated sample
+- `min_samples`: minimum collected local samples required before saving a result
+- `max_acceptance_std_mm`: maximum allowed sample spread on `x` and `y` before the result is rejected
 
 ---
 

@@ -20,8 +20,12 @@ from src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_mar
 )
 from src.engine.robot.calibration.robot_calibration.states.remaining_handlers import (
     handle_align_robot_state,
+    handle_capture_tcp_offset_state,
     handle_iterate_alignment_state,
     handle_done_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.handle_height_sample_state import (
+    handle_height_sample_state,
 )
 
 
@@ -57,6 +61,26 @@ def _make_context(**overrides):
     ctx.vision_service.get_camera_width.return_value = 640
     ctx.vision_service.get_camera_height.return_value = 480
     ctx.debug_draw = MagicMock()
+    ctx.camera_tcp_offset_config = MagicMock(
+        run_during_robot_calibration=False,
+        iterations=0,
+        max_markers_for_tcp_capture=2,
+        rotation_step_deg=15.0,
+        approach_rz=0.0,
+        settle_time_s=0.0,
+        velocity=20,
+        acceleration=10,
+        recenter_max_iterations=5,
+        min_samples=3,
+        max_acceptance_std_mm=10.0,
+    )
+    ctx.camera_tcp_offset_samples = []
+    ctx.camera_tcp_offset_captured_markers = set()
+    ctx.run_height_measurement = True
+    ctx.height_map_samples = []
+    ctx.robot_config = MagicMock()
+    ctx.settings_service = MagicMock()
+    ctx.robot_config_key = "robot_config"
 
     # Wire helpers to mirror the real RobotCalibrationContext behaviour
     def _wait_for_frame():
@@ -308,6 +332,22 @@ class TestIterateAlignmentHandler(unittest.TestCase):
         result = handle_iterate_alignment_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
 
+    def test_alignment_success_returns_capture_tcp_offset_when_enabled(self):
+        ctx = self._aligned_ctx()
+        ctx.camera_tcp_offset_config.run_during_robot_calibration = True
+        ctx.camera_tcp_offset_config.iterations = 2
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.CAPTURE_TCP_OFFSET)
+
+    def test_alignment_success_skips_capture_when_max_markers_already_reached(self):
+        ctx = self._aligned_ctx()
+        ctx.camera_tcp_offset_config.run_during_robot_calibration = True
+        ctx.camera_tcp_offset_config.iterations = 2
+        ctx.camera_tcp_offset_config.max_markers_for_tcp_capture = 1
+        ctx.camera_tcp_offset_captured_markers = {0}
+        result = handle_iterate_alignment_state(ctx)
+        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
+
     def test_alignment_not_reached_stays_in_iterate(self):
         ctx = self._not_aligned_ctx()
         result = handle_iterate_alignment_state(ctx)
@@ -330,6 +370,70 @@ class TestDoneHandler(unittest.TestCase):
         ctx = _make_context(current_marker_id=1, required_ids={0, 1})
         result = handle_done_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.DONE)
+
+
+class TestCaptureTcpOffsetHandler(unittest.TestCase):
+
+    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    def test_returns_sample_height_when_capture_succeeds(self, capture_mock):
+        ctx = _make_context()
+        ctx.camera_tcp_offset_config.run_during_robot_calibration = True
+        ctx.camera_tcp_offset_config.iterations = 2
+        capture_mock.return_value = True
+
+        result = handle_capture_tcp_offset_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
+        capture_mock.assert_called_once_with(ctx)
+
+    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    def test_returns_error_when_capture_fails(self, capture_mock):
+        ctx = _make_context()
+        ctx.camera_tcp_offset_config.run_during_robot_calibration = True
+        ctx.camera_tcp_offset_config.iterations = 2
+        capture_mock.return_value = False
+
+        result = handle_capture_tcp_offset_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
+
+    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    def test_skips_capture_when_max_markers_already_captured(self, capture_mock):
+        ctx = _make_context()
+        ctx.camera_tcp_offset_config.run_during_robot_calibration = True
+        ctx.camera_tcp_offset_config.iterations = 2
+        ctx.camera_tcp_offset_config.max_markers_for_tcp_capture = 1
+        ctx.camera_tcp_offset_captured_markers = {0}
+
+        result = handle_capture_tcp_offset_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
+        capture_mock.assert_not_called()
+
+
+class TestHeightSampleHandler(unittest.TestCase):
+
+    def test_skips_height_measurement_when_disabled(self):
+        ctx = _make_context()
+        ctx.run_height_measurement = False
+        ctx.height_measuring_service = MagicMock()
+
+        result = handle_height_sample_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.DONE)
+        ctx.height_measuring_service.measure_at.assert_not_called()
+
+    def test_samples_height_when_enabled(self):
+        ctx = _make_context()
+        ctx.height_measuring_service = MagicMock()
+        ctx.height_measuring_service.measure_at.return_value = 12.34
+        ctx.calibration_robot_controller.robot_service.get_current_position.return_value = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
+
+        result = handle_height_sample_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.DONE)
+        ctx.height_measuring_service.measure_at.assert_called_once_with(1.0, 2.0)
+        self.assertEqual(ctx.height_map_samples, [[1.0, 2.0, 12.34]])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,23 @@
 
 Engine-level service for robot-to-camera spatial calibration. Moves the robot through a structured ArUco-marker grid, records robot positions and corresponding camera pixel coordinates, and computes the homography (image-to-robot mapping matrix) that allows the vision system to express workpiece positions in robot space.
 
-The package also contains a separate camera-TCP offset calibration routine. That routine assumes the homography already exists, repeatedly centers one configured ArUco marker under the camera, samples several wrist `rz` rotations, solves the rotating local XY offset between the camera center and the real robot TCP, and saves the result back into `RobotSettings.tcp_x_offset` / `tcp_y_offset`.
+The package also contains a separate camera-TCP offset calibration routine. That routine assumes the homography already exists, repeatedly centers one configured ArUco marker under the camera, samples several wrist `rz` rotations, solves the rotating local XY offset between the camera center and the real robot TCP, and saves the result back into `RobotSettings.camera_to_tcp_x_offset` / `camera_to_tcp_y_offset`.
+
+The main robot calibration pipeline can now also capture camera-TCP offset samples while it is already iteratively centering ArUco markers. This avoids relying on a homography at a mismatched Z plane: after a marker is aligned, the pipeline moves to one reference pose at `approach_rz`, then rotates through the configured `rz` sample angles, re-centers the same marker using the existing iterative alignment loop, accumulates local XY offset samples, and saves the solved TCP offset at the end of the run if the sample spread is acceptable.
+
+Important sampling rule:
+- the reference pose is a baseline only and is not used as a solved TCP-offset sample
+- `iterations = N` means `reference pose + N rotated captures`
+- final mean/std checks only use rotated samples where `sample_rz != reference_rz`
+
+This in-main-calibration capture is best-effort:
+- it only runs on up to `max_markers_for_tcp_capture` successfully calibrated markers
+- if one marker fails to produce TCP-offset samples, the calibration logs a warning and continues with the next marker instead of failing the whole robot calibration
+
+Important math rule:
+- `world_dx/world_dy` are the robot XY corrections needed to bring the camera center back over the fixed marker after a wrist rotation
+- the saved camera-relative-to-TCP offset is solved from the rigid-body relation `t_world = (R_ref - R_sample) * c_local`
+- the local offset is therefore not obtained by simply inverse-rotating the measured world correction
 
 ---
 
@@ -20,6 +36,7 @@ src/engine/robot/calibration/
     ├── CalibrationVision.py               ← Camera helper (frame capture + ArUco detection wrappers)
     ├── robot_controller.py                ← CalibrationRobotController (moves robot to target positions)
     ├── metrics.py                         ← Alignment error calculation utilities
+    ├── tcp_offset_capture.py              ← Main-calibration TCP-offset capture/solve helper
     ├── visualizer.py                      ← Optional live debug overlay
     ├── debug.py                           ← DebugDraw helper
     ├── logging.py                         ← Log summary + completion message builders
@@ -63,7 +80,7 @@ RobotCalibrationService(
 )
 ```
 
-`run_calibration()` builds a `RefactoredRobotCalibrationPipeline`, calls `pipeline.run()` (blocking), and returns `(success, message)`. Log messages from the calibration package are forwarded to the broker via a `_BrokerLogHandler` if `events_config` is provided.
+`run_calibration()` refreshes the live `robot_calibration` and `robot_config` values from `SettingsService`, builds a `RefactoredRobotCalibrationPipeline`, calls `pipeline.run()` (blocking), and returns `(success, message)`. This means changing calibration settings in the UI affects the next calibration run immediately without restarting the application. Log messages from the calibration package are forwarded to the broker via a `_BrokerLogHandler` if `events_config` is provided.
 
 `stop_calibration()` calls `pipeline.calibration_state_machine.stop_execution()` and `robot_service.stop_motion()`.
 
@@ -84,8 +101,8 @@ High-level flow:
    - detect the same marker again
    - transform its detected center with the homography
    - compare the transformed camera-center point to the current robot XY
-   - back-rotate that world correction into the reference tool frame
-6. Average the local XY corrections and save them into `RobotSettings.tcp_x_offset` / `tcp_y_offset`
+   - solve the rigid-body equation `t_world = (R_ref - R_sample) * c_local` for the fixed local offset
+6. Average the local XY corrections and save them into `RobotSettings.camera_to_tcp_x_offset` / `camera_to_tcp_y_offset`
 
 Operational details:
 
@@ -94,6 +111,17 @@ Operational details:
 - Restores `draw_contours` afterward only if it had been enabled before the run
 - Uses blocking robot moves with pose convergence enabled, so each sample waits for both XYZ and wrist orientation to settle before the next marker measurement is taken
 - Supports stop requests by setting an internal `threading.Event` and calling `robot_service.stop_motion()`
+
+Main-pipeline TCP-offset logging:
+
+- each accepted rotated sample is logged immediately as:
+  - `Captured TCP offset sample: marker=... sample=... reference_rz=... sample_rz=... world=(..., ...) local=(..., ...)`
+- when the main robot calibration finishes, the pipeline now emits one consolidated summary block containing:
+  - every raw sample used in the final solve
+  - per-sample `marker`, `sample_index`, `reference_rz`, `sample_rz`
+  - per-sample `world=(dx, dy)` and solved `local=(dx, dy)`
+  - grouped mean/std by `sample_rz`
+  - final aggregate mean/std that is validated and then saved into `RobotSettings`
 
 ---
 
@@ -168,7 +196,8 @@ INITIALIZING
                   → ITERATE_ALIGNMENT ──┐
                     → DONE             │ (per-marker loop)
                     → ALIGN_ROBOT ◄────┘
-                    → SAMPLE_HEIGHT
+                    → CAPTURE_TCP_OFFSET
+                      → SAMPLE_HEIGHT
                       → DONE
 ERROR (reachable from any state)
   → INITIALIZING (full reset)
@@ -190,9 +219,11 @@ Holds all mutable state for a single calibration run. Key fields:
 | Camera points | `camera_points_for_homography: dict` |
 | Iteration tracking | `iteration_count`, `max_iterations` |
 | ArUco progress | `current_marker_id`, `required_ids`, `markers_offsets_mm` |
+| TCP offset capture | `camera_tcp_offset_config`, `camera_tcp_offset_samples` |
 | Chessboard | `bottom_left_chessboard_corner_px`, `chessboard_center_px` |
 | Result | `image_to_robot_mapping` (the computed homography matrix) |
 | Z-axis | `Z_current`, `Z_target`, `ppm_scale` |
+| Persistence | `settings_service`, `robot_config`, `robot_config_key` |
 | Stop control | `stop_event: threading.Event` |
 
 `context.reset()` returns the context to its initial state without creating a new object — used for retries.

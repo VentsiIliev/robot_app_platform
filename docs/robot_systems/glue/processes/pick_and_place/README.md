@@ -114,6 +114,7 @@ This keeps the geometry logic unchanged while making tool/user/speed changes loc
 Pickup-point conversion is now split into three explicit layers:
 - `HomographyTransformer.transform(...)` converts camera pixels into calibration-plane robot XY
 - `CalibrationToPickupPlaneMapper` converts calibration-plane XY into pickup-plane / home-frame XY using the declared `CALIBRATION` and `HOME` movement-group poses
+- pickup-plane TCP delta compensation adjusts the mapped pickup-plane point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the working pickup reference angle
 - `PickupCalculator` applies gripper XY offsets, gripper Z offsets, safe heights, and final `rz`
 
 This replaces the older implicit `(-y, x)` rotation inside `PickupCalculator`. The 90 degree relationship between the calibration and pickup planes is now handled as a proper rigid frame conversion with both:
@@ -123,12 +124,28 @@ This replaces the older implicit `(-y, x)` rotation inside `PickupCalculator`. T
 As a result:
 - the homography remains valid only for the calibration plane
 - the pickup-plane conversion is explicit, logged, and testable independently
+- camera/TCP offset compensation for non-reference pickup `rz` now lives in the transform stage, where the mapped pickup-plane XY is still available as a frame-level point
 - gripper compensation stays isolated from plane-frame conversion
 
 The transform handler now logs the full chain:
 - image pickup point
 - calibration-plane robot point from homography
 - pickup-plane robot point after calibration-to-pickup mapping
+- pickup-plane TCP delta and the final corrected robot point
+
+The process uses the same correction model validated in the `PickTarget` debug application. The current runtime assumption is:
+
+- the mapped pickup-plane point is already correct at `rz = 90`
+- changing pickup `rz` requires only the TCP-offset delta from that reference
+
+So the transform stage applies:
+
+```text
+delta(rz) = R(rz) * c - R(90) * c
+corrected_pickup_xy = mapped_pickup_xy - delta(rz)
+```
+
+where `c = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)` comes from `robot/config.json` via `PickAndPlaceConfig`.
 
 ## Diagnostics
 
@@ -142,6 +159,9 @@ The snapshot currently includes:
 - active workpiece id/name
 - active gripper id
 - pickup point in image and robot space
+- mapped pickup-plane point before TCP correction
+- pickup TCP delta
+- final pickup `rz`
 - resolved height source and value
 - plane offsets/state
 - last typed error

@@ -74,6 +74,13 @@ class RobotCalibrationContext(Context):
         self.robot_positions_for_calibration = {}
         self.camera_points_for_homography = {}
         self.image_to_robot_mapping = None
+        self.camera_tcp_offset_config = None
+        self.camera_tcp_offset_samples: list = []
+        self.camera_tcp_offset_captured_markers = set()
+        self.run_height_measurement = True
+        self.settings_service = None
+        self.robot_config = None
+        self.robot_config_key = None
         
         # Iteration tracking
         self.iteration_count = 0

@@ -85,7 +85,7 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `ContourMatchingTester` | `_build_contour_matching_tester` | `ContourMatchingTesterService(vision, WorkpieceService)` |
 | `HeightMeasuring` | `_build_height_measuring_application` | `HeightMeasuringApplicationService(height_measuring, calibration, vision)` |
 | `PickAndPlaceVisualizer` | `_build_pick_and_place_visualizer` | `PickAndPlaceVisualizerService(coordinator)` |
-| `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, settings, workpieces)` |
+| `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, robot, transformer, robot_config, navigation)` |
 | `GlueProcessDriver` | `_build_glue_process_driver_application` | `GlueProcessDriverService(GlueProcess, MatchingService, GlueJobBuilderService, GlueJobExecutionService)` |
 | `BrokerDebug` | `_build_broker_debug_application` | `BrokerDebugApplicationService(messaging)` |
 | `UserManagement` | `_build_user_management_application` | `UserManagementApplicationService(CsvUserRepository)` |
@@ -204,10 +204,25 @@ Within the glue dispensing process, robot motion can now be configured independe
 
 The glue navigation facade now treats `move_home()` literally: it moves directly to the `HOME` group, applying the vision capture Z offset when configured, but it does not insert an automatic calibration waypoint. Any required move to `CALIBRATION` must be requested explicitly by the caller.
 
+The `PickTarget` debug application now uses that same distinction explicitly:
+- in calibration-plane mode its `Start` action moves to `CALIBRATION`
+- in pickup-plane mode its `Start` action moves to `HOME`
+
+`PickTarget` also now exposes a dedicated pickup-plane test mode that combines:
+- calibration-plane to pickup-plane mapping via `CalibrationToPickupPlaneMapper`
+- operator-controlled pickup `rz`
+- TCP-delta compensation relative to the known-good `90°` pickup reference
+
+That debug path exists to validate orientation-dependent pickup targeting before applying the same correction model to the production pick-and-place workflow.
+
 Within pick-and-place, camera-to-robot conversion is now also split explicitly by plane:
 - homography maps image points into calibration-plane robot coordinates
 - a dedicated calibration-to-pickup mapper converts those coordinates into the pickup/home-plane frame using the declared `CALIBRATION` and `HOME` movement-group poses
 - pickup gripper offsets are applied only after that frame conversion
+
+The glue system’s main robot calibration can now also capture camera-TCP offset samples during the normal marker-alignment run. When enabled in `robot/calibration.json`, up to `max_markers_for_tcp_capture` centered markers can be revisited at several wrist `rz` angles, re-centered iteratively, and used to solve a local `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` result that is saved back into `robot/config.json` only if the sample spread passes the configured acceptance threshold. If TCP-offset capture fails on one marker, the calibration logs a warning and continues with the next marker instead of aborting the whole run.
+
+The calibration service now refreshes both `robot/calibration.json` and `robot/config.json` from the shared `SettingsService` each time a calibration run starts. In practice this means changes made in Robot Settings, such as TCP-capture iterations or robot tool/user values, are picked up by the next calibration run immediately without restarting the glue application.
 
 ---
 

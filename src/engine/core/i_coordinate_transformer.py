@@ -25,8 +25,15 @@ class ICoordinateTransformer(ABC):
 
     @abstractmethod
     def transform_to_tcp(self, x: float, y: float) -> Tuple[float, float]:
-        """Return (x_out, y_out) shifted by the TCP offset (camera → tool tip).
-        Raises RuntimeError if the matrix is not loaded or if no TCP offset was
+        """Return (x_out, y_out) shifted by the camera-to-TCP offset.
+        Raises RuntimeError if the matrix is not loaded or if no camera-to-TCP offset was
+        provided at construction time."""
+        ...
+
+    @abstractmethod
+    def transform_to_tool(self, x: float, y: float) -> Tuple[float, float]:
+        """Return (x_out, y_out) shifted by the camera-to-tool offset.
+        Raises RuntimeError if the matrix is not loaded or if no camera-to-tool offset was
         provided at construction time."""
         ...
 

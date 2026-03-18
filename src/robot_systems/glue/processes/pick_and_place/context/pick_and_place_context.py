@@ -16,7 +16,10 @@ class PickAndPlaceContext:
     current_gripper_id: Optional[int] = None
     current_orientation: Optional[float] = None
     current_pickup_point_px: Optional[tuple[float, float]] = None
+    current_pickup_point_robot_mapped: Optional[tuple[float, float]] = None
     current_pickup_point_robot: Optional[tuple[float, float]] = None
+    current_pickup_tcp_delta: Optional[tuple[float, float]] = None
+    current_pickup_rz: Optional[float] = None
     active_height_source: str = "zero"
     current_height_mm: Optional[float] = None
     last_message: str = ""
@@ -59,7 +62,10 @@ class PickAndPlaceContext:
         self.current_gripper_id = None
         self.current_orientation = None
         self.current_pickup_point_px = None
+        self.current_pickup_point_robot_mapped = None
         self.current_pickup_point_robot = None
+        self.current_pickup_tcp_delta = None
+        self.current_pickup_rz = None
         self.current_height_mm = None
 
     def mark_error(self, error: PickAndPlaceErrorInfo) -> None:
@@ -77,7 +83,10 @@ class PickAndPlaceContext:
             "current_gripper_id": self.current_gripper_id,
             "current_orientation": self.current_orientation,
             "current_pickup_point_px": list(self.current_pickup_point_px) if self.current_pickup_point_px else None,
+            "current_pickup_point_robot_mapped": list(self.current_pickup_point_robot_mapped) if self.current_pickup_point_robot_mapped else None,
             "current_pickup_point_robot": list(self.current_pickup_point_robot) if self.current_pickup_point_robot else None,
+            "current_pickup_tcp_delta": list(self.current_pickup_tcp_delta) if self.current_pickup_tcp_delta else None,
+            "current_pickup_rz": self.current_pickup_rz,
             "active_height_source": self.active_height_source,
             "current_height_mm": self.current_height_mm,
             "last_message": self.last_message,

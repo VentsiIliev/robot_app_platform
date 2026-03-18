@@ -9,6 +9,9 @@ _logger = logging.getLogger(__name__)
 
 
 class StubPickTargetService(IPickTargetService):
+    def __init__(self):
+        self._use_pickup_plane = False
+        self._pickup_plane_rz = 90.0
 
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -21,11 +24,20 @@ class StubPickTargetService(IPickTargetService):
         return True
 
     def move_to_calibration_position(self) -> bool:
-        _logger.info("[Stub] move_to_calibration_position")
+        target = "HOME" if self._use_pickup_plane else "CALIBRATION"
+        _logger.info("[Stub] move_to_start_position(%s)", target)
         return True
 
     def set_use_tcp(self, enabled: bool) -> None:
         _logger.info("[Stub] set_use_tcp(%s)", enabled)
+
+    def set_use_pickup_plane(self, enabled: bool) -> None:
+        self._use_pickup_plane = enabled
+        _logger.info("[Stub] set_use_pickup_plane(%s)", enabled)
+
+    def set_pickup_plane_rz(self, rz: float) -> None:
+        self._pickup_plane_rz = rz
+        _logger.info("[Stub] set_pickup_plane_rz(%.1f)", rz)
 
     def capture_contour_trajectory(self) -> List[np.ndarray]:
         _logger.info("[Stub] capture_contour_trajectory")

@@ -145,8 +145,10 @@ class RobotSettings:
     robot_ip: str = "192.168.58.2"
     robot_tool: int = 0
     robot_user: int = 0
-    tcp_x_offset: float = 0.0
-    tcp_y_offset: float = 0.0
+    camera_to_tcp_x_offset: float = 0.0
+    camera_to_tcp_y_offset: float = 0.0
+    camera_to_tool_x_offset: float = 0.0
+    camera_to_tool_y_offset: float = 0.0
     tcp_x_step_distance: float = 50.0
     tcp_x_step_offset: float = 0.1
     tcp_y_step_distance: float = 50.0
@@ -166,8 +168,10 @@ class RobotSettings:
             robot_ip=data.get("ROBOT_IP", "192.168.58.2"),
             robot_tool=data.get("ROBOT_TOOL", 0),
             robot_user=data.get("ROBOT_USER", 0),
-            tcp_x_offset=data.get("TCP_X_OFFSET", 0.0),
-            tcp_y_offset=data.get("TCP_Y_OFFSET", 0.0),
+            camera_to_tcp_x_offset=data.get("CAMERA_TO_TCP_X_OFFSET", 0.0),
+            camera_to_tcp_y_offset=data.get("CAMERA_TO_TCP_Y_OFFSET", 0.0),
+            camera_to_tool_x_offset=data.get("CAMERA_TO_TOOL_X_OFFSET", 0.0),
+            camera_to_tool_y_offset=data.get("CAMERA_TO_TOOL_Y_OFFSET", 0.0),
             tcp_x_step_distance=data.get("TCP_X_STEP_DISTANCE", 50.0),
             tcp_x_step_offset=data.get("TCP_X_STEP_OFFSET", 0.1),
             tcp_y_step_distance=data.get("TCP_Y_STEP_DISTANCE", 50.0),
@@ -183,8 +187,10 @@ class RobotSettings:
             "ROBOT_IP": self.robot_ip,
             "ROBOT_TOOL": self.robot_tool,
             "ROBOT_USER": self.robot_user,
-            "TCP_X_OFFSET": self.tcp_x_offset,
-            "TCP_Y_OFFSET": self.tcp_y_offset,
+            "CAMERA_TO_TCP_X_OFFSET": self.camera_to_tcp_x_offset,
+            "CAMERA_TO_TCP_Y_OFFSET": self.camera_to_tcp_y_offset,
+            "CAMERA_TO_TOOL_X_OFFSET": self.camera_to_tool_x_offset,
+            "CAMERA_TO_TOOL_Y_OFFSET": self.camera_to_tool_y_offset,
             "TCP_X_STEP_DISTANCE": self.tcp_x_step_distance,
             "TCP_X_STEP_OFFSET": self.tcp_x_step_offset,
             "TCP_Y_STEP_DISTANCE": self.tcp_y_step_distance,

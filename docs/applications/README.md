@@ -44,6 +44,7 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `tool_settings/` | Tool changer configuration (grip offsets, tool type selection) |
 | `user_management/` | User account management backed by a CSV repository |
 | `contour_matching_tester/` | Offline workpiece-to-contour match testing tool |
+| `pick_target/` | Manual vision-to-robot target probe for homography, pickup-plane mapping, and TCP-offset debugging |
 
 ---
 

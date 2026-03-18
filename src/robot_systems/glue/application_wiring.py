@@ -89,8 +89,10 @@ def _build_glue_process_driver_application(robot_system):
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
-            tcp_x_offset=robot_config.tcp_x_offset,
-            tcp_y_offset=robot_config.tcp_y_offset,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
@@ -179,8 +181,10 @@ def _build_workpiece_editor_application(robot_system):
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
-            tcp_x_offset=robot_config.tcp_x_offset,
-            tcp_y_offset=robot_config.tcp_y_offset,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
@@ -318,8 +322,10 @@ def _build_calibration_application(robot_system):
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
-            tcp_x_offset=robot_config.tcp_x_offset,
-            tcp_y_offset=robot_config.tcp_y_offset,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
@@ -383,8 +389,10 @@ def _build_dashboard_application(system):
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
-            tcp_x_offset=robot_config.tcp_x_offset,
-            tcp_y_offset=robot_config.tcp_y_offset,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
@@ -501,8 +509,10 @@ def _build_pick_target_application(robot_system):
     transformer = (
         HomographyTransformer(
             vision_service.camera_to_robot_matrix_path,
-            tcp_x_offset=robot_config.tcp_x_offset,
-            tcp_y_offset=robot_config.tcp_y_offset,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)

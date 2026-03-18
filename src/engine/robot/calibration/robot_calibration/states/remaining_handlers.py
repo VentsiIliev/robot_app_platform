@@ -18,6 +18,11 @@ from src.engine.robot.calibration.robot_calibration.logging import (
     construct_iterative_alignment_log_message,
 )
 from src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler import show_live_feed
+from src.engine.robot.calibration.robot_calibration.tcp_offset_capture import (
+    capture_tcp_offset_for_current_marker,
+    finalize_tcp_offset_calibration,
+    should_capture_tcp_offset_for_current_marker,
+)
 
 wait_to_reach_position = True #TODO set to False only for testing!
 
@@ -184,8 +189,9 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         context.robot_positions_for_calibration[marker_id] = current_pose
         context.debug_draw.draw_image_center(iteration_image)
         show_live_feed(context, iteration_image, current_error_mm, broadcast_image=context.broadcast_events)
-        
-        # return RobotCalibrationStates.DONE
+
+        if should_capture_tcp_offset_for_current_marker(context):
+            return RobotCalibrationStates.CAPTURE_TCP_OFFSET
         return RobotCalibrationStates.SAMPLE_HEIGHT
     else:
         # Compute next move
@@ -250,6 +256,23 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     return RobotCalibrationStates.ITERATE_ALIGNMENT
 
 
+def handle_capture_tcp_offset_state(context) -> RobotCalibrationStates:
+    if not should_capture_tcp_offset_for_current_marker(context):
+        return RobotCalibrationStates.SAMPLE_HEIGHT
+    if context.stop_event.is_set():
+        return RobotCalibrationStates.CANCELLED
+    ok = capture_tcp_offset_for_current_marker(context)
+    if context.stop_event.is_set():
+        return RobotCalibrationStates.CANCELLED
+    if not ok:
+        _logger.warning(
+            "Skipping TCP offset capture for marker index %s: %s",
+            context.current_marker_id,
+            getattr(context, "calibration_error_message", "unknown TCP offset capture failure"),
+        )
+    return RobotCalibrationStates.SAMPLE_HEIGHT
+
+
 def handle_done_state(context) -> RobotCalibrationStates:
     """
     Handle the DONE state.
@@ -265,6 +288,13 @@ def handle_done_state(context) -> RobotCalibrationStates:
         if context.height_measuring_service and context.height_map_samples:
             _logger.info("Saving height map: %d samples", len(context.height_map_samples))
             context.height_measuring_service.save_height_map(context.height_map_samples)
+        cfg = getattr(context, "camera_tcp_offset_config", None)
+        if cfg is not None and getattr(cfg, "run_during_robot_calibration", False):
+            ok, message = finalize_tcp_offset_calibration(context)
+            if ok:
+                _logger.info("Saved camera TCP offsets from main robot calibration: %s", message)
+            else:
+                _logger.warning("Camera TCP offset capture did not produce a saved result: %s", message)
         _logger.info("All markers processed. Calibration complete.")
         return RobotCalibrationStates.DONE  # Final completion
 

@@ -48,6 +48,12 @@ class RobotCalibrationConfig:
                  height_measuring_service, required_ids, z_target,
                  robot_tool, robot_user,
                  velocity: int = 30, acceleration: int = 10,
+                 run_height_measurement: bool = True,
+                 settings_service=None,
+                 calibration_settings_key: str | None = None,
+                 robot_config=None,
+                 robot_config_key: str | None = None,
+                 camera_tcp_offset_config=None,
                  axis_mapping_config=None,
                  debug=False, step_by_step=False, live_visualization=False,
                  use_marker_centre: bool = False,
@@ -58,6 +64,12 @@ class RobotCalibrationConfig:
         self.robot_user = robot_user
         self.velocity = velocity
         self.acceleration = acceleration
+        self.run_height_measurement = run_height_measurement
+        self.settings_service = settings_service
+        self.calibration_settings_key = calibration_settings_key
+        self.robot_config = robot_config
+        self.robot_config_key = robot_config_key
+        self.camera_tcp_offset_config = camera_tcp_offset_config
         self.navigation_service = navigation_service
         self.height_measuring_service = height_measuring_service
         self.required_ids = required_ids
@@ -70,4 +82,3 @@ class RobotCalibrationConfig:
         self.use_marker_centre = use_marker_centre
         # use RANSAC outlier rejection in findHomography instead of plain DLT
         self.use_ransac = use_ransac
-

@@ -40,8 +40,8 @@ class PickupCalculator:
         _logger.debug(f"Calculated z_pickup: {z_pickup}")
 
         # temporary set rz_final to cfg.rz_orientation for pickup and descent to avoid gripper rotation during pickup, which can cause issues with vision-based height measurement
-        # rz_final = cfg.rz_orientation
-
+        rz_final = cfg.rz_orientation
+        # rz_final = 0
         pickup_positions = PickupPositions(
             descent = Position(px, py, z_descent, cfg.orientation_rx, cfg.orientation_ry, rz_final),
             pickup  = Position(px, py, z_pickup,  cfg.orientation_rx, cfg.orientation_ry, rz_final),

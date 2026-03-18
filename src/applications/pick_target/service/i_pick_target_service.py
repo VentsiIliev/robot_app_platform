@@ -20,11 +20,19 @@ class IPickTargetService(ABC):
 
     @abstractmethod
     def move_to_calibration_position(self) -> bool:
-        """Move robot to the named CALIBRATION position. Returns success."""
+        """Move robot to the mode-appropriate start position. Returns success."""
 
     @abstractmethod
     def set_use_tcp(self, enabled: bool) -> None:
         """When True, transform() uses TCP offsets; when False, uses raw homography."""
+
+    @abstractmethod
+    def set_use_pickup_plane(self, enabled: bool) -> None:
+        """When True, map transformed points into the pickup plane and use pickup orientation."""
+
+    @abstractmethod
+    def set_pickup_plane_rz(self, rz: float) -> None:
+        """Set the pickup-plane RZ orientation used for manual testing."""
 
     @abstractmethod
     def capture_contour_trajectory(self) -> List[np.ndarray]:
@@ -49,4 +57,3 @@ class IPickTargetService(ABC):
         vel / acc: normalised 0–1 speed fraction.
         Returns (success, message).
         """
-

@@ -79,6 +79,12 @@ def _build_calibration_service(robot_system):
         robot_user=robot_settings.robot_user,
         velocity=calib_settings.velocity,
         acceleration=calib_settings.acceleration,
+        run_height_measurement=calib_settings.run_height_measurement,
+        settings_service=robot_system._settings_service,
+        calibration_settings_key=SettingsID.ROBOT_CALIBRATION,
+        robot_config=robot_settings,
+        robot_config_key=SettingsID.ROBOT_CONFIG,
+        camera_tcp_offset_config=calib_settings.camera_tcp_offset,
         axis_mapping_config=calib_settings.axis_mapping,
         use_ransac=True,
         use_marker_centre=True

@@ -13,6 +13,7 @@ class RobotCalibrationStates(Enum):
     COMPUTE_OFFSETS = auto()
     ALIGN_ROBOT = auto()
     ITERATE_ALIGNMENT = auto()
+    CAPTURE_TCP_OFFSET = auto()
     SAMPLE_HEIGHT = auto()
     DONE = auto()
     ERROR = auto()
@@ -97,7 +98,14 @@ class RobotCalibrationTransitionRules:
                 RobotCalibrationStates.DONE,  # When marker alignment is complete
                 RobotCalibrationStates.ALIGN_ROBOT,  # Go back for next marker
                 RobotCalibrationStates.ERROR,
+                RobotCalibrationStates.CAPTURE_TCP_OFFSET,
                 RobotCalibrationStates.SAMPLE_HEIGHT,
+                RobotCalibrationStates.CANCELLED,
+            },
+
+            RobotCalibrationStates.CAPTURE_TCP_OFFSET: {
+                RobotCalibrationStates.SAMPLE_HEIGHT,
+                RobotCalibrationStates.ERROR,
                 RobotCalibrationStates.CANCELLED,
             },
 
