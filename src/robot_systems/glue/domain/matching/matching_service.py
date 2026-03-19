@@ -2,6 +2,7 @@ import logging
 import numpy as np
 from typing import List, Tuple
 
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService, VisionCaptureSnapshot
 from src.engine.vision.i_vision_service import IVisionService
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.domain.workpieces.service.i_workpiece_service import IWorkpieceService
@@ -20,9 +21,16 @@ def _close_contour(contour: np.ndarray) -> np.ndarray:
 
 class MatchingService(IMatchingService):
 
-    def __init__(self, vision_service: IVisionService, workpiece_service: IWorkpieceService):
+    def __init__(
+        self,
+        vision_service: IVisionService,
+        workpiece_service: IWorkpieceService,
+        capture_snapshot_service: ICaptureSnapshotService,
+    ):
         self._vision_service    = vision_service
         self._workpiece_service = workpiece_service
+        self._capture_snapshot_service = capture_snapshot_service
+        self._last_snapshot: VisionCaptureSnapshot | None = None
 
     def run_matching(self) -> Tuple[dict, int, List, List]:
         contours   = self._get_contours()
@@ -49,7 +57,12 @@ class MatchingService(IMatchingService):
         return workpieces
 
     def _get_contours(self) -> list:
-        raw = self._vision_service.get_latest_contours()
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="matching")
+        self._last_snapshot = snapshot
+        raw = snapshot.contours
         closed = [_close_contour(c) for c in raw]
         _logger.debug("_get_contours: %d contours", len(closed))
         return closed
+
+    def get_last_capture_snapshot(self) -> VisionCaptureSnapshot | None:
+        return self._last_snapshot

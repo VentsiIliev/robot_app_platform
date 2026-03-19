@@ -4,6 +4,7 @@ import threading
 from typing import Callable, Optional
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
@@ -52,7 +53,7 @@ class PickAndPlaceWorkflow:
         on_match_result:      Optional[Callable] = None,
         on_diagnostics:       Optional[Callable[[dict], None]] = None,
         step_gate:            Optional[Callable[[str, dict], bool]] = None,
-        calibration_to_pickup_mapper: Optional[Callable[[float, float], tuple[float, float]]] = None,
+        calibration_to_target_pose_mapper: Optional[PlanePoseMapper] = None,
         simulation:           bool = False,
     ):
         self._robot              = robot
@@ -67,7 +68,7 @@ class PickAndPlaceWorkflow:
         self._on_match_result     = on_match_result
         self._on_diagnostics      = on_diagnostics
         self._step_gate           = step_gate
-        self._calibration_to_pickup_mapper = calibration_to_pickup_mapper
+        self._calibration_to_target_pose_mapper = calibration_to_target_pose_mapper
         self._simulation          = simulation
         self._plane              = Plane(config.plane)
         self._plane_mgr          = PlaneManagementService(self._plane)
@@ -77,12 +78,12 @@ class PickAndPlaceWorkflow:
         self._selection_policy   = WorkpieceSelectionPolicy()
         self._point_transformer  = TargetPointTransformer(
             base_transformer=transformer,
-            calibration_to_pickup_mapper=calibration_to_pickup_mapper,
+            calibration_to_target_pose_mapper=calibration_to_target_pose_mapper,
             camera_to_tcp_x_offset=config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=config.camera_to_tool_y_offset,
-            pickup_plane_reference_rz=config.pickup_plane_reference_rz,
+            camera_center_point=(config.camera_center_x, config.camera_center_y),
+            tool_point=(config.tool_point_x, config.tool_point_y),
+            gripper_point=(config.gripper_point_x, config.gripper_point_y),
         )
         self._height_resolution  = HeightResolutionService(config, height, logger)
         self._context            = PickAndPlaceContext(simulation=simulation)

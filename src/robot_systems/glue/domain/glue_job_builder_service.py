@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
 
 
 class GlueJobBuildError(ValueError):
@@ -41,9 +42,11 @@ class GlueJobBuilderService:
     def __init__(
         self,
         transformer: ICoordinateTransformer | None = None,
+        point_transformer: TargetPointTransformer | None = None,
         z_min: float = 0.0,
     ) -> None:
         self._transformer = transformer
+        self._point_transformer = point_transformer
         self._z_min = float(z_min)
 
     def build_job(self, matched_workpieces: list[dict[str, Any]]) -> GlueJob:
@@ -147,6 +150,8 @@ class GlueJobBuilderService:
             return False
 
     def _transform_xy(self, x: float, y: float) -> tuple[float, float]:
+        if self._point_transformer is not None:
+            return self._point_transformer.transform_to_tool(x, y, current_rz=0.0).final_xy
         if self._transformer is None or not self._transformer.is_available():
             raise GlueJobBuildError("Robot coordinate transformer is unavailable")
         return self._transformer.transform(x, y)

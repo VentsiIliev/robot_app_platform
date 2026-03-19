@@ -209,7 +209,7 @@ The `PickTarget` debug application now uses that same distinction explicitly:
 - in pickup-plane mode its `Start` action moves to `HOME`
 
 `PickTarget` also now exposes a dedicated pickup-plane test mode that combines:
-- calibration-plane to pickup-plane mapping via `CalibrationToPickupPlaneMapper`
+- calibration-plane to pickup-plane mapping via `PlanePoseMapper`
 - operator-controlled pickup `rz`
 - TCP-delta compensation relative to the known-good `90°` pickup reference
 
@@ -217,8 +217,32 @@ That debug path exists to validate orientation-dependent pickup targeting before
 
 Within pick-and-place, camera-to-robot conversion is now also split explicitly by plane:
 - homography maps image points into calibration-plane robot coordinates
-- a dedicated calibration-to-pickup mapper converts those coordinates into the pickup/home-plane frame using the declared `CALIBRATION` and `HOME` movement-group poses
-- pickup gripper offsets are applied only after that frame conversion
+- matching captures contours and the current robot pose together through `ICaptureSnapshotService`
+- a dedicated `PlanePoseMapper` is rebuilt at transform time to convert those coordinates into the actual capture-pose frame
+- a glue-specific `TargetPointTransformer` then resolves the requested target point in that plane:
+  - `camera_center`
+  - `tool`
+  - `gripper`
+- capture-plane reference-angle correction is applied before target-point offsets are added
+- `PickupCalculator` now assumes XY is already fully resolved and only applies heights and final orientation
+
+The current transformation order for pickup is:
+
+1. capture contours and current robot pose together via `ICaptureSnapshotService`
+2. image pixel -> calibration-plane XY via homography
+3. calibration-plane XY -> capture-plane XY via `PlanePoseMapper`
+4. capture-plane reference-angle delta using calibrated `camera_to_tcp_*`
+5. camera/tool/gripper target resolution from measured reference points
+6. pose construction in `PickupCalculator`
+
+For glue dispensing, the transform path is separate and currently simpler:
+
+1. image-space spray contour point
+2. raw homography into calibration-plane XY
+3. glue-level `TargetPointTransformer.transform_to_tool(...)` with no plane mapper
+4. final spray waypoint `[x, y, z, rx, ry, rz]` for `GlueProcess`
+
+This means the glue process now resolves spray geometry to the configured tool point directly, but it does not apply capture-pose plane remapping like pick-and-place.
 
 The glue system’s main robot calibration can now also capture camera-TCP offset samples during the normal marker-alignment run. When enabled in `robot/calibration.json`, up to `max_markers_for_tcp_capture` centered markers can be revisited at several wrist `rz` angles, re-centered iteratively, and used to solve a local `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` result that is saved back into `robot/config.json` only if the sample spread passes the configured acceptance threshold. If TCP-offset capture fails on one marker, the calibration logs a warning and continues with the next marker instead of aborting the whole run.
 

@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.applications.contour_matching_tester.service.i_contour_matching_tester_service import IContourMatchingTesterService
 
 _logger = logging.getLogger(__name__)
@@ -19,9 +20,10 @@ def _close_contour(contour: np.ndarray) -> np.ndarray:
 
 class ContourMatchingTesterService(IContourMatchingTesterService):
 
-    def __init__(self, vision_service=None, workpiece_service=None):
+    def __init__(self, vision_service=None, workpiece_service=None, capture_snapshot_service: ICaptureSnapshotService | None = None):
         self._vision_service    = vision_service
         self._workpiece_service = workpiece_service
+        self._capture_snapshot_service = capture_snapshot_service
         self._metadata:         List[dict] = []   # parallel to the list returned by get_workpieces()
 
     def get_workpieces(self) -> list:
@@ -40,9 +42,12 @@ class ContourMatchingTesterService(IContourMatchingTesterService):
         return workpieces
 
     def get_latest_contours(self) -> list:
-        if self._vision_service is None:
+        if self._capture_snapshot_service is None and self._vision_service is None:
             return []
-        raw    = self._vision_service.get_latest_contours()
+        if self._capture_snapshot_service is not None:
+            raw = self._capture_snapshot_service.capture_snapshot(source="contour_matching_tester").contours
+        else:
+            raw = self._vision_service.get_latest_contours()
         closed = [_close_contour(c) for c in raw]
         _logger.debug("get_latest_contours: %d contours (ensured closed)", len(closed))
         return closed

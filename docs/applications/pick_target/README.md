@@ -56,7 +56,7 @@ The control panel currently provides:
 - `Capture`: capture latest contours and transform them into robot-space points
 - `Move`: move through the captured target list
 - `Execute Trajectory`: execute the captured contour trajectory
-- `TCP: ON/OFF`: choose `transform_to_tcp(...)` vs raw `transform(...)`
+- `Target: CAMERA/TOOL/GRIPPER`: choose which physical point should land on the target for both point pickup and contour execution
 - `Plane: CALIB/PICKUP`: choose calibration-plane coordinates vs pickup-plane coordinates
 - `Pickup RZ`: test pickup-plane wrist orientation values directly
 - `Start`: move to the mode-appropriate reference position
@@ -77,8 +77,11 @@ Trajectory execution is intentionally disabled while pickup-plane mode is enable
 `Capture` uses:
 
 1. contour centroid in image pixels
-2. `HomographyTransformer.transform(...)` or `transform_to_tcp(...)`
-3. robot-space point in the calibration frame
+2. `TargetPointTransformer` with no mapper
+3. target-point resolution in the calibration frame:
+   - `camera_center`
+   - `tool`
+   - `gripper`
 
 ### Pickup-plane mode
 
@@ -86,19 +89,20 @@ Pickup-plane mode uses:
 
 1. contour centroid in image pixels
 2. homography transform into calibration-plane robot XY
-3. `CalibrationToPickupPlaneMapper` to convert into pickup-plane / `HOME` frame XY
-4. pickup-plane TCP-delta correction relative to the working `90°` reference
+3. `PlanePoseMapper` to convert into pickup-plane / `HOME` frame XY
+4. mapped-pose reference-angle correction using calibrated `camera_to_tcp_*`
+5. target-point resolution through `TargetPointTransformer`
 
 ---
 
-## Pickup-Plane TCP Delta
+## Pickup-Plane Reference Delta
 
 The important debug finding was:
 
 - the mapped pickup-plane point is already correct at `rz = 90`
 - applying the full calibrated TCP offset again moves the robot away from the target
 
-So the app does **not** apply the full TCP offset in pickup-plane mode. Instead, it applies only the orientation-dependent change from the known-good `90°` reference:
+So the app does **not** apply the full TCP offset in pickup-plane mode. Instead, it applies only the orientation-dependent change from the known-good mapped-pose reference:
 
 ```text
 delta(rz) = R(rz) * c - R(90) * c
@@ -110,9 +114,9 @@ where:
 - `c = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)` from robot settings
 - `mapped_xy` is the point after homography + calibration-to-pickup mapping
 
-This keeps the `rz=90` baseline unchanged while compensating when the wrist angle changes during testing.
+In the default pickup-plane setup, that reference is the `HOME` pose `rz`, which keeps the known-good baseline unchanged while compensating when the wrist angle changes during testing.
 
-That correction is only applied in pickup-plane mode and only when the app is using raw homography output. If `TCP: ON` is selected, the app assumes the transformer is already applying TCP compensation and skips the extra pickup-plane delta to avoid double application.
+That correction is only applied in pickup-plane mode when the selected target is `camera_center`. When `tool` or `gripper` is selected, the app resolves those target-point offsets through `TargetPointTransformer` on top of the mapped point instead of using the older binary TCP toggle behavior.
 
 ---
 

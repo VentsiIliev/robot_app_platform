@@ -21,6 +21,57 @@ _WORKPIECES_STORAGE   = os.path.join(_SYSTEM_DIR, "storage", "workpieces")
 _USERS_STORAGE        = os.path.join(_SYSTEM_DIR, "storage", "users", "users.csv")
 _PERMISSIONS_STORAGE  = os.path.join(_SYSTEM_DIR, "storage", "settings", "permissions.json")
 
+
+def _build_capture_snapshot_service(robot_system):
+    from src.robot_systems.glue.capture_snapshot_service import GlueCaptureSnapshotService
+
+    return GlueCaptureSnapshotService(
+        vision_service=robot_system.get_optional_service(ServiceID.VISION),
+        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
+    )
+
+
+def _build_glue_target_point_transformer(robot_system):
+    from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+
+    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    robot_config = getattr(robot_system, "_robot_config", None)
+    if vision_service is None:
+        return None
+
+    base_transformer = (
+        HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
+        )
+        if robot_config is not None else
+        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+    )
+
+    if robot_config is None:
+        return TargetPointTransformer(base_transformer=base_transformer)
+
+    return TargetPointTransformer(
+        base_transformer=base_transformer,
+        camera_to_tcp_x_offset=float(robot_config.camera_to_tcp_x_offset),
+        camera_to_tcp_y_offset=float(robot_config.camera_to_tcp_y_offset),
+        camera_center_point=(
+            float(robot_config.camera_center_x),
+            float(robot_config.camera_center_y),
+        ),
+        tool_point=(
+            float(robot_config.tool_point_x),
+            float(robot_config.tool_point_y),
+        ),
+        gripper_point=(
+            float(robot_config.gripper_point_x),
+            float(robot_config.gripper_point_y),
+        ),
+    )
+
 def _build_pick_and_place_visualizer(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.pick_and_place_visualizer import PickAndPlaceVisualizerFactory
@@ -33,9 +84,13 @@ def _build_pick_and_place_visualizer(robot_system):
     from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 
     vision_service    = robot_system.get_optional_service(ServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
-    matching_service  = MatchingService(vision_service=vision_service,
-                                        workpiece_service=workpiece_service)
+    matching_service  = MatchingService(
+        vision_service=vision_service,
+        workpiece_service=workpiece_service,
+        capture_snapshot_service=capture_snapshot_service,
+    )
     service = PickAndPlaceVisualizerService(
         matching_service=matching_service,
         config=PickAndPlaceConfig(),
@@ -57,11 +112,12 @@ def _build_contour_matching_tester(robot_system):
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
     vision_service    = robot_system.get_optional_service(ServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
 
     service = ContourMatchingTesterService(
         vision_service=vision_service,
         workpiece_service=workpiece_service,
-
+        capture_snapshot_service=capture_snapshot_service,
     )
     return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory().build(service, ms))
 
@@ -81,6 +137,7 @@ def _build_glue_process_driver_application(robot_system):
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE))
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = getattr(robot_system, "_robot_config", None)
     try:
         z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
@@ -101,22 +158,26 @@ def _build_glue_process_driver_application(robot_system):
     matching_service = MatchingService(
         vision_service=vision_service,
         workpiece_service=workpiece_service,
+        capture_snapshot_service=capture_snapshot_service,
     )
     execution_service = GlueJobExecutionService(
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
             transformer=transformer,
+            point_transformer=_build_glue_target_point_transformer(robot_system),
             z_min=z_min,
         ),
         glue_process=robot_system.coordinator.glue_process,
         navigation_service=robot_system.coordinator.glue_process.navigation_service,
         vision_service=vision_service,
+        capture_snapshot_service=capture_snapshot_service,
         messaging_service=robot_system._messaging_service,
     )
     service = GlueProcessDriverService(
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
             transformer=transformer,
+            point_transformer=_build_glue_target_point_transformer(robot_system),
             z_min=z_min,
         ),
         glue_process=robot_system.coordinator.glue_process,
@@ -176,6 +237,7 @@ def _build_workpiece_editor_application(robot_system):
 
     settings_service = robot_system._settings_service
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = robot_system._robot_config
 
     transformer = (
@@ -206,6 +268,7 @@ def _build_workpiece_editor_application(robot_system):
 
     service = WorkpieceEditorService(
         vision_service=vision_service,
+        capture_snapshot_service=capture_snapshot_service,
         save_fn=lambda data: workpiece_service.save(data),
         update_fn=lambda sid, data: workpiece_service.update(sid, data),
         form_schema=lambda: build_glue_workpiece_form_schema(  # ← lazy callable
@@ -379,6 +442,7 @@ def _build_dashboard_application(system):
     weight_service = system.get_optional_service(ServiceID.WEIGHT)
     vision_service = system.get_optional_service(ServiceID.VISION)
     robot_service = system.get_optional_service(ServiceID.ROBOT)
+    capture_snapshot_service = _build_capture_snapshot_service(system)
     robot_config = getattr(system, "_robot_config", None)
 
     try:
@@ -403,14 +467,17 @@ def _build_dashboard_application(system):
             matching_service=MatchingService(
                 vision_service=vision_service,
                 workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+                capture_snapshot_service=capture_snapshot_service,
             ),
             job_builder=GlueJobBuilderService(
                 transformer=transformer,
+                point_transformer=_build_glue_target_point_transformer(system),
                 z_min=z_min,
             ),
             glue_process=coordinator.glue_process,
             navigation_service=coordinator.glue_process.navigation_service,
             vision_service=vision_service,
+            capture_snapshot_service=capture_snapshot_service,
             messaging_service=system._messaging_service,
         )
         if vision_service is not None else None
@@ -504,6 +571,7 @@ def _build_pick_target_application(robot_system):
     from src.engine.vision.homography_transformer import HomographyTransformer
 
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service  = robot_system.get_optional_service(ServiceID.ROBOT)
     robot_config = robot_system._robot_config
     transformer = (
@@ -520,6 +588,7 @@ def _build_pick_target_application(robot_system):
     )
     service = PickTargetApplicationService(
         vision_service=vision_service,
+        capture_snapshot_service=capture_snapshot_service,
         robot_service=robot_service,
         transformer=transformer,
         robot_config=robot_system._robot_config,

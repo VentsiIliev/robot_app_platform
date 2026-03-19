@@ -8,6 +8,7 @@ from src.applications.workpiece_editor.service import IWorkpieceEditorService
 from src.applications.workpiece_editor.editor_core.handlers.SaveWorkpieceHandler import SaveWorkpieceHandler
 from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def __init__(self,
                  vision_service,
+                 capture_snapshot_service: Optional[ICaptureSnapshotService],
                  save_fn:        Callable[[dict], tuple[bool, str]],
                  update_fn:      Callable[[str, dict], tuple[bool, str]],
                  form_schema:    WorkpieceFormSchema,
@@ -36,6 +38,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  z_min:          float = 0.0,
                  robot_service=None):
         self._vision             = vision_service
+        self._capture_snapshot_service = capture_snapshot_service
         self._save_fn            = save_fn
         self._update_fn          = update_fn
         self._id_exists_fn       = id_exists_fn
@@ -60,10 +63,12 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         return self._segment_config
 
     def get_contours(self) -> list:
-        if self._vision is None:
+        if self._capture_snapshot_service is None and self._vision is None:
             _logger.warning("get_contours: no vision service")
             return []
         try:
+            if self._capture_snapshot_service is not None:
+                return self._capture_snapshot_service.capture_snapshot(source="workpiece_editor").contours
             return self._vision.get_latest_contours()
         except Exception as exc:
             _logger.error("get_contours failed: %s", exc)

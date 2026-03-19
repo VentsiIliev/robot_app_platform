@@ -6,10 +6,11 @@ import numpy as np
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
-from src.robot_systems.glue.processes.pick_and_place.execution import CalibrationToPickupPlaneMapper
+from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 
 _logger = logging.getLogger(__name__)
 
@@ -22,34 +23,69 @@ class PickTargetApplicationService(IPickTargetService):
     def __init__(
         self,
         vision_service:  Optional[IVisionService],
+        capture_snapshot_service: Optional[ICaptureSnapshotService],
         robot_service:   Optional[IRobotService],
         transformer:     Optional[ICoordinateTransformer],
         robot_config=None,
         navigation=None,
     ):
         self._vision        = vision_service
+        self._capture_snapshot_service = capture_snapshot_service
         self._robot         = robot_service
         self._transformer   = transformer
         self._robot_config  = robot_config
         self._navigation    = navigation
-        self._use_tcp       = False
+        self._target        = "camera_center"
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
         self._pickup_mapper = self._build_pickup_mapper()
-        self._point_transformer = (
+        self._raw_point_transformer = (
             TargetPointTransformer(
                 base_transformer=self._transformer,
-                calibration_to_pickup_mapper=self._pickup_mapper.map_point if self._pickup_mapper is not None else None,
                 camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
                 camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_to_tool_x_offset=float(getattr(self._robot_config, "camera_to_tool_x_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_to_tool_y_offset=float(getattr(self._robot_config, "camera_to_tool_y_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_center_point=(
+                    float(getattr(self._robot_config, "camera_center_x", 0.0)),
+                    float(getattr(self._robot_config, "camera_center_y", 0.0)),
+                ) if self._robot_config is not None else None,
+                tool_point=(
+                    float(getattr(self._robot_config, "tool_point_x", 0.0)),
+                    float(getattr(self._robot_config, "tool_point_y", 0.0)),
+                ) if self._robot_config is not None else None,
+                gripper_point=(
+                    float(getattr(self._robot_config, "gripper_point_x", 0.0)),
+                    float(getattr(self._robot_config, "gripper_point_y", 0.0)),
+                ) if self._robot_config is not None else None,
             )
             if self._transformer is not None else None
         )
+        self._mapped_point_transformer = (
+            TargetPointTransformer(
+                base_transformer=self._transformer,
+                calibration_to_target_pose_mapper=self._pickup_mapper,
+                camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_center_point=(
+                    float(getattr(self._robot_config, "camera_center_x", 0.0)),
+                    float(getattr(self._robot_config, "camera_center_y", 0.0)),
+                ) if self._robot_config is not None else None,
+                tool_point=(
+                    float(getattr(self._robot_config, "tool_point_x", 0.0)),
+                    float(getattr(self._robot_config, "tool_point_y", 0.0)),
+                ) if self._robot_config is not None else None,
+                gripper_point=(
+                    float(getattr(self._robot_config, "gripper_point_x", 0.0)),
+                    float(getattr(self._robot_config, "gripper_point_y", 0.0)),
+                ) if self._robot_config is not None else None,
+            )
+            if self._transformer is not None and self._pickup_mapper is not None else None
+        )
 
-    def set_use_tcp(self, enabled: bool) -> None:
-        self._use_tcp = enabled
+    def set_target(self, target: str) -> None:
+        target = str(target).strip().lower()
+        if target not in {"camera_center", "tool", "gripper"}:
+            raise ValueError(f"Unsupported target '{target}'")
+        self._target = target
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled
@@ -63,7 +99,7 @@ class PickTargetApplicationService(IPickTargetService):
     def _user(self) -> int:
         return self._robot_config.robot_user if self._robot_config else 0
 
-    def _build_pickup_mapper(self) -> Optional[CalibrationToPickupPlaneMapper]:
+    def _build_pickup_mapper(self) -> Optional[PlanePoseMapper]:
         if self._navigation is None:
             return None
         try:
@@ -71,25 +107,34 @@ class PickTargetApplicationService(IPickTargetService):
             pickup_position = self._navigation.get_group_position("HOME")
             if calibration_position is None or pickup_position is None:
                 return None
-            return CalibrationToPickupPlaneMapper.from_positions(
-                calibration_position=calibration_position,
-                pickup_position=pickup_position,
+            return PlanePoseMapper.from_positions(
+                source_position=calibration_position,
+                target_position=pickup_position,
             )
         except Exception:
-            _logger.exception("Failed to initialize calibration-to-pickup mapper")
+            _logger.exception("Failed to initialize calibration-to-target-pose mapper")
             return None
 
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
-        if self._point_transformer is None:
+        point_transformer = self._mapped_point_transformer if self._use_pickup_plane else self._raw_point_transformer
+        if point_transformer is None:
             raise RuntimeError("Coordinate transformer is not available")
-        plane = "pickup" if self._use_pickup_plane else "calibration"
-        if self._use_tcp:
-            result = self._point_transformer.transform_to_tool(px, py, plane=plane)
-        else:
-            result = self._point_transformer.transform_to_camera_center(
+        if self._target == "gripper":
+            result = point_transformer.transform_to_gripper(
                 px,
                 py,
-                plane=plane,
+                current_rz=self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ,
+            )
+        elif self._target == "tool":
+            result = point_transformer.transform_to_tool(
+                px,
+                py,
+                current_rz=self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ,
+            )
+        else:
+            result = point_transformer.transform_to_camera_center(
+                px,
+                py,
                 current_rz=self._pickup_plane_rz if self._use_pickup_plane else None,
             )
         return result.final_xy
@@ -98,12 +143,13 @@ class PickTargetApplicationService(IPickTargetService):
         return 180.0, 0.0, (self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ)
 
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
-        if self._vision is None:
-            _logger.warning("Vision service not available")
+        if self._capture_snapshot_service is None:
+            _logger.warning("Capture snapshot service not available")
             return None, [], []
 
-        frame = self._vision.get_latest_frame()
-        raw_contours = self._vision.get_latest_contours()
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="pick_target.capture")
+        frame = snapshot.frame
+        raw_contours = snapshot.contours
 
         pixel_centroids: List[Tuple[float, float]] = []
         robot_centroids: List[Tuple[float, float]] = []
@@ -153,9 +199,11 @@ class PickTargetApplicationService(IPickTargetService):
             return False
 
     def capture_contour_trajectory(self) -> List[np.ndarray]:
-        if self._vision is None:
+        if self._capture_snapshot_service is None:
             return []
-        raw_contours = self._vision.get_latest_contours()
+        raw_contours = self._capture_snapshot_service.capture_snapshot(
+            source="pick_target.capture_contour_trajectory"
+        ).contours
         result = []
         for raw in raw_contours:
             try:

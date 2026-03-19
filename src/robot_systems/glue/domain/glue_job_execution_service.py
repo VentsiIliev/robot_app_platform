@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.shared_contracts.events.glue_overlay_events import (
     GlueOverlayJobLoadedEvent,
     GlueOverlaySegment,
@@ -38,6 +39,7 @@ class GlueJobExecutionService:
         navigation_service=None,
         vision_service=None,
         robot_service=None,
+        capture_snapshot_service: ICaptureSnapshotService | None = None,
         messaging_service: IMessagingService | None = None,
         stabilization_delay_s: float = 0.5,
         sleep_fn=time.sleep,
@@ -48,6 +50,7 @@ class GlueJobExecutionService:
         self._navigation = navigation_service
         self._vision = vision_service
         self._robot = robot_service
+        self._capture_snapshot_service = capture_snapshot_service
         self._messaging = messaging_service
         self._stabilization_delay_s = max(0.0, float(stabilization_delay_s))
         self._sleep = sleep_fn
@@ -89,8 +92,11 @@ class GlueJobExecutionService:
             if cancelled is not None:
                 return cancelled
 
-            overlay_image = self._capture_overlay_image()
             result, _no_match_count, _matched, _unmatched = self._matching.run_matching()
+            snapshot = getattr(self._matching, "get_last_capture_snapshot", lambda: None)()
+            overlay_image = None if snapshot is None else snapshot.frame
+            if overlay_image is None:
+                overlay_image = self._capture_overlay_image()
             workpieces = list(result.get("workpieces", [])) if isinstance(result, dict) else []
             matched_ids = [self._get_workpiece_id(workpiece) for workpiece in workpieces]
 
@@ -277,6 +283,11 @@ class GlueJobExecutionService:
             self._sleep(0.05)
 
     def _capture_overlay_image(self):
+        if self._capture_snapshot_service is not None:
+            try:
+                return self._capture_snapshot_service.capture_snapshot(source="glue_overlay").frame
+            except Exception:
+                return None
         if self._vision is None:
             return None
         try:

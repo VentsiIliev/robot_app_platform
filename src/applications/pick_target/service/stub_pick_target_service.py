@@ -10,6 +10,7 @@ _logger = logging.getLogger(__name__)
 
 class StubPickTargetService(IPickTargetService):
     def __init__(self):
+        self._target = "camera_center"
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
 
@@ -28,8 +29,9 @@ class StubPickTargetService(IPickTargetService):
         _logger.info("[Stub] move_to_start_position(%s)", target)
         return True
 
-    def set_use_tcp(self, enabled: bool) -> None:
-        _logger.info("[Stub] set_use_tcp(%s)", enabled)
+    def set_target(self, target: str) -> None:
+        self._target = target
+        _logger.info("[Stub] set_target(%s)", target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled

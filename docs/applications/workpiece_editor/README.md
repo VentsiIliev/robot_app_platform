@@ -64,6 +64,7 @@ class IWorkpieceEditorService(ABC):
 ```python
 WorkpieceEditorService(
     vision_service:  Optional[IVisionService],
+    capture_snapshot_service: Optional[ICaptureSnapshotService],
     save_fn:         Callable[[dict], tuple[bool, str]],
     update_fn:       Callable[[str, dict], tuple[bool, str]],
     form_schema:     Callable[[], WorkpieceFormSchema],   # lazy — re-evaluated on each open
@@ -72,7 +73,7 @@ WorkpieceEditorService(
 )
 ```
 
-- `get_contours()` — `vision_service.get_latest_contours()` or `[]`
+- `get_contours()` — prefers `ICaptureSnapshotService.capture_snapshot(source="workpiece_editor").contours`, then falls back to `vision_service.get_latest_contours()`
 - `save_workpiece(data)` — calls `update_fn(storage_id, data)` if editing; otherwise `save_fn(data)`
 - `set_editing(storage_id)` — stores the ID for the next save
 
@@ -101,6 +102,7 @@ User navigates to WorkpieceEditor folder
 ```python
 service = WorkpieceEditorService(
     vision_service = robot_system.get_optional_service(ServiceID.VISION),
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system),
     save_fn        = workpiece_service.save,
     update_fn      = workpiece_service.update,
     form_schema    = lambda: build_glue_workpiece_form_schema(...),
@@ -117,4 +119,5 @@ service = WorkpieceEditorService(
 
 - **`editor_core` is self-contained**: it has no dependency on the service interface or the MVC wrapper. It can be embedded in other applications.
 - **Lazy form schema**: `form_schema` is a callable so glue type and tool lists are re-fetched fresh each time the editor opens — picking up any changes made in ToolSettings or GlueSettings.
+- **Snapshot-first contour capture**: the editor now uses the shared glue capture snapshot service when available, so future pose-coupled editor tools can reuse the same capture path without calling the raw vision service directly.
 - **Vision optional**: contour overlay and `get_contours()` gracefully return empty lists when vision is unavailable.

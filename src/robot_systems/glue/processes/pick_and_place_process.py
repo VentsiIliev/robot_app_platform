@@ -15,7 +15,7 @@ from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
-from src.robot_systems.glue.processes.pick_and_place.execution import CalibrationToPickupPlaneMapper
+from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.shared_contracts.events.process_events import ProcessState
 from src.shared_contracts.events.pick_and_place_events import PickAndPlaceDiagnosticsEvent, PickAndPlaceTopics
 
@@ -197,9 +197,9 @@ class PickAndPlaceProcess(BaseProcess):
             home_position = self._navigation.get_group_position("HOME")
             mapper = None
             if calibration_position is not None and home_position is not None:
-                mapper = CalibrationToPickupPlaneMapper.from_positions(
-                    calibration_position=calibration_position,
-                    pickup_position=home_position,
+                mapper = PlanePoseMapper.from_positions(
+                    source_position=calibration_position,
+                    target_position=home_position,
                 )
             else:
                 self._logger.warning(
@@ -221,7 +221,7 @@ class PickAndPlaceProcess(BaseProcess):
                 on_match_result=_on_match_result,
                 on_diagnostics=_on_diagnostics,
                 step_gate=self._wait_for_step_checkpoint,
-                calibration_to_pickup_mapper=mapper.map_point if mapper is not None else None,
+                calibration_to_target_pose_mapper=mapper,
                 simulation=self._simulation,
             )
             result = workflow.run(

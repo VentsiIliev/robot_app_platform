@@ -11,10 +11,14 @@ def run_matching_cycle(workflow):
     try:
         workflow._context.match_attempt += 1
         workflow._context.set_stage(workflow._stage.MATCHING, "Running contour matching")
+        workflow._context.current_capture_pose = None
         workflow._publish_diagnostics()
         if not workflow._checkpoint("matching.run"):
             return None, PickAndPlaceWorkflowResult.stopped("")
         result, no_match_count, _, _ = workflow._matching.run_matching()
+        snapshot = workflow._matching.get_last_capture_snapshot()
+        if snapshot is not None and snapshot.robot_pose is not None and len(snapshot.robot_pose) >= 6:
+            workflow._context.current_capture_pose = tuple(float(v) for v in snapshot.robot_pose[:6])
     except Exception as exc:
         workflow._logger.exception("Matching failed")
         workflow._context.mark_error(

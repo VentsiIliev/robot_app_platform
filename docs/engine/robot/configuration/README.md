@@ -134,6 +134,12 @@ class RobotSettings:
     camera_to_tcp_y_offset: float = 0.0
     camera_to_tool_x_offset: float = 0.0
     camera_to_tool_y_offset: float = 0.0
+    camera_center_x: float = 0.0
+    camera_center_y: float = 0.0
+    tool_point_x: float = 0.0
+    tool_point_y: float = 0.0
+    gripper_point_x: float = 0.0
+    gripper_point_y: float = 0.0
     tcp_x_step_distance: float = 50.0
     tcp_x_step_offset: float = 0.1
     tcp_y_step_distance: float = 50.0
@@ -151,9 +157,26 @@ JSON key mapping (top-level):
 | `robot_ip` | `"ROBOT_IP"` |
 | `robot_tool` | `"ROBOT_TOOL"` |
 | `robot_user` | `"ROBOT_USER"` |
+| `camera_to_tcp_x_offset` | `"CAMERA_TO_TCP_X_OFFSET"` |
+| `camera_to_tcp_y_offset` | `"CAMERA_TO_TCP_Y_OFFSET"` |
+| `camera_to_tool_x_offset` | `"CAMERA_TO_TOOL_X_OFFSET"` |
+| `camera_to_tool_y_offset` | `"CAMERA_TO_TOOL_Y_OFFSET"` |
+| `camera_center_x` | `"CAMERA_CENTER_X"` |
+| `camera_center_y` | `"CAMERA_CENTER_Y"` |
+| `tool_point_x` | `"TOOL_POINT_X"` |
+| `tool_point_y` | `"TOOL_POINT_Y"` |
+| `gripper_point_x` | `"GRIPPER_POINT_X"` |
+| `gripper_point_y` | `"GRIPPER_POINT_Y"` |
 | `movement_groups` | `"MOVEMENT_GROUPS"` |
 | `safety_limits` | `"SAFETY_LIMITS"` |
 | `global_motion_settings` | `"GLOBAL_MOTION_SETTINGS"` |
+
+The measured point fields (`CAMERA_CENTER_*`, `TOOL_POINT_*`, `GRIPPER_POINT_*`) are intended to be recorded at the same physical real-world point and the same reference orientation. Glue-specific targeting code then derives:
+
+- `camera_to_tool = tool_point - camera_center`
+- `camera_to_gripper = gripper_point - camera_center`
+
+at runtime from those measured points instead of relying only on precomputed offsets.
 
 ---
 

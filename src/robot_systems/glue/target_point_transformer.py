@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Literal, Optional, Tuple
+from enum import Enum
+from typing import Optional, Tuple
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
-
-PlaneName = Literal["calibration", "pickup"]
+from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 
 
 @dataclass(frozen=True)
@@ -14,54 +14,55 @@ class TargetTransformResult:
     calibration_xy: Tuple[float, float]
     plane_xy: Tuple[float, float]
     final_xy: Tuple[float, float]
-    pickup_plane_tcp_delta_xy: Tuple[float, float] = (0.0, 0.0)
+    pickup_plane_reference_delta_xy: Tuple[float, float] = (0.0, 0.0)
     target_delta_xy: Tuple[float, float] = (0.0, 0.0)
     current_rz: Optional[float] = None
     reference_rz: Optional[float] = None
 
-
+# homography → plane → camera alignment → rotate offset → add
 class TargetPointTransformer:
-    """Higher-level image->robot transformer with glue-specific plane/target semantics.
+    """Higher-level image->robot transformer with glue-specific target semantics.
 
     This sits one layer above ``HomographyTransformer``. The base homography
     always maps image pixels into the calibration-plane robot frame. This helper
     then adds the glue-system meaning that callers actually care about:
 
-    - which plane the point should be expressed in (`calibration` or `pickup`)
+    - whether the point should remain in calibration-plane XY or be mapped into
+      another robot pose frame through ``PlanePoseMapper``
     - which physical point should act as the target reference (`camera`, `tcp`,
-      or `tool`)
+      `tool`, or `gripper`)
     - whether an orientation-dependent camera-to-TCP correction must be applied
 
-    Why the pickup-plane delta exists:
+    Why the mapped-pose reference delta exists:
 
-    In the glue system the calibration homography is built from the calibration
-    pose, then the point is mapped into the pickup plane. Empirically, the
-    mapped pickup-plane point is already correct at the working pickup reference
-    orientation (`90°`). Applying the full camera-to-TCP offset again at that
-    orientation moves the robot away from the target.
+    The base homography is calibrated at the calibration pose. When a
+    ``PlanePoseMapper`` is present, the point is first mapped into that target
+    pose frame. Empirically, the mapped point is already correct at the target
+    pose reference orientation. Applying the full camera-to-TCP offset again at
+    that same reference orientation moves the robot away from the target.
 
-    Because of that, pickup-plane camera-center targeting uses only the
-    orientation-dependent *change* from the known-good pickup reference:
+    Because of that, mapped camera-center targeting uses only the
+    orientation-dependent *change* from the mapped-frame reference:
 
         delta(rz) = R(rz) * camera_to_tcp - R(reference_rz) * camera_to_tcp
 
-    and the corrected pickup target becomes:
+    and the corrected mapped target becomes:
 
-        corrected_xy = mapped_pickup_xy - delta(rz)
+        corrected_xy = mapped_xy - delta(rz)
 
-    This guarantees that when ``current_rz == reference_rz`` (currently `90°`)
-    the correction is zero, so the existing working baseline is preserved.
+    ``reference_rz`` comes from ``PlanePoseMapper.target_pose.rz`` when a mapper
+    exists, or falls back to `0°` for calibration-plane use.
     """
 
     def __init__(
         self,
         base_transformer: ICoordinateTransformer,
-        calibration_to_pickup_mapper: Optional[Callable[[float, float], tuple[float, float]]] = None,
+        calibration_to_target_pose_mapper: Optional[PlanePoseMapper] = None,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
-        camera_to_tool_x_offset: float = 0.0,
-        camera_to_tool_y_offset: float = 0.0,
-        pickup_plane_reference_rz: float = 90.0,
+        camera_center_point: Optional[Tuple[float, float]] = None,
+        tool_point: Optional[Tuple[float, float]] = None,
+        gripper_point: Optional[Tuple[float, float]] = None,
     ):
         """Build a target-point resolver on top of a raw calibration-plane transformer.
 
@@ -69,77 +70,76 @@ class TargetPointTransformer:
             base_transformer: Usually ``HomographyTransformer``. Must provide the
                 calibration-plane image->robot transform and optional TCP/tool
                 helpers.
-            calibration_to_pickup_mapper: Optional rigid mapper from
-                calibration-plane XY into pickup-plane XY.
+            calibration_to_target_pose_mapper: Optional rigid mapper object from
+                calibration-plane XY into a target pose frame XY.
             camera_to_tcp_x_offset: Local camera->TCP X offset used for
-                orientation-dependent pickup-plane camera-center compensation.
+                orientation-dependent mapped-frame camera-center compensation.
             camera_to_tcp_y_offset: Local camera->TCP Y offset used for
-                orientation-dependent pickup-plane camera-center compensation.
-            camera_to_tool_x_offset: Local camera->tool X offset in the
-                calibration reference frame.
-            camera_to_tool_y_offset: Local camera->tool Y offset in the
-                calibration reference frame.
-            pickup_plane_reference_rz: The known-good pickup-plane orientation
-                where the mapped point already aligns correctly. At this angle
-                the TCP delta must evaluate to zero.
+                orientation-dependent mapped-frame camera-center compensation.
+            camera_center_point: Optional measured camera-center XY at the
+                common calibration reference point.
+            tool_point: Optional measured tool XY at the same physical point.
+            gripper_point: Optional measured gripper XY at the same physical
+                point.
         """
         self._base_transformer = base_transformer
-        self._calibration_to_pickup_mapper = calibration_to_pickup_mapper
+        self._calibration_to_target_pose_mapper = calibration_to_target_pose_mapper
         self._camera_to_tcp_x_offset = float(camera_to_tcp_x_offset)
         self._camera_to_tcp_y_offset = float(camera_to_tcp_y_offset)
-        self._camera_to_tool_x_offset = float(camera_to_tool_x_offset)
-        self._camera_to_tool_y_offset = float(camera_to_tool_y_offset)
-        self._pickup_plane_reference_rz = float(pickup_plane_reference_rz)
+        self._camera_center_point = camera_center_point
+        self._tool_point = tool_point
+        self._gripper_point = gripper_point
+
+
 
     def transform_to_camera_center(
         self,
         px: float,
         py: float,
         *,
-        plane: PlaneName = "calibration",
         current_rz: Optional[float] = None,
     ) -> TargetTransformResult:
         """Transform an image point so the camera center acts as the target point.
 
-        In calibration-plane mode this is just raw homography output.
+        When no mapper is configured, this is just raw calibration-plane
+        homography output.
 
-        In pickup-plane mode this returns the mapped pickup-plane point, and if
+        When mapping is enabled, this returns the mapped target-plane point, and if
         ``current_rz`` is provided, it also applies the camera-to-TCP *delta*
-        correction relative to ``pickup_plane_reference_rz``. This preserves the
-        known-good baseline at the reference angle while compensating for camera
-        motion around the TCP at other wrist orientations.
+        correction relative to the mapper target pose `rz`. This preserves the
+        known-good baseline at the mapped-frame reference angle while
+        compensating for camera motion around the TCP at other wrist
+        orientations.
         """
         calibration_xy = self._base_transformer.transform(px, py)
-        plane_xy = self._map_plane(calibration_xy, plane)
+        plane_xy = self._map_plane(calibration_xy)
         final_xy = plane_xy
         delta_xy = (0.0, 0.0)
 
-        if plane == "pickup" and current_rz is not None:
+        if self._calibration_to_target_pose_mapper is not None and current_rz is not None:
             final_xy, delta_xy = self._apply_pickup_plane_tcp_delta(plane_xy, current_rz)
 
         return TargetTransformResult(
             calibration_xy=calibration_xy,
             plane_xy=plane_xy,
             final_xy=final_xy,
-            pickup_plane_tcp_delta_xy=delta_xy,
+            pickup_plane_reference_delta_xy=delta_xy,
             current_rz=current_rz,
-            reference_rz=self._pickup_plane_reference_rz if plane == "pickup" else None,
+            reference_rz=self._reference_rz() if self._calibration_to_target_pose_mapper is not None else 0.0,
         )
 
     def transform_to_tcp(
         self,
         px: float,
         py: float,
-        *,
-        plane: PlaneName = "calibration",
     ) -> TargetTransformResult:
         """Transform an image point so the robot TCP acts as the target point.
 
         This uses the base transformer's explicit camera-to-TCP offset helper,
-        then optionally maps the resulting point into the pickup plane.
+        then optionally maps the resulting point into the target pose plane.
         """
         calibration_xy = self._base_transformer.transform_to_tcp(px, py)
-        plane_xy = self._map_plane(calibration_xy, plane)
+        plane_xy = self._map_plane(calibration_xy)
         return TargetTransformResult(
             calibration_xy=calibration_xy,
             plane_xy=plane_xy,
@@ -151,19 +151,28 @@ class TargetPointTransformer:
         px: float,
         py: float,
         *,
-        plane: PlaneName = "calibration",
+        current_rz: Optional[float] = None,
     ) -> TargetTransformResult:
         """Transform an image point so the active tool point acts as the target.
 
-        This uses the base transformer's explicit camera-to-tool offset helper,
-        then optionally maps the resulting point into the pickup plane.
+        This derives ``camera_to_tool`` from the measured reference points
+        ``tool_point - camera_center_point`` and then applies that local offset
+        through the shared rotated-offset path. The glue-level transformer
+        intentionally uses measured points here instead of a precomputed
+        camera-to-tool offset so all target semantics are anchored to one
+        explicit calibration snapshot.
         """
-        calibration_xy = self._base_transformer.transform_to_tool(px, py)
-        plane_xy = self._map_plane(calibration_xy, plane)
-        return TargetTransformResult(
-            calibration_xy=calibration_xy,
-            plane_xy=plane_xy,
-            final_xy=plane_xy,
+        camera_to_tool = self._camera_to_tool_offset()
+
+        if camera_to_tool is None:
+            raise RuntimeError(
+                "Tool targeting requires measured camera_center/tool_point reference values"
+            )
+        return self._transform_camera_to_target(
+            px,
+            py,
+            current_rz=current_rz,
+            camera_offset=camera_to_tool,
         )
 
     def transform_to_gripper(
@@ -171,74 +180,74 @@ class TargetPointTransformer:
         px: float,
         py: float,
         *,
-        plane: PlaneName = "calibration",
-        current_rz: float,
-        tool_to_gripper_x_offset: float = 0.0,
-        tool_to_gripper_y_offset: float = 0.0,
+        current_rz: float
     ) -> TargetTransformResult:
         """Transform an image point so the gripper acts as the target point.
 
-        The computation is layered on top of camera-center targeting:
-
-        1. Resolve the point that makes the camera center align with the target.
-        2. Compute the local camera->gripper vector as:
-           ``camera_to_tool + tool_to_gripper``.
-        3. Rotate that vector by ``current_rz`` and add it to the resolved
-           camera-centered target.
-
-        This keeps all camera/TCP pickup-plane delta logic in one place while
-        letting callers request gripper targeting with a single call.
+        This derives ``camera_to_gripper`` from the measured reference points
+        ``gripper_point - camera_center_point`` and then applies that local
+        offset through the shared rotated-offset path.
         """
-        camera_result = self.transform_to_camera_center(
+        camera_to_gripper = self._camera_to_gripper_offset()
+
+        if camera_to_gripper is None:
+            raise RuntimeError(
+                "Gripper targeting requires measured camera_center/gripper_point reference values"
+            )
+
+        return self._transform_camera_to_target(
             px,
             py,
-            plane=plane,
             current_rz=current_rz,
-        )
-        cam_to_gripper_x = self._camera_to_tool_x_offset + float(tool_to_gripper_x_offset)
-        cam_to_gripper_y = self._camera_to_tool_y_offset + float(tool_to_gripper_y_offset)
-        delta_x, delta_y = self._rotate_xy(cam_to_gripper_x, cam_to_gripper_y, current_rz)
-        final_xy = (
-            camera_result.final_xy[0] + delta_x,
-            camera_result.final_xy[1] + delta_y,
-        )
-        return TargetTransformResult(
-            calibration_xy=camera_result.calibration_xy,
-            plane_xy=camera_result.plane_xy,
-            final_xy=final_xy,
-            pickup_plane_tcp_delta_xy=camera_result.pickup_plane_tcp_delta_xy,
-            target_delta_xy=(delta_x, delta_y),
-            current_rz=current_rz,
-            reference_rz=camera_result.reference_rz,
+            camera_offset=camera_to_gripper,
         )
 
-    def _map_plane(self, xy: Tuple[float, float], plane: PlaneName) -> Tuple[float, float]:
-        """Return the point in the requested plane frame.
+    @staticmethod
+    def compute_offset(
+        from_point: Tuple[float, float],
+        to_point: Tuple[float, float],
+    ) -> Tuple[float, float]:
+        """Return ``to_point - from_point`` for measured XY reference points."""
+        return (to_point[0] - from_point[0], to_point[1] - from_point[1])
 
-        Calibration-plane points pass through unchanged. Pickup-plane points are
-        converted via the configured calibration-to-pickup rigid mapper.
-        """
-        if plane == "calibration":
+    def get_camera_to_tool_offset(self) -> Optional[Tuple[float, float]]:
+        """Return the measured camera->tool offset when available."""
+        return self._camera_to_tool_offset()
+
+    def get_camera_to_gripper_offset(self) -> Optional[Tuple[float, float]]:
+        """Return the measured camera->gripper offset when available."""
+        return self._camera_to_gripper_offset()
+
+    @classmethod
+    def apply_offset(
+        cls,
+        offset_xy: Tuple[float, float],
+        rz_deg: float,
+    ) -> Tuple[float, float]:
+        """Rotate a local XY offset into the world plane at ``rz_deg``."""
+        return cls._rotate_xy(offset_xy[0], offset_xy[1], rz_deg)
+
+    def _map_plane(self, xy: Tuple[float, float]) -> Tuple[float, float]:
+        """Return the point in the configured target frame, if a mapper exists."""
+        if self._calibration_to_target_pose_mapper is None:
             return xy
-        if self._calibration_to_pickup_mapper is None:
-            raise RuntimeError("Pickup-plane mapper is not available")
-        return self._calibration_to_pickup_mapper(xy[0], xy[1])
+        return self._calibration_to_target_pose_mapper.map_point(xy[0], xy[1])
 
     def _apply_pickup_plane_tcp_delta(
         self,
         plane_xy: Tuple[float, float],
         current_rz: float,
     ) -> Tuple[Tuple[float, float], Tuple[float, float]]:
-        """Apply only the pickup-plane camera-to-TCP delta from the reference angle.
+        """Apply only the mapped-frame camera-to-TCP delta from the reference angle.
 
-        The pickup-plane mapped point is already correct at the reference pickup
+        The mapped point is already correct at the mapped-frame reference
         orientation. For any other ``current_rz`` we compensate only for the
         change in camera position caused by rotating around the TCP:
 
             delta(rz) = R(rz) * c - R(reference_rz) * c
 
         The returned tuple is:
-        - corrected point in pickup-plane XY
+        - corrected point in mapped target-frame XY
         - the delta vector that was applied
         """
         tx = self._camera_to_tcp_x_offset
@@ -247,11 +256,66 @@ class TargetPointTransformer:
             return plane_xy, (0.0, 0.0)
 
         cur_x, cur_y = self._rotate_xy(tx, ty, current_rz)
-        ref_x, ref_y = self._rotate_xy(tx, ty, self._pickup_plane_reference_rz)
+        ref_x, ref_y = self._rotate_xy(tx, ty, self._reference_rz())
         delta_x = cur_x - ref_x
         delta_y = cur_y - ref_y
         corrected_xy = (plane_xy[0] - delta_x, plane_xy[1] - delta_y)
         return corrected_xy, (delta_x, delta_y)
+
+    def _reference_rz(self) -> float:
+        if self._calibration_to_target_pose_mapper is None:
+            return 0.0
+        return float(self._calibration_to_target_pose_mapper.target_pose.rz)
+
+    def _transform_camera_to_target(
+        self,
+        px: float,
+        py: float,
+        *,
+        current_rz: Optional[float],
+        camera_offset: Tuple[float, float],
+    ) -> TargetTransformResult:
+        """Resolve a camera-centered target, rotate one local offset, and apply it.
+
+        This is the shared implementation used by tool and gripper targeting:
+
+        1. resolve the image point to a camera-centered target
+        2. rotate the supplied camera->target offset by ``current_rz``
+        3. add the rotated offset to produce the requested physical target point
+        """
+        if current_rz is None:
+            raise RuntimeError("Target targeting requires current_rz")
+        camera_result = self.transform_to_camera_center(
+            px,
+            py,
+            current_rz=current_rz,
+        )
+        delta_x, delta_y = self.apply_offset(camera_offset, current_rz)
+        final_xy = (
+            camera_result.final_xy[0] + delta_x,
+            camera_result.final_xy[1] + delta_y,
+        )
+        return TargetTransformResult(
+            calibration_xy=camera_result.calibration_xy,
+            plane_xy=camera_result.plane_xy,
+            final_xy=final_xy,
+            pickup_plane_reference_delta_xy=camera_result.pickup_plane_reference_delta_xy,
+            target_delta_xy=(delta_x, delta_y),
+            current_rz=current_rz,
+            reference_rz=camera_result.reference_rz,
+        )
+
+    def _camera_to_tool_offset(self) -> Optional[Tuple[float, float]]:
+        """Return camera->tool from measured reference points when available."""
+        if self._camera_center_point is not None and self._tool_point is not None:
+            return self.compute_offset(self._camera_center_point, self._tool_point)
+        return None
+
+    def _camera_to_gripper_offset(self) -> Optional[Tuple[float, float]]:
+        """Return camera->gripper from measured reference points when available."""
+        if self._camera_center_point is not None and self._gripper_point is not None:
+            return self.compute_offset(self._camera_center_point, self._gripper_point)
+        return None
 
     @staticmethod
     def _rotate_xy(x: float, y: float, rz_deg: float) -> Tuple[float, float]:

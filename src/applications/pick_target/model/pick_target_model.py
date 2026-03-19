@@ -26,8 +26,8 @@ class PickTargetModel(IApplicationModel):
     def move_to_calibration_position(self) -> bool:
         return self._service.move_to_calibration_position()
 
-    def set_use_tcp(self, enabled: bool) -> None:
-        self._service.set_use_tcp(enabled)
+    def set_target(self, target: str) -> None:
+        self._service.set_target(target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._service.set_use_pickup_plane(enabled)

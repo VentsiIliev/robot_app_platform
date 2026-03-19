@@ -149,6 +149,12 @@ class RobotSettings:
     camera_to_tcp_y_offset: float = 0.0
     camera_to_tool_x_offset: float = 0.0
     camera_to_tool_y_offset: float = 0.0
+    camera_center_x: float = 0.0
+    camera_center_y: float = 0.0
+    tool_point_x: float = 0.0
+    tool_point_y: float = 0.0
+    gripper_point_x: float = 0.0
+    gripper_point_y: float = 0.0
     tcp_x_step_distance: float = 50.0
     tcp_x_step_offset: float = 0.1
     tcp_y_step_distance: float = 50.0
@@ -172,6 +178,12 @@ class RobotSettings:
             camera_to_tcp_y_offset=data.get("CAMERA_TO_TCP_Y_OFFSET", 0.0),
             camera_to_tool_x_offset=data.get("CAMERA_TO_TOOL_X_OFFSET", 0.0),
             camera_to_tool_y_offset=data.get("CAMERA_TO_TOOL_Y_OFFSET", 0.0),
+            camera_center_x=data.get("CAMERA_CENTER_X", 0.0),
+            camera_center_y=data.get("CAMERA_CENTER_Y", 0.0),
+            tool_point_x=data.get("TOOL_POINT_X", 0.0),
+            tool_point_y=data.get("TOOL_POINT_Y", 0.0),
+            gripper_point_x=data.get("GRIPPER_POINT_X", 0.0),
+            gripper_point_y=data.get("GRIPPER_POINT_Y", 0.0),
             tcp_x_step_distance=data.get("TCP_X_STEP_DISTANCE", 50.0),
             tcp_x_step_offset=data.get("TCP_X_STEP_OFFSET", 0.1),
             tcp_y_step_distance=data.get("TCP_Y_STEP_DISTANCE", 50.0),
@@ -191,6 +203,12 @@ class RobotSettings:
             "CAMERA_TO_TCP_Y_OFFSET": self.camera_to_tcp_y_offset,
             "CAMERA_TO_TOOL_X_OFFSET": self.camera_to_tool_x_offset,
             "CAMERA_TO_TOOL_Y_OFFSET": self.camera_to_tool_y_offset,
+            "CAMERA_CENTER_X": self.camera_center_x,
+            "CAMERA_CENTER_Y": self.camera_center_y,
+            "TOOL_POINT_X": self.tool_point_x,
+            "TOOL_POINT_Y": self.tool_point_y,
+            "GRIPPER_POINT_X": self.gripper_point_x,
+            "GRIPPER_POINT_Y": self.gripper_point_y,
             "TCP_X_STEP_DISTANCE": self.tcp_x_step_distance,
             "TCP_X_STEP_OFFSET": self.tcp_x_step_offset,
             "TCP_Y_STEP_DISTANCE": self.tcp_y_step_distance,

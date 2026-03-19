@@ -45,12 +45,13 @@ The live implementation wraps two optional dependencies:
 ContourMatchingTesterService(
     vision_service:    Optional[IVisionService],   # None → matching returns failure
     workpiece_service: WorkpieceService,            # reads JSON workpiece files
+    capture_snapshot_service: Optional[ICaptureSnapshotService],
 )
 ```
 
 - `get_workpieces()` — delegates to `workpiece_service.list_all()`
-- `run_matching(storage_id)` — loads workpiece contour; calls `vision_service.get_latest_contours()` to get the live camera contour; runs the matching algorithm
-- `get_latest_frame()` / `get_latest_contours()` — delegate to `vision_service` if available
+- `run_matching(storage_id)` — loads workpiece contour; runs the matching algorithm through `vision_service`
+- `get_latest_contours()` — prefers `ICaptureSnapshotService.capture_snapshot(source="contour_matching_tester").contours`, then falls back to `vision_service`
 
 If `vision_service` is `None`, `run_matching` returns `(False, "Vision unavailable", None)`.
 
@@ -68,6 +69,7 @@ If `vision_service` is `None`, `run_matching` returns `(False, "Vision unavailab
 service = ContourMatchingTesterService(
     vision_service    = robot_system.get_optional_service(ServiceID.VISION),
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system),
 )
 return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory().build(service, ms))
 ```
@@ -78,5 +80,6 @@ return WidgetApplication(widget_factory=lambda ms: ContourMatchingTesterFactory(
 
 ## Design Notes
 
+- **Snapshot-first contour reads**: the tester now uses the shared capture snapshot path for live contours when available, which keeps it aligned with the production matching input path.
 - **Vision optional**: the application loads and shows workpieces even without a camera. The "Run Match" button is disabled or returns a clear error when vision is unavailable.
 - **No robot interaction**: purely a vision + file I/O tool. Safe to use during maintenance without robot enabled.

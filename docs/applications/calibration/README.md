@@ -84,9 +84,11 @@ The service accepts an `ICoordinateTransformer` at construction. On each `test_c
 | Method | Result frame | When to use |
 |--------|-------------|-------------|
 | `transform(x, y)` | Camera optical center | Verifying the homography mapping itself |
-| `transform_to_tcp(x, y)` | Tool tip (TCP) | Moving the active tool to a detected point (e.g. glue dispensing) |
+| `transform_to_tcp(x, y)` | Robot TCP | Applying calibrated camera-to-TCP correction directly |
+| `transform_to_tool(x, y)` | Configured tool point | Applying direct camera-to-tool correction directly |
 
 `transform_to_tcp` raises `RuntimeError` if camera-to-TCP offsets were not provided at construction — there is no silent fallback to zero. Those offsets come from `RobotSettings.camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` and are wired in `_build_calibration_application`.
+`transform_to_tool` follows the same rule for `RobotSettings.camera_to_tool_x_offset` / `camera_to_tool_y_offset`.
 
 ---
 

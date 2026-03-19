@@ -127,11 +127,12 @@ class PickTargetController(IApplicationController):
         self._view.capture_requested.connect(self._on_capture)
         self._view.move_requested.connect(self._on_move)
         self._view.calibration_pos_requested.connect(self._on_go_to_calibration)
-        self._view.tcp_toggled.connect(self._model.set_use_tcp)
+        self._view.target_changed.connect(self._model.set_target)
         self._view.pickup_plane_toggled.connect(self._model.set_use_pickup_plane)
         self._view.pickup_plane_rz_changed.connect(self._model.set_pickup_plane_rz)
         self._view.execute_trajectory_requested.connect(self._on_execute_trajectory)
         self._view.destroyed.connect(self.stop)
+        self._model.set_target(self._view.get_target())
         self._model.set_pickup_plane_rz(self._view.get_pickup_plane_rz())
 
     def load(self) -> None:

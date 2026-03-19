@@ -23,8 +23,8 @@ class IPickTargetService(ABC):
         """Move robot to the mode-appropriate start position. Returns success."""
 
     @abstractmethod
-    def set_use_tcp(self, enabled: bool) -> None:
-        """When True, transform() uses TCP offsets; when False, uses raw homography."""
+    def set_target(self, target: str) -> None:
+        """Select the target reference: camera_center, tool, or gripper."""
 
     @abstractmethod
     def set_use_pickup_plane(self, enabled: bool) -> None:

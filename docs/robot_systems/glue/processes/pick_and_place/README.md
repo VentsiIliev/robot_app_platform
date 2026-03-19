@@ -111,11 +111,35 @@ This keeps the geometry logic unchanged while making tool/user/speed changes loc
 
 ## Coordinate Transform Flow
 
-Pickup-point conversion is now split into three explicit layers:
-- `HomographyTransformer.transform(...)` converts camera pixels into calibration-plane robot XY
-- `CalibrationToPickupPlaneMapper` converts calibration-plane XY into pickup-plane / home-frame XY using the declared `CALIBRATION` and `HOME` movement-group poses
-- pickup-plane TCP delta compensation adjusts the mapped pickup-plane point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the working pickup reference angle
-- `PickupCalculator` applies gripper XY offsets, gripper Z offsets, safe heights, and final `rz`
+Pickup-point conversion is now split into explicit runtime steps owned by the glue target transformer and the workflow handlers.
+
+### Transformation Order
+
+For a normal pick-and-place pickup, the order is:
+
+1. Matching capture snapshot
+   - `MatchingService` captures contours and the current robot pose together through `ICaptureSnapshotService`
+   - the workflow stores that pose in `PickAndPlaceContext.current_capture_pose`
+2. `HomographyTransformer.transform(...)`
+   - converts image pixel coordinates into calibration-plane robot XY
+3. Dynamic calibration-to-capture-plane mapping
+   - `transform_handler.py` rebuilds `PlanePoseMapper` from:
+     - declared `CALIBRATION` pose
+     - actual robot pose at contour capture time
+   - this means the second plane is now the real capture pose, not a hardcoded `HOME` assumption
+4. Capture-plane reference-delta correction
+   - if enabled, adjusts the mapped point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the mapper target pose `rz`
+5. Target-point resolution in `TargetPointTransformer`
+   - `transform_to_camera_center(...)` returns the camera-centered target
+   - `transform_to_tool(...)` resolves camera-center first, then applies the rotated measured `camera_center -> tool_point` offset
+   - `transform_to_gripper(...)` resolves camera-center first, then applies the rotated measured `camera_center -> gripper_point` offset
+   - `PickAndPlaceConfig.pickup_target` now supports:
+     - `camera_center`
+     - `tool`
+     - `gripper`
+6. `PickupCalculator`
+   - no longer applies XY compensation
+   - only applies Z heights and final orientation to the already resolved pickup XY
 
 This replaces the older implicit `(-y, x)` rotation inside `PickupCalculator`. The 90 degree relationship between the calibration and pickup planes is now handled as a proper rigid frame conversion with both:
 - rotation from `CALIBRATION.rz` to `HOME.rz`
@@ -123,26 +147,28 @@ This replaces the older implicit `(-y, x)` rotation inside `PickupCalculator`. T
 
 As a result:
 - the homography remains valid only for the calibration plane
-- the pickup-plane conversion is explicit, logged, and testable independently
-- camera/TCP offset compensation for non-reference pickup `rz` now lives in the transform stage, where the mapped pickup-plane XY is still available as a frame-level point
-- gripper compensation stays isolated from plane-frame conversion
+- the second-plane conversion is explicit, logged, and driven by the actual pose used to capture the contours
+- reference-angle compensation now lives in the transform stage, where the mapped capture-plane XY is still available as a frame-level point
+- tool and gripper targeting also live in the transform stage and are resolved from measured reference points before planning the motion poses
+- pick-and-place no longer carries dedicated gripper XY offset fields in `PickAndPlaceConfig`
 
 The transform handler now logs the full chain:
 - image pickup point
 - calibration-plane robot point from homography
-- pickup-plane robot point after calibration-to-pickup mapping
-- pickup-plane TCP delta and the final corrected robot point
+- capture-plane robot point after calibration-to-capture mapping
+- capture-plane reference delta and the final corrected robot point
+- any target-point delta applied for tool or gripper targeting
 
 The process uses the same correction model validated in the `PickTarget` debug application. The current runtime assumption is:
 
-- the mapped pickup-plane point is already correct at `rz = 90`
-- changing pickup `rz` requires only the TCP-offset delta from that reference
+- the mapped capture-plane point is already correct at the `rz` used for contour capture
+- changing pickup `rz` requires only the TCP-offset delta from that captured reference
 
 So the transform stage applies:
 
 ```text
-delta(rz) = R(rz) * c - R(90) * c
-corrected_pickup_xy = mapped_pickup_xy - delta(rz)
+delta(rz) = R(rz) * c - R(rz_capture) * c
+corrected_xy = mapped_xy - delta(rz)
 ```
 
 where `c = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)` comes from `robot/config.json` via `PickAndPlaceConfig`.
@@ -159,8 +185,9 @@ The snapshot currently includes:
 - active workpiece id/name
 - active gripper id
 - pickup point in image and robot space
-- mapped pickup-plane point before TCP correction
-- pickup TCP delta
+- captured robot pose used for mapping
+- mapped capture-plane point before reference-angle correction
+- capture-plane reference delta
 - final pickup `rz`
 - resolved height source and value
 - plane offsets/state
@@ -207,8 +234,9 @@ Pick-and-place now requests calibration moves explicitly where the workflow need
 
 The pickup and placement math was intentionally separated by responsibility:
 - homography remains the camera-to-calibration-plane transform
-- pickup-plane conversion is now handled by a dedicated calibration-to-pickup mapper
-- pickup calculation now assumes its input XY is already in the pickup-plane frame and only applies gripper offsets / heights / final orientation
+- pickup-plane or capture-plane conversion is now handled by `PlanePoseMapper`
+- target-point compensation now happens in the transform stage through `TargetPointTransformer`
+- pickup calculation now assumes its input XY is already the final pickup target and only applies heights / final orientation
 - placement still uses the same contour orientation handling and plane packing logic
 - only the execution seams and failure reporting were tightened
 

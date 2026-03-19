@@ -2,6 +2,17 @@
 
 Camera-based alignment and detection system. Defines `IVisionService` and hosts the full `VisionSystem` implementation backed by OpenCV and the `PLVision` library.
 
+The engine vision layer also declares [ICaptureSnapshotService](/home/ilv/Desktop/robot_app_platform/src/engine/vision/i_capture_snapshot_service.py), the interface used by higher-level robot-system code to pair:
+- latest frame
+- latest contours
+- robot pose at capture time
+- timestamp / source metadata
+
+The current glue implementation lives outside the engine in:
+- [capture_snapshot_service.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/capture_snapshot_service.py)
+
+This keeps engine vision free of robot-service dependencies while still giving applications and processes one stable abstraction for capture-time geometry.
+
 ---
 
 ## Package Structure
@@ -135,11 +146,33 @@ class HomographyTransformer(ICoordinateTransformer):
 - If the file is missing or unreadable, `is_available()` returns `False`; `transform()` raises `RuntimeError`.
 - `reload()` re-reads the file from disk — call this after a calibration run writes a fresh matrix so that the running service picks up the new values without restarting.
 - `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` are **optional** but must both be provided together. If either is omitted, calling `transform_to_tcp()` raises `RuntimeError` — there is no silent default.
-- `camera_to_tool_x_offset` / `camera_to_tool_y_offset` follow the same rule for `transform_to_tool()`.
 - `transform_to_tcp(x, y)` = `transform(x, y)` + `(camera_to_tcp_x_offset, camera_to_tcp_y_offset)`.
-- `transform_to_tool(x, y)` = `transform(x, y)` + `(camera_to_tool_x_offset, camera_to_tool_y_offset)`.
+- `transform_to_tool(x, y)` remains an engine-level convenience for direct camera-to-tool offset use.
+- The glue system's current production targeting no longer relies on `HomographyTransformer.transform_to_tool()`. It uses the higher-level [TargetPointTransformer](../../../src/robot_systems/glue/target_point_transformer.py) to:
+  - optionally map calibration-plane XY into another robot pose frame through `PlanePoseMapper`
+  - resolve `camera_center`, `tool`, or `gripper` targets from measured reference points
+  - apply reference-angle camera-to-TCP correction when a mapped target pose is active
 - `inverse_transform(x, y)` applies the inverse homography and maps robot/output coordinates back into image space. This is used by the production dashboard to project the live TCP onto the static captured glue-progress image.
-- Created by the wiring layer (`application_wiring.py`) using `vision_service.camera_to_robot_matrix_path` and the robot config camera-to-TCP / camera-to-tool offsets; injected as `ICoordinateTransformer` into services that need it.
+- Created by the wiring layer (`application_wiring.py`) using `vision_service.camera_to_robot_matrix_path` and injected as `ICoordinateTransformer` into services that need raw image-to-calibration-plane conversion.
+
+## Glue Target Resolution
+
+The glue system adds a higher-level transform layer above raw homography:
+
+1. `HomographyTransformer.transform(...)`
+   - image pixel -> calibration-plane robot XY
+2. optional `PlanePoseMapper`
+   - calibration-plane XY -> target-pose XY
+3. optional mapped-pose reference-angle correction
+   - uses calibrated `camera_to_tcp_*`
+   - reference `rz` comes from `PlanePoseMapper.target_pose.rz`
+   - defaults to `0` when no mapper exists
+4. target-point resolution in `TargetPointTransformer`
+   - `camera_center`
+   - `tool`
+   - `gripper`
+
+This is the path used by the glue pick-and-place and glue-dispensing flows.
 
 ---
 

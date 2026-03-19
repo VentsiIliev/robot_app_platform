@@ -10,6 +10,7 @@ The `robot` package is the heart of the motion control system. It implements the
 robot/
 ├── interfaces/            ← Abstract contracts for all robot subsystems
 ├── configuration/         ← Settings dataclasses (RobotSettings, RobotCalibrationSettings)
+├── plane_pose_mapper.py   ← Generic rigid XY frame mapping between robot pose frames
 ├── enums/                 ← RobotAxis, Direction, ImageToRobotMapping
 ├── safety/                ← SafetyChecker (workspace bounds enforcement)
 ├── features/              ← NavigationService (named positions), RobotToolService
@@ -145,6 +146,7 @@ This means application startup can continue even when the bridge is down, and su
 |-----------|------------|------|
 | `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService` | [interfaces/](interfaces/README.md) |
 | `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `RobotCalibrationSettings` | [configuration/](configuration/README.md) |
+| `plane_pose_mapper.py` | `PlanePose`, `PlanePoseMapper` | reusable 2D rigid frame transform between robot pose frames |
 | `enums/` | `RobotAxis`, `Direction`, `ImageToRobotMapping` | [enums/](enums/README.md) |
 | `safety/` | `SafetyChecker` | [safety/](safety/README.md) |
 | `features/` | `NavigationService`, `RobotToolService` | [features/](features/README.md) |

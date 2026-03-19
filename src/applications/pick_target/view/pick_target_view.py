@@ -208,7 +208,7 @@ class PickTargetView(IApplicationView):
     capture_requested             = pyqtSignal()
     move_requested                = pyqtSignal()
     calibration_pos_requested     = pyqtSignal()
-    tcp_toggled                   = pyqtSignal(bool)
+    target_changed                = pyqtSignal(str)
     pickup_plane_toggled          = pyqtSignal(bool)
     pickup_plane_rz_changed       = pyqtSignal(float)
     execute_trajectory_requested  = pyqtSignal()
@@ -218,6 +218,8 @@ class PickTargetView(IApplicationView):
         self._move_available = False
         self._pickup_plane_mode = False
         self._trajectory_available = False
+        self._target_cycle = ["camera_center", "tool", "gripper"]
+        self._target_index = 0
         super().__init__("PickTarget", parent)
 
     def setup_ui(self) -> None:
@@ -233,7 +235,7 @@ class PickTargetView(IApplicationView):
         left_split.setStretchFactor(1, 1)
 
         right = self._build_control_panel()
-        right.setFixedWidth(280)
+        right.setFixedWidth(380)
 
         root.addWidget(left_split, stretch=1)
         root.addWidget(right)
@@ -371,11 +373,10 @@ class PickTargetView(IApplicationView):
         layout.addLayout(rz_row)
 
         row2 = QHBoxLayout()
-        self._tcp_btn = QPushButton("TCP: OFF")
-        self._tcp_btn.setCheckable(True)
-        self._tcp_btn.setStyleSheet(_TCP_OFF_STYLE)
-        self._tcp_btn.toggled.connect(self._on_tcp_toggled)
-        row2.addWidget(self._tcp_btn)
+        self._target_btn = QPushButton("Target: CAMERA")
+        self._target_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._target_btn.clicked.connect(self._cycle_target)
+        row2.addWidget(self._target_btn)
 
         self._pickup_plane_btn = QPushButton("Plane: CALIB")
         self._pickup_plane_btn.setCheckable(True)
@@ -499,12 +500,21 @@ class PickTargetView(IApplicationView):
     def get_pickup_plane_rz(self) -> float:
         return self._pickup_rz_spin.value()
 
+    def get_target(self) -> str:
+        return self._target_cycle[self._target_index]
+
     # ── Private ───────────────────────────────────────────────────────
 
-    def _on_tcp_toggled(self, checked: bool) -> None:
-        self._tcp_btn.setText("TCP: ON" if checked else "TCP: OFF")
-        self._tcp_btn.setStyleSheet(_TCP_ON_STYLE if checked else _TCP_OFF_STYLE)
-        self.tcp_toggled.emit(checked)
+    def _cycle_target(self) -> None:
+        self._target_index = (self._target_index + 1) % len(self._target_cycle)
+        target = self._target_cycle[self._target_index]
+        label = {
+            "camera_center": "Target: CAMERA",
+            "tool": "Target: TOOL",
+            "gripper": "Target: GRIPPER",
+        }[target]
+        self._target_btn.setText(label)
+        self.target_changed.emit(target)
 
     def _on_pickup_plane_toggled(self, checked: bool) -> None:
         self._pickup_plane_mode = checked
