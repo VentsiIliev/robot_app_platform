@@ -42,6 +42,8 @@ class PickTargetApplicationService(IPickTargetService):
                 calibration_to_pickup_mapper=self._pickup_mapper.map_point if self._pickup_mapper is not None else None,
                 camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
                 camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_to_tool_x_offset=float(getattr(self._robot_config, "camera_to_tool_x_offset", 0.0)) if self._robot_config is not None else 0.0,
+                camera_to_tool_y_offset=float(getattr(self._robot_config, "camera_to_tool_y_offset", 0.0)) if self._robot_config is not None else 0.0,
             )
             if self._transformer is not None else None
         )

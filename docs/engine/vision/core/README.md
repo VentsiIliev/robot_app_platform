@@ -14,7 +14,16 @@ Decouples frame capture from frame processing by running a dedicated daemon thre
 
 ```python
 class FrameGrabber:
-    def __init__(self, camera, maxlen: int = 5): ...
+    def __init__(
+        self,
+        camera,
+        maxlen: int = 5,
+        *,
+        read_timeout_s: float = 0.25,
+        restart_after_failures: int = 4,
+        restart_cooldown_s: float = 1.0,
+        post_restart_settle_s: float = 0.2,
+    ): ...
     def start(self) -> None: ...           # starts the daemon thread
     def get_latest(self) -> np.ndarray | None: ...   # returns newest buffered frame (thread-safe)
     def stop(self) -> None: ...            # sets running=False, joins thread
@@ -22,7 +31,12 @@ class FrameGrabber:
 
 - The buffer holds the last `maxlen` frames (default 5). Older frames are discarded automatically.
 - `get_latest()` is safe to call from any thread (`threading.Lock` guards the deque).
+- Each grab uses `camera.capture(timeout=read_timeout_s)` so stream failures are noticed quickly instead of blocking for a full second on every read.
+- After `restart_after_failures` consecutive failed reads, `FrameGrabber` attempts stream recovery with `camera.stop_stream()` and `camera.start_stream()`.
+- Restart attempts are throttled by `restart_cooldown_s` and followed by a short `post_restart_settle_s` delay so repeated FFmpeg/MJPEG parse failures do not create a tight reconnect loop.
 - `VisionSystem.__init__` creates and starts `FrameGrabber`; `stop_system()` calls `stop()`.
+
+This recovery path was added specifically for remote MJPEG streams opened through OpenCV/FFmpeg. In that setup, malformed multipart boundaries or truncated JPEG payloads can make `capture()` return `None` forever unless the stream is explicitly reopened.
 
 ### `RemoteCamera`
 
@@ -40,6 +54,12 @@ RemoteCamera(
 ```
 
 To switch `VisionSystem` to a remote camera, replace `self.camera` assignment in `setup_camera()` with a `RemoteCamera` instance (see the commented `TODO` block in `VisionSystem.py`).
+
+Notes:
+
+- `RemoteCamera` still relies on OpenCV/FFmpeg for multipart MJPEG parsing.
+- If the remote endpoint emits malformed boundaries, FFmpeg may print `mpjpeg Expected boundary '--' not found` or `mjpeg overread`.
+- The primary mitigation in the current stack is `FrameGrabber` auto-restart of the stream after repeated failed reads.
 
 ---
 

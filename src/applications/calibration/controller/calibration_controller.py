@@ -73,6 +73,7 @@ class CalibrationController(IApplicationController):
 
         self._connect_signals()
         self._subscribe()
+        self._jog.start()
         self._view.destroyed.connect(self.stop)
         self._refresh_calibration_dependent_actions()
         self._view.set_depth_map_enabled(self._model.get_height_calibration_data() is not None)
@@ -80,6 +81,7 @@ class CalibrationController(IApplicationController):
     def stop(self) -> None:
         self._running = False
         self._active = False
+        self._jog.stop()
         self._model.stop_calibration()
         self._model.stop_test_calibration()
         for topic, cb in reversed(self._subs):

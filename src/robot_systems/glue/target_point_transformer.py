@@ -15,6 +15,7 @@ class TargetTransformResult:
     plane_xy: Tuple[float, float]
     final_xy: Tuple[float, float]
     pickup_plane_tcp_delta_xy: Tuple[float, float] = (0.0, 0.0)
+    target_delta_xy: Tuple[float, float] = (0.0, 0.0)
     current_rz: Optional[float] = None
     reference_rz: Optional[float] = None
 
@@ -58,6 +59,8 @@ class TargetPointTransformer:
         calibration_to_pickup_mapper: Optional[Callable[[float, float], tuple[float, float]]] = None,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
+        camera_to_tool_x_offset: float = 0.0,
+        camera_to_tool_y_offset: float = 0.0,
         pickup_plane_reference_rz: float = 90.0,
     ):
         """Build a target-point resolver on top of a raw calibration-plane transformer.
@@ -72,6 +75,10 @@ class TargetPointTransformer:
                 orientation-dependent pickup-plane camera-center compensation.
             camera_to_tcp_y_offset: Local camera->TCP Y offset used for
                 orientation-dependent pickup-plane camera-center compensation.
+            camera_to_tool_x_offset: Local camera->tool X offset in the
+                calibration reference frame.
+            camera_to_tool_y_offset: Local camera->tool Y offset in the
+                calibration reference frame.
             pickup_plane_reference_rz: The known-good pickup-plane orientation
                 where the mapped point already aligns correctly. At this angle
                 the TCP delta must evaluate to zero.
@@ -80,6 +87,8 @@ class TargetPointTransformer:
         self._calibration_to_pickup_mapper = calibration_to_pickup_mapper
         self._camera_to_tcp_x_offset = float(camera_to_tcp_x_offset)
         self._camera_to_tcp_y_offset = float(camera_to_tcp_y_offset)
+        self._camera_to_tool_x_offset = float(camera_to_tool_x_offset)
+        self._camera_to_tool_y_offset = float(camera_to_tool_y_offset)
         self._pickup_plane_reference_rz = float(pickup_plane_reference_rz)
 
     def transform_to_camera_center(
@@ -155,6 +164,52 @@ class TargetPointTransformer:
             calibration_xy=calibration_xy,
             plane_xy=plane_xy,
             final_xy=plane_xy,
+        )
+
+    def transform_to_gripper(
+        self,
+        px: float,
+        py: float,
+        *,
+        plane: PlaneName = "calibration",
+        current_rz: float,
+        tool_to_gripper_x_offset: float = 0.0,
+        tool_to_gripper_y_offset: float = 0.0,
+    ) -> TargetTransformResult:
+        """Transform an image point so the gripper acts as the target point.
+
+        The computation is layered on top of camera-center targeting:
+
+        1. Resolve the point that makes the camera center align with the target.
+        2. Compute the local camera->gripper vector as:
+           ``camera_to_tool + tool_to_gripper``.
+        3. Rotate that vector by ``current_rz`` and add it to the resolved
+           camera-centered target.
+
+        This keeps all camera/TCP pickup-plane delta logic in one place while
+        letting callers request gripper targeting with a single call.
+        """
+        camera_result = self.transform_to_camera_center(
+            px,
+            py,
+            plane=plane,
+            current_rz=current_rz,
+        )
+        cam_to_gripper_x = self._camera_to_tool_x_offset + float(tool_to_gripper_x_offset)
+        cam_to_gripper_y = self._camera_to_tool_y_offset + float(tool_to_gripper_y_offset)
+        delta_x, delta_y = self._rotate_xy(cam_to_gripper_x, cam_to_gripper_y, current_rz)
+        final_xy = (
+            camera_result.final_xy[0] + delta_x,
+            camera_result.final_xy[1] + delta_y,
+        )
+        return TargetTransformResult(
+            calibration_xy=camera_result.calibration_xy,
+            plane_xy=camera_result.plane_xy,
+            final_xy=final_xy,
+            pickup_plane_tcp_delta_xy=camera_result.pickup_plane_tcp_delta_xy,
+            target_delta_xy=(delta_x, delta_y),
+            current_rz=current_rz,
+            reference_rz=camera_result.reference_rz,
         )
 
     def _map_plane(self, xy: Tuple[float, float], plane: PlaneName) -> Tuple[float, float]:

@@ -80,6 +80,8 @@ class PickAndPlaceWorkflow:
             calibration_to_pickup_mapper=calibration_to_pickup_mapper,
             camera_to_tcp_x_offset=config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=config.camera_to_tcp_y_offset,
+            camera_to_tool_x_offset=config.camera_to_tool_x_offset,
+            camera_to_tool_y_offset=config.camera_to_tool_y_offset,
             pickup_plane_reference_rz=config.pickup_plane_reference_rz,
         )
         self._height_resolution  = HeightResolutionService(config, height, logger)

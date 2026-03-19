@@ -21,12 +21,23 @@ def transform_pickup_point(workflow, pickup_px):
     try:
         orientation = float(workflow._context.current_orientation or 0.0)
         rz_final = float(workflow._config.rz_orientation - orientation)
-        result = workflow._point_transformer.transform_to_camera_center(
-            pickup_px[0],
-            pickup_px[1],
-            plane="pickup" if workflow._calibration_to_pickup_mapper is not None else "calibration",
-            current_rz=rz_final if workflow._config.apply_pickup_plane_tcp_delta else None,
-        )
+        plane = "pickup" if workflow._calibration_to_pickup_mapper is not None else "calibration"
+        if workflow._config.pickup_target == "gripper":
+            result = workflow._point_transformer.transform_to_gripper(
+                pickup_px[0],
+                pickup_px[1],
+                plane=plane,
+                current_rz=rz_final,
+                tool_to_gripper_x_offset=workflow._config.gripper_x_offset,
+                tool_to_gripper_y_offset=workflow._config.gripper_y_offset,
+            )
+        else:
+            result = workflow._point_transformer.transform_to_camera_center(
+                pickup_px[0],
+                pickup_px[1],
+                plane=plane,
+                current_rz=rz_final if workflow._config.apply_pickup_plane_tcp_delta else None,
+            )
         calibration_x, calibration_y = result.calibration_xy
         workflow._logger.debug(
             "Homography transformed pickup point %s -> calibration-plane robot point (%.3f, %.3f)",
@@ -52,6 +63,15 @@ def transform_pickup_point(workflow, pickup_px):
         workflow._context.current_pickup_tcp_delta = tuple(map(float, result.pickup_plane_tcp_delta_xy))
         workflow._context.current_pickup_rz = result.current_rz
         robot_x, robot_y = result.final_xy
+        if workflow._config.pickup_target == "gripper":
+            workflow._logger.debug(
+                "Applied gripper target delta at rz=%.3f -> (%.3f, %.3f); final pickup target (%.3f, %.3f)",
+                rz_final,
+                result.target_delta_xy[0],
+                result.target_delta_xy[1],
+                robot_x,
+                robot_y,
+            )
         workflow._context.current_pickup_point_robot = (float(robot_x), float(robot_y))
         return robot_x, robot_y, None
     except Exception as exc:

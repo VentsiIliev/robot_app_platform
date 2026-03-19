@@ -31,14 +31,13 @@ class PickAndPlaceConfig:
     orientation_rx:       float              = 180.0
     orientation_ry:       float              = 0.0
     rz_orientation:       float              = 90.0
+    pickup_target:        str                = "camera_center"  # camera_center | gripper
     gripper_x_offset:     float              = 0
     gripper_y_offset:     float              =   0
-
-
-    # gripper_x_offset:     float              = 0
-    # gripper_y_offset:     float              = 0
     camera_to_tcp_x_offset: float            = 0.0
     camera_to_tcp_y_offset: float            = 0.0
+    camera_to_tool_x_offset: float           = 0.0
+    camera_to_tool_y_offset: float           = 0.0
     pickup_plane_reference_rz: float         = 90.0
     apply_pickup_plane_tcp_delta: bool       = True
     gripper_z_offsets:    Dict[int, float]   = field(default_factory=dict)  # gripper_id → z_offset

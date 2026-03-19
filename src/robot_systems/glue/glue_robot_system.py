@@ -243,6 +243,8 @@ class GlueRobotSystem(BaseRobotSystem):
                 config=PickAndPlaceConfig(
                     camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                     camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
+                    camera_to_tool_x_offset=float(self._robot_config.camera_to_tool_x_offset),
+                    camera_to_tool_y_offset=float(self._robot_config.camera_to_tool_y_offset),
                 ),
                 system_manager=self._system_manager,
                 requirements=pick_and_place_requirements,

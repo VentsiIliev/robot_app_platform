@@ -120,11 +120,14 @@ Concrete `ICoordinateTransformer` that loads a 3×3 homography matrix from a `.n
 class HomographyTransformer(ICoordinateTransformer):
     def __init__(self, matrix_path: str,
                  camera_to_tcp_x_offset: float = <not provided>,
-                 camera_to_tcp_y_offset: float = <not provided>): ...
+                 camera_to_tcp_y_offset: float = <not provided>,
+                 camera_to_tool_x_offset: float = <not provided>,
+                 camera_to_tool_y_offset: float = <not provided>): ...
     def is_available(self) -> bool: ...
     def reload(self) -> bool: ...
     def transform(self, x: float, y: float) -> Tuple[float, float]: ...
     def transform_to_tcp(self, x: float, y: float) -> Tuple[float, float]: ...
+    def transform_to_tool(self, x: float, y: float) -> Tuple[float, float]: ...
     def inverse_transform(self, x: float, y: float) -> Tuple[float, float]: ...
 ```
 
@@ -132,9 +135,11 @@ class HomographyTransformer(ICoordinateTransformer):
 - If the file is missing or unreadable, `is_available()` returns `False`; `transform()` raises `RuntimeError`.
 - `reload()` re-reads the file from disk — call this after a calibration run writes a fresh matrix so that the running service picks up the new values without restarting.
 - `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` are **optional** but must both be provided together. If either is omitted, calling `transform_to_tcp()` raises `RuntimeError` — there is no silent default.
-- `transform_to_tcp(x, y)` = `transform(x, y)` + `(camera_to_tcp_x_offset, camera_to_tcp_y_offset)`. Use this when you need the result relative to the tool tip rather than the camera optical center.
+- `camera_to_tool_x_offset` / `camera_to_tool_y_offset` follow the same rule for `transform_to_tool()`.
+- `transform_to_tcp(x, y)` = `transform(x, y)` + `(camera_to_tcp_x_offset, camera_to_tcp_y_offset)`.
+- `transform_to_tool(x, y)` = `transform(x, y)` + `(camera_to_tool_x_offset, camera_to_tool_y_offset)`.
 - `inverse_transform(x, y)` applies the inverse homography and maps robot/output coordinates back into image space. This is used by the production dashboard to project the live TCP onto the static captured glue-progress image.
-- Created by the wiring layer (`application_wiring.py`) using `vision_service.camera_to_robot_matrix_path` and `robot_config.camera_to_tcp_x_offset` / `robot_config.camera_to_tcp_y_offset`; injected as `ICoordinateTransformer` into services that need it.
+- Created by the wiring layer (`application_wiring.py`) using `vision_service.camera_to_robot_matrix_path` and the robot config camera-to-TCP / camera-to-tool offsets; injected as `ICoordinateTransformer` into services that need it.
 
 ---
 
@@ -164,6 +169,7 @@ See [VisionSystem.py](../../../src/engine/vision/implementation/VisionSystem/Vis
 
 - Constructed once by `build_vision_service()` in `service_builders.py`
 - Runs a background `FrameGrabber` thread from construction
+- When the camera backend starts returning repeated `None` frames, `FrameGrabber` now attempts in-place stream recovery with `stop_stream()` / `start_stream()` instead of spinning forever on stale data
 - `start_system()` starts the main `_loop` daemon thread; `stop_system()` joins it
 - `run()` is the per-tick processing method (called by `_loop`):
   1. Grab latest frame from `FrameGrabber`
@@ -171,3 +177,20 @@ See [VisionSystem.py](../../../src/engine/vision/implementation/VisionSystem/Vis
   3. If `rawMode` → publish raw frame and return
   4. If `contour_detection` → `ContourDetectionService.detect()` → cache in `_latest_contours`
   5. If calibrated → `correctImage()` (undistort + perspective warp)
+
+### Remote MJPEG Recovery
+
+When `VisionSystem` is configured with `RemoteCamera`, OpenCV opens the `http://.../video_feed` source through FFmpeg. If the multipart MJPEG stream becomes malformed or is truncated mid-read, FFmpeg may log errors such as:
+
+- `mjpeg overread`
+- `mpjpeg Expected boundary '--' not found`
+
+Without recovery, this failure mode causes `Camera.capture()` to return `None` repeatedly, which leaves the UI showing the last buffered frame indefinitely.
+
+To mitigate that:
+
+- `FrameGrabber` reads with a shorter timeout so failed reads are detected quickly
+- after a small number of consecutive failed reads it attempts `camera.stop_stream()` followed by `camera.start_stream()`
+- restart attempts are throttled to avoid a tight reconnect loop if the remote endpoint is still unhealthy
+
+This does not fix a broken MJPEG producer, but it prevents a single stream desynchronization from permanently freezing frame updates until the whole application is restarted.
