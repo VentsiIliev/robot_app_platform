@@ -40,5 +40,39 @@ class CalibrationModel(IApplicationModel):
     def stop_test_calibration(self) -> None:
         self._service.stop_test_calibration()
 
+    def measure_marker_heights(self) -> tuple[bool, str]:
+        return self._service.measure_marker_heights()
+
+    def generate_area_grid(
+        self,
+        corners_norm,
+        rows: int,
+        cols: int,
+    ) -> list[tuple[float, float]]:
+        return self._service.generate_area_grid(corners_norm, rows, cols)
+
+    def measure_area_grid(
+        self,
+        corners_norm,
+        rows: int,
+        cols: int,
+    ) -> tuple[bool, str]:
+        return self._service.measure_area_grid(corners_norm, rows, cols)
+
+    def stop_marker_height_measurement(self) -> None:
+        self._service.stop_marker_height_measurement()
+
+    def can_measure_marker_heights(self) -> bool:
+        return self._service.can_measure_marker_heights()
+
+    def verify_height_model(self) -> tuple[bool, str]:
+        return self._service.verify_height_model()
+
     def get_height_calibration_data(self):
         return self._service.get_height_calibration_data()
+
+    def has_saved_height_model(self) -> bool:
+        return self._service.has_saved_height_model()
+
+    def restore_pending_safety_walls(self) -> bool:
+        return self._service.restore_pending_safety_walls()

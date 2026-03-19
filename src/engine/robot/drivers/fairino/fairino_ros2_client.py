@@ -239,6 +239,57 @@ class FairinoRos2Client:
             logger.error("get_status error: %s", e, exc_info=True)
             return None
 
+    def get_safety_walls_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/safety/walls/status", timeout=2)
+            data = response.json()
+            self._mark_available()
+            logger.debug("get_safety_walls_status ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_safety_walls_status error: %s", e, exc_info=True)
+            return {"supported": False, "enabled": None, "error": str(e)}
+
+    def are_safety_walls_enabled(self):
+        try:
+            response = requests.get(f"{self.server_url}/safety/walls/enabled", timeout=2)
+            data = response.json()
+            self._mark_available()
+            enabled = data.get("enabled")
+            logger.debug("are_safety_walls_enabled ← http=%s raw=%s", response.status_code, data)
+            return bool(enabled) if enabled is not None else None
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("are_safety_walls_enabled error: %s", e, exc_info=True)
+            return None
+
+    def enable_safety_walls(self) -> bool:
+        logger.debug("enable_safety_walls → POST /safety/walls/enable")
+        try:
+            response = requests.post(f"{self.server_url}/safety/walls/enable", timeout=5)
+            data = response.json()
+            self._mark_available()
+            logger.debug("enable_safety_walls ← http=%s raw=%s", response.status_code, data)
+            return bool(data.get("success")) and bool(data.get("enabled"))
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("enable_safety_walls error: %s", e, exc_info=True)
+            return False
+
+    def disable_safety_walls(self) -> bool:
+        logger.debug("disable_safety_walls → POST /safety/walls/disable")
+        try:
+            response = requests.post(f"{self.server_url}/safety/walls/disable", timeout=5)
+            data = response.json()
+            self._mark_available()
+            logger.debug("disable_safety_walls ← http=%s raw=%s", response.status_code, data)
+            return bool(data.get("success")) and data.get("enabled") is False
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("disable_safety_walls error: %s", e, exc_info=True)
+            return False
+
     def get_current_velocity(self):
         # logger.debug("get_current_velocity → GET /velocity/current")
         try:

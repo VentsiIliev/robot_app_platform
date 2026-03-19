@@ -42,40 +42,10 @@ class LaserCalibrationService:
         cfg = self._config
         pos = initial_position or cfg.calibration_initial_position
 
-        self._robot.move_linear(
-            position=pos,
-            tool=self._tool,
-            user=self._user,
-            velocity=cfg.calibration_velocity,
-            acceleration=cfg.calibration_acceleration,
-            blendR=0,
-            wait_to_reach=True,
-        )
-        time.sleep(cfg.delay_between_move_detect_ms / 1000.0)
-
-        _, _, zero_ref = self._laser.detect()
-        if zero_ref is None:
-            _logger.error("Laser not detected at initial calibration position")
-            return False
-
-        _logger.info("Zero reference: %s", zero_ref)
-        points: List[Tuple[float, float]] = [(0.0, 0.0)]
-
-        for i in range(1, cfg.num_iterations + 1):
-
-            if stop_event and stop_event.is_set():  # ← cancellation check
-                _logger.info("Calibration cancelled at iteration %d", i)
-                return False
-
-            current = self._robot.get_current_position()
-            if not current:
-                _logger.error("Cannot get robot position at iteration %d", i)
-                return False
-
-            step_pos = list(current)
-            step_pos[2] -= cfg.step_size_mm
+        self._laser.begin_measurement_session()
+        try:
             self._robot.move_linear(
-                position=step_pos,
+                position=pos,
                 tool=self._tool,
                 user=self._user,
                 velocity=cfg.calibration_velocity,
@@ -85,31 +55,71 @@ class LaserCalibrationService:
             )
             time.sleep(cfg.delay_between_move_detect_ms / 1000.0)
 
-            for _ in range(cfg.calibration_max_attempts):
-                _, _, closest = self._laser.detect()
-                if closest is None:
-                    _logger.warning("No detection at iteration %d, retrying", i)
-                    continue
-                delta = zero_ref[0] - closest[0]
-                if delta >= 0:
-                    continue
-                points.append((float(i * cfg.step_size_mm), float(delta)))
-                _logger.info(
-                    "Point %d: height=%.2f mm, delta=%.3f px", i, i * cfg.step_size_mm, delta
+            _, _, zero_ref = self._laser.detect()
+            if zero_ref is None:
+                _logger.error("Laser not detected at initial calibration position")
+                return False
+
+            _logger.info("Zero reference: %s", zero_ref)
+            points: List[Tuple[float, float]] = [(0.0, 0.0)]
+
+            for i in range(1, cfg.num_iterations + 1):
+
+                if stop_event and stop_event.is_set():  # ← cancellation check
+                    _logger.info("Calibration cancelled at iteration %d", i)
+                    return False
+
+                current = self._robot.get_current_position()
+                if not current:
+                    _logger.error("Cannot get robot position at iteration %d", i)
+                    return False
+
+                step_pos = list(current)
+                step_pos[2] -= cfg.step_size_mm
+                self._robot.move_linear(
+                    position=step_pos,
+                    tool=self._tool,
+                    user=self._user,
+                    velocity=cfg.calibration_velocity,
+                    acceleration=cfg.calibration_acceleration,
+                    blendR=0,
+                    wait_to_reach=True,
                 )
-                break
+                time.sleep(cfg.delay_between_move_detect_ms / 1000.0)
 
-        if len(points) < 3:
-            _logger.error("Not enough calibration points (%d); need at least 3", len(points))
-            return False
+                for _ in range(cfg.calibration_max_attempts):
+                    _, _, closest = self._laser.detect()
+                    if closest is None:
+                        _logger.warning("No detection at iteration %d, retrying", i)
+                        continue
+                    delta = zero_ref[0] - closest[0]
+                    if delta >= 0:
+                        continue
+                    points.append((float(i * cfg.step_size_mm), float(delta)))
+                    _logger.info(
+                        "Point %d: height=%.2f mm, delta=%.3f px", i, i * cfg.step_size_mm, delta
+                    )
+                    break
 
-        calib_data = self._fit_polynomial(points, pos, zero_ref)
-        self._data = calib_data
-        self._repo.save(calib_data)
-        _logger.info(
-            "Calibration saved: degree=%d, MSE=%.6f", calib_data.polynomial_degree, calib_data.polynomial_mse
-        )
-        return True
+            if len(points) < 3:
+                _logger.error("Not enough calibration points (%d); need at least 3", len(points))
+                return False
+
+            calib_data = self._fit_polynomial(points, pos, zero_ref)
+            zero_bias = self._measure_zero_height_bias(calib_data, stop_event=stop_event)
+            calib_data.zero_height_offset_mm = zero_bias
+            self._data = calib_data
+            self._repo.save(calib_data)
+            _logger.info(
+                "Calibration saved: degree=%d, MSE=%.6f, zero_height_offset_mm=%.4f",
+                calib_data.polynomial_degree,
+                calib_data.polynomial_mse,
+                calib_data.zero_height_offset_mm,
+            )
+            self._log_calibration_report(calib_data)
+            return True
+        finally:
+            self._laser.end_measurement_session()
 
     def _fit_polynomial(
         self,
@@ -145,3 +155,97 @@ class LaserCalibrationService:
             polynomial_mse=best_mse,
         )
 
+    def _measure_zero_height_bias(
+        self,
+        calib_data: LaserCalibrationData,
+        *,
+        stop_event: threading.Event | None = None,
+    ) -> float:
+        if stop_event and stop_event.is_set():
+            return 0.0
+
+        pos = calib_data.robot_initial_position
+        zero_ref = calib_data.zero_reference_coords
+        if not pos or not zero_ref:
+            return 0.0
+
+        self._robot.move_linear(
+            position=list(pos),
+            tool=self._tool,
+            user=self._user,
+            velocity=self._config.calibration_velocity,
+            acceleration=self._config.calibration_acceleration,
+            blendR=0,
+            wait_to_reach=True,
+        )
+        time.sleep(self._config.delay_between_move_detect_ms / 1000.0)
+
+        for attempt in range(1, self._config.calibration_max_attempts + 1):
+            if stop_event and stop_event.is_set():
+                return 0.0
+            _, _, closest = self._laser.detect()
+            if closest is None:
+                _logger.warning(
+                    "Zero-height bias measurement: no laser detected at calibration position (attempt %d/%d)",
+                    attempt,
+                    self._config.calibration_max_attempts,
+                )
+                continue
+            pixel_delta = float(zero_ref[0]) - float(closest[0])
+            raw_height_mm = self._predict_height(calib_data, pixel_delta)
+            _logger.info(
+                "Measured zero-height bias at calibration position: %.4f mm (delta=%.3f px)",
+                raw_height_mm,
+                pixel_delta,
+            )
+            return raw_height_mm
+
+        _logger.warning("Failed to measure zero-height bias after calibration; defaulting to 0.0 mm")
+        return 0.0
+
+    @staticmethod
+    def _predict_height(calib_data: LaserCalibrationData, pixel_delta: float) -> float:
+        features = [float(pixel_delta) ** (i + 1) for i in range(int(calib_data.polynomial_degree))]
+        return (
+            sum(float(c) * f for c, f in zip(calib_data.polynomial_coefficients, features))
+            + float(calib_data.polynomial_intercept)
+        )
+
+    def _log_calibration_report(self, calib_data: LaserCalibrationData) -> None:
+        lines = [
+            "",
+            "=== Laser Calibration Report ===",
+        ]
+
+        zero_ref = calib_data.zero_reference_coords or []
+        if len(zero_ref) >= 2:
+            lines.append(
+                f"Zero reference pixel: x={float(zero_ref[0]):.3f} y={float(zero_ref[1]):.3f}"
+            )
+
+        robot_pos = calib_data.robot_initial_position or []
+        if len(robot_pos) >= 6:
+            lines.append(
+                "Calibration pose: "
+                f"x={float(robot_pos[0]):.3f} y={float(robot_pos[1]):.3f} z={float(robot_pos[2]):.3f} "
+                f"rx={float(robot_pos[3]):.3f} ry={float(robot_pos[4]):.3f} rz={float(robot_pos[5]):.3f}"
+            )
+
+        lines.append(f"Polynomial degree: {int(calib_data.polynomial_degree)}")
+        lines.append(f"Polynomial MSE: {float(calib_data.polynomial_mse):.6f}")
+        lines.append(f"Zero-height offset: {float(calib_data.zero_height_offset_mm):+.4f} mm")
+
+        coeffs = [float(v) for v in calib_data.polynomial_coefficients]
+        lines.append(f"Intercept: {float(calib_data.polynomial_intercept):+.6f}")
+        lines.append(f"Coefficients: {coeffs}")
+
+        lines.append("Calibration samples:")
+        for idx, point in enumerate(calib_data.calibration_points):
+            if len(point) < 2:
+                continue
+            lines.append(
+                f"[{idx}] height={float(point[0]):.3f} mm delta={float(point[1]):.3f} px"
+            )
+
+        lines.append("================================")
+        _logger.info("\n".join(lines))

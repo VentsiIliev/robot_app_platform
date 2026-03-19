@@ -165,7 +165,8 @@ class HeightMeasuringApplicationService(IHeightMeasuringAppService):
             return None
         delta    = data.zero_reference_coords[0] - pixel_x
         features = [delta ** (i + 1) for i in range(data.polynomial_degree)]
-        return sum(c * f for c, f in zip(data.polynomial_coefficients, features)) + data.polynomial_intercept
+        raw_height = sum(c * f for c, f in zip(data.polynomial_coefficients, features)) + data.polynomial_intercept
+        return raw_height - float(getattr(data, "zero_height_offset_mm", 0.0))
 
     def cleanup(self) -> None:
         if self._laser_ops is None:

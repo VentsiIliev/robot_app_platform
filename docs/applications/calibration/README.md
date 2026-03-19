@@ -9,9 +9,9 @@ Single-screen workflow for calibrating the camera lens and the robot-to-camera s
 ```
 calibration/
 ├── service/
-│   ├── i_calibration_service.py              ← ICalibrationService (10 methods)
+│   ├── i_calibration_service.py              ← ICalibrationService
 │   ├── stub_calibration_service.py           ← In-memory stub (always returns success)
-│   └── calibration_application_service.py   ← Bridges vision_service + process_controller + transformer + camera TCP offset calibrator
+│   └── calibration_application_service.py    ← Bridges vision_service + process_controller + transformer + standalone helpers
 ├── model/
 │   └── calibration_model.py                  ← Thin delegation to ICalibrationService
 ├── view/
@@ -36,6 +36,12 @@ class ICalibrationService(ABC):
     def is_calibrated(self)                -> bool: ...
     def test_calibration(self)             -> tuple[bool, str]: ...
     def stop_test_calibration(self)        -> None: ...
+    def measure_marker_heights(self)       -> tuple[bool, str]: ...
+    def generate_area_grid(...)            -> list[tuple[float, float]]: ...
+    def measure_area_grid(...)             -> tuple[bool, str]: ...
+    def verify_height_model(self)          -> tuple[bool, str]: ...
+    def stop_marker_height_measurement(self)-> None: ...
+    def can_measure_marker_heights(self)   -> bool: ...
     def get_height_calibration_data(self)  -> any: ...
 ```
 
@@ -55,6 +61,7 @@ CalibrationApplicationService(
     calib_config:        _ICalibConfig    = None,
     transformer:         ICoordinateTransformer = None,  # pixel → robot mm
     camera_tcp_offset_calibrator: _ICameraTcpOffsetCalibrator = None,
+    marker_height_mapping_service: _IMarkerHeightMappingService = None,
 )
 ```
 
@@ -65,10 +72,16 @@ CalibrationApplicationService(
 | `calibrate_robot()` | `process_controller.calibrate()` → returns `(True, "started")` |
 | `calibrate_camera_and_robot()` | `calibrate_camera()` first; if success → `process_controller.calibrate()` |
 | `calibrate_camera_tcp_offset()` | Requires `is_calibrated() == True`; then runs the dedicated camera-TCP offset calibration service |
+| `measure_marker_heights()` | Requires homography + height calibration; runs the standalone ArUco marker height-mapping workflow |
+| `generate_area_grid(...)` | Uses the user-defined 4-corner area and `rows/cols` to generate row-major grid points on the image |
+| `measure_area_grid(...)` | Runs the standalone area-grid height-mapping workflow over the generated points |
+| `verify_height_model()` | Runs 4 interior verification measurements against the saved piecewise triangle height model |
 | `stop_calibration()` | `process_controller.stop_calibration()` and stops the camera-TCP offset calibrator if one is active |
 | `is_calibrated()` | Checks that both matrix files exist on disk |
 | `test_calibration()` | Detects ArUco markers, converts pixels to robot mm via `transformer`, moves robot to each marker |
 | `stop_test_calibration()` | Sets `_stop_test = True` to abort an in-progress test |
+| `stop_marker_height_measurement()` | Stops the standalone marker-height workflow and requests robot motion stop |
+| `can_measure_marker_heights()` | `True` when homography exists and the height measuring service is calibrated |
 | `get_height_calibration_data()` | Delegates to `height_service` |
 
 ### `test_calibration` pixel-to-robot conversion
@@ -122,6 +135,73 @@ User presses "Test Calibration"
   → detect ArUco markers in current frame
   → transformer.transform(px, py) → (x_mm, y_mm)
   → robot.move_ptp to each marker position
+
+User presses "Measure Marker Heights"
+  → service.measure_marker_heights()
+  → transformer.reload() picks up latest matrix
+  → repeatedly detect ArUco markers until all configured `required_ids` are collected (max 50 attempts)
+  → cache marker pixels / transformed robot XY by marker ID
+  → disable auto-exposure once for the whole measurement session
+  → robot.move_ptp to each marker in the configured marker order
+  → height_service.measure_at(x_mm, y_mm)
+  → save measured samples plus marker IDs as a depth map
+  → build a piecewise triangle model when the depth map is later viewed
+  → restore auto-exposure when done
+
+After a successful marker-height run
+  → controller asks whether to verify the saved model
+  → if confirmed, service.verify_height_model()
+  → infer 4 interior verification points from the piecewise triangle model
+  → height_service.measure_at(x_mm, y_mm) at each inferred point
+  → log predicted height, measured height, signed error, mean abs error, max abs error
+
+User draws a 4-corner area in the camera view
+  → uses the built-in editable area overlay in `CameraView`
+  → corners are stored in normalized image coordinates
+
+User sets "Rows" / "Cols" and presses "Generate Grid"
+  → service.generate_area_grid(corners_norm, rows, cols)
+  → grid points are generated row-major:
+    - left to right within each row
+    - top row to bottom row
+  → overlay points are drawn on the camera image
+
+User presses "Measure Area Grid"
+  → service.measure_area_grid(corners_norm, rows, cols)
+  → transformer.reload() picks up latest matrix
+  → each grid point is transformed through the homography
+  → height service opens one measurement session for the full run
+  → if remote safety walls are currently enabled, they are disabled for this run and restored in `finally`
+  → if a grid point is unreachable:
+    - try recovery through point `0` of the grid (`r1c1`)
+    - retry once
+    - if still unreachable, skip it and continue
+  → save measured samples plus grid metadata (`point_labels`, `grid_rows`, `grid_cols`)
+
+After a successful area-grid run
+  → controller enables "View Depth Map"
+  → controller asks whether to verify the saved model
+  → if confirmed, service.verify_height_model()
+  → for area-grid data, 4 verification points are built from interior cell centers
+  → predicted/measured/error report is logged the same way as marker verification
+
+User presses "View Depth Map"
+  → opens `DepthMapDialog`
+  → marker-tagged data is rendered as a piecewise triangle surface
+  → area-grid data is rendered as a generic depth map with saved point labels
+
+## Calibration UI Layout
+
+- Left side:
+  - large camera preview
+  - area-grid controls directly below the preview
+- Right side:
+  - capture
+  - calibration actions
+  - test / marker-height actions
+  - log
+
+This keeps the area-selection and grid-generation controls next to the image they affect.
 ```
 
 ---
@@ -135,6 +215,7 @@ transformer = (
     if vision_service is not None else None
 )
 camera_tcp_offset_calibrator = CameraTcpOffsetCalibrationService(...)
+marker_height_mapping_service = ArucoMarkerHeightMappingService(...)
 service = CalibrationApplicationService(
     vision_service     = vision_service,
     process_controller = robot_system.coordinator,
@@ -144,6 +225,7 @@ service = CalibrationApplicationService(
     calib_config       = robot_system._robot_calibration,
     transformer        = transformer,
     camera_tcp_offset_calibrator = camera_tcp_offset_calibrator,
+    marker_height_mapping_service = marker_height_mapping_service,
 )
 return WidgetApplication(widget_factory=lambda ms: CalibrationFactory(ms, jog_service).build(service))
 ```

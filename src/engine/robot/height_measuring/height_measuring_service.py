@@ -49,13 +49,32 @@ class HeightMeasuringService(IHeightMeasuringService):
     def reload_calibration(self) -> None:
         self._load_calibration()
 
-    def save_height_map(self, samples: List[List[float]]) -> None:
+    def save_height_map(
+        self,
+        samples: List[List[float]],
+        marker_ids: Optional[List[int]] = None,
+        point_labels: Optional[List[str]] = None,
+        grid_rows: int = 0,
+        grid_cols: int = 0,
+        planned_points: Optional[List[List[float]]] = None,
+        planned_point_labels: Optional[List[str]] = None,
+        unavailable_point_labels: Optional[List[str]] = None,
+    ) -> None:
         if not samples:
             return
         if self._depth_map_repo is None:
             _logger.warning("save_height_map: no depth_map_repository injected — cannot save depth map")
             return
-        data = DepthMapData(points=[list(s) for s in samples])
+        data = DepthMapData(
+            points=[list(s) for s in samples],
+            marker_ids=[int(v) for v in marker_ids] if marker_ids else [],
+            point_labels=[str(v) for v in point_labels] if point_labels else [],
+            grid_rows=int(grid_rows or 0),
+            grid_cols=int(grid_cols or 0),
+            planned_points=[list(point) for point in planned_points] if planned_points else [],
+            planned_point_labels=[str(v) for v in planned_point_labels] if planned_point_labels else [],
+            unavailable_point_labels=[str(v) for v in unavailable_point_labels] if unavailable_point_labels else [],
+        )
         self._depth_map_repo.save(data)
         _logger.info("Depth map saved: %d points", len(samples))
 
@@ -69,24 +88,33 @@ class HeightMeasuringService(IHeightMeasuringService):
             _logger.error("Failed to load depth map data: %s", e)
             return None
 
-    def measure_at(self, x: float, y: float) -> Optional[float]:
+    def begin_measurement_session(self) -> None:
+        self._laser.begin_measurement_session()
+
+    def end_measurement_session(self) -> None:
+        self._laser.end_measurement_session()
+
+    def measure_at(self, x: float, y: float, *, already_at_xy: bool = False) -> Optional[float]:
         if not self.is_calibrated():
             _logger.error("Cannot measure: calibration not loaded")
             return None
 
         cfg    = self._config
         ref    = self._calib.robot_initial_position
-        target = [x, y, ref[2]] + list(ref[3:6])
-
-        self._robot.move_linear(
-            position=target,
-            tool=self._tool,
-            user=self._user,
-            velocity=cfg.measurement_velocity,
-            acceleration=cfg.measurement_acceleration,
-            blendR=0,
-            wait_to_reach=True,
-        )
+        if not already_at_xy:
+            target = [x, y, ref[2]] + list(ref[3:6])
+            moved = self._robot.move_linear(
+                position=target,
+                tool=self._tool,
+                user=self._user,
+                velocity=cfg.measurement_velocity,
+                acceleration=cfg.measurement_acceleration,
+                blendR=0,
+                wait_to_reach=True,
+            )
+            if not moved:
+                _logger.warning("Failed to move to measurement point (%.2f, %.2f)", x, y)
+                return None
         time.sleep(cfg.delay_between_move_detect_ms / 1000.0)
 
         _, _, closest = self._laser.detect()
@@ -95,9 +123,16 @@ class HeightMeasuringService(IHeightMeasuringService):
             return None
 
         pixel_delta = self._calib.zero_reference_coords[0] - closest[0]
-        height_mm   = self._pixel_to_mm(pixel_delta)
+        raw_height_mm = self._pixel_to_mm(pixel_delta)
+        height_mm = raw_height_mm - float(getattr(self._calib, "zero_height_offset_mm", 0.0))
         _logger.info(
-            "Height at (%.2f, %.2f): %.4f mm  (delta=%.3f px)", x, y, height_mm, pixel_delta
+            "Height at (%.2f, %.2f): %.4f mm  (raw=%.4f mm, zero_offset=%.4f mm, delta=%.3f px)",
+            x,
+            y,
+            height_mm,
+            raw_height_mm,
+            float(getattr(self._calib, "zero_height_offset_mm", 0.0)),
+            pixel_delta,
         )
         return height_mm
 
@@ -122,4 +157,3 @@ class HeightMeasuringService(IHeightMeasuringService):
         except Exception as e:
             _logger.error("Failed to load calibration: %s", e)
             self._calib = self._poly_model = self._poly_transform = None
-

@@ -74,6 +74,24 @@ class FairinoRos2Robot(IRobot):
     def get_connection_details(self) -> dict:
         return self._client.get_connection_details()
 
+    def enable_safety_walls(self) -> bool:
+        logger.info("enable_safety_walls →")
+        success = self._client.enable_safety_walls()
+        logger.info("enable_safety_walls ← success=%s", success)
+        return success
+
+    def disable_safety_walls(self) -> bool:
+        logger.info("disable_safety_walls →")
+        success = self._client.disable_safety_walls()
+        logger.info("disable_safety_walls ← success=%s", success)
+        return success
+
+    def are_safety_walls_enabled(self):
+        return self._client.are_safety_walls_enabled()
+
+    def get_safety_walls_status(self) -> dict:
+        return self._client.get_safety_walls_status()
+
     def enable(self) -> None:
         logger.info("enable →")
         self._client.enable()

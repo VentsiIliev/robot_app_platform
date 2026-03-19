@@ -91,10 +91,10 @@
     }
   },
   "SAFETY_LIMITS": {
-    "x_min": -600,
-    "x_max": 600,
-    "y_min": -650,
-    "y_max": 650,
+    "x_min": -650,
+    "x_max": 650,
+    "y_min": -700,
+    "y_max": 700,
     "z_min": 270,
     "z_max": 821,
     "rx_min": 170,

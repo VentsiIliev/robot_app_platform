@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 from src.engine.core.i_health_checkable import IHealthCheckable
 from .i_motion_service import IMotionService
 from .i_robot_lifecycle import IRobotLifecycle
@@ -37,6 +38,18 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
 
     def get_last_trajectory_command_info(self):
         return None
+
+    @abstractmethod
+    def enable_safety_walls(self) -> bool: ...
+
+    @abstractmethod
+    def disable_safety_walls(self) -> bool: ...
+
+    @abstractmethod
+    def are_safety_walls_enabled(self) -> Optional[bool]: ...
+
+    @abstractmethod
+    def get_safety_walls_status(self) -> dict: ...
 
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""

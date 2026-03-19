@@ -2,11 +2,11 @@ import cv2
 import numpy as np
 
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QVBoxLayout, QWidget, QLabel,
-    QTextEdit, QSizePolicy,
+    QFormLayout, QHBoxLayout, QVBoxLayout, QWidget, QLabel,
+    QTextEdit, QSizePolicy, QSpinBox, QScrollArea,
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QImage, QPixmap, QTextCursor
+from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap, QTextCursor
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.camera_view import CameraView
@@ -133,6 +133,10 @@ _MAGNIFY_INSET_SIZE  = 210             # output inset square (px)
 _MAGNIFY_MARGIN      = 10              # inset distance from frame edge
 _MAGNIFY_BORDER      = (230, 230, 230) # BGR inset border
 _MAGNIFY_SOURCE      = (0, 200, 255)   # BGR source-region indicator
+_GRID_POINT_COLOR    = QColor("#FF7043")
+_GRID_POINT_FILL     = QColor(255, 112, 67, 180)
+_GRID_LABEL_COLOR    = QColor("#1A1A2E")
+_CARD_STYLE = f"background: {_PANEL_BG}; border: 1px solid #E0E0E0; border-radius: 10px;"
 
 
 def _divider() -> QWidget:
@@ -148,6 +152,32 @@ def _section_label(text: str) -> QLabel:
     return lbl
 
 
+class _GridCameraView(CameraView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._grid_points: list[tuple[float, float]] = []
+
+    def set_grid_points(self, points: list[tuple[float, float]]) -> None:
+        self._grid_points = [(float(x), float(y)) for x, y in points]
+        self.update()
+
+    def _paint_overlay(self, painter: QPainter, image_rect) -> None:
+        if not self._grid_points:
+            return
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(_GRID_POINT_COLOR, 1.5)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(_GRID_POINT_FILL))
+
+        for index, (xn, yn) in enumerate(self._grid_points):
+            px, py = self._to_pixel(xn, yn)
+            painter.drawEllipse(int(px) - 4, int(py) - 4, 8, 8)
+            painter.setPen(_GRID_LABEL_COLOR)
+            painter.drawText(int(px) + 6, int(py) - 6, str(index + 1))
+            painter.setPen(pen)
+
+
 class CalibrationView(IApplicationView):
 
     capture_requested            = pyqtSignal()
@@ -157,7 +187,11 @@ class CalibrationView(IApplicationView):
     calibrate_camera_tcp_offset_requested = pyqtSignal()
     stop_calibration_requested   = pyqtSignal()
     test_calibration_requested   = pyqtSignal()
+    measure_marker_heights_requested = pyqtSignal()
+    generate_area_grid_requested = pyqtSignal()
+    measure_area_grid_requested  = pyqtSignal()
     view_depth_map_requested     = pyqtSignal()
+    verify_saved_model_requested = pyqtSignal()
     jog_requested              = pyqtSignal(str, str, str, float)
     jog_stopped                = pyqtSignal(str)
 
@@ -201,29 +235,93 @@ class CalibrationView(IApplicationView):
         panel = QWidget()
         panel.setStyleSheet(f"background: {_BG};")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        preview_card = QWidget()
+        preview_card.setStyleSheet(_CARD_STYLE)
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
 
         caption = QLabel("Camera Preview")
         caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         caption.setFixedHeight(24)
         caption.setStyleSheet(_CAPTION)
 
-        self._preview_label = CameraView()
+        self._preview_label = _GridCameraView()
         self._preview_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
+        self._preview_label.add_area("measurement_area", "#4CAF50")
+        self._preview_label.set_active_area("measurement_area")
+        self._preview_label.corner_updated.connect(self._on_measurement_area_changed)
+        self._preview_label.empty_clicked.connect(self._on_measurement_area_empty_clicked)
 
-        layout.addWidget(caption,             stretch=0)
-        layout.addWidget(self._preview_label, stretch=1)
+        preview_layout.addWidget(caption, stretch=0)
+        preview_layout.addWidget(self._preview_label, stretch=1)
+
+        area_card = QWidget()
+        area_card.setStyleSheet(_CARD_STYLE)
+        area_layout = QVBoxLayout(area_card)
+        area_layout.setContentsMargins(16, 12, 16, 16)
+        area_layout.setSpacing(10)
+
+        area_layout.addWidget(_section_label("Area Grid"))
+
+        area_top = QHBoxLayout()
+        area_top.setSpacing(12)
+
+        form = QFormLayout()
+        self._grid_rows_spin = QSpinBox()
+        self._grid_rows_spin.setRange(2, 50)
+        self._grid_rows_spin.setValue(5)
+        self._grid_cols_spin = QSpinBox()
+        self._grid_cols_spin.setRange(2, 50)
+        self._grid_cols_spin.setValue(4)
+        form.addRow("Rows:", self._grid_rows_spin)
+        form.addRow("Cols:", self._grid_cols_spin)
+        area_top.addLayout(form, stretch=0)
+
+        area_actions = QVBoxLayout()
+        area_actions.setSpacing(8)
+        self._generate_area_grid_btn = MaterialButton("▦  Generate Grid")
+        self._generate_area_grid_btn.setStyleSheet(_BTN_TEST)
+        area_actions.addWidget(self._generate_area_grid_btn)
+
+        self._measure_area_grid_btn = MaterialButton("📐  Measure Area Grid")
+        self._measure_area_grid_btn.setStyleSheet(_BTN_TEST)
+        self._measure_area_grid_btn.setEnabled(False)
+        area_actions.addWidget(self._measure_area_grid_btn)
+
+        area_actions.addStretch()
+        area_top.addLayout(area_actions, stretch=1)
+        area_layout.addLayout(area_top)
+
+        area_bottom = QHBoxLayout()
+        area_bottom.setSpacing(8)
+
+        self._clear_area_grid_btn = MaterialButton("✎  Clear Area")
+        self._clear_area_grid_btn.setStyleSheet(_BTN_SECONDARY)
+        area_bottom.addWidget(self._clear_area_grid_btn)
+
+        self._view_depth_map_btn = MaterialButton("📈  View Depth Map")
+        self._view_depth_map_btn.setStyleSheet(_BTN_TEST)
+        self._view_depth_map_btn.setEnabled(False)
+        area_bottom.addWidget(self._view_depth_map_btn)
+
+        area_layout.addLayout(area_bottom)
+
+        layout.addWidget(preview_card, stretch=5)
+        layout.addWidget(area_card, stretch=0)
         return panel
 
     # ── Controls panel ────────────────────────────────────────────────
 
     def _build_controls_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setStyleSheet(f"background: {_PANEL_BG}; border-left: 1px solid #E0E0E0;")
-        layout = QVBoxLayout(panel)
+        content = QWidget()
+        content.setStyleSheet(f"background: {_PANEL_BG};")
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
@@ -263,7 +361,7 @@ class CalibrationView(IApplicationView):
 
         layout.addWidget(_divider())
 
-        self._stop_robot_btn = MaterialButton("⏹  Stop Robot Calibration")
+        self._stop_robot_btn = MaterialButton("⏹  Stop Active Task")
         self._stop_robot_btn.setStyleSheet(_BTN_DANGER)
         self._stop_robot_btn.setEnabled(False)
         layout.addWidget(self._stop_robot_btn)
@@ -283,10 +381,15 @@ class CalibrationView(IApplicationView):
         self._test_calibration_btn.setEnabled(False)
         layout.addWidget(self._test_calibration_btn)
 
-        self._view_depth_map_btn = MaterialButton("📈  View Depth Map")
-        self._view_depth_map_btn.setStyleSheet(_BTN_TEST)
-        self._view_depth_map_btn.setEnabled(True)
-        layout.addWidget(self._view_depth_map_btn)
+        self._measure_marker_heights_btn = MaterialButton("📏  Measure Marker Heights")
+        self._measure_marker_heights_btn.setStyleSheet(_BTN_TEST)
+        self._measure_marker_heights_btn.setEnabled(False)
+        layout.addWidget(self._measure_marker_heights_btn)
+
+        self._verify_saved_model_btn = MaterialButton("🧪  Verify Saved Model")
+        self._verify_saved_model_btn.setStyleSheet(_BTN_TEST)
+        self._verify_saved_model_btn.setEnabled(False)
+        layout.addWidget(self._verify_saved_model_btn)
 
         layout.addWidget(_divider())
 
@@ -301,7 +404,13 @@ class CalibrationView(IApplicationView):
         layout.addWidget(self._log, stretch=1)
 
         self._connect_signals()
-        return panel
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(f"background: {_PANEL_BG}; border-left: 1px solid #E0E0E0;")
+        scroll.setWidget(content)
+        return scroll
 
     def _connect_signals(self) -> None:
         self._capture_btn.clicked.connect(self.capture_requested.emit)
@@ -312,7 +421,12 @@ class CalibrationView(IApplicationView):
             self.calibrate_camera_tcp_offset_requested.emit
         )
         self._test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
+        self._measure_marker_heights_btn.clicked.connect(self.measure_marker_heights_requested.emit)
+        self._generate_area_grid_btn.clicked.connect(self.generate_area_grid_requested.emit)
+        self._measure_area_grid_btn.clicked.connect(self.measure_area_grid_requested.emit)
+        self._clear_area_grid_btn.clicked.connect(self.clear_measurement_area)
         self._view_depth_map_btn.clicked.connect(self.view_depth_map_requested.emit)
+        self._verify_saved_model_btn.clicked.connect(self.verify_saved_model_requested.emit)
         self._crosshair_btn.clicked.connect(self._toggle_crosshair)
         self._magnifier_btn.clicked.connect(self._toggle_magnifier)
         self._stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
@@ -329,6 +443,12 @@ class CalibrationView(IApplicationView):
             _BTN_OVERLAY_ON if self._magnifier_on else _BTN_OVERLAY_OFF
         )
 
+    def _on_measurement_area_changed(self, _area: str, _idx: int, _xn: float, _yn: float) -> None:
+        self._preview_label.set_grid_points([])
+
+    def _on_measurement_area_empty_clicked(self, _area: str, _xn: float, _yn: float) -> None:
+        self._preview_label.set_grid_points([])
+
     # ── Public API ────────────────────────────────────────────────────
 
     def set_stop_calibration_enabled(self, enabled: bool) -> None:
@@ -340,8 +460,15 @@ class CalibrationView(IApplicationView):
     def set_camera_tcp_offset_enabled(self, enabled: bool) -> None:
         self._calibrate_camera_tcp_offset_btn.setEnabled(enabled)
 
+    def set_measure_marker_heights_enabled(self, enabled: bool) -> None:
+        self._measure_marker_heights_btn.setEnabled(enabled)
+
+    def set_measure_area_grid_enabled(self, enabled: bool) -> None:
+        self._measure_area_grid_btn.setEnabled(enabled)
+
     def set_depth_map_enabled(self, enabled: bool) -> None:
         self._view_depth_map_btn.setEnabled(enabled)
+        self._verify_saved_model_btn.setEnabled(enabled)
 
     def update_camera_view(self, image) -> None:
         if image is None:
@@ -371,6 +498,23 @@ class CalibrationView(IApplicationView):
                 self._calibrate_sequence_btn,
         ):
             btn.setEnabled(enabled)
+        self._generate_area_grid_btn.setEnabled(enabled)
+        self._clear_area_grid_btn.setEnabled(enabled)
+        self._grid_rows_spin.setEnabled(enabled)
+        self._grid_cols_spin.setEnabled(enabled)
+
+    def get_measurement_area_corners(self) -> list[tuple[float, float]]:
+        return self._preview_label.get_area_corners("measurement_area")
+
+    def clear_measurement_area(self) -> None:
+        self._preview_label.clear_area("measurement_area")
+        self._preview_label.set_grid_points([])
+
+    def set_generated_grid_points(self, points: list[tuple[float, float]]) -> None:
+        self._preview_label.set_grid_points(points)
+
+    def get_area_grid_shape(self) -> tuple[int, int]:
+        return int(self._grid_rows_spin.value()), int(self._grid_cols_spin.value())
 
     # ── Frame overlays ────────────────────────────────────────────────
 

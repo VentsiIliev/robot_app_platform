@@ -103,3 +103,20 @@ class IRobot(ABC):
     def get_connection_details(self) -> dict:
         """Optional diagnostic details about the underlying transport state."""
         return {}
+
+    def enable_safety_walls(self) -> bool:
+        """Optional remote safety-wall control."""
+        return False
+
+    def disable_safety_walls(self) -> bool:
+        """Optional remote safety-wall control."""
+        return False
+
+    def are_safety_walls_enabled(self):
+        """Optional remote safety-wall status."""
+        status = self.get_safety_walls_status()
+        return status.get("enabled") if isinstance(status, dict) else None
+
+    def get_safety_walls_status(self) -> dict:
+        """Optional remote safety-wall status payload."""
+        return {"supported": False, "enabled": None}

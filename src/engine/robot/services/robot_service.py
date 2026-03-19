@@ -76,3 +76,15 @@ class RobotService(IRobotService):
 
     def get_last_trajectory_command_info(self):
         return self._robot.get_last_trajectory_command_info()
+
+    def enable_safety_walls(self) -> bool:
+        return bool(self._robot.enable_safety_walls())
+
+    def disable_safety_walls(self) -> bool:
+        return bool(self._robot.disable_safety_walls())
+
+    def are_safety_walls_enabled(self):
+        return self._robot.are_safety_walls_enabled()
+
+    def get_safety_walls_status(self) -> dict:
+        return self._robot.get_safety_walls_status()

@@ -369,6 +369,9 @@ def _build_calibration_application(robot_system):
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
     from src.applications.base.robot_jog_service import RobotJogService
+    from src.engine.robot.calibration.aruco_marker_height_mapping_service import (
+        ArucoMarkerHeightMappingService,
+    )
     from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
         CameraTcpOffsetCalibrationService,
     )
@@ -408,6 +411,22 @@ def _build_calibration_application(robot_system):
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
+    marker_height_mapping_service = (
+        ArucoMarkerHeightMappingService(
+            vision_service=vision_service,
+            robot_service=robot_service,
+            height_service=getattr(robot_system, "_height_measuring_service", None),
+            robot_config=robot_system._robot_config,
+            calib_config=robot_system._robot_calibration,
+            transformer=transformer,
+            use_marker_centre=True,
+        )
+        if vision_service is not None
+        and robot_service is not None
+        and getattr(robot_system, "_height_measuring_service", None) is not None
+        and robot_config is not None
+        else None
+    )
 
     service = CalibrationApplicationService(
         vision_service=vision_service,
@@ -418,6 +437,7 @@ def _build_calibration_application(robot_system):
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
+        marker_height_mapping_service=marker_height_mapping_service,
         use_marker_centre=True,
     )
 

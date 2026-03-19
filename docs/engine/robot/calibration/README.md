@@ -4,6 +4,13 @@ Engine-level service for robot-to-camera spatial calibration. Moves the robot th
 
 The package also contains a separate camera-TCP offset calibration routine. That routine assumes the homography already exists, repeatedly centers one configured ArUco marker under the camera, samples several wrist `rz` rotations, solves the rotating local XY offset between the camera center and the real robot TCP, and saves the result back into `RobotSettings.camera_to_tcp_x_offset` / `camera_to_tcp_y_offset`.
 
+It also contains two standalone post-calibration surface-mapping routines:
+
+- ArUco marker height mapping
+- user-defined area-grid height mapping
+
+Both are intended for use after homography calibration is already complete: they transform image-space reference points into robot XY with the computed homography, move the robot to each point, trigger the height-measuring service, and save the collected `[x, y, height_mm]` samples as a depth map.
+
 The main robot calibration pipeline can now also capture camera-TCP offset samples while it is already iteratively centering ArUco markers. This avoids relying on a homography at a mismatched Z plane: after a marker is aligned, the pipeline moves to one reference pose at `approach_rz`, then rotates through the configured `rz` sample angles, re-centers the same marker using the existing iterative alignment loop, accumulates local XY offset samples, and saves the solved TCP offset at the end of the run if the sample spread is acceptable.
 
 Important sampling rule:
@@ -26,6 +33,7 @@ Important math rule:
 
 ```
 src/engine/robot/calibration/
+├── aruco_marker_height_mapping_service.py  ← Standalone ArUco marker / area-grid → height-map workflow
 ├── camera_tcp_offset_calibration_service.py ← Standalone camera-center → TCP XY offset calibration
 ├── i_robot_calibration_service.py         ← IRobotCalibrationService ABC
 ├── robot_calibration_service.py           ← Concrete implementation (runs pipeline)
@@ -122,6 +130,97 @@ Main-pipeline TCP-offset logging:
   - per-sample `world=(dx, dy)` and solved `local=(dx, dy)`
   - grouped mean/std by `sample_rz`
   - final aggregate mean/std that is validated and then saved into `RobotSettings`
+
+---
+
+## `ArucoMarkerHeightMappingService`
+
+Standalone post-calibration workflow for building a depth map from either:
+
+- visible ArUco markers
+- a user-defined quadrilateral area subdivided into a regular grid
+
+High-level flow:
+
+Marker mode flow:
+
+1. Reload the homography from `vision_service.camera_to_robot_matrix_path`
+2. Capture/detect until all configured `required_ids` are collected (up to 50 attempts)
+3. Convert each selected marker point to robot XY with `transformer.transform(px, py)`
+4. Move the robot to each marker at the configured calibration `z_target`
+5. Call `height_measuring_service.measure_at(x_mm, y_mm)`
+6. Store the measured sample as `[measured_x, measured_y, height_mm]`
+7. Save all collected samples through `height_measuring_service.save_height_map(...)`, including marker IDs
+8. Optionally verify the saved model by inferring 4 interior points and re-measuring them
+
+Area-grid mode flow:
+
+1. Receive 4 normalized image-space corner points plus `rows` / `cols`
+2. Normalize corner order to `top-left, top-right, bottom-right, bottom-left`
+3. Generate bilinearly interpolated grid points in row-major order
+4. Convert each grid point from normalized image coordinates to pixels
+5. Transform each pixel point to robot XY with `transformer.transform(px, py)`
+6. Move/measure each grid point and save the reached samples
+7. Save the depth map with grid metadata:
+   - `point_labels`
+   - `grid_rows`
+   - `grid_cols`
+
+Important separation:
+
+- this workflow is standalone and can be triggered from the Calibration application after homography calibration is complete
+- the optional `run_height_measurement` step in the main robot-calibration pipeline remains unchanged and still runs inside the state machine when enabled
+
+Exposure handling:
+
+- the standalone workflow now opens one height-measurement session for the full run
+- auto-exposure is disabled once before the first marker measurement
+- per-marker `measure_at(...)` calls reuse that session without toggling exposure again
+- auto-exposure is restored once when the workflow finishes or is stopped
+
+Safety-wall handling for area-grid mode:
+
+- if `robot_service.are_safety_walls_enabled()` returns `True`
+- the workflow calls `robot_service.disable_safety_walls()` before the grid run
+- `robot_service.enable_safety_walls()` is called in `finally`
+- marker mode does not change safety-wall state
+
+Marker collection and ordering:
+
+- unlike the earlier one-shot version, the standalone workflow now keeps detecting markers until all configured `required_ids` are collected or a 50-attempt limit is reached
+- once collected, marker reference pixels and transformed robot XY points are cached by marker ID
+- measurement then runs in the configured marker order (`required_ids`)
+
+Area-grid ordering:
+
+- generated points are measured in row-major order
+- left to right within each row
+- top row to bottom row
+- labels are persisted as `r1c1`, `r1c2`, ...
+
+Saved model and verification:
+
+- the saved depth map now stores both measured points and their marker IDs
+- the Calibration depth-map dialog uses those marker IDs to build a piecewise triangle surface instead of generic cubic interpolation when the expected board layout is available
+- after a successful standalone measurement run, the Calibration UI can prompt the user to run verification
+- marker verification infers 4 interior test points from the piecewise triangle model
+- area-grid verification infers 4 interior cell-center points from the saved grid
+- both then measure the true heights there and log a consolidated error report with:
+  - predicted height
+  - measured height
+  - signed error
+  - mean absolute error
+  - max absolute error
+
+Unreachable-point policy:
+
+- marker mode is strict:
+  - move failure aborts the run
+- area-grid mode is tolerant:
+  - failed point → try recovery via the first grid point
+  - retry once
+  - if still unreachable, skip and continue
+  - final report includes reached / unreached totals
 
 ---
 

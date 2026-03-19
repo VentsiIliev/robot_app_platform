@@ -14,6 +14,7 @@ class LaserCalibrationData:
     polynomial_intercept: float = 0.0
     polynomial_degree: int = 1
     polynomial_mse: float = 0.0
+    zero_height_offset_mm: float = 0.0
 
     def is_calibrated(self) -> bool:
         return bool(self.polynomial_coefficients)
@@ -37,6 +38,7 @@ class LaserCalibrationDataSerializer(ISettingsSerializer[LaserCalibrationData]):
             "polynomial_intercept":     data.polynomial_intercept,
             "polynomial_degree":        data.polynomial_degree,
             "polynomial_mse":           data.polynomial_mse,
+            "zero_height_offset_mm":    data.zero_height_offset_mm,
         }
 
     def from_dict(self, raw: Dict[str, Any]) -> LaserCalibrationData:
@@ -48,10 +50,10 @@ class LaserCalibrationDataSerializer(ISettingsSerializer[LaserCalibrationData]):
             polynomial_intercept=raw.get("polynomial_intercept", 0.0),
             polynomial_degree=raw.get("polynomial_degree", 1),
             polynomial_mse=raw.get("polynomial_mse", 0.0),
+            zero_height_offset_mm=raw.get("zero_height_offset_mm", 0.0),
         )
 
 
 class LaserCalibrationRepository(BaseJsonSettingsRepository[LaserCalibrationData]):
     def __init__(self, file_path: str):
         super().__init__(LaserCalibrationDataSerializer(), file_path)
-

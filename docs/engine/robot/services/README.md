@@ -9,13 +9,13 @@ This package contains the core service implementations that sit between the phys
 ```
 IRobotService (public interface)
        │
-       └── RobotService
+      └── RobotService
                  ├── _motion: IMotionService
                  │       └── MotionService
                  │                 ├── _robot: IRobot
                  │                 ├── _safety: ISafetyChecker
                  │                 └── _cached_position: List[float]  ← updated by "robot/position" subscription
-                 ├── _robot: IRobot  (same instance — for enable/disable)
+                 ├── _robot: IRobot  (same instance — for enable/disable + remote safety walls)
                  ├── _state: IRobotStateProvider
                  │       └── RobotStateManager
                  │                 ├── _robot: FairinoRobot(robot.ip)  ← dedicated connection, correct IP
@@ -220,6 +220,18 @@ Delegates:
 - `get_current_position()` → `list(self._state.position)` — reads the cache maintained by `RobotStateManager`, **no XML-RPC call**
 - `enable_robot()` / `disable_robot()` → `self._robot.enable()` / `.disable()`
 - `get_current_velocity()` / `get_current_acceleration()` / `get_state()` / `get_state_topic()` → `self._state`
+- remote safety-wall control:
+  - `enable_safety_walls()` → `self._robot.enable_safety_walls()`
+  - `disable_safety_walls()` → `self._robot.disable_safety_walls()`
+  - `are_safety_walls_enabled()` → `self._robot.are_safety_walls_enabled()`
+  - `get_safety_walls_status()` → `self._robot.get_safety_walls_status()`
+
+Remote safety-wall support is intentionally part of `IRobotService`, not `ISafetyChecker`:
+
+- `ISafetyChecker`
+  - local platform-side pose validation
+- remote safety walls
+  - execution-environment / MoveIt planning-scene control
 
 ---
 

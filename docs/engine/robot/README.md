@@ -69,6 +69,8 @@ IMotionService
               + get_current_velocity()
               + get_current_acceleration()
               + get_state() / get_state_topic()
+              + enable_safety_walls() / disable_safety_walls()
+              + are_safety_walls_enabled() / get_safety_walls_status()
 ```
 
 ---
@@ -137,6 +139,36 @@ This means application startup can continue even when the bridge is down, and su
 `RobotStateSnapshot.extra` may include transport diagnostics such as:
 - `server_url`
 - `last_error`
+
+## Remote Safety Walls
+
+`IRobotService` now also exposes optional control of the remote ROS/MoveIt safety-wall system:
+
+- `enable_safety_walls() -> bool`
+- `disable_safety_walls() -> bool`
+- `are_safety_walls_enabled() -> Optional[bool]`
+- `get_safety_walls_status() -> dict`
+
+Important distinction:
+
+- `ISafetyChecker`
+  - platform-side Cartesian limit checking before commands are sent
+- remote safety walls
+  - ROS/MoveIt planning-scene walls enforced by the ROS bridge
+
+These are related but separate safety layers. The platform contract keeps both:
+- local safety checks remain in `MotionService` through `ISafetyChecker`
+- remote wall control is exposed through `IRobotService`
+
+Current driver support:
+
+- `FairinoRos2Robot`
+  - backed by the REST endpoints:
+    - `GET /safety/walls/enabled`
+    - `GET /safety/walls/status`
+    - `POST /safety/walls/enable`
+    - `POST /safety/walls/disable`
+- non-ROS drivers inherit safe default no-op implementations from `IRobot`
 
 ---
 

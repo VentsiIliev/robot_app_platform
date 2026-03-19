@@ -27,15 +27,30 @@ class LaserDetectionService:
         self._vision    = vision_service
         self._config    = config or LaserDetectionSettings()
         self._exposure  = exposure_control
+        self._session_depth = 0
+
+    def begin_measurement_session(self) -> None:
+        self._session_depth += 1
+        if self._session_depth == 1 and self._exposure:
+            _logger.debug("Disabling auto-exposure for laser measurement session")
+            self._exposure.set_auto_exposure(False)
+
+    def end_measurement_session(self) -> None:
+        if self._session_depth <= 0:
+            return
+        self._session_depth -= 1
+        if self._session_depth == 0 and self._exposure:
+            _logger.debug("Restoring auto-exposure after laser measurement session")
+            self._exposure.set_auto_exposure(True)
 
     def detect(self) -> Tuple[Optional[np.ndarray], Optional[tuple], Optional[Tuple[float, float]]]:
-        if self._exposure:
+        if self._exposure and self._session_depth == 0:
             _logger.debug("Disabling auto-exposure for laser detection")
             self._exposure.set_auto_exposure(False)
         try:
             return self._detect()
         finally:
-            if self._exposure:
+            if self._exposure and self._session_depth == 0:
                 _logger.debug("Restoring auto-exposure after laser detection")
                 self._exposure.set_auto_exposure(True)
 
@@ -92,6 +107,7 @@ class LaserDetectionService:
             self._laser.turn_off()
         except Exception:
             pass
+        self._session_depth = 0
         if self._exposure:
             try:
                 self._exposure.set_auto_exposure(True)
@@ -103,4 +119,3 @@ class LaserDetectionService:
 
     def turn_off(self) -> None:
         self._laser.turn_off()
-

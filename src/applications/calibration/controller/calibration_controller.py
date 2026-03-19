@@ -5,6 +5,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.jog_controller import JogController
+from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration.view.calibration_view import CalibrationView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -38,7 +39,11 @@ class _Bridge(QObject):
     stop_btn_enabled        = pyqtSignal(bool)
     test_btn_enabled        = pyqtSignal(bool)
     camera_tcp_btn_enabled  = pyqtSignal(bool)
+    marker_height_btn_enabled = pyqtSignal(bool)
+    area_grid_btn_enabled   = pyqtSignal(bool)
     test_finished           = pyqtSignal(bool, str)
+    marker_height_finished  = pyqtSignal(bool, str)
+    area_grid_finished      = pyqtSignal(bool, str)
     depth_map_btn_enabled   = pyqtSignal(bool)
 
 
@@ -67,7 +72,11 @@ class CalibrationController(IApplicationController):
         self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
         self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
         self._bridge.camera_tcp_btn_enabled.connect(self._view.set_camera_tcp_offset_enabled)
+        self._bridge.marker_height_btn_enabled.connect(self._view.set_measure_marker_heights_enabled)
+        self._bridge.area_grid_btn_enabled.connect(self._view.set_measure_area_grid_enabled)
         self._bridge.test_finished.connect(self._on_test_finished)
+        self._bridge.marker_height_finished.connect(self._on_marker_height_finished)
+        self._bridge.area_grid_finished.connect(self._on_area_grid_finished)
         self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
         self._view.stop_calibration_requested.connect(self._on_stop_calibration)
 
@@ -76,7 +85,7 @@ class CalibrationController(IApplicationController):
         self._jog.start()
         self._view.destroyed.connect(self.stop)
         self._refresh_calibration_dependent_actions()
-        self._view.set_depth_map_enabled(self._model.get_height_calibration_data() is not None)
+        self._view.set_depth_map_enabled(self._model.has_saved_height_model())
 
     def stop(self) -> None:
         self._running = False
@@ -115,6 +124,7 @@ class CalibrationController(IApplicationController):
     def _on_stop_calibration(self) -> None:
         self._model.stop_calibration()
         self._model.stop_test_calibration()
+        self._model.stop_marker_height_measurement()
         self._bridge.stop_btn_enabled.emit(False)
 
     def _on_camera_frame(self, frame) -> None:
@@ -134,7 +144,11 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
+        self._view.measure_marker_heights_requested.connect(self._on_measure_marker_heights)
+        self._view.generate_area_grid_requested.connect(self._on_generate_area_grid)
+        self._view.measure_area_grid_requested.connect(self._on_measure_area_grid)
         self._view.view_depth_map_requested.connect(self._on_view_depth_map)
+        self._view.verify_saved_model_requested.connect(self._on_verify_saved_model)
 
     def _log(self, ok: bool, msg: str) -> None:
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
@@ -192,6 +206,8 @@ class CalibrationController(IApplicationController):
             self._bridge.stop_btn_enabled.emit(True)
             self._bridge.test_btn_enabled.emit(False)
             self._bridge.camera_tcp_btn_enabled.emit(False)
+            self._bridge.marker_height_btn_enabled.emit(False)
+            self._bridge.area_grid_btn_enabled.emit(False)
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
             self._robot_process_running = False
             self._bridge.stop_btn_enabled.emit(False)
@@ -199,9 +215,7 @@ class CalibrationController(IApplicationController):
 
         if event.state == ProcessState.STOPPED:
             self._bridge.process_finished.emit(True, "Robot calibration complete")
-            self._bridge.depth_map_btn_enabled.emit(
-                self._model.get_height_calibration_data() is not None
-            )
+            self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
         elif event.state == ProcessState.ERROR:
             self._bridge.process_finished.emit(False, event.message or "Robot calibration failed")
 
@@ -218,6 +232,8 @@ class CalibrationController(IApplicationController):
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.marker_height_btn_enabled.emit(False)
+        self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
         worker = _Worker(self._model.test_calibration)
@@ -242,9 +258,154 @@ class CalibrationController(IApplicationController):
         if not self._running:
             return
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._model.restore_pending_safety_walls()
         self._view.set_buttons_enabled(True)
         self._bridge.stop_btn_enabled.emit(False)
         self._refresh_calibration_dependent_actions()
+
+    def _on_measure_marker_heights(self) -> None:
+        self._view.set_buttons_enabled(False)
+        self._bridge.test_btn_enabled.emit(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.marker_height_btn_enabled.emit(False)
+        self._bridge.stop_btn_enabled.emit(True)
+        thread = QThread()
+        worker = _Worker(self._model.measure_marker_heights)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_marker_height_worker_done)
+        worker.failed.connect(self._on_marker_height_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_marker_height_worker_done(self, result) -> None:
+        ok, msg = result
+        self._bridge.marker_height_finished.emit(ok, msg)
+
+    def _on_marker_height_worker_failed(self, error: str) -> None:
+        self._bridge.marker_height_finished.emit(False, f"Marker height error: {error}")
+
+    def _on_marker_height_finished(self, ok: bool, msg: str) -> None:
+        if not self._running:
+            return
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_buttons_enabled(True)
+        self._bridge.stop_btn_enabled.emit(False)
+        self._refresh_calibration_dependent_actions()
+
+        if not ok:
+            return
+
+        self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
+
+        should_verify = ask_yes_no(
+            self._view,
+            "Verify Height Model",
+            "Run 4-point verification against the saved piecewise triangle height model?",
+        )
+        if should_verify:
+            self._start_height_model_verification()
+
+    def _on_generate_area_grid(self) -> None:
+        corners = self._view.get_measurement_area_corners()
+        rows, cols = self._view.get_area_grid_shape()
+        if len(corners) != 4:
+            self._view.append_log("✗ Area grid needs exactly 4 corners. Click the preview to place them.")
+            return
+        points = self._model.generate_area_grid(corners, rows, cols)
+        if not points:
+            self._view.append_log("✗ Failed to generate area grid")
+            return
+        self._view.set_generated_grid_points(points)
+        self._view.append_log(f"✓ Generated area grid: rows={rows} cols={cols} points={len(points)}")
+
+    def _on_measure_area_grid(self) -> None:
+        corners = self._view.get_measurement_area_corners()
+        rows, cols = self._view.get_area_grid_shape()
+        if len(corners) != 4:
+            self._view.append_log("✗ Area grid measurement needs exactly 4 corners")
+            return
+        points = self._model.generate_area_grid(corners, rows, cols)
+        if not points:
+            self._view.append_log("✗ Failed to generate area grid for measurement")
+            return
+        self._view.set_generated_grid_points(points)
+        self._view.set_buttons_enabled(False)
+        self._bridge.test_btn_enabled.emit(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.marker_height_btn_enabled.emit(False)
+        self._bridge.area_grid_btn_enabled.emit(False)
+        self._bridge.stop_btn_enabled.emit(True)
+        thread = QThread()
+        worker = _Worker(lambda: self._model.measure_area_grid(corners, rows, cols))
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_area_grid_worker_done)
+        worker.failed.connect(self._on_area_grid_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_area_grid_worker_done(self, result) -> None:
+        ok, msg = result
+        self._bridge.area_grid_finished.emit(ok, msg)
+
+    def _on_area_grid_worker_failed(self, error: str) -> None:
+        self._bridge.area_grid_finished.emit(False, f"Area grid error: {error}")
+
+    def _on_area_grid_finished(self, ok: bool, msg: str) -> None:
+        if not self._running:
+            return
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_buttons_enabled(True)
+        self._bridge.stop_btn_enabled.emit(False)
+        self._refresh_calibration_dependent_actions()
+
+        if not ok:
+            self._model.restore_pending_safety_walls()
+            return
+
+        self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
+
+        should_verify = ask_yes_no(
+            self._view,
+            "Verify Height Model",
+            "Run 4-point verification against the saved area-grid height model?",
+        )
+        if should_verify:
+            self._start_height_model_verification()
+        else:
+            self._model.restore_pending_safety_walls()
+
+    def _start_height_model_verification(self) -> None:
+        self._view.set_buttons_enabled(False)
+        self._bridge.test_btn_enabled.emit(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.marker_height_btn_enabled.emit(False)
+        self._bridge.area_grid_btn_enabled.emit(False)
+        self._bridge.stop_btn_enabled.emit(True)
+        thread = QThread()
+        worker = _Worker(self._model.verify_height_model)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_test_worker_done)
+        worker.failed.connect(self._on_test_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_verify_saved_model(self) -> None:
+        if not self._model.has_saved_height_model():
+            self._view.append_log("✗ No saved height model available")
+            return
+        self._start_height_model_verification()
 
     # ── Thread helper ─────────────────────────────────────────────────
 
@@ -275,3 +436,6 @@ class CalibrationController(IApplicationController):
         calibrated = self._model.is_calibrated()
         self._bridge.test_btn_enabled.emit(calibrated)
         self._bridge.camera_tcp_btn_enabled.emit(calibrated and not self.is_calibrating())
+        can_measure = self._model.can_measure_marker_heights() and not self.is_calibrating()
+        self._bridge.marker_height_btn_enabled.emit(can_measure)
+        self._bridge.area_grid_btn_enabled.emit(can_measure)
