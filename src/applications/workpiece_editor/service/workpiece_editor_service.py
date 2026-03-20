@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 import numpy as np
 
 from src.applications.workpiece_editor.editor_core.config import WorkpieceFormSchema
@@ -10,6 +10,9 @@ from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter im
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
+
+if TYPE_CHECKING:
+    from src.robot_systems.glue.targeting import VisionTargetResolver
 
 _logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  segment_config: SegmentEditorConfig,
                  id_exists_fn:   Callable[[str], bool] = None,
                  transformer:    Optional[ICoordinateTransformer] = None,
+                 resolver:       Optional["VisionTargetResolver"] = None,
                  z_min:          float = 0.0,
                  robot_service=None):
         self._vision             = vision_service
@@ -45,6 +49,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._form_schema        = form_schema
         self._segment_config     = segment_config
         self._transformer        = transformer
+        self._resolver           = resolver
         self._z_min              = z_min
         self._robot_service      = robot_service
         self._editing_storage_id = None
@@ -195,11 +200,24 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         try:
             _defaults = self._segment_config.schema.get_defaults()
             spray_height = float(str(settings.get("spraying_height", _defaults.get("spraying_height", "0"))).replace(",", ""))
-            z  = self._z_min + spray_height
+            base_z = self._z_min + spray_height
             rz = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
         except (ValueError, TypeError):
-            z, rz = 0.0, 0.0
+            base_z, rz = 0.0, 0.0
         rx, ry = 180.0, 0.0
+
+        if self._resolver is not None:
+            from src.robot_systems.glue.targeting.pixel_target import PixelTarget
+            result = []
+            for px, py in pts_px:
+                tr = self._resolver.resolve(
+                    PixelTarget(float(px), float(py), rz=rz, rx=rx, ry=ry),
+                    self._resolver.registry.tool(),
+                )
+                x, y = tr.final_xy
+                z = base_z + tr.z
+                result.append([x, y, z, rx, ry, tr.rz])
+            return result
 
         if self._transformer is None or not self._transformer.is_available():
             _logger.warning("[EXECUTE] No calibration transformer — using raw pixel coords")
@@ -210,7 +228,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 rx_coord, ry_coord = self._transformer.transform(float(px), float(py))
             else:
                 rx_coord, ry_coord = float(px), float(py)
-            result.append([rx_coord, ry_coord, z, rx, ry, rz])
+            result.append([rx_coord, ry_coord, base_z, rx, ry, rz])
         return result
 
     def _merge(self, form_data: dict, editor_data) -> dict:

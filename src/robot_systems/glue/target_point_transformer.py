@@ -159,7 +159,7 @@ class TargetPointTransformer:
         ``tool_point - camera_center_point`` and then applies that local offset
         through the shared rotated-offset path. The glue-level transformer
         intentionally uses measured points here instead of a precomputed
-        camera-to-tool offset so all target semantics are anchored to one
+        camera-to-tool offset, so all target semantics are anchored to one
         explicit calibration snapshot.
         """
         camera_to_tool = self._camera_to_tool_offset()

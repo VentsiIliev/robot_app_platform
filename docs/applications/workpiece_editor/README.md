@@ -70,11 +70,16 @@ WorkpieceEditorService(
     form_schema:     Callable[[], WorkpieceFormSchema],   # lazy — re-evaluated on each open
     segment_config:  SegmentEditorConfig,
     id_exists_fn:    Callable[[str], bool],
+    transformer:     Optional[ICoordinateTransformer] = None,
+    resolver:        Optional[VisionTargetResolver] = None,
+    z_min:           float = 0.0,
+    robot_service    = None,
 )
 ```
 
 - `get_contours()` — prefers `ICaptureSnapshotService.capture_snapshot(source="workpiece_editor").contours`, then falls back to `vision_service.get_latest_contours()`
 - `save_workpiece(data)` — calls `update_fn(storage_id, data)` if editing; otherwise `save_fn(data)`
+- `execute_workpiece(data)` — transforms pixel contour paths into robot poses and sends them to the robot. When a `VisionTargetResolver` is available it uses the full pipeline (homography → plane mapping → TCP delta → tool offset rotation → height correction); otherwise falls back to raw `ICoordinateTransformer.transform()`
 - `set_editing(storage_id)` — stores the ID for the next save
 
 ---
@@ -100,6 +105,8 @@ User navigates to WorkpieceEditor folder
 ## Wiring in `GlueRobotSystem`
 
 ```python
+base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+
 service = WorkpieceEditorService(
     vision_service = robot_system.get_optional_service(ServiceID.VISION),
     capture_snapshot_service = _build_capture_snapshot_service(robot_system),
@@ -108,8 +115,14 @@ service = WorkpieceEditorService(
     form_schema    = lambda: build_glue_workpiece_form_schema(...),
     segment_config = SegmentEditorConfig(schema=build_glue_segment_settings_schema(...)),
     id_exists_fn   = workpiece_service.workpiece_id_exists,
+    transformer    = base_transformer,
+    resolver       = resolver,
+    z_min          = float(robot_config.safety_limits.z_min),
+    robot_service  = robot_system.get_optional_service(ServiceID.ROBOT),
 )
 ```
+
+`_build_glue_vision_resolver()` returns the shared `(HomographyTransformer, VisionTargetResolver)` pair used by all glue applications. When vision is unavailable both values are `None` and the service falls back to raw pixel coordinates.
 
 `ApplicationSpec`: `folder_id=1` (Production), icon `fa5s.draw-polygon`.
 

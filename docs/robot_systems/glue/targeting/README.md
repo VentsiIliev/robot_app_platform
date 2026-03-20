@@ -72,31 +72,67 @@ class VisionTargetResolver:
         registry: PointRegistry,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
-        calibration_to_target_pose_mapper: Optional[PlanePoseMapper] = None,
+        frames: Optional[Dict[str, TargetFrame]] = None,
     ) -> None: ...
 
     def resolve(
         self,
-        px: float,
-        py: float,
+        target: PixelTarget,
         point: EndEffectorPoint,
         *,
-        current_rz: Optional[float] = None,
+        frame: str = TargetFrame.CALIBRATION,
+        mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult: ...
 
     def resolve_named(
         self,
-        px: float,
-        py: float,
+        target: PixelTarget,
         name: str,
         *,
-        current_rz: Optional[float] = None,
+        frame: str = TargetFrame.CALIBRATION,
+        mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult: ...
-
-    def with_mapper(self, mapper: Optional[PlanePoseMapper]) -> VisionTargetResolver: ...
 
     @property
     def registry(self) -> PointRegistry: ...
+```
+
+---
+
+## Named Frames and Dynamic Mappers
+
+Register named coordinate planes at construction via the `frames=` dict. Each `TargetFrame` bundles a `PlanePoseMapper` and an optional `IHeightCorrectionService`:
+
+```python
+resolver = VisionTargetResolver(
+    base_transformer=transformer,
+    registry=registry,
+    camera_to_tcp_x_offset=tcp_x,
+    camera_to_tcp_y_offset=tcp_y,
+    frames={
+        TargetFrame.CALIBRATION: TargetFrame(
+            TargetFrame.CALIBRATION,
+            height_correction=depth_map_service,
+        ),
+        TargetFrame.PICKUP: TargetFrame(
+            TargetFrame.PICKUP,
+            mapper=pickup_mapper,
+        ),
+    },
+)
+```
+
+Select a frame per call:
+
+```python
+result = resolver.resolve(target, point, frame=TargetFrame.PICKUP)
+```
+
+For dynamic one-off mappers (e.g. per-capture-pose remapping), pass `mapper=` directly — it takes precedence over the frame's mapper:
+
+```python
+capture_mapper = PlanePoseMapper.from_positions(calibration_pos, capture_pose)
+result = resolver.resolve(target, point, mapper=capture_mapper)
 ```
 
 ---
@@ -129,27 +165,6 @@ Steps 3 and 4 both require `current_rz`. Step 3 is skipped if `current_rz` is `N
 
 ---
 
-## `with_mapper()` — Pose-Frame Variants
-
-`with_mapper()` returns a new resolver instance that inserts a `PlanePoseMapper` at step 2. It does **not** modify the original:
-
-```python
-# Calibration-plane resolver (no mapper)
-base_resolver = VisionTargetResolver(base_transformer, registry, ...)
-
-# Pickup-plane resolver (maps into HOME frame)
-pickup_resolver = base_resolver.with_mapper(pickup_mapper)
-
-# Dynamic capture-pose resolver (maps into actual robot pose at capture time)
-capture_resolver = base_resolver.with_mapper(
-    PlanePoseMapper.from_positions(calibration_pos, capture_pose)
-)
-```
-
-This pattern keeps a single resolver object per robot system while enabling per-call plane variants without re-construction.
-
----
-
 ## `TargetTransformResult`
 
 ```python
@@ -172,9 +187,10 @@ All intermediate results are preserved for logging and debugging.
 
 | Caller | How it uses the resolver |
 |--------|--------------------------|
-| `PickTargetApplicationService` | `resolver.resolve_named(px, py, target, current_rz=rz)` — uses `with_mapper(pickup_mapper)` when pickup-plane mode is active |
-| `PickAndPlaceWorkflow` | Stores `VisionTargetResolver` as `_resolver`; `transform_handler.py` calls `resolver.with_mapper(capture_mapper)` for dynamic capture-pose remapping |
-| `GlueJobBuilderService` | `resolver.resolve(x, y, registry.tool(), current_rz=0.0)` — always resolves to tool point |
+| `PickTargetApplicationService` | `resolver.resolve_named(PixelTarget(px, py, rz=rz, rx=rx, ry=ry), target, frame=...)` — uses named frames (`CALIBRATION`, `PICKUP`) with height correction |
+| `PickAndPlaceWorkflow` | Stores `VisionTargetResolver` as `_resolver`; `transform_handler.py` calls `resolver.resolve_named(PixelTarget(...), target, mapper=capture_mapper)` for dynamic capture-pose remapping |
+| `GlueJobBuilderService` | `resolver.resolve(PixelTarget(px, py, rz=rz, rx=180, ry=0), registry.tool())` — resolves to tool point with height correction delta |
+| `WorkpieceEditorService` | `resolver.resolve(PixelTarget(px, py, rz=rz, rx=180, ry=0), registry.tool())` — same pipeline as `GlueJobBuilderService` for the execute-workpiece path |
 | `application_wiring.py` | `_build_glue_vision_resolver()` builds one `PointRegistry` + `VisionTargetResolver` and shares it across applications |
 
 ---

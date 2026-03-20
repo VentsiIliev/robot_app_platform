@@ -221,18 +221,7 @@ def _build_workpiece_editor_application(robot_system):
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = robot_system._robot_config
 
-    transformer = (
-        HomographyTransformer(
-            vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
-        )
-        if vision_service is not None and robot_config is not None else
-        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-        if vision_service is not None else None
-    )
+    base_transformer, resolver = _build_glue_vision_resolver(robot_system)
 
     def _get_glue_types():
         catalog = settings_service.get(SettingsID.GLUE_CATALOG)
@@ -258,7 +247,8 @@ def _build_workpiece_editor_application(robot_system):
         ),
         segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types())),
         id_exists_fn=workpiece_service.workpiece_id_exists,
-        transformer=transformer,
+        transformer=base_transformer,
+        resolver=resolver,
         z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
         robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
     )
