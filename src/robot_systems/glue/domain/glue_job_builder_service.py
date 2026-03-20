@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
-from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+from src.robot_systems.glue.targeting import VisionTargetResolver
+from src.robot_systems.glue.targeting.pixel_target import PixelTarget
 
 
 class GlueJobBuildError(ValueError):
@@ -42,11 +43,11 @@ class GlueJobBuilderService:
     def __init__(
         self,
         transformer: ICoordinateTransformer | None = None,
-        point_transformer: TargetPointTransformer | None = None,
+        resolver: VisionTargetResolver | None = None,
         z_min: float = 0.0,
     ) -> None:
         self._transformer = transformer
-        self._point_transformer = point_transformer
+        self._resolver = resolver
         self._z_min = float(z_min)
 
     def build_job(self, matched_workpieces: list[dict[str, Any]]) -> GlueJob:
@@ -85,20 +86,34 @@ class GlueJobBuilderService:
         ]
 
     def _extract_points(self, raw_segment: dict[str, Any], settings: dict[str, Any]) -> list[list[float]]:
-        raw_points = raw_segment.get("contour")
-        if raw_points is None:
-            raw_points = []
+        raw_points = raw_segment.get("contour") or []
         points: list[list[float]] = []
-        z = self._z_min + self._safe_float(settings.get("spraying_height"), 0.0)
+        base_z = self._z_min + self._safe_float(settings.get("spraying_height"), 0.0)
         rz = self._safe_float(settings.get("rz_angle"), 0.0)
+
         for raw_point in raw_points:
             point = raw_point
             while self._is_singleton_container(point):
                 point = point[0]
             if not self._is_coordinate_pair(point):
                 continue
-            x, y = self._transform_xy(float(point[0]), float(point[1]))
-            points.append([x, y, z, self._RX, self._RY, rz])
+
+            px, py = float(point[0]), float(point[1])
+
+            if self._resolver is not None:
+                result = self._resolver.resolve(
+                    PixelTarget(px, py, rz=rz, rx=self._RX, ry=self._RY),
+                    self._resolver.registry.tool(),
+                    # frame=TargetFrame.CALIBRATION,  # or PICKUP, etc.
+                )
+                x, y = result.final_xy
+                z = base_z + result.z  # height-correction delta from depth map
+                final_rz = result.rz
+            else:
+                raise GlueJobBuildError("Robot coordinate transformer is unavailable")
+
+            points.append([x, y, z, self._RX, self._RY, final_rz])
+
         if not points:
             raise GlueJobBuildError("Spray segment contour is empty")
         return points
@@ -148,13 +163,6 @@ class GlueJobBuilderService:
             return len(value) >= 2
         except Exception:
             return False
-
-    def _transform_xy(self, x: float, y: float) -> tuple[float, float]:
-        if self._point_transformer is not None:
-            return self._point_transformer.transform_to_tool(x, y, current_rz=0.0).final_xy
-        if self._transformer is None or not self._transformer.is_available():
-            raise GlueJobBuildError("Robot coordinate transformer is unavailable")
-        return self._transformer.transform(x, y)
 
     def _safe_float(self, value: Any, default: float) -> float:
         try:

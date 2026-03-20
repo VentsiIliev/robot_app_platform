@@ -129,14 +129,13 @@ For a normal pick-and-place pickup, the order is:
    - this means the second plane is now the real capture pose, not a hardcoded `HOME` assumption
 4. Capture-plane reference-delta correction
    - if enabled, adjusts the mapped point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the mapper target pose `rz`
-5. Target-point resolution in `TargetPointTransformer`
-   - `transform_to_camera_center(...)` returns the camera-centered target
-   - `transform_to_tool(...)` resolves camera-center first, then applies the rotated measured `camera_center -> tool_point` offset
-   - `transform_to_gripper(...)` resolves camera-center first, then applies the rotated measured `camera_center -> gripper_point` offset
-   - `PickAndPlaceConfig.pickup_target` now supports:
-     - `camera_center`
-     - `tool`
-     - `gripper`
+5. Target-point resolution via `VisionTargetResolver`
+   - `resolver.resolve_named(px, py, target, current_rz=rz)` resolves the named end-effector point:
+     - `camera` / `camera_center` → camera-centered target (zero offset)
+     - `tool` → camera-center plus the rotated `camera_center → tool_point` offset
+     - `gripper` → camera-center plus the rotated `camera_center → gripper_point` offset
+   - all offsets come from `PointRegistry`, which reads measured reference points from `PickAndPlaceConfig`
+   - `PickAndPlaceConfig.pickup_target` supports: `camera_center`, `tool`, `gripper`
 6. `PickupCalculator`
    - no longer applies XY compensation
    - only applies Z heights and final orientation to the already resolved pickup XY
@@ -235,7 +234,7 @@ Pick-and-place now requests calibration moves explicitly where the workflow need
 The pickup and placement math was intentionally separated by responsibility:
 - homography remains the camera-to-calibration-plane transform
 - pickup-plane or capture-plane conversion is now handled by `PlanePoseMapper`
-- target-point compensation now happens in the transform stage through `TargetPointTransformer`
+- target-point compensation now happens in the transform stage through `VisionTargetResolver`
 - pickup calculation now assumes its input XY is already the final pickup target and only applies heights / final orientation
 - placement still uses the same contour orientation handling and plane packing logic
 - only the execution seams and failure reporting were tightened

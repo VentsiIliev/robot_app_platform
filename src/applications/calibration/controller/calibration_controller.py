@@ -44,6 +44,8 @@ class _Bridge(QObject):
     test_finished           = pyqtSignal(bool, str)
     marker_height_finished  = pyqtSignal(bool, str)
     area_grid_finished      = pyqtSignal(bool, str)
+    area_grid_verified      = pyqtSignal(bool, str, dict)
+    area_grid_verify_progress = pyqtSignal(str, str, int, int)
     depth_map_btn_enabled   = pyqtSignal(bool)
 
 
@@ -63,6 +65,7 @@ class CalibrationController(IApplicationController):
         self._active                = False
         self._robot_process_running = False   # ← tracks robot calibration process state
         self._logger   = logging.getLogger(self.__class__.__name__)
+        self._area_grid_verify_statuses: dict[str, str] = {}
 
     def load(self) -> None:
         self._running = True
@@ -77,6 +80,8 @@ class CalibrationController(IApplicationController):
         self._bridge.test_finished.connect(self._on_test_finished)
         self._bridge.marker_height_finished.connect(self._on_marker_height_finished)
         self._bridge.area_grid_finished.connect(self._on_area_grid_finished)
+        self._bridge.area_grid_verified.connect(self._on_area_grid_verified)
+        self._bridge.area_grid_verify_progress.connect(self._on_area_grid_verify_progress)
         self._bridge.depth_map_btn_enabled.connect(self._view.set_depth_map_enabled)
         self._view.stop_calibration_requested.connect(self._on_stop_calibration)
 
@@ -147,6 +152,7 @@ class CalibrationController(IApplicationController):
         self._view.measure_marker_heights_requested.connect(self._on_measure_marker_heights)
         self._view.generate_area_grid_requested.connect(self._on_generate_area_grid)
         self._view.measure_area_grid_requested.connect(self._on_measure_area_grid)
+        self._view.verify_area_grid_requested.connect(self._on_verify_area_grid)
         self._view.view_depth_map_requested.connect(self._on_view_depth_map)
         self._view.verify_saved_model_requested.connect(self._on_verify_saved_model)
 
@@ -319,8 +325,51 @@ class CalibrationController(IApplicationController):
         if not points:
             self._view.append_log("✗ Failed to generate area grid")
             return
-        self._view.set_generated_grid_points(points)
+        labels = [f"r{(i // cols) + 1}c{(i % cols) + 1}" for i in range(len(points))]
+        self._view.set_generated_grid_points(points, point_labels=labels, point_statuses={})
         self._view.append_log(f"✓ Generated area grid: rows={rows} cols={cols} points={len(points)}")
+
+    def _on_verify_area_grid(self) -> None:
+        corners = self._view.get_measurement_area_corners()
+        rows, cols = self._view.get_area_grid_shape()
+        if len(corners) != 4:
+            self._view.append_log("✗ Area grid verification needs exactly 4 corners")
+            return
+        points = self._model.generate_area_grid(corners, rows, cols)
+        if not points:
+            self._view.append_log("✗ Failed to generate area grid for verification")
+            return
+        labels = [f"r{(i // cols) + 1}c{(i % cols) + 1}" for i in range(len(points))]
+        self._area_grid_verify_statuses = {}
+        self._view.set_generated_grid_points(points, point_labels=labels, point_statuses={})
+        self._view.set_substitute_regions({})
+        self._view.append_log("▶ Verifying area grid reachability...")
+        self._view.set_verify_area_grid_busy(True, 0, len(points))
+        self._view.set_buttons_enabled(False)
+        self._bridge.test_btn_enabled.emit(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.marker_height_btn_enabled.emit(False)
+        self._bridge.area_grid_btn_enabled.emit(False)
+        thread = QThread()
+        worker = _Worker(
+            lambda: self._model.verify_area_grid(
+                corners,
+                rows,
+                cols,
+                progress_callback=lambda label, status, current, total: (
+                    self._bridge.area_grid_verify_progress.emit(label, status, current, total)
+                ),
+            )
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_area_grid_verify_done)
+        worker.failed.connect(self._on_area_grid_verify_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
 
     def _on_measure_area_grid(self) -> None:
         corners = self._view.get_measurement_area_corners()
@@ -358,6 +407,13 @@ class CalibrationController(IApplicationController):
     def _on_area_grid_worker_failed(self, error: str) -> None:
         self._bridge.area_grid_finished.emit(False, f"Area grid error: {error}")
 
+    def _on_area_grid_verify_done(self, result) -> None:
+        ok, msg, details = result
+        self._bridge.area_grid_verified.emit(ok, msg, details)
+
+    def _on_area_grid_verify_failed(self, error: str) -> None:
+        self._bridge.area_grid_verified.emit(False, f"Area grid verification error: {error}", {})
+
     def _on_area_grid_finished(self, ok: bool, msg: str) -> None:
         if not self._running:
             return
@@ -381,6 +437,92 @@ class CalibrationController(IApplicationController):
             self._start_height_model_verification()
         else:
             self._model.restore_pending_safety_walls()
+
+    def _on_area_grid_verified(self, ok: bool, msg: str, details: dict) -> None:
+        if not self._running:
+            return
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        points = self._view.get_measurement_area_corners()
+        rows, cols = self._view.get_area_grid_shape()
+        generated = self._model.generate_area_grid(points, rows, cols) if len(points) == 4 else []
+        labels = [f"r{(i // cols) + 1}c{(i % cols) + 1}" for i in range(len(generated))]
+        # substitutes: dict[str, list[(xn, yn)]]  (one or more support points per unreachable)
+        substitutes = details.get("substitutes", {}) if ok else {}
+        all_points = list(generated)
+        all_labels = list(labels)
+        all_statuses = dict(self._area_grid_verify_statuses)
+        for u_label, subs_norm in substitutes.items():
+            for i, (xn, yn) in enumerate(subs_norm):
+                sub_label = f"{u_label}_sub_{i}"
+                all_points.append((xn, yn))
+                all_labels.append(sub_label)
+                all_statuses[sub_label] = "substitute"
+        self._view.set_generated_grid_points(
+            all_points,
+            point_labels=all_labels,
+            point_statuses=all_statuses,
+        )
+        self._view.set_substitute_regions(details.get("substitute_polygons", {}) if ok else {})
+        if ok:
+            reachable    = details.get("reachable_labels", [])
+            unreachable  = details.get("unreachable_labels", [])
+            via_anchor   = details.get("via_anchor_labels", [])
+            xy           = details.get("point_robot_xy", {})
+            # sub_xy: dict[str, list[(x, y)]]
+            sub_xy       = details.get("substitute_robot_xy", {})
+            total_pts    = len(reachable) + len(unreachable)
+
+            def _log(line: str) -> None:
+                self._view.append_log(line)
+                self._logger.info(line)
+
+            _log("─" * 48)
+            _log("Grid Verification Report")
+            _log("─" * 48)
+
+            _log(f"Reachable  ({len(reachable)}/{total_pts}):")
+            for lbl in reachable:
+                x, y = xy.get(lbl, (float("nan"), float("nan")))
+                _log(f"  {lbl:<8}  x={x:>8.1f} mm  y={y:>8.1f} mm")
+
+            if unreachable:
+                _log(f"Unreachable ({len(unreachable)}/{total_pts}):")
+                for lbl in unreachable:
+                    x, y = xy.get(lbl, (float("nan"), float("nan")))
+                    _log(f"  {lbl:<8}  x={x:>8.1f} mm  y={y:>8.1f} mm")
+
+            if substitutes:
+                _log("Substitutions:")
+                for lbl in unreachable:
+                    pts = sub_xy.get(lbl, [])
+                    if pts:
+                        for i, (sx, sy) in enumerate(pts):
+                            _log(f"  {lbl} → {lbl}_sub_{i}  x={sx:>8.1f} mm  y={sy:>8.1f} mm")
+                    else:
+                        _log(f"  {lbl} → no substitute found inside grid")
+
+            if via_anchor:
+                _log(f"Via-anchor: {', '.join(via_anchor)}")
+
+            _log("─" * 48)
+        self._view.set_verify_area_grid_busy(False)
+        self._view.set_buttons_enabled(True)
+        self._refresh_calibration_dependent_actions()
+
+    def _on_area_grid_verify_progress(self, label: str, status: str, current: int, total: int) -> None:
+        if not self._running:
+            return
+        self._area_grid_verify_statuses[str(label)] = str(status)
+        corners = self._view.get_measurement_area_corners()
+        rows, cols = self._view.get_area_grid_shape()
+        generated = self._model.generate_area_grid(corners, rows, cols) if len(corners) == 4 else []
+        labels = [f"r{(i // cols) + 1}c{(i % cols) + 1}" for i in range(len(generated))]
+        self._view.set_generated_grid_points(
+            generated,
+            point_labels=labels,
+            point_statuses=dict(self._area_grid_verify_statuses),
+        )
+        self._view.set_verify_area_grid_busy(True, current, total)
 
     def _start_height_model_verification(self) -> None:
         self._view.set_buttons_enabled(False)

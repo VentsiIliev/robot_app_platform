@@ -43,12 +43,14 @@ class AreaGridHeightModel:
         planned_xy_by_rc: dict[tuple[int, int], tuple[float, float]],
         measured_xyz_by_rc: dict[tuple[int, int], tuple[float, float, float]],
         unavailable_rc: set[tuple[int, int]] | None = None,
+        support_xyz: list[tuple[float, float, float]] | None = None,
     ):
         self._rows = int(rows)
         self._cols = int(cols)
         self._planned_xy_by_rc = dict(planned_xy_by_rc)
         self._measured_xyz_by_rc = dict(measured_xyz_by_rc)
         self._unavailable_rc = set(unavailable_rc or set())
+        self._support_xyz: list[tuple[float, float, float]] = list(support_xyz or [])
         self._completed_xyz_by_rc: dict[tuple[int, int], tuple[float, float, float]] = {}
         self._status_by_rc: dict[tuple[int, int], str] = {}
         self._triangulation_cache = None
@@ -70,11 +72,14 @@ class AreaGridHeightModel:
             planned_xy_by_rc[parsed] = (float(point[0]), float(point[1]))
 
         measured_xyz_by_rc: dict[tuple[int, int], tuple[float, float, float]] = {}
+        support_xyz: list[tuple[float, float, float]] = []
         measured_points = [list(point) for point in getattr(data, "points", [])]
         measured_labels = [str(label) for label in getattr(data, "point_labels", [])]
         for label, point in zip(measured_labels, measured_points):
             parsed = cls._parse_label(label, rows, cols)
             if parsed is None or len(point) < 3:
+                if "_support_" in label and len(point) >= 3:
+                    support_xyz.append((float(point[0]), float(point[1]), float(point[2])))
                 continue
             measured_xyz_by_rc[parsed] = (float(point[0]), float(point[1]), float(point[2]))
 
@@ -97,6 +102,7 @@ class AreaGridHeightModel:
             planned_xy_by_rc=planned_xy_by_rc,
             measured_xyz_by_rc=measured_xyz_by_rc,
             unavailable_rc=unavailable_rc,
+            support_xyz=support_xyz,
         )
 
     @staticmethod
@@ -244,17 +250,94 @@ class AreaGridHeightModel:
             if estimate[0] is not None:
                 local_estimates.append(float(estimate[0]))
 
+        col_z, col_mode = self._column_extrapolate(key)
+
         if local_estimates:
-            return float(sum(local_estimates) / len(local_estimates)), "cell-estimated"
+            z_cell = float(sum(local_estimates) / len(local_estimates))
+            if col_z is not None:
+                return 0.6 * col_z + 0.4 * z_cell, "col+cell"
+            return z_cell, "cell-estimated"
+
+        if col_z is not None:
+            z_idw, _ = self._interpolate_from_known(float(x), float(y))
+            if z_idw is not None:
+                return 0.7 * col_z + 0.3 * z_idw, "col+idw"
+            return col_z, col_mode
 
         return self._interpolate_from_known(float(x), float(y))
+
+    def _column_extrapolate(self, key: tuple[int, int]) -> tuple[float | None, str]:
+        """Linear extrapolation/interpolation to *key* along its grid column.
+
+        Uses measured grid points in the same column plus any support points whose
+        x coordinate is within *_COLUMN_X_TOL_MM* of the column's planned x values.
+        Prefers bracketing (one point on each side of the target y) over one-sided
+        extrapolation.
+        """
+        _COLUMN_X_TOL_MM = 30.0
+
+        _col_idx = key[1]
+        if key not in self._planned_xy_by_rc:
+            return None, "none"
+        x_col, y_target = self._planned_xy_by_rc[key]
+        x_col = float(x_col)
+        y_target = float(y_target)
+
+        col_pts: list[tuple[float, float]] = []  # (y, z)
+        for (r, c), (_, py, pz) in self._measured_xyz_by_rc.items():
+            if c == _col_idx:
+                col_pts.append((float(py), float(pz)))
+
+        # Include support points close to this column's x
+        for sx, sy, sz in self._support_xyz:
+            if abs(float(sx) - x_col) <= _COLUMN_X_TOL_MM:
+                col_pts.append((float(sy), float(sz)))
+
+        if len(col_pts) < 2:
+            return None, "none"
+
+        col_pts.sort(key=lambda p: p[0])
+
+        below = [p for p in col_pts if p[0] < y_target]
+        above = [p for p in col_pts if p[0] >= y_target]
+
+        if below and above:
+            y1, z1 = max(below, key=lambda p: p[0])   # nearest below
+            y2, z2 = min(above, key=lambda p: p[0])   # nearest above
+            mode = "col-interpolated"
+        else:
+            # One-sided extrapolation — use the two closest points
+            by_dist = sorted(col_pts, key=lambda p: abs(p[0] - y_target))
+            (y1, z1), (y2, z2) = by_dist[0], by_dist[1]
+            if y1 > y2:
+                y1, z1, y2, z2 = y2, z2, y1, z1
+            mode = "col-extrapolated"
+
+        if abs(y2 - y1) < 1e-9:
+            return float((z1 + z2) / 2), "col-same"
+
+        t = (y_target - y1) / (y2 - y1)
+        return float(z1 + t * (z2 - z1)), mode
+
+    def _with_support(
+        self,
+        base: dict[tuple[int, int], tuple[float, float, float]],
+    ) -> dict[tuple[int, int], tuple[float, float, float]]:
+        """Return *base* augmented with support points using virtual keys (-1, i)."""
+        if not self._support_xyz:
+            return base
+        combined = dict(base)
+        for i, pt in enumerate(self._support_xyz):
+            combined[(-1, i)] = pt
+        return combined
 
     def _interpolate_from_known(self, x: float, y: float) -> tuple[float | None, str]:
         cell_hit = self._interpolate_by_cell(float(x), float(y), self._measured_xyz_by_rc)
         if cell_hit[0] is not None:
             return cell_hit
-        if len(self._measured_xyz_by_rc) >= 3:
-            z, mode = self._interpolate_from_points(self._measured_xyz_by_rc, x, y)
+        pts = self._with_support(self._measured_xyz_by_rc)
+        if len(pts) >= 3:
+            z, mode = self._interpolate_from_points(pts, x, y)
             if z is not None:
                 return z, mode
         return None, "none"
@@ -263,8 +346,9 @@ class AreaGridHeightModel:
         cell_hit = self._interpolate_by_cell(float(x), float(y), self._completed_xyz_by_rc)
         if cell_hit[0] is not None:
             return cell_hit
-        if len(self._completed_xyz_by_rc) >= 3:
-            z, mode = self._interpolate_from_points(self._completed_xyz_by_rc, x, y)
+        pts = self._with_support(self._completed_xyz_by_rc)
+        if len(pts) >= 3:
+            z, mode = self._interpolate_from_points(pts, x, y)
             if z is not None:
                 return z, mode
         return None, "none"

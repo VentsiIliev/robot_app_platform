@@ -22,7 +22,7 @@ class CameraSettingsMapper:
             width                   = data.get("Width",                    1280),
             height                  = data.get("Height",                   720),
             skip_frames             = data.get("Skip frames",              30),
-            capture_position_offset = data.get("Capture position offset",  -4),
+            capture_position_offset = float(data.get("Capture position offset", -4.0)),
             contour_detection       = data.get("Contour detection",        True),
             draw_contours           = data.get("Draw contours",            True),
             threshold               = data.get("Threshold",                150),

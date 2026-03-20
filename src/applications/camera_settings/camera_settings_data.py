@@ -11,7 +11,7 @@ class CameraSettingsData:
     width:                    int   = 1280
     height:                   int   = 720
     skip_frames:              int   = 30
-    capture_position_offset:  int   = -4
+    capture_position_offset:  float = -4.0
 
     # Detection
     contour_detection:        bool  = True

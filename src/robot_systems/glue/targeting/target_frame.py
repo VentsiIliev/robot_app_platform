@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.engine.robot.plane_pose_mapper import PlanePoseMapper
+    from src.engine.robot.height_measuring.i_height_correction_service import IHeightCorrectionService
+
+
+class TargetFrame:
+    """A named coordinate frame bundling its plane mapper and height correction.
+
+    Instances are registered with ``VisionTargetResolver`` via the ``frames=``
+    constructor argument.  The resolver uses ``mapper`` for XY plane conversion;
+    the application layer uses ``height_correction`` for Z.
+
+    The class-level name constants (``CALIBRATION``, ``PICKUP``) are the
+    canonical keys used as ``frame=`` arguments in ``resolve()`` calls.
+    """
+
+    # ── Name constants ────────────────────────────────────────────────────────
+    CALIBRATION = "calibration"  # calibration-plane coordinates (identity mapper)
+    PICKUP      = "pickup"       # pickup-plane coordinates (maps CALIBRATION → HOME)
+
+    # ── Instance ──────────────────────────────────────────────────────────────
+    def __init__(
+        self,
+        name: str,
+        mapper: Optional["PlanePoseMapper"] = None,
+        height_correction: Optional["IHeightCorrectionService"] = None,
+    ) -> None:
+        self.name             = name
+        self.mapper           = mapper
+        self.height_correction = height_correction
+
+    def get_z_correction(self, x: float, y: float) -> float:
+        """Return the height correction delta in mm at robot position (x, y).
+
+        Returns ``0.0`` when no correction service is configured or when the
+        service cannot predict a value for the given position.
+        """
+        if self.height_correction is None:
+            return 0.0
+        dz = self.height_correction.predict_z(x, y)
+        return dz if dz is not None else 0.0
+
+    def __repr__(self) -> str:
+        has_mapper = self.mapper is not None
+        has_hc     = self.height_correction is not None
+        return f"TargetFrame({self.name!r}, mapper={has_mapper}, height_correction={has_hc})"

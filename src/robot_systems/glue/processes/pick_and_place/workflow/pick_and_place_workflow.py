@@ -10,7 +10,7 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.context import PickAndPlaceContext
 from src.robot_systems.glue.processes.pick_and_place.errors import (
@@ -76,14 +76,12 @@ class PickAndPlaceWorkflow:
         self._placement_calc     = PlacementCalculator(self._plane_mgr, config)
         self._placement_strategy = PlacementStrategy(self._placement_calc)
         self._selection_policy   = WorkpieceSelectionPolicy()
-        self._point_transformer  = TargetPointTransformer(
+        _registry = PointRegistry(config)
+        self._resolver = VisionTargetResolver(
             base_transformer=transformer,
-            calibration_to_target_pose_mapper=calibration_to_target_pose_mapper,
+            registry=_registry,
             camera_to_tcp_x_offset=config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=config.camera_to_tcp_y_offset,
-            camera_center_point=(config.camera_center_x, config.camera_center_y),
-            tool_point=(config.tool_point_x, config.tool_point_y),
-            gripper_point=(config.gripper_point_x, config.gripper_point_y),
         )
         self._height_resolution  = HeightResolutionService(config, height, logger)
         self._context            = PickAndPlaceContext(simulation=simulation)

@@ -11,7 +11,9 @@ from PyQt6.QtWidgets import (
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, PRIMARY,
 )
+from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.robot_jog_widget import RobotJogWidget
 
 _LOG_STYLE = """
 QPlainTextEdit {
@@ -212,12 +214,19 @@ class PickTargetView(IApplicationView):
     pickup_plane_toggled          = pyqtSignal(bool)
     pickup_plane_rz_changed       = pyqtSignal(float)
     execute_trajectory_requested  = pyqtSignal()
+    z_mode_toggled                = pyqtSignal(bool)   # True = two-step
+    apply_correction_requested    = pyqtSignal()
+    measure_height_toggled        = pyqtSignal(bool)   # True = live measure after move
+    jog_requested                 = pyqtSignal(str, str, str, float)
+    jog_stopped                   = pyqtSignal(str)
 
     def __init__(self, parent=None):
         self._magnifier_on = False
         self._move_available = False
         self._pickup_plane_mode = False
         self._trajectory_available = False
+        self._two_step_mode = False
+        self._correction_available = False
         self._target_cycle = ["camera_center", "tool", "gripper"]
         self._target_index = 0
         super().__init__("PickTarget", parent)
@@ -239,6 +248,17 @@ class PickTargetView(IApplicationView):
 
         root.addWidget(left_split, stretch=1)
         root.addWidget(right)
+
+        self._jog_widget = RobotJogWidget()
+        self._jog_widget.set_frame_options(
+            self._target_cycle,
+            default=self._target_cycle[self._target_index],
+        )
+        self._drawer = DrawerToggle(self, side="right", width=320)
+        self._drawer.add_widget(self._jog_widget)
+        self._jog_widget.jog_requested.connect(self.jog_requested)
+        self._jog_widget.jog_stopped.connect(self.jog_stopped)
+        self._jog_widget.frame_changed.connect(self._on_jog_frame_changed)
 
     # ── Builders ──────────────────────────────────────────────────────
 
@@ -304,6 +324,27 @@ class PickTargetView(IApplicationView):
         self._move_btn.clicked.connect(self.move_requested)
         btn_row.addWidget(self._move_btn)
         layout.addLayout(btn_row)
+
+        # ── Z correction mode ─────────────────────────────────────────
+        z_row = QHBoxLayout()
+        self._z_mode_btn = QPushButton("Z: DIRECT")
+        self._z_mode_btn.setCheckable(True)
+        self._z_mode_btn.setStyleSheet(_TCP_OFF_STYLE)
+        self._z_mode_btn.toggled.connect(self._on_z_mode_toggled)
+        z_row.addWidget(self._z_mode_btn)
+
+        self._apply_correction_btn = QPushButton("↕ Apply Z Correction")
+        self._apply_correction_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._apply_correction_btn.setEnabled(False)
+        self._apply_correction_btn.clicked.connect(self.apply_correction_requested)
+        z_row.addWidget(self._apply_correction_btn)
+        layout.addLayout(z_row)
+
+        self._measure_height_btn = QPushButton("📏 Measure Height")
+        self._measure_height_btn.setCheckable(True)
+        self._measure_height_btn.setStyleSheet(_TCP_OFF_STYLE)
+        self._measure_height_btn.toggled.connect(self._on_measure_height_toggled)
+        layout.addWidget(self._measure_height_btn)
 
         # ── Execute Trajectory ────────────────────────────────────────
         self._traj_btn = QPushButton("⬡ Execute Trajectory")
@@ -477,10 +518,19 @@ class PickTargetView(IApplicationView):
         self._trajectory_available = enabled
         self._traj_btn.setEnabled(enabled and not self._pickup_plane_mode)
 
+    def set_correction_available(self, available: bool) -> None:
+        self._correction_available = available
+        self._apply_correction_btn.setEnabled(available and self._two_step_mode)
+
     def set_busy(self, busy: bool) -> None:
         self._capture_btn.setEnabled(not busy)
         self._move_btn.setEnabled(not busy and self._move_available)
         self._calib_btn.setEnabled(not busy)
+        self._z_mode_btn.setEnabled(not busy)
+        self._measure_height_btn.setEnabled(not busy)
+        self._apply_correction_btn.setEnabled(
+            not busy and self._correction_available and self._two_step_mode
+        )
         self._traj_btn.setEnabled(
             not busy and self._trajectory_available and not self._pickup_plane_mode
         )
@@ -500,6 +550,9 @@ class PickTargetView(IApplicationView):
     def get_pickup_plane_rz(self) -> float:
         return self._pickup_rz_spin.value()
 
+    def set_jog_position(self, pos: list) -> None:
+        self._jog_widget.set_position(pos)
+
     def get_target(self) -> str:
         return self._target_cycle[self._target_index]
 
@@ -507,14 +560,35 @@ class PickTargetView(IApplicationView):
 
     def _cycle_target(self) -> None:
         self._target_index = (self._target_index + 1) % len(self._target_cycle)
-        target = self._target_cycle[self._target_index]
+        self._apply_target(self._target_cycle[self._target_index])
+
+    def _on_jog_frame_changed(self, name: str) -> None:
+        if name in self._target_cycle:
+            idx = self._target_cycle.index(name)
+            self._target_index = idx
+            self._apply_target(name, sync_jog=False)
+
+    def _apply_target(self, target: str, sync_jog: bool = True) -> None:
         label = {
             "camera_center": "Target: CAMERA",
             "tool": "Target: TOOL",
             "gripper": "Target: GRIPPER",
-        }[target]
+        }.get(target, f"Target: {target.upper()}")
         self._target_btn.setText(label)
+        if sync_jog:
+            self._jog_widget.set_frame(target)
         self.target_changed.emit(target)
+
+    def _on_measure_height_toggled(self, checked: bool) -> None:
+        self._measure_height_btn.setStyleSheet(_TCP_ON_STYLE if checked else _TCP_OFF_STYLE)
+        self.measure_height_toggled.emit(checked)
+
+    def _on_z_mode_toggled(self, checked: bool) -> None:
+        self._two_step_mode = checked
+        self._z_mode_btn.setText("Z: TWO-STEP" if checked else "Z: DIRECT")
+        self._z_mode_btn.setStyleSheet(_TCP_ON_STYLE if checked else _TCP_OFF_STYLE)
+        self._apply_correction_btn.setEnabled(checked and self._correction_available)
+        self.z_mode_toggled.emit(checked)
 
     def _on_pickup_plane_toggled(self, checked: bool) -> None:
         self._pickup_plane_mode = checked

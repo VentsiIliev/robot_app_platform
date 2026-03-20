@@ -69,6 +69,7 @@ IMotionService
               + get_current_velocity()
               + get_current_acceleration()
               + get_state() / get_state_topic()
+              + validate_pose(start_position, target_position, tool=0, user=0)
               + enable_safety_walls() / disable_safety_walls()
               + are_safety_walls_enabled() / get_safety_walls_status()
 ```
@@ -169,6 +170,41 @@ Current driver support:
     - `POST /safety/walls/enable`
     - `POST /safety/walls/disable`
 - non-ROS drivers inherit safe default no-op implementations from `IRobot`
+
+## Pose Reachability Validation
+
+`IRobotService` now also exposes a reusable planning-only reachability primitive:
+
+- `validate_pose(start_position, target_position, tool=0, user=0) -> dict`
+
+Purpose:
+
+- simulate whether a target pose is reachable from an explicit start pose
+- reuse the same ROS/MoveIt planning path without physically moving the robot
+- support higher-level workflows such as Calibration area-grid prechecks
+
+Current driver support:
+
+- `FairinoRos2Robot`
+  - backed by the REST endpoint:
+    - `POST /reachability/pose`
+
+Expected response fields include:
+
+- `reachable`
+- `fraction`
+- `reason`
+- `start_position`
+- `target_position`
+
+Important distinction:
+
+- `validate_pose(...)`
+  - planning-only simulation from a supplied start state
+- `move_ptp(...)` / `move_linear(...)`
+  - live execution from the robot's actual current state
+
+The Calibration application uses `validate_pose(...)` only for precheck simulation. Real motion still plans from the live robot state at execution time.
 
 ---
 

@@ -1,15 +1,19 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from src.engine.robot.height_measuring.i_height_correction_service import IHeightCorrectionService
 
 import numpy as np
 
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
-from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+from src.robot_systems.glue.targeting import PixelTarget, PointRegistry, TargetFrame, VisionTargetResolver
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 
 _logger = logging.getLogger(__name__)
@@ -28,6 +32,8 @@ class PickTargetApplicationService(IPickTargetService):
         transformer:     Optional[ICoordinateTransformer],
         robot_config=None,
         navigation=None,
+        height_correction: Optional["IHeightCorrectionService"] = None,
+        height_measuring: Optional[IHeightMeasuringService] = None,
     ):
         self._vision        = vision_service
         self._capture_snapshot_service = capture_snapshot_service
@@ -35,54 +41,39 @@ class PickTargetApplicationService(IPickTargetService):
         self._transformer   = transformer
         self._robot_config  = robot_config
         self._navigation    = navigation
+        self._height_measuring  = height_measuring
         self._target        = "camera_center"
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
         self._pickup_mapper = self._build_pickup_mapper()
-        self._raw_point_transformer = (
-            TargetPointTransformer(
+
+        registry = PointRegistry(robot_config)
+        tcp_x = float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0
+        tcp_y = float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0
+        self._resolver = (
+            VisionTargetResolver(
                 base_transformer=self._transformer,
-                camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_center_point=(
-                    float(getattr(self._robot_config, "camera_center_x", 0.0)),
-                    float(getattr(self._robot_config, "camera_center_y", 0.0)),
-                ) if self._robot_config is not None else None,
-                tool_point=(
-                    float(getattr(self._robot_config, "tool_point_x", 0.0)),
-                    float(getattr(self._robot_config, "tool_point_y", 0.0)),
-                ) if self._robot_config is not None else None,
-                gripper_point=(
-                    float(getattr(self._robot_config, "gripper_point_x", 0.0)),
-                    float(getattr(self._robot_config, "gripper_point_y", 0.0)),
-                ) if self._robot_config is not None else None,
+                registry=registry,
+                camera_to_tcp_x_offset=tcp_x,
+                camera_to_tcp_y_offset=tcp_y,
+                frames={
+                    TargetFrame.CALIBRATION: TargetFrame(
+                        TargetFrame.CALIBRATION,
+                        height_correction=height_correction,
+                    ),
+                    TargetFrame.PICKUP: TargetFrame(
+                        TargetFrame.PICKUP,
+                        mapper=self._pickup_mapper,
+                    ),
+                },
             )
             if self._transformer is not None else None
-        )
-        self._mapped_point_transformer = (
-            TargetPointTransformer(
-                base_transformer=self._transformer,
-                calibration_to_target_pose_mapper=self._pickup_mapper,
-                camera_to_tcp_x_offset=float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_to_tcp_y_offset=float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0,
-                camera_center_point=(
-                    float(getattr(self._robot_config, "camera_center_x", 0.0)),
-                    float(getattr(self._robot_config, "camera_center_y", 0.0)),
-                ) if self._robot_config is not None else None,
-                tool_point=(
-                    float(getattr(self._robot_config, "tool_point_x", 0.0)),
-                    float(getattr(self._robot_config, "tool_point_y", 0.0)),
-                ) if self._robot_config is not None else None,
-                gripper_point=(
-                    float(getattr(self._robot_config, "gripper_point_x", 0.0)),
-                    float(getattr(self._robot_config, "gripper_point_y", 0.0)),
-                ) if self._robot_config is not None else None,
-            )
-            if self._transformer is not None and self._pickup_mapper is not None else None
         )
 
     def set_target(self, target: str) -> None:
         target = str(target).strip().lower()
+        if target == "camera":
+            target = "camera_center"
         if target not in {"camera_center", "tool", "gripper"}:
             raise ValueError(f"Unsupported target '{target}'")
         self._target = target
@@ -115,34 +106,21 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.exception("Failed to initialize calibration-to-target-pose mapper")
             return None
 
+    @property
+    def _active_frame(self) -> str:
+        return TargetFrame.PICKUP if self._use_pickup_plane else TargetFrame.CALIBRATION
+
+    def _pixel_target(self, px: float, py: float) -> PixelTarget:
+        return PixelTarget(px=px, py=py, rz=self._pickup_plane_rz, rx=180.0, ry=0.0)
+
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
-        point_transformer = self._mapped_point_transformer if self._use_pickup_plane else self._raw_point_transformer
-        if point_transformer is None:
+        if self._resolver is None:
             raise RuntimeError("Coordinate transformer is not available")
-        if self._target == "gripper":
-            result = point_transformer.transform_to_gripper(
-                px,
-                py,
-                current_rz=self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ,
-            )
-        elif self._target == "tool":
-            result = point_transformer.transform_to_tool(
-                px,
-                py,
-                current_rz=self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ,
-            )
-        else:
-            result = point_transformer.transform_to_camera_center(
-                px,
-                py,
-                current_rz=self._pickup_plane_rz if self._use_pickup_plane else None,
-            )
-        return result.final_xy
+        return self._resolver.resolve_named(
+            self._pixel_target(px, py), self._target, frame=self._active_frame
+        ).final_xy
 
-    def _target_orientation(self) -> Tuple[float, float, float]:
-        return 180.0, 0.0, (self._pickup_plane_rz if self._use_pickup_plane else _CALIB_RZ)
-
-    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
+    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float, float, float, float, float]]]:
         if self._capture_snapshot_service is None:
             _logger.warning("Capture snapshot service not available")
             return None, [], []
@@ -151,28 +129,47 @@ class PickTargetApplicationService(IPickTargetService):
         frame = snapshot.frame
         raw_contours = snapshot.contours
 
+        from src.applications.pick_target.service.i_pick_target_service import RobotPose
         pixel_centroids: List[Tuple[float, float]] = []
-        robot_centroids: List[Tuple[float, float]] = []
+        robot_targets:   List[RobotPose] = []
 
         for raw in raw_contours:
             try:
                 cnt = Contour(raw)
                 px, py = cnt.getCentroid()
                 pixel_centroids.append((px, py))
-                if self._transformer is not None:
-                    rx, ry = self._transform_point(px, py)
-                    robot_centroids.append((rx, ry))
+                if self._resolver is not None:
+                    result = self._resolver.resolve_named(
+                        self._pixel_target(px, py), self._target, frame=self._active_frame,
+                    )
+                    robot_targets.append(result.robot_pose(_Z))
             except Exception:
                 _logger.exception("Failed to process contour centroid")
 
-        return frame, pixel_centroids, robot_centroids
+        return frame, pixel_centroids, robot_targets
 
-    def move_to(self, robot_x: float, robot_y: float) -> bool:
+    def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
         if self._robot is None:
             _logger.warning("Robot service not available — cannot move")
             return False
         try:
-            rx, ry, rz = self._target_orientation()
+            return self._robot.move_ptp(
+                [x, y, z, rx, ry, rz],
+                tool=self._tool(),
+                user=self._user(),
+                velocity=20,
+                acceleration=10,
+                wait_to_reach=True,
+            )
+        except Exception:
+            _logger.exception("move_to(%.1f, %.1f, %.1f) failed", x, y, z)
+            return False
+
+    def move_to_base(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float) -> bool:
+        if self._robot is None:
+            _logger.warning("Robot service not available — cannot move")
+            return False
+        try:
             return self._robot.move_ptp(
                 [robot_x, robot_y, _Z, rx, ry, rz],
                 tool=self._tool(),
@@ -182,7 +179,44 @@ class PickTargetApplicationService(IPickTargetService):
                 wait_to_reach=True,
             )
         except Exception:
-            _logger.exception("move_to(%.1f, %.1f) failed", robot_x, robot_y)
+            _logger.exception("move_to_base(%.1f, %.1f) failed", robot_x, robot_y)
+            return False
+
+    def move_to_with_live_height(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float) -> bool:
+        if self._robot is None:
+            _logger.warning("Robot service not available — cannot move")
+            return False
+        if not self.move_to_base(robot_x, robot_y, rx, ry, rz):
+            return False
+        if self._height_measuring is None:
+            _logger.warning("Height measuring service not available — staying at base Z")
+            return True
+        try:
+            self._height_measuring.begin_measurement_session()
+            measured_z = self._height_measuring.measure_at(robot_x, robot_y)
+            self._height_measuring.end_measurement_session()
+        except Exception:
+            _logger.exception("Live height measurement failed at (%.1f, %.1f)", robot_x, robot_y)
+            return True  # base move succeeded
+        if measured_z is None:
+            _logger.warning("Height measurement returned None at (%.1f, %.1f) — staying at base Z", robot_x, robot_y)
+            return True
+        adjusted_z = _Z + measured_z
+        _logger.debug(
+            "Live height correction at (%.1f, %.1f): base=%.1f measured=%.3f adjusted=%.3f",
+            robot_x, robot_y, _Z, measured_z, adjusted_z,
+        )
+        try:
+            return self._robot.move_ptp(
+                [robot_x, robot_y, adjusted_z, rx, ry, rz],
+                tool=self._tool(),
+                user=self._user(),
+                velocity=20,
+                acceleration=10,
+                wait_to_reach=True,
+            )
+        except Exception:
+            _logger.exception("move_to_with_live_height Z-adjust failed at (%.1f, %.1f)", robot_x, robot_y)
             return False
 
     def move_to_calibration_position(self) -> bool:
@@ -234,7 +268,7 @@ class PickTargetApplicationService(IPickTargetService):
         if not contour_robot_pts:
             return False, "No contour waypoints to execute"
         try:
-            rx, ry, rz = self._target_orientation()
+            rx, ry, rz = 180.0, 0.0, self._pickup_plane_rz
             total_pts = 0
             for pts in contour_robot_pts:
                 path = [[float(x), float(y), float(z)] for x, y in pts]

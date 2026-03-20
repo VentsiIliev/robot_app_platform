@@ -116,7 +116,7 @@ class TargetPointTransformer:
         final_xy = plane_xy
         delta_xy = (0.0, 0.0)
 
-        if self._calibration_to_target_pose_mapper is not None and current_rz is not None:
+        if current_rz is not None:
             final_xy, delta_xy = self._apply_pickup_plane_tcp_delta(plane_xy, current_rz)
 
         return TargetTransformResult(
@@ -125,7 +125,7 @@ class TargetPointTransformer:
             final_xy=final_xy,
             pickup_plane_reference_delta_xy=delta_xy,
             current_rz=current_rz,
-            reference_rz=self._reference_rz() if self._calibration_to_target_pose_mapper is not None else 0.0,
+            reference_rz=self._reference_rz(),
         )
 
     def transform_to_tcp(

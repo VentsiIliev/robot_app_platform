@@ -19,8 +19,9 @@ CORE_GROUP = SettingGroup("Core", [
                  default=720,   min_val=240,  max_val=2160, step=1,   step_options=[1, 10, 100]),
     SettingField("skip_frames",             "Skip Frames",             "spinbox",
                  default=30,    min_val=0,    max_val=200,  step=1,   step_options=[1, 5, 10]),
-    SettingField("capture_position_offset", "Capture Position Offset", "spinbox",
-                 default=-4,    min_val=-500, max_val=500,  step=1,   step_options=[1, 5, 10]),
+    SettingField("capture_position_offset", "Capture Position Offset", "double_spinbox",
+                 default=-4.0,  min_val=-500.0, max_val=500.0, step=0.5, decimals=1,
+                 step_options=[0.5, 1.0, 5.0]),
 ])
 
 CONTOUR_GROUP = SettingGroup("Contour Detection", [

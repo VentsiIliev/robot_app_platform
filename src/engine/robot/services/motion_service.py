@@ -11,10 +11,10 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class MotionService(IMotionService):
-    _WAIT_THRESHOLD_MM = 2.0
+    _WAIT_THRESHOLD_MM = 0.5
     _WAIT_THRESHOLD_DEG = 1.0
     _WAIT_DELAY_S = 0.1
-    _WAIT_TIMEOUT_S = 10.0
+    _WAIT_TIMEOUT_S = 30.0
     _STOP_RETRY_DELAY_S = 0.05
     _STOP_ATTEMPTS = 3
 
@@ -196,11 +196,14 @@ class MotionService(IMotionService):
             cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         deadline = time.monotonic() + timeout
+        last_current: List[float] | None = None
+        last_dist: float | None = None
+        last_orientation_delta: float | None = None
         while time.monotonic() < deadline:
             if cancelled is not None and cancelled():
                 self._logger.debug("wait_for_position cancelled while waiting for %s", target)
                 return False
-            current = self._cached_position or self._robot.get_current_position()
+            current = self._robot.get_current_position() or self._cached_position
             if current and len(current) >= 3:
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))
                 orientation_delta = 0.0
@@ -209,15 +212,30 @@ class MotionService(IMotionService):
                         self._wrapped_angle_delta_deg(current[i], target[i])
                         for i in range(3, 6)
                     )
+                last_current = list(current)
+                last_dist = dist
+                last_orientation_delta = orientation_delta
                 if dist <= threshold and orientation_delta <= orientation_threshold_deg:
                     return True
             time.sleep(delay)
-        self._logger.warning(
-            "Timed out waiting for robot to reach %s within %.3fmm / %.3fdeg",
-            target,
-            threshold,
-            orientation_threshold_deg,
-        )
+        if last_current and len(last_current) >= 6:
+            self._logger.warning(
+                "Timed out waiting for robot to reach %s within %.3fmm / %.3fdeg; "
+                "last_current=%s dist=%.3fmm orientation_delta=%.3fdeg",
+                target,
+                threshold,
+                orientation_threshold_deg,
+                last_current,
+                last_dist if last_dist is not None else float("nan"),
+                last_orientation_delta if last_orientation_delta is not None else float("nan"),
+            )
+        else:
+            self._logger.warning(
+                "Timed out waiting for robot to reach %s within %.3fmm / %.3fdeg",
+                target,
+                threshold,
+                orientation_threshold_deg,
+            )
         return False
 
     @staticmethod

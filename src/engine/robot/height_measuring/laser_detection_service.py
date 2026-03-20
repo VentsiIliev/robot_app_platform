@@ -82,11 +82,13 @@ class LaserDetectionService:
             )
             if closest is not None:
                 _logger.info("Laser detected at %s (attempt %d)", closest, attempt + 1)
+                self._laser.turn_off()
                 return mask, bright, closest
 
             _logger.warning("Attempt %d/%d: no laser line detected", attempt + 1, cfg.max_detection_retries)
 
         _logger.error("Laser detection failed after %d attempts", cfg.max_detection_retries)
+        self._laser.turn_off()
         return None, None, None
 
     def _collect_frames(self, count: int, delay_s: float) -> List[np.ndarray]:

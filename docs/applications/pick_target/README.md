@@ -7,6 +7,7 @@
 - fixed pickup orientation assumptions
 - camera/TCP offset compensation
 - contour trajectory capture
+- height correction (depth-map model and live laser measurement)
 
 ---
 
@@ -19,114 +20,127 @@ The application captures the latest vision contours, transforms them into robot-
 - execute a captured contour trajectory
 - compare calibration-plane vs pickup-plane behavior
 - test different pickup `rz` values quickly
-
-This is especially useful when validating whether a transformed point aligns:
-
-- with the camera center
-- with the TCP
-- or only with one reference wrist orientation
+- validate height correction before enabling it in production
 
 ---
 
 ## Wiring
 
-**Factory:** `_build_pick_target_application(...)` in [application_wiring.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/application_wiring.py)
+**Factory:** `_build_pick_target_application(...)` in `application_wiring.py`
 
-The app is built with:
+The app is built via `_build_glue_vision_resolver(robot_system)` which returns a shared `(base_transformer, resolver)` pair. The same helper is used by the dashboard and glue process driver, so all applications share the same calibrated homography and point registry.
 
-- `vision_service`
-- `robot_service`
-- `HomographyTransformer`
-- `robot_config`
-- `GlueNavigationService`
-
-The `HomographyTransformer` is constructed with the calibrated camera-to-TCP offsets from `robot_config`:
-
-- `camera_to_tcp_x_offset`
-- `camera_to_tcp_y_offset`
-
-The application service also receives `robot_config` directly so it can apply pickup-plane TCP compensation during manual testing.
+```python
+base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+service = PickTargetApplicationService(
+    transformer=base_transformer,
+    robot_config=robot_system._robot_config,
+    navigation=robot_system._navigation,
+    height_correction=HeightCorrectionService(height_service),
+    height_measuring=height_service,
+)
+```
 
 ---
 
 ## UI Controls
 
-The control panel currently provides:
+| Control | Description |
+|---------|-------------|
+| `◉ Capture` | Capture latest contours, transform to robot space, display in log |
+| `▶ Move` | Move to all captured targets in sequence |
+| `⬡ Execute Trajectory` | Execute contour outlines as robot trajectories |
+| `Target: CAMERA/TOOL/GRIPPER` | Select which end-effector point should land on the target |
+| `Plane: CALIB/PICKUP` | Toggle calibration-plane vs pickup-plane (HOME frame) coordinates |
+| `Pickup RZ` | Wrist orientation used for both calib and pickup-plane modes |
+| `Z: DIRECT / Z: TWO-STEP` | Toggle between immediate Z correction and two-step mode |
+| `↕ Apply Z Correction` | In two-step mode: apply depth-map Z correction to the last moved targets |
+| `📏 Measure Height` | After moving to base Z, use the live laser to measure and adjust Z |
+| `↩ Start` | Move to the mode-appropriate reference position |
 
-- `Capture`: capture latest contours and transform them into robot-space points
-- `Move`: move through the captured target list
-- `Execute Trajectory`: execute the captured contour trajectory
-- `Target: CAMERA/TOOL/GRIPPER`: choose which physical point should land on the target for both point pickup and contour execution
-- `Plane: CALIB/PICKUP`: choose calibration-plane coordinates vs pickup-plane coordinates
-- `Pickup RZ`: test pickup-plane wrist orientation values directly
-- `Start`: move to the mode-appropriate reference position
+**Start behavior:**
+- calibration-plane mode → `CALIBRATION`
+- pickup-plane mode → `HOME`
 
-`Start` behavior:
-
-- calibration-plane mode: move to `CALIBRATION`
-- pickup-plane mode: move to `HOME`
-
-Trajectory execution is intentionally disabled while pickup-plane mode is enabled. The pickup-plane mode is used for manual point validation first; contour execution remains tied to the simpler calibration-plane path until the same correction model is moved into the real process.
+Trajectory execution is disabled while pickup-plane mode is active.
 
 ---
 
 ## Transform Chain
 
+All transformations go through `VisionTargetResolver` from `src/robot_systems/glue/targeting/`.
+
 ### Calibration-plane mode
 
-`Capture` uses:
-
-1. contour centroid in image pixels
-2. `TargetPointTransformer` with no mapper
-3. target-point resolution in the calibration frame:
-   - `camera_center`
-   - `tool`
-   - `gripper`
+```
+pixel (px, py)
+  → HomographyTransformer.transform()   [calibration-plane XY]
+  → TCP-delta correction at current_rz
+  → end-effector offset for selected target (camera/tool/gripper)
+  → final robot XY
+```
 
 ### Pickup-plane mode
 
-Pickup-plane mode uses:
+```
+pixel (px, py)
+  → HomographyTransformer.transform()   [calibration-plane XY]
+  → PlanePoseMapper (CALIBRATION → HOME)  [pickup-plane XY]
+  → TCP-delta correction at current_rz
+  → end-effector offset for selected target
+  → final robot XY
+```
 
-1. contour centroid in image pixels
-2. homography transform into calibration-plane robot XY
-3. `PlanePoseMapper` to convert into pickup-plane / `HOME` frame XY
-4. mapped-pose reference-angle correction using calibrated `camera_to_tcp_*`
-5. target-point resolution through `TargetPointTransformer`
+The two modes are implemented as `self._resolver` (no mapper) and `self._mapped_resolver` (`resolver.with_mapper(pickup_mapper)`). `_transform_point()` selects between them based on `_use_pickup_plane`.
+
+---
+
+## Z Correction Modes
+
+### DIRECT (default)
+
+`move_to()` applies depth-map Z correction from `IHeightCorrectionService`:
+
+```text
+z = Z_BASE + height_correction.predict_z(robot_x, robot_y)
+```
+
+### TWO-STEP
+
+1. `Move` calls `move_to_base()` — always `Z_BASE = 300 mm`, no correction
+2. After all moves complete, `Apply Z Correction` re-runs `move_to()` which applies the depth-map correction
+
+### Measure Height
+
+When the `📏 Measure Height` toggle is on, `Move` calls `move_to_with_live_height()`:
+
+1. Move to `Z_BASE` (base Z, no correction)
+2. Call `IHeightMeasuringService.measure_at(robot_x, robot_y)` — laser moves to calibrated measurement height, measures surface
+3. Move to `Z_BASE + measured_z`
+
+Live measurement and depth-map correction are mutually exclusive per move.
+
+---
+
+## Jog Widget Integration
+
+A `RobotJogWidget` is embedded in a `DrawerToggle` panel on the right side of the view.
+
+The jog widget includes a **Frame selector** combo box (`camera_center`, `tool`, `gripper`). Changing the frame selector also changes the active target for capture/move, keeping both selectors in sync. The existing `Target:` button on the control panel does the same thing.
+
+The `JogController` handles live robot position polling and jog commands. It is started in `controller.load()` and stopped in `controller.stop()`.
 
 ---
 
 ## Pickup-Plane Reference Delta
 
-The important debug finding was:
+The mapped pickup-plane point is already correct at the reference `rz` (from `HOME` pose). Applying the full TCP offset again at that reference angle would move the robot away from the target.
 
-- the mapped pickup-plane point is already correct at `rz = 90`
-- applying the full calibrated TCP offset again moves the robot away from the target
-
-So the app does **not** apply the full TCP offset in pickup-plane mode. Instead, it applies only the orientation-dependent change from the known-good mapped-pose reference:
+Instead, only the **orientation-dependent change** from the reference is applied:
 
 ```text
-delta(rz) = R(rz) * c - R(90) * c
-target_xy = mapped_xy - delta(rz)
+delta(rz) = R(rz) · tcp_offset − R(ref_rz) · tcp_offset
+target_xy = mapped_xy − delta(rz)
 ```
 
-where:
-
-- `c = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)` from robot settings
-- `mapped_xy` is the point after homography + calibration-to-pickup mapping
-
-In the default pickup-plane setup, that reference is the `HOME` pose `rz`, which keeps the known-good baseline unchanged while compensating when the wrist angle changes during testing.
-
-That correction is only applied in pickup-plane mode when the selected target is `camera_center`. When `tool` or `gripper` is selected, the app resolves those target-point offsets through `TargetPointTransformer` on top of the mapped point instead of using the older binary TCP toggle behavior.
-
----
-
-## Why This App Exists
-
-This application is the shortest path to answering questions like:
-
-- Does homography alone align only at one wrist angle?
-- Does the pickup-plane mapper preserve the expected XY reference?
-- Are the calibrated TCP offsets correct in sign and frame?
-- Is the miss caused by plane mapping, TCP compensation, or final pickup orientation?
-
-It should remain a focused debug tool, not a second implementation of the full pick-and-place process.
+This correction is always applied whenever `current_rz` is provided, regardless of plane mode. The correction is zero when `rz == ref_rz`, preserving the known-good baseline.

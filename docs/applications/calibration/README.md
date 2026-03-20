@@ -38,6 +38,7 @@ class ICalibrationService(ABC):
     def stop_test_calibration(self)        -> None: ...
     def measure_marker_heights(self)       -> tuple[bool, str]: ...
     def generate_area_grid(...)            -> list[tuple[float, float]]: ...
+    def verify_area_grid(...)              -> tuple[bool, str, dict]: ...
     def measure_area_grid(...)             -> tuple[bool, str]: ...
     def verify_height_model(self)          -> tuple[bool, str]: ...
     def stop_marker_height_measurement(self)-> None: ...
@@ -74,6 +75,7 @@ CalibrationApplicationService(
 | `calibrate_camera_tcp_offset()` | Requires `is_calibrated() == True`; then runs the dedicated camera-TCP offset calibration service |
 | `measure_marker_heights()` | Requires homography + height calibration; runs the standalone ArUco marker height-mapping workflow |
 | `generate_area_grid(...)` | Uses the user-defined 4-corner area and `rows/cols` to generate row-major grid points on the image |
+| `verify_area_grid(...)` | Sequentially simulates reachability for the generated grid using `robot_service.validate_pose(start, target)` and the same anchor-recovery policy as execution |
 | `measure_area_grid(...)` | Runs the standalone area-grid height-mapping workflow over the generated points |
 | `verify_height_model()` | Runs 4 interior verification measurements against the saved piecewise triangle height model |
 | `stop_calibration()` | `process_controller.stop_calibration()` and stops the camera-TCP offset calibrator if one is active |
@@ -166,6 +168,27 @@ User sets "Rows" / "Cols" and presses "Generate Grid"
     - top row to bottom row
   → overlay points are drawn on the camera image
 
+User presses "Verify Grid"
+  → controller regenerates the current row-major grid and keeps it drawn on the preview
+  → controller starts a background worker so the UI stays responsive
+  → "Verify Grid" changes to "Verifying Grid..." while the worker runs
+  → service.verify_area_grid(corners_norm, rows, cols)
+  → if remote safety walls are currently enabled, they are disabled for the verification run and restored afterward
+  → for each point, the service simulates the planned execution order:
+    - try `current_simulated_state -> target`
+    - if that fails, try `current_simulated_state -> anchor`
+    - if anchor is reachable, try `anchor -> target`
+  → after each point, the preview updates immediately:
+    - green = reachable
+    - red = unreachable
+    - orange = not checked yet
+  → results are classified as:
+    - direct
+    - via anchor
+    - unreachable
+  → unreachable grid points are redrawn in red on the camera overlay
+  → the log reports the direct / via-anchor / unreachable totals and lists any non-direct points
+
 User presses "Measure Area Grid"
   → service.measure_area_grid(corners_norm, rows, cols)
   → transformer.reload() picks up latest matrix
@@ -195,6 +218,7 @@ User presses "View Depth Map"
 - Left side:
   - large camera preview
   - area-grid controls directly below the preview
+  - generated grid overlay, with unreachable precheck points shown in red after "Verify Grid"
 - Right side:
   - capture
   - calibration actions

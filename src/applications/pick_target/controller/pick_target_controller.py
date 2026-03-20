@@ -9,6 +9,8 @@ import numpy as np
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.jog_controller import JogController
+from src.applications.base.robot_jog_service import RobotJogService
 from src.applications.pick_target.model.pick_target_model import PickTargetModel
 from src.applications.pick_target.view.pick_target_view import PickTargetView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -27,28 +29,48 @@ class _MoveWorker(QObject):
     log_message = pyqtSignal(str)
     finished    = pyqtSignal()
 
-    def __init__(self, model: PickTargetModel, coords: List[Tuple[float, float]], delay: float = 0.0):
+    def __init__(
+        self,
+        model: PickTargetModel,
+        coords: List[Tuple[float, float, float, float, float, float]],
+        delay: float = 0.0,
+        use_base_z: bool = False,
+        use_live_height: bool = False,
+    ):
         super().__init__()
-        self._model  = model
-        self._coords = coords
-        self._delay  = delay
-        self._stop   = False
+        self._model          = model
+        self._coords         = coords
+        self._delay          = delay
+        self._use_base_z     = use_base_z
+        self._use_live_height = use_live_height
+        self._stop           = False
 
     def request_stop(self) -> None:
         self._stop = True
 
     def run(self) -> None:
+        if self._use_live_height:
+            tag = "[LIVE]"
+        elif self._use_base_z:
+            tag = "[BASE]"
+        else:
+            tag = "[MOVE]"
         try:
-            for i, (rx, ry) in enumerate(self._coords):
+            for i, (x, y, z, rx, ry, rz) in enumerate(self._coords):
                 if self._stop:
                     self.log_message.emit("[STOP] Aborted by user.")
                     break
                 self.log_message.emit(
-                    f"[MOVE] {i + 1}/{len(self._coords)}: robot=({rx:.1f}, {ry:.1f})"
+                    f"{tag} {i + 1}/{len(self._coords)}: robot=({x:.1f}, {y:.1f}, {z:.1f})"
                 )
-                ok = self._model.move_to(rx, ry)
+                if self._use_live_height:
+                    ok = self._model.move_to_with_live_height(x, y, rx, ry, rz)
+                elif self._use_base_z:
+                    ok = self._model.move_to_base(x, y, rx, ry, rz)
+                else:
+                    ok = self._model.move_to(x, y, z, rx, ry, rz)
                 status = "[OK]  " if ok else "[FAIL]"
-                self.log_message.emit(f"{status} ({rx:.1f}, {ry:.1f})")
+                self.log_message.emit(f"{status} ({x:.1f}, {y:.1f}, {z:.1f})")
                 if self._delay > 0 and i < len(self._coords) - 1 and not self._stop:
                     self.log_message.emit(f"[WAIT] {self._delay:.1f}s...")
                     time.sleep(self._delay)
@@ -107,20 +129,25 @@ class PickTargetController(IApplicationController):
 
     def __init__(
         self,
-        model:     PickTargetModel,
-        view:      PickTargetView,
-        messaging: Optional[IMessagingService] = None,
+        model:       PickTargetModel,
+        view:        PickTargetView,
+        messaging:   Optional[IMessagingService] = None,
+        jog_service: Optional[RobotJogService] = None,
     ):
         self._model   = model
         self._view    = view
         self._broker  = messaging
+        self._jog     = JogController(view, jog_service, messaging) if jog_service and messaging else None
         self._bridge  = _Bridge()
         self._subs:   List[Tuple[str, Callable]] = []
         self._active: List[Tuple[QThread, QObject]] = []  # keeps workers alive
         self._current_worker: Optional[QObject] = None
         self._alive   = False
-        self._captured_coords:      List[Tuple[float, float]] = []
-        self._captured_trajectory:  List = []              # robot-space contour arrays
+        self._captured_coords:          List[Tuple[float, float, float, float, float, float]] = []
+        self._captured_trajectory:      List = []          # robot-space contour arrays
+        self._two_step_mode:             bool = False
+        self._measure_height_mode:       bool = False
+        self._pending_correction_coords: List[Tuple[float, float, float, float, float, float]] = []
 
         self._bridge.camera_frame.connect(self._on_camera_frame)
 
@@ -131,6 +158,9 @@ class PickTargetController(IApplicationController):
         self._view.pickup_plane_toggled.connect(self._model.set_use_pickup_plane)
         self._view.pickup_plane_rz_changed.connect(self._model.set_pickup_plane_rz)
         self._view.execute_trajectory_requested.connect(self._on_execute_trajectory)
+        self._view.z_mode_toggled.connect(self._on_z_mode_toggled)
+        self._view.apply_correction_requested.connect(self._on_apply_correction)
+        self._view.measure_height_toggled.connect(self._on_measure_height_toggled)
         self._view.destroyed.connect(self.stop)
         self._model.set_target(self._view.get_target())
         self._model.set_pickup_plane_rz(self._view.get_pickup_plane_rz())
@@ -139,9 +169,13 @@ class PickTargetController(IApplicationController):
         self._alive = True
         if self._broker:
             self._subscribe()
+        if self._jog:
+            self._jog.start()
 
     def stop(self) -> None:
         self._alive = False
+        if self._jog:
+            self._jog.stop()
         if self._current_worker and hasattr(self._current_worker, "request_stop"):
             self._current_worker.request_stop()
         for thread, _ in self._active:
@@ -187,18 +221,30 @@ class PickTargetController(IApplicationController):
         self._view.set_busy(False)
         self._view.set_move_enabled(bool(self._captured_coords))
         self._view.set_trajectory_enabled(bool(self._captured_trajectory))
+        self._view.set_correction_available(bool(self._pending_correction_coords))
         self._current_worker = None
+
+    def _on_measure_height_toggled(self, enabled: bool) -> None:
+        self._measure_height_mode = enabled
+
+    def _on_z_mode_toggled(self, two_step: bool) -> None:
+        self._two_step_mode = two_step
+        if not two_step:
+            self._pending_correction_coords = []
+            self._view.set_correction_available(False)
 
     def _on_calib_done(self) -> None:
         self._view.set_busy(False)
         self._view.set_move_enabled(bool(self._captured_coords))
         self._view.set_trajectory_enabled(bool(self._captured_trajectory))
+        self._view.set_correction_available(bool(self._pending_correction_coords))
         self._current_worker = None
 
     def _on_trajectory_done(self) -> None:
         self._view.set_busy(False)
         self._view.set_move_enabled(bool(self._captured_coords))
         self._view.set_trajectory_enabled(bool(self._captured_trajectory))
+        self._view.set_correction_available(bool(self._pending_correction_coords))
         self._current_worker = None
 
     def _on_thread_finished(self) -> None:
@@ -227,8 +273,8 @@ class PickTargetController(IApplicationController):
 
         n = len(robot_coords)
         self._view.append_log(f"[CAPTURE] {n} target(s) found.")
-        for i, (rx, ry) in enumerate(robot_coords):
-            self._view.append_log(f"  [{i + 1}] robot=({rx:.1f}, {ry:.1f})")
+        for i, (x, y, z, rx, ry, rz) in enumerate(robot_coords):
+            self._view.append_log(f"  [{i + 1}] robot=({x:.1f}, {y:.1f}, z={z:.1f}, rz={rz:.1f})")
 
         traj_pts = sum(len(c) for c in self._captured_trajectory)
         if self._captured_trajectory:
@@ -272,10 +318,41 @@ class PickTargetController(IApplicationController):
         if self._current_worker is not None:
             return
         self._view.set_busy(True)
+        coords = list(self._captured_coords)
+        delay = self._view.get_move_delay()
+        if self._measure_height_mode:
+            self._pending_correction_coords = []
+            self._view.append_log(
+                f"[LIVE] Moving to {len(coords)} target(s) with live height measurement..."
+            )
+            worker = _MoveWorker(self._model, coords, delay, use_live_height=True)
+        elif self._two_step_mode:
+            self._pending_correction_coords = coords
+            self._view.set_correction_available(False)
+            self._view.append_log(
+                f"[BASE] Moving to {len(coords)} target(s) at base Z (no correction)..."
+            )
+            worker = _MoveWorker(self._model, coords, delay, use_base_z=True)
+        else:
+            self._pending_correction_coords = []
+            self._view.append_log(
+                f"[MOVE] Starting sequence for {len(coords)} target(s)..."
+            )
+            worker = _MoveWorker(self._model, coords, delay)
+        self._launch(worker, on_done=self._on_move_done)
+
+    def _on_apply_correction(self) -> None:
+        if not self._pending_correction_coords:
+            self._view.append_log("[WARN] No pending targets — press Move first (two-step mode).")
+            return
+        if self._current_worker is not None:
+            return
+        self._view.set_busy(True)
+        coords = list(self._pending_correction_coords)
         self._view.append_log(
-            f"[MOVE] Starting sequence for {len(self._captured_coords)} target(s)..."
+            f"[CORR] Applying height correction for {len(coords)} target(s)..."
         )
-        worker = _MoveWorker(self._model, list(self._captured_coords), self._view.get_move_delay())
+        worker = _MoveWorker(self._model, coords, self._view.get_move_delay(), use_base_z=False)
         self._launch(worker, on_done=self._on_move_done)
 
     # ── Start position ────────────────────────────────────────────────

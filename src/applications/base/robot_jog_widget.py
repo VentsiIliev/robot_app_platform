@@ -1,9 +1,11 @@
 from functools import partial
+from typing import List, Optional
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QSlider, QSizePolicy, QSpacerItem,
+    QComboBox,
 )
 
 from pl_gui.settings.settings_view.styles import (
@@ -69,11 +71,13 @@ class RobotJogWidget(QFrame):
     jog_requested        = pyqtSignal(str, str, str, float)  # command, axis, direction, step
     jog_started          = pyqtSignal(str)
     jog_stopped          = pyqtSignal(str)
+    frame_changed        = pyqtSignal(str)   # emitted when the frame/point selector changes
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._timers:   dict[str, QTimer]       = {}
         self._axis_map: dict[str, tuple[str, str]] = {}
+        self._frame_combo: Optional[QComboBox]  = None
         self._setup_ui()
         self._setup_timers()
 
@@ -161,6 +165,36 @@ class RobotJogWidget(QFrame):
             return
         for name, idx in _POS_AXES:
             self._pos_labels[name].setText(f"{pos[idx]:.3f}")
+
+    def set_frame_options(self, names: List[str], default: Optional[str] = None) -> None:
+        """Populate the frame selector combo box."""
+        if self._frame_combo is None:
+            return
+        self._frame_combo.blockSignals(True)
+        self._frame_combo.clear()
+        for n in names:
+            self._frame_combo.addItem(n)
+        if default and default in names:
+            self._frame_combo.setCurrentText(default)
+        self._frame_combo.blockSignals(False)
+
+    def set_frame(self, name: str) -> None:
+        """Programmatically select a frame without emitting frame_changed."""
+        if self._frame_combo is None:
+            return
+        self._frame_combo.blockSignals(True)
+        self._frame_combo.setCurrentText(name)
+        self._frame_combo.blockSignals(False)
+
+    def get_frame(self) -> str:
+        """Return the currently selected frame name, or empty string if none."""
+        if self._frame_combo is None or self._frame_combo.count() == 0:
+            return ""
+        return self._frame_combo.currentText()
+
+    def _on_frame_combo_changed(self, text: str) -> None:
+        if text:
+            self.frame_changed.emit(text)
 
 
     def _build_slider_row(
@@ -338,6 +372,26 @@ class RobotJogWidget(QFrame):
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        frame_lbl = QLabel("Frame:")
+        frame_lbl.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
+        layout.addWidget(frame_lbl)
+
+        self._frame_combo = QComboBox()
+        self._frame_combo.setFixedHeight(32)
+        self._frame_combo.setStyleSheet(f"""
+            QComboBox {{
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+                background: white;
+                color: {TEXT_COLOR};
+            }}
+            QComboBox::drop-down {{ border: none; }}
+        """)
+        self._frame_combo.currentTextChanged.connect(self._on_frame_combo_changed)
+        layout.addWidget(self._frame_combo)
+        layout.addStretch()
         return layout
 
     @staticmethod

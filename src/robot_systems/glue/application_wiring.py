@@ -31,13 +31,18 @@ def _build_capture_snapshot_service(robot_system):
     )
 
 
-def _build_glue_target_point_transformer(robot_system):
-    from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+def _build_glue_vision_resolver(robot_system):
+    """Build a shared VisionTargetResolver for the glue robot system.
+
+    Returns ``(base_transformer, resolver)`` where ``resolver`` may be None
+    if no vision service is available.
+    """
+    from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
 
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
     robot_config = getattr(robot_system, "_robot_config", None)
     if vision_service is None:
-        return None
+        return None, None
 
     base_transformer = (
         HomographyTransformer(
@@ -51,26 +56,14 @@ def _build_glue_target_point_transformer(robot_system):
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
     )
 
-    if robot_config is None:
-        return TargetPointTransformer(base_transformer=base_transformer)
-
-    return TargetPointTransformer(
+    registry = PointRegistry(robot_config)
+    resolver = VisionTargetResolver(
         base_transformer=base_transformer,
-        camera_to_tcp_x_offset=float(robot_config.camera_to_tcp_x_offset),
-        camera_to_tcp_y_offset=float(robot_config.camera_to_tcp_y_offset),
-        camera_center_point=(
-            float(robot_config.camera_center_x),
-            float(robot_config.camera_center_y),
-        ),
-        tool_point=(
-            float(robot_config.tool_point_x),
-            float(robot_config.tool_point_y),
-        ),
-        gripper_point=(
-            float(robot_config.gripper_point_x),
-            float(robot_config.gripper_point_y),
-        ),
+        registry=registry,
+        camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config else 0.0,
+        camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config else 0.0,
     )
+    return base_transformer, resolver
 
 def _build_pick_and_place_visualizer(robot_system):
     from src.applications.base.widget_application import WidgetApplication
@@ -124,7 +117,6 @@ def _build_contour_matching_tester(robot_system):
 
 def _build_glue_process_driver_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
-    from src.engine.vision.homography_transformer import HomographyTransformer
     from src.robot_systems.glue.applications.glue_process_driver import (
         GlueProcessDriverFactory,
         GlueProcessDriverService,
@@ -143,18 +135,7 @@ def _build_glue_process_driver_application(robot_system):
         z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
     except Exception:
         z_min = 0.0
-    transformer = (
-        HomographyTransformer(
-            vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
-        )
-        if vision_service is not None and robot_config is not None else
-        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-        if vision_service is not None else None
-    )
+    base_transformer, resolver = _build_glue_vision_resolver(robot_system)
     matching_service = MatchingService(
         vision_service=vision_service,
         workpiece_service=workpiece_service,
@@ -163,8 +144,8 @@ def _build_glue_process_driver_application(robot_system):
     execution_service = GlueJobExecutionService(
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
-            transformer=transformer,
-            point_transformer=_build_glue_target_point_transformer(robot_system),
+            transformer=base_transformer,
+            resolver=resolver,
             z_min=z_min,
         ),
         glue_process=robot_system.coordinator.glue_process,
@@ -176,8 +157,8 @@ def _build_glue_process_driver_application(robot_system):
     service = GlueProcessDriverService(
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
-            transformer=transformer,
-            point_transformer=_build_glue_target_point_transformer(robot_system),
+            transformer=base_transformer,
+            resolver=resolver,
             z_min=z_min,
         ),
         glue_process=robot_system.coordinator.glue_process,
@@ -470,18 +451,7 @@ def _build_dashboard_application(system):
     except Exception:
         z_min = 0.0
 
-    transformer = (
-        HomographyTransformer(
-            vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
-        )
-        if vision_service is not None and robot_config is not None else
-        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-        if vision_service is not None else None
-    )
+    base_transformer, resolver = _build_glue_vision_resolver(system)
     execution_service = (
         GlueJobExecutionService(
             matching_service=MatchingService(
@@ -490,8 +460,8 @@ def _build_dashboard_application(system):
                 capture_snapshot_service=capture_snapshot_service,
             ),
             job_builder=GlueJobBuilderService(
-                transformer=transformer,
-                point_transformer=_build_glue_target_point_transformer(system),
+                transformer=base_transformer,
+                resolver=resolver,
                 z_min=z_min,
             ),
             glue_process=coordinator.glue_process,
@@ -511,7 +481,7 @@ def _build_dashboard_application(system):
             weight_service=weight_service,
             execution_service=execution_service,
             robot_service=robot_service,
-            preview_transformer=transformer,
+            preview_transformer=base_transformer,
         )
     )
 
@@ -585,36 +555,30 @@ def _build_modbus_settings_application(robot_app):
 
 
 def _build_pick_target_application(robot_system):
+    from src.applications.base.robot_jog_service import RobotJogService
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.pick_target.pick_target_factory import PickTargetFactory
     from src.applications.pick_target.service.pick_target_application_service import PickTargetApplicationService
-    from src.engine.vision.homography_transformer import HomographyTransformer
+    from src.engine.robot.height_measuring.height_correction_service import HeightCorrectionService
 
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service  = robot_system.get_optional_service(ServiceID.ROBOT)
-    robot_config = robot_system._robot_config
-    transformer = (
-        HomographyTransformer(
-            vision_service.camera_to_robot_matrix_path,
-            camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
-        )
-        if vision_service is not None and robot_config is not None else
-        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-        if vision_service is not None else None
-    )
+    base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+    height_service = getattr(robot_system, "_height_measuring_service", None)
+    height_correction = HeightCorrectionService(height_service) if height_service is not None else None
     service = PickTargetApplicationService(
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
         robot_service=robot_service,
-        transformer=transformer,
+        transformer=base_transformer,
         robot_config=robot_system._robot_config,
         navigation=robot_system._navigation,
+        height_correction=height_correction,
+        height_measuring=height_service,
     )
-    return WidgetApplication(widget_factory=lambda ms: PickTargetFactory(ms).build(service))
+    jog_service = RobotJogService(robot_system.get_optional_service(ServiceID.ROBOT))
+    return WidgetApplication(widget_factory=lambda ms: PickTargetFactory(ms, jog_service).build(service))
 
 
 def _build_device_control_application(robot_system):

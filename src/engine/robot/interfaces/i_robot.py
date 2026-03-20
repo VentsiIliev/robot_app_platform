@@ -120,3 +120,14 @@ class IRobot(ABC):
     def get_safety_walls_status(self) -> dict:
         """Optional remote safety-wall status payload."""
         return {"supported": False, "enabled": None}
+
+    def validate_pose(
+        self,
+        start_position: List[float],
+        target_position: List[float],
+        tool: int = 0,
+        user: int = 0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        """Optional remote pose reachability validation."""
+        return {"supported": False, "reachable": False}

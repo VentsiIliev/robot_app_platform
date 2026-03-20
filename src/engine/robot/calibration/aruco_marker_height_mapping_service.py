@@ -23,6 +23,10 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_VELOCITY = 30
 _DEFAULT_ACCELERATION = 10
 _MAX_MARKER_DETECTION_ATTEMPTS = 50
+_VERIFICATION_SETTLE_THRESHOLD_MM = 0.25
+_VERIFICATION_SETTLE_THRESHOLD_DEG = 0.25
+_VERIFICATION_SETTLE_TIMEOUT_S = 10.0
+_VERIFICATION_SETTLE_DELAY_S = 0.05
 
 class _IRobotService(Protocol):
     def get_current_position(self) -> list: ...
@@ -140,18 +144,21 @@ class ArucoMarkerHeightMappingService:
         if not self._transformer.is_available():
             return False, "System not calibrated — run robot calibration first"
 
+        measurement_pose = self._resolve_measurement_pose()
+        if measurement_pose is None:
+            return False, "Height measurement calibration pose is unavailable"
+
         self._height_service.begin_measurement_session()
         try:
             current_pos = self._robot_service.get_current_position()
             if not current_pos or len(current_pos) < 6:
                 return False, "Failed to get current robot position"
 
-            rx, ry, rz = current_pos[3], current_pos[4], current_pos[5]
+            z_target, rx, ry, rz = measurement_pose
             tool = int(getattr(self._robot_config, "robot_tool", 0))
             user = int(getattr(self._robot_config, "robot_user", 0))
             velocity = int(getattr(self._calib_config, "velocity", _DEFAULT_VELOCITY))
             acceleration = int(getattr(self._calib_config, "acceleration", _DEFAULT_ACCELERATION))
-            z_target = float(getattr(self._calib_config, "z_target", 300))
             required_ids = [int(v) for v in getattr(self._calib_config, "required_ids", [])]
             required = set(required_ids) or None
 
@@ -225,6 +232,8 @@ class ArucoMarkerHeightMappingService:
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
+        support_points_mm: list[tuple[str, float, float]] | None = None,
+        skip_labels: set[str] | None = None,
     ) -> tuple[bool, str]:
         self._stop_event.clear()
 
@@ -247,16 +256,19 @@ class ArucoMarkerHeightMappingService:
         if not self._transformer.is_available():
             return False, "System not calibrated — run robot calibration first"
 
+        measurement_pose = self._resolve_measurement_pose()
+        if measurement_pose is None:
+            return False, "Height measurement calibration pose is unavailable"
+
         current_pos = self._robot_service.get_current_position()
         if not current_pos or len(current_pos) < 6:
             return False, "Failed to get current robot position"
 
-        rx, ry, rz = current_pos[3], current_pos[4], current_pos[5]
+        z_target, rx, ry, rz = measurement_pose
         tool = int(getattr(self._robot_config, "robot_tool", 0))
         user = int(getattr(self._robot_config, "robot_user", 0))
         velocity = int(getattr(self._calib_config, "velocity", _DEFAULT_VELOCITY))
         acceleration = int(getattr(self._calib_config, "acceleration", _DEFAULT_ACCELERATION))
-        z_target = float(getattr(self._calib_config, "z_target", 300))
 
         grid_norm = self.generate_area_grid(corners_norm, rows, cols)
         if not grid_norm:
@@ -277,6 +289,27 @@ class ArucoMarkerHeightMappingService:
                     self._transformer.transform(float(px), float(py)),
                 )
             )
+
+        for sup_label, sx_mm, sy_mm in (support_points_mm or []):
+            try:
+                sup_px, sup_py = self._transformer.inverse_transform(float(sx_mm), float(sy_mm))
+            except Exception:
+                sup_px, sup_py = 0.0, 0.0
+            ordered_pairs.append((sup_label, (float(sup_px), float(sup_py)), (float(sx_mm), float(sy_mm))))
+            _logger.info("Support point %s added: x=%.3f y=%.3f mm", sup_label, sx_mm, sy_mm)
+
+        # Pre-register known-unreachable labels so _measure_points never attempts them
+        all_pairs = list(ordered_pairs)  # keep for planned_* metadata (includes skipped)
+        pre_skipped: list[str] = []
+        if skip_labels:
+            filtered_pairs = []
+            for pair in ordered_pairs:
+                if str(pair[0]) in skip_labels:
+                    pre_skipped.append(str(pair[0]))
+                    _logger.info("Pre-skipping known-unreachable point %s", pair[0])
+                else:
+                    filtered_pairs.append(pair)
+            ordered_pairs = filtered_pairs
 
         self._height_service.begin_measurement_session()
         safety_walls_enabled = self._robot_service.are_safety_walls_enabled()
@@ -316,8 +349,9 @@ class ArucoMarkerHeightMappingService:
                 point_labels=[str(point_id) for point_id, _, _ in ordered_pairs],
                 grid_rows=rows,
                 grid_cols=cols,
-                planned_samples=[[float(x_mm), float(y_mm)] for _, _, (x_mm, y_mm) in ordered_pairs],
-                planned_point_labels=[str(point_id) for point_id, _, _ in ordered_pairs],
+                planned_samples=[[float(x_mm), float(y_mm)] for _, _, (x_mm, y_mm) in all_pairs],
+                planned_point_labels=[str(point_id) for point_id, _, _ in all_pairs],
+                initial_unavailable_labels=pre_skipped or None,
             )
         finally:
             self._height_service.end_measurement_session()
@@ -403,7 +437,19 @@ class ArucoMarkerHeightMappingService:
                 if not moved:
                     measured = None
                 else:
-                    measured = self._height_service.measure_at(point.x, point.y, already_at_xy=True)
+                    settled = self._wait_for_pose_settle(
+                        target_position=[float(point.x), float(point.y), z_target, rx, ry, rz],
+                    )
+                    if not settled:
+                        _logger.warning(
+                            "Height model verification pose did not settle at %s (x=%.3f y=%.3f)",
+                            point.name,
+                            point.x,
+                            point.y,
+                        )
+                        measured = None
+                    else:
+                        measured = self._height_service.measure_at(point.x, point.y, already_at_xy=True)
                 if measured is None:
                     failures += 1
                     _logger.warning(
@@ -452,6 +498,15 @@ class ArucoMarkerHeightMappingService:
                     return float(point[0]), float(point[1])
         return None
 
+    def _resolve_measurement_pose(self) -> tuple[float, float, float, float] | None:
+        calib = self._height_service.get_calibration_data()
+        if calib is None:
+            return None
+        ref = getattr(calib, "robot_initial_position", None)
+        if ref is None or len(ref) < 6:
+            return None
+        return float(ref[2]), float(ref[3]), float(ref[4]), float(ref[5])
+
     def _measure_points(
         self,
         *,
@@ -475,12 +530,13 @@ class ArucoMarkerHeightMappingService:
         grid_cols: int = 0,
         planned_samples: Optional[list[list[float]]] = None,
         planned_point_labels: Optional[list[str]] = None,
+        initial_unavailable_labels: Optional[list[str]] = None,
     ) -> tuple[bool, str]:
         samples: list[list[float]] = []
         report_rows: list[tuple[object, float, float, float]] = []
         processed = 0
-        unreachable = 0
-        unavailable_labels: list[str] = []
+        unavailable_labels: list[str] = list(initial_unavailable_labels or [])
+        unreachable = len(unavailable_labels)
 
         for point_id, point_px, point_mm in ordered_pairs:
             if self._stop_event.is_set():
@@ -593,7 +649,40 @@ class ArucoMarkerHeightMappingService:
                     f"unreached {unreachable} point(s) before stop"
                 )
 
-            time.sleep(0.5)
+            settled = self._wait_for_pose_settle(
+                target_position=[float(x_mm), float(y_mm), float(z_target), float(rx), float(ry), float(rz)],
+            )
+            if not settled:
+                _logger.warning(
+                    "Measurement pose did not settle for point %s (%s) at x=%.3f y=%.3f",
+                    point_id,
+                    label,
+                    x_mm,
+                    y_mm,
+                )
+                if strict_fail_on_unreachable:
+                    self._save_samples(
+                        samples,
+                        self._extract_int_ids(report_rows) if save_ids else None,
+                        point_labels=self._extract_labels(report_rows) if point_labels else None,
+                        grid_rows=grid_rows,
+                        grid_cols=grid_cols,
+                        planned_points=planned_samples,
+                        planned_point_labels=planned_point_labels,
+                        unavailable_point_labels=unavailable_labels,
+                    )
+                    return False, f"Point {point_id} did not settle at the measurement pose"
+                unreachable += 1
+                unavailable_labels.append(str(point_id))
+                _logger.warning(
+                    "Skipping unsettled point %s (%s); reached=%d unreached=%d",
+                    point_id,
+                    label,
+                    processed,
+                    unreachable,
+                )
+                continue
+
             height_mm = self._height_service.measure_at(x_mm, y_mm, already_at_xy=True)
             if height_mm is None:
                 _logger.warning("Height measurement failed for point %s (%s)", point_id, label)
@@ -791,7 +880,7 @@ class ArucoMarkerHeightMappingService:
         user: int,
         velocity: int,
         acceleration: int,
-    ) -> bool:
+        ) -> bool:
         return self._robot_service.move_ptp(
             position=[x_mm, y_mm, z_target, rx, ry, rz],
             tool=tool,
@@ -800,6 +889,43 @@ class ArucoMarkerHeightMappingService:
             acceleration=acceleration,
             wait_to_reach=True,
         )
+
+    def _wait_for_pose_settle(self, *, target_position: list[float]) -> bool:
+        deadline = time.time() + _VERIFICATION_SETTLE_TIMEOUT_S
+        last_current = None
+        while time.time() < deadline:
+            current = self._robot_service.get_current_position()
+            last_current = current
+            if current and len(current) >= 6:
+                pos_ok = (
+                        abs(float(current[0]) - float(target_position[0])) <= _VERIFICATION_SETTLE_THRESHOLD_MM
+                        and abs(float(current[1]) - float(target_position[1])) <= _VERIFICATION_SETTLE_THRESHOLD_MM
+                        and abs(float(current[2]) - float(target_position[2])) <= _VERIFICATION_SETTLE_THRESHOLD_MM
+                )
+                ang_ok = (
+                        self._angle_diff(float(current[3]),
+                                         float(target_position[3])) <= _VERIFICATION_SETTLE_THRESHOLD_DEG
+                        and self._angle_diff(float(current[4]),
+                                             float(target_position[4])) <= _VERIFICATION_SETTLE_THRESHOLD_DEG
+                        and self._angle_diff(float(current[5]),
+                                             float(target_position[5])) <= _VERIFICATION_SETTLE_THRESHOLD_DEG
+                )
+
+                if pos_ok and ang_ok:
+                    return True
+            if self._stop_event.is_set():
+                return False
+            time.sleep(_VERIFICATION_SETTLE_DELAY_S)
+        _logger.warning(
+            f"Pose did not settle target->{target_position} , current->{last_current} within {int(_VERIFICATION_SETTLE_TIMEOUT_S)}s")
+        return False
+
+    @staticmethod
+    def _angle_diff(a: float, b: float) -> float:
+        d = (a - b) % 360.0
+        if d > 180.0:
+            d -= 360.0
+        return abs(d)
 
     def _recover_via_marker_zero(
         self,

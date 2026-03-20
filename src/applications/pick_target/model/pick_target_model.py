@@ -17,11 +17,17 @@ class PickTargetModel(IApplicationModel):
     def save(self, *args, **kwargs) -> None:
         pass
 
-    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
+    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float, float, float, float, float]]]:
         return self._service.capture()
 
-    def move_to(self, robot_x: float, robot_y: float) -> bool:
-        return self._service.move_to(robot_x, robot_y)
+    def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
+        return self._service.move_to(x, y, z, rx, ry, rz)
+
+    def move_to_base(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+        return self._service.move_to_base(x, y, rx, ry, rz)
+
+    def move_to_with_live_height(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+        return self._service.move_to_with_live_height(x, y, rx, ry, rz)
 
     def move_to_calibration_position(self) -> bool:
         return self._service.move_to_calibration_position()

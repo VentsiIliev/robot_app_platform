@@ -251,6 +251,34 @@ class FairinoRos2Client:
             logger.error("get_safety_walls_status error: %s", e, exc_info=True)
             return {"supported": False, "enabled": None, "error": str(e)}
 
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool=0,
+        user=0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        payload = {
+            "start_position": self._to_float_list(start_position),
+            "target_position": self._to_float_list(target_position),
+            "tool": int(tool),
+            "user": int(user),
+        }
+        if start_joint_state is not None:
+            payload["start_joint_state"] = start_joint_state
+        logger.debug("validate_pose → POST /reachability/pose payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/reachability/pose", json=payload, timeout=15)
+            data = response.json()
+            self._mark_available()
+            logger.debug("validate_pose ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("validate_pose error: %s", e, exc_info=True)
+            return {"success": False, "supported": False, "reachable": False, "error": str(e)}
+
     def are_safety_walls_enabled(self):
         try:
             response = requests.get(f"{self.server_url}/safety/walls/enabled", timeout=2)

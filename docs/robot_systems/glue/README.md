@@ -219,8 +219,8 @@ Within pick-and-place, camera-to-robot conversion is now also split explicitly b
 - homography maps image points into calibration-plane robot coordinates
 - matching captures contours and the current robot pose together through `ICaptureSnapshotService`
 - a dedicated `PlanePoseMapper` is rebuilt at transform time to convert those coordinates into the actual capture-pose frame
-- a glue-specific `TargetPointTransformer` then resolves the requested target point in that plane:
-  - `camera_center`
+- `VisionTargetResolver` (from [`src/robot_systems/glue/targeting/`](targeting/README.md)) then resolves the requested target point in that plane:
+  - `camera_center` / `camera`
   - `tool`
   - `gripper`
 - capture-plane reference-angle correction is applied before target-point offsets are added
@@ -239,7 +239,7 @@ For glue dispensing, the transform path is separate and currently simpler:
 
 1. image-space spray contour point
 2. raw homography into calibration-plane XY
-3. glue-level `TargetPointTransformer.transform_to_tool(...)` with no plane mapper
+3. `VisionTargetResolver.resolve(..., registry.tool(), current_rz=0.0)` — resolves to the tool point, no plane mapper
 4. final spray waypoint `[x, y, z, rx, ry, rz]` for `GlueProcess`
 
 This means the glue process now resolves spray geometry to the configured tool point directly, but it does not apply capture-pose plane remapping like pick-and-place.
@@ -265,4 +265,4 @@ The calibration service now refreshes both `robot/calibration.json` and `robot/c
 | `tools.py` | Defines `ToolChangerSettingsSerializer` |
 | `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
-→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [pick_and_place/](processes/pick_and_place/README.md)
+→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [pick_and_place/](processes/pick_and_place/README.md) · [targeting/](targeting/README.md)

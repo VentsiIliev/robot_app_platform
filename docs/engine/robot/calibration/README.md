@@ -166,6 +166,26 @@ Area-grid mode flow:
    - `grid_rows`
    - `grid_cols`
 
+Area-grid precheck flow:
+
+1. Generate the same row-major grid from the 4 selected corners
+2. Build target robot poses using the saved laser-calibration measurement pose for `z/rx/ry/rz`
+3. Simulate the real execution order without moving the robot by calling:
+   - `robot_service.validate_pose(start_state, target_state)`
+4. If remote safety walls are enabled, disable them for the full precheck and restore them at the end
+5. For each point:
+   - try `current_simulated_state -> target`
+   - if that fails, try `current_simulated_state -> anchor`
+   - then `anchor -> target`
+6. Classify each point as:
+   - direct
+   - via anchor
+   - unreachable
+7. Stream the classification back to the Calibration UI after each point so the grid updates live:
+   - green = reachable
+   - red = unreachable
+   - orange = pending
+
 Important separation:
 
 - this workflow is standalone and can be triggered from the Calibration application after homography calibration is complete
@@ -185,6 +205,12 @@ Safety-wall handling for area-grid mode:
 - `robot_service.enable_safety_walls()` is called in `finally`
 - marker mode does not change safety-wall state
 
+Precheck semantics:
+
+- area-grid precheck is simulation only
+- it does not move the robot
+- it mirrors the execution policy, but real execution still plans from the live robot state when each move is actually sent
+
 Marker collection and ordering:
 
 - unlike the earlier one-shot version, the standalone workflow now keeps detecting markers until all configured `required_ids` are collected or a 50-attempt limit is reached
@@ -197,6 +223,13 @@ Area-grid ordering:
 - left to right within each row
 - top row to bottom row
 - labels are persisted as `r1c1`, `r1c2`, ...
+
+Area-grid reachability verification:
+
+- the Calibration UI exposes a dedicated `Verify Grid` action after grid generation
+- verification runs in a background worker so the UI stays responsive
+- the preview keeps the generated grid visible and recolors unreachable points in red
+- this precheck is intended to warn the operator before starting a long measurement run so the area/grid can be adjusted
 
 Saved model and verification:
 

@@ -51,6 +51,16 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     @abstractmethod
     def get_safety_walls_status(self) -> dict: ...
 
+    @abstractmethod
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool: int = 0,
+        user: int = 0,
+        start_joint_state: dict | None = None,
+    ) -> dict: ...
+
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
         return self.get_state() not in ("error", "disconnected", "fault")

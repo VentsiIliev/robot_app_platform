@@ -1,5 +1,5 @@
 import logging
-from typing import Sequence
+from typing import Callable, Sequence
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 
 _logger = logging.getLogger(__name__)
@@ -61,6 +61,24 @@ class StubCalibrationService(ICalibrationService):
     ) -> tuple[bool, str]:
         _logger.info("Stub: measure_area_grid rows=%d cols=%d corners=%s", rows, cols, list(corners_norm))
         return True, "Stub: area grid height mapping complete"
+
+    def verify_area_grid(
+        self,
+        corners_norm: Sequence[tuple[float, float]],
+        rows: int,
+        cols: int,
+        progress_callback: Callable[[str, str, int, int], None] | None = None,
+    ) -> tuple[bool, str, dict]:
+        _logger.info("Stub: verify_area_grid rows=%d cols=%d corners=%s", rows, cols, list(corners_norm))
+        if progress_callback is not None:
+            progress_callback("r1c1", "direct", 1, 3)
+            progress_callback("r1c2", "via_anchor", 2, 3)
+            progress_callback("r1c3", "unreachable", 3, 3)
+        return True, "Stub: area grid verification complete", {
+            "direct_labels": ["r1c1"],
+            "via_anchor_labels": ["r1c2"],
+            "unreachable_labels": ["r1c3"],
+        }
 
     def stop_marker_height_measurement(self) -> None:
         _logger.info("Stub: stop_marker_height_measurement")

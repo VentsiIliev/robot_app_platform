@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
+from typing import Callable, Sequence
 
 
 class ICalibrationService(ABC):
@@ -49,6 +49,15 @@ class ICalibrationService(ABC):
         rows: int,
         cols: int,
     ) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def verify_area_grid(
+        self,
+        corners_norm: Sequence[tuple[float, float]],
+        rows: int,
+        cols: int,
+        progress_callback: Callable[[str, str, int, int], None] | None = None,
+    ) -> tuple[bool, str, dict]: ...
 
     @abstractmethod
     def stop_marker_height_measurement(self) -> None: ...

@@ -59,6 +59,20 @@ class CalibrationModel(IApplicationModel):
     ) -> tuple[bool, str]:
         return self._service.measure_area_grid(corners_norm, rows, cols)
 
+    def verify_area_grid(
+        self,
+        corners_norm,
+        rows: int,
+        cols: int,
+        progress_callback=None,
+    ) -> tuple[bool, str, dict]:
+        return self._service.verify_area_grid(
+            corners_norm,
+            rows,
+            cols,
+            progress_callback=progress_callback,
+        )
+
     def stop_marker_height_measurement(self) -> None:
         self._service.stop_marker_height_measurement()
 

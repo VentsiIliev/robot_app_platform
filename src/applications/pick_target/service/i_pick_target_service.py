@@ -3,20 +3,31 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
+RobotPose = Tuple[float, float, float, float, float, float]  # (x, y, z, rx, ry, rz)
+
 
 class IPickTargetService(ABC):
 
     @abstractmethod
-    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float]]]:
+    def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[RobotPose]]:
         """
         Snapshot the current vision state.
-        Returns (frame, pixel_centroids [(px, py)], robot_centroids [(rx, ry)]).
+        Returns (frame, pixel_centroids [(px, py)], robot_targets [(x, y, z, rx, ry, rz)]).
+        Each robot target is a complete height-corrected approach pose.
         frame may be None if vision is unavailable.
         """
 
     @abstractmethod
-    def move_to(self, robot_x: float, robot_y: float) -> bool:
-        """Move robot to (x, y, z=300, rx=180, ry=0, rz=0). Returns success."""
+    def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
+        """Move robot to the given pose. z is the pre-computed height-corrected approach height."""
+
+    @abstractmethod
+    def move_to_base(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+        """Move robot to (x, y) at base Z with the given orientation — no height correction."""
+
+    @abstractmethod
+    def move_to_with_live_height(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+        """Move to (x, y) at base Z, measure surface height live, then adjust Z."""
 
     @abstractmethod
     def move_to_calibration_position(self) -> bool:

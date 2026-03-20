@@ -209,6 +209,39 @@ ApplicationFactory.build(service)
 
 ---
 
+## `RobotJogWidget`
+
+**File:** `robot_jog_widget.py`
+
+A reusable Qt widget that provides manual robot jogging controls with directional buttons, step-size selection, and frame/end-effector selection.
+
+### Frame Selector
+
+The widget includes a `QComboBox` labeled **"Frame:"** in its bottom row. It allows the operator to select which end-effector point the jog motion is relative to.
+
+```python
+# Signals
+frame_changed = pyqtSignal(str)   # emitted when operator selects a different frame
+
+# Public API
+def set_frame_options(self, names: List[str], default: Optional[str] = None) -> None:
+    """Populate the combo box with the given names; optionally set the active selection."""
+
+def set_frame(self, name: str) -> None:
+    """Programmatically select a frame without emitting frame_changed."""
+
+def get_frame(self) -> str:
+    """Return the currently selected frame name, or '' if not set."""
+```
+
+`set_frame()` is intentionally signal-free so a parent widget can keep a button and the combo box in sync without triggering an infinite signal loop.
+
+### Integration in `PickTarget`
+
+The `PickTargetView` populates the combo with the three canonical end-effector names (`camera_center`, `tool`, `gripper`) and connects `frame_changed` to `_on_jog_frame_changed`. The existing **Target:** button on the control panel does the same thing — both selectors are kept in sync via `_apply_target(sync_jog=True/False)`.
+
+---
+
 ## Design Notes
 
 - **GC ownership**: PyQt6 weak-references Python bound methods as signal slots. If no strong ref holds the controller, it is GC'd and all signal connections die silently. `ApplicationFactory.build()` assigns `view._controller = controller` to transfer ownership to the view.

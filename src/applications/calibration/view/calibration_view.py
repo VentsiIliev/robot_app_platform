@@ -5,8 +5,8 @@ from PyQt6.QtWidgets import (
     QFormLayout, QHBoxLayout, QVBoxLayout, QWidget, QLabel,
     QTextEdit, QSizePolicy, QSpinBox, QScrollArea,
 )
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap, QTextCursor
+from PyQt6.QtCore import pyqtSignal, Qt, QPointF
+from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTextCursor
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.camera_view import CameraView
@@ -136,6 +136,17 @@ _MAGNIFY_SOURCE      = (0, 200, 255)   # BGR source-region indicator
 _GRID_POINT_COLOR    = QColor("#FF7043")
 _GRID_POINT_FILL     = QColor(255, 112, 67, 180)
 _GRID_LABEL_COLOR    = QColor("#1A1A2E")
+_GRID_REACHABLE_COLOR = QColor("#2E7D32")
+_GRID_REACHABLE_FILL  = QColor(46, 125, 50, 190)
+_GRID_UNREACHABLE_COLOR = QColor("#D32F2F")
+_GRID_UNREACHABLE_FILL  = QColor(211, 47, 47, 190)
+_SUBSTITUTE_PALETTE = [
+    (QColor("#F9A825"), QColor(249, 168,  37, 55)),   # amber
+    (QColor("#7B1FA2"), QColor(123,  31, 162, 55)),   # purple
+    (QColor("#0288D1"), QColor(  2, 136, 209, 55)),   # blue
+    (QColor("#E64A19"), QColor(230,  74,  25, 55)),   # deep orange
+    (QColor("#00838F"), QColor(  0, 131, 143, 55)),   # teal
+]
 _CARD_STYLE = f"background: {_PANEL_BG}; border: 1px solid #E0E0E0; border-radius: 10px;"
 
 
@@ -156,25 +167,84 @@ class _GridCameraView(CameraView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._grid_points: list[tuple[float, float]] = []
+        self._grid_labels: list[str] = []
+        self._point_statuses: dict[str, str] = {}
+        self._substitute_polygons: dict[str, list[tuple[float, float]]] = {}
 
-    def set_grid_points(self, points: list[tuple[float, float]]) -> None:
+    def set_grid_points(
+        self,
+        points: list[tuple[float, float]],
+        *,
+        point_labels: list[str] | None = None,
+        point_statuses: dict[str, str] | None = None,
+    ) -> None:
         self._grid_points = [(float(x), float(y)) for x, y in points]
+        self._grid_labels = [str(label) for label in (point_labels or [])]
+        self._point_statuses = {
+            str(label): str(status)
+            for label, status in (point_statuses or {}).items()
+        }
+        self.update()
+
+    def set_substitute_regions(self, polygons: dict[str, list[tuple[float, float]]]) -> None:
+        self._substitute_polygons = dict(polygons)
         self.update()
 
     def _paint_overlay(self, painter: QPainter, image_rect) -> None:
-        if not self._grid_points:
+        if not self._grid_points and not self._substitute_polygons:
             return
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        ordered_labels = list(self._substitute_polygons.keys())
+
+        # Build area clip path from the measurement area corners
+        area_corners = self.get_area_corners("measurement_area")
+        area_path: QPainterPath | None = None
+        if len(area_corners) >= 3:
+            area_path = QPainterPath()
+            area_path.addPolygon(QPolygonF([QPointF(*self._to_pixel(xn, yn)) for xn, yn in area_corners]))
+            area_path.closeSubpath()
+
+        # Draw search region polygons first (behind the dots), clipped to the area
+        for i, (u_label, poly_norm) in enumerate(self._substitute_polygons.items()):
+            if len(poly_norm) < 3:
+                continue
+            color_line, color_fill = _SUBSTITUTE_PALETTE[i % len(_SUBSTITUTE_PALETTE)]
+            painter.setPen(QPen(color_line, 1.0, Qt.PenStyle.DashLine))
+            painter.setBrush(QBrush(color_fill))
+            circle_path = QPainterPath()
+            circle_path.addPolygon(QPolygonF([QPointF(*self._to_pixel(xn, yn)) for xn, yn in poly_norm]))
+            circle_path.closeSubpath()
+            draw_path = circle_path.intersected(area_path) if area_path is not None else circle_path
+            painter.drawPath(draw_path)
+
         pen = QPen(_GRID_POINT_COLOR, 1.5)
         painter.setPen(pen)
         painter.setBrush(QBrush(_GRID_POINT_FILL))
 
         for index, (xn, yn) in enumerate(self._grid_points):
             px, py = self._to_pixel(xn, yn)
+            point_name = self._grid_labels[index] if index < len(self._grid_labels) else str(index + 1)
+            status = self._point_statuses.get(point_name, "")
+            if status in ("direct", "via_anchor", "reachable"):
+                painter.setPen(QPen(_GRID_REACHABLE_COLOR, 1.5))
+                painter.setBrush(QBrush(_GRID_REACHABLE_FILL))
+            elif status == "unreachable":
+                painter.setPen(QPen(_GRID_UNREACHABLE_COLOR, 1.5))
+                painter.setBrush(QBrush(_GRID_UNREACHABLE_FILL))
+            elif status == "substitute":
+                u_label = point_name[:-4]  # strip "_sub"
+                pair_idx = ordered_labels.index(u_label) if u_label in ordered_labels else 0
+                color_line, _ = _SUBSTITUTE_PALETTE[pair_idx % len(_SUBSTITUTE_PALETTE)]
+                painter.setPen(QPen(color_line, 1.5))
+                painter.setBrush(QBrush(color_line))
+            else:
+                painter.setPen(pen)
+                painter.setBrush(QBrush(_GRID_POINT_FILL))
             painter.drawEllipse(int(px) - 4, int(py) - 4, 8, 8)
             painter.setPen(_GRID_LABEL_COLOR)
-            painter.drawText(int(px) + 6, int(py) - 6, str(index + 1))
+            painter.drawText(int(px) + 6, int(py) - 6, point_name)
             painter.setPen(pen)
 
 
@@ -189,6 +259,7 @@ class CalibrationView(IApplicationView):
     test_calibration_requested   = pyqtSignal()
     measure_marker_heights_requested = pyqtSignal()
     generate_area_grid_requested = pyqtSignal()
+    verify_area_grid_requested   = pyqtSignal()
     measure_area_grid_requested  = pyqtSignal()
     view_depth_map_requested     = pyqtSignal()
     verify_saved_model_requested = pyqtSignal()
@@ -293,6 +364,11 @@ class CalibrationView(IApplicationView):
         self._measure_area_grid_btn.setStyleSheet(_BTN_TEST)
         self._measure_area_grid_btn.setEnabled(False)
         area_actions.addWidget(self._measure_area_grid_btn)
+
+        self._verify_area_grid_btn = MaterialButton("🧭  Verify Grid")
+        self._verify_area_grid_btn.setStyleSheet(_BTN_TEST)
+        self._verify_area_grid_btn.setEnabled(False)
+        area_actions.addWidget(self._verify_area_grid_btn)
 
         area_actions.addStretch()
         area_top.addLayout(area_actions, stretch=1)
@@ -423,6 +499,7 @@ class CalibrationView(IApplicationView):
         self._test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
         self._measure_marker_heights_btn.clicked.connect(self.measure_marker_heights_requested.emit)
         self._generate_area_grid_btn.clicked.connect(self.generate_area_grid_requested.emit)
+        self._verify_area_grid_btn.clicked.connect(self.verify_area_grid_requested.emit)
         self._measure_area_grid_btn.clicked.connect(self.measure_area_grid_requested.emit)
         self._clear_area_grid_btn.clicked.connect(self.clear_measurement_area)
         self._view_depth_map_btn.clicked.connect(self.view_depth_map_requested.emit)
@@ -465,6 +542,16 @@ class CalibrationView(IApplicationView):
 
     def set_measure_area_grid_enabled(self, enabled: bool) -> None:
         self._measure_area_grid_btn.setEnabled(enabled)
+        self._verify_area_grid_btn.setEnabled(enabled)
+
+    def set_verify_area_grid_busy(self, busy: bool, current: int = 0, total: int = 0) -> None:
+        if busy:
+            if total > 0:
+                self._verify_area_grid_btn.setText(f"⏳  Verifying Grid... {current}/{total}")
+            else:
+                self._verify_area_grid_btn.setText("⏳  Verifying Grid...")
+            return
+        self._verify_area_grid_btn.setText("🧭  Verify Grid")
 
     def set_depth_map_enabled(self, enabled: bool) -> None:
         self._view_depth_map_btn.setEnabled(enabled)
@@ -510,8 +597,21 @@ class CalibrationView(IApplicationView):
         self._preview_label.clear_area("measurement_area")
         self._preview_label.set_grid_points([])
 
-    def set_generated_grid_points(self, points: list[tuple[float, float]]) -> None:
-        self._preview_label.set_grid_points(points)
+    def set_generated_grid_points(
+        self,
+        points: list[tuple[float, float]],
+        *,
+        point_labels: list[str] | None = None,
+        point_statuses: dict[str, str] | None = None,
+    ) -> None:
+        self._preview_label.set_grid_points(
+            points,
+            point_labels=point_labels,
+            point_statuses=point_statuses,
+        )
+
+    def set_substitute_regions(self, polygons: dict[str, list[tuple[float, float]]]) -> None:
+        self._preview_label.set_substitute_regions(polygons)
 
     def get_area_grid_shape(self) -> tuple[int, int]:
         return int(self._grid_rows_spin.value()), int(self._grid_cols_spin.value())

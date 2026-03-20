@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
-from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
 from src.robot_systems.glue.processes.pick_and_place.errors import WorkpieceProcessResult
+from src.robot_systems.glue.targeting.pixel_target import PixelTarget
 
 
 def transform_pickup_point(workflow, pickup_px):
@@ -25,30 +25,22 @@ def transform_pickup_point(workflow, pickup_px):
     try:
         orientation = float(workflow._context.current_orientation or 0.0)
         rz_final = float(workflow._config.rz_orientation - orientation)
-        point_transformer = workflow._point_transformer
-        used_mapped_transformer = False
+        used_mapped_resolver = False
 
+        active_mapper = None
         capture_pose = workflow._context.current_capture_pose
         calibration_position = workflow._navigation.get_group_position("CALIBRATION")
         if capture_pose is not None and calibration_position is not None:
-            capture_mapper = PlanePoseMapper.from_positions(
+            active_mapper = PlanePoseMapper.from_positions(
                 source_position=calibration_position,
                 target_position=capture_pose,
             )
-            point_transformer = TargetPointTransformer(
-                base_transformer=workflow._transformer,
-                calibration_to_target_pose_mapper=capture_mapper,
-                camera_to_tcp_x_offset=workflow._config.camera_to_tcp_x_offset,
-                camera_to_tcp_y_offset=workflow._config.camera_to_tcp_y_offset,
-                camera_center_point=(workflow._config.camera_center_x, workflow._config.camera_center_y),
-                tool_point=(workflow._config.tool_point_x, workflow._config.tool_point_y),
-                gripper_point=(workflow._config.gripper_point_x, workflow._config.gripper_point_y),
-            )
-            used_mapped_transformer = True
+            used_mapped_resolver = True
         elif workflow._calibration_to_target_pose_mapper is not None:
-            used_mapped_transformer = True
+            active_mapper = workflow._calibration_to_target_pose_mapper
+            used_mapped_resolver = True
 
-        result = resolve_target_point(workflow, pickup_px, rz_final, point_transformer)
+        result = resolve_target_point(workflow, pickup_px, rz_final, active_mapper)
 
         calibration_x, calibration_y = result.calibration_xy
         workflow._logger.debug(
@@ -57,7 +49,7 @@ def transform_pickup_point(workflow, pickup_px):
             calibration_x,
             calibration_y,
         )
-        if used_mapped_transformer:
+        if used_mapped_resolver:
             robot_x, robot_y = result.plane_xy
             workflow._logger.debug(
                 "Calibration-plane robot point (%.3f, %.3f) -> mapped robot point (%.3f, %.3f)",
@@ -73,7 +65,7 @@ def transform_pickup_point(workflow, pickup_px):
             )
         workflow._context.current_pickup_point_robot_mapped = (float(robot_x), float(robot_y))
         workflow._context.current_pickup_reference_delta = tuple(map(float, result.pickup_plane_reference_delta_xy))
-        workflow._context.current_pickup_rz = result.current_rz
+        workflow._context.current_pickup_rz = result.rz
         robot_x, robot_y = result.final_xy
         if workflow._config.pickup_target in {"gripper", "tool"}:
             workflow._logger.debug(
@@ -99,25 +91,13 @@ def transform_pickup_point(workflow, pickup_px):
         workflow._publish_diagnostics()
         return None, None, WorkpieceProcessResult.fail(error)
 
-def resolve_target_point(workflow, pickup_px, rz_final, point_transformer: TargetPointTransformer):
-    result = None
-    if workflow._config.pickup_target == "gripper":
-        result = point_transformer.transform_to_gripper(
-            pickup_px[0],
-            pickup_px[1],
-            current_rz=rz_final,
-        )
-    elif workflow._config.pickup_target == "tool":
-        result = point_transformer.transform_to_tool(
-            pickup_px[0],
-            pickup_px[1],
-            current_rz=rz_final,
-        )
-    else:
-        result = point_transformer.transform_to_camera_center(
-            pickup_px[0],
-            pickup_px[1],
-            current_rz=rz_final if workflow._config.apply_pickup_plane_reference_delta else None,
-        )
 
-    return result
+def resolve_target_point(workflow, pickup_px, rz_final, active_mapper):
+    target = workflow._config.pickup_target
+    # For camera_center, rz=None skips TCP-delta correction (controlled by apply_pickup_plane_reference_delta)
+    if target in ("camera_center", "camera"):
+        rz = rz_final if workflow._config.apply_pickup_plane_reference_delta else None
+    else:
+        rz = rz_final
+    pixel_target = PixelTarget(pickup_px[0], pickup_px[1], rz=rz)
+    return workflow._resolver.resolve_named(pixel_target, target, mapper=active_mapper)

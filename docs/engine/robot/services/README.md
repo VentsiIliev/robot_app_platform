@@ -220,6 +220,7 @@ Delegates:
 - `get_current_position()` → `list(self._state.position)` — reads the cache maintained by `RobotStateManager`, **no XML-RPC call**
 - `enable_robot()` / `disable_robot()` → `self._robot.enable()` / `.disable()`
 - `get_current_velocity()` / `get_current_acceleration()` / `get_state()` / `get_state_topic()` → `self._state`
+- `validate_pose(start_position, target_position, tool=0, user=0)` → `self._robot.validate_pose(...)`
 - remote safety-wall control:
   - `enable_safety_walls()` → `self._robot.enable_safety_walls()`
   - `disable_safety_walls()` → `self._robot.disable_safety_walls()`
@@ -232,6 +233,12 @@ Remote safety-wall support is intentionally part of `IRobotService`, not `ISafet
   - local platform-side pose validation
 - remote safety walls
   - execution-environment / MoveIt planning-scene control
+
+`validate_pose(...)` is a third, separate concern:
+
+- planning-only reachability simulation from an explicit start state
+- no live robot movement
+- intended for workflow prechecks such as area-grid verification in the Calibration UI
 
 ---
 

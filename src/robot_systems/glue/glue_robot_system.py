@@ -183,7 +183,7 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
         from src.robot_systems.glue.domain.matching.matching_service import MatchingService
         from src.robot_systems.glue.capture_snapshot_service import GlueCaptureSnapshotService
-        from src.robot_systems.glue.target_point_transformer import TargetPointTransformer
+        from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
         from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
             JsonWorkpieceRepository
         from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
@@ -202,8 +202,8 @@ class GlueRobotSystem(BaseRobotSystem):
             robot_service=self._robot,
         )
         transformer = HomographyTransformer(vision_service.camera_to_robot_matrix_path) if vision_service else None
-        glue_point_transformer = (
-            TargetPointTransformer(
+        glue_resolver = (
+            VisionTargetResolver(
                 base_transformer=HomographyTransformer(
                     vision_service.camera_to_robot_matrix_path,
                     camera_to_tcp_x_offset=self._robot_config.camera_to_tcp_x_offset,
@@ -211,11 +211,9 @@ class GlueRobotSystem(BaseRobotSystem):
                     camera_to_tool_x_offset=self._robot_config.camera_to_tool_x_offset,
                     camera_to_tool_y_offset=self._robot_config.camera_to_tool_y_offset,
                 ),
+                registry=PointRegistry(self._robot_config),
                 camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                 camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
-                camera_center_point=(float(self._robot_config.camera_center_x), float(self._robot_config.camera_center_y)),
-                tool_point=(float(self._robot_config.tool_point_x), float(self._robot_config.tool_point_y)),
-                gripper_point=(float(self._robot_config.gripper_point_x), float(self._robot_config.gripper_point_y)),
             )
             if vision_service is not None else None
         )
@@ -244,7 +242,7 @@ class GlueRobotSystem(BaseRobotSystem):
                 matching_service=matching_service,
                 job_builder=GlueJobBuilderService(
                     transformer=transformer,
-                    point_transformer=glue_point_transformer,
+                    resolver=glue_resolver,
                     z_min=float(self._robot_config.safety_limits.z_min),
                 ),
                 glue_process=glue_process,

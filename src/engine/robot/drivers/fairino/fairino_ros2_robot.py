@@ -92,6 +92,22 @@ class FairinoRos2Robot(IRobot):
     def get_safety_walls_status(self) -> dict:
         return self._client.get_safety_walls_status()
 
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool: int = 0,
+        user: int = 0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        return self._client.validate_pose(
+            start_position,
+            target_position,
+            tool=tool,
+            user=user,
+            start_joint_state=start_joint_state,
+        )
+
     def enable(self) -> None:
         logger.info("enable →")
         self._client.enable()
