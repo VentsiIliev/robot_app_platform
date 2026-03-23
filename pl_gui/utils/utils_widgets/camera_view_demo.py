@@ -5,7 +5,7 @@ Simulates a live feed via a QTimer that generates simple gradient frames.
 Pre-registers two areas and activates one for interactive editing.
 
 Run with:
-    python pl_gui/utils/utils_widgets/camera_view_demo.py
+    python pl_gui/utils/utils_widgets/camera_view_demo.y_pixels
 """
 import sys
 import random

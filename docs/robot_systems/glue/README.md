@@ -239,7 +239,7 @@ For glue dispensing, the transform path is separate and currently simpler:
 
 1. image-space spray contour point
 2. raw homography into calibration-plane XY
-3. `VisionTargetResolver.resolve(..., registry.tool(), current_rz=0.0)` — resolves to the tool point, no plane mapper
+3. `VisionTargetResolver.resolve(VisionPoseRequest(...), registry.tool())` — resolves to the tool point and returns the final pose, no plane mapper
 4. final spray waypoint `[x, y, z, rx, ry, rz]` for `GlueProcess`
 
 This means the glue process now resolves spray geometry to the configured tool point directly, but it does not apply capture-pose plane remapping like pick-and-place.

@@ -10,9 +10,7 @@ from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QP
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.camera_view import CameraView
-from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.robot_jog_widget import RobotJogWidget
 
 _BG          = "#F8F9FA"
 _PANEL_BG    = "#FFFFFF"
@@ -128,8 +126,8 @@ MaterialButton:disabled {
 _CROSSHAIR_COLOR     = (0, 255, 80)    # BGR bright green
 _CROSSHAIR_THICKNESS = 1
 
-_MAGNIFY_CROP_HALF   = 60              # px from center to crop edge
-_MAGNIFY_INSET_SIZE  = 210             # output inset square (px)
+_MAGNIFY_CROP_HALF   = 60              # x_pixels from center to crop edge
+_MAGNIFY_INSET_SIZE  = 210             # output inset square (x_pixels)
 _MAGNIFY_MARGIN      = 10              # inset distance from frame edge
 _MAGNIFY_BORDER      = (230, 230, 230) # BGR inset border
 _MAGNIFY_SOURCE      = (0, 200, 255)   # BGR source-region indicator
@@ -249,6 +247,7 @@ class _GridCameraView(CameraView):
 
 
 class CalibrationView(IApplicationView):
+    SHOW_JOG_WIDGET = True
 
     capture_requested            = pyqtSignal()
     calibrate_camera_requested   = pyqtSignal()
@@ -263,8 +262,6 @@ class CalibrationView(IApplicationView):
     measure_area_grid_requested  = pyqtSignal()
     view_depth_map_requested     = pyqtSignal()
     verify_saved_model_requested = pyqtSignal()
-    jog_requested              = pyqtSignal(str, str, str, float)
-    jog_stopped                = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__("Calibration", parent)
@@ -277,13 +274,6 @@ class CalibrationView(IApplicationView):
         root.setSpacing(0)
         root.addWidget(self._build_preview_panel(),  stretch=3)
         root.addWidget(self._build_controls_panel(), stretch=2)
-
-        self._drawer = DrawerToggle(self, side="right", width=320)
-        self._jog_widget = RobotJogWidget()
-        self._drawer.add_widget(self._jog_widget)
-
-        self._jog_widget.jog_requested.connect(self.jog_requested)
-        self._jog_widget.jog_stopped.connect(self.jog_stopped)
 
     def can_close(self) -> bool:
         if hasattr(self, "_controller") and self._controller.is_calibrating():
@@ -664,6 +654,3 @@ class CalibrationView(IApplicationView):
         cv2.rectangle(frame, (x1, y1), (x2, y2), _MAGNIFY_SOURCE, 1)
 
         return frame
-
-    def set_jog_position(self, pos: list) -> None:
-        self._jog_widget.set_position(pos)

@@ -13,7 +13,7 @@ def _stage_linear_densification(
     the subsequent spline stage has enough data to produce a smooth curve.
 
     Args:
-        path: Original sparse path (list of [x, y, z, rx, ry, rz] points).
+        path: Original sparse path (list of [x, y, z, rx_degrees, ry_degrees, rz_degrees] points).
         adaptive_spacing_mm: Target distance between consecutive points in mm.
         debug: If True, print progress information.
 
@@ -92,7 +92,7 @@ def interpolate_path_two_stage(
 
     Args:
         path: Input path as a list of N points, each point is a list of floats
-            (e.g. [x, y, z, rx, ry, rz]).
+            (e.g. [x, y, z, rx_degrees, ry_degrees, rz_degrees]).
         adaptive_spacing_mm: Target distance between consecutive points in mm
             for the linear densification stage.
         spline_density_multiplier: Controls how much denser the spline output

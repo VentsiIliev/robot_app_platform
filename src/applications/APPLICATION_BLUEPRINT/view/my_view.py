@@ -6,6 +6,8 @@ from src.applications.base.i_application_view import IApplicationView
 
 class MyView(IApplicationView):
     """Pure Qt widget — no services, no model, no business logic."""
+    SHOW_JOG_WIDGET = False
+    JOG_FRAME_SELECTOR_ENABLED = False
 
     # Outbound signals — one per user action
     save_requested = pyqtSignal(str)
@@ -23,6 +25,10 @@ class MyView(IApplicationView):
 
         # TODO: wire internal signals to outbound pyqtSignals
         # self._btn.clicked.connect(self._on_inner_save)
+
+    def _configure_jog_widget(self) -> None:
+        """Optional hook: populate frame options when enabling frame selection."""
+        pass
 
     # ── Inbound setters (controller → view) ──────────────────────────────
 

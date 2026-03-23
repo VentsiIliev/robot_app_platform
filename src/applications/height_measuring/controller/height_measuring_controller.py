@@ -8,8 +8,6 @@ from PyQt6.QtGui import QImage, QPixmap
 
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
-from src.applications.base.jog_controller import JogController
-from src.applications.base.robot_jog_service import RobotJogService
 from src.applications.height_measuring.model.height_measuring_model import HeightMeasuringModel
 from src.applications.height_measuring.model.mapper import HeightMeasuringSettingsMapper
 from src.applications.height_measuring.view.height_measuring_view import HeightMeasuringView
@@ -36,11 +34,10 @@ class _FireAndForget(QRunnable):
 
 class HeightMeasuringController(IApplicationController, BackgroundWorker):
 
-    def __init__(self, model, view, messaging, jog_service):
+    def __init__(self, model, view, messaging):
         BackgroundWorker.__init__(self)
         self._model           = model
         self._view            = view
-        self._jog             = JogController(view, jog_service, messaging)
         self._bridge          = _Bridge()
         self._stopped         = False
         self._frame_timer     = QTimer()
@@ -81,12 +78,10 @@ class HeightMeasuringController(IApplicationController, BackgroundWorker):
         info   = self._model.get_calibration_info() if is_cal else None
         self._view.set_calibration_status(is_cal, info)
         self._frame_timer.start()
-        self._jog.start()
 
     def stop(self) -> None:
         self._stopped = True  # ← set first, before anything else
         self._detect_timer.stop()
-        self._jog.stop()
         self._frame_timer.stop()
         self._model.cleanup()
         self._stop_threads()
@@ -218,4 +213,3 @@ class HeightMeasuringController(IApplicationController, BackgroundWorker):
 
     def _run_blocking(self, fn, on_done) -> None:
         self._run_in_thread(fn=fn, on_done=on_done)
-

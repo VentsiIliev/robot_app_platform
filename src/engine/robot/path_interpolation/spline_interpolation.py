@@ -90,12 +90,12 @@ def interpolate_path_spline_with_lambda(
 ) -> list[list[float]]:
     """Smooth a path using univariate splines with arc-length parameterization.
 
-    Each coordinate dimension (x, y, z, rx, ry, rz, ...) is fitted with an
+    Each coordinate dimension (x, y, z, rx_degrees, ry_degrees, rz_degrees, ...) is fitted with an
     independent ``UnivariateSpline``.  The spline is then sampled at evenly spaced arc-length intervals to produce the output path.
 
     Args:
         path: Input path as a list of N points, each point is a list of floats
-            (e.g. [x, y, z, rx, ry, rz]).
+            (e.g. [x, y, z, rx_degrees, ry_degrees, rz_degrees]).
         target_spacing_mm: Desired distance between consecutive output points
             in mm.  Smaller values produce denser output.
         k: Degree of the spline curve (1=linear, 2=quadratic, 3=cubic).

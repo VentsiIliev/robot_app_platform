@@ -120,7 +120,7 @@ class MenuIcon(QPushButton):
         # Update stylesheet for text-only display
         self.setStyleSheet(self.styleSheet() + f"""
             QPushButton {{
-                font-size: {font_size}px;
+                font-size: {font_size}x_pixels;
                 font-weight: 500;
                 letter-spacing: 0.5px;
             }}
@@ -256,8 +256,8 @@ class MenuIcon(QPushButton):
             # Update border-radius in stylesheet
             import re
             updated_style = re.sub(
-                r'border-radius:\s*\d+px',
-                f'border-radius: {radius}px',
+                r'border-radius:\s*\d+x_pixels',
+                f'border-radius: {radius}x_pixels',
                 current_style
             )
             self.setStyleSheet(updated_style)

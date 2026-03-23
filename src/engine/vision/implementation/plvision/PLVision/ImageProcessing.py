@@ -1,5 +1,5 @@
 """
-* File: ImageProcessing.py
+* File: ImageProcessing.y_pixels
 * Author: AtD
 * Comments: This file contains the main function of the project.
 * Revision history:

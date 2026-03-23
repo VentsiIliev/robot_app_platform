@@ -77,6 +77,7 @@ class RobotJogWidget(QFrame):
         super().__init__(parent)
         self._timers:   dict[str, QTimer]       = {}
         self._axis_map: dict[str, tuple[str, str]] = {}
+        self._frame_label: Optional[QLabel]     = None
         self._frame_combo: Optional[QComboBox]  = None
         self._setup_ui()
         self._setup_timers()
@@ -177,6 +178,14 @@ class RobotJogWidget(QFrame):
         if default and default in names:
             self._frame_combo.setCurrentText(default)
         self._frame_combo.blockSignals(False)
+
+    def enable_frame_selector(self, enabled: bool) -> None:
+        """Show or hide the optional frame selector."""
+        is_visible = bool(enabled)
+        if self._frame_label is not None:
+            self._frame_label.setVisible(is_visible)
+        if self._frame_combo is not None:
+            self._frame_combo.setVisible(is_visible)
 
     def set_frame(self, name: str) -> None:
         """Programmatically select a frame without emitting frame_changed."""
@@ -372,9 +381,9 @@ class RobotJogWidget(QFrame):
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        frame_lbl = QLabel("Frame:")
-        frame_lbl.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
-        layout.addWidget(frame_lbl)
+        self._frame_label = QLabel("Frame:")
+        self._frame_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
+        layout.addWidget(self._frame_label)
 
         self._frame_combo = QComboBox()
         self._frame_combo.setFixedHeight(32)
@@ -392,6 +401,7 @@ class RobotJogWidget(QFrame):
         self._frame_combo.currentTextChanged.connect(self._on_frame_combo_changed)
         layout.addWidget(self._frame_combo)
         layout.addStretch()
+        self.enable_frame_selector(False)
         return layout
 
     @staticmethod
@@ -500,6 +510,5 @@ class RobotJogWidget(QFrame):
             direction = "Minus" if direction == "Plus" else "Plus"
 
         self.jog_requested.emit("JOG_ROBOT", axis, direction, step)
-
 
 

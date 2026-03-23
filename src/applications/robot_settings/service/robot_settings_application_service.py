@@ -97,7 +97,7 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         try:
             values = [float(x.strip()) for x in point_str.strip("[] ").split(",")]
             if len(values) != 6:
-                return False, "Invalid position format — expected 6 values [x, y, z, rx, ry, rz]"
+                return False, "Invalid position format — expected 6 values [x, y, z, rx_degrees, ry_degrees, rz_degrees]"
             ok = self._navigation.move_to_position(values, group_name)
             if ok:
                 return True, ""

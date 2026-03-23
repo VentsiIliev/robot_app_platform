@@ -1,5 +1,5 @@
 """
-Tests for src/robot_systems/glue/domain/permissions/permissions_repository.py
+Tests for src/robot_systems/glue/domain/permissions/permissions_repository.y_pixels
 
 Covers JSON persistence, default fallback, copy semantics, and round-trip fidelity.
 Uses a temp file so tests are fully isolated and leave no side effects.

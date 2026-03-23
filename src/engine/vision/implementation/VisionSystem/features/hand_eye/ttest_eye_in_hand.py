@@ -1,7 +1,7 @@
 import logging
 #!/usr/bin/env python3
 """
-chessboard_to_robot_fixed.py
+chessboard_to_robot_fixed.y_pixels
 
 Detects chessboard in camera feed, computes 3D chessboard points,
 and transforms them to robot coordinates using hand-eye calibration.

@@ -109,7 +109,7 @@ class CameraTcpOffsetCalibrationService:
         try:
             _logger.info(
                 "Starting camera TCP offset calibration: marker_id=%d iterations=%d rotation_step_deg=%.3f "
-                "approach=(z=%.3f rx=%.3f ry=%.3f rz=%.3f) motion=(vel=%d acc=%d)",
+                "approach=(z=%.3f rx_degrees=%.3f ry_degrees=%.3f rz_degrees=%.3f) motion=(vel=%d acc=%d)",
                 cfg.marker_id,
                 cfg.iterations,
                 cfg.rotation_step_deg,
@@ -134,7 +134,7 @@ class CameraTcpOffsetCalibrationService:
             target_px, target_py = initial_detection
             target_x, target_y = self._transformer.transform(target_px, target_py)
             _logger.info(
-                "Initial marker detection: px=(%.3f, %.3f) -> camera-center robot target=(%.3f, %.3f)",
+                "Initial marker detection: x_pixels=(%.3f, %.3f) -> camera-center robot target=(%.3f, %.3f)",
                 target_px,
                 target_py,
                 target_x,
@@ -243,7 +243,7 @@ class CameraTcpOffsetCalibrationService:
         pixel_error_norm = math.hypot(pixel_error_x, pixel_error_y)
 
         _logger.info(
-            "Sample %d: rz=%.3f marker_px=(%.3f, %.3f) pixel_error=(%.3f, %.3f | norm=%.3f) "
+            "Sample %d: rz_degrees=%.3f marker_px=(%.3f, %.3f) pixel_error=(%.3f, %.3f | norm=%.3f) "
             "desired_camera_center=(%.3f, %.3f) current_pose_xy=(%.3f, %.3f) "
             "world_correction=(%.6f, %.6f) local_estimate=(%.6f, %.6f)",
             index + 1,
@@ -297,7 +297,7 @@ class CameraTcpOffsetCalibrationService:
                 center_x = float(center[0])
                 center_y = float(center[1])
                 _logger.debug(
-                    "%s: detected marker %d at center px=(%.3f, %.3f) on attempt %d/%d",
+                    "%s: detected marker %d at center x_pixels=(%.3f, %.3f) on attempt %d/%d",
                     label,
                     marker_id,
                     center_x,

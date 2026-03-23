@@ -27,8 +27,8 @@ class PlanePoseMapper:
         self._sin_delta = math.sin(self._delta_rz_rad)
 
         self._logger.info(
-            "PlanePoseMapper initialized: source=(%.3f, %.3f, rz=%.3f), "
-            "target=(%.3f, %.3f, rz=%.3f), delta_rz=%.3f",
+            "PlanePoseMapper initialized: source=(%.3f, %.3f, rz_degrees=%.3f), "
+            "target=(%.3f, %.3f, rz_degrees=%.3f), delta_rz=%.3f",
             source_pose.x,
             source_pose.y,
             source_pose.rz,

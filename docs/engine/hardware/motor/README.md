@@ -165,7 +165,7 @@ Transport exceptions are caught; `MotorState.communication_errors` is populated 
 Standalone smoke-test script. No hardware required.
 
 ```bash
-python src/engine/hardware/motor/mock_runner.py
+python src/engine/hardware/motor/mock_runner.y_pixels
 ```
 
 Scenarios: `turn_on/off`, `persistent_connection`, `health_check_healthy`, `health_check_with_errors`, `health_check_all`, `transport_failure`.

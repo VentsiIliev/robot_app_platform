@@ -66,7 +66,10 @@ Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messa
 WidgetApplication(widget_factory=lambda _ms: factory.build(service))
 
 # Application needs broker for live data subscriptions:
-WidgetApplication(widget_factory=lambda ms: factory.build(service, ms))
+WidgetApplication(widget_factory=lambda ms: factory.build(service, messaging=ms))
+
+# Application supports shared jog wiring:
+WidgetApplication(widget_factory=lambda ms: factory.build(service, messaging=ms, jog_service=jog_service))
 ```
 
 ---
@@ -89,11 +92,12 @@ class ApplicationFactory(ABC):
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController: ...
 ```
 
-`build()` calls the three abstract methods in order, then:
-1. Calls `controller.load()` — populates the view from the model
-2. Assigns `view._controller = controller` — GC ownership fix (never write this yourself)
-3. Logs the build at DEBUG level
-4. Returns the `view`
+`build(service, messaging=None, jog_service=None)` calls the three abstract methods in order, then:
+1. Optionally auto-attaches `JogController` when the view enables jog and both shared dependencies are provided
+2. Calls `controller.load()` — populates the view from the model
+3. Assigns `view._controller = controller` — GC ownership fix (never write this yourself)
+4. Logs the build at DEBUG level
+5. Returns the `view`
 
 ---
 
@@ -118,6 +122,17 @@ class IApplicationModel(ABC):
 
 ```python
 class IApplicationView(AppWidget):
+    SHOW_JOG_WIDGET = False
+    JOG_FRAME_SELECTOR_ENABLED = False
+
+    jog_requested = pyqtSignal(str, str, str, float)
+    jog_started = pyqtSignal(str)
+    jog_stopped = pyqtSignal(str)
+
+    def enable_jog_widget(self, enabled: bool) -> None: ...
+    def set_jog_position(self, pos: list) -> None: ...
+    def get_jog_frame(self) -> str: ...
+
     @abstractmethod
     def setup_ui(self) -> None: ...
 
@@ -125,7 +140,46 @@ class IApplicationView(AppWidget):
     def clean_up(self) -> None: ...
 ```
 
-Extends `AppWidget` from `pl_gui` — required for shell integration. `setup_ui()` is called by `AppWidget.__init__` after all instance attributes are set. `clean_up()` is for stopping timers or threads when the widget is destroyed.
+Extends `AppWidget` from `pl_gui` and now owns the shared jog drawer lifecycle for all application views.
+
+Behavior:
+- every `IApplicationView` gets a `RobotJogWidget` and `DrawerToggle` installed automatically after `setup_ui()`
+- the drawer is hidden by default
+- views opt in by setting `SHOW_JOG_WIDGET = True`
+- views that need frame selection opt in with `JOG_FRAME_SELECTOR_ENABLED = True`
+- controllers can always call `view.set_jog_position(...)`
+- `JogController` can always ask `view.get_jog_frame()`
+- `ApplicationFactory.build(..., messaging=..., jog_service=...)` auto-attaches jog support when the view opts in
+
+This removes the need for each application view to manually create `_drawer` and `_jog_widget`.
+It also removes the need for application controllers to manually construct `JogController`.
+
+Typical view configuration:
+
+```python
+class PickTargetView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+```
+
+If a view needs custom jog setup, implement a private hook:
+
+```python
+def _configure_jog_widget(self) -> None:
+    self._jog_widget.set_frame_options(
+        ["camera_center", "tool", "gripper"],
+        default="tool",
+    )
+```
+
+If the view needs to react to frame changes, implement:
+
+```python
+def _on_jog_frame_changed(self, name: str) -> None:
+    ...
+```
+
+`setup_ui()` is still called by `AppWidget.__init__` after the subclass has initialized its own state. `clean_up()` remains the place for stopping timers or threads when the widget is destroyed.
 
 ---
 
@@ -196,12 +250,13 @@ This keeps translation at the UI boundary instead of pushing localized strings i
 ## Data Flow
 
 ```
-ApplicationFactory.build(service)
+ApplicationFactory.build(service, messaging=..., jog_service=...)
       │
       ├─ _create_model(service) → model
       ├─ _create_view()         → view
       ├─ _create_controller(model, view) → controller
       │
+      ├─ [optional] auto-create JogController when view enables jog
       ├─ controller.load()          ← populate view from model
       ├─ view._controller = controller  ← GC ownership fix
       └─ return view
@@ -217,13 +272,16 @@ A reusable Qt widget that provides manual robot jogging controls with directiona
 
 ### Frame Selector
 
-The widget includes a `QComboBox` labeled **"Frame:"** in its bottom row. It allows the operator to select which end-effector point the jog motion is relative to.
+The widget has an optional `QComboBox` labeled **"Frame:"** in its bottom row. It is hidden by default and must be enabled explicitly by the host view.
 
 ```python
 # Signals
 frame_changed = pyqtSignal(str)   # emitted when operator selects a different frame
 
 # Public API
+def enable_frame_selector(self, enabled: bool) -> None:
+    """Show or hide the optional frame selector."""
+
 def set_frame_options(self, names: List[str], default: Optional[str] = None) -> None:
     """Populate the combo box with the given names; optionally set the active selection."""
 
@@ -234,11 +292,40 @@ def get_frame(self) -> str:
     """Return the currently selected frame name, or '' if not set."""
 ```
 
+Typical usage:
+
+```python
+self._jog_widget = RobotJogWidget()
+self._jog_widget.enable_frame_selector(True)
+self._jog_widget.set_frame_options(["camera_center", "tool", "gripper"], default="tool")
+```
+
 `set_frame()` is intentionally signal-free so a parent widget can keep a button and the combo box in sync without triggering an infinite signal loop.
 
 ### Integration in `PickTarget`
 
-The `PickTargetView` populates the combo with the three canonical end-effector names (`camera_center`, `tool`, `gripper`) and connects `frame_changed` to `_on_jog_frame_changed`. The existing **Target:** button on the control panel does the same thing — both selectors are kept in sync via `_apply_target(sync_jog=True/False)`.
+`PickTargetView` enables the frame selector via the base view flags, populates the combo in `_configure_jog_widget()`, and reacts to selection changes in `_on_jog_frame_changed()`. The existing **Target:** button on the control panel does the same thing, so both selectors stay in sync via `_apply_target(sync_jog=True/False)`.
+
+### Shared Jog Path
+
+`JogController` now reads the active jog frame from the host view when the view exposes:
+
+```python
+def get_jog_frame(self) -> str: ...
+```
+
+and forwards that into `RobotJogService`.
+
+In the shared application path, you normally do not create `JogController` yourself anymore. The base factory does it automatically when:
+- the view sets `SHOW_JOG_WIDGET = True`
+- the factory `build(...)` call receives both `messaging` and `jog_service`
+
+In glue-system applications, the wiring can provide a target-aware jog service that converts a jog request into a corrected Cartesian pose move. That shared path lets jog moves respect:
+- TCP-delta correction
+- selected end-effector point (`camera`, `tool`, `gripper`)
+- robot tool/user settings from glue configuration
+
+Applications that do not enable the frame selector continue to behave like normal raw jog UIs.
 
 ---
 

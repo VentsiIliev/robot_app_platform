@@ -159,7 +159,7 @@ class TestAppServiceSendAccessPackage(unittest.TestCase):
 
     def test_email_sender_missing_returns_false(self):
         svc = UserManagementApplicationService(_make_repo())
-        # _email_sender.py doesn't exist — ImportError is caught
+        # _email_sender.y_pixels doesn't exist — ImportError is caught
         ok, msg = svc.send_access_package(_record("1", email="user@test.com"), "/tmp/qr.png")
         self.assertFalse(ok)
 

@@ -167,7 +167,8 @@ class PickAndPlaceVisualizerController(IApplicationController):
             try:
                 self._broker.unsubscribe(topic, cb)
             except Exception:
-                pass
+                import traceback
+                traceback.print_exc()
         self._subs.clear()
 
     # ── Broker subscriptions ──────────────────────────────────────────

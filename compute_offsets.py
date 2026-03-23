@@ -3,7 +3,7 @@ from typing import Tuple
 
 
 # ============================================================
-# 1. INPUT: measured positions at SAME physical point (rz=0)
+# 1. INPUT: measured positions at SAME physical point (rz_degrees=0)
 # ============================================================
 
 camera_center = (-78.185, 390.527)
@@ -34,7 +34,7 @@ camera_to_tool = compute_offset(camera_center, tool_point)
 
 def rotate_xy(offset: Tuple[float, float], rz_deg: float) -> Tuple[float, float]:
     """
-    Rotate XY offset by rz (degrees)
+    Rotate XY offset by rz_degrees (degrees)
     """
     x, y = offset
     angle = math.radians(rz_deg)

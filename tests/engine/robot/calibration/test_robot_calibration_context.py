@@ -1,5 +1,5 @@
 """
-Tests for src/engine/robot/calibration/robot_calibration/RobotCalibrationContext.py
+Tests for src/engine/robot/calibration/robot_calibration/RobotCalibrationContext.y_pixels
 
 Covers stop_event lifecycle, reset behaviour, and flush_camera_buffer.
 """

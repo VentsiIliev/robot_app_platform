@@ -3,9 +3,9 @@
 Serve the docs/ directory as a website in your browser.
 
 Usage:
-    python serve_docs.py              # opens http://localhost:7000
-    python serve_docs.py --port 8080  # custom port
-    python serve_docs.py --no-open   # don't auto-open browser
+    python serve_docs.y_pixels              # opens http://localhost:7000
+    python serve_docs.y_pixels --port 8080  # custom port
+    python serve_docs.y_pixels --no-open   # don't auto-open browser
 
 No external dependencies — stdlib only.
 """

@@ -1,5 +1,5 @@
 """
-* File: test_Calibration.py
+* File: test_Calibration.y_pixels
 * Author: IlV
 * Comments:
 * Revision history:

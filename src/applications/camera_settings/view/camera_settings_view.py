@@ -32,6 +32,8 @@ _CAPTION_STYLE = "color: #666688; font-size: 8pt; background: transparent; paddi
 
 
 class CameraSettingsView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
 
     raw_mode_toggled               = pyqtSignal(bool)
     save_area_requested            = pyqtSignal(str)
@@ -52,6 +54,14 @@ class CameraSettingsView(IApplicationView):
         root.addWidget(self._settings_view, stretch=2)
         self._connect_signals()
         self.vision_state_changed.connect(self._on_vision_state_changed)
+
+    def _configure_jog_widget(self) -> None:
+        if self._jog_widget is None:
+            return
+        self._jog_widget.set_frame_options(
+            ["camera_center", "tool", "gripper"],
+            default="camera_center",
+        )
 
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()

@@ -22,10 +22,14 @@ class WorkpieceLibraryFactory(ApplicationFactory):
         assert isinstance(view, WorkpieceLibraryView)
         return WorkpieceLibraryController(model, view)
 
-    def build(self, service: IWorkpieceLibraryService, messaging: IMessagingService = None):
+    def build(self, service: IWorkpieceLibraryService, messaging: IMessagingService = None, jog_service=None):
         model      = self._create_model(service)
         view       = WorkpieceLibraryView(schema=model.schema)
         controller = WorkpieceLibraryController(model, view, messaging)
-        controller.load()
-        view._controller = controller
-        return view
+        return self._finalize_build(
+            model=model,
+            view=view,
+            controller=controller,
+            messaging=messaging,
+            jog_service=jog_service,
+        )

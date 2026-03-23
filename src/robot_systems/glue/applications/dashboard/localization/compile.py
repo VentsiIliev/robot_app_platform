@@ -11,8 +11,8 @@ Expected layout:
         ...
 
 Usage:
-    python compile.py              # compile all languages
-    python compile.py de fr        # compile specific languages only
+    python compile.y_pixels              # compile all languages
+    python compile.y_pixels de fr        # compile specific languages only
 """
 
 import sys

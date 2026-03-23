@@ -10,15 +10,9 @@ from src.applications.robot_settings.service.i_robot_settings_service import IRo
 from src.applications.robot_settings.view.robot_settings_view import RobotSettingsView
 
 
-from src.applications.base.robot_jog_service import RobotJogService
-from src.engine.core.i_messaging_service import IMessagingService
-
-
 class RobotSettingsFactory(ApplicationFactory):
-
-    def __init__(self, messaging: IMessagingService, jog_service: RobotJogService):
-        self._messaging   = messaging
-        self._jog_service = jog_service
+    def __init__(self):
+        self._messaging = None
 
     def _create_model(self, service: IRobotSettingsService) -> IApplicationModel:
         return RobotSettingsModel(service)
@@ -27,4 +21,8 @@ class RobotSettingsFactory(ApplicationFactory):
         return RobotSettingsView()
 
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
-        return RobotSettingsController(model, view, self._messaging, self._jog_service)
+        return RobotSettingsController(model, view, self._messaging)
+
+    def build(self, service, messaging=None, jog_service=None):
+        self._messaging = messaging
+        return super().build(service, messaging=messaging, jog_service=jog_service)

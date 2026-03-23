@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
-from src.robot_systems.glue.targeting import VisionTargetResolver
-from src.robot_systems.glue.targeting.pixel_target import PixelTarget
+from src.robot_systems.glue.targeting import VisionPoseRequest, VisionTargetResolver
 
 
 class GlueJobBuildError(ValueError):
@@ -86,7 +85,9 @@ class GlueJobBuilderService:
         ]
 
     def _extract_points(self, raw_segment: dict[str, Any], settings: dict[str, Any]) -> list[list[float]]:
-        raw_points = raw_segment.get("contour") or []
+        raw_points = raw_segment.get("contour")
+        if raw_points is None:
+            raw_points = []
         points: list[list[float]] = []
         base_z = self._z_min + self._safe_float(settings.get("spraying_height"), 0.0)
         rz = self._safe_float(settings.get("rz_angle"), 0.0)
@@ -102,13 +103,11 @@ class GlueJobBuilderService:
 
             if self._resolver is not None:
                 result = self._resolver.resolve(
-                    PixelTarget(px, py, rz=rz, rx=self._RX, ry=self._RY),
+                    VisionPoseRequest(px, py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
                     self._resolver.registry.tool(),
                     # frame=TargetFrame.CALIBRATION,  # or PICKUP, etc.
                 )
-                x, y = result.final_xy
-                z = base_z + result.z  # height-correction delta from depth map
-                final_rz = result.rz
+                x, y, z, _, _, final_rz = result.robot_pose()
             else:
                 raise GlueJobBuildError("Robot coordinate transformer is unavailable")
 
@@ -119,7 +118,8 @@ class GlueJobBuilderService:
         return points
 
     def _extract_settings(self, raw_segment: dict[str, Any]) -> dict[str, Any]:
-        settings = dict(raw_segment.get("settings") or {})
+        raw_settings = raw_segment.get("settings")
+        settings = dict(raw_settings) if raw_settings is not None else {}
         if not settings:
             raise GlueJobBuildError("Spray segment settings are missing")
         return settings
@@ -145,8 +145,10 @@ class GlueJobBuilderService:
 
     def _get_spray_pattern(self, workpiece: Any) -> dict[str, Any]:
         if isinstance(workpiece, dict):
-            return workpiece.get("sprayPattern") or {}
-        return getattr(workpiece, "sprayPattern", None) or {}
+            result = workpiece.get("sprayPattern")
+        else:
+            result = getattr(workpiece, "sprayPattern", None)
+        return result if result is not None else {}
 
     def _is_singleton_container(self, value: Any) -> bool:
         if isinstance(value, (str, bytes)):

@@ -1,7 +1,7 @@
 """
 Tests for:
-  src/robot_systems/glue/domain/auth/authenticated_user.py
-  src/robot_systems/glue/domain/auth/authentication_service.py
+  src/robot_systems/glue/domain/auth/authenticated_user.y_pixels
+  src/robot_systems/glue/domain/auth/authentication_service.y_pixels
 
 AuthenticatedUser wraps the domain User and satisfies IAuthenticatedUser.
 AuthenticationService verifies credentials against IUserRepository.

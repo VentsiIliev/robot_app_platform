@@ -1,5 +1,5 @@
 """
-* File: DxfConverter.py
+* File: DxfConverter.y_pixels
 * Author: IlV
 * Comments:
 * Revision history:

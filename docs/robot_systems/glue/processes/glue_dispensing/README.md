@@ -284,13 +284,13 @@ ERROR
 Run it with:
 
 ```bash
-python src/robot_systems/glue/processes/glue_dispensing/manual_debug_runner.py
+python src/robot_systems/glue/processes/glue_dispensing/manual_debug_runner.y_pixels
 ```
 
 Useful flags:
 
 ```bash
-python src/robot_systems/glue/processes/glue_dispensing/manual_debug_runner.py --spray-on --adjust-pump
+python src/robot_systems/glue/processes/glue_dispensing/manual_debug_runner.y_pixels --spray-on --adjust-pump
 ```
 
 The driver uses:

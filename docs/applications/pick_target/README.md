@@ -69,6 +69,7 @@ Trajectory execution is disabled while pickup-plane mode is active.
 ## Transform Chain
 
 All transformations go through `VisionTargetResolver` from `src/robot_systems/glue/targeting/`.
+The service builds a `VisionPoseRequest`, asks the resolver to target `camera`, `tool`, or `gripper`, and then uses `result.robot_pose()` when it needs the final robot pose.
 
 ### Calibration-plane mode
 
@@ -91,7 +92,7 @@ pixel (px, py)
   → final robot XY
 ```
 
-The two modes are implemented as `self._resolver` (no mapper) and `self._mapped_resolver` (`resolver.with_mapper(pickup_mapper)`). `_transform_point()` selects between them based on `_use_pickup_plane`.
+In the current implementation there is one resolver. `_transform_point()` chooses the active frame, and `capture()` builds a `VisionPoseRequest(z_mm=_Z, ...)` when it needs the final move pose.
 
 ---
 
@@ -99,16 +100,13 @@ The two modes are implemented as `self._resolver` (no mapper) and `self._mapped_
 
 ### DIRECT (default)
 
-`move_to()` applies depth-map Z correction from `IHeightCorrectionService`:
-
-```text
-z = Z_BASE + height_correction.predict_z(robot_x, robot_y)
-```
+The resolver can include frame height correction in the returned pose when the active frame has a height-correction service configured.
+That means the final `z` already comes back resolved in `result.robot_pose()`.
 
 ### TWO-STEP
 
-1. `Move` calls `move_to_base()` — always `Z_BASE = 300 mm`, no correction
-2. After all moves complete, `Apply Z Correction` re-runs `move_to()` which applies the depth-map correction
+1. `Move` calls `move_to_base()` — always `Z_BASE = 300 mm`, no live measurement
+2. After all moves complete, `Apply Z Correction` re-runs the move path using corrected Z
 
 ### Measure Height
 
@@ -126,9 +124,9 @@ Live measurement and depth-map correction are mutually exclusive per move.
 
 A `RobotJogWidget` is embedded in a `DrawerToggle` panel on the right side of the view.
 
-The jog widget includes a **Frame selector** combo box (`camera_center`, `tool`, `gripper`). Changing the frame selector also changes the active target for capture/move, keeping both selectors in sync. The existing `Target:` button on the control panel does the same thing.
+The jog widget enables the base widget's optional **Frame selector** combo box (`camera_center`, `tool`, `gripper`). Changing the frame selector also changes the active target for capture/move, keeping both selectors in sync. The existing `Target:` button on the control panel does the same thing.
 
-The `JogController` handles live robot position polling and jog commands. It is started in `controller.load()` and stopped in `controller.stop()`.
+The `JogController` handles live robot position polling and jog commands. In glue wiring, the jog service is target-aware: it converts jog requests into corrected Cartesian moves so the selected `camera/tool/gripper` point stays consistent with TCP-delta compensation. It is started in `controller.load()` and stopped in `controller.stop()`.
 
 ---
 
@@ -143,4 +141,4 @@ delta(rz) = R(rz) · tcp_offset − R(ref_rz) · tcp_offset
 target_xy = mapped_xy − delta(rz)
 ```
 
-This correction is always applied whenever `current_rz` is provided, regardless of plane mode. The correction is zero when `rz == ref_rz`, preserving the known-good baseline.
+This correction is always applied relative to the mapper reference pose. The correction is zero when `rz == ref_rz`, preserving the known-good baseline.

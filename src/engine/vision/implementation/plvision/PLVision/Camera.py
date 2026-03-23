@@ -354,7 +354,7 @@ class Camera:
 
 if __name__ == '__main__':
     """
-    Usage: python3 src/libs/plvision/PLVision/Camera.py
+    Usage: python3 src/libs/plvision/PLVision/Camera.y_pixels
     Optional env var CAM_DEMO_DURATION (seconds) to auto-stop the demo.
     Keys: q=quit, t=toggle AE, +/-, r=cycle res, f=cycle fps, m=toggle MJPG, p=print props, h=help
     """

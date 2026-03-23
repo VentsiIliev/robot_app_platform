@@ -47,7 +47,7 @@ class GlueCellSettingsController(IApplicationController, BrokerSubscriptionMixin
         self._view.save_requested.connect(self._on_save)
         self._view.tare_requested.connect(self._on_tare)
         self._view.destroyed.connect(self.stop)
-        self._subscribe()
+        self._subscribe_all()
 
     def stop(self) -> None:
         self._active = False
@@ -55,7 +55,7 @@ class GlueCellSettingsController(IApplicationController, BrokerSubscriptionMixin
 
     # ── Broker → Bridge (background-thread safe) ──────────────────────
 
-    def _subscribe(self) -> None:
+    def _subscribe_all(self) -> None:
         for cell_id in self._model.get_cell_ids():
             self._subscribe(
                 WeightTopics.reading(cell_id),

@@ -149,7 +149,7 @@ if __name__ == "__main__":
                     # Solve PnP
                     try:
                         rvec, tvec, pose_mat, reproj = pose_solver.solve_pnp(objp, corners.reshape(-1, 2))
-                        _logger.error("PnP solved. Reprojection error (px):", reproj)
+                        _logger.error("PnP solved. Reprojection error (x_pixels):", reproj)
 
                         print_pose_explained(pose_mat)
                         pose_computed=True

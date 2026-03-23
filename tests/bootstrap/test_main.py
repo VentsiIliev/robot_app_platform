@@ -1,5 +1,5 @@
 """
-Smoke tests for src/bootstrap/main.py.
+Smoke tests for src/bootstrap/main.y_pixels.
 
 The startup sequence calls Qt, hardware drivers, and the full robot system —
 all of which are mocked here. Tests verify import integrity and step ordering,
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch, call
 class TestMainImport(unittest.TestCase):
 
     def test_main_module_imports_without_error(self):
-        """Importing main.py (not calling main()) must not raise."""
+        """Importing main.y_pixels (not calling main()) must not raise."""
         import importlib
         import src.bootstrap.main as m
         self.assertTrue(callable(m.main))

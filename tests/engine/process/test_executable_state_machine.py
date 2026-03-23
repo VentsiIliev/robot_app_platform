@@ -1,5 +1,5 @@
 """
-Tests for src/engine/process/executable_state_machine.py
+Tests for src/engine/process/executable_state_machine.y_pixels
 
 Covers stop_execution, loop exit, on_enter/on_exit callbacks, broker publishing,
 and exception handling inside handlers.

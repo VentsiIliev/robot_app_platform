@@ -261,7 +261,7 @@ def _print_help() -> None:
     print("  step [n]                 execute one or more states")
     print("  start-point              move fake robot to current path start")
     print("  end-point                move fake robot to current path end")
-    print("  pos x y z [rx ry rz]     set fake robot position")
+    print("  pos x y z [rx_degrees ry_degrees rz_degrees]     set fake robot position")
     print("  motion vel acc           set fake robot velocity/acceleration")
     print("  pause                    clear run_allowed")
     print("  resume                   set is_resuming=True and allow running")

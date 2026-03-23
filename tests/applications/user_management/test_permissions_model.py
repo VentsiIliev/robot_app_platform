@@ -1,5 +1,5 @@
 """
-Tests for src/applications/user_management/model/permissions_model.py
+Tests for src/applications/user_management/model/permissions_model.y_pixels
 
 PermissionsModel wraps IPermissionsAdminService and provides the pure logic
 for the App Permissions tab: reading the current permissions, toggling a

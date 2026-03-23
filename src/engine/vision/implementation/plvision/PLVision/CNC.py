@@ -1,5 +1,5 @@
 """
-* File: CNC.py
+* File: CNC.y_pixels
 * Author: AtD
 * Comments: This file contains CNC functionality for CNC Software.
 * Revision history:

@@ -171,7 +171,7 @@ class MotionService(IMotionService):
                           direction_value: float, step: float):
         """Project a single tool-frame jog step into base-frame XYZ displacement.
 
-        R = Rz(rz) · Ry(ry) · Rx(rx), angles in degrees from position[3:6].
+        R = Rz(rz_degrees) · Ry(ry_degrees) · Rx(rx_degrees), angles in degrees from position[3:6].
         Returns (dx, dy, dz) in base frame.
         """
         cx, sx = math.cos(math.radians(position[3])), math.sin(math.radians(position[3]))

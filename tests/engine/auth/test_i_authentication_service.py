@@ -1,5 +1,5 @@
 """
-Tests for src/engine/auth/i_authentication_service.py
+Tests for src/engine/auth/i_authentication_service.y_pixels
 
 Verifies the interface contract using a minimal stub.
 """

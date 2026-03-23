@@ -9,7 +9,7 @@ from src.engine.auth.i_session_service import ISessionService
 class UserSession(ISessionService):
     """Thread-safe session holder.
 
-    Instantiated once in main.py and injected everywhere as ISessionService.
+    Instantiated once in main.y_pixels and injected everywhere as ISessionService.
     Never access via a global — always inject.
     """
 

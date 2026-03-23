@@ -209,6 +209,13 @@ Inherits `IApplicationView` which extends `AppWidget` — required by the shell.
 Override `setup_ui()` to build your widgets.  
 **No service imports. No model imports. No business logic.**
 
+`IApplicationView` also provides a shared jog drawer for every application. It is hidden by default.
+- Set `SHOW_JOG_WIDGET = True` if the app should show the jog drawer
+- Set `JOG_FRAME_SELECTOR_ENABLED = True` if the app needs frame/end-effector selection
+- Use `_configure_jog_widget()` when the view needs to populate frame options
+- Do not manually construct `DrawerToggle` or `RobotJogWidget` in application views anymore
+- Do not manually construct `JogController` in application controllers anymore when using the shared factory path
+
 ### Signal forwarding rule
 > **Never** connect an internal widget signal directly to an outbound `pyqtSignal.emit`  
 > or use a `lambda` for forwarding.  
@@ -223,6 +230,8 @@ from src.applications.base.i_application_view import IApplicationView
 
 
 class MyView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+
     # Outbound signals — one per user action
     save_requested = pyqtSignal(str)
 
@@ -243,6 +252,10 @@ class MyView(IApplicationView):
 
     def _on_inner_save(self, value: str) -> None:
         self.save_requested.emit(value)  # ✓ named method, strong ref
+
+    def _configure_jog_widget(self) -> None:
+        # Optional: only needed when the app enables frame selection
+        pass
 
     # ── Inbound setters — controller pushes data in ───────────────────────
 
@@ -424,7 +437,7 @@ Store threads in `_active` to prevent immediate GC. Clean up in `stop()`.
 **File:** `my_application_factory.py`
 
 Subclass `ApplicationFactory` and implement three factory methods.  
-`ApplicationFactory.build()` handles the wiring order, `controller.load()`, and the GC fix automatically.
+`ApplicationFactory.build()` handles the wiring order, `controller.load()`, the GC fix, and shared jog hookup automatically.
 
 ### The GC fix (handled automatically by ApplicationFactory)
 > PyQt6 uses **weak references** for Python bound-method slot connections.  
@@ -459,11 +472,12 @@ class MyApplicationFactory(ApplicationFactory):
         return MyController(model, view)
 ```
 
-`ApplicationFactory.build(service)` calls these three methods in order, then:
-1. calls `controller.load()`
-2. assigns `view._controller = controller`
-3. logs the build
-4. returns the view
+`ApplicationFactory.build(service, messaging=..., jog_service=...)` calls these three methods in order, then:
+1. if the view enables jog and both shared dependencies are provided, auto-creates `JogController`
+2. calls `controller.load()`
+3. assigns `view._controller = controller`
+4. logs the build
+5. returns the view
 
 ---
 
@@ -488,12 +502,14 @@ class MyApplication(IApplication):
     def __init__(self, settings_service=None):
         self._logger = logging.getLogger(self.__class__.__name__)
         self._service = MyApplicationService(settings_service)
+        self._messaging_service = None
 
     def register(self, messaging_service: IMessagingService) -> None:
+        self._messaging_service = messaging_service
         self._logger.debug("MyApplication registered")
 
     def create_widget(self) -> AppWidget:
-        return MyApplicationFactory().build(self._service)
+        return MyApplicationFactory().build(self._service, messaging=self._messaging_service)
 ```
 
 ---
@@ -704,4 +720,3 @@ if __name__ == "__main__":
 - [ ] Step 11 — Settings dataclass + serializer declared (if needed)
 - [ ] Step 12 — `WidgetApplication` + factory function wired into robot app via `ApplicationSpec`
 - [ ] Step 13 — Standalone runner works with `StubMyService`
-

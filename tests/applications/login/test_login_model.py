@@ -1,5 +1,5 @@
 """
-Tests for src/applications/login/model/login_model.py
+Tests for src/applications/login/model/login_model.y_pixels
 
 LoginModel is a thin delegation layer over ILoginApplicationService
 plus input validation logic.

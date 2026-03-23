@@ -1,5 +1,5 @@
 """
-Tests for src/engine/process/base_process.py
+Tests for src/engine/process/base_process.y_pixels
 
 BaseProcess is the abstract base for all robot processes.
 Covers state transitions, broker publishing, hook invocation, and

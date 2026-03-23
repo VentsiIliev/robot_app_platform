@@ -1642,7 +1642,7 @@ class RPC():
     @brief  计算工具坐标系-六点法
     @param  [in] NULL
     @return 错误码 成功-0,  失败-错误码
-    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx,ry,rz] 工具坐标系
+    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees] 工具坐标系
     """
 
     @log_call
@@ -1672,7 +1672,7 @@ class RPC():
     @brief  计算工具坐标系-四点法
     @param  [in] NULL
     @return 错误码 成功-0,  失败-错误码
-    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx,ry,rz]  工具坐标系
+    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees]  工具坐标系
     """
 
     @log_call
@@ -1688,7 +1688,7 @@ class RPC():
     """   
     @brief  设置工具坐标系
     @param  [in] 必选参数 id: 坐标系编号，范围 [1~15]
-    @param  [in] 必选参数 t_coord:[x,y,z,rx,ry,rz]  工具中心点相对末端法兰中心位姿，单位 [mm][°]
+    @param  [in] 必选参数 t_coord:[x,y,z,rx_degrees,ry_degrees,rz_degrees]  工具中心点相对末端法兰中心位姿，单位 [mm][°]
     @param  [in] 必选参数 type:0-工具坐标系，1-传感器坐标系
     @param  [in] 必选参数 install: 安装位置，0-机器人末端，1-机器人外部
     @param  [in] 必选参数 toolID: 工具ID
@@ -1711,7 +1711,7 @@ class RPC():
     """   
     @brief  设置工具坐标系列表
     @param  [in] 必选参数 id: 坐标系编号，范围 [1~15]
-    @param  [in] 必选参数 t_coord:[x,y,z,rx,ry,rz]  工具中心点相对末端法兰中心位姿，单位 [mm][°]
+    @param  [in] 必选参数 t_coord:[x,y,z,rx_degrees,ry_degrees,rz_degrees]  工具中心点相对末端法兰中心位姿，单位 [mm][°]
     @param  [in] 必选参数 type:0-工具坐标系，1-传感器坐标系
     @param  [in] 必选参数 install: 安装位置，0-机器人末端，1-机器人外部
     @param  [in] 必选参数 loadNum: 负载编号
@@ -1746,7 +1746,7 @@ class RPC():
     @brief  计算外部工具坐标系-三点法
     @param  [in] NULL
     @return 错误码 成功-0,  失败-错误码
-    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx,ry,rz] 外部工具坐标系
+    @return 返回值（调用成功返回）tcp_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees] 外部工具坐标系
     """
 
     @log_call
@@ -1762,8 +1762,8 @@ class RPC():
     """   
     @brief  设置外部工具坐标系
     @param  [in] 必选参数 id: 坐标系编号，范围 [0~14]
-    @param  [in] 必选参数 etcp: [x,y,z,rx,ry,rz] 外部工具坐标系，单位 [mm][°]
-    @param  [in] 必选参数 etool: [x,y,z,rx,ry,rz] 末端工具坐标系，单位 [mm][°]
+    @param  [in] 必选参数 etcp: [x,y,z,rx_degrees,ry_degrees,rz_degrees] 外部工具坐标系，单位 [mm][°]
+    @param  [in] 必选参数 etool: [x,y,z,rx_degrees,ry_degrees,rz_degrees] 末端工具坐标系，单位 [mm][°]
     @return 错误码 成功-0  失败-错误码
     """
 
@@ -1779,8 +1779,8 @@ class RPC():
     """   
     @brief  设置外部工具坐标系列表
     @param  [in] 必选参数 id: 坐标系编号，范围 [0~14]
-    @param  [in] 必选参数 etcp: [x,y,z,rx,ry,rz] 外部工具坐标系，单位 [mm][°]
-    @param  [in] 必选参数 etool: [x,y,z,rx,ry,rz] 末端工具坐标系，单位 [mm][°]
+    @param  [in] 必选参数 etcp: [x,y,z,rx_degrees,ry_degrees,rz_degrees] 外部工具坐标系，单位 [mm][°]
+    @param  [in] 必选参数 etool: [x,y,z,rx_degrees,ry_degrees,rz_degrees] 末端工具坐标系，单位 [mm][°]
     @return 错误码 成功-0  失败-错误码
     """
 
@@ -1811,7 +1811,7 @@ class RPC():
     @param  [in] method 计算方式 0：原点-x轴-z轴  1：原点-x轴-xy平面
     @param  [in] refFrame 参考坐标系
     @return 错误码 成功-0,  失败-错误码
-    @return 返回值（调用成功返回）wobj_pose [x,y,z,rx,ry,rz] 工件坐标系
+    @return 返回值（调用成功返回）wobj_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees] 工件坐标系
     """
 
     @log_call
@@ -2232,7 +2232,7 @@ class RPC():
     @brief  获取TCP指令速度
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞  默认1
     @return 错误码 成功- 0,  失败-错误码
-    @return 返回值（调用成功返回） speed [x,y,z,rx,ry,rz]速度 mm/s
+    @return 返回值（调用成功返回） speed [x,y,z,rx_degrees,ry_degrees,rz_degrees]速度 mm/s
     """
 
     @log_call
@@ -2252,7 +2252,7 @@ class RPC():
     @brief  获取TCP反馈速度
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞  默认1
     @return 错误码 成功- 0,  失败-错误码
-    @return 返回值（调用成功返回） speed [x,y,z,rx,ry,rz]速度
+    @return 返回值（调用成功返回） speed [x,y,z,rx_degrees,ry_degrees,rz_degrees]速度
     """
 
     @log_call
@@ -2272,7 +2272,7 @@ class RPC():
     @brief  获取当前工具位姿
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞 默认1
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回） tcp_pose=[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回） tcp_pose=[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -2330,7 +2330,7 @@ class RPC():
     @brief  获取当前末端法兰位姿
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞 默认1
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回） flange_pose=[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回） flange_pose=[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -2348,7 +2348,7 @@ class RPC():
     """   
     @brief  逆运动学，笛卡尔位姿求解关节位置
     @param  [in] 必选参数 type:0-绝对位姿 (基坐标系)，1-相对位姿（基坐标系），2-相对位姿（工具坐标系）
-    @param  [in] 必选参数 desc_pose:[x,y,z,rx,ry,rz], 工具位姿，单位 [mm][°]
+    @param  [in] 必选参数 desc_pose:[x,y,z,rx_degrees,ry_degrees,rz_degrees], 工具位姿，单位 [mm][°]
     @param  [in] 默认参数 config: 关节配置，[-1]-参考当前关节位置求解，[0~7]-依据关节配置求解 默认-1
     @return 错误码 成功- 0, 失败-错误码
     @return 返回值（调用成功返回） joint_pos=[j1,j2,j3,j4,j5,j6]
@@ -2370,7 +2370,7 @@ class RPC():
     """   
     @brief  逆运动学，工具位姿求解关节位置，参考指定关节位置求解
     @param  [in] 必选参数 type:0-绝对位姿 (基坐标系)，1-相对位姿（基坐标系），2-相对位姿（工具坐标系）
-    @param  [in] 必选参数 desc_pose:[x,y,z,rx,ry,rz], 工具位姿，单位 [mm][°]
+    @param  [in] 必选参数 desc_pose:[x,y,z,rx_degrees,ry_degrees,rz_degrees], 工具位姿，单位 [mm][°]
     @param  [in] 必选参数 joint_pos_ref：[j1,j2,j3,j4,j5,j6]，关节参考位置，单位 [°]
     @return 错误码 成功- 0,joint_pos=[j1,j2,j3,j4,j5,j6] 失败-错误码
     @return 返回值（调用成功返回） joint_pos=[j1,j2,j3,j4,j5,j6]
@@ -2392,7 +2392,7 @@ class RPC():
     """   
     @brief  逆运动学，工具位姿求解关节位置是否有解
     @param  [in] 必选参数 type:0-绝对位姿 (基坐标系)，1-相对位姿（基坐标系），2-相对位姿（工具坐标系）
-    @param  [in] 必选参数 desc_pose:[x,y,z,rx,ry,rz], 工具位姿，单位 [mm][°]
+    @param  [in] 必选参数 desc_pose:[x,y,z,rx_degrees,ry_degrees,rz_degrees], 工具位姿，单位 [mm][°]
     @param  [in] 必选参数 joint_pos_ref：[j1,j2,j3,j4,j5,j6]，关节参考位置，单位 [°]
     @return 错误码 成功- 0, 失败-错误码
     @return 返回值（调用成功返回） result:“True”-有解，“False”-无解
@@ -2415,7 +2415,7 @@ class RPC():
     @brief  正运动学，关节位置求解工具位姿
     @param  [in] 必选参数 joint_pos:[j1,j2,j3,j4,j5,j6]: 关节位置，单位 [°]
     @return 错误码 成功- 0,  失败-错误码
-    @return 返回值（调用成功返回） desc_pos=[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回） desc_pos=[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -2489,7 +2489,7 @@ class RPC():
     @brief  获取当前工具坐标系
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞 默认1
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）tcp_offset=[x,y,z,rx,ry,rz]: 相对位姿，单位 [mm][°]
+    @return 返回值（调用成功返回）tcp_offset=[x,y,z,rx_degrees,ry_degrees,rz_degrees]: 相对位姿，单位 [mm][°]
     """
 
     @log_call
@@ -2507,7 +2507,7 @@ class RPC():
     @brief  获取当前工件坐标系
     @param  [in] 默认参数 flag：0-阻塞，1-非阻塞 默认1
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）wobj_offset=[x,y,z,rx,ry,rz]: 相对位姿，单位 [mm][°]
+    @return 返回值（调用成功返回）wobj_offset=[x,y,z,rx_degrees,ry_degrees,rz_degrees]: 相对位姿，单位 [mm][°]
     """
 
     @log_call
@@ -2630,7 +2630,7 @@ class RPC():
     @brief  查询机器人示教管理点位数据
     @param  [in] 必选参数 name  点位名
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）data 点位数据[x,y,z,rx,ry,rz,j1,j2,j3,j4,j5,j6,tool, wobj,speed,acc,e1,e2,e3,e4]
+    @return 返回值（调用成功返回）data 点位数据[x,y,z,rx_degrees,ry_degrees,rz_degrees,j1,j2,j3,j4,j5,j6,tool, wobj,speed,acc,e1,e2,e3,e4]
     """
 
     @log_call
@@ -2950,7 +2950,7 @@ class RPC():
     @brief  获取轨迹起始位姿
     @param  [in] name 轨迹文件名,不需要文件后缀
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）desc_pose [x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回）desc_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -3014,7 +3014,7 @@ class RPC():
     @brief  获取轨迹起始位姿
     @param  [in] 必选参数 name：轨迹名
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）desc_pose [x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回）desc_pose [x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -3505,7 +3505,7 @@ class RPC():
     """   
     @brief  设置力传感器参考坐标系
     @param  [in] 必选参数 ref：0-工具坐标系，1-基坐标系
-    @param  [in] 默认参数 coord：[x,y,z,rx,ry,rz] 自定义坐标系值,默认[0,0,0,0,0,0]
+    @param  [in] 默认参数 coord：[x,y,z,rx_degrees,ry_degrees,rz_degrees] 自定义坐标系值,默认[0,0,0,0,0,0]
     @return 错误码 成功- 0, 失败-错误码
     """
 
@@ -3765,7 +3765,7 @@ class RPC():
     @brief  计算中间平面位置结束
     @param  [in] NULL
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回）pos=[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回）pos=[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -4389,11 +4389,11 @@ class RPC():
 
     """   
     @brief  段焊获取位置和姿态
-    @param  [in]必选参数 startPos=[x,y,z,rx,ry,rz] 起始点坐标
-    @param  [in]必选参数 endPos=[x,y,z,rx,ry,rz] 终止点坐标
+    @param  [in]必选参数 startPos=[x,y,z,rx_degrees,ry_degrees,rz_degrees] 起始点坐标
+    @param  [in]必选参数 endPos=[x,y,z,rx_degrees,ry_degrees,rz_degrees] 终止点坐标
     @param  [in]必选参数 startDistance 焊接点至起点的长度
     @return 错误码 成功- 0, 失败-错误码    
-    @return 返回值（调用成功返回） weldPointDesc=[x,y,z,rx,ry,rz] 焊接点的笛卡尔坐标信息
+    @return 返回值（调用成功返回） weldPointDesc=[x,y,z,rx_degrees,ry_degrees,rz_degrees] 焊接点的笛卡尔坐标信息
     @return 返回值（调用成功返回） weldPointJoint=[j1,j2,j3,j4,j5,j6] 焊接点的关节坐标信息
     @return 返回值（调用成功返回） tool 工具号
     @return 返回值（调用成功返回） user 工件号
@@ -5596,7 +5596,7 @@ class RPC():
     """   
     @brief  计算扩展轴坐标系-四点法
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回） coord 坐标系值[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回） coord 坐标系值[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -5607,7 +5607,7 @@ class RPC():
 
     """   
     @brief  设置标定参考点在变位机末端坐标系下位姿
-    @param [in]必选参数 pos 位姿值[x,y,z,rx,ry,rz]
+    @param [in]必选参数 pos 位姿值[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     @return 错误码 成功- 0, 失败-错误码
     """
 
@@ -5634,7 +5634,7 @@ class RPC():
     """   
     @brief  变位机坐标系计算-四点法
     @return 错误码 成功- 0, 失败-错误码
-    @return 返回值（调用成功返回） coord 坐标系值[x,y,z,rx,ry,rz]
+    @return 返回值（调用成功返回） coord 坐标系值[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     """
 
     @log_call
@@ -5651,7 +5651,7 @@ class RPC():
     @brief  应用扩展轴坐标系
     @param [in]必选参数 axisCoordNum 坐标系编号
     @param [in]必选参数 toolNum 工具号
-    @param [in]必选参数 coord 坐标系值[x,y,z,rx,ry,rz]
+    @param [in]必选参数 coord 坐标系值[x,y,z,rx_degrees,ry_degrees,rz_degrees]
     @param [in]必选参数 calibFlag 标定标志 0-否，1-是    
     @return 错误码 成功- 0, 失败-错误码
     """

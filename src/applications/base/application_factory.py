@@ -7,6 +7,46 @@ from pl_gui.shell.base_app_widget.AppWidget import AppWidget
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.jog_controller import JogController
+
+
+def finalize_application_build(
+    *,
+    logger: logging.Logger,
+    factory_name: str,
+    model: IApplicationModel,
+    view: IApplicationView,
+    controller: IApplicationController,
+    messaging=None,
+    jog_service=None,
+) -> AppWidget:
+    jog = None
+    if getattr(view, "SHOW_JOG_WIDGET", False) and messaging is not None and jog_service is not None:
+        jog = JogController(view, jog_service, messaging)
+        jog.start()
+        view._jog_controller = jog
+
+    controller.load()
+    view._controller = controller  # transfers ownership — prevents GC killing signal connections
+
+    _original_clean_up = view.clean_up
+
+    def _clean_up():
+        if jog is not None:
+            jog.stop()
+        controller.stop()
+        _original_clean_up()
+
+    view.clean_up = _clean_up
+
+    logger.debug(
+        "%s built: %s / %s / %s",
+        factory_name,
+        type(model).__name__,
+        type(view).__name__,
+        type(controller).__name__,
+    )
+    return view
 
 
 class ApplicationFactory(ABC):
@@ -40,27 +80,33 @@ class ApplicationFactory(ABC):
     @abstractmethod
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController: ...
 
-    def build(self, service) -> AppWidget:
+    def _finalize_build(
+        self,
+        *,
+        model: IApplicationModel,
+        view: IApplicationView,
+        controller: IApplicationController,
+        messaging=None,
+        jog_service=None,
+    ) -> AppWidget:
+        return finalize_application_build(
+            logger=self._logger,
+            factory_name=self.__class__.__name__,
+            model=model,
+            view=view,
+            controller=controller,
+            messaging=messaging,
+            jog_service=jog_service,
+        )
+
+    def build(self, service, messaging=None, jog_service=None) -> AppWidget:
         model      = self._create_model(service)
         view       = self._create_view()
         controller = self._create_controller(model, view)
-        controller.load()
-        view._controller = controller  # transfers ownership — prevents GC killing signal connections
-
-        # Wire clean_up → controller.stop() so broker subscriptions are always
-        # removed when the shell destroys the widget.  The view's own clean_up
-        # logic (if any) still runs afterwards.
-        _original_clean_up = view.clean_up
-        def _clean_up():
-            controller.stop()
-            _original_clean_up()
-        view.clean_up = _clean_up
-
-        self._logger.debug(
-            "%s built: %s / %s / %s",
-            self.__class__.__name__,
-            type(model).__name__,
-            type(view).__name__,
-            type(controller).__name__,
+        return self._finalize_build(
+            model=model,
+            view=view,
+            controller=controller,
+            messaging=messaging,
+            jog_service=jog_service,
         )
-        return view

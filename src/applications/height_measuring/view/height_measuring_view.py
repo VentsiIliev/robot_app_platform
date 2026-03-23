@@ -10,11 +10,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget, QMessageBox,
 )
 from src.applications.base.styled_message_box import show_warning
-from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.utils.utils_widgets.camera_view import CameraView
-from src.applications.base.robot_jog_widget import RobotJogWidget
 from src.applications.height_measuring.view.height_measuring_schema import (
     CALIBRATION_GROUP, DETECTION_GROUP, MEASURING_GROUP,
 )
@@ -41,6 +39,7 @@ _BTN_OVERLAY_ON = (
 
 
 class HeightMeasuringView(IApplicationView):
+    SHOW_JOG_WIDGET = True
 
     calibrate_requested        = pyqtSignal()
     stop_requested             = pyqtSignal()
@@ -50,8 +49,6 @@ class HeightMeasuringView(IApplicationView):
     detect_once_requested      = pyqtSignal()
     start_continuous_requested = pyqtSignal()
     stop_continuous_requested  = pyqtSignal()
-    jog_requested              = pyqtSignal(str, str, str, float)
-    jog_stopped                = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__("HeightMeasuring", parent)
@@ -70,13 +67,6 @@ class HeightMeasuringView(IApplicationView):
         self._settings_view.add_tab("Calibration", [CALIBRATION_GROUP])
         self._settings_view.add_tab("Measuring",   [MEASURING_GROUP])
         layout.addWidget(self._settings_view)
-
-        self._drawer = DrawerToggle(self, side="right", width=320)
-        self._jog_widget = RobotJogWidget()
-        self._drawer.add_widget(self._jog_widget)
-
-        self._jog_widget.jog_requested.connect(self.jog_requested)
-        self._jog_widget.jog_stopped.connect(self.jog_stopped)
 
         self._settings_view.save_requested.connect(self._on_inner_save)
 
@@ -386,9 +376,6 @@ class HeightMeasuringView(IApplicationView):
 
     def append_log(self, message: str) -> None:
         self._log.append(message)
-
-    def set_jog_position(self, pos: list) -> None:
-        self._jog_widget.set_position(pos)
 
     def show_message(self, message: str, is_error: bool = False) -> None:
         colour = "#e55" if is_error else "#5e5"

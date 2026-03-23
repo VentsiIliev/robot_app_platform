@@ -339,7 +339,7 @@
 #
 #     @patch(_PATCH_REFINE, return_value=(0.0, 1.0))
 #     def test_light_gaussian_noise_still_matches(self, _):
-#         """noise_level=0.5 px — good lighting, minor sensor noise."""
+#         """noise_level=0.5 x_pixels — good lighting, minor sensor noise."""
 #         circle = ShapeFactory.generate_shape(ShapeType.CIRCLE, scale=1.0)
 #         wp = _StubWorkpiece(circle)
 #         _, no_match_count, matched, _ = _make_service().run_matching([wp], [self._noisy(circle, 0.5)])
@@ -348,7 +348,7 @@
 #
 #     @patch(_PATCH_REFINE, return_value=(0.0, 1.0))
 #     def test_medium_gaussian_noise_still_matches(self, _):
-#         """noise_level=1.5 px — moderate lighting variation."""
+#         """noise_level=1.5 x_pixels — moderate lighting variation."""
 #         circle = ShapeFactory.generate_shape(ShapeType.CIRCLE, scale=1.0)
 #         wp = _StubWorkpiece(circle)
 #         _, no_match_count, matched, _ = _make_service().run_matching([wp], [self._noisy(circle, 1.5)])

@@ -23,18 +23,15 @@ class ModbusSettingsFactory(ApplicationFactory):
     def _create_controller(self, model: IApplicationModel, view: IApplicationView) -> IApplicationController:
         return ModbusSettingsController(model, view)
 
-    def build(self, settings_service: IModbusSettingsService, action_service: IModbusActionService):
+    def build(self, settings_service: IModbusSettingsService, action_service: IModbusActionService, messaging=None, jog_service=None):
         """Override — two services required instead of one."""
         model      = ModbusSettingsModel(settings_service, action_service)
         view       = self._create_view()
         controller = self._create_controller(model, view)
-        controller.load()
-        view._controller = controller
-        self._logger.debug(
-            "%s built: %s / %s / %s",
-            self.__class__.__name__,
-            type(model).__name__,
-            type(view).__name__,
-            type(controller).__name__,
+        return self._finalize_build(
+            model=model,
+            view=view,
+            controller=controller,
+            messaging=messaging,
+            jog_service=jog_service,
         )
-        return view

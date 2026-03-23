@@ -50,7 +50,7 @@ class CameraSettings(Settings):
         self.set_value(CameraSettingKey.BRIGHTNESS_KD.value, 0.05)
         self.set_value(CameraSettingKey.TARGET_BRIGHTNESS.value, 200)
         
-        # Brightness area defaults (using current hardcoded values from brightness_manager.py)
+        # Brightness area defaults (using current hardcoded values from brightness_manager.y_pixels)
         self.set_value(CameraSettingKey.BRIGHTNESS_AREA_P1.value, [940, 612])
         self.set_value(CameraSettingKey.BRIGHTNESS_AREA_P2.value, [1004, 614])
         self.set_value(CameraSettingKey.BRIGHTNESS_AREA_P3.value, [1004, 662])

@@ -3,10 +3,10 @@
 ## Commands
 
 ```bash
-python src/bootstrap/main.py                          # run full application
-python tests/run_tests.py                             # run all tests
-python -m unittest tests/path/to/test_file.py -v     # single test file
-python src/applications/<name>/example_usage.py      # standalone app dev runner
+python src/bootstrap/main.y_pixels                          # run full application
+python tests/run_tests.y_pixels                             # run all tests
+python -m unittest tests/path/to/test_file.y_pixels -v     # single test file
+python src/applications/<name>/example_usage.y_pixels      # standalone app dev runner
 ```
 
 No `pyproject.toml` / `requirements.txt` — deps live in `.venv/`.
@@ -246,9 +246,9 @@ from pl_gui.settings.settings_view.styles import (
     PRIMARY,           # #905BA9 — primary accent colour
     PRIMARY_DARK,      # darker shade for hover/pressed
     GROUP_STYLE,       # QGroupBox stylesheet
-    ACTION_BTN_STYLE,  # filled primary button (44 px tall, 8 px radius, 11 pt bold)
+    ACTION_BTN_STYLE,  # filled primary button (44 x_pixels tall, 8 x_pixels radius, 11 pt bold)
     GHOST_BTN_STYLE,   # outlined primary button — secondary actions
-    SAVE_BUTTON_STYLE, # large save/confirm button (52 px tall)
+    SAVE_BUTTON_STYLE, # large save/confirm button (52 x_pixels tall)
     LABEL_STYLE,       # bold 11 pt label
 )
 ```

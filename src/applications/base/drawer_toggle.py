@@ -61,6 +61,18 @@ class DrawerToggle(QObject):
     def add_widget(self, widget):
         self._content.insertWidget(self._content.count() - 1, widget)
 
+    def set_visible(self, visible: bool) -> None:
+        if not visible:
+            self._is_open = False
+            self._anim.stop()
+            self._panel.hide()
+            self._btn.hide()
+            return
+        self._update_arrow()
+        self._reposition()
+        self._panel.hide()
+        self._btn.show()
+
     def eventFilter(self, obj, event):
         if obj is self._host and event.type() == QEvent.Type.Resize:
             self._reposition()

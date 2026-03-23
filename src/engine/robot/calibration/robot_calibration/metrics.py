@@ -97,6 +97,6 @@ def compute_homography(camera_points_for_homography, robot_positions_for_calibra
     src_pts = np.array(camera_points, dtype=np.float32)
     dst_pts = np.array(robot_positions, dtype=np.float32)
     method = cv2.RANSAC if use_ransac else 0
-    ransac_threshold = 2.0  # px reprojection tolerance for RANSAC inlier/outlier split
+    ransac_threshold = 2.0  # x_pixels reprojection tolerance for RANSAC inlier/outlier split
     H_camera_center, status = cv2.findHomography(src_pts, dst_pts, method, ransac_threshold)
     return H_camera_center, status

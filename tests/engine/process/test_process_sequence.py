@@ -1,5 +1,5 @@
 """
-Tests for src/engine/process/process_sequence.py
+Tests for src/engine/process/process_sequence.y_pixels
 
 ProcessSequence orchestrates a list of IProcess instances in order,
 auto-advancing to the next process when the current one stops.

@@ -16,7 +16,7 @@ not tested here. Only state flow and correct execution order are verified.
 
 Note: The auto-advance chain between processes (pick_and_place → glue in
 PICK_AND_SPRAY mode) is implemented inside ProcessSequence and is tested
-separately in tests/engine/process/test_process_sequence.py.
+separately in tests/engine/process/test_process_sequence.y_pixels.
 """
 import unittest
 from unittest.mock import MagicMock, patch

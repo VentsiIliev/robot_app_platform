@@ -655,7 +655,7 @@ context.ppm_scale                       # Z_current / Z_target (фактор з�
 
 #### Резултати от Калибриране
 ```python
-context.robot_positions_for_calibration  # Речник: marker_id → [x, y, z, rx, ry, rz]
+context.robot_positions_for_calibration  # Речник: marker_id → [x, y, z, rx_degrees, ry_degrees, rz_degrees]
 context.camera_points_for_homography     # Речник: marker_id → (x_px, y_px)
 context.image_to_robot_mapping           # ImageToRobotMapping (картографиране на осите)
 ```

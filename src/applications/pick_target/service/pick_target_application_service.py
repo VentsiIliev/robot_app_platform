@@ -13,7 +13,7 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
-from src.robot_systems.glue.targeting import PixelTarget, PointRegistry, TargetFrame, VisionTargetResolver
+from src.robot_systems.glue.targeting import VisionPoseRequest, PointRegistry, TargetFrame, VisionTargetResolver
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 
 _logger = logging.getLogger(__name__)
@@ -110,14 +110,26 @@ class PickTargetApplicationService(IPickTargetService):
     def _active_frame(self) -> str:
         return TargetFrame.PICKUP if self._use_pickup_plane else TargetFrame.CALIBRATION
 
-    def _pixel_target(self, px: float, py: float) -> PixelTarget:
-        return PixelTarget(px=px, py=py, rz=self._pickup_plane_rz, rx=180.0, ry=0.0)
+    def get_jog_reference_rz(self) -> float:
+        if self._active_frame == TargetFrame.PICKUP and self._pickup_mapper is not None:
+            return float(self._pickup_mapper.target_pose.rz)
+        return 0.0
+
+    def _pose_target(self, px: float, py: float, z_mm: float = 0.0) -> VisionPoseRequest:
+        return VisionPoseRequest(
+            x_pixels=px,
+            y_pixels=py,
+            z_mm=z_mm,
+            rz_degrees=self._pickup_plane_rz,
+            rx_degrees=180.0,
+            ry_degrees=0.0,
+        )
 
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
         if self._resolver is None:
             raise RuntimeError("Coordinate transformer is not available")
         return self._resolver.resolve_named(
-            self._pixel_target(px, py), self._target, frame=self._active_frame
+            self._pose_target(px, py), self._target, frame=self._active_frame
         ).final_xy
 
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float, float, float, float, float]]]:
@@ -140,9 +152,9 @@ class PickTargetApplicationService(IPickTargetService):
                 pixel_centroids.append((px, py))
                 if self._resolver is not None:
                     result = self._resolver.resolve_named(
-                        self._pixel_target(px, py), self._target, frame=self._active_frame,
+                        self._pose_target(px, py, z_mm=_Z), self._target, frame=self._active_frame,
                     )
-                    robot_targets.append(result.robot_pose(_Z))
+                    robot_targets.append(result.robot_pose())
             except Exception:
                 _logger.exception("Failed to process contour centroid")
 

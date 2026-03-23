@@ -8,7 +8,7 @@ Demonstrates three scenarios:
                       fake camera frames are published so the live feed works.
 
 Run from the project root:
-    python src/applications/login/example_usage.py [normal|first_run|qr]
+    python src/applications/login/example_usage.y_pixels [normal|first_run|qr]
 """
 import sys
 import os

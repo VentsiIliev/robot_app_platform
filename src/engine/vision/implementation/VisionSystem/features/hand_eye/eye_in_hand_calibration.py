@@ -1,7 +1,7 @@
 import logging
 #!/usr/bin/env python3
 """
-eye_in_hand_calibration_absolute_safe_fixed.py
+eye_in_hand_calibration_absolute_safe_fixed.y_pixels
 
 Fixed eye-in-hand calibration:
 - Proper Euler -> rotation matrix conversion

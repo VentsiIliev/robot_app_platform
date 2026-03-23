@@ -9,8 +9,6 @@ import numpy as np
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
-from src.applications.base.jog_controller import JogController
-from src.applications.base.robot_jog_service import RobotJogService
 from src.applications.pick_target.model.pick_target_model import PickTargetModel
 from src.applications.pick_target.view.pick_target_view import PickTargetView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -132,12 +130,10 @@ class PickTargetController(IApplicationController):
         model:       PickTargetModel,
         view:        PickTargetView,
         messaging:   Optional[IMessagingService] = None,
-        jog_service: Optional[RobotJogService] = None,
     ):
         self._model   = model
         self._view    = view
         self._broker  = messaging
-        self._jog     = JogController(view, jog_service, messaging) if jog_service and messaging else None
         self._bridge  = _Bridge()
         self._subs:   List[Tuple[str, Callable]] = []
         self._active: List[Tuple[QThread, QObject]] = []  # keeps workers alive
@@ -169,13 +165,9 @@ class PickTargetController(IApplicationController):
         self._alive = True
         if self._broker:
             self._subscribe()
-        if self._jog:
-            self._jog.start()
 
     def stop(self) -> None:
         self._alive = False
-        if self._jog:
-            self._jog.stop()
         if self._current_worker and hasattr(self._current_worker, "request_stop"):
             self._current_worker.request_stop()
         for thread, _ in self._active:

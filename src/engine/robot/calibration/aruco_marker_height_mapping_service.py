@@ -558,7 +558,7 @@ class ArucoMarkerHeightMappingService:
             x_mm, y_mm = point_mm
             label = self._describe_point(point_id)
             _logger.info(
-                "%s point %s (%s) px=(%.3f, %.3f) -> robot (%.3f, %.3f). Moving to measurement pose...",
+                "%s point %s (%s) x_pixels=(%.3f, %.3f) -> robot (%.3f, %.3f). Moving to measurement pose...",
                 start_label,
                 point_id,
                 label,

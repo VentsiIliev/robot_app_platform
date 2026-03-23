@@ -2,7 +2,7 @@
 Motor service mock runner — manual integration / smoke test.
 
 Run with:
-    python src/engine/hardware/motor/mock_runner.py
+    python src/engine/hardware/motor/mock_runner.y_pixels
 
 No serial port required. MockMotorTransport intercepts all register I/O
 and prints what would be sent over the wire.  Use it to verify

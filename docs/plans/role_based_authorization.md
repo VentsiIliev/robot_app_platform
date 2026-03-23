@@ -148,7 +148,7 @@ All engine interfaces (`IAuthenticationService`, `ISessionService`, `IAuthorizat
 - `src/robot_systems/glue/domain/permissions/permissions_repository.py` — concrete implementation
 
 ```python
-# src/engine/auth/i_permissions_repository.py
+# src/engine/auth/i_permissions_repository.y_pixels
 class IPermissionsRepository(ABC):
 
     @abstractmethod
@@ -180,7 +180,7 @@ concrete class. DIP — depend on the abstraction, not the implementation.
 - `src/engine/auth/authorization_service.py`
 
 ```python
-# Read-only interface — used by main.py and any runtime guard
+# Read-only interface — used by main.y_pixels and any runtime guard
 class IAuthorizationService(ABC):
 
     @abstractmethod
@@ -223,7 +223,7 @@ Comparison inside is done on `user.role.value` — no import of `Role` needed.
 - `src/robot_systems/glue/domain/auth/authentication_service.py` — concrete implementation
 
 ```python
-# src/engine/auth/i_authentication_service.py
+# src/engine/auth/i_authentication_service.y_pixels
 class IAuthenticationService(ABC):
 
     @abstractmethod
@@ -280,7 +280,7 @@ All existing `ApplicationSpec(name="GlueDashboard", ...)` calls auto-derive `app
 - `src/engine/auth/user_session.py`
 
 ```python
-# src/engine/auth/i_session_service.py
+# src/engine/auth/i_session_service.y_pixels
 class ISessionService(ABC):
 
     @abstractmethod
@@ -328,7 +328,7 @@ def ensure_permissions_current(
     - Adds missing app_ids with default ["Admin"].
     - Removes keys for apps that no longer exist.
     - Saves back to disk only if changes were made.
-    Called once in main.py after PermissionsRepository is built.
+    Called once in main.y_pixels after PermissionsRepository is built.
     """
 ```
 
@@ -348,7 +348,7 @@ is called explicitly at startup. This keeps `PermissionsRepository.__init__` sim
 - `src/applications/login/login_window.py`
 
 ```python
-# src/applications/login/i_login_application_service.py
+# src/applications/login/i_login_application_service.y_pixels
 class ILoginApplicationService(ABC):
 
     @abstractmethod

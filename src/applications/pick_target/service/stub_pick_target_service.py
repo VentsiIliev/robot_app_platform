@@ -25,7 +25,7 @@ class StubPickTargetService(IPickTargetService):
         return frame, pixel_centroids, robot_targets
 
     def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
-        _logger.info("[Stub] move_to(%.1f, %.1f, %.1f, rx=%.1f, ry=%.1f, rz=%.1f)", x, y, z, rx, ry, rz)
+        _logger.info("[Stub] move_to(%.1f, %.1f, %.1f, rx_degrees=%.1f, ry_degrees=%.1f, rz_degrees=%.1f)", x, y, z, rx, ry, rz)
         return True
 
     def move_to_base(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:

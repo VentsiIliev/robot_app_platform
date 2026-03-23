@@ -34,7 +34,7 @@ class TargetFrame:
         self.height_correction = height_correction
 
     def get_z_correction(self, x: float, y: float) -> float:
-        """Return the height correction delta in mm at robot position (x, y).
+        """Return the height-correction contribution in mm at robot position (x, y).
 
         Returns ``0.0`` when no correction service is configured or when the
         service cannot predict a value for the given position.

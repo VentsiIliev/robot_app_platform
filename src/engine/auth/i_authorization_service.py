@@ -7,7 +7,7 @@ from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 class IAuthorizationService(ABC):
     """Read-only authorization contract.
 
-    Used by main.py and any runtime access guard.
+    Used by main.y_pixels and any runtime access guard.
     Does not expose write operations — callers get only the access they need.
     """
 

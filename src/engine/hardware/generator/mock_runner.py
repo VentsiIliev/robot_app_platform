@@ -2,7 +2,7 @@
 Generator controller mock runner — manual integration / smoke test.
 
 Run with:
-    python src/engine/hardware/generator/mock_runner.py
+    python src/engine/hardware/generator/mock_runner.y_pixels
 
 No serial port required. MockGeneratorTransport intercepts all register I/O
 and prints what would be sent over the wire. Use it to verify

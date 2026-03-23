@@ -1,5 +1,5 @@
 """
-Tests for src/engine/auth/authorization_service.py
+Tests for src/engine/auth/authorization_service.y_pixels
 
 Covers visible-app filtering, can_access, get_all_permissions, set_permissions,
 and the Admin-always-has-access invariant on user_management.

@@ -4,7 +4,6 @@ from typing import List, Tuple, Callable
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 
 from src.applications.base.i_application_controller import IApplicationController
-from src.applications.base.jog_controller import JogController
 from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration.view.calibration_view import CalibrationView
@@ -53,10 +52,9 @@ class _Bridge(QObject):
 class CalibrationController(IApplicationController):
 
     def __init__(self, model: CalibrationModel, view: CalibrationView,
-                 messaging: IMessagingService,jog_service):
+                 messaging: IMessagingService):
         self._model    = model
         self._view     = view
-        self._jog = JogController(view, jog_service, messaging)
         self._broker   = messaging
         self._bridge   = _Bridge()
         self._subs:    List[Tuple[str, Callable]] = []
@@ -87,7 +85,6 @@ class CalibrationController(IApplicationController):
 
         self._connect_signals()
         self._subscribe()
-        self._jog.start()
         self._view.destroyed.connect(self.stop)
         self._refresh_calibration_dependent_actions()
         self._view.set_depth_map_enabled(self._model.has_saved_height_model())
@@ -95,7 +92,6 @@ class CalibrationController(IApplicationController):
     def stop(self) -> None:
         self._running = False
         self._active = False
-        self._jog.stop()
         self._model.stop_calibration()
         self._model.stop_test_calibration()
         for topic, cb in reversed(self._subs):

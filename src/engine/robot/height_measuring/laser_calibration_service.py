@@ -97,7 +97,7 @@ class LaserCalibrationService:
                         continue
                     points.append((float(i * cfg.step_size_mm), float(delta)))
                     _logger.info(
-                        "Point %d: height=%.2f mm, delta=%.3f px", i, i * cfg.step_size_mm, delta
+                        "Point %d: height=%.2f mm, delta=%.3f x_pixels", i, i * cfg.step_size_mm, delta
                     )
                     break
 
@@ -194,7 +194,7 @@ class LaserCalibrationService:
             pixel_delta = float(zero_ref[0]) - float(closest[0])
             raw_height_mm = self._predict_height(calib_data, pixel_delta)
             _logger.info(
-                "Measured zero-height bias at calibration position: %.4f mm (delta=%.3f px)",
+                "Measured zero-height bias at calibration position: %.4f mm (delta=%.3f x_pixels)",
                 raw_height_mm,
                 pixel_delta,
             )
@@ -244,7 +244,7 @@ class LaserCalibrationService:
             if len(point) < 2:
                 continue
             lines.append(
-                f"[{idx}] height={float(point[0]):.3f} mm delta={float(point[1]):.3f} px"
+                f"[{idx}] height={float(point[0]):.3f} mm delta={float(point[1]):.3f} x_pixels"
             )
 
         lines.append("================================")

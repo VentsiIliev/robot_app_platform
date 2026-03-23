@@ -196,7 +196,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         return True, f"{run_label}: {len(robot_paths)} path(s), {total_spline_pts} waypoints"
 
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
-        """Convert (N, 2) pixel points + segment settings → [[x, y, z, rx, ry, rz], ...]."""
+        """Convert (N, 2) pixel points + segment settings → [[x, y, z, rx_degrees, ry_degrees, rz_degrees], ...]."""
         try:
             _defaults = self._segment_config.schema.get_defaults()
             spray_height = float(str(settings.get("spraying_height", _defaults.get("spraying_height", "0"))).replace(",", ""))
@@ -207,16 +207,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         rx, ry = 180.0, 0.0
 
         if self._resolver is not None:
-            from src.robot_systems.glue.targeting.pixel_target import PixelTarget
+            from src.robot_systems.glue.targeting import VisionPoseRequest
             result = []
             for px, py in pts_px:
                 tr = self._resolver.resolve(
-                    PixelTarget(float(px), float(py), rz=rz, rx=rx, ry=ry),
+                    VisionPoseRequest(float(px), float(py), z_mm=base_z, rz_degrees=rz, rx_degrees=rx, ry_degrees=ry),
                     self._resolver.registry.tool(),
                 )
-                x, y = tr.final_xy
-                z = base_z + tr.z
-                result.append([x, y, z, rx, ry, tr.rz])
+                result.append(list(tr.robot_pose()))
             return result
 
         if self._transformer is None or not self._transformer.is_available():

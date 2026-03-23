@@ -111,6 +111,8 @@ Verification at `rx=180°, ry=0°, rz=0°` (R = diag(1, −1, −1)):
 
 **`start_jog` note:** Jog uses the `jog_velocity` and `jog_acceleration` values set at construction time (defaults: 10.0), not parameters passed by the caller.
 
+**Application-layer note:** some applications do not call `MotionService.start_jog()` directly for every jog button press. In the glue system, the shared `RobotJogService` can convert a jog request into a corrected `move_ptp(...)` call when a target-aware frame (`camera/tool/gripper`) is active. That higher-level compensation lives in the application/robot-system layer, not in `MotionService`.
+
 ---
 
 ### `RobotStateSnapshot`
@@ -123,7 +125,7 @@ Immutable snapshot of robot state. Published to the messaging bus on every polli
 @dataclass(frozen=True)
 class RobotStateSnapshot:
     state:        str
-    position:     List[float]      # [x, y, z, rx, ry, rz] in mm/degrees
+    position:     List[float]      # [x, y, z, rx_degrees, ry_degrees, rz_degrees] in mm/degrees
     velocity:     float
     acceleration: float
     extra:        Dict[str, Any] = field(default_factory=dict)

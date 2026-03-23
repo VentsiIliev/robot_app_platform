@@ -128,9 +128,9 @@ For a normal pick-and-place pickup, the order is:
      - actual robot pose at contour capture time
    - this means the second plane is now the real capture pose, not a hardcoded `HOME` assumption
 4. Capture-plane reference-delta correction
-   - if enabled, adjusts the mapped point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the mapper target pose `rz`
+   - adjusts the mapped point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the mapper target pose `rz`
 5. Target-point resolution via `VisionTargetResolver`
-   - `resolver.resolve_named(px, py, target, current_rz=rz)` resolves the named end-effector point:
+   - `resolver.resolve_named(VisionPoseRequest(...), target, mapper=...)` resolves the named end-effector point:
      - `camera` / `camera_center` → camera-centered target (zero offset)
      - `tool` → camera-center plus the rotated `camera_center → tool_point` offset
      - `gripper` → camera-center plus the rotated `camera_center → gripper_point` offset

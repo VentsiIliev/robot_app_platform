@@ -1,5 +1,5 @@
 """
-* File: arucoModule.py
+* File: arucoModule.y_pixels
 * Author: IlV
 * Comments:
 * Revision history:

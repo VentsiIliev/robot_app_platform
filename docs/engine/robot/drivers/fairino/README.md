@@ -33,7 +33,7 @@ class FairinoRobot(IRobot):
 **Current state:** `FairinoRobot.__init__` creates a `TestRobotWrapper` internally (`self.robot = TestRobotWrapper()`). Replace this line with `Robot.RPC(self.ip)` to connect to real hardware:
 
 ```python
-# In fairino_robot.py, __init__:
+# In fairino_robot.y_pixels, __init__:
 # Replace:
 self.robot = TestRobotWrapper()
 # With:

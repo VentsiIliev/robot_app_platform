@@ -1,5 +1,5 @@
 """
-Tests for src/engine/auth/i_permissions_repository.py
+Tests for src/engine/auth/i_permissions_repository.y_pixels
 
 Verifies the interface contract: any implementation must satisfy these behaviours.
 Uses a minimal in-memory stub to prove the contract, not the JSON-backed implementation.

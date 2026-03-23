@@ -1,5 +1,5 @@
 """
-* File: FileSelector.py
+* File: FileSelector.y_pixels
 * Author: AtD
 * Comments: This file contains the main function of the project.
 * Revision history:

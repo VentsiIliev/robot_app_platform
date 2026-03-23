@@ -29,12 +29,18 @@ class UserManagementFactory(ApplicationFactory):
         permissions_service: Optional[IPermissionsAdminService] = None,
         known_app_ids: Optional[List[str]] = None,
         messaging=None,
+        jog_service=None,
     ):
         model      = self._create_model(service)
         view       = UserManagementView(schema=model.schema)
         controller = UserManagementController(model, view, messaging=messaging)
-        controller.load()
-        view._controller = controller
+        view = self._finalize_build(
+            model=model,
+            view=view,
+            controller=controller,
+            messaging=messaging,
+            jog_service=jog_service,
+        )
 
         if permissions_service is not None and known_app_ids is not None:
             perm_model      = PermissionsModel(permissions_service, known_app_ids)

@@ -1,5 +1,5 @@
 """
-Tests for src/engine/auth/user_session.py
+Tests for src/engine/auth/user_session.y_pixels
 
 Covers login, logout, current_user/current_role properties, is_authenticated,
 and thread safety under concurrent access.

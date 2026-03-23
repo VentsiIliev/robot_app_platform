@@ -90,7 +90,7 @@ def construct_chessboard_state_log_message(
     # Bottom-left corner info
     if bottom_left_corner is not None:
         corner_int = tuple(bottom_left_corner.astype(int))
-        lines.append(f"   • Bottom-left corner (px): {corner_int}")
+        lines.append(f"   • Bottom-left corner (x_pixels): {corner_int}")
     else:
         lines.append("⚠️  Bottom-left corner not defined.")
 
@@ -132,7 +132,7 @@ def construct_aruco_state_log_message(
     lines.append(f"✅ All required ArUco markers found: {detected_ids}")
 
     # Pixel-space information
-    lines.append("📍 Marker top-left corners (px):")
+    lines.append("📍 Marker top-left corners (x_pixels):")
     for marker_id, coords in marker_top_left_corners_px.items():
         lines.append(f"   • ID {marker_id}: ({coords[0]:.1f}, {coords[1]:.1f})")
 
@@ -189,8 +189,8 @@ def construct_compute_offsets_log_message(
 
     # Summarize input geometry
     lines.append(f"🧮 Using PPM = {ppm:.3f}")
-    lines.append(f"📍 Bottom-left corner (px): {tuple(bottom_left_corner_px.astype(int))}")
-    lines.append(f"🎯 Image center (px): {image_center_px}")
+    lines.append(f"📍 Bottom-left corner (x_pixels): {tuple(bottom_left_corner_px.astype(int))}")
+    lines.append(f"🎯 Image center (x_pixels): {image_center_px}")
 
     # Compute image center in mm relative to bottom-left
     center_x_mm = (image_center_px[0] - bottom_left_corner_px[0]) / ppm
@@ -225,7 +225,7 @@ def construct_align_robot_log_message(
     Args:
         marker_id (int): Current marker being aligned to.
         calib_to_marker (Tuple[float, float]): Offset from calibration pose to marker (mm).
-        current_pose (Tuple[float, float, float, float, float, float]): Current robot pose (x, y, z, rx, ry, rz).
+        current_pose (Tuple[float, float, float, float, float, float]): Current robot pose (x, y, z, rx_degrees, ry_degrees, rz_degrees).
         calib_pose (Tuple[float, float, float, float, float, float]): Calibration reference pose.
         z_target (float): Z target height for movement.
         result (Optional[int]): Result of movement command (0 = success, nonzero = failure).
@@ -302,7 +302,7 @@ def construct_iterative_alignment_log_message(
         movement_time (float, optional): Time for robot movement.
         stability_time (float, optional): Time waited for stabilization.
         current_error_mm (float, optional): Current alignment error in mm.
-        current_error_px (float, optional): Current alignment error in px.
+        current_error_px (float, optional): Current alignment error in x_pixels.
         offset_mm (tuple, optional): (X, Y) offset in mm.
         threshold_mm (float, optional): Error threshold for success.
         alignment_success (bool): True if alignment succeeded this iteration.
@@ -326,7 +326,7 @@ def construct_iterative_alignment_log_message(
         lines.append(f"⏱️ Stability wait: {stability_time:.3f}s")
 
     if current_error_mm is not None:
-        lines.append(f"📏 Current error: {current_error_mm:.3f} mm ({current_error_px:.1f} px)")
+        lines.append(f"📏 Current error: {current_error_mm:.3f} mm ({current_error_px:.1f} x_pixels)")
     if offset_mm is not None:
         lines.append(f"↔️ Offset (mm): X={offset_mm[0]:.3f}, Y={offset_mm[1]:.3f}")
 
@@ -375,7 +375,7 @@ def construct_calibration_completion_log_message(
         lines.append(f"  • ID {marker_id}: {np.round(position, 3).tolist()}")
 
     lines.append("")
-    lines.append("📸 Camera points (px):")
+    lines.append("📸 Camera points (x_pixels):")
     for marker_id, point in sorted_camera_items:
         lines.append(f"  • ID {marker_id}: {np.round(point, 3).tolist()}")
 

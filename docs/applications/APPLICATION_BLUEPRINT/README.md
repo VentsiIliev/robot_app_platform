@@ -58,7 +58,7 @@ APPLICATION_BLUEPRINT/
 ## Standalone Runner
 
 ```python
-# example_usage.py
+# example_usage.y_pixels
 def run_standalone() -> None:
     import sys
     from PyQt6.QtWidgets import QApplication, QMainWindow

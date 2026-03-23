@@ -1,5 +1,5 @@
 """
-Tests for src/applications/user_management/controller/permissions_controller.py
+Tests for src/applications/user_management/controller/permissions_controller.y_pixels
 
 Covers the pure controller logic: load populates the view, checkbox signals
 are forwarded to the model, and the deferral notice is shown on load.

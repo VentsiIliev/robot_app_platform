@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.robot_systems.glue.processes.pick_and_place.errors import WorkpieceProcessResult
-from src.robot_systems.glue.targeting.pixel_target import PixelTarget
+from src.robot_systems.glue.targeting import VisionPoseRequest
 
 
 def transform_pickup_point(workflow, pickup_px):
@@ -69,7 +69,7 @@ def transform_pickup_point(workflow, pickup_px):
         robot_x, robot_y = result.final_xy
         if workflow._config.pickup_target in {"gripper", "tool"}:
             workflow._logger.debug(
-                "Applied %s target delta at rz=%.3f -> (%.3f, %.3f); final pickup target (%.3f, %.3f)",
+                "Applied %s target delta at rz_degrees=%.3f -> (%.3f, %.3f); final pickup target (%.3f, %.3f)",
                 workflow._config.pickup_target,
                 rz_final,
                 result.target_delta_xy[0],
@@ -94,10 +94,12 @@ def transform_pickup_point(workflow, pickup_px):
 
 def resolve_target_point(workflow, pickup_px, rz_final, active_mapper):
     target = workflow._config.pickup_target
-    # For camera_center, rz=None skips TCP-delta correction (controlled by apply_pickup_plane_reference_delta)
-    if target in ("camera_center", "camera"):
-        rz = rz_final if workflow._config.apply_pickup_plane_reference_delta else None
-    else:
-        rz = rz_final
-    pixel_target = PixelTarget(pickup_px[0], pickup_px[1], rz=rz)
-    return workflow._resolver.resolve_named(pixel_target, target, mapper=active_mapper)
+    target_request = VisionPoseRequest(
+        x_pixels=pickup_px[0],
+        y_pixels=pickup_px[1],
+        z_mm=0.0,
+        rz_degrees=rz_final,
+        rx_degrees=workflow._config.orientation_rx,
+        ry_degrees=workflow._config.orientation_ry,
+    )
+    return workflow._resolver.resolve_named(target_request, target, mapper=active_mapper)

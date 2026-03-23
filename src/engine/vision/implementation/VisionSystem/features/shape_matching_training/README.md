@@ -285,16 +285,16 @@ Comprehensive test suite with 95%+ coverage:
 
 ```bash
 # Run all tests
-python run_tests.py
+python run_tests.y_pixels
 
 # Run specific test types
-python run_tests.py --unit           # Unit tests only
-python run_tests.py --integration    # Integration tests only
-python run_tests.py --performance    # Performance tests only
-python run_tests.py --full           # Full suite with coverage
+python run_tests.y_pixels --unit           # Unit tests only
+python run_tests.y_pixels --integration    # Integration tests only
+python run_tests.y_pixels --performance    # Performance tests only
+python run_tests.y_pixels --full           # Full suite with coverage
 
 # Check dependencies
-python run_tests.py --check-deps
+python run_tests.y_pixels --check-deps
 ```
 
 ### Test Categories

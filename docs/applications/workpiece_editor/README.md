@@ -79,7 +79,7 @@ WorkpieceEditorService(
 
 - `get_contours()` — prefers `ICaptureSnapshotService.capture_snapshot(source="workpiece_editor").contours`, then falls back to `vision_service.get_latest_contours()`
 - `save_workpiece(data)` — calls `update_fn(storage_id, data)` if editing; otherwise `save_fn(data)`
-- `execute_workpiece(data)` — transforms pixel contour paths into robot poses and sends them to the robot. When a `VisionTargetResolver` is available it uses the full pipeline (homography → plane mapping → TCP delta → tool offset rotation → height correction); otherwise falls back to raw `ICoordinateTransformer.transform()`
+- `execute_workpiece(data)` — transforms pixel contour paths into final robot poses and sends them to the robot. When a `VisionTargetResolver` is available it builds a `VisionPoseRequest` for each contour point and uses the full pipeline (homography → plane mapping → TCP delta → tool offset rotation → height correction); otherwise falls back to raw `ICoordinateTransformer.transform()`
 - `set_editing(storage_id)` — stores the ID for the next save
 
 ---

@@ -1,5 +1,5 @@
 """
-Tests for src/applications/workpiece_library/model/workpiece_library_model.py
+Tests for src/applications/workpiece_library/model/workpiece_library_model.y_pixels
 """
 import unittest
 from unittest.mock import MagicMock

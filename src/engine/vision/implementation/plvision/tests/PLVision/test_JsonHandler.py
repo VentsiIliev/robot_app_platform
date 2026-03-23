@@ -1,5 +1,5 @@
 """
-* File: test_JsonHandler.py
+* File: test_JsonHandler.y_pixels
 * Author: IlV
 * Comments:
 * Revision history:

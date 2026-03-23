@@ -6,13 +6,11 @@ from src.applications.broker_debug.controller.broker_debug_controller import Bro
 from src.applications.broker_debug.model.broker_debug_model import BrokerDebugModel
 from src.applications.broker_debug.service.i_broker_debug_service import IBrokerDebugService
 from src.applications.broker_debug.view.broker_debug_view import BrokerDebugView
-from src.engine.core.i_messaging_service import IMessagingService
 
 
 class BrokerDebugFactory(ApplicationFactory):
-
-    def __init__(self, messaging: IMessagingService):
-        self._messaging = messaging
+    def __init__(self):
+        self._messaging = None
 
     def _create_model(self, service: IBrokerDebugService) -> BrokerDebugModel:
         return BrokerDebugModel(service)
@@ -24,3 +22,7 @@ class BrokerDebugFactory(ApplicationFactory):
         assert isinstance(model, BrokerDebugModel)
         assert isinstance(view, BrokerDebugView)
         return BrokerDebugController(model, view, self._messaging)
+
+    def build(self, service, messaging=None, jog_service=None):
+        self._messaging = messaging
+        return super().build(service, messaging=messaging, jog_service=jog_service)

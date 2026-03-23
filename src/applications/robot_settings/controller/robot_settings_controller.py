@@ -7,8 +7,6 @@ from src.applications.base.app_dialog import (
 )
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
-from src.applications.base.jog_controller import JogController
-from src.applications.base.robot_jog_service import RobotJogService
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
 from src.applications.robot_settings.model.mapper import RobotCalibrationMapper, RobotSettingsMapper
 from src.applications.robot_settings.model.robot_settings_model import RobotSettingsModel
@@ -21,11 +19,10 @@ from src.engine.robot.configuration import MovementGroup
 class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: RobotSettingsModel, view: RobotSettingsView,
-                 messaging: IMessagingService, jog_service: RobotJogService):
+                 messaging: IMessagingService):
         BackgroundWorker.__init__(self)
         self._model    = model
         self._view     = view
-        self._jog      = JogController(view, jog_service, messaging)
         self._logger   = logging.getLogger(self.__class__.__name__)
 
         self._view.save_requested.connect(self._on_save)
@@ -63,11 +60,9 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._model.get_expected_movement_groups(),
             extra_defs=extra_defs,
         )
-        self._jog.start()
 
     def stop(self) -> None:
         self._stop_threads()
-        self._jog.stop()
 
     def _on_save(self, _values: dict) -> None:
         try:
@@ -237,4 +232,3 @@ class _AddGroupDialog(AppDialog):
             has_trajectory_execution = self._trajectory_cb.isChecked(),
         )
         return name, defn
-

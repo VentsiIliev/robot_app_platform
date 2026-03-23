@@ -11,9 +11,7 @@ from PyQt6.QtWidgets import (
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, PRIMARY,
 )
-from src.applications.base.drawer_toggle import DrawerToggle
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.base.robot_jog_widget import RobotJogWidget
 
 _LOG_STYLE = """
 QPlainTextEdit {
@@ -42,8 +40,8 @@ _OVERLAY_ON_STYLE  = (
 )
 
 # ── Magnifier tunables ────────────────────────────────────────────────────────
-_MAG_CROP_HALF   = 60    # px from center to crop edge
-_MAG_INSET_SIZE  = 300   # output inset square (px)
+_MAG_CROP_HALF   = 60    # x_pixels from center to crop edge
+_MAG_INSET_SIZE  = 300   # output inset square (x_pixels)
 _MAG_MARGIN      = 8     # inset distance from frame edge
 _MAG_BORDER      = (220, 220, 220)
 _MAG_SOURCE      = (0, 200, 255)
@@ -206,6 +204,8 @@ class _ZoomableImageWidget(QWidget):
 # ── View ──────────────────────────────────────────────────────────────────────
 
 class PickTargetView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
 
     capture_requested             = pyqtSignal()
     move_requested                = pyqtSignal()
@@ -217,8 +217,6 @@ class PickTargetView(IApplicationView):
     z_mode_toggled                = pyqtSignal(bool)   # True = two-step
     apply_correction_requested    = pyqtSignal()
     measure_height_toggled        = pyqtSignal(bool)   # True = live measure after move
-    jog_requested                 = pyqtSignal(str, str, str, float)
-    jog_stopped                   = pyqtSignal(str)
 
     def __init__(self, parent=None):
         self._magnifier_on = False
@@ -249,16 +247,13 @@ class PickTargetView(IApplicationView):
         root.addWidget(left_split, stretch=1)
         root.addWidget(right)
 
-        self._jog_widget = RobotJogWidget()
+    def _configure_jog_widget(self) -> None:
+        if self._jog_widget is None:
+            return
         self._jog_widget.set_frame_options(
             self._target_cycle,
             default=self._target_cycle[self._target_index],
         )
-        self._drawer = DrawerToggle(self, side="right", width=320)
-        self._drawer.add_widget(self._jog_widget)
-        self._jog_widget.jog_requested.connect(self.jog_requested)
-        self._jog_widget.jog_stopped.connect(self.jog_stopped)
-        self._jog_widget.frame_changed.connect(self._on_jog_frame_changed)
 
     # ── Builders ──────────────────────────────────────────────────────
 
@@ -550,9 +545,6 @@ class PickTargetView(IApplicationView):
     def get_pickup_plane_rz(self) -> float:
         return self._pickup_rz_spin.value()
 
-    def set_jog_position(self, pos: list) -> None:
-        self._jog_widget.set_position(pos)
-
     def get_target(self) -> str:
         return self._target_cycle[self._target_index]
 
@@ -575,7 +567,7 @@ class PickTargetView(IApplicationView):
             "gripper": "Target: GRIPPER",
         }.get(target, f"Target: {target.upper()}")
         self._target_btn.setText(label)
-        if sync_jog:
+        if sync_jog and self._jog_widget is not None:
             self._jog_widget.set_frame(target)
         self.target_changed.emit(target)
 

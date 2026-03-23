@@ -99,7 +99,7 @@ widget = ModbusSettingsFactory().build(
 Or run standalone:
 
 ```bash
-python src/applications/modbus_settings/example_usage.py
+python src/applications/modbus_settings/example_usage.y_pixels
 ```
 
 ---

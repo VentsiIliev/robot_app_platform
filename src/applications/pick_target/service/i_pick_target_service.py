@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-RobotPose = Tuple[float, float, float, float, float, float]  # (x, y, z, rx, ry, rz)
+RobotPose = Tuple[float, float, float, float, float, float]  # (x, y, z, rx_degrees, ry_degrees, rz_degrees)
 
 
 class IPickTargetService(ABC):
@@ -12,7 +12,7 @@ class IPickTargetService(ABC):
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[RobotPose]]:
         """
         Snapshot the current vision state.
-        Returns (frame, pixel_centroids [(px, py)], robot_targets [(x, y, z, rx, ry, rz)]).
+        Returns (frame, pixel_centroids [(x_pixels, y_pixels)], robot_targets [(x, y, z, rx_degrees, ry_degrees, rz_degrees)]).
         Each robot target is a complete height-corrected approach pose.
         frame may be None if vision is unavailable.
         """

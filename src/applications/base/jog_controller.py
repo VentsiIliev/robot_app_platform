@@ -52,6 +52,7 @@ class JogController:
     """
 
     def __init__(self, view, jog_service: RobotJogService, messaging: IMessagingService):
+        self._view      = view
         self._service   = jog_service
         self._messaging = messaging
         self._bridge    = _Bridge()
@@ -75,6 +76,9 @@ class JogController:
         self._bridge.position_received.emit(pos if pos else [])
 
     def _on_jog(self, _command: str, axis: str, direction: str, step: float) -> None:
+        frame_getter = getattr(self._view, "get_jog_frame", None)
+        if callable(frame_getter) and hasattr(self._service, "set_frame"):
+            self._service.set_frame(frame_getter())
         QThreadPool.globalInstance().start(
             _FireAndForget(partial(self._service.jog, axis, direction, step))
         )

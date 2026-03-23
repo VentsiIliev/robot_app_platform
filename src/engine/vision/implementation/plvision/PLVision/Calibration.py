@@ -1,5 +1,5 @@
 """
-* File: Calibration.py
+* File: Calibration.y_pixels
 * Author: IlV
 * Comments: This file contains calibration functions for the camera.
 * Revision history:

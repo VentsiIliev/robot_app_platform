@@ -40,7 +40,7 @@ _RADIUS_INACTIVE = 7       # corner dot radius when area is inactive
 _ZOOM_STEP = 1.30
 _ZOOM_MIN  = 0.05
 _ZOOM_MAX  = 12.0
-_PAN_MARGIN = 40           # minimum px of image visible on any edge
+_PAN_MARGIN = 40           # minimum x_pixels of image visible on any edge
 
 _BG_COLOR        = QColor("#F8F9FA")   # light background — matches app BG_COLOR
 _TOOLBAR_STYLE   = "background: white; border-bottom: 1px solid #E0E0E0;"
@@ -54,7 +54,7 @@ _PALETTE: Dict[str, QColor] = {
 }
 _FALLBACK_COLOR = QColor(100, 140, 255)
 
-# Zoom buttons: ghost style using PRIMARY (#905BA9), touch-friendly 44 px squares
+# Zoom buttons: ghost style using PRIMARY (#905BA9), touch-friendly 44 x_pixels squares
 _ZOOM_BTN_STYLE = (
     "QPushButton {"
     "  background: white; color: #905BA9;"
@@ -434,13 +434,13 @@ class CameraView(QWidget):
         self._apply_zoom(self._zoom / _ZOOM_STEP, self._available_rect().center())
 
     def _clamp_pan(self) -> None:
-        """Keep at least _PAN_MARGIN px of the image visible on every edge."""
+        """Keep at least _PAN_MARGIN x_pixels of the image visible on every edge."""
         avail = self._available_rect()
         ir    = self._image_rect()
 
         m = _PAN_MARGIN
 
-        # right edge of image must be at least m px into widget from left
+        # right edge of image must be at least m x_pixels into widget from left
         max_pan_x = avail.width()  / 2 + ir.width()  / 2 - m
         # left edge of image must be at most (avail.width - m) from left → pan_x >= ...
         min_pan_x = -(avail.width()  / 2 + ir.width()  / 2 - m)

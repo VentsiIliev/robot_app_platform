@@ -44,13 +44,13 @@ class TargetPointTransformer:
     Because of that, mapped camera-center targeting uses only the
     orientation-dependent *change* from the mapped-frame reference:
 
-        delta(rz) = R(rz) * camera_to_tcp - R(reference_rz) * camera_to_tcp
+        delta(rz_degrees) = R(rz_degrees) * camera_to_tcp - R(reference_rz) * camera_to_tcp
 
     and the corrected mapped target becomes:
 
-        corrected_xy = mapped_xy - delta(rz)
+        corrected_xy = mapped_xy - delta(rz_degrees)
 
-    ``reference_rz`` comes from ``PlanePoseMapper.target_pose.rz`` when a mapper
+    ``reference_rz`` comes from ``PlanePoseMapper.target_pose.rz_degrees`` when a mapper
     exists, or falls back to `0°` for calibration-plane use.
     """
 
@@ -106,7 +106,7 @@ class TargetPointTransformer:
 
         When mapping is enabled, this returns the mapped target-plane point, and if
         ``current_rz`` is provided, it also applies the camera-to-TCP *delta*
-        correction relative to the mapper target pose `rz`. This preserves the
+        correction relative to the mapper target pose `rz_degrees`. This preserves the
         known-good baseline at the mapped-frame reference angle while
         compensating for camera motion around the TCP at other wrist
         orientations.
@@ -244,7 +244,7 @@ class TargetPointTransformer:
         orientation. For any other ``current_rz`` we compensate only for the
         change in camera position caused by rotating around the TCP:
 
-            delta(rz) = R(rz) * c - R(reference_rz) * c
+            delta(rz_degrees) = R(rz_degrees) * c - R(reference_rz) * c
 
         The returned tuple is:
         - corrected point in mapped target-frame XY

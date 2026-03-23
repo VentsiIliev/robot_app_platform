@@ -14,7 +14,7 @@ def ensure_permissions_current(
       storage but will never be queried — new apps start admin-only by default.
     - Writes to the repo only for entries that are genuinely missing.
 
-    Called once at startup in main.py after PermissionsRepository is built.
+    Called once at startup in main.y_pixels after PermissionsRepository is built.
     """
     existing = repo.get_all()
     for app_id in known_app_ids:

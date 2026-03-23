@@ -1,8 +1,8 @@
 """
 Tests for:
-  src/applications/login/i_login_application_service.py
-  src/applications/login/login_application_service.py
-  src/applications/login/stub_login_application_service.py
+  src/applications/login/i_login_application_service.y_pixels
+  src/applications/login/login_application_service.y_pixels
+  src/applications/login/stub_login_application_service.y_pixels
 
 LoginApplicationService delegates auth to IAuthenticationService, manages
 first-run detection, admin creation, robot positioning, and QR scanning.

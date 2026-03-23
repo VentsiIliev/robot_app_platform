@@ -8,7 +8,7 @@ class IPermissionsAdminService(IAuthorizationService):
     """Extends IAuthorizationService with admin write operations.
 
     Only the permissions editor model should depend on this interface.
-    main.py and runtime guards use the narrower IAuthorizationService.
+    main.y_pixels and runtime guards use the narrower IAuthorizationService.
     """
 
     @abstractmethod

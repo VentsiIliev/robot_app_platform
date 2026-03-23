@@ -1,5 +1,5 @@
 """
-Tests for src/engine/auth/i_authenticated_user.py
+Tests for src/engine/auth/i_authenticated_user.y_pixels
 """
 import unittest
 from enum import Enum

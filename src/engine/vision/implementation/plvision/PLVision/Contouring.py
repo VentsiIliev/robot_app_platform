@@ -1,5 +1,5 @@
 """
-* File: Contouring.py
+* File: Contouring.y_pixels
 * Author: AtD, IlV
 * Comments:
 * Revision history:

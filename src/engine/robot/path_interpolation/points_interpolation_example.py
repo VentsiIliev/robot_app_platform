@@ -1,11 +1,11 @@
 """
-Example usage of path_interpolation.py
+Example usage of path_interpolation.y_pixels
 
 Demonstrates the two-stage interpolation pipeline (linear densification → spline smoothing)
 on different geometric shapes. Run directly to generate debug plots for each shape.
 
 Usage:
-    python src/modules/utils/points_interpolation_example.py [shape]
+    python src/modules/utils/points_interpolation_example.y_pixels [shape]
 
 Shapes: rectangle, circle, triangle, l_shape, star, all (default: all)
 """
@@ -19,12 +19,12 @@ from src.engine.robot.path_interpolation import combined_interpolation
 from src.engine.robot.path_interpolation.debug_plotting import plot_trajectory_debug
 
 # ---------------------------------------------------------------------------
-# Shape generators – each returns a list of [x, y, z, rx, ry, rz] points
+# Shape generators – each returns a list of [x, y, z, rx_degrees, ry_degrees, rz_degrees] points
 # that simulate a robot tool-path at a constant Z height.
 # ---------------------------------------------------------------------------
 
 Z_HEIGHT = -150.0       # constant working height (mm)
-ORIENTATION = [0.0, 0.0, 0.0]  # rx, ry, rz (constant orientation)
+ORIENTATION = [0.0, 0.0, 0.0]  # rx_degrees, ry_degrees, rz_degrees (constant orientation)
 
 
 def _pt(x, y, z=Z_HEIGHT):

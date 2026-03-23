@@ -42,7 +42,6 @@ class PickAndPlaceConfig:
     tool_point_y: float                      = 0.0
     gripper_point_x: float                   = 0.0
     gripper_point_y: float                   = 0.0
-    apply_pickup_plane_reference_delta: bool = True
     gripper_z_offsets:    Dict[int, float]   = field(default_factory=dict)  # gripper_id → z_offset
     max_vision_retries:   int                = 10
     vision_retry_delay_s: float              = 1.0

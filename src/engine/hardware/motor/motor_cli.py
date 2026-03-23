@@ -1,10 +1,10 @@
 
 """
-motor_cli.py — interactive terminal runner for MotorService.
+motor_cli.y_pixels — interactive terminal runner for MotorService.
 
 Usage:
-    python src/engine/hardware/motor/motor_cli.py --port COM5 --slave 10
-    python src/engine/hardware/motor/motor_cli.py --port /dev/ttyUSB0 --slave 10 --motors 0 2 4 6
+    python src/engine/hardware/motor/motor_cli.y_pixels --port COM5 --slave 10
+    python src/engine/hardware/motor/motor_cli.y_pixels --port /dev/ttyUSB0 --slave 10 --motors 0 2 4 6
 
 Commands (once the REPL starts):
     open                          open persistent connection

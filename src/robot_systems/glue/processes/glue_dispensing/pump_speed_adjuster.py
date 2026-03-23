@@ -1,5 +1,5 @@
 """
-Dynamic pump speed adjustment — clean port of the old dynamicPumpSpeedAdjustment.py.
+Dynamic pump speed adjustment — clean port of the old dynamicPumpSpeedAdjustment.y_pixels.
 
 Key changes from original:
 - IMotorService.set_speed() replaces adjustMotorSpeed()

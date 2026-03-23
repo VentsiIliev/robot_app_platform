@@ -1,5 +1,5 @@
 """
-Tests for src/robot_systems/glue/domain/permissions/permissions_migrator.py
+Tests for src/robot_systems/glue/domain/permissions/permissions_migrator.y_pixels
 
 Verifies that ensure_permissions_current adds missing app_ids, removes stale keys,
 saves back only when changes were made, and preserves existing values untouched.

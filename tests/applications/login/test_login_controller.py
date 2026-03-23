@@ -1,5 +1,5 @@
 """
-Tests for src/applications/login/controller/login_controller.py
+Tests for src/applications/login/controller/login_controller.y_pixels
 """
 import unittest
 from unittest.mock import MagicMock

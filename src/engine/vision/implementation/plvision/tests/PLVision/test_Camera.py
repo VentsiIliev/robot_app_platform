@@ -1,5 +1,5 @@
 """
-* File: test_Camera.py
+* File: test_Camera.y_pixels
 * Author: IlV
 * Comments:
 * Revision history:

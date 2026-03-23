@@ -126,7 +126,7 @@ class HeightMeasuringService(IHeightMeasuringService):
         raw_height_mm = self._pixel_to_mm(pixel_delta)
         height_mm = raw_height_mm - float(getattr(self._calib, "zero_height_offset_mm", 0.0))
         _logger.info(
-            "Height at (%.2f, %.2f): %.4f mm  (raw=%.4f mm, zero_offset=%.4f mm, delta=%.3f px)",
+            "Height at (%.2f, %.2f): %.4f mm  (raw=%.4f mm, zero_offset=%.4f mm, delta=%.3f x_pixels)",
             x,
             y,
             height_mm,

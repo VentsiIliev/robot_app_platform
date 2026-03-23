@@ -1,5 +1,5 @@
 """
-Tests for src/applications/camera_settings/model/camera_settings_model.py
+Tests for src/applications/camera_settings/model/camera_settings_model.y_pixels
 """
 import unittest
 from unittest.mock import MagicMock
