@@ -2,13 +2,31 @@
 
 Copy `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/`, rename every `My` / `my` / `ROBOT_SYSTEM_BLUEPRINT`, and implement the marked `TODO` sections in order.
 
+The blueprint is also intentionally runnable in a minimal demo mode:
+- stub robot via `TestRobotWrapper`
+- shared login flow
+- shared `MyDashboard` + `CameraSettings` + `RobotSettings` + `ToolSettings` + `UserManagement` applications
+- no unfinished hardware/process dependencies
+
+Run it with:
+
+```bash
+python src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/run_demo.py
+```
+
 This blueprint is the robot-system equivalent of `APPLICATION_BLUEPRINT/`. It documents the current platform patterns for:
 - class-level system declaration
 - shared default service builders
 - provider-based runtime assembly
 - standardized storage and settings layout
+- standardized dashboard service boundary
 - reusable targeting, frames, and jog wiring
-- reusable Robot Settings targeting editing
+- reusable shared `RobotSettings` wiring, including targeting editing
+
+Use this blueprint as the reusability gate:
+- when adding a new shared robot-system feature, first make it work here
+- if it cannot be demonstrated cleanly in the blueprint demo, the abstraction is probably still too concrete-system-specific
+- treat the blueprint demo as the proof that a feature is platform-reusable
 
 ---
 
@@ -60,6 +78,7 @@ src/robot_systems/my_system/
   __init__.py
   my_robot_system.py
   bootstrap_provider.py
+  run_demo.py
   application_wiring.py
   component_ids.py
   service_builders.py
@@ -216,8 +235,88 @@ Rules:
 Goal:
 - `settings_specs` can be filled with concrete `SettingsSpec(...)` entries
 
+For systems that adopt the common robot contracts, prefer reusing the shared `RobotSettings` application instead of creating a system-specific robot-settings screen. The minimal reusable contract is:
+- `CommonSettingsID.ROBOT_CONFIG`
+- `CommonSettingsID.ROBOT_CALIBRATION`
+- `CommonServiceID.NAVIGATION`
+
+Optional:
+- `CommonSettingsID.TOOL_CHANGER_CONFIG`
+- robot-system targeting adapter callbacks for the `Targeting` tab
+
+For systems that adopt the common vision contract, prefer reusing the shared `CameraSettings` application. The reusable contract is:
+- `CommonServiceID.VISION`
+- `CommonSettingsID.VISION_CAMERA_SETTINGS`
+
+For systems that adopt the common tool contract, prefer reusing the shared `ToolSettings` application. The reusable contract is:
+- `CommonSettingsID.TOOL_CHANGER_CONFIG`
+
+In practice, systems should also declare:
+- `CommonServiceID.TOOLS`
+- `CommonSettingsID.ROBOT_CONFIG`
+
 Recommended detailed pattern:
 - see `settings/README.md` in the blueprint
+
+### 4b. Build the dashboard through a service boundary
+
+Files:
+- `applications/dashboard/service/i_my_dashboard_service.py`
+- `applications/dashboard/service/demo_my_dashboard_service.py`
+- `applications/dashboard/model/my_dashboard_model.py`
+- `applications/dashboard/view/my_dashboard_view.py`
+- `applications/dashboard/controller/my_dashboard_controller.py`
+- `applications/dashboard/my_dashboard_factory.py`
+
+Standardized approach:
+1. define one narrow dashboard service interface first
+2. make the model depend only on that interface
+3. keep the view generic and command-oriented
+4. let the controller translate button clicks into service calls
+5. only after that connect the service to your real coordinator/process
+
+If your dashboard view wraps `DashboardWidget`, the controller should also use the shared dashboard camera-feed mixin:
+- `src/applications/base/dashboard_camera_feed_mixin.py`
+
+That gives every dashboard a standard live camera preview path via:
+- `VisionTopics.LATEST_IMAGE`
+- `view.set_trajectory_image(...)`
+
+So a dashboard that uses `DashboardWidget` should not hand-roll its own camera subscription unless it needs special overlay behavior on top.
+
+For process-state updates, use:
+- `src/applications/base/dashboard_process_state_mixin.py`
+
+That gives a standard `ProcessTopics.ACTIVE` subscription automatically when:
+- the controller uses the mixin
+- the dashboard service implements `get_process_id()`
+
+So a standard dashboard should not subscribe to `ProcessTopics.ACTIVE` manually just to mirror process state into the UI.
+
+Recommended service contract:
+- `get_process_id()`
+- `load_state()`
+- `start()`
+- `stop()`
+- `pause()`
+- `resume()`
+- `reset_errors()`
+
+Recommended implementation order for a real robot system:
+1. create your main process/coordinator
+2. implement a dashboard service that delegates commands to it
+3. map process state into a small `DashboardState` dataclass
+4. expose only generic dashboard fields first:
+   - process state
+   - current mode
+   - active job summary
+   - short status lines
+5. add richer robot-system-specific cards only after the service contract is stable
+
+The blueprint demo dashboard is intentionally small and runnable. Replace:
+- `DemoMyDashboardService`
+with:
+- a coordinator-backed dashboard service for your concrete robot system
 
 ### 4. Define service contracts
 Files:
@@ -278,13 +377,20 @@ In `on_start()`:
 - read settings into instance attrs
 - start required background services
 - install providers like `_targeting_provider` and `_calibration_provider`
+- register generic runtime resources for automatic cleanup when appropriate:
+  - `self.register_managed_resource(service)`
+  - `self.register_managed_resource(service, cleanup=self._custom_cleanup)`
 
 In `on_stop()`:
-- stop background services
-- release robot-related resources
+- keep only the shutdown steps that are safety-critical or order-sensitive
+- let `BaseRobotSystem.stop()` clean up registered managed resources automatically in reverse order after `on_stop()`
 
 Goal:
 - runtime system is fully initialized and cleanly stoppable
+
+Use this split:
+- `register_managed_resource(...)` for generic lifecycle cleanup such as `stop()`, `close()`, `disconnect()`, or an explicit callback
+- `on_stop()` for robot/system shutdown semantics such as stopping motion, disabling the robot, or ordered process shutdown
 
 If the system supports robot calibration, prefer this pattern:
 
@@ -305,8 +411,8 @@ self._calibration_service = build_robot_system_calibration_service(self)
 
 Provider rule:
 - keep the provider minimal
-- it should normally only build the system-specific calibration-navigation
-  adapter
+- it should normally just return `CalibrationNavigationService(...)`
+- only the optional `before_move` side effect should vary per robot system
 
 If the system supports height measuring, prefer the same split:
 
@@ -330,6 +436,8 @@ Provider rule:
 - keep common settings, common repositories, and common robot/vision service
   access in the shared builder
 - use the provider only for the truly system-specific hardware piece
+- the blueprint ships with `MockLaserControl` so height-measuring flows can be
+  scaffolded before real laser hardware wiring exists
 
 ### 6. Wire applications
 File: `application_wiring.py`

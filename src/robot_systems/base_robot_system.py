@@ -137,6 +137,7 @@ class BaseRobotSystem(ABC):
         self._messaging_service: Optional[Any] = None
         self._system_manager:    Optional[Any] = None
         self._health_registry:   Optional[Any] = None
+        self._managed_resources: List[tuple[str, Any]] = []
         self._running = False
 
     @property
@@ -282,6 +283,61 @@ class BaseRobotSystem(ABC):
         return cls.storage_path("settings", "permissions.json")
 
     # ------------------------------------------------------------------
+    # Managed resources
+    # ------------------------------------------------------------------
+
+    def register_managed_resource(self, resource: Any, cleanup: Any = None) -> Any:
+        """Register a generic runtime resource for automatic shutdown.
+
+        Resources are cleaned up in reverse registration order after on_stop().
+        If cleanup is provided it is called directly. Otherwise the resource is
+        inspected for stop/close/disconnect in that order.
+        """
+        if resource is None:
+            return None
+        label = self._managed_resource_label(resource, cleanup)
+        entry = (label, cleanup if cleanup is not None else resource)
+        if entry not in self._managed_resources:
+            self._managed_resources.append(entry)
+        return resource
+
+    def unregister_managed_resource(self, resource: Any) -> None:
+        self._managed_resources = [
+            entry
+            for entry in self._managed_resources
+            if entry[1] is not resource
+        ]
+
+    def _cleanup_managed_resources(self) -> None:
+        for label, cleanup_target in reversed(self._managed_resources):
+            try:
+                self._cleanup_managed_resource(cleanup_target)
+            except Exception:
+                self._logger.exception(
+                    "Managed resource cleanup failed for %s in %s",
+                    label,
+                    self.metadata.name,
+                )
+        self._managed_resources.clear()
+
+    @staticmethod
+    def _managed_resource_label(resource: Any, cleanup: Any) -> str:
+        target = cleanup if cleanup is not None else resource
+        if callable(target):
+            return getattr(target, "__name__", repr(target))
+        return type(target).__name__
+
+    def _cleanup_managed_resource(self, resource: Any) -> None:
+        if callable(resource):
+            resource()
+            return
+        for method_name in ("stop", "close", "disconnect"):
+            method = getattr(resource, method_name, None)
+            if callable(method):
+                method()
+                return
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -306,9 +362,14 @@ class BaseRobotSystem(ABC):
         if not self._running:
             return
         self._logger.info("Stopping %s", self.metadata.name)
-        self.on_stop()
-        self._running = False
-        self._logger.info("%s stopped", self.metadata.name)
+        try:
+            self.on_stop()
+        finally:
+            try:
+                self._cleanup_managed_resources()
+            finally:
+                self._running = False
+                self._logger.info("%s stopped", self.metadata.name)
 
     @property
     def is_running(self) -> bool:

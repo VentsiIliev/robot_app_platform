@@ -1,29 +1,40 @@
 from __future__ import annotations
 
+from src.engine.common_service_ids import CommonServiceID
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.configuration import (
+    RobotCalibrationSettingsSerializer,
+    RobotSettingsSerializer,
+    ToolChangerSettingsSerializer,
+)
+from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
+from src.engine.robot.features.navigation_service import NavigationService
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
+from src.engine.vision.i_vision_service import IVisionService
 from src.robot_systems.base_robot_system import (
     ApplicationSpec,
     BaseRobotSystem,
     FolderSpec,
     RolePolicy,
     ServiceSpec,
-    SettingsSpec,
     ShellSetup,
+    SettingsSpec,
     SystemMetadata,
 )
-from src.engine.common_service_ids import CommonServiceID
-from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT import application_wiring
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.calibration.provider import MyRobotSystemCalibrationProvider
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.height_measuring.provider import (
-    MyRobotSystemHeightMeasuringProvider,
-)
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.component_ids import ServiceID
 from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.component_ids import SettingsID
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.provider import MyRobotSystemTargetingProvider
+from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.settings.targeting import (
+    MyTargetingSettingsSerializer,
+)
+from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.provider import (
+    MyRobotSystemTargetingProvider,
+)
 
 
 class MyRobotSystem(BaseRobotSystem):
-    """TODO: Rename to your real robot-system class name."""
+    """Runnable minimal demo robot system blueprint."""
 
     role_policy = RolePolicy(
         role_values=["Admin"],
@@ -38,14 +49,38 @@ class MyRobotSystem(BaseRobotSystem):
         folders=[
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
+            FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
         ],
         applications=[
-            # TODO: Keep only the applications this robot system actually supports.
+            ApplicationSpec(
+                name="MyDashboard",
+                folder_id=1,
+                icon="fa5s.tachometer-alt",
+                factory=application_wiring._build_dashboard_application,
+            ),
+            ApplicationSpec(
+                name="CameraSettings",
+                folder_id=2,
+                icon="fa5s.camera",
+                factory=application_wiring._build_camera_settings_application,
+            ),
             ApplicationSpec(
                 name="RobotSettings",
                 folder_id=2,
                 icon="mdi.robot-industrial",
                 factory=application_wiring._build_robot_settings_application,
+            ),
+            ApplicationSpec(
+                name="ToolSettings",
+                folder_id=2,
+                icon="fa5s.tools",
+                factory=application_wiring._build_tool_settings_application,
+            ),
+            ApplicationSpec(
+                name="UserManagement",
+                folder_id=3,
+                icon="fa5s.users-cog",
+                factory=application_wiring._build_user_management_application,
             ),
         ],
     )
@@ -59,54 +94,88 @@ class MyRobotSystem(BaseRobotSystem):
     )
 
     settings_specs = [
-        # TODO: Add the generic robot/runtime settings your system needs.
-        # SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json"),
-        # SettingsSpec(CommonSettingsID.ROBOT_CALIBRATION, RobotCalibrationSerializer(), "robot/calibration.json"),
-        # SettingsSpec(CommonSettingsID.VISION_CAMERA_SETTINGS, CameraSettingsSerializer(), "vision/camera_settings.json"),
-        # SettingsSpec(CommonSettingsID.TOOL_CHANGER_CONFIG, ToolChangerSettingsSerializer(), "tools/tool_changer.json"),
-        # SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
-        # SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_SETTINGS, HeightMeasuringSettingsSerializer(), "height_measuring/settings.json"),
-        # SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_CALIBRATION, HeightMeasuringCalibrationSerializer(), "height_measuring/calibration.json"),
-        # SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
-        # TODO: Add system-specific settings such as targeting definitions.
-        # SettingsSpec(SettingsID.MY_TARGETING, MyTargetingSettingsSerializer(), "targeting/definitions.json"),
+        SettingsSpec(
+            CommonSettingsID.ROBOT_CONFIG,
+            RobotSettingsSerializer(),
+            "robot/config.json",
+        ),
+        SettingsSpec(
+            CommonSettingsID.ROBOT_CALIBRATION,
+            RobotCalibrationSettingsSerializer(),
+            "robot/calibration.json",
+        ),
+        SettingsSpec(
+            CommonSettingsID.VISION_CAMERA_SETTINGS,
+            CameraSettingsSerializer(),
+            "vision/camera_settings.json",
+        ),
+        SettingsSpec(
+            CommonSettingsID.TOOL_CHANGER_CONFIG,
+            ToolChangerSettingsSerializer(),
+            "tools/tool_changer.json",
+        ),
+        SettingsSpec(
+            SettingsID.MY_TARGETING,
+            MyTargetingSettingsSerializer(),
+            "targeting/definitions.json",
+        ),
     ]
 
     services = [
-        # TODO: Declare required and optional services using service contracts.
-        # ServiceSpec(CommonServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control"),
-        # ServiceSpec(CommonServiceID.NAVIGATION, NavigationService, required=True, description="Named group navigation"),
-        # ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Vision pipeline"),
-        # ServiceSpec(CommonServiceID.TOOLS, IToolService, required=False, description="Tool manager"),
-        # ServiceSpec(ServiceID.CUSTOM_DEVICE, ICustomDeviceService, required=False, description="System-specific device"),
-        # `IVisionService` uses the shared default builder when
-        # CommonSettingsID.VISION_CAMERA_SETTINGS is declared.
-        # `IToolService` uses the shared default builder when
-        # CommonSettingsID.TOOL_CHANGER_CONFIG and CommonSettingsID.ROBOT_CONFIG are declared.
+        ServiceSpec(
+            CommonServiceID.ROBOT,
+            IRobotService,
+            required=True,
+            description="Shared robot runtime service",
+        ),
+        ServiceSpec(
+            CommonServiceID.NAVIGATION,
+            NavigationService,
+            required=True,
+            description="Shared named-position navigation service",
+        ),
+        ServiceSpec(
+            CommonServiceID.VISION,
+            IVisionService,
+            required=False,
+            description="Shared vision pipeline service",
+        ),
+        ServiceSpec(
+            CommonServiceID.TOOLS,
+            IToolService,
+            required=False,
+            description="Shared tool changer runtime service",
+        ),
     ]
 
     def on_start(self) -> None:
-        # TODO: Read resolved services and settings into instance attributes.
-        # Example:
-        # self._robot = self.get_service(CommonServiceID.ROBOT)
-        # self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
-        #
-        # TODO: Install providers here so shared base helpers can use them.
-        # Example:
-        # self._targeting_provider = MyRobotSystemTargetingProvider(self)
-        # self._calibration_provider = MyRobotSystemCalibrationProvider(self)
-        # self._height_measuring_provider = MyRobotSystemHeightMeasuringProvider(self)
-        #
-        # TODO: Build provider-based shared services here when your system supports them.
-        # Example:
-        # self._calibration_service = build_robot_system_calibration_service(self)
-        # (
-        #     self._height_measuring_service,
-        #     self._height_measuring_calibration_service,
-        #     self._laser_detection_service,
-        # ) = build_robot_system_height_measuring_services(self)
-        raise NotImplementedError("TODO: implement MyRobotSystem.on_start")
+        from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.applications.dashboard.service.demo_my_dashboard_service import (
+            DemoMyDashboardService,
+        )
+        from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.processes import DemoProcess
+
+        self._robot = self.get_service(CommonServiceID.ROBOT)
+        self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
+        self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
+        self._targeting_settings = self.get_settings(SettingsID.MY_TARGETING)
+        self._vision = self.get_optional_service(CommonServiceID.VISION)
+        self._tools = self.get_optional_service(CommonServiceID.TOOLS)
+        self._targeting_provider = MyRobotSystemTargetingProvider(self)
+        self._main_process = DemoProcess(
+            messaging=self._messaging_service,
+            system_manager=self._system_manager,
+            service_checker=self.health_registry.check,
+        )
+        self.register_managed_resource(self._main_process)
+        self._dashboard_service = DemoMyDashboardService(self._main_process)
+        if self._vision is not None:
+            self._vision.start()
+            self.register_managed_resource(self._vision)
 
     def on_stop(self) -> None:
-        # TODO: Shut down runtime services started in on_start().
-        raise NotImplementedError("TODO: implement MyRobotSystem.on_stop")
+        # Minimal runnable blueprint: nothing explicit to stop.
+        pass
+
+    @staticmethod
+    def build_demo_robot():
+        return TestRobotWrapper()

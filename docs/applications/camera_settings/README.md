@@ -1,6 +1,10 @@
 # `src/applications/camera_settings/` — Camera Settings
 
-Configures the vision system camera: resolution, brightness, contour thresholds, and work area regions. Persists settings via `ISettingsService` and optionally pushes live updates to the running `VisionSystem`.
+Configures the vision system camera: resolution, brightness, contour thresholds, and work area regions. Persists settings via `ISettingsService` and pushes live updates to the running `VisionSystem`.
+
+This is intended to be the shared camera-settings application for any robot system that adopts the common vision contract:
+- `CommonServiceID.VISION`
+- `CommonSettingsID.VISION_CAMERA_SETTINGS`
 
 ---
 
@@ -46,11 +50,11 @@ class ICameraSettingsService(ABC):
 
 ## `CameraSettingsApplicationService`
 
-The live implementation. Constructed with `settings_service` and an optional `vision_service`:
+The live implementation. Constructed with `settings_service` and `vision_service`:
 
 - `load_settings()` — reads from `SettingsService` via `CommonSettingsID.VISION_CAMERA_SETTINGS`; falls back to defaults if not found
 - `save_settings()` — persists via `SettingsService`
-- `update_settings(dict)` — delegates to `vision_service.updateSettings(dict)` if vision is available; returns `(False, "Vision unavailable")` otherwise
+- `update_settings(dict)` — delegates to `vision_service.updateSettings(dict)`
 - `set_raw_mode(bool)` — forwards directly to `vision_service.rawMode`
 - `save_work_area()` / `get_work_area()` — delegate to `vision_service`
 
@@ -101,14 +105,14 @@ Used by `CameraSettingsSerializer` (engine layer) to persist settings.
 
 ---
 
-## Wiring in `GlueRobotSystem`
+## Shared Wiring Pattern
 
 ```python
 service = CameraSettingsApplicationService(
     settings_service = robot_system._settings_service,
-    vision_service   = robot_system.get_optional_service(CommonServiceID.VISION),
+    vision_service   = robot_system.get_service(CommonServiceID.VISION),
 )
 return WidgetApplication(widget_factory=lambda ms: CameraSettingsFactory().build(service, ms))
 ```
 
-`ApplicationSpec`: `folder_id=2` (Service), icon `fa5s.camera`.
+Use this app directly in any robot system that declares the shared vision service/settings contract. `ApplicationSpec` is typically placed in the Service folder with icon `fa5s.camera`.

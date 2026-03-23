@@ -1,0 +1,40 @@
+{
+  "adaptive_movement_config": {
+    "min_step_mm": 0.1,
+    "max_step_mm": 25.0,
+    "target_error_mm": 0.25,
+    "max_error_ref": 100.0,
+    "k": 2.0,
+    "derivative_scaling": 0.5
+  },
+  "axis_mapping_config": {
+    "marker_id": 4,
+    "move_mm": 100.0,
+    "max_attempts": 100,
+    "delay_after_move_s": 1.0
+  },
+  "camera_tcp_offset_config": {
+    "run_during_robot_calibration": false,
+    "max_markers_for_tcp_capture": 2,
+    "marker_id": 4,
+    "rotation_step_deg": 15.0,
+    "iterations": 6,
+    "approach_z": 300.0,
+    "approach_rx": 180.0,
+    "approach_ry": 0.0,
+    "approach_rz": 0.0,
+    "velocity": 20,
+    "acceleration": 10,
+    "settle_time_s": 1.0,
+    "detection_attempts": 20,
+    "retry_delay_s": 0.1,
+    "recenter_max_iterations": 20,
+    "min_samples": 3,
+    "max_acceptance_std_mm": 10.0
+  },
+  "run_height_measurement": true,
+  "z_target": 300,
+  "required_ids": [0, 1, 2, 3, 4, 5, 6, 8],
+  "velocity": 30,
+  "acceleration": 10
+}

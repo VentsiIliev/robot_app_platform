@@ -8,6 +8,7 @@ from src.engine.auth.authentication_service import AuthenticationService
 from src.engine.auth.authorization_service import AuthorizationService
 from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
 from src.engine.common_service_ids import CommonServiceID
+from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
 from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.domain.users import build_my_user_schema
 from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.my_robot_system import MyRobotSystem
 from src.robot_systems.robot_system_bootstrap_provider import RobotSystemBootstrapProvider
@@ -19,8 +20,7 @@ class MyRobotSystemBootstrapProvider(RobotSystemBootstrapProvider):
         return MyRobotSystem
 
     def build_robot(self):
-        # TODO: Return the concrete robot driver used by this robot system.
-        raise NotImplementedError("TODO: implement build_robot")
+        return TestRobotWrapper()
 
     def build_login_view(self, robot_system, messaging_service):
         role_policy = robot_system.__class__.role_policy

@@ -2,6 +2,15 @@
 
 Manages the tool changer configuration: the set of available tools (`ToolDefinition`) and the physical slots (`SlotConfig`) that map slot positions to installed tools. Persists via `ISettingsService`.
 
+This is intended to be the shared tool-settings application for any robot system that adopts the common tool contract:
+- `CommonSettingsID.TOOL_CHANGER_CONFIG`
+
+In practice, robot systems should also declare:
+- `CommonServiceID.TOOLS`
+- `CommonSettingsID.ROBOT_CONFIG`
+
+because the shared runtime `IToolService` is built separately through `SystemBuilder` and validates those contracts up front.
+
 ---
 
 ## MVC Structure
@@ -53,14 +62,14 @@ Reads and writes the `TOOL_CHANGER_CONFIG` settings key via `ISettingsService`. 
 
 ---
 
-## Wiring in `GlueRobotSystem`
+## Shared Wiring Pattern
 
 ```python
 service = ToolSettingsApplicationService(robot_system._settings_service)
 return WidgetApplication(widget_factory=lambda _ms: ToolSettingsFactory().build(service))
 ```
 
-`ApplicationSpec`: `folder_id=2` (Service), icon `fa5s.tools`.
+Use this app directly in any robot system that declares the common tool settings contract. `ApplicationSpec` is typically placed in the Service folder with icon `fa5s.tools`.
 
 The application edits `CommonSettingsID.TOOL_CHANGER_CONFIG`. The runtime
 `IToolService` is built separately by `SystemBuilder` through the shared

@@ -4,6 +4,7 @@ from typing import Callable, List, Tuple
 
 from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
+from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
 from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.robot_systems.glue.component_ids import ProcessID
 from src.engine.core.i_messaging_service import IMessagingService
@@ -56,7 +57,7 @@ class _Worker(QObject):
 
 
 
-class GlueDashboardController(IApplicationController):
+class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
 
     def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: IMessagingService):
         self._model         = model
@@ -68,6 +69,7 @@ class GlueDashboardController(IApplicationController):
         self._active        = False
         self._logger        = logging.getLogger(self.__class__.__name__)
         self._bridge        = _DashboardBridge()
+        self._init_dashboard_camera_feed()
         self._workers: List[Tuple[QThread, _Worker]] = []
         self._notifications = UserNotificationPresenter(view, broker, translate=self._t)
         self._progress_timer = QTimer()
@@ -118,7 +120,6 @@ class GlueDashboardController(IApplicationController):
         self._bridge.process_state.connect(self._on_process_state_str)
         self._bridge.system_state.connect(self._on_system_state)      # ← was missing
         self._bridge.service_warning.connect(self._on_service_warning)
-        self._bridge.camera_image.connect(self._on_camera_image)
         self._bridge.overlay_loaded.connect(self._on_overlay_loaded)
 
     # ── Broker → Bridge ───────────────────────────────────────────────
@@ -151,8 +152,7 @@ class GlueDashboardController(IApplicationController):
                 ),
             )
 
-        self._sub(VisionTopics.LATEST_IMAGE,
-              lambda msg: self._bridge.camera_image.emit(msg))
+        self._subscribe_dashboard_camera_feed()
         self._sub(GlueOverlayTopics.JOB_LOADED,
                   lambda event: self._bridge.overlay_loaded.emit(event))
 
@@ -162,10 +162,6 @@ class GlueDashboardController(IApplicationController):
         )
 
     # ── Bridge slots (main thread) ─────────────────────────────────────
-    def _on_camera_image(self, message: object) -> None:
-        if self._view_ok():
-            self._view.set_trajectory_image(message)
-
     def _on_overlay_loaded(self, event: object) -> None:
         if not self._view_ok():
             return

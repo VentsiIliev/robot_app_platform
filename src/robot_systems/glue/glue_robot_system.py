@@ -157,9 +157,11 @@ class GlueRobotSystem(BaseRobotSystem):
             cell_ids=self._glue_cells.get_all_cell_ids(),
             interval_s=0.5,
         )
+        self.register_managed_resource(self._weight, cleanup=self._stop_weight_service)
         self._vision.start()
         self._motor = self.get_service(ServiceID.MOTOR)
         self._motor.open()
+        self.register_managed_resource(self._motor)
 
         self._height_measuring_service, self._height_measuring_calibration_service, \
             self._laser_detection_service = build_robot_system_height_measuring_services(self)
@@ -173,14 +175,12 @@ class GlueRobotSystem(BaseRobotSystem):
         self._robot.enable_robot()
 
     def on_stop(self) -> None:
-
-        self._weight.stop_monitoring()
-        self._weight.disconnect_all()
-
         self._robot.stop_motion()
         self._robot.disable_robot()
 
-        self._motor.close()
+    def _stop_weight_service(self) -> None:
+        self._weight.stop_monitoring()
+        self._weight.disconnect_all()
 
     # ── Coordinator ───────────────────────────────────────────────────────────
 

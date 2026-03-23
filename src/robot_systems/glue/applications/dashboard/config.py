@@ -13,12 +13,6 @@ class GlueCellTopics:
     def glue_type(cell_id: int) -> str: return f"glue/cell/{cell_id}/glue_type"
 
 
-# class SystemTopics:
-#     SYSTEM_STATE  = "vision_service/system_state"
-#
-#
-
-
 @dataclass
 class GlueDashboardConfig(DashboardConfig):
     default_cell_capacity_grams: float = 5000.0

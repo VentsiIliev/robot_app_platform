@@ -7,6 +7,10 @@ For new robot-system development, start from:
 - [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
 - [settings/README.md](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
 
+Reusability rule:
+- new shared robot-system features should be proven in [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) first
+- if a feature cannot be demonstrated cleanly in the blueprint demo, it is not yet standardized enough for platform-level reuse
+
 ---
 
 ## Architecture
@@ -198,9 +202,17 @@ app   = (
 - **Default builders vs providers**:
   - use shared default builders for truly common services such as `IVisionService` and `IToolService`
   - use robot-system providers when only part of the assembly is system-specific, such as targeting, calibration, and height measuring
+- **Dashboard standardization**:
+  - keep the dashboard UI behind a narrow robot-system service interface
+  - let the dashboard model depend only on that interface
+  - delegate the real start/stop/pause/resume logic to the system coordinator/process behind that service
+  - if the dashboard view uses `DashboardWidget`, use the shared dashboard camera-feed mixin so live vision frames are wired automatically through `VisionTopics.LATEST_IMAGE`
+  - if the dashboard service exposes `get_process_id()`, use the shared dashboard process-state mixin so `ProcessTopics.ACTIVE` is wired automatically too
+  - use the blueprint dashboard package as the starting pattern for new systems
 - **Robot system blueprint**:
   - use [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) as the starting template
-  - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration, height-measuring, and bootstrap provider skeletons
+  - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration, height-measuring, bootstrap provider, and dashboard skeletons
+  - treat the blueprint demo as the proof-of-reusability target for new shared robot-system patterns before depending on them in concrete systems
 - **System-specific settings pattern**:
   - define robot-system-specific persisted settings under the robot system's `settings/` package
   - register them through `SettingsID` in `component_ids.py`

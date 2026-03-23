@@ -1,0 +1,14 @@
+{
+  "slots": [
+    {
+      "slot_id": 1,
+      "tool_id": 1
+    }
+  ],
+  "tools": [
+    {
+      "id": 1,
+      "name": "default_tool"
+    }
+  ]
+}

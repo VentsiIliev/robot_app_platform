@@ -1,8 +1,9 @@
 from typing import List
-
+import logging
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
 
+_logger = logging.getLogger(__name__)
 
 class TestRobotWrapper(IRobot):
     """
@@ -10,23 +11,30 @@ class TestRobotWrapper(IRobot):
        Implements every method used by FairinoRobot and returns safe dummy values.
        """
 
-    def __init__(self):
-        print("⚙️  TestRobot initialized (mock robot).")
+    def execute_trajectory(self, path, rx: float = 180, ry: float = 0, rz: float = 0, vel: float = 0.1,
+                           acc: float = 0.1, blocking: bool = False) -> None:
+        _logger.debug(f"TestRobot: execute_trajectory called with {len(path)} points, rx={rx}, ry={ry}, rz={rz}, vel={vel}, acc={acc}, blocking={blocking}")
 
+    def __init__(self):
+        _logger.info("TestRobot initialized")
     # --- Motion commands ---
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
+        _logger.debug(f"TestRobot: move_ptp called with {len(position)} points, vel={vel}, acc={acc}, blocking={blocking}")
         return 0
 
     def move_linear(
         self, position: List[float], tool: int, user: int,
         vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True
     ) -> int:
+        _logger.debug(f"TestRobot: move_linear called with {len(position)} points, vel={vel}, acc={acc}, blend_radius={blend_radius}, blocking={blocking}")
         return 0
 
     def start_jog(self, axis: RobotAxis, direction: Direction, step: float, vel: float, acc: float) -> int:
+        _logger.debug(f"TestRobot: start_jog called with axis={axis}, direction={direction}, step={step}, vel={vel}, acc={acc}")
         return 0
 
     def stop_motion(self) -> int:
+        _logger.debug("TestRobot: stop_motion called")
         return 0
 
     # --- State queries ---
@@ -76,3 +84,4 @@ class TestRobotWrapper(IRobot):
 
     def GetSDKVersion(self):
         return "TestRobot SDK v1.0"
+

@@ -1,1 +1,2 @@
-username,password_hash,role
+id,firstName,lastName,password,role,email
+1,Demo,Admin,admin123,Admin,demo.admin@example.com

@@ -5,6 +5,19 @@ The `robot_settings` application provides a GUI for editing all robot configurat
 - the optional camera-TCP offset capture settings used inside the main robot calibration pipeline
 - optional robot-system-specific targeting definitions such as named points and named frames
 
+This is intended to be the shared robot-settings application for any robot system that adopts the common platform contracts:
+- `CommonSettingsID.ROBOT_CONFIG`
+- `CommonSettingsID.ROBOT_CALIBRATION`
+- `NavigationService`
+
+Optional integrations:
+- `CommonSettingsID.TOOL_CHANGER_CONFIG` for slot/tool display
+- robot-system-specific targeting load/save adapters for the `Targeting` tab
+
+The shared `CameraSettings` application follows the same model:
+- `CommonServiceID.VISION`
+- `CommonSettingsID.VISION_CAMERA_SETTINGS`
+
 ---
 
 ## Architecture
@@ -106,6 +119,7 @@ widget = RobotSettingsFactory().build(RobotSettingsApplicationService(settings_s
 - **Two mappers, one `save()`**: `RobotSettings` and `RobotCalibrationSettings` are persisted separately under different keys, but the view presents them in one unified flat dict. The model's `save()` calls both mappers and writes both files in one user action.
 - **`movement_groups` is not in the flat dict**: `MovementGroupsTab` has its own `get_values() → Dict[str, MovementGroup]` method. The controller reads both `get_values()` and `get_movement_groups()` separately and passes them to `model.save()`.
 - **Reusable app, robot-system adapters**: The application remains generic. Robot-system-specific targeting structures are converted to and from the editor payload in the wiring/service layer.
+- **Standard shared app**: If a robot system uses the shared `RobotSettings` and `RobotCalibrationSettings` engine models, it should reuse this application rather than creating a robot-system-specific copy.
 - **No broker subscriptions**: `RobotSettingsController.stop()` is a no-op. The application does not receive live data.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)
