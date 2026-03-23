@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
 from src.engine.robot.interfaces.i_robot_service import IRobotService
@@ -17,6 +17,8 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         robot_service:     Optional[IRobotService] = None,
         tool_settings_key: Optional[Enum]          = None,
         navigation_service: Optional[NavigationService] = None,
+        load_targeting_definitions_fn: Optional[Callable[[], object]] = None,
+        save_targeting_definitions_fn: Optional[Callable[[object], None]] = None,
     ):
         self._settings          = settings_service
         self._config_key        = config_key
@@ -24,6 +26,8 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         self._robot             = robot_service
         self._tool_settings_key = tool_settings_key
         self._navigation = navigation_service
+        self._load_targeting_definitions_fn = load_targeting_definitions_fn
+        self._save_targeting_definitions_fn = save_targeting_definitions_fn
 
     def load_config(self) -> RobotSettings:
         return self._settings.get(self._config_key)
@@ -36,6 +40,16 @@ class RobotSettingsApplicationService(IRobotSettingsService):
 
     def save_calibration(self, calibration: RobotCalibrationSettings) -> None:
         self._settings.save(self._calibration_key, calibration)
+
+    def load_targeting_definitions(self):
+        if self._load_targeting_definitions_fn is None:
+            return None
+        return self._load_targeting_definitions_fn()
+
+    def save_targeting_definitions(self, targeting) -> None:
+        if self._save_targeting_definitions_fn is None:
+            return
+        self._save_targeting_definitions_fn(targeting)
 
     def get_current_position(self) -> Optional[List[float]]:
         if self._robot is None:

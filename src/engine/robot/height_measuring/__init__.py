@@ -20,6 +20,12 @@ from src.engine.robot.height_measuring.laser_detector import LaserDetector
 from src.engine.robot.height_measuring.laser_detection_service import LaserDetectionService
 from src.engine.robot.height_measuring.laser_calibration_service import LaserCalibrationService
 from src.engine.robot.height_measuring.height_measuring_service import HeightMeasuringService
+from src.engine.robot.height_measuring.robot_system_height_measuring_provider import (
+    RobotSystemHeightMeasuringProvider,
+)
+from src.engine.robot.height_measuring.service_builders import (
+    build_robot_system_height_measuring_services,
+)
 
 __all__ = [
     "IHeightMeasuringService",
@@ -35,5 +41,6 @@ __all__ = [
     "LaserDetectionService",
     "LaserCalibrationService",
     "HeightMeasuringService",
+    "RobotSystemHeightMeasuringProvider",
+    "build_robot_system_height_measuring_services",
 ]
-

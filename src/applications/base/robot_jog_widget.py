@@ -1,5 +1,5 @@
 from functools import partial
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -167,16 +167,27 @@ class RobotJogWidget(QFrame):
         for name, idx in _POS_AXES:
             self._pos_labels[name].setText(f"{pos[idx]:.3f}")
 
-    def set_frame_options(self, names: List[str], default: Optional[str] = None) -> None:
+    def set_frame_options(self, names: Sequence[object], default: Optional[str] = None) -> None:
         """Populate the frame selector combo box."""
         if self._frame_combo is None:
             return
         self._frame_combo.blockSignals(True)
         self._frame_combo.clear()
-        for n in names:
-            self._frame_combo.addItem(n)
-        if default and default in names:
-            self._frame_combo.setCurrentText(default)
+        values: list[str] = []
+        for item in names:
+            if isinstance(item, tuple) and len(item) >= 2:
+                label = str(item[0])
+                value = str(item[1])
+                self._frame_combo.addItem(label, value)
+                values.append(value)
+            else:
+                value = str(item)
+                self._frame_combo.addItem(value, value)
+                values.append(value)
+        if default and default in values:
+            index = self._frame_combo.findData(default)
+            if index >= 0:
+                self._frame_combo.setCurrentIndex(index)
         self._frame_combo.blockSignals(False)
 
     def enable_frame_selector(self, enabled: bool) -> None:
@@ -192,14 +203,19 @@ class RobotJogWidget(QFrame):
         if self._frame_combo is None:
             return
         self._frame_combo.blockSignals(True)
-        self._frame_combo.setCurrentText(name)
+        index = self._frame_combo.findData(name)
+        if index >= 0:
+            self._frame_combo.setCurrentIndex(index)
+        else:
+            self._frame_combo.setCurrentText(name)
         self._frame_combo.blockSignals(False)
 
     def get_frame(self) -> str:
         """Return the currently selected frame name, or empty string if none."""
         if self._frame_combo is None or self._frame_combo.count() == 0:
             return ""
-        return self._frame_combo.currentText()
+        data = self._frame_combo.currentData()
+        return str(data) if data is not None else self._frame_combo.currentText()
 
     def _on_frame_combo_changed(self, text: str) -> None:
         if text:
@@ -510,5 +526,4 @@ class RobotJogWidget(QFrame):
             direction = "Minus" if direction == "Plus" else "Plus"
 
         self.jog_requested.emit("JOG_ROBOT", axis, direction, step)
-
 

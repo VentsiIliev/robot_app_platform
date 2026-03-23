@@ -90,7 +90,7 @@ The glue robot system defines its own `GLUE_USER_SCHEMA` in `src/robot_systems/g
 
 ```python
 service = UserManagementApplicationService(
-    CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA)
+    CsvUserRepository(robot_system.users_storage_path(), GLUE_USER_SCHEMA)
 )
 return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
 ```

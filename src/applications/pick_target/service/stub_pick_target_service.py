@@ -4,15 +4,17 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
-from src.engine.robot.targeting import PointRegistry
+from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
+from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
+from src.robot_systems.glue.targeting.registry import build_glue_point_registry
 
 _logger = logging.getLogger(__name__)
 
 
 class StubPickTargetService(IPickTargetService):
     def __init__(self):
-        self._registry = PointRegistry()
-        self._target = self._registry.camera().name
+        self._registry = build_glue_point_registry(GlueTargetingSettings.defaults())
+        self._target = self._registry.by_name(CAMERA_POINT).name
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
 

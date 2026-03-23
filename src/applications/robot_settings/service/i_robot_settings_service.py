@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Tuple
+from typing import Any, Optional, List, Tuple
 
 from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
 
@@ -17,6 +17,12 @@ class IRobotSettingsService(ABC):
 
     @abstractmethod
     def save_calibration(self, calibration: RobotCalibrationSettings) -> None: ...
+
+    @abstractmethod
+    def load_targeting_definitions(self) -> Any: ...
+
+    @abstractmethod
+    def save_targeting_definitions(self, targeting: Any) -> None: ...
 
     @abstractmethod
     def get_current_position(self) -> Optional[List[float]]: ...

@@ -7,19 +7,18 @@ if TYPE_CHECKING:
 import numpy as np
 
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
-from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
-from src.engine.robot.targeting import VisionPoseRequest, PointRegistry, TargetFrame, VisionTargetResolver
-from src.engine.robot.plane_pose_mapper import PlanePoseMapper
+from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
+from src.robot_systems.glue.targeting.frame_names import CALIBRATION_FRAME, PICKUP_FRAME
+from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
 
 _logger = logging.getLogger(__name__)
 
 _Z = 300.0
-_CALIB_RZ = 0.0
 
 
 class PickTargetApplicationService(IPickTargetService):
@@ -29,46 +28,25 @@ class PickTargetApplicationService(IPickTargetService):
         vision_service:  Optional[IVisionService],
         capture_snapshot_service: Optional[ICaptureSnapshotService],
         robot_service:   Optional[IRobotService],
-        transformer:     Optional[ICoordinateTransformer],
+        resolver:        Optional[VisionTargetResolver],
         robot_config=None,
         navigation=None,
-        height_correction: Optional["IHeightCorrectionService"] = None,
         height_measuring: Optional[IHeightMeasuringService] = None,
     ):
         self._vision        = vision_service
         self._capture_snapshot_service = capture_snapshot_service
         self._robot         = robot_service
-        self._transformer   = transformer
+        self._resolver      = resolver
         self._robot_config  = robot_config
         self._navigation    = navigation
         self._height_measuring  = height_measuring
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
-        self._pickup_mapper = self._build_pickup_mapper()
 
-        self._registry = PointRegistry(robot_config)
-        self._target_point = self._registry.camera()
-        tcp_x = float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0
-        tcp_y = float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0
-        self._resolver = (
-            VisionTargetResolver(
-                base_transformer=self._transformer,
-                registry=self._registry,
-                camera_to_tcp_x_offset=tcp_x,
-                camera_to_tcp_y_offset=tcp_y,
-                frames={
-                    TargetFrame.CALIBRATION: TargetFrame(
-                        TargetFrame.CALIBRATION,
-                        height_correction=height_correction,
-                    ),
-                    TargetFrame.PICKUP: TargetFrame(
-                        TargetFrame.PICKUP,
-                        mapper=self._pickup_mapper,
-                    ),
-                },
-            )
-            if self._transformer is not None else None
-        )
+        self._registry = resolver.registry if resolver is not None else None
+        self._target_point = self._registry.by_name(CAMERA_POINT) if self._registry is not None else None
+        pickup_frame = resolver.get_frame(PICKUP_FRAME) if resolver is not None else None
+        self._pickup_mapper = pickup_frame.mapper if pickup_frame is not None else None
 
     def set_target(self, target: str) -> None:
         self._target_point = self._registry.by_name(target)
@@ -85,28 +63,12 @@ class PickTargetApplicationService(IPickTargetService):
     def _user(self) -> int:
         return self._robot_config.robot_user if self._robot_config else 0
 
-    def _build_pickup_mapper(self) -> Optional[PlanePoseMapper]:
-        if self._navigation is None:
-            return None
-        try:
-            calibration_position = self._navigation.get_group_position("CALIBRATION")
-            pickup_position = self._navigation.get_group_position("HOME")
-            if calibration_position is None or pickup_position is None:
-                return None
-            return PlanePoseMapper.from_positions(
-                source_position=calibration_position,
-                target_position=pickup_position,
-            )
-        except Exception:
-            _logger.exception("Failed to initialize calibration-to-target-pose mapper")
-            return None
-
     @property
     def _active_frame(self) -> str:
-        return TargetFrame.PICKUP if self._use_pickup_plane else TargetFrame.CALIBRATION
+        return PICKUP_FRAME if self._use_pickup_plane else CALIBRATION_FRAME
 
     def get_jog_reference_rz(self) -> float:
-        if self._active_frame == TargetFrame.PICKUP and self._pickup_mapper is not None:
+        if self._active_frame == PICKUP_FRAME and self._pickup_mapper is not None:
             return float(self._pickup_mapper.target_pose.rz)
         return 0.0
 

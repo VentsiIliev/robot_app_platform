@@ -13,6 +13,9 @@ from src.robot_systems.glue.applications.glue_settings.view.glue_type_tab import
 class GlueSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no model, no business logic."""
 
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+
     save_requested        = pyqtSignal(dict)
     spray_on_changed      = pyqtSignal(bool)            # auto-save — no Save press needed
     add_type_requested    = pyqtSignal(str, str)

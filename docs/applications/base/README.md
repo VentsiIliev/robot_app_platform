@@ -131,6 +131,8 @@ class IApplicationView(AppWidget):
 
     def enable_jog_widget(self, enabled: bool) -> None: ...
     def set_jog_position(self, pos: list) -> None: ...
+    def set_jog_frame_options(self, names: list[str], default: str | None = None) -> None: ...
+    def set_jog_frame(self, name: str) -> None: ...
     def get_jog_frame(self) -> str: ...
 
     @abstractmethod
@@ -148,11 +150,13 @@ Behavior:
 - views opt in by setting `SHOW_JOG_WIDGET = True`
 - views that need frame selection opt in with `JOG_FRAME_SELECTOR_ENABLED = True`
 - controllers can always call `view.set_jog_position(...)`
+- shared jog wiring can always call `view.set_jog_frame_options(...)` and `view.set_jog_frame(...)`
 - `JogController` can always ask `view.get_jog_frame()`
 - `ApplicationFactory.build(..., messaging=..., jog_service=...)` auto-attaches jog support when the view opts in
 
 This removes the need for each application view to manually create `_drawer` and `_jog_widget`.
 It also removes the need for application controllers to manually construct `JogController`.
+When a robot system exposes a targeting provider, the shared jog service can also be built generically with `build_robot_system_jog_service(robot_system, ...)` instead of per-system custom jog wiring.
 
 Typical view configuration:
 
@@ -162,15 +166,9 @@ class PickTargetView(IApplicationView):
     JOG_FRAME_SELECTOR_ENABLED = True
 ```
 
-If a view needs custom jog setup, implement a private hook:
+If the active robot system provides dynamic jog-frame definitions, the shared jog controller populates the combo automatically from `jog_service.get_available_frames()` and refreshes it when targeting definitions change.
 
-```python
-def _configure_jog_widget(self) -> None:
-    self._jog_widget.set_frame_options(
-        ["camera", "tool", "gripper"],
-        default="tool",
-    )
-```
+Views should only use a private `_configure_jog_widget()` hook for presentation details or non-system-specific behavior, not to hardcode system frame names.
 
 If the view needs to react to frame changes, implement:
 

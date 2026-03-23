@@ -5,14 +5,17 @@ import time
 from typing import Optional
 
 from src.engine.robot.interfaces.i_robot_service import IRobotService
-from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService, VisionCaptureSnapshot
+from src.engine.vision.i_capture_snapshot_service import (
+    ICaptureSnapshotService,
+    VisionCaptureSnapshot,
+)
 from src.engine.vision.i_vision_service import IVisionService
 
 _logger = logging.getLogger(__name__)
 
 
-class GlueCaptureSnapshotService(ICaptureSnapshotService):
-    """Glue-level capture orchestrator that samples vision data and robot pose together."""
+class CaptureSnapshotService(ICaptureSnapshotService):
+    """Capture the latest vision data and robot pose as one runtime snapshot."""
 
     def __init__(
         self,
@@ -50,4 +53,3 @@ class GlueCaptureSnapshotService(ICaptureSnapshotService):
             timestamp_s=time.time(),
             source=source,
         )
-

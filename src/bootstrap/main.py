@@ -110,12 +110,11 @@ def _create_login_dialog(ctx, robot_app):
     from src.applications.login.login_application_service import LoginApplicationService
     from src.applications.login.login_factory import LoginFactory
     from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.robot_systems.glue.application_wiring import _USERS_STORAGE
     from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
     from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
     from src.robot_systems.glue.service_ids import ServiceID
 
-    user_repo     = CsvUserRepository(_USERS_STORAGE, GLUE_USER_SCHEMA)
+    user_repo     = CsvUserRepository(robot_app.users_storage_path(), GLUE_USER_SCHEMA)
     auth_service  = AuthenticationService(user_repo)
     robot_service = robot_app.get_optional_service(ServiceID.ROBOT)
     login_service = LoginApplicationService(
@@ -128,9 +127,8 @@ def _load_apps_into_shell(shell, session, robot_app, ctx):
     """Load role-filtered apps and reload the shell's folder page."""
     from src.engine.auth.authorization_service import AuthorizationService
     from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
-    from src.robot_systems.glue.application_wiring import _PERMISSIONS_STORAGE
 
-    auth_svc      = AuthorizationService(PermissionsRepository(_PERMISSIONS_STORAGE))
+    auth_svc      = AuthorizationService(PermissionsRepository(robot_app.permissions_storage_path()))
     visible_specs = auth_svc.get_visible_apps(session.current_user, GlueRobotSystem.shell.applications)
 
     loader = ApplicationLoader(ctx.messaging_service)

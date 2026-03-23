@@ -1,6 +1,10 @@
-# `src/robot_systems/` — Robot Applications
+# `src/robot_systems/` — Robot Systems
 
-The `robot_apps` package is the application layer of the platform. It contains `BaseRobotSystem` (the abstract declaration contract), `SystemBuilder` (the wiring engine), and one concrete app per robot type. Each robot system declares what it needs via class-level specs; `SystemBuilder` constructs and injects everything.
+The `robot_systems` package contains `BaseRobotSystem` (the abstract declaration contract), `SystemBuilder` (the wiring engine), and one concrete robot system per machine/domain. Each robot system declares what it needs via class-level specs; `SystemBuilder` constructs and injects everything.
+
+For new robot-system development, start from:
+- [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT)
+- [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
 
 ---
 
@@ -37,6 +41,11 @@ class BaseRobotSystem(ABC):
     def get_settings_repo(self, name: str) -> ISettingsRepository: ...
     def get_service(self, name: str) -> Any: ...
     def get_optional_service(self, name: str) -> Optional[Any]: ...
+    def get_targeting_provider(self): ...
+    def get_calibration_provider(self): ...
+    def get_height_measuring_provider(self): ...
+    def get_shared_vision_resolver(self): ...
+    def invalidate_shared_vision_resolver(self) -> None: ...
     def start(self, services: Dict[str, Any], settings_service=None,
               system_manager=None, messaging_service=None) -> None: ...
     def stop(self) -> None: ...
@@ -83,7 +92,7 @@ robot_config    = self.get_settings("robot_config")   # raises if no settings se
 
 ## `SystemBuilder`
 
-**File:** `app_builder.py`
+**File:** `system_builder.py`
 
 ```python
 class SystemBuilder:
@@ -119,16 +128,43 @@ SystemBuilder.build(AppClass)
 
 | Service Type | Default Builder | Notes |
 |-------------|----------------|-------|
-| `IRobotService` | `_build_robot_service` | Builds `RobotStatePublisher → RobotStateManager → RobotService`; starts state monitoring |
-| `NavigationService` | `_build_navigation` | Builds `NavigationService(motion, settings)` |
-| `IToolService` | `_build_tool_service` | Requires `tool_changer` and `settings`; skipped if either is `None` |
+| `IRobotService` | `build_robot_service` | Builds `RobotStatePublisher → RobotStateManager → RobotService`; starts state monitoring |
+| `NavigationService` | `build_navigation_service` | Builds `NavigationService(motion, settings)` using `CommonSettingsID.ROBOT_CONFIG` |
+| `IToolService` | `build_tool_service` | Shared default builder; requires `CommonSettingsID.TOOL_CHANGER_CONFIG` and `CommonSettingsID.ROBOT_CONFIG` |
+| `IVisionService` | `build_vision_service` | Shared default builder; requires `CommonSettingsID.VISION_CAMERA_SETTINGS` and standard robot-system storage layout |
 
 Custom services (e.g., `IWeightCellService`) are registered via `ServiceSpec.builder` on the app class.
+
+### Default Validation
+
+`SystemBuilder` now fails early when a robot system declares only one side of a
+shared default-builder contract.
+
+Current validation rules:
+
+- `IVisionService` requires `CommonSettingsID.VISION_CAMERA_SETTINGS`
+- `CommonSettingsID.VISION_CAMERA_SETTINGS` requires `IVisionService`
+- `IToolService` requires `CommonSettingsID.TOOL_CHANGER_CONFIG`
+- `IToolService` requires `CommonSettingsID.ROBOT_CONFIG`
+- `CommonSettingsID.TOOL_CHANGER_CONFIG` requires `IToolService`
+- `CommonSettingsID.ROBOT_CALIBRATION` requires:
+  - `IRobotService`
+  - `IVisionService`
+  - `NavigationService`
+  - `CommonSettingsID.ROBOT_CONFIG`
+- `CommonSettingsID.HEIGHT_MEASURING_SETTINGS` requires:
+  - `IRobotService`
+  - `IVisionService`
+  - `CommonSettingsID.ROBOT_CONFIG`
+  - `CommonSettingsID.HEIGHT_MEASURING_CALIBRATION`
+  - `CommonSettingsID.DEPTH_MAP_DATA`
+
+This keeps robot-system declarations coherent and avoids partial default wiring.
 
 ### Usage
 
 ```python
-from src.robot_systems.app_builder import SystemBuilder
+from src.robot_systems.system_builder import SystemBuilder
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
 
@@ -149,6 +185,13 @@ app   = (
 - **`translations_root` is robot-system owned**: The engine localization service is generic, but the actual catalogs live with the robot system. Bootstrap resolves the active robot system's translation directory from `metadata.translations_root`.
 - **Language persistence uses robot-system storage**: Bootstrap also stores the selected language under the active robot system's `settings_root`, so localization state follows the robot system instead of using a hardcoded global file.
 - **`SystemBuilder.register()`**: Allows overriding or extending the default service registry at the call site. Use when a service requires dependencies not available in the standard context.
+- **Common vs robot-system settings ids**: Shared infrastructure ids now live in [`CommonSettingsID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_settings_ids.py). Robot-system `settings_ids.py` files should only contain system-specific ids.
+- **Default builders vs providers**:
+  - use shared default builders for truly common services such as `IVisionService` and `IToolService`
+  - use robot-system providers when only part of the assembly is system-specific, such as targeting, calibration, and height measuring
+- **Robot system blueprint**:
+  - use [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) as the starting template
+  - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration and height-measuring provider skeletons
 - **`required=False` in `ServiceSpec`**: The app starts successfully even if an optional service fails to build. `on_start()` uses `get_optional_service()` and checks for `None` before using optional services.
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.
 

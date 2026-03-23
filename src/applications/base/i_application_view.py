@@ -64,6 +64,14 @@ class IApplicationView(AppWidget):
         if self._jog_widget is not None:
             self._jog_widget.set_position(pos)
 
+    def set_jog_frame_options(self, names: list[str], default: str | None = None) -> None:
+        if self._jog_widget is not None:
+            self._jog_widget.set_frame_options(names, default=default)
+
+    def set_jog_frame(self, name: str) -> None:
+        if self._jog_widget is not None:
+            self._jog_widget.set_frame(name)
+
     def get_jog_frame(self) -> str:
         if self._jog_widget is None:
             return ""

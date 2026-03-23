@@ -7,9 +7,9 @@ from typing import Dict, Optional, Tuple
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
-from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 from src.engine.robot.targeting.point_registry import PointRegistry
 from src.engine.robot.targeting.target_frame import TargetFrame
+from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class VisionTargetResolver:
         target: VisionPoseRequest,
         point: EndEffectorPoint,
         *,
-        frame: str = TargetFrame.CALIBRATION,
+        frame: str = "",
         mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult:
         frame_obj = self._frames.get(frame)
@@ -89,6 +89,9 @@ class VisionTargetResolver:
     @property
     def registry(self) -> PointRegistry:
         return self._registry
+
+    def get_frame(self, name: str) -> Optional[TargetFrame]:
+        return self._frames.get(name)
 
     def _apply_tcp_delta(self, plane_xy: Tuple[float, float], current_rz: float, active_mapper: Optional[PlanePoseMapper]) -> Tuple[Tuple[float, float], Tuple[float, float]]:
         if self._tcp_x == 0.0 and self._tcp_y == 0.0:

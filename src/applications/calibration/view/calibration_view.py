@@ -248,6 +248,7 @@ class _GridCameraView(CameraView):
 
 class CalibrationView(IApplicationView):
     SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
 
     capture_requested            = pyqtSignal()
     calibrate_camera_requested   = pyqtSignal()

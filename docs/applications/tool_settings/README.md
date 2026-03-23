@@ -61,3 +61,8 @@ return WidgetApplication(widget_factory=lambda _ms: ToolSettingsFactory().build(
 ```
 
 `ApplicationSpec`: `folder_id=2` (Service), icon `fa5s.tools`.
+
+The application edits `CommonSettingsID.TOOL_CHANGER_CONFIG`. The runtime
+`IToolService` is built separately by `SystemBuilder` through the shared
+default builder in
+[default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py).

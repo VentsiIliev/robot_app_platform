@@ -40,6 +40,7 @@ _BTN_OVERLAY_ON = (
 
 class HeightMeasuringView(IApplicationView):
     SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
 
     calibrate_requested        = pyqtSignal()
     stop_requested             = pyqtSignal()

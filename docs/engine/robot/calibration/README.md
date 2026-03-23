@@ -365,9 +365,11 @@ Holds all mutable state for a single calibration run. Key fields:
 ## Usage in `GlueRobotSystem`
 
 ```python
-from src.robot_systems.glue.service_builders import _build_calibration_service
+from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
+from src.robot_systems.glue.calibration.provider import GlueRobotSystemCalibrationProvider
 
-calibration_service = _build_calibration_service(robot_system)
+robot_system._calibration_provider = GlueRobotSystemCalibrationProvider(robot_system)
+calibration_service = build_robot_system_calibration_service(robot_system)
 # → RobotCalibrationService(
 #       config=RobotCalibrationConfig(vision, robot, navigation, ...),
 #       adaptive_config=AdaptiveMovementConfig(...),
@@ -375,7 +377,21 @@ calibration_service = _build_calibration_service(robot_system)
 #   )
 ```
 
-The service is stored as `robot_system._calibration_service` and exposed through `GlueOperationCoordinator.calibrate()` / `stop_calibration()`.
+The service builder is now generic. The robot system only provides a concrete
+`RobotSystemCalibrationProvider` implementation for the system-specific
+calibration move and then reuses the shared builder for the common assembly.
+
+The service is stored as `robot_system._calibration_service` and exposed
+through `GlueOperationCoordinator.calibrate()` / `stop_calibration()`.
+
+This is the recommended pattern for future robot systems:
+
+- keep the calibration workflow and settings assembly in the shared engine
+  builder
+- implement a robot-system provider only for the part that varies per system:
+  the calibration-navigation adapter
+- keep robot-system-specific side effects, such as glue's camera-area switch,
+  explicit in the provider instead of hiding them inside shared navigation
 
 ---
 

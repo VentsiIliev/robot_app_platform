@@ -12,6 +12,7 @@ class RobotTopics:
     POSITION     = "robot/position"
     VELOCITY     = "robot/velocity"
     ACCELERATION = "robot/acceleration"
+    TARGETING_DEFINITIONS_CHANGED = "robot/targeting_definitions_changed"
 ```
 
 All four topics are published together on every polling tick (every 0.5s) by `RobotStatePublisher`.
@@ -22,6 +23,7 @@ All four topics are published together on every polling tick (every 0.5s) by `Ro
 | `robot/position` | `List[float]` [x,y,z,rx,ry,rz] | `RobotTrajectoryWidget` in `pl_gui` |
 | `robot/velocity` | `float` | Dashboard, telemetry |
 | `robot/acceleration` | `float` | Dashboard, telemetry |
+| `robot/targeting_definitions_changed` | `dict` editor payload (robot-system-specific) | shared `JogController` refreshes frame options and live jog targeting |
 
 ---
 

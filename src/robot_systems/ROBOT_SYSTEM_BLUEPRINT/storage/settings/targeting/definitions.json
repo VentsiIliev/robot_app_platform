@@ -1,0 +1,19 @@
+{
+  "POINTS": [
+    {
+      "name": "camera",
+      "display_name": "camera",
+      "x_mm": 0.0,
+      "y_mm": 0.0
+    }
+  ],
+  "FRAMES": [
+    {
+      "name": "calibration",
+      "source_navigation_group": "",
+      "target_navigation_group": "",
+      "use_height_correction": true
+    }
+  ],
+  "ALIASES": {}
+}

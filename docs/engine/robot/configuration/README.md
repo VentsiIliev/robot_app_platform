@@ -154,7 +154,7 @@ JSON key mapping (top-level):
 | `safety_limits` | `"SAFETY_LIMITS"` |
 | `global_motion_settings` | `"GLOBAL_MOTION_SETTINGS"` |
 
-Robot-system-specific target-point definitions no longer belong here. In the glue system they live in a separate `GlueTargetingSettings` file under `glue/targeting.json`, where measured `camera/tool/gripper` points are stored independently from generic robot connection and motion settings.
+Robot-system-specific target-point definitions no longer belong here. In the glue system they live in a separate `GlueTargetingSettings` file under `targeting/definitions.json`, where measured points and frame definitions are stored independently from generic robot connection and motion settings.
 
 ---
 

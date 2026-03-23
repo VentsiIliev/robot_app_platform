@@ -10,16 +10,16 @@
 class RobotSettingsModel(IApplicationModel):
     def __init__(self, service: IRobotSettingsService): ...
 
-    def load(self) -> tuple[RobotSettings, RobotCalibrationSettings]: ...
-    def save(self, flat: dict, movement_groups: Dict[str, MovementGroup] = None) -> None: ...
+    def load(self) -> tuple[RobotSettings, RobotCalibrationSettings, dict | None]: ...
+    def save(self, flat: dict, movement_groups: Dict[str, MovementGroup] = None, targeting_data: dict | None = None) -> None: ...
 ```
 
-Holds both `_config: Optional[RobotSettings]` and `_calibration: Optional[RobotCalibrationSettings]` in memory after `load()`. Contains zero Qt imports.
+Holds `_config`, `_calibration`, and optional generic targeting-definition data in memory after `load()`. Contains zero Qt imports.
 
 | Method | Behaviour |
 |--------|-----------|
-| `load()` | Calls `service.load_config()` + `service.load_calibration()`, caches both, returns `(config, calibration)` |
-| `save(flat, movement_groups)` | Maps flat dict → updated `RobotSettings`; sets `updated.movement_groups = movement_groups`; saves via service; then maps flat dict → updated `RobotCalibrationSettings`; saves via service |
+| `load()` | Calls `service.load_config()` + `service.load_calibration()` + optional `service.load_targeting_definitions()`; returns `(config, calibration, targeting_definitions)` |
+| `save(flat, movement_groups, targeting_data)` | Saves updated `RobotSettings`, updated `RobotCalibrationSettings`, and optional generic targeting-definition payload through the service |
 
 ---
 
@@ -100,3 +100,4 @@ Additional keys used by the in-main-calibration capture flow:
 
 - **`deepcopy` before mutation**: Both mappers use `deepcopy(base)` before applying flat values. This prevents accidental mutation of the cached `_config` / `_calibration` objects.
 - **`movement_groups` bypasses the flat dict**: The `MovementGroupsTab` widget produces `Dict[str, MovementGroup]` objects directly, not flat string values. The model receives them as a separate argument and assigns them after mapping.
+- **Targeting stays generic in the app layer**: The model stores targeting definitions as plain dictionaries. Robot-system-specific conversion between that editor payload and real settings objects happens in the service/wiring layer, not in the reusable application package.

@@ -105,7 +105,7 @@ User navigates to WorkpieceEditor folder
 ## Wiring in `GlueRobotSystem`
 
 ```python
-base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+base_transformer, resolver = robot_system.get_shared_vision_resolver()
 
 service = WorkpieceEditorService(
     vision_service = robot_system.get_optional_service(ServiceID.VISION),
@@ -122,7 +122,7 @@ service = WorkpieceEditorService(
 )
 ```
 
-`_build_glue_vision_resolver()` returns the shared `(HomographyTransformer, VisionTargetResolver)` pair used by all glue applications. When vision is unavailable both values are `None` and the service falls back to raw pixel coordinates.
+`robot_system.get_shared_vision_resolver()` returns the shared `(HomographyTransformer, VisionTargetResolver)` pair used by all glue applications. When vision is unavailable both values are `None` and the service falls back to raw pixel coordinates.
 
 `ApplicationSpec`: `folder_id=1` (Production), icon `fa5s.draw-polygon`.
 

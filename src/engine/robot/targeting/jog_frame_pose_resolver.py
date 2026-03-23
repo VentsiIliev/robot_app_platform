@@ -28,6 +28,9 @@ class JogFramePoseResolver:
         except Exception:
             return None
 
+    def available_frames(self) -> list[str]:
+        return self._registry.names()
+
     def resolve(
         self,
         current_pose: Sequence[float],

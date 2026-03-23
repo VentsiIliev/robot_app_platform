@@ -135,7 +135,7 @@ For a normal pick-and-place pickup, the order is:
      - `camera` → camera-centered target (zero offset)
      - `tool` → camera-center plus the rotated `camera_center → tool_point` offset
      - `gripper` → camera-center plus the rotated `camera_center → gripper_point` offset
-   - all offsets come from `PointRegistry`, which reads measured reference points from `GlueTargetingSettings`
+   - all offsets come from the glue point registry builder, which reads measured reference points from `GlueTargetingSettings`
    - `PickAndPlaceConfig.pickup_target` supports the canonical names: `camera`, `tool`, `gripper`
    - the registry still accepts legacy `camera_center` when loading older config values
 6. `PickupCalculator`

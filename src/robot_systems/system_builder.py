@@ -8,19 +8,17 @@ from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.core.messaging_service import MessagingService
 
 from src.engine.repositories.settings_service_factory import build_from_specs
-from src.engine.robot.features.navigation_service import NavigationService
-from src.engine.robot.features.tool_service import RobotToolService
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.interfaces.i_motion_service import IMotionService
 from src.engine.robot.interfaces.i_robot import IRobot
-from src.engine.robot.interfaces.i_robot_service import IRobotService
-from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.safety.safety_checker import SafetyChecker
 from src.engine.robot.services.motion_service import MotionService
-from src.engine.robot.services.robot_service import RobotService
-from src.engine.robot.services.robot_state_manager import RobotStateManager
-from src.engine.robot.services.robot_state_publisher import RobotStatePublisher
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.vision.i_vision_service import IVisionService
 from src.robot_systems.base_robot_system import BaseRobotSystem
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.default_service_builders import DEFAULT_SERVICE_BUILDERS
 
 T = TypeVar("T", bound=BaseRobotSystem)
 _LOGGER = logging.getLogger("SystemBuilder")
@@ -32,46 +30,11 @@ class _BuildContext:
     motion: IMotionService
     settings: Any
     tool_changer: Any
-    messaging_service: IMessagingService       # ← added
+    messaging_service: IMessagingService
+    system_class: Type[BaseRobotSystem]
 
 
 ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
-
-
-# ---------------------------------------------------------------------------
-# Default builders
-# ---------------------------------------------------------------------------
-
-def _build_robot_service(ctx: _BuildContext) -> IRobotService:
-    publisher = RobotStatePublisher(ctx.messaging_service)
-    state = RobotStateManager(ctx.robot.clone(), publisher=publisher)
-    state.start_monitoring()
-    return RobotService(motion=ctx.motion, robot=ctx.robot, state_provider=state)
-
-
-def _build_navigation(ctx: _BuildContext) -> NavigationService:
-    return NavigationService(motion=ctx.motion,settings_key=SettingsID.ROBOT_CONFIG, settings_service=ctx.settings)
-
-
-def _build_tool_service(ctx: _BuildContext) -> Optional[IToolService]:
-    if ctx.tool_changer is None:
-        _LOGGER.debug("IToolService declared but no tool_changer provided — skipping")
-        return None
-    if ctx.settings is None:
-        _LOGGER.debug("IToolService declared but no settings provided — skipping")
-        return None
-    return RobotToolService(
-        motion_service=ctx.motion,
-        robot_config=ctx.settings.get_robot_config(),
-        tool_changer=ctx.tool_changer,
-    )
-
-
-_DEFAULT_REGISTRY: Dict[Type, ServiceBuilderFn] = {
-    IRobotService:     _build_robot_service,
-    NavigationService: _build_navigation,
-    IToolService:      _build_tool_service,
-}
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +48,7 @@ class SystemBuilder:
         self._settings: Any = None
         self._tool_changer: Any = None
         self._messaging_service: Optional[IMessagingService] = None   # ← no default
-        self._registry: Dict[Type, ServiceBuilderFn] = dict(_DEFAULT_REGISTRY)
+        self._registry: Dict[Type, ServiceBuilderFn] = dict(DEFAULT_SERVICE_BUILDERS)
 
     def with_robot(self, robot: IRobot) -> SystemBuilder:
         self._robot = robot
@@ -117,6 +80,7 @@ class SystemBuilder:
             )
 
         _LOGGER.debug("Building %s", system_class.metadata.name)
+        self._validate_default_service_requirements(system_class)
 
         settings_service = None
         if system_class.settings_specs:
@@ -126,13 +90,14 @@ class SystemBuilder:
                 system_class=system_class,
             )
 
-        motion = MotionService(self._robot, SafetyChecker(SettingsID.ROBOT_CONFIG, settings_service))
+        motion = MotionService(self._robot, SafetyChecker(CommonSettingsID.ROBOT_CONFIG, settings_service))
         ctx = _BuildContext(
             robot=self._robot,
             motion=motion,
             settings=settings_service,
             tool_changer=self._tool_changer,
             messaging_service=self._messaging_service,
+            system_class=system_class,
         )
 
         # merge vision_service-level per-spec builders into registry (override defaults)
@@ -178,4 +143,108 @@ class SystemBuilder:
         )
         return system
 
+    @staticmethod
+    def _validate_default_service_requirements(system_class: Type[BaseRobotSystem]) -> None:
+        declared_service_types = {spec.service_type for spec in system_class.services}
+        declared_settings = {spec.name for spec in system_class.settings_specs}
 
+        has_vision_service = IVisionService in declared_service_types
+        has_vision_settings = CommonSettingsID.VISION_CAMERA_SETTINGS in declared_settings
+        has_tool_service = IToolService in declared_service_types
+        has_tool_settings = CommonSettingsID.TOOL_CHANGER_CONFIG in declared_settings
+        has_robot_config = CommonSettingsID.ROBOT_CONFIG in declared_settings
+        has_navigation_service = NavigationService in declared_service_types
+        has_robot_calibration = CommonSettingsID.ROBOT_CALIBRATION in declared_settings
+        has_height_settings = CommonSettingsID.HEIGHT_MEASURING_SETTINGS in declared_settings
+        has_height_calibration = CommonSettingsID.HEIGHT_MEASURING_CALIBRATION in declared_settings
+        has_depth_map = CommonSettingsID.DEPTH_MAP_DATA in declared_settings
+
+        if has_vision_service and not has_vision_settings:
+            raise RuntimeError(
+                f"{system_class.__name__} declares IVisionService but does not declare "
+                "CommonSettingsID.VISION_CAMERA_SETTINGS in settings_specs. "
+                "Add the common camera settings spec or remove the IVisionService declaration."
+            )
+        if has_vision_settings and not has_vision_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.VISION_CAMERA_SETTINGS but does not declare "
+                "IVisionService in services. Add the IVisionService ServiceSpec or remove the unused camera settings spec."
+            )
+        if has_tool_service and not has_tool_settings:
+            raise RuntimeError(
+                f"{system_class.__name__} declares IToolService but does not declare "
+                "CommonSettingsID.TOOL_CHANGER_CONFIG in settings_specs. "
+                "Add the common tool changer settings spec or remove the IToolService declaration."
+            )
+        if has_tool_service and not has_robot_config:
+            raise RuntimeError(
+                f"{system_class.__name__} declares IToolService but does not declare "
+                "CommonSettingsID.ROBOT_CONFIG in settings_specs. "
+                "The default tool builder requires robot configuration to resolve tool/user motion settings."
+            )
+        if has_tool_settings and not has_tool_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.TOOL_CHANGER_CONFIG but does not declare "
+                "IToolService in services. Add the IToolService ServiceSpec or remove the unused tool changer settings spec."
+            )
+        if has_robot_calibration and not has_robot_config:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.ROBOT_CALIBRATION but does not declare "
+                "CommonSettingsID.ROBOT_CONFIG in settings_specs. "
+                "Robot calibration requires the common robot config for tool/user and TCP-offset persistence."
+            )
+        if has_robot_calibration and IRobotService not in declared_service_types:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.ROBOT_CALIBRATION but does not declare "
+                "IRobotService in services. Robot calibration requires a robot service."
+            )
+        if has_robot_calibration and not has_vision_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.ROBOT_CALIBRATION but does not declare "
+                "IVisionService in services. Robot calibration requires a vision service."
+            )
+        if has_robot_calibration and not has_navigation_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.ROBOT_CALIBRATION but does not declare "
+                "NavigationService in services. Robot calibration requires navigation to the CALIBRATION group."
+            )
+        if has_height_settings and not has_robot_config:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_SETTINGS but does not declare "
+                "CommonSettingsID.ROBOT_CONFIG in settings_specs. "
+                "Height measuring requires the common robot config for tool/user motion parameters."
+            )
+        if has_height_settings and IRobotService not in declared_service_types:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_SETTINGS but does not declare "
+                "IRobotService in services. Height measuring requires a robot service."
+            )
+        if has_height_settings and not has_height_calibration:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_SETTINGS but does not declare "
+                "CommonSettingsID.HEIGHT_MEASURING_CALIBRATION in settings_specs. "
+                "The shared height-measuring builder requires persisted laser calibration data."
+            )
+        if has_height_settings and not has_depth_map:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_SETTINGS but does not declare "
+                "CommonSettingsID.DEPTH_MAP_DATA in settings_specs. "
+                "The shared height-measuring builder requires persisted depth-map storage."
+            )
+        if has_height_settings and not has_vision_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_SETTINGS but does not declare "
+                "IVisionService in services. Height measuring requires a vision service."
+            )
+        if has_height_calibration and not has_height_settings:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.HEIGHT_MEASURING_CALIBRATION but does not declare "
+                "CommonSettingsID.HEIGHT_MEASURING_SETTINGS in settings_specs. "
+                "Add the common height-measuring settings spec or remove the unused calibration data spec."
+            )
+        if has_depth_map and not has_height_settings:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.DEPTH_MAP_DATA but does not declare "
+                "CommonSettingsID.HEIGHT_MEASURING_SETTINGS in settings_specs. "
+                "Add the common height-measuring settings spec or remove the unused depth-map data spec."
+            )

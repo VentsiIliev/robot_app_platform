@@ -75,7 +75,7 @@ The live implementation lives in `src/robot_systems/glue/domain/workpieces/glue_
 
 ```python
 service = GlueWorkpieceLibraryService(
-    WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+    WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path())),
     glue_types_fn = lambda: catalog.get_all_names(),
     tools_fn      = lambda: _get_tools(robot_system),
 )

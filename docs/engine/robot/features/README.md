@@ -36,6 +36,15 @@ Each method:
 
 Returns `False` if the position is not configured, the movement group is missing, or the move fails.
 
+`NavigationService` is intentionally limited to motion. If a robot system needs
+extra calibration-only behavior before moving to the `CALIBRATION` group, that
+behavior should be added outside `NavigationService`.
+
+For that purpose the platform provides
+`src/engine/robot/calibration/calibration_navigation_service.py`, which wraps
+`NavigationService.move_to_group("CALIBRATION", ...)` and optionally runs an
+explicit `before_move` callback.
+
 **Error conditions:**
 
 | Condition | Return | Logged |
@@ -71,6 +80,14 @@ class RobotToolService(IToolService):
 Both `pickup_gripper` and `drop_off_gripper` return `(success, error_message_or_None)`.
 
 Internally creates a `ToolManager` with the provided motion service, robot config, and tool changer.
+
+In robot-system wiring, `IToolService` is now normally built through the shared
+default builder in [default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py),
+not by per-system custom code. A robot system that declares `IToolService`
+must also declare:
+
+- `CommonSettingsID.TOOL_CHANGER_CONFIG`
+- `CommonSettingsID.ROBOT_CONFIG`
 
 ---
 

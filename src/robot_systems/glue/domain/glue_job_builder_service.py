@@ -5,6 +5,7 @@ from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
+from src.robot_systems.glue.targeting.point_names import TOOL_POINT
 
 
 class GlueJobBuildError(ValueError):
@@ -105,8 +106,7 @@ class GlueJobBuilderService:
             if self._resolver is not None:
                 result = self._resolver.resolve(
                     VisionPoseRequest(x_pixels=px, y_pixels=py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
-                    self._resolver.registry.tool(),
-                    # frame=TargetFrame.CALIBRATION,  # or PICKUP, etc.
+                    self._resolver.registry.by_name(TOOL_POINT),
                 )
                 x, y, z, _, _, final_rz = result.robot_pose()
             else:

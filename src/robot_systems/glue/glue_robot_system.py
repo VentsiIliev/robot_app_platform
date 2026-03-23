@@ -1,11 +1,13 @@
 import os
 
+from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.glue.settings_ids import SettingsID
 from src.engine.process import ProcessRequirements
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.robot.features.navigation_service import NavigationService
+from src.engine.robot.height_measuring import build_robot_system_height_measuring_services
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.robot_systems.base_robot_system import (
@@ -22,18 +24,17 @@ from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.robot_systems.glue.service_ids import ServiceID
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
+from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
 from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    build_vision_service, build_tool_service, _build_calibration_service, _build_height_measuring_services, \
     _build_generator_service
 from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
 from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
 from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
+from src.robot_systems.glue.calibration.provider import GlueRobotSystemCalibrationProvider
+from src.robot_systems.glue.height_measuring.provider import GlueRobotSystemHeightMeasuringProvider
 from src.robot_systems.glue.settings.device_control import GlueMotorConfigSerializer
-
-import os
-_WORKPIECES_STORAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "workpieces")
-
+from src.robot_systems.glue.targeting.provider import GlueRobotSystemTargetingProvider
 
 # ── System ───────────────────────────────────────────────────────────────────────
 
@@ -77,18 +78,18 @@ class GlueRobotSystem(BaseRobotSystem):
 
 
     settings_specs = [
-        SettingsSpec(SettingsID.ROBOT_CONFIG,      RobotSettingsSerializer(),             "robot/config.json"),
-        SettingsSpec(SettingsID.ROBOT_CALIBRATION, RobotCalibrationSettingsSerializer(),  "robot/calibration.json"),
+        SettingsSpec(CommonSettingsID.ROBOT_CONFIG,      RobotSettingsSerializer(),             "robot/config.json"),
+        SettingsSpec(CommonSettingsID.ROBOT_CALIBRATION, RobotCalibrationSettingsSerializer(),  "robot/calibration.json"),
         SettingsSpec(SettingsID.GLUE_SETTINGS,     GlueSettingsSerializer(),              "glue/settings.json"),
-        SettingsSpec(SettingsID.GLUE_TARGETING,    GlueTargetingSettingsSerializer(),     "glue/targeting.json"),
+        SettingsSpec(SettingsID.GLUE_TARGETING,    GlueTargetingSettingsSerializer(),     "targeting/definitions.json"),
         SettingsSpec(SettingsID.GLUE_CELLS,        GlueCellsConfigSerializer(),           "glue/cells.json"),
         SettingsSpec(SettingsID.GLUE_CATALOG,      GlueCatalogSerializer(),               "glue/catalog.json"),
-        SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
-        SettingsSpec(SettingsID.VISION_CAMERA_SETTINGS,     CameraSettingsSerializer(),         "vision/camera_settings.json"),
-        SettingsSpec(SettingsID.TOOL_CHANGER_CONFIG,          ToolChangerSettingsSerializer(),         "tools/tool_changer.json"),
-        SettingsSpec(SettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
-        SettingsSpec(SettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
-        SettingsSpec(SettingsID.DEPTH_MAP_DATA,               DepthMapDataSerializer(),                "height_measuring/depth_map.json"),
+        SettingsSpec(CommonSettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
+        SettingsSpec(CommonSettingsID.VISION_CAMERA_SETTINGS,     CameraSettingsSerializer(),         "vision/camera_settings.json"),
+        SettingsSpec(CommonSettingsID.TOOL_CHANGER_CONFIG,          ToolChangerSettingsSerializer(),         "tools/tool_changer.json"),
+        SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_SETTINGS,    HeightMeasuringSettingsSerializer(),     "height_measuring/settings.json"),
+        SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),        "height_measuring/calibration_data.json"),
+        SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA,               DepthMapDataSerializer(),                "height_measuring/depth_map.json"),
         SettingsSpec(SettingsID.GLUE_MOTOR_CONFIG,            GlueMotorConfigSerializer(),             "hardware/motors.json"),
     ]
 
@@ -96,7 +97,7 @@ class GlueRobotSystem(BaseRobotSystem):
         ServiceSpec(ServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control"),
         ServiceSpec(ServiceID.NAVIGATION, NavigationService, required=True, description="Named position movements"),
         ServiceSpec(ServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
-                    builder=build_vision_service),
+                    ),
         ServiceSpec(
             name=ServiceID.WEIGHT,
             service_type=IWeightCellService,
@@ -116,7 +117,6 @@ class GlueRobotSystem(BaseRobotSystem):
             service_type=IToolService,
             required=False,
             description="Gripper / tool changer",
-            builder=build_tool_service,
         ),
     ]
 
@@ -127,13 +127,15 @@ class GlueRobotSystem(BaseRobotSystem):
         self._vision = self.get_optional_service(ServiceID.VISION)
         self._navigation = GlueNavigationService(_nav_engine, vision=self._vision, robot_service=self._robot)  # ← typed facade
         self._tools = self.get_optional_service(ServiceID.TOOLS)
-        self._robot_config = self.get_settings(SettingsID.ROBOT_CONFIG)
-        self._robot_calibration = self.get_settings(SettingsID.ROBOT_CALIBRATION)
+        self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
+        self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._glue_settings = self.get_settings(SettingsID.GLUE_SETTINGS)
         self._glue_targeting = self.get_settings(SettingsID.GLUE_TARGETING)
         self._glue_cells = self.get_settings(SettingsID.GLUE_CELLS)
         self._glue_catalog = self.get_settings(SettingsID.GLUE_CATALOG)
-        self._modbus_config = self.get_settings(SettingsID.MODBUS_CONFIG)
+        self._modbus_config = self.get_settings(CommonSettingsID.MODBUS_CONFIG)
+        self._targeting_provider = GlueRobotSystemTargetingProvider(self)
+        self._height_measuring_provider = GlueRobotSystemHeightMeasuringProvider(self)
         self._weight = self.get_service(ServiceID.WEIGHT)
         self._vision = self.get_optional_service(ServiceID.VISION)
 
@@ -146,9 +148,10 @@ class GlueRobotSystem(BaseRobotSystem):
         self._motor.open()
 
         self._height_measuring_service, self._height_measuring_calibration_service, \
-            self._laser_detection_service = _build_height_measuring_services(self)
+            self._laser_detection_service = build_robot_system_height_measuring_services(self)
 
-        self._calibration_service = _build_calibration_service(self)
+        self._calibration_provider = GlueRobotSystemCalibrationProvider(self)
+        self._calibration_service = build_robot_system_calibration_service(self)
         self._generator           = _build_generator_service(self)
 
         self._coordinator         = self._build_coordinator()
@@ -172,7 +175,6 @@ class GlueRobotSystem(BaseRobotSystem):
         return self._coordinator
 
     def _build_coordinator(self):
-        from src.engine.vision.homography_transformer import HomographyTransformer
         from src.engine.process.process_requirements import ProcessRequirements
         from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
         from src.robot_systems.glue.processes.clean_process import CleanProcess
@@ -185,12 +187,10 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.domain.glue_job_builder_service import GlueJobBuilderService
         from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
         from src.robot_systems.glue.domain.matching.matching_service import MatchingService
-        from src.robot_systems.glue.capture_snapshot_service import GlueCaptureSnapshotService
-        from src.engine.robot.targeting import PointRegistry, VisionTargetResolver
+        from src.engine.vision.capture_snapshot_service import CaptureSnapshotService
         from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
             JsonWorkpieceRepository
         from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
-
         glue_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.MOTOR, ServiceID.VISION)
         pick_and_place_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
         clean_requirements = ProcessRequirements.requires(ServiceID.ROBOT)
@@ -200,27 +200,14 @@ class GlueRobotSystem(BaseRobotSystem):
         vision_service = self.get_optional_service(ServiceID.VISION)
         tool_service = self.get_optional_service(ServiceID.TOOLS)
         height_service = self._height_measuring_service
-        capture_snapshot_service = GlueCaptureSnapshotService(
+        capture_snapshot_service = CaptureSnapshotService(
             vision_service=vision_service,
             robot_service=self._robot,
         )
-        transformer = HomographyTransformer(vision_service.camera_to_robot_matrix_path) if vision_service else None
-        glue_resolver = (
-            VisionTargetResolver(
-                base_transformer=HomographyTransformer(
-                    vision_service.camera_to_robot_matrix_path,
-                    camera_to_tcp_x_offset=self._robot_config.camera_to_tcp_x_offset,
-                    camera_to_tcp_y_offset=self._robot_config.camera_to_tcp_y_offset,
-                ),
-                registry=PointRegistry(self._glue_targeting),
-                camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
-                camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
-            )
-            if vision_service is not None else None
-        )
+        transformer, glue_resolver = self.get_shared_vision_resolver()
         matching_service = MatchingService(
             vision_service=vision_service,
-            workpiece_service=WorkpieceService(JsonWorkpieceRepository(_WORKPIECES_STORAGE)),
+            workpiece_service=WorkpieceService(JsonWorkpieceRepository(self.workpieces_storage_path())),
             capture_snapshot_service=capture_snapshot_service,
         ) if vision_service else None
         glue_process = GlueProcess(
@@ -264,12 +251,11 @@ class GlueRobotSystem(BaseRobotSystem):
                 matching_service=matching_service,
                 tool_service=tool_service,
                 height_service=height_service,
-                transformer=transformer,
+                resolver=glue_resolver,
                 config=PickAndPlaceConfig(
                     camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                     camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
                 ),
-                targeting_settings=self._glue_targeting,
                 system_manager=self._system_manager,
                 requirements=pick_and_place_requirements,
                 service_checker=service_checker,

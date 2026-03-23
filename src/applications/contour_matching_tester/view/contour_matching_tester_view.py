@@ -100,6 +100,9 @@ _THUMB_SIZE = 140
 
 class ContourMatchingTesterView(IApplicationView):
 
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+
     load_workpieces_requested = pyqtSignal()
     match_requested           = pyqtSignal()
     capture_requested         = pyqtSignal()

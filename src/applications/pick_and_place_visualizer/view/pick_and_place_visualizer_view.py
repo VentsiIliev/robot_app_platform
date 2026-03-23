@@ -68,6 +68,9 @@ QPushButton:hover {
 
 class PickAndPlaceVisualizerView(IApplicationView):
 
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+
     simulation_toggled = pyqtSignal(bool)
     step_mode_toggled = pyqtSignal(bool)
     start_process_requested = pyqtSignal()

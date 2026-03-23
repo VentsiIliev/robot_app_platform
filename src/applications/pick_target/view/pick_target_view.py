@@ -247,14 +247,6 @@ class PickTargetView(IApplicationView):
         root.addWidget(left_split, stretch=1)
         root.addWidget(right)
 
-    def _configure_jog_widget(self) -> None:
-        if self._jog_widget is None:
-            return
-        self._jog_widget.set_frame_options(
-            self._target_cycle,
-            default=self._target_cycle[self._target_index],
-        )
-
     # ── Builders ──────────────────────────────────────────────────────
 
     def _build_image_panel(self, title: str, attr: str, placeholder: str = "No feed") -> QWidget:

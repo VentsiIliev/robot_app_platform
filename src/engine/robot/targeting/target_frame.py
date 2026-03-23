@@ -15,9 +15,6 @@ class TargetFrame:
     the application layer uses ``height_correction`` for Z.
     """
 
-    CALIBRATION = "calibration"
-    PICKUP = "pickup"
-
     def __init__(
         self,
         name: str,

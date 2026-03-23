@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
+from src.robot_systems.glue.targeting.point_names import TOOL_POINT
+
 
 def _has_valid_contour(contour) -> bool:
     if contour is None:
@@ -212,7 +214,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             for px, py in pts_px:
                 tr = self._resolver.resolve(
                     VisionPoseRequest(float(px), float(py), z_mm=base_z, rz_degrees=rz, rx_degrees=rx, ry_degrees=ry),
-                    self._resolver.registry.tool(),
+                    self._resolver.registry.by_name(TOOL_POINT),
                 )
                 result.append(list(tr.robot_pose()))
             return result

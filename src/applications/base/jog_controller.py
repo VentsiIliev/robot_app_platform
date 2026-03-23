@@ -12,6 +12,7 @@ _logger = logging.getLogger(__name__)
 
 class _Bridge(QObject):
     position_received = pyqtSignal(list)
+    frame_options_received = pyqtSignal(object, str)
 
 
 class _FireAndForget(QRunnable):
@@ -59,6 +60,7 @@ class JogController:
         self._subs      = []
 
         self._bridge.position_received.connect(view.set_jog_position)
+        self._bridge.frame_options_received.connect(self._apply_frame_options)
         view.jog_requested.connect(self._on_jog)
         view.jog_stopped.connect(self._on_jog_stop)
 
@@ -66,6 +68,10 @@ class JogController:
         cb = self._on_position
         self._messaging.subscribe(RobotTopics.POSITION, cb)
         self._subs.append((RobotTopics.POSITION, cb))
+        targeting_cb = self._on_targeting_definitions_changed
+        self._messaging.subscribe(RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb)
+        self._subs.append((RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb))
+        self._refresh_frame_options()
 
     def stop(self) -> None:
         for topic, cb in self._subs:
@@ -74,6 +80,31 @@ class JogController:
 
     def _on_position(self, pos: list) -> None:
         self._bridge.position_received.emit(pos if pos else [])
+
+    def _on_targeting_definitions_changed(self, _payload=None) -> None:
+        self._refresh_frame_options()
+
+    def _refresh_frame_options(self) -> None:
+        get_frames = getattr(self._service, "get_available_frames", None)
+        get_default = getattr(self._service, "get_default_frame", None)
+        if not callable(get_frames):
+            return
+        names = list(get_frames())
+        default = str(get_default() or "").strip() if callable(get_default) else ""
+        self._bridge.frame_options_received.emit(names, default)
+
+    def _apply_frame_options(self, names_obj, default: str) -> None:
+        set_options = getattr(self._view, "set_jog_frame_options", None)
+        if not callable(set_options):
+            return
+        names = list(names_obj or [])
+        current = getattr(self._view, "get_jog_frame", lambda: "")()
+        selected = current if current in names else default
+        set_options(names, default=selected or default)
+        if selected:
+            set_frame = getattr(self._service, "set_frame", None)
+            if callable(set_frame):
+                set_frame(selected)
 
     def _on_jog(self, _command: str, axis: str, direction: str, step: float) -> None:
         frame_getter = getattr(self._view, "get_jog_frame", None)

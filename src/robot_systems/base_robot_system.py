@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Type, Callable, TYPE_CHECKING
 from dataclasses import dataclass, field
 from src.engine.repositories.interfaces import ISettingsSerializer, ISettingsRepository, ISettingsService
+from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
+from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
+from src.engine.vision.homography_transformer import HomographyTransformer
 if TYPE_CHECKING:
     from src.engine.process.service_health_registry import ServiceHealthRegistry
 
@@ -147,6 +151,100 @@ class BaseRobotSystem(ABC):
                 f"Service name must be an Enum value, got {type(name).__name__!r}. "
             )
         return self._resolved.get(name)
+
+    def get_targeting_provider(self):
+        return getattr(self, "_targeting_provider", None)
+
+    def get_calibration_provider(self):
+        return getattr(self, "_calibration_provider", None)
+
+    def get_height_measuring_provider(self):
+        return getattr(self, "_height_measuring_provider", None)
+
+    def get_shared_vision_resolver(self):
+        provider = self.get_targeting_provider()
+        if provider is None:
+            return None, None
+        cached_transformer = getattr(self, "_vision_base_transformer", None)
+        cached_resolver = getattr(self, "_vision_target_resolver", None)
+        if cached_transformer is not None and cached_resolver is not None:
+            return cached_transformer, cached_resolver
+        transformer = self._build_shared_base_transformer()
+        if transformer is None:
+            return None, None
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        resolver = VisionTargetResolver(
+            base_transformer=transformer,
+            registry=provider.build_point_registry(),
+            camera_to_tcp_x_offset=tcp_x,
+            camera_to_tcp_y_offset=tcp_y,
+            frames=provider.build_frames(),
+        )
+        self._vision_base_transformer = transformer
+        self._vision_target_resolver = resolver
+        return transformer, resolver
+
+    def invalidate_shared_vision_resolver(self) -> None:
+        self._vision_base_transformer = None
+        self._vision_target_resolver = None
+
+    def build_robot_system_jog_pose_resolver(self, reference_rz_provider=None):
+        provider = self.get_targeting_provider()
+        if provider is None:
+            return None
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        return JogFramePoseResolver(
+            registry=provider.build_point_registry(),
+            camera_to_tcp_x_offset=tcp_x,
+            camera_to_tcp_y_offset=tcp_y,
+            reference_rz_provider=reference_rz_provider,
+        )
+
+    def _build_shared_base_transformer(self):
+        vision_service = getattr(self, "_vision", None)
+        if vision_service is None:
+            return None
+        robot_config = getattr(self, "_robot_config", None)
+        if robot_config is None:
+            return HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        return HomographyTransformer(
+            vision_service.camera_to_robot_matrix_path,
+            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
+            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
+        )
+
+    def _get_camera_to_tcp_offsets(self) -> tuple[float, float]:
+        robot_config = getattr(self, "_robot_config", None)
+        if robot_config is None:
+            return 0.0, 0.0
+        return (
+            float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
+            float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
+        )
+
+    @classmethod
+    def package_root(cls) -> str:
+        module = sys.modules.get(cls.__module__)
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            raise RuntimeError(f"[{cls.metadata.name}] Cannot resolve package root for '{cls.__module__}'")
+        return os.path.dirname(os.path.abspath(module_file))
+
+    @classmethod
+    def storage_path(cls, *parts: str) -> str:
+        return os.path.join(cls.package_root(), "storage", *parts)
+
+    @classmethod
+    def workpieces_storage_path(cls) -> str:
+        return cls.storage_path("workpieces")
+
+    @classmethod
+    def users_storage_path(cls) -> str:
+        return cls.storage_path("users", "users.csv")
+
+    @classmethod
+    def permissions_storage_path(cls) -> str:
+        return cls.storage_path("settings", "permissions.json")
 
     # ------------------------------------------------------------------
     # Lifecycle

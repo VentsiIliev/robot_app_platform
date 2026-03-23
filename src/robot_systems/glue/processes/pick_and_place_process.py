@@ -2,20 +2,19 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
-from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.robot.targeting import VisionTargetResolver
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.process_ids import ProcessID
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
-from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.shared_contracts.events.process_events import ProcessState
 from src.shared_contracts.events.pick_and_place_events import PickAndPlaceDiagnosticsEvent, PickAndPlaceTopics
@@ -31,9 +30,8 @@ class PickAndPlaceProcess(BaseProcess):
         matching_service: Optional[IMatchingService] = None,
         tool_service: Optional[IToolService] = None,
         height_service: Optional[IHeightMeasuringService] = None,
-        transformer: Optional[ICoordinateTransformer] = None,
+        resolver: Optional[VisionTargetResolver] = None,
         config: Optional[PickAndPlaceConfig] = None,
-        targeting_settings: Optional[GlueTargetingSettings] = None,
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
         service_checker: Optional[Callable[[str], bool]] = None,
@@ -50,9 +48,8 @@ class PickAndPlaceProcess(BaseProcess):
         self._matching   = matching_service
         self._tools      = tool_service
         self._height     = height_service
-        self._transformer = transformer
+        self._resolver   = resolver
         self._config     = config or PickAndPlaceConfig()
-        self._targeting_settings = targeting_settings or GlueTargetingSettings()
 
         self._simulation  = False
         self._run_allowed = threading.Event()
@@ -158,7 +155,7 @@ class PickAndPlaceProcess(BaseProcess):
     # ── Worker ────────────────────────────────────────────────────────
 
     def _run_workflow(self) -> None:
-        if not all([self._matching, self._tools, self._height, self._transformer]):
+        if not all([self._matching, self._tools, self._height, self._resolver]):
             self._logger.error("Pick-and-place not fully configured")
             self.set_error("Required services not configured")
             return
@@ -217,9 +214,8 @@ class PickAndPlaceProcess(BaseProcess):
                 matching=self._matching,
                 tools=self._tools,
                 height=self._height,
-                transformer=self._transformer,
+                resolver=self._resolver,
                 config=self._config,
-                targeting_settings=self._targeting_settings,
                 logger=self._logger,
                 on_workpiece_placed=_on_placed,
                 on_match_result=_on_match_result,

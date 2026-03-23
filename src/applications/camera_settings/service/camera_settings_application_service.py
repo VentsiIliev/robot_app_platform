@@ -2,6 +2,7 @@ import logging
 from src.applications.camera_settings.camera_settings_data import CameraSettingsData
 from src.applications.camera_settings.mapper import CameraSettingsMapper
 from src.applications.camera_settings.service.i_camera_settings_service import ICameraSettingsService
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.vision.i_vision_service import IVisionService
 
@@ -9,10 +10,9 @@ from src.engine.vision.i_vision_service import IVisionService
 class CameraSettingsApplicationService(ICameraSettingsService):
 
     def __init__(self, settings_service: ISettingsService, vision_service: IVisionService):
-        from src.robot_systems.glue.settings_ids import SettingsID
         self._settings_service = settings_service
         self._vision_service   = vision_service
-        self._settings_id      = SettingsID.VISION_CAMERA_SETTINGS
+        self._settings_id      = CommonSettingsID.VISION_CAMERA_SETTINGS
         self._logger           = logging.getLogger(self.__class__.__name__)
 
     def load_settings(self) -> CameraSettingsData:

@@ -10,10 +10,13 @@ The `robot` package is the heart of the motion control system. It implements the
 robot/
 ├── interfaces/            ← Abstract contracts for all robot subsystems
 ├── configuration/         ← Settings dataclasses (RobotSettings, RobotCalibrationSettings)
+├── targeting/             ← Generic target-point registry, resolver math, and robot-system targeting provider
 ├── plane_pose_mapper.py   ← Generic rigid XY frame mapping between robot pose frames
 ├── enums/                 ← RobotAxis, Direction, ImageToRobotMapping
 ├── safety/                ← SafetyChecker (workspace bounds enforcement)
 ├── features/              ← NavigationService (named positions), RobotToolService
+├── calibration/           ← Generic calibration builders + calibration provider contract
+├── height_measuring/      ← Generic height-measuring builders + provider contract
 ├── services/              ← MotionService, RobotStateManager, RobotService, factory
 ├── drivers/
 │   └── fairino/           ← FairinoRobot, TestRobotWrapper
@@ -214,6 +217,10 @@ The Calibration application uses `validate_pose(...)` only for precheck simulati
 |-----------|------------|------|
 | `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService` | [interfaces/](interfaces/README.md) |
 | `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `RobotCalibrationSettings` | [configuration/](configuration/README.md) |
+| `targeting/` | `PointRegistry`, `VisionTargetResolver`, `RobotSystemTargetingProvider` | generic image-target and jog-target resolution across robot systems |
+| `calibration/` | `build_robot_system_calibration_service`, `RobotSystemCalibrationProvider` | shared calibration builder with robot-system dependency adapter |
+| `height_measuring/` | `build_robot_system_height_measuring_services`, `RobotSystemHeightMeasuringProvider` | shared height-measuring builder with system-specific laser control provider |
+| `../../robot_systems/default_service_builders.py` | `build_tool_service`, `build_vision_service` | centralized shared default builders used by `SystemBuilder` |
 | `plane_pose_mapper.py` | `PlanePose`, `PlanePoseMapper` | reusable 2D rigid frame transform between robot pose frames |
 | `enums/` | `RobotAxis`, `Direction`, `ImageToRobotMapping` | [enums/](enums/README.md) |
 | `safety/` | `SafetyChecker` | [safety/](safety/README.md) |

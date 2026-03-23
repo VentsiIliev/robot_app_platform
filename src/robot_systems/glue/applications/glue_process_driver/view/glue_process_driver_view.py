@@ -20,6 +20,10 @@ from src.applications.base.i_application_view import IApplicationView
 
 
 class GlueProcessDriverView(IApplicationView):
+
+    SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
+
     capture_match_requested = pyqtSignal()
     build_job_requested = pyqtSignal()
     load_job_requested = pyqtSignal(bool)

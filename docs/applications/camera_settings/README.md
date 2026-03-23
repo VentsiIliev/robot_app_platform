@@ -48,7 +48,7 @@ class ICameraSettingsService(ABC):
 
 The live implementation. Constructed with `settings_service` and an optional `vision_service`:
 
-- `load_settings()` — reads from `SettingsService` via `SettingsID.VISION_CAMERA_SETTINGS`; falls back to defaults if not found
+- `load_settings()` — reads from `SettingsService` via `CommonSettingsID.VISION_CAMERA_SETTINGS`; falls back to defaults if not found
 - `save_settings()` — persists via `SettingsService`
 - `update_settings(dict)` — delegates to `vision_service.updateSettings(dict)` if vision is available; returns `(False, "Vision unavailable")` otherwise
 - `set_raw_mode(bool)` — forwards directly to `vision_service.rawMode`

@@ -9,6 +9,7 @@ Simple mental model:
 - `VisionTargetResolver` handles the geometry and returns the final robot pose
 
 All glue applications use the same math here so targeting behaves the same everywhere.
+Glue now also uses one shared `VisionTargetResolver` instance per robot-system runtime. It is built through `robot_system.get_shared_vision_resolver()`, cached on the robot system, and injected into applications and processes that need targeting.
 
 ---
 
@@ -38,25 +39,36 @@ The camera center has `(0.0, 0.0)` offsets by definition — it is the reference
 
 ```python
 class PointRegistry:
-    def __init__(self, point_settings=None) -> None: ...
-
-    def camera(self) -> EndEffectorPoint: ...
-    def tool(self) -> EndEffectorPoint: ...
-    def gripper(self) -> EndEffectorPoint: ...
+    def __init__(
+        self,
+        points: Iterable[EndEffectorPoint],
+        aliases: Mapping[str, str] | None = None,
+    ) -> None: ...
     def by_name(self, name: str) -> EndEffectorPoint: ...
     def names(self) -> list[str]: ...
 ```
 
-Builds the three canonical end-effector points from any settings object that carries `camera_center_x/y`, `tool_point_x/y`, `gripper_point_x/y` attributes. In the glue system this is `GlueTargetingSettings`, stored separately from generic robot config.
+The engine registry is now generic. It stores whatever named points a robot system defines.
 
-Offsets are computed once at construction:
+In the glue system, the canonical points and aliases are defined in:
+- `src/robot_systems/glue/targeting/point_names.py`
+- `src/robot_systems/glue/targeting/registry.py`
+
+Glue builds the registry from `GlueTargetingSettings`, stored separately from generic robot config.
+
+`targeting/definitions.json` now stores:
+- `POINTS`: named measured XY references in robot coordinates
+- `FRAMES`: named frame definitions with optional navigation source/target groups and height-correction usage
+- `ALIASES`: compatibility aliases such as `camera_center -> camera`
+
+Offsets are computed once at construction relative to the measured `camera` point:
 
 ```
 tool_offset    = tool_point    − camera_center
 gripper_offset = gripper_point − camera_center
 ```
 
-`by_name()` accepts the legacy string `"camera_center"` as an alias for `"camera"` so older config files and UI code continue to work without changes.
+`by_name()` accepts the legacy string `"camera_center"` as an alias for `"camera"` in the glue system because that alias is registered by glue, not by the engine.
 
 ---
 
@@ -86,10 +98,10 @@ So a request reads like:
 
 > "Move so this image target is reached at this Z and this orientation."
 
-The only thing not encoded in the request is which physical point should hit the target. That is provided separately as:
-- `registry.camera()`
-- `registry.tool()`
-- `registry.gripper()`
+The only thing not encoded in the request is which physical point should hit the target. That is provided separately as a concrete registry point:
+- `registry.by_name("camera")`
+- `registry.by_name("tool")`
+- `registry.by_name("gripper")`
 
 Callers are expected to pass one of these concrete registry points into the resolver.
 
@@ -117,13 +129,28 @@ class VisionTargetResolver:
         target: VisionPoseRequest,
         point: EndEffectorPoint,
         *,
-        frame: str = TargetFrame.CALIBRATION,
+        frame: str = "",
         mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult: ...
 
     @property
     def registry(self) -> PointRegistry: ...
 ```
+
+In the glue system this resolver is not re-created per application. The shared
+glue resolver is built through `BaseRobotSystem.get_shared_vision_resolver()`.
+
+The split is now:
+- generic base-system logic owns:
+  - homography transformer creation
+  - camera-to-TCP offset application
+  - `VisionTargetResolver` assembly
+- `GlueRobotSystemTargetingProvider` owns only:
+  - glue point registry construction
+  - glue frame-map construction
+  - jog target list metadata
+
+Consumers receive the same resolver instance and vary only the per-call request, point, and optional dynamic mapper.
 
 ---
 
@@ -148,12 +175,27 @@ Strings may still exist at the UI or config boundary, but they are resolved thro
 So manual jog moves and vision-resolved moves follow the same compensation model.
 
 This is used by the shared glue jog wiring, not only by `PickTarget`.
+`build_robot_system_jog_service(...)` now gets the generic robot/tool/user/TCP
+pieces from the base robot system and only asks the targeting provider for:
+- point registry
+- target options
+- default target
 
 ---
 
 ## Named Frames and Dynamic Mappers
 
-Register named coordinate planes at construction via the `frames=` dict. Each `TargetFrame` bundles a `PlanePoseMapper` and an optional `IHeightCorrectionService`:
+Register named coordinate planes at construction via the `frames=` dict. Each `TargetFrame` bundles a `PlanePoseMapper` and an optional `IHeightCorrectionService`.
+
+The engine no longer defines glue-specific frame names. In the glue system, frame names are defined in:
+- `src/robot_systems/glue/targeting/frame_names.py`
+
+Glue also provides `build_glue_target_frames(...)` which converts the stored frame definitions into runtime `TargetFrame` objects:
+- a frame with empty source/target groups behaves as a named frame with no mapper
+- a frame with both groups set builds a `PlanePoseMapper` from the corresponding navigation poses
+- `use_height_correction=True` attaches the active height-correction service to that frame
+
+Example:
 
 ```python
 resolver = VisionTargetResolver(
@@ -162,12 +204,12 @@ resolver = VisionTargetResolver(
     camera_to_tcp_x_offset=tcp_x,
     camera_to_tcp_y_offset=tcp_y,
     frames={
-        TargetFrame.CALIBRATION: TargetFrame(
-            TargetFrame.CALIBRATION,
+        CALIBRATION_FRAME: TargetFrame(
+            CALIBRATION_FRAME,
             height_correction=depth_map_service,
         ),
-        TargetFrame.PICKUP: TargetFrame(
-            TargetFrame.PICKUP,
+        PICKUP_FRAME: TargetFrame(
+            PICKUP_FRAME,
             mapper=pickup_mapper,
         ),
     },
@@ -177,7 +219,7 @@ resolver = VisionTargetResolver(
 Select a frame per call:
 
 ```python
-result = resolver.resolve(target, point, frame=TargetFrame.PICKUP)
+result = resolver.resolve(target, point, frame=PICKUP_FRAME)
 ```
 
 For dynamic one-off mappers (e.g. per-capture-pose remapping), pass `mapper=` directly — it takes precedence over the frame's mapper:
@@ -249,7 +291,7 @@ result = resolver.resolve(
         rx_degrees=180.0,
         ry_degrees=0.0,
     ),
-    resolver.registry.tool(),
+    resolver.registry.by_name("tool"),
 )
 
 pose = result.robot_pose()  # [x, y, z, rx, ry, rz]
@@ -294,17 +336,17 @@ Keep the other fields when you need diagnostics, logs, or UI overlays.
 |--------|--------------------------|
 | `PickTargetApplicationService` | stores the selected registry point and uses `resolve(VisionPoseRequest(...), point, frame=...)` to preview final robot poses |
 | `PickAndPlaceWorkflow` | resolves `pickup_target` through `PointRegistry` and uses `resolve(VisionPoseRequest(...), point, mapper=capture_mapper)` for dynamic capture-pose remapping |
-| `GlueJobBuilderService` | uses `resolve(VisionPoseRequest(...), registry.tool())` to build final glue waypoints |
-| `WorkpieceEditorService` | uses `resolve(VisionPoseRequest(...), registry.tool())` to execute edited contour paths through the same pipeline |
+| `GlueJobBuilderService` | uses `resolve(VisionPoseRequest(...), registry.by_name("tool"))` to build final glue waypoints |
+| `WorkpieceEditorService` | uses `resolve(VisionPoseRequest(...), registry.by_name("tool"))` to execute edited contour paths through the same pipeline |
 | shared glue jog wiring | uses `JogFramePoseResolver` so manual jog moves can respect TCP delta and selected `camera/tool/gripper` point semantics |
-| `application_wiring.py` | `_build_glue_vision_resolver()` builds one `PointRegistry` + `VisionTargetResolver` and shares it across applications |
+| `BaseRobotSystem` + glue targeting provider | `get_shared_vision_resolver()` builds one `PointRegistry` + `VisionTargetResolver` and shares it across applications |
 
 ---
 
 ## Construction in `application_wiring.py`
 
 ```python
-base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+base_transformer, resolver = robot_system.get_shared_vision_resolver()
 ```
 
 The helper returns `(None, None)` when vision is unavailable. All callers guard on `None` independently.

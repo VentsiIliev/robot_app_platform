@@ -6,6 +6,7 @@ from pl_gui.settings.settings_view.settings_view import SettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
+from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
 
 from src.applications.robot_settings.view.robot_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_CAMERA_TCP_GROUP, CALIBRATION_MARKER_GROUP,
@@ -18,10 +19,12 @@ from src.applications.robot_settings.view.robot_settings_schema import (
 class RobotSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no business logic."""
     SHOW_JOG_WIDGET = True
+    JOG_FRAME_SELECTOR_ENABLED = True
 
     save_requested = pyqtSignal(dict)
     value_changed = pyqtSignal(str, object, str)
     movement_changed = pyqtSignal(str, object)
+    targeting_changed = pyqtSignal()
     add_group_requested = pyqtSignal()
     remove_group_requested = pyqtSignal(str)
     set_current_requested = pyqtSignal(str)
@@ -38,6 +41,7 @@ class RobotSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         self._movement_tab  = MovementGroupsTab()
+        self._targeting_tab = TargetingDefinitionsTab()
         self._settings_view = CollapsibleSettingsView(
             component_name="RobotSettings",
             mapper=RobotSettingsMapper.to_flat_dict,
@@ -45,6 +49,7 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("General",             [ROBOT_INFO_GROUP, GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP])
         self._settings_view.add_tab("Safety",              [SAFETY_LIMITS_GROUP])
         self._settings_view.add_raw_tab("Movement Groups", self._movement_tab)
+        self._settings_view.add_raw_tab("Targeting", self._targeting_tab)
         self._settings_view.add_tab(
             "Calibration",
             [
@@ -64,6 +69,7 @@ class RobotSettingsView(IApplicationView):
         self._movement_tab.set_current_requested.connect(self.set_current_requested)
         self._movement_tab.move_to_requested.connect(self.move_to_requested)
         self._movement_tab.execute_trajectory_requested.connect(self.execute_requested)
+        self._targeting_tab.definitions_changed.connect(self.targeting_changed)
 
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)
@@ -80,11 +86,17 @@ class RobotSettingsView(IApplicationView):
     def load_movement_groups(self, groups: dict, extra_defs: dict = None) -> None:
         self._movement_tab.load(groups, extra_defs=extra_defs)
 
+    def load_targeting_definitions(self, data: dict | None) -> None:
+        self._targeting_tab.load(data)
+
     def get_values(self) -> dict:
         return self._settings_view.get_values()
 
     def get_movement_groups(self) -> dict:
         return self._movement_tab.get_values()
+
+    def get_targeting_definitions(self) -> dict:
+        return self._targeting_tab.get_values()
 
     def changeEvent(self, event) -> None:
         if event.type() == QEvent.Type.LanguageChange:

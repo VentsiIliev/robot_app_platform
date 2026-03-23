@@ -55,14 +55,6 @@ class CameraSettingsView(IApplicationView):
         self._connect_signals()
         self.vision_state_changed.connect(self._on_vision_state_changed)
 
-    def _configure_jog_widget(self) -> None:
-        if self._jog_widget is None:
-            return
-        self._jog_widget.set_frame_options(
-            ["camera", "tool", "gripper"],
-            default="camera",
-        )
-
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
         layout = QVBoxLayout(panel)

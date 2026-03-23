@@ -14,6 +14,7 @@ from src.applications.robot_settings.view.movement_groups_tab import MovementGro
 from src.applications.robot_settings.view.robot_settings_view import RobotSettingsView
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.robot.configuration import MovementGroup
+from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class RobotSettingsController(IApplicationController, BackgroundWorker):
@@ -24,6 +25,7 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._model    = model
         self._view     = view
         self._logger   = logging.getLogger(self.__class__.__name__)
+        self._messaging = messaging
 
         self._view.save_requested.connect(self._on_save)
         self._view.add_group_requested.connect(self._on_add_group)
@@ -31,17 +33,19 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_current_requested.connect(self._on_set_current)
         self._view.move_to_requested.connect(self._on_move_to)
         self._view.execute_requested.connect(self._on_execute)
+        self._view.targeting_changed.connect(self._on_targeting_changed)
         self._view.destroyed.connect(self.stop)
 
 
 
     def load(self) -> None:
-        config, calibration = self._model.load()
+        config, calibration, targeting_definitions = self._model.load()
         flat = {
             **RobotSettingsMapper.to_flat_dict(config),
             **RobotCalibrationMapper.to_flat_dict(calibration),
         }
         self._view.load_config(flat)
+        self._view.load_targeting_definitions(targeting_definitions)
 
         extra_defs = {}
         for slot_id, tool_name in self._model.get_slot_info():
@@ -68,8 +72,10 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         try:
             flat            = self._view.get_values()
             movement_groups = self._view.get_movement_groups()
+            targeting_definitions = self._view.get_targeting_definitions()
             self._logger.debug("Saving %d fields, %d movement groups", len(flat), len(movement_groups))
-            self._model.save(flat, movement_groups)
+            self._model.save(flat, movement_groups, targeting_definitions)
+            self._publish_targeting_changed(targeting_definitions)
             self._logger.info("Robot settings saved")
         except Exception:
             self._logger.exception("Failed to save robot settings")
@@ -139,13 +145,41 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             label=f"Execute — {group_name}",
         )
 
+    def _on_targeting_changed(self) -> None:
+        try:
+            self._model.save(
+                self._view.get_values(),
+                self._view.get_movement_groups(),
+                self._view.get_targeting_definitions(),
+            )
+            self._publish_targeting_changed(self._view.get_targeting_definitions())
+            self._logger.debug("Auto-saved targeting definitions")
+        except Exception:
+            self._logger.exception("Auto-save targeting definitions failed")
+
     def _auto_save(self) -> None:
         """Flush current movement groups to disk before any motion — NavigationService reads from settings."""
         try:
-            self._model.save(self._view.get_values(), self._view.get_movement_groups())
+            self._model.save(
+                self._view.get_values(),
+                self._view.get_movement_groups(),
+                self._view.get_targeting_definitions(),
+            )
+            self._publish_targeting_changed(self._view.get_targeting_definitions())
             self._logger.debug("Auto-saved before motion")
         except Exception:
             self._logger.exception("Auto-save before motion failed")
+
+    def _publish_targeting_changed(self, targeting_definitions: dict | None) -> None:
+        if self._messaging is None:
+            return
+        try:
+            self._messaging.publish(
+                RobotTopics.TARGETING_DEFINITIONS_CHANGED,
+                targeting_definitions or {},
+            )
+        except Exception:
+            self._logger.debug("Failed to publish targeting-definitions change event", exc_info=True)
 
     def _run_blocking(self, fn, label: str) -> None:
         self._run_in_thread(

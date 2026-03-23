@@ -13,7 +13,7 @@ class RobotSettingsView(IApplicationView):
     movement_changed = pyqtSignal(str, object)        # (key, value)
 ```
 
-Pure Qt widget. Builds a `SettingsView` with four tabs and a raw `MovementGroupsTab`. Contains zero business logic.
+Pure Qt widget. Builds a `SettingsView` with schema-driven tabs plus two raw tabs: `MovementGroupsTab` and `TargetingDefinitionsTab`. Contains zero business logic.
 
 ### Outbound Signals
 
@@ -29,8 +29,10 @@ Pure Qt widget. Builds a `SettingsView` with four tabs and a raw `MovementGroups
 |--------|--------|
 | `load_config(config: RobotSettings)` | Calls `settings_view.load(config)` — uses `RobotSettingsMapper.to_flat_dict` as the mapper |
 | `load_movement_groups(groups: dict)` | Calls `movement_tab.load(groups)` |
+| `load_targeting_definitions(data: dict \| None)` | Calls `targeting_tab.load(data)` |
 | `get_values() → dict` | Returns flat dict of all form field values |
 | `get_movement_groups() → dict` | Returns `Dict[str, MovementGroup]` from `MovementGroupsTab` |
+| `get_targeting_definitions() → dict` | Returns generic point/frame definition data from `TargetingDefinitionsTab` |
 
 ### Tab Layout
 
@@ -41,6 +43,7 @@ RobotSettingsView
        │                           TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP
        ├─ "Safety" tab          → SAFETY_LIMITS_GROUP
        ├─ "Movement Groups" tab → MovementGroupsTab (raw QWidget tab)
+       ├─ "Targeting" tab       → TargetingDefinitionsTab (raw QWidget tab)
        └─ "Calibration" tab     → CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_MARKER_GROUP,
                                    CALIBRATION_AXIS_MAPPING_GROUP,
                                    CALIBRATION_CAMERA_TCP_GROUP
@@ -70,9 +73,15 @@ Defines the field group constants consumed by `RobotSettingsView.setup_ui()`:
 
 `MovementGroupsTab` is a raw `QWidget` (not a `SettingsView` tab) that provides a table or form for editing named movement positions. It emits `values_changed(key, value)` as the user edits rows, and exposes `load(groups: dict)` and `get_values() → Dict[str, MovementGroup]`.
 
+`TargetingDefinitionsTab` is another raw `QWidget` that edits generic targeting metadata:
+- named target points with `x_mm`, `y_mm`, and optional aliases
+- named frames with optional source/target navigation groups and a height-correction toggle
+
+The tab itself is generic. Robot-system-specific protected rows and serialization are supplied by the application service layer.
+
 ---
 
 ## Design Notes
 
 - **Named forwarders for all signal bridging**: `_on_inner_save`, `_on_inner_value_changed`, `_on_inner_movement_changed` are named bound methods — no lambdas or `.emit` references are used as connection targets.
-- **`SettingsView.add_raw_tab`**: The Movement Groups tab is added with `add_raw_tab()` which accepts any `QWidget` directly, bypassing schema-driven field generation.
+- **`SettingsView.add_raw_tab`**: The Movement Groups and Targeting tabs are added with `add_raw_tab()` which accepts any `QWidget` directly, bypassing schema-driven field generation.

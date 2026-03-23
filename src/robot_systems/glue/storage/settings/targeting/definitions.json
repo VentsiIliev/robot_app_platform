@@ -1,0 +1,39 @@
+{
+  "POINTS": [
+    {
+      "name": "camera",
+      "display_name": "camera",
+      "x_mm": -78.185,
+      "y_mm": 390.527
+    },
+    {
+      "name": "tool",
+      "display_name": "tool",
+      "x_mm": -82.573,
+      "y_mm": 466.438
+    },
+    {
+      "name": "gripper",
+      "display_name": "gripper",
+      "x_mm": 16.656,
+      "y_mm": 469.511
+    }
+  ],
+  "FRAMES": [
+    {
+      "name": "calibration",
+      "source_navigation_group": "",
+      "target_navigation_group": "",
+      "use_height_correction": true
+    },
+    {
+      "name": "pickup",
+      "source_navigation_group": "CALIBRATION",
+      "target_navigation_group": "HOME",
+      "use_height_correction": false
+    }
+  ],
+  "ALIASES": {
+    "camera_center": "camera"
+  }
+}

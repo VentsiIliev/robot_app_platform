@@ -8,10 +8,10 @@ The engine vision layer also declares [ICaptureSnapshotService](/home/ilv/Deskto
 - robot pose at capture time
 - timestamp / source metadata
 
-The current glue implementation lives outside the engine in:
-- [capture_snapshot_service.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/capture_snapshot_service.py)
+The default engine implementation now lives in:
+- [capture_snapshot_service.py](/home/ilv/Desktop/robot_app_platform/src/engine/vision/capture_snapshot_service.py)
 
-This keeps engine vision free of robot-service dependencies while still giving applications and processes one stable abstraction for capture-time geometry.
+This gives applications and processes one stable abstraction for capture-time geometry while keeping the capture logic reusable across robot systems.
 
 ---
 
@@ -186,7 +186,7 @@ class CameraSettingsSerializer(ISettingsSerializer[CameraSettings]):
     def from_dict(self, data)   -> CameraSettings: ...
 ```
 
-Used in `GlueRobotSystem.settings_specs` under key `SettingsID.VISION_CAMERA_SETTINGS`. The file is stored at `storage/settings/GlueSystem/vision/camera_settings.json`.
+Used in robot-system `settings_specs` under key `CommonSettingsID.VISION_CAMERA_SETTINGS`. The file is stored at `storage/settings/<system>/vision/camera_settings.json`.
 
 ---
 
@@ -196,7 +196,7 @@ Used in `GlueRobotSystem.settings_specs` under key `SettingsID.VISION_CAMERA_SET
 
 See [VisionSystem.py](../../../src/engine/vision/implementation/VisionSystem/VisionSystem.py) for full API. Key points:
 
-- Constructed once by `build_vision_service()` in `service_builders.py`
+- Constructed once by the default `build_vision_service()` in [src/robot_systems/default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py)
 - Runs a background `FrameGrabber` thread from construction
 - When the camera backend starts returning repeated `None` frames, `FrameGrabber` now attempts in-place stream recovery with `stop_stream()` / `start_stream()` instead of spinning forever on stale data
 - `start_system()` starts the main `_loop` daemon thread; `stop_system()` joins it

@@ -4,7 +4,7 @@ from src.engine.repositories.interfaces.i_settings_service import ISettingsServi
 
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.glue.settings.tools import ToolChangerSettings
 from .i_tool_settings_service import IToolSettingsService
 
@@ -17,10 +17,10 @@ class ToolSettingsApplicationService(IToolSettingsService):
         self._settings = settings_service
 
     def _load(self) -> ToolChangerSettings:
-        return self._settings.get(SettingsID.TOOL_CHANGER_CONFIG)
+        return self._settings.get(CommonSettingsID.TOOL_CHANGER_CONFIG)
 
     def _save(self, tc: ToolChangerSettings) -> None:
-        self._settings.save(SettingsID.TOOL_CHANGER_CONFIG, tc)
+        self._settings.save(CommonSettingsID.TOOL_CHANGER_CONFIG, tc)
 
     def get_tools(self) -> List[ToolDefinition]:
         return self._load().tools

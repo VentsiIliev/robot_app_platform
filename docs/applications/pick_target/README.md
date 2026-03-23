@@ -28,15 +28,14 @@ The application captures the latest vision contours, transforms them into robot-
 
 **Factory:** `_build_pick_target_application(...)` in `application_wiring.py`
 
-The app is built via `_build_glue_vision_resolver(robot_system)` which returns a shared `(base_transformer, resolver)` pair. The same helper is used by the dashboard and glue process driver, so all applications share the same calibrated homography and point registry.
+The app uses `robot_system.get_shared_vision_resolver()`. That generic base-system method asks the active robot system's targeting provider to build the resolver once, caches it on the robot system, and reuses it across the dashboard, glue driver, pick-and-place flow, and `PickTarget`.
 
 ```python
-base_transformer, resolver = _build_glue_vision_resolver(robot_system)
+_, resolver = robot_system.get_shared_vision_resolver()
 service = PickTargetApplicationService(
-    transformer=base_transformer,
+    resolver=resolver,
     robot_config=robot_system._robot_config,
     navigation=robot_system._navigation,
-    height_correction=HeightCorrectionService(height_service),
     height_measuring=height_service,
 )
 ```
@@ -92,7 +91,7 @@ pixel (px, py)
   → final robot XY
 ```
 
-In the current implementation there is one resolver. `_transform_point()` chooses the active frame, and `capture()` builds a `VisionPoseRequest(z_mm=_Z, ...)` when it needs the final move pose.
+In the current implementation there is one shared glue resolver. `_transform_point()` chooses the active frame, and `capture()` builds a `VisionPoseRequest(z_mm=_Z, ...)` when it needs the final move pose.
 
 ---
 

@@ -3,15 +3,13 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
-from src.engine.robot.targeting import PointRegistry, VisionTargetResolver
+from src.engine.robot.targeting import VisionTargetResolver
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.context import PickAndPlaceContext
 from src.robot_systems.glue.processes.pick_and_place.errors import (
@@ -47,9 +45,8 @@ class PickAndPlaceWorkflow:
         matching:             IMatchingService,
         tools:                IToolService,
         height:               IHeightMeasuringService,
-        transformer:          ICoordinateTransformer,
+        resolver:             VisionTargetResolver,
         config:               PickAndPlaceConfig,
-        targeting_settings:   GlueTargetingSettings,
         logger:               logging.Logger,
         on_workpiece_placed:  Optional[Callable] = None,
         on_match_result:      Optional[Callable] = None,
@@ -63,7 +60,7 @@ class PickAndPlaceWorkflow:
         self._matching           = matching
         self._tools              = tools
         self._height             = height
-        self._transformer        = transformer
+        self._resolver           = resolver
         self._config             = config
         self._logger             = logger
         self._on_workpiece_placed = on_workpiece_placed
@@ -78,13 +75,6 @@ class PickAndPlaceWorkflow:
         self._placement_calc     = PlacementCalculator(self._plane_mgr, config)
         self._placement_strategy = PlacementStrategy(self._placement_calc)
         self._selection_policy   = WorkpieceSelectionPolicy()
-        _registry = PointRegistry(targeting_settings)
-        self._resolver = VisionTargetResolver(
-            base_transformer=transformer,
-            registry=_registry,
-            camera_to_tcp_x_offset=config.camera_to_tcp_x_offset,
-            camera_to_tcp_y_offset=config.camera_to_tcp_y_offset,
-        )
         self._height_resolution  = HeightResolutionService(config, height, logger)
         self._context            = PickAndPlaceContext(simulation=simulation)
         self._context.update_plane(self._plane)

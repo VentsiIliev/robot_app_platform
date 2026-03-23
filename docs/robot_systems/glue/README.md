@@ -27,7 +27,7 @@ class GlueRobotSystem(BaseRobotSystem):
 | `ROBOT_CONFIG` | `RobotSettingsSerializer` | `robot/config.json` | `RobotSettings` |
 | `ROBOT_CALIBRATION` | `RobotCalibrationSettingsSerializer` | `robot/calibration.json` | `RobotCalibrationSettings` |
 | `GLUE_SETTINGS` | `GlueSettingsSerializer` | `glue/settings.json` | `GlueSettings` |
-| `GLUE_TARGETING` | `GlueTargetingSettingsSerializer` | `glue/targeting.json` | Measured `camera/tool/gripper` point definitions |
+| `GLUE_TARGETING` | `GlueTargetingSettingsSerializer` | `targeting/definitions.json` | Named point definitions, named frame definitions, and point aliases for glue targeting |
 | `GLUE_CELLS` | `GlueCellsConfigSerializer` | `glue/cells.json` | `GlueCellsConfig` (3 default cells) |
 | `GLUE_CATALOG` | `GlueCatalogSerializer` | `glue/catalog.json` | `GlueCatalog` (glue type library) |
 | `MODBUS_CONFIG` | `ModbusConfigSerializer` | `hardware/modbus.json` | `ModbusConfig` |
@@ -40,7 +40,12 @@ class GlueRobotSystem(BaseRobotSystem):
 
 Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotSystem.describe()` reports this as `storage/settings/gluesystem/` because it combines `settings_root` with `metadata.name.lower()`, but the actual checked-in glue system defaults live in the robot-system package under `storage/settings/`.
 
-`robot/config.json` now contains only generic robot/runtime settings. Glue-specific measured target points were moved into `glue/targeting.json` so the targeting model can evolve independently of platform-level robot configuration.
+`robot/config.json` now contains only generic robot/runtime settings. Glue targeting definitions live in `targeting/definitions.json`, outside the glue-dispensing settings namespace, so the targeting model can evolve independently of both platform-level robot configuration and glue-process settings.
+
+Non-settings storage paths are now standardized on `BaseRobotSystem` instead of being hardcoded as module globals in `application_wiring.py`. Shared runtime code uses:
+- `workpieces_storage_path()`
+- `users_storage_path()`
+- `permissions_storage_path()`
 
 ---
 
@@ -53,9 +58,16 @@ Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotS
 | `VISION` | `IVisionService` | **No** | `build_vision_service` |
 | `WEIGHT` | `IWeightCellService` | Yes | `build_weight_cell_service` |
 | `MOTOR` | `IMotorService` | Yes | `build_motor_service` |
-| `TOOLS` | `IToolService` | **No** | `build_tool_service` |
+| `TOOLS` | `IToolService` | **No** | Default (`build_tool_service`) |
 
 `build_weight_cell_service` reads `GLUE_CELLS` settings and calls `build_http_weight_cell_service(cells_config, messaging)`.
+
+The glue system now relies on three shared engine assembly paths:
+
+- `IVisionService` → default builder
+- `IToolService` → default builder
+- robot calibration / height measuring → shared engine builders plus glue
+  providers
 
 ---
 
@@ -88,7 +100,7 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `ContourMatchingTester` | `_build_contour_matching_tester` | `ContourMatchingTesterService(vision, WorkpieceService)` |
 | `HeightMeasuring` | `_build_height_measuring_application` | `HeightMeasuringApplicationService(height_measuring, calibration, vision)` |
 | `PickAndPlaceVisualizer` | `_build_pick_and_place_visualizer` | `PickAndPlaceVisualizerService(coordinator)` |
-| `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, robot, transformer, robot_config, navigation)` |
+| `PickTarget` | `_build_pick_target_application` | `PickTargetApplicationService(vision, robot, resolver, robot_config, navigation)` |
 | `GlueProcessDriver` | `_build_glue_process_driver_application` | `GlueProcessDriverService(GlueProcess, MatchingService, GlueJobBuilderService, GlueJobExecutionService)` |
 | `BrokerDebug` | `_build_broker_debug_application` | `BrokerDebugApplicationService(messaging)` |
 | `UserManagement` | `_build_user_management_application` | `UserManagementApplicationService(CsvUserRepository)` |
@@ -115,7 +127,11 @@ def on_start(self) -> None:
     self._vision.start()
     self._motor = self.get_service(ServiceID.MOTOR)
     self._motor.open()
-    self._calibration_service = _build_calibration_service(self)
+    self._height_measuring_provider = GlueRobotSystemHeightMeasuringProvider(self)
+    self._height_measuring_service, self._height_measuring_calibration_service, \
+        self._laser_detection_service = build_robot_system_height_measuring_services(self)
+    self._calibration_provider = GlueRobotSystemCalibrationProvider(self)
+    self._calibration_service = build_robot_system_calibration_service(self)
     self._coordinator = self._build_coordinator()
     self._robot.enable_robot()
 ```
@@ -130,6 +146,28 @@ def on_stop(self) -> None:
     self._robot.disable_robot()
     self._motor.close()
 ```
+
+`GlueNavigationService` remains the glue runtime facade for glue-specific
+workflow movement such as `HOME`, `LOGIN`, pickup, and capture-offset-aware
+navigation.
+
+Calibration now uses the generic engine-level
+`CalibrationNavigationService` instead:
+
+- it moves to the standard `CALIBRATION` navigation group through the shared
+  `NavigationService`
+- the glue-only side effect `vision.set_detection_area("spray")` is injected
+  explicitly from glue wiring via the adapter's `before_move` callback
+
+That keeps the calibration path reusable without baking glue camera policy into
+the generic navigation abstraction.
+
+Height measuring now follows the same pattern:
+
+- the generic engine builder assembles detector, detection, calibration, and
+  measuring services from common settings and repositories
+- the glue system supplies only `GlueRobotSystemHeightMeasuringProvider`
+- that provider's only job is to build the glue-specific laser control
 
 ---
 
@@ -163,6 +201,13 @@ The coordinator owns the runtime mode selection:
 It is reused in two places:
 - dashboard `SPRAY_ONLY` start
 - `PICK_AND_SPRAY` handoff after pick-and-place finishes
+
+The glue system also owns one shared `VisionTargetResolver` runtime instance. It is built through the generic base-system method `self.get_shared_vision_resolver()`, which delegates the glue-specific details to `GlueRobotSystemTargetingProvider`, caches the result on the robot system, and injects it into:
+- `PickTargetApplicationService`
+- `GlueJobBuilderService`
+- `PickAndPlaceProcess` / `PickAndPlaceWorkflow`
+
+That keeps point/frame definitions and TCP-delta logic consistent across the whole glue system.
 
 ### `SPRAY_ONLY`
 
@@ -242,7 +287,7 @@ For glue dispensing, the transform path is separate and currently simpler:
 
 1. image-space spray contour point
 2. raw homography into calibration-plane XY
-3. `VisionTargetResolver.resolve(VisionPoseRequest(...), registry.tool())` — resolves to the tool point and returns the final pose, no plane mapper
+3. `VisionTargetResolver.resolve(VisionPoseRequest(...), registry.by_name("tool"))` — resolves to the tool point and returns the final pose, no plane mapper
 4. final spray waypoint `[x, y, z, rx, ry, rz]` for `GlueProcess`
 
 This means the glue process now resolves spray geometry to the configured tool point directly, but it does not apply capture-pose plane remapping like pick-and-place.
