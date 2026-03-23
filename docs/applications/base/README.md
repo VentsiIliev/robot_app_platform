@@ -167,7 +167,7 @@ If a view needs custom jog setup, implement a private hook:
 ```python
 def _configure_jog_widget(self) -> None:
     self._jog_widget.set_frame_options(
-        ["camera_center", "tool", "gripper"],
+        ["camera", "tool", "gripper"],
         default="tool",
     )
 ```
@@ -297,7 +297,7 @@ Typical usage:
 ```python
 self._jog_widget = RobotJogWidget()
 self._jog_widget.enable_frame_selector(True)
-self._jog_widget.set_frame_options(["camera_center", "tool", "gripper"], default="tool")
+self._jog_widget.set_frame_options(["camera", "tool", "gripper"], default="tool")
 ```
 
 `set_frame()` is intentionally signal-free so a parent widget can keep a button and the combo box in sync without triggering an infinite signal loop.
@@ -324,6 +324,8 @@ In glue-system applications, the wiring can provide a target-aware jog service t
 - TCP-delta correction
 - selected end-effector point (`camera`, `tool`, `gripper`)
 - robot tool/user settings from glue configuration
+
+Internally that shared jog path resolves the selected frame name through `PointRegistry` once and then works with the concrete registry point, matching the resolver API used by vision targeting.
 
 Applications that do not enable the frame selector continue to behave like normal raw jog UIs.
 

@@ -130,12 +130,14 @@ For a normal pick-and-place pickup, the order is:
 4. Capture-plane reference-delta correction
    - adjusts the mapped point using the calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset` relative to the mapper target pose `rz`
 5. Target-point resolution via `VisionTargetResolver`
-   - `resolver.resolve_named(VisionPoseRequest(...), target, mapper=...)` resolves the named end-effector point:
-     - `camera` / `camera_center` → camera-centered target (zero offset)
+   - the workflow resolves `PickAndPlaceConfig.pickup_target` through `PointRegistry`
+   - `resolver.resolve(VisionPoseRequest(...), point, mapper=...)` then resolves that concrete end-effector point:
+     - `camera` → camera-centered target (zero offset)
      - `tool` → camera-center plus the rotated `camera_center → tool_point` offset
      - `gripper` → camera-center plus the rotated `camera_center → gripper_point` offset
-   - all offsets come from `PointRegistry`, which reads measured reference points from `PickAndPlaceConfig`
-   - `PickAndPlaceConfig.pickup_target` supports: `camera_center`, `tool`, `gripper`
+   - all offsets come from `PointRegistry`, which reads measured reference points from `GlueTargetingSettings`
+   - `PickAndPlaceConfig.pickup_target` supports the canonical names: `camera`, `tool`, `gripper`
+   - the registry still accepts legacy `camera_center` when loading older config values
 6. `PickupCalculator`
    - no longer applies XY compensation
    - only applies Z heights and final orientation to the already resolved pickup XY
@@ -149,7 +151,7 @@ As a result:
 - the second-plane conversion is explicit, logged, and driven by the actual pose used to capture the contours
 - reference-angle compensation now lives in the transform stage, where the mapped capture-plane XY is still available as a frame-level point
 - tool and gripper targeting also live in the transform stage and are resolved from measured reference points before planning the motion poses
-- pick-and-place no longer carries dedicated gripper XY offset fields in `PickAndPlaceConfig`
+- pick-and-place no longer carries measured target-point fields in `PickAndPlaceConfig`; those live in glue targeting settings instead
 
 The transform handler now logs the full chain:
 - image pickup point

@@ -59,8 +59,8 @@ class CameraSettingsView(IApplicationView):
         if self._jog_widget is None:
             return
         self._jog_widget.set_frame_options(
-            ["camera_center", "tool", "gripper"],
-            default="camera_center",
+            ["camera", "tool", "gripper"],
+            default="camera",
         )
 
     def _build_left_panel(self) -> QWidget:

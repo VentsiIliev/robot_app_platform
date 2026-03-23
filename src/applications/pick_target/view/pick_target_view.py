@@ -225,7 +225,7 @@ class PickTargetView(IApplicationView):
         self._trajectory_available = False
         self._two_step_mode = False
         self._correction_available = False
-        self._target_cycle = ["camera_center", "tool", "gripper"]
+        self._target_cycle = ["camera", "tool", "gripper"]
         self._target_index = 0
         super().__init__("PickTarget", parent)
 
@@ -562,7 +562,7 @@ class PickTargetView(IApplicationView):
 
     def _apply_target(self, target: str, sync_jog: bool = True) -> None:
         label = {
-            "camera_center": "Target: CAMERA",
+            "camera": "Target: CAMERA",
             "tool": "Target: TOOL",
             "gripper": "Target: GRIPPER",
         }.get(target, f"Target: {target.upper()}")

@@ -15,6 +15,7 @@ from src.robot_systems.base_robot_system import (
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
 from src.robot_systems.glue.settings.glue import GlueSettingsSerializer
 from src.robot_systems.glue.settings.glue_types import GlueCatalogSerializer
+from src.robot_systems.glue.settings.targeting import GlueTargetingSettingsSerializer
 from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
 from src.robot_systems.glue import application_wiring
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
@@ -79,6 +80,7 @@ class GlueRobotSystem(BaseRobotSystem):
         SettingsSpec(SettingsID.ROBOT_CONFIG,      RobotSettingsSerializer(),             "robot/config.json"),
         SettingsSpec(SettingsID.ROBOT_CALIBRATION, RobotCalibrationSettingsSerializer(),  "robot/calibration.json"),
         SettingsSpec(SettingsID.GLUE_SETTINGS,     GlueSettingsSerializer(),              "glue/settings.json"),
+        SettingsSpec(SettingsID.GLUE_TARGETING,    GlueTargetingSettingsSerializer(),     "glue/targeting.json"),
         SettingsSpec(SettingsID.GLUE_CELLS,        GlueCellsConfigSerializer(),           "glue/cells.json"),
         SettingsSpec(SettingsID.GLUE_CATALOG,      GlueCatalogSerializer(),               "glue/catalog.json"),
         SettingsSpec(SettingsID.MODBUS_CONFIG,     ModbusConfigSerializer(),              "hardware/modbus.json"),
@@ -128,6 +130,7 @@ class GlueRobotSystem(BaseRobotSystem):
         self._robot_config = self.get_settings(SettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(SettingsID.ROBOT_CALIBRATION)
         self._glue_settings = self.get_settings(SettingsID.GLUE_SETTINGS)
+        self._glue_targeting = self.get_settings(SettingsID.GLUE_TARGETING)
         self._glue_cells = self.get_settings(SettingsID.GLUE_CELLS)
         self._glue_catalog = self.get_settings(SettingsID.GLUE_CATALOG)
         self._modbus_config = self.get_settings(SettingsID.MODBUS_CONFIG)
@@ -183,7 +186,7 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.domain.glue_job_execution_service import GlueJobExecutionService
         from src.robot_systems.glue.domain.matching.matching_service import MatchingService
         from src.robot_systems.glue.capture_snapshot_service import GlueCaptureSnapshotService
-        from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
+        from src.engine.robot.targeting import PointRegistry, VisionTargetResolver
         from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
             JsonWorkpieceRepository
         from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
@@ -208,10 +211,8 @@ class GlueRobotSystem(BaseRobotSystem):
                     vision_service.camera_to_robot_matrix_path,
                     camera_to_tcp_x_offset=self._robot_config.camera_to_tcp_x_offset,
                     camera_to_tcp_y_offset=self._robot_config.camera_to_tcp_y_offset,
-                    camera_to_tool_x_offset=self._robot_config.camera_to_tool_x_offset,
-                    camera_to_tool_y_offset=self._robot_config.camera_to_tool_y_offset,
                 ),
-                registry=PointRegistry(self._robot_config),
+                registry=PointRegistry(self._glue_targeting),
                 camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                 camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
             )
@@ -267,15 +268,8 @@ class GlueRobotSystem(BaseRobotSystem):
                 config=PickAndPlaceConfig(
                     camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                     camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),
-                    camera_to_tool_x_offset=float(self._robot_config.camera_to_tool_x_offset),
-                    camera_to_tool_y_offset=float(self._robot_config.camera_to_tool_y_offset),
-                    camera_center_x=float(self._robot_config.camera_center_x),
-                    camera_center_y=float(self._robot_config.camera_center_y),
-                    tool_point_x=float(self._robot_config.tool_point_x),
-                    tool_point_y=float(self._robot_config.tool_point_y),
-                    gripper_point_x=float(self._robot_config.gripper_point_x),
-                    gripper_point_y=float(self._robot_config.gripper_point_y),
                 ),
+                targeting_settings=self._glue_targeting,
                 system_manager=self._system_manager,
                 requirements=pick_and_place_requirements,
                 service_checker=service_checker,

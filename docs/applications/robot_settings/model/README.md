@@ -44,7 +44,6 @@ class RobotSettingsMapper:
 | `robot_tool` | `config.robot_tool` |
 | `robot_user` | `config.robot_user` |
 | `camera_to_tcp_x_offset`, `camera_to_tcp_y_offset` | `config.camera_to_tcp_x_offset`, `config.camera_to_tcp_y_offset` |
-| `camera_to_tool_x_offset`, `camera_to_tool_y_offset` | `config.camera_to_tool_x_offset`, `config.camera_to_tool_y_offset` |
 | `global_velocity`, `global_acceleration`, `emergency_decel`, `max_jog_step` | `config.global_motion_settings.*` |
 | `tcp_x_step_distance`, `tcp_x_step_offset`, `tcp_y_step_distance`, `tcp_y_step_offset` | `config.tcp_*` |
 | `offset_pos_x`, `offset_neg_x`, `offset_pos_y`, `offset_neg_y` | `str(config.offset_direction_map.*)` |
@@ -55,7 +54,7 @@ class RobotSettingsMapper:
 | Field group | Coercion |
 |-------------|---------|
 | `robot_tool`, `robot_user`, motion integers, safety bounds | `int()` |
-| `camera_to_*_offset`, `tcp_*_distance`, `tcp_*_step_offset` | `float()` |
+| `camera_to_tcp_*_offset`, `tcp_*_distance`, `tcp_*_step_offset` | `float()` |
 | `offset_*` | `str(...) == "True"` → `bool` |
 | `robot_ip` | `str()` |
 

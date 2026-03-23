@@ -13,7 +13,7 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
-from src.robot_systems.glue.targeting import VisionPoseRequest, PointRegistry, TargetFrame, VisionTargetResolver
+from src.engine.robot.targeting import VisionPoseRequest, PointRegistry, TargetFrame, VisionTargetResolver
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 
 _logger = logging.getLogger(__name__)
@@ -42,18 +42,18 @@ class PickTargetApplicationService(IPickTargetService):
         self._robot_config  = robot_config
         self._navigation    = navigation
         self._height_measuring  = height_measuring
-        self._target        = "camera_center"
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
         self._pickup_mapper = self._build_pickup_mapper()
 
-        registry = PointRegistry(robot_config)
+        self._registry = PointRegistry(robot_config)
+        self._target_point = self._registry.camera()
         tcp_x = float(getattr(self._robot_config, "camera_to_tcp_x_offset", 0.0)) if self._robot_config is not None else 0.0
         tcp_y = float(getattr(self._robot_config, "camera_to_tcp_y_offset", 0.0)) if self._robot_config is not None else 0.0
         self._resolver = (
             VisionTargetResolver(
                 base_transformer=self._transformer,
-                registry=registry,
+                registry=self._registry,
                 camera_to_tcp_x_offset=tcp_x,
                 camera_to_tcp_y_offset=tcp_y,
                 frames={
@@ -71,12 +71,7 @@ class PickTargetApplicationService(IPickTargetService):
         )
 
     def set_target(self, target: str) -> None:
-        target = str(target).strip().lower()
-        if target == "camera":
-            target = "camera_center"
-        if target not in {"camera_center", "tool", "gripper"}:
-            raise ValueError(f"Unsupported target '{target}'")
-        self._target = target
+        self._target_point = self._registry.by_name(target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled
@@ -128,8 +123,8 @@ class PickTargetApplicationService(IPickTargetService):
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
         if self._resolver is None:
             raise RuntimeError("Coordinate transformer is not available")
-        return self._resolver.resolve_named(
-            self._pose_target(px, py), self._target, frame=self._active_frame
+        return self._resolver.resolve(
+            self._pose_target(px, py), self._target_point, frame=self._active_frame
         ).final_xy
 
     def capture(self) -> Tuple[Optional[np.ndarray], List[Tuple[float, float]], List[Tuple[float, float, float, float, float, float]]]:
@@ -151,8 +146,8 @@ class PickTargetApplicationService(IPickTargetService):
                 px, py = cnt.getCentroid()
                 pixel_centroids.append((px, py))
                 if self._resolver is not None:
-                    result = self._resolver.resolve_named(
-                        self._pose_target(px, py, z_mm=_Z), self._target, frame=self._active_frame,
+                    result = self._resolver.resolve(
+                        self._pose_target(px, py, z_mm=_Z), self._target_point, frame=self._active_frame,
                     )
                     robot_targets.append(result.robot_pose())
             except Exception:

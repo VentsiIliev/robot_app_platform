@@ -4,13 +4,15 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
+from src.engine.robot.targeting import PointRegistry
 
 _logger = logging.getLogger(__name__)
 
 
 class StubPickTargetService(IPickTargetService):
     def __init__(self):
-        self._target = "camera_center"
+        self._registry = PointRegistry()
+        self._target = self._registry.camera().name
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
 
@@ -42,8 +44,8 @@ class StubPickTargetService(IPickTargetService):
         return True
 
     def set_target(self, target: str) -> None:
-        self._target = target
-        _logger.info("[Stub] set_target(%s)", target)
+        self._target = self._registry.by_name(target).name
+        _logger.info("[Stub] set_target(%s)", self._target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled

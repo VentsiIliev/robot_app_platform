@@ -3,16 +3,12 @@ from __future__ import annotations
 import math
 from typing import Callable, Optional, Sequence
 
-from src.robot_systems.glue.targeting.point_registry import PointRegistry
+from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
+from src.engine.robot.targeting.point_registry import PointRegistry
 
 
 class JogFramePoseResolver:
-    """Resolve incremental jog commands so a selected end-effector point stays consistent.
-
-    The robot command pose is adjusted so the chosen point (`camera`, `tool`,
-    or `gripper`) moves as requested, including the same TCP-delta / point-offset
-    compensation used by vision targeting.
-    """
+    """Resolve incremental jog commands so a selected end-effector point stays consistent."""
 
     def __init__(
         self,
@@ -26,20 +22,21 @@ class JogFramePoseResolver:
         self._tcp_y = float(camera_to_tcp_y_offset)
         self._reference_rz_provider = reference_rz_provider
 
+    def point_for_name(self, frame_name: str) -> Optional[EndEffectorPoint]:
+        try:
+            return self._registry.by_name(frame_name)
+        except Exception:
+            return None
+
     def resolve(
         self,
         current_pose: Sequence[float],
         axis: str,
         direction: str,
         step: float,
-        frame_name: str,
+        point: EndEffectorPoint,
     ) -> list[float] | None:
         if len(current_pose) < 6:
-            return None
-
-        try:
-            point = self._registry.by_name(frame_name)
-        except Exception:
             return None
 
         x, y, z, rx, ry, rz = [float(v) for v in current_pose[:6]]
@@ -88,28 +85,12 @@ class JogFramePoseResolver:
         except Exception:
             return 0.0
 
-    def _selected_xy_from_command(
-        self,
-        command_x: float,
-        command_y: float,
-        rz_degrees: float,
-        point_offset_x: float,
-        point_offset_y: float,
-        reference_rz: float,
-    ) -> tuple[float, float]:
+    def _selected_xy_from_command(self, command_x: float, command_y: float, rz_degrees: float, point_offset_x: float, point_offset_y: float, reference_rz: float) -> tuple[float, float]:
         tcp_dx, tcp_dy = self._tcp_delta(rz_degrees, reference_rz)
         point_dx, point_dy = _rotate_xy(point_offset_x, point_offset_y, rz_degrees)
         return command_x + tcp_dx - point_dx, command_y + tcp_dy - point_dy
 
-    def _command_xy_from_selected(
-        self,
-        selected_x: float,
-        selected_y: float,
-        rz_degrees: float,
-        point_offset_x: float,
-        point_offset_y: float,
-        reference_rz: float,
-    ) -> tuple[float, float]:
+    def _command_xy_from_selected(self, selected_x: float, selected_y: float, rz_degrees: float, point_offset_x: float, point_offset_y: float, reference_rz: float) -> tuple[float, float]:
         tcp_dx, tcp_dy = self._tcp_delta(rz_degrees, reference_rz)
         point_dx, point_dy = _rotate_xy(point_offset_x, point_offset_y, rz_degrees)
         return selected_x - tcp_dx + point_dx, selected_y - tcp_dy + point_dy

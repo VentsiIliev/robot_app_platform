@@ -31,17 +31,9 @@ class PickAndPlaceConfig:
     orientation_rx:       float              = 180.0
     orientation_ry:       float              = 0.0
     rz_orientation:       float              = 90.0
-    pickup_target:        str                = "tool"  # camera_center | tool | gripper
+    pickup_target:        str                = "tool"  # camera | tool | gripper
     camera_to_tcp_x_offset: float            = 0.0
     camera_to_tcp_y_offset: float            = 0.0
-    camera_to_tool_x_offset: float           = 0.0
-    camera_to_tool_y_offset: float           = 0.0
-    camera_center_x: float                   = 0.0
-    camera_center_y: float                   = 0.0
-    tool_point_x: float                      = 0.0
-    tool_point_y: float                      = 0.0
-    gripper_point_x: float                   = 0.0
-    gripper_point_y: float                   = 0.0
     gripper_z_offsets:    Dict[int, float]   = field(default_factory=dict)  # gripper_id → z_offset
     max_vision_retries:   int                = 10
     vision_retry_delay_s: float              = 1.0

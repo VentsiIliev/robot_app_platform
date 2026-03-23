@@ -68,8 +68,8 @@ Trajectory execution is disabled while pickup-plane mode is active.
 
 ## Transform Chain
 
-All transformations go through `VisionTargetResolver` from `src/robot_systems/glue/targeting/`.
-The service builds a `VisionPoseRequest`, asks the resolver to target `camera`, `tool`, or `gripper`, and then uses `result.robot_pose()` when it needs the final robot pose.
+All transformations go through `VisionTargetResolver` from `src/engine/robot/targeting/`.
+The service builds a `VisionPoseRequest`, resolves the selected target through `PointRegistry`, and calls `resolver.resolve(request, point, ...)`. The selected point is always one of the supported registry points: `camera`, `tool`, or `gripper`. When it needs the final robot pose it uses `result.robot_pose()`.
 
 ### Calibration-plane mode
 
@@ -124,7 +124,7 @@ Live measurement and depth-map correction are mutually exclusive per move.
 
 A `RobotJogWidget` is embedded in a `DrawerToggle` panel on the right side of the view.
 
-The jog widget enables the base widget's optional **Frame selector** combo box (`camera_center`, `tool`, `gripper`). Changing the frame selector also changes the active target for capture/move, keeping both selectors in sync. The existing `Target:` button on the control panel does the same thing.
+The jog widget enables the base widget's optional **Frame selector** combo box (`camera`, `tool`, `gripper`). Changing the frame selector also changes the active target for capture/move, keeping both selectors in sync. The existing `Target:` button on the control panel does the same thing.
 
 The `JogController` handles live robot position polling and jog commands. In glue wiring, the jog service is target-aware: it converts jog requests into corrected Cartesian moves so the selected `camera/tool/gripper` point stays consistent with TCP-delta compensation. It is started in `controller.load()` and stopped in `controller.stop()`.
 

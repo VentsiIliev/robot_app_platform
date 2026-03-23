@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
-from src.robot_systems.glue.targeting import VisionPoseRequest, VisionTargetResolver
+from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
 
 
 class GlueJobBuildError(ValueError):
@@ -68,6 +68,7 @@ class GlueJobBuilderService:
                             settings=settings,
                         )
                     )
+
         return GlueJob(segments=segments)
 
     def to_process_paths(self, job: GlueJob) -> list[tuple[list[list[float]], dict[str, Any], dict[str, Any]]]:
@@ -103,7 +104,7 @@ class GlueJobBuilderService:
 
             if self._resolver is not None:
                 result = self._resolver.resolve(
-                    VisionPoseRequest(px, py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
+                    VisionPoseRequest(x_pixels=px, y_pixels=py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
                     self._resolver.registry.tool(),
                     # frame=TargetFrame.CALIBRATION,  # or PICKUP, etc.
                 )

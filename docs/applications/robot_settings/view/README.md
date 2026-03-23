@@ -54,7 +54,7 @@ Defines the field group constants consumed by `RobotSettingsView.setup_ui()`:
 
 | Constant | Fields |
 |----------|--------|
-| `ROBOT_INFO_GROUP` | `robot_ip`, `robot_tool`, `robot_user`, `camera_to_tcp_x_offset`, `camera_to_tcp_y_offset`, `camera_to_tool_x_offset`, `camera_to_tool_y_offset` |
+| `ROBOT_INFO_GROUP` | `robot_ip`, `robot_tool`, `robot_user`, `camera_to_tcp_x_offset`, `camera_to_tcp_y_offset` |
 | `GLOBAL_MOTION_GROUP` | `global_velocity`, `global_acceleration`, `emergency_decel`, `max_jog_step` |
 | `TCP_STEP_GROUP` | `tcp_x_step_distance`, `tcp_x_step_offset`, `tcp_y_step_distance`, `tcp_y_step_offset` |
 | `OFFSET_DIRECTION_GROUP` | `offset_pos_x`, `offset_neg_x`, `offset_pos_y`, `offset_neg_y` |

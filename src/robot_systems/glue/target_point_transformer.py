@@ -61,7 +61,6 @@ class TargetPointTransformer:
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
         camera_center_point: Optional[Tuple[float, float]] = None,
-        tool_point: Optional[Tuple[float, float]] = None,
         gripper_point: Optional[Tuple[float, float]] = None,
     ):
         """Build a target-point resolver on top of a raw calibration-plane transformer.
@@ -78,7 +77,6 @@ class TargetPointTransformer:
                 orientation-dependent mapped-frame camera-center compensation.
             camera_center_point: Optional measured camera-center XY at the
                 common calibration reference point.
-            tool_point: Optional measured tool XY at the same physical point.
             gripper_point: Optional measured gripper XY at the same physical
                 point.
         """
@@ -87,10 +85,7 @@ class TargetPointTransformer:
         self._camera_to_tcp_x_offset = float(camera_to_tcp_x_offset)
         self._camera_to_tcp_y_offset = float(camera_to_tcp_y_offset)
         self._camera_center_point = camera_center_point
-        self._tool_point = tool_point
         self._gripper_point = gripper_point
-
-
 
     def transform_to_camera_center(
         self,
@@ -146,35 +141,6 @@ class TargetPointTransformer:
             final_xy=plane_xy,
         )
 
-    def transform_to_tool(
-        self,
-        px: float,
-        py: float,
-        *,
-        current_rz: Optional[float] = None,
-    ) -> TargetTransformResult:
-        """Transform an image point so the active tool point acts as the target.
-
-        This derives ``camera_to_tool`` from the measured reference points
-        ``tool_point - camera_center_point`` and then applies that local offset
-        through the shared rotated-offset path. The glue-level transformer
-        intentionally uses measured points here instead of a precomputed
-        camera-to-tool offset, so all target semantics are anchored to one
-        explicit calibration snapshot.
-        """
-        camera_to_tool = self._camera_to_tool_offset()
-
-        if camera_to_tool is None:
-            raise RuntimeError(
-                "Tool targeting requires measured camera_center/tool_point reference values"
-            )
-        return self._transform_camera_to_target(
-            px,
-            py,
-            current_rz=current_rz,
-            camera_offset=camera_to_tool,
-        )
-
     def transform_to_gripper(
         self,
         px: float,
@@ -209,10 +175,6 @@ class TargetPointTransformer:
     ) -> Tuple[float, float]:
         """Return ``to_point - from_point`` for measured XY reference points."""
         return (to_point[0] - from_point[0], to_point[1] - from_point[1])
-
-    def get_camera_to_tool_offset(self) -> Optional[Tuple[float, float]]:
-        """Return the measured camera->tool offset when available."""
-        return self._camera_to_tool_offset()
 
     def get_camera_to_gripper_offset(self) -> Optional[Tuple[float, float]]:
         """Return the measured camera->gripper offset when available."""
@@ -304,12 +266,6 @@ class TargetPointTransformer:
             current_rz=current_rz,
             reference_rz=camera_result.reference_rz,
         )
-
-    def _camera_to_tool_offset(self) -> Optional[Tuple[float, float]]:
-        """Return camera->tool from measured reference points when available."""
-        if self._camera_center_point is not None and self._tool_point is not None:
-            return self.compute_offset(self._camera_center_point, self._tool_point)
-        return None
 
     def _camera_to_gripper_offset(self) -> Optional[Tuple[float, float]]:
         """Return camera->gripper from measured reference points when available."""

@@ -27,6 +27,7 @@ class GlueRobotSystem(BaseRobotSystem):
 | `ROBOT_CONFIG` | `RobotSettingsSerializer` | `robot/config.json` | `RobotSettings` |
 | `ROBOT_CALIBRATION` | `RobotCalibrationSettingsSerializer` | `robot/calibration.json` | `RobotCalibrationSettings` |
 | `GLUE_SETTINGS` | `GlueSettingsSerializer` | `glue/settings.json` | `GlueSettings` |
+| `GLUE_TARGETING` | `GlueTargetingSettingsSerializer` | `glue/targeting.json` | Measured `camera/tool/gripper` point definitions |
 | `GLUE_CELLS` | `GlueCellsConfigSerializer` | `glue/cells.json` | `GlueCellsConfig` (3 default cells) |
 | `GLUE_CATALOG` | `GlueCatalogSerializer` | `glue/catalog.json` | `GlueCatalog` (glue type library) |
 | `MODBUS_CONFIG` | `ModbusConfigSerializer` | `hardware/modbus.json` | `ModbusConfig` |
@@ -38,6 +39,8 @@ class GlueRobotSystem(BaseRobotSystem):
 | `GLUE_MOTOR_CONFIG` | `GlueMotorConfigSerializer` | `hardware/motors.json` | Glue motor board config + motor topology |
 
 Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotSystem.describe()` reports this as `storage/settings/gluesystem/` because it combines `settings_root` with `metadata.name.lower()`, but the actual checked-in glue system defaults live in the robot-system package under `storage/settings/`.
+
+`robot/config.json` now contains only generic robot/runtime settings. Glue-specific measured target points were moved into `glue/targeting.json` so the targeting model can evolve independently of platform-level robot configuration.
 
 ---
 
@@ -219,8 +222,8 @@ Within pick-and-place, camera-to-robot conversion is now also split explicitly b
 - homography maps image points into calibration-plane robot coordinates
 - matching captures contours and the current robot pose together through `ICaptureSnapshotService`
 - a dedicated `PlanePoseMapper` is rebuilt at transform time to convert those coordinates into the actual capture-pose frame
-- `VisionTargetResolver` (from [`src/robot_systems/glue/targeting/`](targeting/README.md)) then resolves the requested target point in that plane:
-  - `camera_center` / `camera`
+- `VisionTargetResolver` (from [`src/engine/robot/targeting/`](/home/ilv/Desktop/robot_app_platform/src/engine/robot/targeting)) then resolves the requested target point in that plane:
+  - `camera`
   - `tool`
   - `gripper`
 - capture-plane reference-angle correction is applied before target-point offsets are added

@@ -10,7 +10,8 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
+from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
+from src.engine.robot.targeting import PointRegistry, VisionTargetResolver
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.context import PickAndPlaceContext
 from src.robot_systems.glue.processes.pick_and_place.errors import (
@@ -48,6 +49,7 @@ class PickAndPlaceWorkflow:
         height:               IHeightMeasuringService,
         transformer:          ICoordinateTransformer,
         config:               PickAndPlaceConfig,
+        targeting_settings:   GlueTargetingSettings,
         logger:               logging.Logger,
         on_workpiece_placed:  Optional[Callable] = None,
         on_match_result:      Optional[Callable] = None,
@@ -76,7 +78,7 @@ class PickAndPlaceWorkflow:
         self._placement_calc     = PlacementCalculator(self._plane_mgr, config)
         self._placement_strategy = PlacementStrategy(self._placement_calc)
         self._selection_policy   = WorkpieceSelectionPolicy()
-        _registry = PointRegistry(config)
+        _registry = PointRegistry(targeting_settings)
         self._resolver = VisionTargetResolver(
             base_transformer=transformer,
             registry=_registry,

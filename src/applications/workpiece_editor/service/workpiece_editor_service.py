@@ -12,7 +12,7 @@ from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 if TYPE_CHECKING:
-    from src.robot_systems.glue.targeting import VisionTargetResolver
+    from src.engine.robot.targeting import VisionTargetResolver
 
 _logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         rx, ry = 180.0, 0.0
 
         if self._resolver is not None:
-            from src.robot_systems.glue.targeting import VisionPoseRequest
+            from src.engine.robot.targeting import VisionPoseRequest
             result = []
             for px, py in pts_px:
                 tr = self._resolver.resolve(

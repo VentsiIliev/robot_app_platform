@@ -35,7 +35,7 @@ class IPickTargetService(ABC):
 
     @abstractmethod
     def set_target(self, target: str) -> None:
-        """Select the target reference: camera_center, tool, or gripper."""
+        """Select the target reference: camera, tool, or gripper."""
 
     @abstractmethod
     def set_use_pickup_plane(self, enabled: bool) -> None:

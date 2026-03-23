@@ -37,10 +37,11 @@ def _build_glue_vision_resolver(robot_system):
     Returns ``(base_transformer, resolver)`` where ``resolver`` may be None
     if no vision service is available.
     """
-    from src.robot_systems.glue.targeting import PointRegistry, VisionTargetResolver
+    from src.engine.robot.targeting import PointRegistry, VisionTargetResolver
 
     vision_service = robot_system.get_optional_service(ServiceID.VISION)
     robot_config = getattr(robot_system, "_robot_config", None)
+    targeting_settings = getattr(robot_system, "_glue_targeting", None)
     if vision_service is None:
         return None, None
 
@@ -49,14 +50,12 @@ def _build_glue_vision_resolver(robot_system):
             vision_service.camera_to_robot_matrix_path,
             camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)
     )
 
-    registry = PointRegistry(robot_config)
+    registry = PointRegistry(targeting_settings)
     resolver = VisionTargetResolver(
         base_transformer=base_transformer,
         registry=registry,
@@ -68,14 +67,15 @@ def _build_glue_vision_resolver(robot_system):
 
 def _build_glue_jog_service(robot_system, reference_rz_provider=None):
     from src.applications.base.robot_jog_service import RobotJogService
-    from src.robot_systems.glue.targeting import JogFramePoseResolver, PointRegistry
+    from src.engine.robot.targeting import JogFramePoseResolver, PointRegistry
 
     robot_service = robot_system.get_optional_service(ServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
+    targeting_settings = getattr(robot_system, "_glue_targeting", None)
     pose_resolver = None
-    if robot_config is not None:
+    if targeting_settings is not None:
         pose_resolver = JogFramePoseResolver(
-            registry=PointRegistry(robot_config),
+            registry=PointRegistry(targeting_settings),
             camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
             camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
             reference_rz_provider=reference_rz_provider,
@@ -398,8 +398,6 @@ def _build_calibration_application(robot_system):
             vision_service.camera_to_robot_matrix_path,
             camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
-            camera_to_tool_x_offset=robot_config.camera_to_tool_x_offset,
-            camera_to_tool_y_offset=robot_config.camera_to_tool_y_offset,
         )
         if vision_service is not None and robot_config is not None else
         HomographyTransformer(vision_service.camera_to_robot_matrix_path)

@@ -24,22 +24,29 @@ class RobotJogService:
         self._user_getter = user_getter
         self._move_velocity = float(move_velocity)
         self._move_acceleration = float(move_acceleration)
-        self._frame_name = ""
+        self._frame_point = None
         self._lock = threading.Lock()
 
     def set_frame(self, frame_name: str) -> None:
-        self._frame_name = str(frame_name or "").strip()
+        if self._pose_resolver is None:
+            self._frame_point = None
+            return
+        point_for_name = getattr(self._pose_resolver, "point_for_name", None)
+        if callable(point_for_name):
+            self._frame_point = point_for_name(frame_name)
+            return
+        self._frame_point = None
 
     def jog(self, axis: str, direction: str, step: float) -> None:
         if self._robot is None:
             return
         try:
-            if self._pose_resolver is not None and self._frame_name:
+            if self._pose_resolver is not None and self._frame_point is not None:
                 if not self._lock.acquire(blocking=False):
                     return
                 try:
                     current = self._robot.get_current_position()
-                    target = self._pose_resolver.resolve(current, axis, direction, step, self._frame_name)
+                    target = self._pose_resolver.resolve(current, axis, direction, step, self._frame_point)
                     if target is not None:
                         tool = int(self._tool_getter()) if self._tool_getter is not None else 0
                         user = int(self._user_getter()) if self._user_getter is not None else 0

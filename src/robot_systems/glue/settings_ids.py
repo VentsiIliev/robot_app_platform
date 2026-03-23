@@ -5,6 +5,7 @@ class SettingsID(str, Enum):
     ROBOT_CONFIG      = "robot_config"
     ROBOT_CALIBRATION = "robot_calibration"
     GLUE_SETTINGS     = "glue_settings"
+    GLUE_TARGETING    = "glue_targeting"
     GLUE_CELLS        = "glue_cells"
     GLUE_CATALOG      = "glue_catalog"
     MODBUS_CONFIG     = "modbus_config"

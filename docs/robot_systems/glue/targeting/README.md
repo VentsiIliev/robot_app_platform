@@ -1,6 +1,6 @@
-# `src/robot_systems/glue/targeting/` — Vision Targeting
+# Glue Usage of `src/engine/robot/targeting/`
 
-This package is the glue system's shared "image target -> robot pose" layer.
+The targeting implementation now lives in `src/engine/robot/targeting/`. This document explains how the glue robot system uses that engine-level package.
 
 Simple mental model:
 - you have a point in the camera image
@@ -38,7 +38,7 @@ The camera center has `(0.0, 0.0)` offsets by definition — it is the reference
 
 ```python
 class PointRegistry:
-    def __init__(self, robot_config=None) -> None: ...
+    def __init__(self, point_settings=None) -> None: ...
 
     def camera(self) -> EndEffectorPoint: ...
     def tool(self) -> EndEffectorPoint: ...
@@ -47,7 +47,7 @@ class PointRegistry:
     def names(self) -> list[str]: ...
 ```
 
-Builds the three canonical end-effector points from any config object that carries `camera_center_x/y`, `tool_point_x/y`, `gripper_point_x/y` attributes. Works with both `RobotSettings` and `PickAndPlaceConfig`.
+Builds the three canonical end-effector points from any settings object that carries `camera_center_x/y`, `tool_point_x/y`, `gripper_point_x/y` attributes. In the glue system this is `GlueTargetingSettings`, stored separately from generic robot config.
 
 Offsets are computed once at construction:
 
@@ -91,7 +91,7 @@ The only thing not encoded in the request is which physical point should hit the
 - `registry.tool()`
 - `registry.gripper()`
 
-or by name via `resolve_named(..., "tool")`.
+Callers are expected to pass one of these concrete registry points into the resolver.
 
 ---
 
@@ -121,15 +121,6 @@ class VisionTargetResolver:
         mapper: Optional[PlanePoseMapper] = None,
     ) -> TargetTransformResult: ...
 
-    def resolve_named(
-        self,
-        target: VisionPoseRequest,
-        name: str,
-        *,
-        frame: str = TargetFrame.CALIBRATION,
-        mapper: Optional[PlanePoseMapper] = None,
-    ) -> TargetTransformResult: ...
-
     @property
     def registry(self) -> PointRegistry: ...
 ```
@@ -151,6 +142,8 @@ It uses the same ingredients as vision targeting:
 - `PointRegistry` for `camera/tool/gripper` offsets
 - calibrated `camera_to_tcp_x_offset` / `camera_to_tcp_y_offset`
 - a reference `rz` when the active plane has a known reference pose
+
+Strings may still exist at the UI or config boundary, but they are resolved through `PointRegistry` once and the internal jog logic then uses the concrete `EndEffectorPoint`.
 
 So manual jog moves and vision-resolved moves follow the same compensation model.
 
@@ -299,11 +292,11 @@ Keep the other fields when you need diagnostics, logs, or UI overlays.
 
 | Caller | How it uses the resolver |
 |--------|--------------------------|
-| `PickTargetApplicationService` | uses `resolve_named(VisionPoseRequest(...), target, frame=...)` to preview final robot poses for `camera`, `tool`, or `gripper` |
-| `PickAndPlaceWorkflow` | uses `resolve_named(VisionPoseRequest(...), target, mapper=capture_mapper)` for dynamic capture-pose remapping |
+| `PickTargetApplicationService` | stores the selected registry point and uses `resolve(VisionPoseRequest(...), point, frame=...)` to preview final robot poses |
+| `PickAndPlaceWorkflow` | resolves `pickup_target` through `PointRegistry` and uses `resolve(VisionPoseRequest(...), point, mapper=capture_mapper)` for dynamic capture-pose remapping |
 | `GlueJobBuilderService` | uses `resolve(VisionPoseRequest(...), registry.tool())` to build final glue waypoints |
 | `WorkpieceEditorService` | uses `resolve(VisionPoseRequest(...), registry.tool())` to execute edited contour paths through the same pipeline |
-| shared glue jog wiring | uses `JogFramePoseResolver` so manual jog moves can respect TCP delta and selected `camera/tool/gripper` target semantics |
+| shared glue jog wiring | uses `JogFramePoseResolver` so manual jog moves can respect TCP delta and selected `camera/tool/gripper` point semantics |
 | `application_wiring.py` | `_build_glue_vision_resolver()` builds one `PointRegistry` + `VisionTargetResolver` and shares it across applications |
 
 ---
