@@ -108,7 +108,7 @@ User navigates to WorkpieceEditor folder
 base_transformer, resolver = robot_system.get_shared_vision_resolver()
 
 service = WorkpieceEditorService(
-    vision_service = robot_system.get_optional_service(ServiceID.VISION),
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION),
     capture_snapshot_service = _build_capture_snapshot_service(robot_system),
     save_fn        = workpiece_service.save,
     update_fn      = workpiece_service.update,
@@ -118,7 +118,7 @@ service = WorkpieceEditorService(
     transformer    = base_transformer,
     resolver       = resolver,
     z_min          = float(robot_config.safety_limits.z_min),
-    robot_service  = robot_system.get_optional_service(ServiceID.ROBOT),
+    robot_service  = robot_system.get_optional_service(CommonServiceID.ROBOT),
 )
 ```
 

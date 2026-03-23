@@ -3,7 +3,7 @@ import logging
 from dataclasses import replace
 from typing import Dict, List, Optional
 
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import SettingsID
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
@@ -12,7 +12,7 @@ from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMo
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
 from src.robot_systems.glue.settings.cells import GlueCellsConfig
 from src.robot_systems.glue.settings.glue_types import GlueCatalog
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.process_events import ProcessBusyEvent, ProcessTopics
 
 

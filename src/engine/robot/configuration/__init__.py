@@ -13,6 +13,10 @@ from .robot_calibration_settings import (
     RobotCalibrationSettings,
     RobotCalibrationSettingsSerializer,
 )
+from .tool_changer_settings import (
+    ToolChangerSettings,
+    ToolChangerSettingsSerializer,
+)
 
 __all__ = [
     "SafetyLimits",
@@ -26,4 +30,6 @@ __all__ = [
     "CameraTcpOffsetCalibrationConfig",
     "RobotCalibrationSettings",
     "RobotCalibrationSettingsSerializer",
+    "ToolChangerSettings",
+    "ToolChangerSettingsSerializer",
 ]

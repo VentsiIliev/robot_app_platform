@@ -30,6 +30,13 @@ RobotCalibrationSettings
         ─────────────────────
         RobotCalibrationSettingsSerializer → ISettingsSerializer[RobotCalibrationSettings]
         settings_type = "robot_calibration"
+
+ToolChangerSettings
+  ├── tools: List[ToolDefinition]
+  └── slots: List[SlotConfig]
+        ─────────────────────
+        ToolChangerSettingsSerializer → ISettingsSerializer[ToolChangerSettings]
+        settings_type = "tool_changer"
 ```
 
 ---
@@ -155,6 +162,22 @@ JSON key mapping (top-level):
 | `global_motion_settings` | `"GLOBAL_MOTION_SETTINGS"` |
 
 Robot-system-specific target-point definitions no longer belong here. In the glue system they live in a separate `GlueTargetingSettings` file under `targeting/definitions.json`, where measured points and frame definitions are stored independently from generic robot connection and motion settings.
+
+### `ToolChangerSettings`
+
+**File:** `tool_changer_settings.py`
+
+Shared tool library / slot mapping settings used by the default `IToolService`
+builder and by the Tool Settings application.
+
+```python
+@dataclass
+class ToolChangerSettings:
+    tools: List[ToolDefinition]
+    slots: List[SlotConfig]
+```
+
+Persisted under `CommonSettingsID.TOOL_CHANGER_CONFIG`.
 
 ---
 

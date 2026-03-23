@@ -7,7 +7,7 @@
 | 1 | `IAuthenticatedUser` — engine-level user base interface | ✅ Done |
 | 2 | `IPermissionsRepository` + `PermissionsRepository` | ✅ Done |
 | 3 | `IAuthorizationService` + `IPermissionsAdminService` + `AuthorizationService` | ✅ Done |
-| 4 | `IAuthenticationService` + `AuthenticatedUser` adapter + `AuthenticationService` | ✅ Done |
+| 4 | `IAuthenticationService` + `AuthenticatedUser` + `AuthenticationService` | ✅ Done |
 | 5 | Add `app_id` to `ApplicationSpec` | ✅ Done |
 | 6 | `ISessionService` + `UserSession` | ✅ Done |
 | 7 | Permissions migration (`ensure_permissions_current`) | ✅ Done |
@@ -32,7 +32,7 @@ The platform already has a `Role` enum (`ADMIN`, `OPERATOR`, `VIEWER`) and a `Us
 | Decision | Choice | Rationale |
 |---|---|---|
 | First-run bootstrap | **"Create first admin" wizard — no default credentials** | A default `admin/admin` is a known attack vector; forcing the operator to set their own password on first boot is safer and more explicit |
-| Role serialization | **`Role.value` strings** (`"Admin"`, `"Operator"`, `"Viewer"`) everywhere | Consistent with the existing `User.to_dict()` / `User.from_dict()` pattern already in the codebase |
+| Role serialization | **Role value strings defined by the robot system** | Shared auth and authorization work with strings and do not depend on a fixed global `Role` enum |
 | Permission keys | **`app_id: str` field on `ApplicationSpec`** (stable snake_case) | Decouples the display `name` from the storage key — renaming a display name won't silently break `permissions.json` |
 | Engine/app boundary | **`IAuthenticatedUser` at engine level** | Engine services (`IAuthenticationService`, `ISessionService`, `IAuthorizationService`) operate on this interface; application-level `User` implements it. No upward imports from engine into applications. |
 
@@ -47,9 +47,11 @@ LoginWindow (QDialog)
 ILoginApplicationService              ← application-level service boundary
   └─ LoginApplicationService
        │ delegates auth ──────────→  IAuthenticationService
-       │                               └─ AuthenticationService   (robot-system level)
-       │                                    └─ IUserRepository     (app-level interface)
-       │                                         └─ CsvUserRepository
+       │                               └─ AuthenticationService   (engine level)
+       │                                    └─ IAuthUserRepository
+       │                                         └─ AuthUserRepositoryAdapter
+       │                                              └─ IUserRepository
+       │                                                   └─ CsvUserRepository
        │ robot positioning ────────→  IRobotService
        │ QR scanning ──────────────→  ICameraService
        ↓
@@ -76,7 +78,8 @@ They are intentionally separate services with separate interfaces.
 **Layer placement:**
 - `IAuthenticatedUser`, `IAuthenticationService`, `IAuthorizationService`, `IPermissionsAdminService`, `IPermissionsRepository`, `ISessionService` → `src/engine/auth/` (Platform — Level 1)
 - `AuthorizationService`, `UserSession` → `src/engine/auth/` (engine-level concrete, depends only on engine interfaces)
-- `AuthenticationService`, `PermissionsRepository` → `src/robot_systems/glue/` (RobotSystem — Level 2, may import from applications)
+- `AuthenticationService`, `AuthenticatedUser`, `IAuthUserRepository`, `AuthUserRecord` → `src/engine/auth/` (Platform — Level 1)
+- `PermissionsRepository` → `src/robot_systems/glue/` (RobotSystem — Level 2)
 - `ILoginApplicationService`, `LoginApplicationService`, `LoginWindow` → `src/applications/login/` (Application — Level 3)
 
 ---
@@ -87,9 +90,9 @@ They are intentionally separate services with separate interfaces.
 (same runtime storage root used by all other settings files — not the `src/` tree)
 
 Keys are `app_id` values (stable snake_case, never change even if display name changes).
-Values are arrays of `Role.value` strings — consistent with how roles are stored in `users.csv`.
+Values are arrays of role value strings — consistent with how roles are stored in `users.csv`.
 
-Default content (written on first run if missing, defaulting to Admin-only for safety):
+For the glue system, the default content is written on first run using its configured default permission role values:
 
 ```json
 {
@@ -141,11 +144,11 @@ All engine interfaces (`IAuthenticationService`, `ISessionService`, `IAuthorizat
 
 ---
 
-### Step 2 — `IPermissionsRepository` + `PermissionsRepository`
+### Step 2 — `IPermissionsRepository` + `JsonPermissionsRepository`
 
 **New files:**
 - `src/engine/auth/i_permissions_repository.py` — engine-level interface
-- `src/robot_systems/glue/domain/permissions/permissions_repository.py` — concrete implementation
+- `src/engine/auth/json_permissions_repository.py` — reusable concrete implementation
 
 ```python
 # src/engine/auth/i_permissions_repository.y_pixels
@@ -153,20 +156,21 @@ class IPermissionsRepository(ABC):
 
     @abstractmethod
     def get_allowed_role_values(self, app_id: str) -> List[str]:
-        """Returns role value strings for this app_id. Defaults to ['Admin'] if missing."""
+        """Returns role value strings for this app_id.
+        Defaults to the repository's configured default role values if missing."""
 
     @abstractmethod
     def set_allowed_role_values(self, app_id: str, role_values: List[str]) -> None:
-        """Persists immediately. Caller is responsible for enforcing Admin invariant."""
+        """Persists immediately. Caller is responsible for enforcing any robot-system-specific protected-role invariant."""
 
     @abstractmethod
     def get_all(self) -> Dict[str, List[str]]:
         """Full mapping keyed by app_id — used by the admin permissions editor."""
 ```
 
-`PermissionsRepository` (robot-system level) implements this interface against a JSON file.
-It works exclusively with `str` values — it never imports `Role`. Serialization and deserialization
-use plain strings matching `Role.value` (`"Admin"`, `"Operator"`, `"Viewer"`).
+`JsonPermissionsRepository` implements this interface against a JSON file.
+It works exclusively with `str` values — it never imports a concrete `Role` enum. Serialization and deserialization
+use plain role value strings defined by the active robot system.
 
 **Why:** `AuthorizationService` lives at the engine level and must not depend on a robot-system
 concrete class. DIP — depend on the abstraction, not the implementation.
@@ -202,7 +206,7 @@ class IPermissionsAdminService(IAuthorizationService):
     @abstractmethod
     def set_permissions(self, app_id: str, role_values: List[str]) -> None:
         """Admin updates role access for an app_id. Persisted immediately.
-        Enforces invariant: 'user_management' always retains 'Admin'."""
+        Implementations may enforce robot-system-specific protected-role invariants."""
 ```
 
 `AuthorizationService` implements `IPermissionsAdminService` (which extends `IAuthorizationService`).
@@ -216,11 +220,13 @@ Comparison inside is done on `user.role.value` — no import of `Role` needed.
 
 ---
 
-### Step 4 — `IAuthenticationService` + `AuthenticationService`
+### Step 4 — `IAuthenticationService` + `IAuthUserRepository` + `AuthenticationService`
 
 **New files:**
 - `src/engine/auth/i_authentication_service.py` — engine-level interface
-- `src/robot_systems/glue/domain/auth/authentication_service.py` — concrete implementation
+- `src/engine/auth/i_auth_user_repository.py` — thin auth-facing repository interface
+- `src/engine/auth/auth_user_record.py` — minimal auth-facing user record
+- `src/engine/auth/authentication_service.py` — reusable concrete implementation
 
 ```python
 # src/engine/auth/i_authentication_service.y_pixels
@@ -239,9 +245,9 @@ Lockout tracking (`record_failed_attempt`, `is_locked_out`) is **not on the inte
 internal implementation concern of `AuthenticationService`. No external caller should manipulate
 lockout state directly.
 
-`AuthenticationService` (robot-system level) implements this against `IUserRepository` +
-`CsvUserRepository`. It is concrete at the robot-system level because it needs to import
-application-layer types (`User`, `CsvUserRepository`), which robot-system code is permitted to do.
+`AuthenticationService` now lives at the engine level and depends only on `IAuthUserRepository`.
+Robot systems can adapt richer user-management repositories to that thin auth contract with
+`AuthUserRepositoryAdapter` while keeping CRUD-oriented schema logic outside the engine.
 
 **Stub:** `StubAuthenticationService(IAuthenticationService)` — accepts any credentials, returns a
 fixed `IAuthenticatedUser`. Used in tests and standalone runners.
@@ -316,7 +322,7 @@ Injecting `ISessionService` lets tests pass a `StubSessionService` with a preset
 
 ### Step 7 — Permissions migration
 
-**New file:** `src/robot_systems/glue/domain/permissions/permissions_migrator.py`
+**New file:** `src/engine/auth/permissions_migrator.py`
 
 ```python
 def ensure_permissions_current(
@@ -325,7 +331,7 @@ def ensure_permissions_current(
 ) -> None:
     """
     Reconcile permissions.json against the live set of app_ids.
-    - Adds missing app_ids with default ["Admin"].
+    - Adds missing app_ids with the robot system's configured default role values.
     - Removes keys for apps that no longer exist.
     - Saves back to disk only if changes were made.
     Called once in main.y_pixels after PermissionsRepository is built.
@@ -472,7 +478,7 @@ Modified startup sequence:
 2.  SystemBuilder ... .build(GlueRobotSystem)
 3.  ShellConfigurator.configure(GlueRobotSystem)
 4.  QApplication(sys.argv)
-5.  Build PermissionsRepository(permissions_path)
+5.  Build JsonPermissionsRepository(permissions_path)
 6.  ensure_permissions_current(repo, known_app_ids)        ← migration, once at startup
 7.  Build AuthorizationService(repo)                       ← IPermissionsAdminService
 8.  Build UserSession()                                    ← ISessionService
@@ -495,15 +501,19 @@ Modified startup sequence:
 |------|--------|
 | `src/engine/auth/i_authenticated_user.py` | **New** — engine-level user base interface |
 | `src/engine/auth/i_authentication_service.py` | **New** — authentication interface (returns `IAuthenticatedUser`) |
+| `src/engine/auth/i_auth_user_repository.py` | **New** — thin auth repository interface |
+| `src/engine/auth/auth_user_record.py` | **New** — minimal auth-facing user record |
+| `src/engine/auth/authenticated_user.py` | **New** — default `IAuthenticatedUser` wrapper |
+| `src/engine/auth/authentication_service.py` | **New** — reusable auth implementation via `IAuthUserRepository` |
 | `src/engine/auth/i_permissions_repository.py` | **New** — permissions persistence interface (strings only, no `Role` import) |
 | `src/engine/auth/i_authorization_service.py` | **New** — read-only authorization interface |
 | `src/engine/auth/i_permissions_admin_service.py` | **New** — extends `IAuthorizationService` with admin write operations |
 | `src/engine/auth/authorization_service.py` | **New** — implements `IPermissionsAdminService` via `IPermissionsRepository` |
 | `src/engine/auth/i_session_service.py` | **New** — session interface |
 | `src/engine/auth/user_session.py` | **New** — thread-safe singleton implementing `ISessionService` |
-| `src/robot_systems/glue/domain/auth/authentication_service.py` | **New** — concrete auth against `CsvUserRepository` |
-| `src/robot_systems/glue/domain/permissions/permissions_repository.py` | **New** — JSON-backed `IPermissionsRepository` implementation |
-| `src/robot_systems/glue/domain/permissions/permissions_migrator.py` | **New** — `ensure_permissions_current()` migration function |
+| `src/applications/user_management/domain/auth_user_repository_adapter.py` | **New** — adapts `IUserRepository` to `IAuthUserRepository` |
+| `src/engine/auth/json_permissions_repository.py` | **New** — JSON-backed `IPermissionsRepository` implementation |
+| `src/engine/auth/permissions_migrator.py` | **New** — `ensure_permissions_current()` migration function |
 | `src/robot_systems/glue/storage/settings/permissions.json` | **New** — default permissions config |
 | `src/robot_systems/base_robot_system.py` | Add `app_id: str` field to `ApplicationSpec` with auto-derive in `__post_init__` |
 | `src/bootstrap/main.py` | Show login first, run migration, filter specs via `IAuthorizationService` |
@@ -524,8 +534,8 @@ Modified startup sequence:
 - **ISP — lockout is internal**: `record_failed_attempt` / `is_locked_out` are not on `IAuthenticationService`. Lockout is an implementation detail of `AuthenticationService`, not a contract for callers.
 - **DIP — `UserSession` injected as `ISessionService`**: never accessed via a bare `UserSession.get()` global in production code. Tests pass a `StubSessionService`.
 - **SRP — migration is separate from persistence**: `PermissionsRepository` loads and saves faithfully; `ensure_permissions_current()` handles schema reconciliation and is called once at startup.
-- **Admin-configurable at runtime**: no code changes needed to adjust who can see what — admin edits it via the UI.
-- **Safe default**: any app not listed in `permissions.json` defaults to `["Admin"]` only — including newly added apps.
+- **Admin-configurable at runtime**: no code changes needed to adjust who can see what — the protected roles and default roles come from the robot system, and admins edit the resulting permissions via the UI.
+- **Safe default**: any app not listed in `permissions.json` defaults to the robot system's configured default permission role values — including newly added apps.
 - **Changes take effect on next login**: simplest approach; no need to rebuild `AppShell` at runtime.
 - **No `pl_gui/` changes**: filtering happens before `AppShell`, which already handles empty folders.
 
@@ -536,8 +546,8 @@ Modified startup sequence:
 1. Log in as ADMIN → open UserManagement → "App Permissions" tab → uncheck Operator from WorkpieceEditor → save
 2. Log out, log in as OPERATOR → verify WorkpieceEditor is gone from the shell
 3. Log in as ADMIN again → re-enable → log in as OPERATOR → verify it's back
-4. Delete `permissions.json` → restart → verify all apps default to Admin-only
-5. Add a new `ApplicationSpec` to `GlueRobotSystem.shell` without updating `permissions.json` → verify it is Admin-only by default
+4. Delete `permissions.json` → restart → verify all apps default to the configured default permission roles
+5. Add a new `ApplicationSpec` to `GlueRobotSystem.shell` without updating `permissions.json` → verify it gets the configured default roles
 6. Run: `python tests/run_tests.py` — all existing tests pass unchanged
 
 ---
@@ -576,14 +586,15 @@ read-only, this button lives in a thin wrapper widget created in `main.py` that 
 On click: `session_service.logout()` → hide shell → show `LoginWindow` → rebuild with new role's
 filtered specs.
 
-### 6 — Admin is always protected
-`set_permissions()` in `AuthorizationService` enforces the invariant: `user_management` always
-retains `"Admin"` regardless of what is passed in. This is the single enforcement point — not
-duplicated in the repository.
+### 6 — Protected roles are system policy
+`set_permissions()` in `AuthorizationService` can enforce protected app-role mappings injected by
+the robot system. For glue, `user_management` always retains `"Admin"` regardless of what is passed
+in. This is the single enforcement point — not duplicated in the repository.
 
 ```python
 def set_permissions(self, app_id: str, role_values: List[str]) -> None:
-    if app_id == "user_management":
-        role_values = list(set(role_values) | {"Admin"})
+    protected_roles = self._protected_app_role_values.get(app_id, [])
+    if protected_roles:
+        role_values = list(set(role_values) | set(protected_roles))
     self._repo.set_allowed_role_values(app_id, role_values)
 ```

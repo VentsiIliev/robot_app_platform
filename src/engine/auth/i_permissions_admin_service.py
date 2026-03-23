@@ -18,4 +18,4 @@ class IPermissionsAdminService(IAuthorizationService):
     @abstractmethod
     def set_permissions(self, app_id: str, role_values: list[str]) -> None:
         """Update and persist role access for app_id.
-        Enforces invariant: 'user_management' always retains 'Admin'."""
+        Implementations may enforce robot-system-specific protected role invariants."""

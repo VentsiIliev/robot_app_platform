@@ -5,7 +5,7 @@ from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
-from src.robot_systems.glue.targeting.point_names import TOOL_POINT
+from src.robot_systems.glue.targeting.targeting_constants import TOOL_POINT
 
 
 class GlueJobBuildError(ValueError):

@@ -67,7 +67,7 @@ If `vision_service` is `None`, `run_matching` returns `(False, "Vision unavailab
 
 ```python
 service = ContourMatchingTesterService(
-    vision_service    = robot_system.get_optional_service(ServiceID.VISION),
+    vision_service    = robot_system.get_optional_service(CommonServiceID.VISION),
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path())),
     capture_snapshot_service = _build_capture_snapshot_service(robot_system),
 )

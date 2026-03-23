@@ -10,7 +10,7 @@ def _build_robot_settings_application(robot_system):
     from src.applications.robot_settings.service.robot_settings_application_service import (
         RobotSettingsApplicationService,
     )
-    from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.settings_ids import SettingsID
+    from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.component_ids import SettingsID
     from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.settings_adapter import (
         from_editor_dict,
         to_editor_dict,

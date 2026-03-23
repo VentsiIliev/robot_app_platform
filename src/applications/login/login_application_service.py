@@ -3,7 +3,6 @@ from typing import List, Optional, Tuple
 from src.applications.login.i_login_application_service import ILoginApplicationService
 from src.applications.login.i_qr_scanner import IQrScanner
 from src.applications.user_management.domain.i_user_repository import IUserRepository
-from src.applications.user_management.domain.user import Role
 from src.applications.user_management.domain.user_schema import UserRecord
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 from src.engine.auth.i_authentication_service import IAuthenticationService
@@ -31,12 +30,14 @@ class LoginApplicationService(ILoginApplicationService):
         robot_service:   Optional[IRobotService]  = None,
         qr_scanner:      Optional[IQrScanner]     = None,
         login_position:  Optional[List[float]]    = None,
+        admin_role_value: str = "Admin",
     ) -> None:
         self._auth          = auth_service
         self._repo          = user_repository
         self._robot         = robot_service
         self._scanner       = qr_scanner
         self._login_pos     = login_position
+        self._admin_role_value = str(admin_role_value)
 
     # ── ILoginApplicationService ───────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ class LoginApplicationService(ILoginApplicationService):
             "firstName": first_name,
             "lastName":  last_name,
             "password":  password,
-            "role":      Role.ADMIN.value,
+            "role":      self._admin_role_value,
             "email":     "",
         })
         success = self._repo.add(record)

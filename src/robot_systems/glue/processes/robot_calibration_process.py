@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.engine.system.i_system_manager import ISystemManager
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.base_process import BaseProcess

@@ -4,7 +4,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.engine.core.i_messaging_service import IMessagingService
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.robot_systems.glue.applications.glue_process_driver.model.glue_process_driver_model import (
     GlueProcessDriverModel,
 )

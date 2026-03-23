@@ -1,44 +1,58 @@
 import os
 
+from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.glue.settings_ids import SettingsID
-from src.engine.process import ProcessRequirements
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
-from src.engine.hardware.weight.http.http_weight_cell_factory import build_http_weight_cell_service
+from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
+from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
+from src.engine.robot.configuration import (
+    RobotCalibrationSettingsSerializer,
+    RobotSettingsSerializer,
+    ToolChangerSettingsSerializer,
+)
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.height_measuring import build_robot_system_height_measuring_services
+from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
+from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
+from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
+from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
+from src.engine.vision.i_vision_service import IVisionService
+
+
 from src.robot_systems.base_robot_system import (
     SystemMetadata, BaseRobotSystem, FolderSpec, ApplicationSpec,
-    ServiceSpec, SettingsSpec, ShellSetup,
+    RolePolicy, ServiceSpec, SettingsSpec, ShellSetup,
 )
+from src.robot_systems.glue import application_wiring
+from src.robot_systems.glue.calibration.provider import GlueRobotSystemCalibrationProvider
+from src.robot_systems.glue.component_ids import ServiceID
+from src.robot_systems.glue.component_ids import SettingsID
+from src.robot_systems.glue.height_measuring.provider import GlueRobotSystemHeightMeasuringProvider
+from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
+    _build_generator_service
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
+from src.robot_systems.glue.settings.device_control import GlueMotorConfigSerializer
 from src.robot_systems.glue.settings.glue import GlueSettingsSerializer
 from src.robot_systems.glue.settings.glue_types import GlueCatalogSerializer
 from src.robot_systems.glue.settings.targeting import GlueTargetingSettingsSerializer
-from src.engine.robot.configuration import RobotSettingsSerializer, RobotCalibrationSettingsSerializer
-from src.robot_systems.glue import application_wiring
-from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
-from src.robot_systems.glue.service_ids import ServiceID
-from src.engine.vision.i_vision_service import IVisionService
-from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
-from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
-from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    _build_generator_service
-from src.robot_systems.glue.settings.tools import ToolChangerSettingsSerializer
-from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSerializer
-from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationDataSerializer
-from src.engine.robot.height_measuring.depth_map_data import DepthMapDataSerializer
-from src.robot_systems.glue.calibration.provider import GlueRobotSystemCalibrationProvider
-from src.robot_systems.glue.height_measuring.provider import GlueRobotSystemHeightMeasuringProvider
-from src.robot_systems.glue.settings.device_control import GlueMotorConfigSerializer
 from src.robot_systems.glue.targeting.provider import GlueRobotSystemTargetingProvider
+
 
 # ── System ───────────────────────────────────────────────────────────────────────
 
 class GlueRobotSystem(BaseRobotSystem):
+    role_policy = RolePolicy(
+        role_values=["Admin", "Operator", "Viewer", "Developer"],
+        admin_role_value="Admin",
+        default_permission_role_values=["Admin"],
+        protected_app_role_values={
+            "user_management": ["Admin"],
+        },
+    )
+
     shell = ShellSetup(
         folders=[
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
@@ -94,9 +108,9 @@ class GlueRobotSystem(BaseRobotSystem):
     ]
 
     services = [
-        ServiceSpec(ServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control"),
-        ServiceSpec(ServiceID.NAVIGATION, NavigationService, required=True, description="Named position movements"),
-        ServiceSpec(ServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
+        ServiceSpec(CommonServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control"),
+        ServiceSpec(CommonServiceID.NAVIGATION, NavigationService, required=True, description="Named position movements"),
+        ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
                     ),
         ServiceSpec(
             name=ServiceID.WEIGHT,
@@ -113,7 +127,7 @@ class GlueRobotSystem(BaseRobotSystem):
             builder=build_motor_service,
         ),
         ServiceSpec(
-            name=ServiceID.TOOLS,
+            name=CommonServiceID.TOOLS,
             service_type=IToolService,
             required=False,
             description="Gripper / tool changer",
@@ -122,11 +136,11 @@ class GlueRobotSystem(BaseRobotSystem):
 
     def on_start(self) -> None:
         from src.robot_systems.glue.navigation import GlueNavigationService
-        self._robot = self.get_service(ServiceID.ROBOT)
-        _nav_engine      = self.get_service(ServiceID.NAVIGATION)
-        self._vision = self.get_optional_service(ServiceID.VISION)
+        self._robot = self.get_service(CommonServiceID.ROBOT)
+        _nav_engine      = self.get_service(CommonServiceID.NAVIGATION)
+        self._vision = self.get_optional_service(CommonServiceID.VISION)
         self._navigation = GlueNavigationService(_nav_engine, vision=self._vision, robot_service=self._robot)  # ← typed facade
-        self._tools = self.get_optional_service(ServiceID.TOOLS)
+        self._tools = self.get_optional_service(CommonServiceID.TOOLS)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._glue_settings = self.get_settings(SettingsID.GLUE_SETTINGS)
@@ -137,7 +151,7 @@ class GlueRobotSystem(BaseRobotSystem):
         self._targeting_provider = GlueRobotSystemTargetingProvider(self)
         self._height_measuring_provider = GlueRobotSystemHeightMeasuringProvider(self)
         self._weight = self.get_service(ServiceID.WEIGHT)
-        self._vision = self.get_optional_service(ServiceID.VISION)
+        self._vision = self.get_optional_service(CommonServiceID.VISION)
 
         self._weight.start_monitoring(
             cell_ids=self._glue_cells.get_all_cell_ids(),
@@ -191,14 +205,14 @@ class GlueRobotSystem(BaseRobotSystem):
         from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import \
             JsonWorkpieceRepository
         from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
-        glue_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.MOTOR, ServiceID.VISION)
-        pick_and_place_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
-        clean_requirements = ProcessRequirements.requires(ServiceID.ROBOT)
-        calibration_requirements = ProcessRequirements.requires(ServiceID.ROBOT, ServiceID.VISION)
+        glue_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, ServiceID.MOTOR, CommonServiceID.VISION)
+        pick_and_place_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, CommonServiceID.VISION)
+        clean_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT)
+        calibration_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, CommonServiceID.VISION)
         service_checker = self.health_registry.check
 
-        vision_service = self.get_optional_service(ServiceID.VISION)
-        tool_service = self.get_optional_service(ServiceID.TOOLS)
+        vision_service = self.get_optional_service(CommonServiceID.VISION)
+        tool_service = self.get_optional_service(CommonServiceID.TOOLS)
         height_service = self._height_measuring_service
         capture_snapshot_service = CaptureSnapshotService(
             vision_service=vision_service,

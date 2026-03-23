@@ -28,6 +28,12 @@ src/engine/
 │   ├── i_localization_service.py
 │   ├── dict_translator.py
 │   └── localization_service.py
+├── auth/                       ← Authentication, authorization, and session contracts
+│   ├── i_authenticated_user.py
+│   ├── i_auth_user_repository.py
+│   ├── authentication_service.py
+│   ├── authorization_service.py
+│   └── user_session.py
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
@@ -97,6 +103,7 @@ src/engine/
 | Weight cells | `WeightCellService` | [hardware/weight/](hardware/weight/README.md) |
 | Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
 | Localization | `LocalizationService` | [localization/](localization/README.md) |
+| Auth | `AuthenticationService` / `AuthorizationService` / `UserSession` | documented in `src/engine/auth/` |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
 | Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |
@@ -118,6 +125,8 @@ The engine is wired together during platform startup (`src/bootstrap/main.py`):
 ```
 
 All engine objects are created once and injected as interfaces — no engine module instantiates itself at import time.
+
+Robot-system-specific startup composition does not belong in `engine/` and should not be hardcoded in `src/bootstrap/main.py`. Concrete robot driver selection, login/auth wiring, and authorization/permissions filtering should live in the active robot system's bootstrap provider.
 
 ---
 

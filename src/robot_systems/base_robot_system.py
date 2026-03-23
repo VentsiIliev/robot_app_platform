@@ -52,6 +52,40 @@ class ShellSetup:
 
 
 @dataclass(frozen=True)
+class RolePolicy:
+    role_values: List[str] = field(default_factory=list)
+    admin_role_value: str = "Admin"
+    default_permission_role_values: List[str] = field(default_factory=list)
+    protected_app_role_values: Dict[str, List[str]] = field(default_factory=dict)
+
+    def __post_init__(self):
+        role_values = [str(role) for role in self.role_values]
+        admin_role_value = str(self.admin_role_value)
+        default_roles = [str(role) for role in self.default_permission_role_values]
+        protected = {
+            str(app_id): [str(role) for role in role_values]
+            for app_id, role_values in self.protected_app_role_values.items()
+        }
+        object.__setattr__(self, "role_values", role_values)
+        object.__setattr__(self, "admin_role_value", admin_role_value)
+        object.__setattr__(self, "default_permission_role_values", default_roles)
+        object.__setattr__(self, "protected_app_role_values", protected)
+
+        known_roles = set(role_values)
+        if role_values and admin_role_value not in known_roles:
+            raise ValueError(
+                f"RolePolicy admin_role_value '{admin_role_value}' must be present in role_values"
+            )
+        if any(role not in known_roles for role in default_roles):
+            raise ValueError("RolePolicy default_permission_role_values must all be present in role_values")
+        for app_id, required_roles in protected.items():
+            if any(role not in known_roles for role in required_roles):
+                raise ValueError(
+                    f"RolePolicy protected_app_role_values for '{app_id}' contains unknown roles"
+                )
+
+
+@dataclass(frozen=True)
 class ServiceSpec:
     name: str
     service_type: Type
@@ -94,6 +128,7 @@ class BaseRobotSystem(ABC):
     services: ClassVar[List[ServiceSpec]] = []
     settings_specs: ClassVar[List[SettingsSpec]] = []
     shell: ClassVar[ShellSetup] = ShellSetup()
+    role_policy: ClassVar[RolePolicy] = RolePolicy()
 
     def __init__(self) -> None:
         self._logger = logging.getLogger(self.__class__.__name__)

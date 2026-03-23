@@ -66,3 +66,8 @@ The application edits `CommonSettingsID.TOOL_CHANGER_CONFIG`. The runtime
 `IToolService` is built separately by `SystemBuilder` through the shared
 default builder in
 [default_service_builders.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/default_service_builders.py).
+
+`ToolChangerSettings` and `ToolChangerSettingsSerializer` are now engine-level
+types in
+[tool_changer_settings.py](/home/ilv/Desktop/robot_app_platform/src/engine/robot/configuration/tool_changer_settings.py),
+not glue-specific settings classes.

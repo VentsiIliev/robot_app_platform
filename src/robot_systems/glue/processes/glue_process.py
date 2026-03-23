@@ -10,7 +10,7 @@ from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_context import DispensingContext
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_machine_factory import DispensingMachineFactory

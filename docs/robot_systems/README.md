@@ -5,6 +5,7 @@ The `robot_systems` package contains `BaseRobotSystem` (the abstract declaration
 For new robot-system development, start from:
 - [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT)
 - [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
+- [settings/README.md](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
 
 ---
 
@@ -18,6 +19,12 @@ SystemBuilder
   │    for each ServiceSpec, looks up a builder in _registry
   │    → calls builder(BuildContext) → service instance
   └─ app.start(services_dict, settings_service) → app.on_start()
+
+RobotSystemBootstrapProvider
+  ├─ selects the concrete robot driver
+  ├─ selects the concrete robot-system class
+  ├─ builds the robot-system-specific login view
+  └─ builds the robot-system-specific authorization service
 
 BaseRobotSystem (ABC)
   ├─ class-level specs: metadata, settings_specs, services, shell
@@ -184,14 +191,20 @@ app   = (
 - **Class-level specs**: `metadata`, `services`, `settings_specs`, and `shell` are `ClassVar` — they describe the *type*, not any instance. This allows `SystemBuilder` to inspect them before instantiation.
 - **`translations_root` is robot-system owned**: The engine localization service is generic, but the actual catalogs live with the robot system. Bootstrap resolves the active robot system's translation directory from `metadata.translations_root`.
 - **Language persistence uses robot-system storage**: Bootstrap also stores the selected language under the active robot system's `settings_root`, so localization state follows the robot system instead of using a hardcoded global file.
+- **Bootstrap stays generic**: startup-specific composition such as concrete robot driver selection, login/auth wiring, and authorization/permissions wiring should live in a robot-system bootstrap provider, not directly in `src/bootstrap/main.py`.
 - **`SystemBuilder.register()`**: Allows overriding or extending the default service registry at the call site. Use when a service requires dependencies not available in the standard context.
-- **Common vs robot-system settings ids**: Shared infrastructure ids now live in [`CommonSettingsID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_settings_ids.py). Robot-system `settings_ids.py` files should only contain system-specific ids.
+- **Common vs robot-system settings ids**: Shared infrastructure ids now live in [`CommonSettingsID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_settings_ids.py). Robot-system [`component_ids.py`](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `SettingsID` values.
+- **Common vs robot-system service ids**: Shared infrastructure service names now live in [`CommonServiceID`](/home/ilv/Desktop/robot_app_platform/src/engine/common_service_ids.py). Robot-system [`component_ids.py`](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/component_ids.py) files should keep only system-specific `ServiceID` values.
 - **Default builders vs providers**:
   - use shared default builders for truly common services such as `IVisionService` and `IToolService`
   - use robot-system providers when only part of the assembly is system-specific, such as targeting, calibration, and height measuring
 - **Robot system blueprint**:
   - use [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) as the starting template
-  - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration and height-measuring provider skeletons
+  - the blueprint now includes targeting registry/frames/settings adapter skeletons plus calibration, height-measuring, and bootstrap provider skeletons
+- **System-specific settings pattern**:
+  - define robot-system-specific persisted settings under the robot system's `settings/` package
+  - register them through `SettingsID` in `component_ids.py`
+  - keep shared reusable settings in `src/engine/`, not in the robot system
 - **`required=False` in `ServiceSpec`**: The app starts successfully even if an optional service fails to build. `on_start()` uses `get_optional_service()` and checks for `None` before using optional services.
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.
 

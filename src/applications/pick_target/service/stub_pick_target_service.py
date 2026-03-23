@@ -5,7 +5,7 @@ import numpy as np
 
 from src.applications.pick_target.service.i_pick_target_service import IPickTargetService
 from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
+from src.robot_systems.glue.targeting.targeting_constants import CAMERA_POINT
 from src.robot_systems.glue.targeting.registry import build_glue_point_registry
 
 _logger = logging.getLogger(__name__)

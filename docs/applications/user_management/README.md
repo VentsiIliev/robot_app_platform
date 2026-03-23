@@ -16,6 +16,7 @@ user_management/
 │   ├── user_schema.py                            ← UserSchema, UserRecord, FieldDescriptor
 │   ├── i_user_repository.py                      ← IUserRepository ABC
 │   ├── csv_user_repository.py                    ← CSV-backed implementation
+│   ├── auth_user_repository_adapter.py           ← Adapts IUserRepository to engine auth
 │   ├── default_schema.py                         ← Minimal default schema
 │   └── user.py
 ├── model/
@@ -78,19 +79,33 @@ A schema-agnostic wrapper around a `dict`. Used for all read/write operations �
 
 Persists `UserRecord` objects to a CSV file at a configurable path. Schema is provided at construction time to determine column order and the ID field.
 
+### `AuthUserRepositoryAdapter`
+
+Bridges the richer user-management repository contract to the thin engine auth contract.
+
+- input: `IUserRepository`
+- output: `IAuthUserRepository`
+- maps a `UserRecord` into `AuthUserRecord`
+
+This keeps the login/authentication path reusable without forcing the CRUD-oriented user-management stack into `src/engine/`.
+
 ---
 
 ## Glue System Schema
 
-The glue robot system defines its own `GLUE_USER_SCHEMA` in `src/robot_systems/glue/domain/users/`. The `UserManagement` application is wired with this schema without knowing what fields it contains.
+The glue robot system now declares its role and permission policy on [glue_robot_system.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/glue_robot_system.py) via `role_policy`. The user schema itself is built from that declaration by [glue_user_schema.py](/home/ilv/Desktop/robot_app_platform/src/robot_systems/glue/domain/users/glue_user_schema.py). The `UserManagement` application is still wired without knowing what fields or roles the glue system chose.
 
 ---
 
 ## Wiring in `GlueRobotSystem`
 
 ```python
+role_policy = robot_system.__class__.role_policy
 service = UserManagementApplicationService(
-    CsvUserRepository(robot_system.users_storage_path(), GLUE_USER_SCHEMA)
+    CsvUserRepository(
+        robot_system.users_storage_path(),
+        build_glue_user_schema(role_policy.role_values),
+    )
 )
 return WidgetApplication(widget_factory=lambda _ms: UserManagementFactory().build(service))
 ```
@@ -119,7 +134,14 @@ def retranslateUi(self, *_) -> None:
 
 ### Permissions table headers
 
-Column headers are the `Role` enum values (`"Admin"`, `"Operator"`, `"Viewer"`, `"Developer"`). They are translated inline inside `set_permissions()`:
+Column headers come from the robot system's configured role values. For the glue system those are:
+
+- `"Admin"`
+- `"Operator"`
+- `"Viewer"`
+- `"Developer"`
+
+They are translated inline inside `set_permissions()`:
 
 ```python
 self._table.setHorizontalHeaderLabels([self._t(r) for r in role_values])
@@ -144,3 +166,5 @@ Field labels and role values must exist as keys in every catalog under
 - **No robot/vision dependency**: `UserManagement` is wired without calling `get_service()` or `get_optional_service()`. It is purely settings + persistence.
 - **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes. The same field `label` is used as both the table column header and the translation key — keep them consistent.
 - **CSV persistence**: straightforward for operator-level access management; not intended for high-security production use.
+- **Auth is now a thin adapter**: login/authentication no longer depends directly on `IUserRepository`. Instead, `AuthUserRepositoryAdapter` exposes only the minimal auth-facing data needed by the shared engine `AuthenticationService`.
+- **Roles are robot-system-defined**: the permissions tab and first-admin creation no longer rely on a fixed shared `Role` enum. The robot system supplies the available role values, the default permission role values, and any protected app-role invariants.

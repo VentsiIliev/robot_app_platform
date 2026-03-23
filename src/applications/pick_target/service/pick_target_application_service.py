@@ -13,8 +13,11 @@ from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
-from src.robot_systems.glue.targeting.frame_names import CALIBRATION_FRAME, PICKUP_FRAME
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
+from src.robot_systems.glue.targeting.targeting_constants import (
+    CALIBRATION_FRAME,
+    CAMERA_POINT,
+    PICKUP_FRAME,
+)
 
 _logger = logging.getLogger(__name__)
 

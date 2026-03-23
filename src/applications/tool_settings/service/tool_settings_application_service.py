@@ -2,10 +2,10 @@ import logging
 from typing import List, Tuple
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 
+from src.engine.robot.configuration import ToolChangerSettings
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.glue.settings.tools import ToolChangerSettings
 from .i_tool_settings_service import IToolSettingsService
 
 _logger = logging.getLogger(__name__)

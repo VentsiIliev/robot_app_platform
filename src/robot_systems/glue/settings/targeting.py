@@ -4,8 +4,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from src.engine.repositories.interfaces import ISettingsSerializer
-from src.robot_systems.glue.targeting.frame_names import CALIBRATION_FRAME, PICKUP_FRAME
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT, GRIPPER_POINT, POINT_ALIASES, TOOL_POINT
+from src.robot_systems.glue.targeting.targeting_constants import (
+    CALIBRATION_FRAME,
+    CAMERA_POINT,
+    GRIPPER_POINT,
+    PICKUP_FRAME,
+    POINT_ALIASES,
+    TOOL_POINT,
+)
 
 
 @dataclass

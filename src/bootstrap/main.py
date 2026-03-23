@@ -2,8 +2,6 @@ import logging
 import sys
 from pathlib import Path
 
-from src.engine.robot.drivers.fairino import FairinoRos2Robot
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.bootstrap.logging_config import setup_logging
@@ -11,15 +9,14 @@ from src.bootstrap.build_engine import EngineContext
 from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
 from src.engine.localization.localization_service import LocalizationService
-from src.engine.robot.drivers.fairino.test_robot import TestRobotWrapper
-from src.engine.robot.drivers.fairino.fairino_robot import FairinoRobot
 from src.robot_systems.system_builder import SystemBuilder
-from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+from src.robot_systems.glue.bootstrap_provider import GlueBootstrapProvider
 from PyQt6.QtWidgets import QApplication, QWidget
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
 _DEV_SKIP_LOGIN = True
+_BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
 
 def main() -> None:
     setup_logging()
@@ -33,15 +30,13 @@ def main() -> None:
     # 2 — robot app (settings loaded, services wired)
     robot_app = (
         SystemBuilder()
-        # .with_robot(FairinoRobot("192.168.58.2"))
-        # .with_robot(TestRobotWrapper())
-        .with_robot(FairinoRos2Robot(server_url="http://localhost:5000"))
+        .with_robot(_BOOTSTRAP_PROVIDER.build_robot())
         .with_messaging_service(ctx.messaging_service)
-        .build(GlueRobotSystem)
+        .build(_BOOTSTRAP_PROVIDER.system_class)
     )
 
     # 3 — shell folder layout from app metadata
-    ShellConfigurator.configure(GlueRobotSystem)
+    ShellConfigurator.configure(_BOOTSTRAP_PROVIDER.system_class)
 
     # 4 — Qt app + localization
     qt_app = QApplication(sys.argv)
@@ -77,7 +72,7 @@ def main() -> None:
         _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
         _load_apps_into_shell(shell, session, robot_app, ctx)
     else:
-        login_view = _create_login_dialog(ctx, robot_app)   # parent=None; stacked_widget becomes parent
+        login_view = _BOOTSTRAP_PROVIDER.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
         shell.stacked_widget.addWidget(login_view)          # → index 1
         shell.stacked_widget.setCurrentIndex(1)             # show login in shell content area
 
@@ -103,33 +98,10 @@ def main() -> None:
         sys.exit(qt_app.exec())
     finally:
         robot_app.stop()
-
-
-def _create_login_dialog(ctx, robot_app):
-    """Build and return the login view (without exec-ing it)."""
-    from src.applications.login.login_application_service import LoginApplicationService
-    from src.applications.login.login_factory import LoginFactory
-    from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
-    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
-    from src.robot_systems.glue.service_ids import ServiceID
-
-    user_repo     = CsvUserRepository(robot_app.users_storage_path(), GLUE_USER_SCHEMA)
-    auth_service  = AuthenticationService(user_repo)
-    robot_service = robot_app.get_optional_service(ServiceID.ROBOT)
-    login_service = LoginApplicationService(
-        auth_service=auth_service, user_repository=user_repo, robot_service=robot_service
-    )
-    return LoginFactory.build(login_service, messaging=ctx.messaging_service)
-
-
 def _load_apps_into_shell(shell, session, robot_app, ctx):
     """Load role-filtered apps and reload the shell's folder page."""
-    from src.engine.auth.authorization_service import AuthorizationService
-    from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
-
-    auth_svc      = AuthorizationService(PermissionsRepository(robot_app.permissions_storage_path()))
-    visible_specs = auth_svc.get_visible_apps(session.current_user, GlueRobotSystem.shell.applications)
+    auth_svc = _BOOTSTRAP_PROVIDER.build_authorization_service(robot_app)
+    visible_specs = auth_svc.get_visible_apps(session.current_user, robot_app.__class__.shell.applications)
 
     loader = ApplicationLoader(ctx.messaging_service)
     for spec in visible_specs:

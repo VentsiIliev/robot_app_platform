@@ -6,8 +6,8 @@ from typing import Dict, Optional
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.process.process_sequence import ProcessSequence
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
-from src.robot_systems.glue.process_ids import ProcessID
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import ProcessID
+from src.robot_systems.glue.component_ids import SettingsID
 from src.robot_systems.glue.processes.robot_calibration_process import RobotCalibrationProcess
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode

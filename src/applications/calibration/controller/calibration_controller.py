@@ -8,7 +8,7 @@ from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration.view.calibration_view import CalibrationView
 from src.engine.core.i_messaging_service import IMessagingService
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.robot_events import RobotCalibrationTopics
 from src.shared_contracts.events.vision_events import VisionTopics
 from src.shared_contracts.events.process_events import ProcessTopics, ProcessState, ProcessStateEvent

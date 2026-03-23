@@ -5,7 +5,7 @@ from typing import Callable, List, Tuple
 from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
 from src.applications.base.notification_presenter import UserNotificationPresenter
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.engine.core.i_messaging_service import IMessagingService
 from src.engine.system import SystemTopics
 from src.applications.base.i_application_controller import IApplicationController

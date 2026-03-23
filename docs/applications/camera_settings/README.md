@@ -106,7 +106,7 @@ Used by `CameraSettingsSerializer` (engine layer) to persist settings.
 ```python
 service = CameraSettingsApplicationService(
     settings_service = robot_system._settings_service,
-    vision_service   = robot_system.get_optional_service(ServiceID.VISION),
+    vision_service   = robot_system.get_optional_service(CommonServiceID.VISION),
 )
 return WidgetApplication(widget_factory=lambda ms: CameraSettingsFactory().build(service, ms))
 ```

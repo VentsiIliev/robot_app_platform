@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.engine.robot.targeting import EndEffectorPoint, PointRegistry
 from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
+from src.robot_systems.glue.targeting.targeting_constants import CAMERA_POINT
 
 
 def build_glue_point_registry(targeting_settings: GlueTargetingSettings | None) -> PointRegistry:

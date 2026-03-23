@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from src.engine.robot.height_measuring.height_correction_service import HeightCorrectionService
 from src.engine.robot.targeting.robot_system_targeting_provider import RobotSystemTargetingProvider
-from src.robot_systems.glue.settings_ids import SettingsID
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT
+from src.robot_systems.glue.component_ids import SettingsID
+from src.robot_systems.glue.targeting.targeting_constants import CAMERA_POINT
 from src.robot_systems.glue.targeting.frames import build_glue_target_frames
 from src.robot_systems.glue.targeting.registry import build_glue_point_registry
 

@@ -51,7 +51,7 @@ class PointRegistry:
 The engine registry is now generic. It stores whatever named points a robot system defines.
 
 In the glue system, the canonical points and aliases are defined in:
-- `src/robot_systems/glue/targeting/point_names.py`
+- `src/robot_systems/glue/targeting/targeting_constants.py`
 - `src/robot_systems/glue/targeting/registry.py`
 
 Glue builds the registry from `GlueTargetingSettings`, stored separately from generic robot config.
@@ -188,7 +188,7 @@ pieces from the base robot system and only asks the targeting provider for:
 Register named coordinate planes at construction via the `frames=` dict. Each `TargetFrame` bundles a `PlanePoseMapper` and an optional `IHeightCorrectionService`.
 
 The engine no longer defines glue-specific frame names. In the glue system, frame names are defined in:
-- `src/robot_systems/glue/targeting/frame_names.py`
+- `src/robot_systems/glue/targeting/targeting_constants.py`
 
 Glue also provides `build_glue_target_frames(...)` which converts the stored frame definitions into runtime `TargetFrame` objects:
 - a frame with empty source/target groups behaves as a named frame with no mapper

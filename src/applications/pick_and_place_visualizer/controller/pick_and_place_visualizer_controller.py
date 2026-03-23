@@ -13,7 +13,7 @@ from src.applications.pick_and_place_visualizer.view.pick_and_place_visualizer_v
     PickAndPlaceVisualizerView,
 )
 from src.engine.core.i_messaging_service import IMessagingService
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.process_events import ProcessTopics
 from src.shared_contracts.events.vision_events import VisionTopics
 

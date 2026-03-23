@@ -28,6 +28,8 @@ class UserManagementFactory(ApplicationFactory):
         service: IUserManagementService,
         permissions_service: Optional[IPermissionsAdminService] = None,
         known_app_ids: Optional[List[str]] = None,
+        role_values: Optional[List[str]] = None,
+        default_role_values: Optional[List[str]] = None,
         messaging=None,
         jog_service=None,
     ):
@@ -42,8 +44,18 @@ class UserManagementFactory(ApplicationFactory):
             jog_service=jog_service,
         )
 
-        if permissions_service is not None and known_app_ids is not None:
-            perm_model      = PermissionsModel(permissions_service, known_app_ids)
+        if (
+            permissions_service is not None
+            and known_app_ids is not None
+            and role_values is not None
+            and default_role_values is not None
+        ):
+            perm_model      = PermissionsModel(
+                permissions_service,
+                known_app_ids,
+                role_values,
+                default_role_values,
+            )
             perm_view       = PermissionsView()
             perm_controller = PermissionsController(perm_model, perm_view, messaging=messaging)
             perm_controller.load()

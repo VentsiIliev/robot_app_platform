@@ -1,9 +1,11 @@
 from enum import Enum
 
 
-class ServiceID(str, Enum):
-    # TODO: Keep only the service IDs your robot system actually needs.
+class CommonServiceID(str, Enum):
     ROBOT = "robot"
     NAVIGATION = "navigation"
     VISION = "vision"
     TOOLS = "tools"
+
+    def __str__(self) -> str:
+        return self.value

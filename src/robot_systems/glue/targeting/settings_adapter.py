@@ -3,8 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 
 from src.robot_systems.glue.settings.targeting import GlueTargetFrameDefinition, GlueTargetPoint, GlueTargetingSettings
-from src.robot_systems.glue.targeting.frame_names import CALIBRATION_FRAME, PICKUP_FRAME
-from src.robot_systems.glue.targeting.point_names import CAMERA_POINT, GRIPPER_POINT, TOOL_POINT
+from src.robot_systems.glue.targeting.targeting_constants import (
+    CALIBRATION_FRAME,
+    CAMERA_POINT,
+    GRIPPER_POINT,
+    PICKUP_FRAME,
+    TOOL_POINT,
+)
 
 
 def to_editor_dict(settings: GlueTargetingSettings | None) -> dict:

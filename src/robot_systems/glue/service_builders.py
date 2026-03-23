@@ -1,6 +1,6 @@
 # src/robot_systems/glue/service_builders.y_pixels
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import SettingsID
 
 def _build_generator_service(robot_system):
     from src.engine.hardware.generator.modbus.modbus_generator_factory import build_modbus_generator_controller

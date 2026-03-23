@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/settings/` — Glue App Settings Definitions
 
-This package contains all settings dataclasses and serializers specific to the `GlueRobotSystem`, plus re-export shims for settings types that live in the engine layer.
+This package contains the settings dataclasses and serializers specific to the `GlueRobotSystem`.
 
 ---
 
@@ -12,9 +12,6 @@ This package contains all settings dataclasses and serializers specific to the `
 | `glue_types.py` | Domain model + serializer | Glue type catalog (`GlueCatalog`, `Glue`) |
 | `cells.py` | Serializer subclass | `GlueCellsConfigSerializer` with glue-specific cell defaults |
 | `device_control.py` | Settings dataclass + serializer | `GlueMotorConfig` / `GlueMotorConfigSerializer` for glue motor board settings |
-| `modbus.py` | Re-export shim | `ModbusConfig`, `ModbusConfigSerializer` from engine layer |
-| `robot.py` | Re-export shim | `RobotSettings`, `RobotSettingsSerializer` etc. from engine layer |
-| `robot_calibration.py` | Legacy class | `RobotCalibrationConfig` — runtime config object (not a serializer) |
 
 ---
 
@@ -104,14 +101,17 @@ class GlueMotorConfig:
 
 ---
 
-## Re-export Shims
+## Shared Engine Settings
 
-`modbus.py` and `robot.py` re-export types from `src/engine/` for backwards compatibility. **Prefer importing from `src/engine/` directly** in new code.
+These shared settings now live in the engine layer and should be imported directly from `src/engine/`:
+- `ModbusConfig`, `ModbusConfigSerializer`
+- `RobotSettings`, `RobotSettingsSerializer`
+- `RobotCalibrationSettings`, `RobotCalibrationSettingsSerializer`
+- [tool_changer_settings.py](/home/ilv/Desktop/robot_app_platform/src/engine/robot/configuration/tool_changer_settings.py)
 
 ---
 
 ## Design Notes
 
 - **`GlueSettingKey` enum**: All 19 field names are declared as enum values. This prevents typos in key access (`GlueSettingKey.FAN_SPEED.value` rather than `"fan_speed"`). The `GlueSettings.from_dict()` and `to_dict()` methods use enum values as keys.
-- **`robot_calibration.py` is a legacy runtime config**: `RobotCalibrationConfig` is an old-style class used in calibration procedures (takes `vision_system`, `robot_service`, etc.). It is distinct from `RobotCalibrationSettings` (the persisted dataclass). Do not confuse the two.
 - **`device_control.py` keeps the old alias names alive**: `DeviceControlConfig` and `DeviceControlConfigSerializer` are backwards-compatible aliases for `GlueMotorConfig` and `GlueMotorConfigSerializer`.

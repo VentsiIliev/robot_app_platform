@@ -1,7 +1,7 @@
 from typing import List
 
 from src.robot_systems.glue.applications.glue_settings import IGlueSettingsService
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import SettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 
 from src.robot_systems.glue.settings.glue import GlueSettings

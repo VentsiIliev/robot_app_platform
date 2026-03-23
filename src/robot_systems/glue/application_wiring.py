@@ -1,12 +1,13 @@
 import logging
 
+from src.engine.common_service_ids import CommonServiceID
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration.robot_settings import SafetyLimits
 from src.robot_systems.glue.domain.workpieces.schemas import build_glue_workpiece_form_schema, \
     build_glue_segment_settings_schema
-from src.robot_systems.glue.service_ids import ServiceID
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import ServiceID
+from src.robot_systems.glue.component_ids import SettingsID
 
 _logger = logging.getLogger(__name__)
 
@@ -15,8 +16,8 @@ def _build_capture_snapshot_service(robot_system):
     from src.engine.vision.capture_snapshot_service import CaptureSnapshotService
 
     return CaptureSnapshotService(
-        vision_service=robot_system.get_optional_service(ServiceID.VISION),
-        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
     )
 
 
@@ -32,7 +33,7 @@ def _build_pick_and_place_visualizer(robot_system):
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
     from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path()))
     matching_service = MatchingService(
@@ -61,7 +62,7 @@ def _build_contour_matching_tester(robot_system):
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path()))
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
 
     service = ContourMatchingTesterService(
@@ -88,7 +89,7 @@ def _build_glue_process_driver_application(robot_system):
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path()))
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = getattr(robot_system, "_robot_config", None)
     try:
@@ -181,7 +182,7 @@ def _build_workpiece_editor_application(robot_system):
     from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
     settings_service = robot_system._settings_service
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = robot_system._robot_config
 
@@ -214,7 +215,7 @@ def _build_workpiece_editor_application(robot_system):
         transformer=base_transformer,
         resolver=resolver,
         z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
-        robot_service=robot_system.get_optional_service(ServiceID.ROBOT),
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
     )
 
     class _PendingLoader:
@@ -270,13 +271,25 @@ def _build_user_management_application(robot_system):
     from src.applications.user_management.service.user_management_application_service import \
         UserManagementApplicationService
     from src.applications.user_management.domain.csv_user_repository import CsvUserRepository
-    from src.robot_systems.glue.domain.users import GLUE_USER_SCHEMA
-    from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
+    from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
+    from src.robot_systems.glue.domain.users import build_glue_user_schema
     from src.engine.auth.authorization_service import AuthorizationService
 
-    service = UserManagementApplicationService(CsvUserRepository(robot_system.users_storage_path(), GLUE_USER_SCHEMA))
-    perm_repo = PermissionsRepository(robot_system.permissions_storage_path())
-    perm_svc = AuthorizationService(perm_repo)
+    role_policy = robot_system.__class__.role_policy
+    service = UserManagementApplicationService(
+        CsvUserRepository(
+            robot_system.users_storage_path(),
+            build_glue_user_schema(role_policy.role_values),
+        )
+    )
+    perm_repo = JsonPermissionsRepository(
+        robot_system.permissions_storage_path(),
+        default_role_values=role_policy.default_permission_role_values,
+    )
+    perm_svc = AuthorizationService(
+        perm_repo,
+        protected_app_role_values=role_policy.protected_app_role_values,
+    )
     known_ids = [spec.app_id for spec in robot_system.shell.applications]
     jog_service = build_robot_system_jog_service(robot_system)
 
@@ -285,6 +298,8 @@ def _build_user_management_application(robot_system):
             service,
             perm_svc,
             known_ids,
+            role_values=role_policy.role_values,
+            default_role_values=role_policy.default_permission_role_values,
             messaging=messaging_service,
             jog_service=jog_service,
         )
@@ -298,11 +313,11 @@ def _build_camera_settings_application(robot_system):
     from src.applications.camera_settings.camera_settings_factory import CameraSettingsFactory
     from src.applications.camera_settings.service.camera_settings_application_service import \
         CameraSettingsApplicationService
-    from src.robot_systems.glue.service_ids import ServiceID
+    from src.robot_systems.glue.component_ids import ServiceID
 
     service = CameraSettingsApplicationService(
         settings_service=robot_system._settings_service,
-        vision_service=robot_system.get_optional_service(ServiceID.VISION),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
     )
     factory = CameraSettingsFactory()
     jog_service = build_robot_system_jog_service(robot_system)
@@ -325,11 +340,11 @@ def _build_calibration_application(robot_system):
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
     from src.engine.vision.homography_transformer import HomographyTransformer
 
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
-    robot_service = robot_system.get_optional_service(ServiceID.ROBOT)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = robot_system._robot_config
     navigation_service = CalibrationNavigationService(
-        robot_system.get_service(ServiceID.NAVIGATION),
+        robot_system.get_service(CommonServiceID.NAVIGATION),
         before_move=(lambda: vision_service.set_detection_area("spray")) if vision_service is not None else None,
     )
     transformer = (
@@ -404,8 +419,8 @@ def _build_dashboard_application(system):
     coordinator = system.coordinator
     settings_service = system._settings_service
     weight_service = system.get_optional_service(ServiceID.WEIGHT)
-    vision_service = system.get_optional_service(ServiceID.VISION)
-    robot_service = system.get_optional_service(ServiceID.ROBOT)
+    vision_service = system.get_optional_service(CommonServiceID.VISION)
+    robot_service = system.get_optional_service(CommonServiceID.ROBOT)
     capture_snapshot_service = _build_capture_snapshot_service(system)
     robot_config = getattr(system, "_robot_config", None)
 
@@ -487,7 +502,7 @@ def _build_robot_settings_application(robot_app):
     from src.applications.robot_settings.robot_settings_factory import RobotSettingsFactory
     from src.applications.robot_settings.service.robot_settings_application_service import \
         RobotSettingsApplicationService
-    from src.robot_systems.glue.service_ids import ServiceID
+    from src.robot_systems.glue.component_ids import ServiceID
     from src.robot_systems.glue.targeting.settings_adapter import from_editor_dict, to_editor_dict
 
     def _save_targeting_definitions(data) -> None:
@@ -501,9 +516,9 @@ def _build_robot_settings_application(robot_app):
         robot_app._settings_service,
         config_key=CommonSettingsID.ROBOT_CONFIG,
         calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
-        robot_service=robot_app.get_optional_service(ServiceID.ROBOT),
+        robot_service=robot_app.get_optional_service(CommonServiceID.ROBOT),
         tool_settings_key=CommonSettingsID.TOOL_CHANGER_CONFIG,
-        navigation_service=robot_app.get_service(ServiceID.NAVIGATION),
+        navigation_service=robot_app.get_service(CommonServiceID.NAVIGATION),
         load_targeting_definitions_fn=lambda: to_editor_dict(
             robot_app._settings_service.get(SettingsID.GLUE_TARGETING)),
         save_targeting_definitions_fn=_save_targeting_definitions,
@@ -555,9 +570,9 @@ def _build_pick_target_application(robot_system):
     from src.applications.pick_target.pick_target_factory import PickTargetFactory
     from src.applications.pick_target.service.pick_target_application_service import PickTargetApplicationService
 
-    vision_service = robot_system.get_optional_service(ServiceID.VISION)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
-    robot_service = robot_system.get_optional_service(ServiceID.ROBOT)
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     _, resolver = robot_system.get_shared_vision_resolver()
     height_service = getattr(robot_system, "_height_measuring_service", None)
     service = PickTargetApplicationService(
@@ -582,7 +597,7 @@ def _build_device_control_application(robot_system):
     from src.applications.device_control.service.device_control_application_service import \
         DeviceControlApplicationService
     from src.applications.device_control.service.i_device_control_service import MotorEntry
-    from src.robot_systems.glue.settings_ids import SettingsID
+    from src.robot_systems.glue.component_ids import SettingsID
 
     config = robot_system._settings_service.get(SettingsID.GLUE_MOTOR_CONFIG)
     motors = [MotorEntry(name=m.name, address=m.address) for m in config.motors]
@@ -610,7 +625,7 @@ def _build_height_measuring_application(robot_app):
 
     settings_repo = robot_app._settings_service.get_repo(CommonSettingsID.HEIGHT_MEASURING_SETTINGS)
     service = HeightMeasuringApplicationService(
-        vision_service=robot_app.get_optional_service(ServiceID.VISION),
+        vision_service=robot_app.get_optional_service(CommonServiceID.VISION),
         height_measuring_service=robot_app._height_measuring_service,
         calibration_service=robot_app._height_measuring_calibration_service,
         settings_repo=settings_repo,

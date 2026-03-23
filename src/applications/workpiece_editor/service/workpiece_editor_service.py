@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-from src.robot_systems.glue.targeting.point_names import TOOL_POINT
+from src.robot_systems.glue.targeting.targeting_constants import TOOL_POINT
 
 
 def _has_valid_contour(contour) -> bool:

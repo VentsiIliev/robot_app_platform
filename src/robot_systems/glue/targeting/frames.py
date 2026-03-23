@@ -6,7 +6,7 @@ from src.engine.robot.targeting import TargetFrame
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.settings.targeting import GlueTargetFrameDefinition, GlueTargetingSettings
-from src.robot_systems.glue.targeting.frame_names import CALIBRATION_FRAME, PICKUP_FRAME
+from src.robot_systems.glue.targeting.targeting_constants import CALIBRATION_FRAME, PICKUP_FRAME
 
 
 def build_glue_target_frames(

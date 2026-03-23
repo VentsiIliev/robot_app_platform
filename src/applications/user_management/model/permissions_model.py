@@ -1,8 +1,4 @@
-from src.applications.user_management.domain.user import Role
 from src.engine.auth.i_permissions_admin_service import IPermissionsAdminService
-
-_DEFAULT_ROLES = ["Admin"]
-_ALL_ROLE_VALUES = [r.value for r in Role]
 
 
 class PermissionsModel:
@@ -17,9 +13,13 @@ class PermissionsModel:
         self,
         service: IPermissionsAdminService,
         known_app_ids: list[str],
+        role_values: list[str],
+        default_role_values: list[str],
     ) -> None:
         self._service       = service
         self._known_app_ids = list(known_app_ids)
+        self._role_values = list(role_values)
+        self._default_role_values = list(default_role_values)
 
     # ── Read ───────────────────────────────────────────────────────────────────
 
@@ -28,14 +28,14 @@ class PermissionsModel:
 
     def get_role_values(self) -> list[str]:
         """Column headers for the permissions table."""
-        return list(_ALL_ROLE_VALUES)
+        return list(self._role_values)
 
     def get_permissions(self) -> dict[str, list[str]]:
         """Return permissions for known apps only.
         Apps missing from the service default to ['Admin']."""
         all_perms = self._service.get_all_permissions()
         return {
-            app_id: list(all_perms.get(app_id, _DEFAULT_ROLES))
+            app_id: list(all_perms.get(app_id, self._default_role_values))
             for app_id in self._known_app_ids
         }
 
@@ -43,7 +43,7 @@ class PermissionsModel:
 
     def set_permission(self, app_id: str, role_value: str, allowed: bool) -> None:
         """Toggle a single role for an app and persist immediately."""
-        current = list(self._service.get_all_permissions().get(app_id, _DEFAULT_ROLES))
+        current = list(self._service.get_all_permissions().get(app_id, self._default_role_values))
         if allowed:
             if role_value not in current:
                 current.append(role_value)

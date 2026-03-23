@@ -113,11 +113,11 @@ All factories are defined in `application_wiring.py` with lazy imports.
 
 ```python
 def on_start(self) -> None:
-    self._robot      = self.get_service(ServiceID.ROBOT)
-    _nav_engine      = self.get_service(ServiceID.NAVIGATION)
+    self._robot      = self.get_service(CommonServiceID.ROBOT)
+    _nav_engine      = self.get_service(CommonServiceID.NAVIGATION)
     self._navigation = GlueNavigationService(_nav_engine)    # typed facade
-    self._vision     = self.get_optional_service(ServiceID.VISION)
-    self._tools      = self.get_optional_service(ServiceID.TOOLS)
+    self._vision     = self.get_optional_service(CommonServiceID.VISION)
+    self._tools      = self.get_optional_service(CommonServiceID.TOOLS)
     # load all settings into instance vars ...
     self._weight = self.get_service(ServiceID.WEIGHT)
     self._weight.start_monitoring(
@@ -150,6 +150,13 @@ def on_stop(self) -> None:
 `GlueNavigationService` remains the glue runtime facade for glue-specific
 workflow movement such as `HOME`, `LOGIN`, pickup, and capture-offset-aware
 navigation.
+
+Glue-specific authentication logic has been removed from the robot system:
+
+- shared engine `AuthenticationService` now verifies credentials
+- glue bootstrap adapts the existing CSV user repository through `AuthUserRepositoryAdapter`
+- shared engine `JsonPermissionsRepository` now handles permissions persistence
+- glue owns its role and permission policy declaratively through `GlueRobotSystem.role_policy`
 
 Calibration now uses the generic engine-level
 `CalibrationNavigationService` instead:
@@ -298,19 +305,15 @@ The calibration service now refreshes both `robot/calibration.json` and `robot/c
 
 ---
 
-## Settings Shim Files
+## Glue Settings Files
 
-`src/robot_systems/glue/settings/` contains thin re-export shims:
+`src/robot_systems/glue/settings/` contains only glue-specific settings definitions now:
 
 | File | Content |
 |------|---------|
-| `modbus.py` | Re-exports `ModbusConfig`, `ModbusConfigSerializer` from engine layer |
-| `robot.py` | Re-exports `RobotSettings`, `RobotSettingsSerializer` etc. from engine layer |
-| `robot_calibration.py` | Legacy `RobotCalibrationConfig` class (runtime config object, not a settings serializer) |
 | `cells.py` | Defines `GlueCellsConfigSerializer` with glue-specific defaults (3 cells, default IPs) |
 | `glue.py` | Defines `GlueSettings` dataclass + `GlueSettingsSerializer` |
 | `glue_types.py` | Defines `Glue`, `GlueCatalog` dataclasses + `GlueCatalogSerializer` |
-| `tools.py` | Defines `ToolChangerSettingsSerializer` |
 | `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
 → Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [pick_and_place/](processes/pick_and_place/README.md) · [targeting/](targeting/README.md)

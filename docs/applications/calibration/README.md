@@ -231,7 +231,7 @@ This keeps the area-selection and grid-generation controls next to the image the
 ## Wiring in `GlueRobotSystem`
 
 ```python
-vision_service = robot_system.get_optional_service(ServiceID.VISION)
+vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
 transformer = (
     HomographyTransformer(vision_service.camera_to_robot_matrix_path)
     if vision_service is not None else None
@@ -241,7 +241,7 @@ marker_height_mapping_service = ArucoMarkerHeightMappingService(...)
 service = CalibrationApplicationService(
     vision_service     = vision_service,
     process_controller = robot_system.coordinator,
-    robot_service      = robot_system.get_optional_service(ServiceID.ROBOT),
+    robot_service      = robot_system.get_optional_service(CommonServiceID.ROBOT),
     height_service     = robot_system.get_optional_service(ServiceID.HEIGHT_MEASURING),
     robot_config       = robot_system._robot_config,
     calib_config       = robot_system._robot_calibration,

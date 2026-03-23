@@ -37,7 +37,7 @@ class PermissionsView(QWidget):
             self._table.setVerticalHeaderLabels(app_ids)
 
             for row, app_id in enumerate(app_ids):
-                allowed = permissions.get(app_id, ["Admin"])
+                allowed = permissions.get(app_id, [])
                 for col, role_value in enumerate(role_values):
                     cell   = QWidget()
                     layout = QHBoxLayout(cell)

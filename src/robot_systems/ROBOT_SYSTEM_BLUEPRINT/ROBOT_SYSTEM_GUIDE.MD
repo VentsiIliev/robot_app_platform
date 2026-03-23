@@ -16,29 +16,40 @@ This blueprint is the robot-system equivalent of `APPLICATION_BLUEPRINT/`. It do
 
 ```
 Bootstrap
-  └─ SystemBuilder.build(MyRobotSystem)
-       ├─ reads MyRobotSystem.settings_specs
-       ├─ validates shared default-builder contracts up front
-       ├─ builds declared services from MyRobotSystem.services
-       ├─ instantiates MyRobotSystem()
-       └─ calls MyRobotSystem.on_start()
-            ├─ reads resolved services/settings into runtime attrs
-            ├─ installs optional providers (targeting, calibration, height measuring)
-            ├─ builds provider-based shared services if needed
-            └─ starts long-lived runtime services if needed
+  └─ MyRobotSystemBootstrapProvider
+       ├─ selects the concrete robot driver
+       ├─ selects the robot-system class
+       ├─ composes login/auth startup UI
+       ├─ composes authorization/permissions filtering
+       └─ calls SystemBuilder.build(MyRobotSystem)
+            ├─ reads MyRobotSystem.settings_specs
+            ├─ validates shared default-builder contracts up front
+            ├─ builds declared services from MyRobotSystem.services
+            ├─ instantiates MyRobotSystem()
+            └─ calls MyRobotSystem.on_start()
+                 ├─ reads resolved services/settings into runtime attrs
+                 ├─ installs optional providers (targeting, calibration, height measuring)
+                 ├─ builds provider-based shared services if needed
+                 └─ starts long-lived runtime services if needed
 ```
 
 Robot-system responsibilities:
 - declare shell folders and applications
 - declare service contracts and settings files
+- declare role and permission policy
 - assemble robot-system-specific runtime services
 - expose optional providers for reusable base helpers
+- own startup-only composition through `bootstrap_provider.py`
+  - concrete robot driver selection
+  - login/auth screen composition
+  - authorization/permissions composition
 
 Robot-system responsibilities do **not** include:
 - putting business logic in `BaseRobotSystem`
 - hardcoding storage paths in application wiring
 - duplicating target/jog math already available in `src/engine/robot/targeting/`
 - reimplementing shared default builders for robot, navigation, tool, or vision unless behavior really differs
+- putting robot-system-specific login, permissions, or driver selection directly in `src/bootstrap/main.py`
 
 ---
 
@@ -48,12 +59,16 @@ Robot-system responsibilities do **not** include:
 src/robot_systems/my_system/
   __init__.py
   my_robot_system.py
+  bootstrap_provider.py
   application_wiring.py
-  service_ids.py
-  settings_ids.py
+  component_ids.py
   service_builders.py
+  domain/
+    users/
+      user_schema.py            schema builder derived from role_policy
   settings/
     __init__.py
+    README.md
     targeting.py                optional but recommended if the system supports targeting
     ... other system settings
   calibration/
@@ -64,8 +79,7 @@ src/robot_systems/my_system/
     provider.py                optional when the system supports height measuring
   targeting/
     __init__.py
-    point_names.py
-    frame_names.py
+    targeting_constants.py
     provider.py
     registry.py
     frames.py
@@ -89,6 +103,7 @@ Use this split:
 - `targeting/` = runtime naming and provider assembly
 - `storage/` = checked-in defaults owned by the robot system
 - `application_wiring.py` = application composition only
+- `bootstrap_provider.py` = startup-only composition for robot driver, login, and authorization
 
 ---
 
@@ -109,18 +124,63 @@ Goal:
 - `SystemBuilder` can instantiate the robot system class
 - the shell can discover the initial application list
 
+### 1a. Define startup composition
+File: `bootstrap_provider.py`
+
+Implement a `RobotSystemBootstrapProvider` for your robot system.
+
+Put only startup-only composition here:
+- choose the concrete robot driver
+- return the concrete robot-system class
+- build the robot-system-specific login/auth view
+- build the robot-system-specific authorization service
+
+Preferred auth split:
+- reuse the shared engine `AuthenticationService`
+- adapt your user repository to `IAuthUserRepository`
+- reuse the shared engine `AuthorizationService`
+- keep only the permissions repository robot-system-specific
+- define your robot-system role policy explicitly:
+  - available role values for user editing and permission columns
+  - default permission role values for new apps
+  - protected app-role invariants such as "admin app must keep admin access"
+
+Preferred declaration split:
+- put the role/permission policy on your `BaseRobotSystem` subclass as `role_policy`
+- derive user-schema role options from that declaration
+- keep persisted `permissions.json` only for mutable app-to-role assignments
+
+The blueprint includes a concrete example of that split:
+- `my_robot_system.py` declares `role_policy`
+- `domain/users/user_schema.py` builds the editable user schema from `role_policy.role_values`
+- `bootstrap_provider.py` wires shared `AuthenticationService`, `AuthorizationService`, `AuthUserRepositoryAdapter`, and `JsonPermissionsRepository`
+
+Keep this logic out of `src/bootstrap/main.py`. The platform bootstrap should stay generic and ask the robot system how to compose these startup-only pieces.
+
+Goal:
+- `main.py` can boot your system without importing your auth stack, user schema, or concrete robot driver directly
+
 ### 2. Define IDs
 Files:
-- `service_ids.py`
-- `settings_ids.py`
+- `component_ids.py`
 
 Rules:
 - use `Enum` subclasses
 - keep names stable after they are published
 - one enum member per service/settings concept
 - keep shared infrastructure ids in `src/engine/common_settings_ids.py`
-- keep only robot-system-specific ids in `settings_ids.py`
+- keep shared infrastructure service ids in `src/engine/common_service_ids.py`
+- keep only robot-system-specific ids in `component_ids.py`
 - do not duplicate common ids in your robot-system enums
+- use `CommonServiceID` for shared services such as:
+  - `ROBOT`
+  - `NAVIGATION`
+  - `VISION`
+  - `TOOLS`
+- prefer three small enums in that one file:
+  - `ServiceID`
+  - `SettingsID`
+  - `ProcessID`
 
 Goal:
 - wiring and settings access stop relying on string literals
@@ -129,6 +189,7 @@ Goal:
 Files:
 - `settings/*.py`
 - `storage/settings/...`
+- `settings/README.md`
 
 Rules:
 - shared infrastructure settings should use `CommonSettingsID`
@@ -141,11 +202,22 @@ Rules:
   - `HEIGHT_MEASURING_CALIBRATION`
   - `DEPTH_MAP_DATA`
 - generic robot/runtime settings stay under `storage/settings/robot/...`
+- shared tool-changer settings typically live under `storage/settings/tools/tool_changer.json`
 - robot-system-specific targeting should live under `storage/settings/targeting/...`
 - process-specific settings should live under their own namespace, not under targeting
+- each robot-system-specific persisted setting should have:
+  - a dedicated `SettingsID` entry
+  - one dataclass
+  - one serializer
+  - one default JSON file
+- put unrelated settings in separate modules; do not create one catch-all settings file
+- if a setting becomes reusable across robot systems, move it to `src/engine/`
 
 Goal:
 - `settings_specs` can be filled with concrete `SettingsSpec(...)` entries
+
+Recommended detailed pattern:
+- see `settings/README.md` in the blueprint
 
 ### 4. Define service contracts
 Files:
@@ -187,6 +259,16 @@ Examples:
   - `CommonSettingsID.DEPTH_MAP_DATA`
 
 Plan for those dependencies explicitly in `settings_specs` and `services`. If you omit one side of a shared contract, startup fails loudly with a runtime error that names the missing declaration.
+
+### 4b. Keep bootstrap generic
+
+Use the bootstrap provider boundary for anything that is startup-specific but not part of the long-lived robot-system runtime:
+- concrete robot driver selection
+- login screen composition
+- authentication repositories and schemas
+- authorization and permissions filtering
+
+Do not move that logic into `BaseRobotSystem`, and do not hardcode it into `src/bootstrap/main.py`.
 
 ### 5. Implement `on_start()` / `on_stop()`
 File: `my_robot_system.py`
@@ -296,8 +378,8 @@ This keeps storage conventions identical across robot systems.
 
 If the robot system supports image-target -> robot-pose resolution or target-aware jogging, define targeting explicitly.
 
-### Where to define target names
-File: `targeting/point_names.py`
+### Where to define target names and frame names
+File: `targeting/targeting_constants.py`
 
 Example:
 
@@ -305,6 +387,9 @@ Example:
 CAMERA_POINT = "camera"
 TRANSDUCER_POINT = "transducer"
 GRIPPER_POINT = "gripper"
+
+CALIBRATION_FRAME = "calibration"
+PICKUP_FRAME = "pickup"
 
 POINT_ALIASES = {
     "camera_center": CAMERA_POINT,
@@ -315,16 +400,6 @@ Rules:
 - these are canonical internal ids
 - UI labels should be separate persisted values like `display_name`
 - do not rename required canonical ids just to change UI text
-
-### Where to define frame names
-File: `targeting/frame_names.py`
-
-Example:
-
-```python
-CALIBRATION_FRAME = "calibration"
-PICKUP_FRAME = "pickup"
-```
 
 Rules:
 - frame names are robot-system vocabulary, not engine vocabulary
@@ -471,7 +546,7 @@ Prerequisites:
 Declaration:
 
 ```python
-ServiceSpec(ServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control")
+ServiceSpec(CommonServiceID.ROBOT, IRobotService, required=True, description="Motion and lifecycle control")
 ```
 
 ### Navigation
@@ -484,7 +559,7 @@ Prerequisites:
 Declaration:
 
 ```python
-ServiceSpec(ServiceID.NAVIGATION, NavigationService, required=True, description="Named group navigation")
+ServiceSpec(CommonServiceID.NAVIGATION, NavigationService, required=True, description="Named group navigation")
 ```
 
 ### Tool
@@ -498,7 +573,7 @@ Prerequisites:
 Declaration:
 
 ```python
-ServiceSpec(ServiceID.TOOLS, IToolService, required=False, description="Tool manager")
+ServiceSpec(CommonServiceID.TOOLS, IToolService, required=False, description="Tool manager")
 ```
 
 ### Vision
@@ -518,7 +593,7 @@ What the default builder does:
 Declaration:
 
 ```python
-ServiceSpec(ServiceID.VISION, IVisionService, required=False, description="Vision pipeline")
+ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Vision pipeline")
 ```
 
 and do not need a custom `build_vision_service(ctx)` at all.
@@ -535,7 +610,7 @@ Only add a custom builder if:
 1. Copy `ROBOT_SYSTEM_BLUEPRINT/` to `my_system/`
 2. Rename all identifiers
 3. Fill `metadata`, `shell`, `settings_specs`, `services`
-4. Create `ServiceID` and `SettingsID`
+4. Create robot-system-specific `ServiceID`, `SettingsID`, and optional `ProcessID` in `component_ids.py`, and use `CommonServiceID` / `CommonSettingsID` for shared infrastructure
 5. Create settings serializers and default JSON files
 6. Reuse shared default builders where possible
 7. Implement `on_start()` / `on_stop()`

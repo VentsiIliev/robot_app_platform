@@ -12,7 +12,7 @@ from src.engine.robot.targeting import VisionTargetResolver
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.glue.navigation import GlueNavigationService
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper

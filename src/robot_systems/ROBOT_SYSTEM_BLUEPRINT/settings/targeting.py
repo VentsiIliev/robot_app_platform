@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.engine.repositories.interfaces import ISettingsSerializer
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.frame_names import CALIBRATION_FRAME
-from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.point_names import CAMERA_POINT, POINT_ALIASES
+from src.robot_systems.ROBOT_SYSTEM_BLUEPRINT.targeting.targeting_constants import (
+    CALIBRATION_FRAME,
+    CAMERA_POINT,
+    POINT_ALIASES,
+)
 
 
 @dataclass
