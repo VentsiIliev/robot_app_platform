@@ -2,8 +2,9 @@ from __future__ import annotations
 import logging
 from typing import Callable, List, Tuple
 
-from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QTimer, pyqtSignal
 
+from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
 from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.robot_systems.glue.component_ids import ProcessID
@@ -41,43 +42,33 @@ class _DashboardBridge(QObject):
     overlay_loaded  = pyqtSignal(object)
 
 
-class _Worker(QObject):
-    finished = pyqtSignal()
-
-    def __init__(self, fn):
-        super().__init__()
-        self._fn = fn
-
-    def run(self):
-        try:
-            self._fn()
-        finally:
-            self.finished.emit()
 
 
-
-
-class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
+class GlueDashboardController(
+    IApplicationController,
+    BackgroundWorker,
+    DashboardCameraFeedMixin,
+):
 
     def __init__(self, model: GlueDashboardModel, view: GlueDashboardView, broker: IMessagingService):
+        BackgroundWorker.__init__(self)
         self._model         = model
         self._view          = view
         self._broker        = broker
         self._subs:         List[Tuple[str, Callable]] = []
         self._mode_index    = 0
         self._current_state = ProcessState.IDLE.value
-        self._active        = False
+        self._is_active     = False
         self._logger        = logging.getLogger(self.__class__.__name__)
         self._bridge        = _DashboardBridge()
         self._init_dashboard_camera_feed()
-        self._workers: List[Tuple[QThread, _Worker]] = []
         self._notifications = UserNotificationPresenter(view, broker, translate=self._t)
         self._progress_timer = QTimer()
         self._progress_timer.setInterval(150)
         self._progress_timer.timeout.connect(self._poll_preview_progress)
 
     def load(self) -> None:
-        self._active = True
+        self._is_active = True
         self._notifications.start()
         self._wire_bridge()
         self._subscribe()
@@ -87,11 +78,12 @@ class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
         self._view.destroyed.connect(self.stop)
 
     def stop(self) -> None:
-        self._active = False
+        self._is_active = False
         try:
             self._progress_timer.stop()
         except RuntimeError:
             pass
+        self._stop_threads()
         self._notifications.stop()
         for topic, cb in reversed(self._subs):
             try: self._broker.unsubscribe(topic, cb)
@@ -102,7 +94,7 @@ class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
     # ── Guard ─────────────────────────────────────────────────────────
 
     def _view_ok(self) -> bool:
-        if not self._active:
+        if not self._is_active:
             return False
         try:
             _ = self._view.isVisible()
@@ -250,22 +242,22 @@ class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
             pass
 
     def _on_start(self) -> None:
-        if not self._active: return
+        if not self._is_active: return
         self._run_blocking(self._model.start)
 
     def _on_stop(self) -> None:
-        if not self._active: return
+        if not self._is_active: return
         self._model.stop()
 
     def _on_pause(self) -> None:
-        if not self._active: return
+        if not self._is_active: return
         if self._current_state == ProcessState.PAUSED.value:
             self._model.start()
         else:
             self._model.pause()
 
     def _on_action(self, action_id: str) -> None:
-        if not self._active: return
+        if not self._is_active: return
         if action_id == "mode_toggle":
             self._mode_index = 1 - self._mode_index
             label = MODE_TOGGLE_LABELS[self._mode_index]
@@ -277,7 +269,7 @@ class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
             self._model.reset_errors()
 
     def _on_glue_change(self, card_id: int) -> None:
-        if not self._active: return
+        if not self._is_active: return
         from PyQt6.QtWidgets import QDialog
         from src.robot_systems.glue.applications.dashboard.ui.glue_change_guide_wizard import create_glue_change_wizard
         cell_id    = int(card_id) - 1
@@ -312,22 +304,17 @@ class GlueDashboardController(IApplicationController, DashboardCameraFeedMixin):
             self._view.set_action_button_enabled("reset_errors", cfg["reset_errors"])
 
     def _run_blocking(self, fn) -> None:
-        thread = QThread()
-        worker = _Worker(fn)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(lambda: self._release_worker(thread, worker))
-        self._workers.append((thread, worker))
-        thread.start()
+        self._run_in_thread(
+            fn=fn,
+            on_done=lambda _result: None,
+            on_error=self._on_background_error,
+        )
 
-    def _release_worker(self, thread: QThread, worker: _Worker) -> None:
-        try:
-            self._workers.remove((thread, worker))
-        except ValueError:
-            pass
-        worker.deleteLater()
-        thread.deleteLater()
+    def _on_background_error(self, message: str) -> None:
+        if not self._view_ok():
+            return
+        self._logger.error("Dashboard background task failed: %s", message)
+        self._view.set_service_warning(message)
 
     # ── Initialize ────────────────────────────────────────────────────
 
