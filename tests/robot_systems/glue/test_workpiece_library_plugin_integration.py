@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.base.widget_application import WidgetApplication
+from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.settings_ids import SettingsID
 
@@ -24,7 +25,7 @@ def _make_robot_system():
     ss = MagicMock()
     ss.get.side_effect = lambda key: (
         catalog if key == SettingsID.GLUE_CATALOG else
-        tc      if key == SettingsID.TOOL_CHANGER_CONFIG else
+        tc      if key == CommonSettingsID.TOOL_CHANGER_CONFIG else
         MagicMock()
     )
 

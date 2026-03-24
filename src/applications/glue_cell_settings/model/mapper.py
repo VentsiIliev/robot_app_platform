@@ -19,7 +19,6 @@ class GlueCellMapper:
             "motor_address":         cell.motor_address,
             "zero_offset":           cell.calibration.zero_offset,
             "scale_factor":          cell.calibration.scale_factor,
-            "temperature_compensation": cell.calibration.temperature_compensation,
             "sampling_rate":         cell.measurement.sampling_rate,
             "filter_cutoff":         cell.measurement.filter_cutoff,
             "averaging_samples":     cell.measurement.averaging_samples,
@@ -33,7 +32,6 @@ class GlueCellMapper:
             original.calibration,
             zero_offset             = float(flat.get("zero_offset",           original.calibration.zero_offset)),
             scale_factor            = float(flat.get("scale_factor",          original.calibration.scale_factor)),
-            temperature_compensation= str(flat.get("temperature_compensation", original.calibration.temperature_compensation)) == "True",
         )
         measurement = replace(
             original.measurement,

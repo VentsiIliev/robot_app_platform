@@ -8,7 +8,7 @@ from src.applications.glue_cell_settings.model.glue_cell_settings_model import G
 
 
 def _calib(offset=0.0, scale=1.0):
-    return CalibrationConfig(offset, scale, False)
+    return CalibrationConfig(offset, scale)
 
 def _meas():
     return MeasurementConfig(10, 1.0, 5, 0.0, 1000.0)
@@ -91,7 +91,7 @@ class TestGlueCellSettingsModelSave(unittest.TestCase):
     def test_save_calls_save_cells(self):
         model, svc = self._model_and_svc()
         flat = {"url": "http://new", "zero_offset": "2.5", "scale_factor": "0.95",
-                "temperature_compensation": "False", "capacity": "500.0",
+                "capacity": "500.0",
                 "fetch_timeout_seconds": "5.0", "data_fetch_interval_ms": "500",
                 "motor_address": "0", "type": "T",
                 "sampling_rate": "10", "filter_cutoff": "1.0",
@@ -103,7 +103,7 @@ class TestGlueCellSettingsModelSave(unittest.TestCase):
     def test_save_pushes_calibration(self):
         model, svc = self._model_and_svc()
         flat = {"url": "http://x", "zero_offset": "3.0", "scale_factor": "0.9",
-                "temperature_compensation": "False", "capacity": "500.0",
+                "capacity": "500.0",
                 "fetch_timeout_seconds": "5.0", "data_fetch_interval_ms": "500",
                 "motor_address": "0", "type": "T",
                 "sampling_rate": "10", "filter_cutoff": "1.0",
@@ -117,7 +117,7 @@ class TestGlueCellSettingsModelSave(unittest.TestCase):
     def test_save_updates_cached_config(self):
         model, svc = self._model_and_svc()
         flat = {"url": "http://updated", "zero_offset": "0.0", "scale_factor": "1.0",
-                "temperature_compensation": "False", "capacity": "500.0",
+                "capacity": "500.0",
                 "fetch_timeout_seconds": "5.0", "data_fetch_interval_ms": "500",
                 "motor_address": "0", "type": "T",
                 "sampling_rate": "10", "filter_cutoff": "1.0",
@@ -136,7 +136,7 @@ class TestGlueCellSettingsModelSave(unittest.TestCase):
         model, svc = self._model_and_svc()
         original_cell1 = model.get_cell_flat(1)
         flat = {"url": "http://changed", "zero_offset": "0.0", "scale_factor": "1.0",
-                "temperature_compensation": "False", "capacity": "500.0",
+                "capacity": "500.0",
                 "fetch_timeout_seconds": "5.0", "data_fetch_interval_ms": "500",
                 "motor_address": "0", "type": "T",
                 "sampling_rate": "10", "filter_cutoff": "1.0",

@@ -80,3 +80,11 @@ default builder in
 types in
 [tool_changer_settings.py](/home/ilv/Desktop/robot_app_platform/src/engine/robot/configuration/tool_changer_settings.py),
 not glue-specific settings classes.
+
+The default tool catalog and default slot layout are robot-system declarations,
+not engine defaults. A robot system should declare:
+- `tools`
+- `tool_slots`
+
+and wire those into `ToolChangerSettingsSerializer(default_tools=..., default_slots=...)`
+inside its `settings_specs`.

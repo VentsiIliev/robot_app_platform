@@ -34,19 +34,10 @@ class BrightnessManager:
 
 
     def get_area_by_threshold(self):
-        if self.vision_system.threshold_by_area == "pickup":
-            _logger.info(
-
-                f"Using pickup area for brightness adjustment with thresh = {self.vision_system.camera_settings.get_threshold_pickup_area()}")
-            return self.vision_system.service.pickupAreaPoints()
-        elif self.vision_system.threshold_by_area == "spray":
-            _logger.info(
-
-                f"Using spray area for brightness adjustment with thresh = {self.vision_system.camera_settings.get_threshold()}")
-            return self.vision_system.service.sprayAreaPoints()
-        else:
-            raise ValueError(
-                f"Invalid threshold_by_area: {self.vision_system.threshold_by_area} Valid options are 'pickup' or 'spray'.")
+        active_area = self.vision_system.threshold_by_area
+        if not active_area:
+            return None
+        return self.vision_system._get_area_points_by_region(active_area)
 
     def adjust_brightness(self):
         # Get area points from camera settings, with fallback to hardcoded values

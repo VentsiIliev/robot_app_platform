@@ -1,21 +1,11 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Sequence
 
 from src.engine.repositories.interfaces import ISettingsSerializer
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
-
-_DEFAULT_TOOLS = [
-    {"id": 0, "name": "TOOL 1"},
-    {"id": 1, "name": "TOOL 2"},
-    {"id": 4, "name": "TOOL 3"},
-]
-
-_DEFAULT_SLOTS = [
-    {"slot_id": 10, "tool_id": 0},
-    {"slot_id": 11, "tool_id": 1},
-    {"slot_id": 12, "tool_id": 4},
-]
+from src.shared_contracts.declarations.tooling import ToolDefinition as ToolDefinitionDeclaration
+from src.shared_contracts.declarations.tooling import ToolSlotDefinition
 
 
 @dataclass
@@ -31,12 +21,29 @@ class ToolChangerSettings:
 
 
 class ToolChangerSettingsSerializer(ISettingsSerializer):
+    def __init__(
+        self,
+        default_tools: Sequence[ToolDefinitionDeclaration] | None = None,
+        default_slots: Sequence[ToolSlotDefinition] | None = None,
+    ) -> None:
+        self._default_tools = list(default_tools or [])
+        self._default_slots = list(default_slots or [])
+
     @property
     def settings_type(self) -> str:
         return "tool_changer"
 
     def get_default(self) -> ToolChangerSettings:
-        return self._from_raw({"tools": _DEFAULT_TOOLS, "slots": _DEFAULT_SLOTS})
+        return ToolChangerSettings(
+            tools=[
+                ToolDefinition(id=int(tool.id), name=str(tool.name))
+                for tool in self._default_tools
+            ],
+            slots=[
+                SlotConfig(id=int(slot.id), tool_id=slot.tool_id)
+                for slot in self._default_slots
+            ],
+        )
 
     def to_dict(self, settings: ToolChangerSettings) -> dict:
         return {
@@ -47,17 +54,22 @@ class ToolChangerSettingsSerializer(ISettingsSerializer):
     def from_dict(self, data: dict) -> ToolChangerSettings:
         return self._from_raw(data)
 
-    @staticmethod
-    def _from_raw(data: dict) -> ToolChangerSettings:
+    def _from_raw(self, data: dict) -> ToolChangerSettings:
+        raw_tools = data.get("tools")
+        raw_slots = data.get("slots")
         tools = [
             ToolDefinition(id=int(t["id"]), name=str(t["name"]))
-            for t in data.get("tools", _DEFAULT_TOOLS)
+            for t in (raw_tools if raw_tools is not None else [tool.to_dict() for tool in self._default_tools])
         ]
         slots = [
             SlotConfig(
                 id=int(s["slot_id"]),
                 tool_id=int(s["tool_id"]) if s.get("tool_id") is not None else None,
             )
-            for s in data.get("slots", _DEFAULT_SLOTS)
+            for s in (
+                raw_slots
+                if raw_slots is not None
+                else [{"slot_id": slot.id, "tool_id": slot.tool_id} for slot in self._default_slots]
+            )
         ]
         return ToolChangerSettings(tools=tools, slots=slots)

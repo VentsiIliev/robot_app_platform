@@ -50,25 +50,22 @@ class PointRegistry:
 
 The engine registry is now generic. It stores whatever named points a robot system defines.
 
-In the glue system, the canonical points and aliases are defined in:
-- `src/robot_systems/glue/targeting/targeting_constants.py`
+In the glue system, the canonical remote TCPs are declared on `GlueRobotSystem`, and the measured values are stored in shared `TargetingSettings`.
+Glue-specific runtime point-registry assembly lives in:
 - `src/robot_systems/glue/targeting/registry.py`
 
-Glue builds the registry from `GlueTargetingSettings`, stored separately from generic robot config.
+Glue builds the registry from shared `TargetingSettings`, stored separately from generic robot config.
 
 `targeting/definitions.json` now stores:
 - `POINTS`: named measured XY references in robot coordinates
 - `FRAMES`: named frame definitions with optional navigation source/target groups and height-correction usage
-- `ALIASES`: compatibility aliases such as `camera_center -> camera`
 
 Offsets are computed once at construction relative to the measured `camera` point:
 
 ```
-tool_offset    = tool_point    − camera_center
-gripper_offset = gripper_point − camera_center
+tool_offset    = tool_point    − camera
+gripper_offset = gripper_point − camera
 ```
-
-`by_name()` accepts the legacy string `"camera_center"` as an alias for `"camera"` in the glue system because that alias is registered by glue, not by the engine.
 
 ---
 
@@ -188,12 +185,15 @@ pieces from the base robot system and only asks the targeting provider for:
 Register named coordinate planes at construction via the `frames=` dict. Each `TargetFrame` bundles a `PlanePoseMapper` and an optional `IHeightCorrectionService`.
 
 The engine no longer defines glue-specific frame names. In the glue system, frame names are defined in:
-- `src/robot_systems/glue/targeting/targeting_constants.py`
+- shared `TargetingSettings` under `targeting/definitions.json`
 
 Glue also provides `build_glue_target_frames(...)` which converts the stored frame definitions into runtime `TargetFrame` objects:
+- canonical frame identity now comes from `GlueRobotSystem.target_frames`
+- persisted shared targeting settings only override editable frame behavior such as navigation source/target groups and `use_height_correction`
 - a frame with empty source/target groups behaves as a named frame with no mapper
 - a frame with both groups set builds a `PlanePoseMapper` from the corresponding navigation poses
 - `use_height_correction=True` attaches the active height-correction service to that frame
+- each runtime `TargetFrame` also carries `work_area_id`, which binds targeting frames to the shared work-area model
 
 Example:
 
@@ -204,12 +204,14 @@ resolver = VisionTargetResolver(
     camera_to_tcp_x_offset=tcp_x,
     camera_to_tcp_y_offset=tcp_y,
     frames={
-        CALIBRATION_FRAME: TargetFrame(
-            CALIBRATION_FRAME,
+        "calibration": TargetFrame(
+            "calibration",
+            work_area_id="spray",
             height_correction=depth_map_service,
         ),
-        PICKUP_FRAME: TargetFrame(
-            PICKUP_FRAME,
+        "pickup": TargetFrame(
+            "pickup",
+            work_area_id="pickup",
             mapper=pickup_mapper,
         ),
     },
@@ -219,7 +221,7 @@ resolver = VisionTargetResolver(
 Select a frame per call:
 
 ```python
-result = resolver.resolve(target, point, frame=PICKUP_FRAME)
+result = resolver.resolve(target, point, frame="pickup")
 ```
 
 For dynamic one-off mappers (e.g. per-capture-pose remapping), pass `mapper=` directly — it takes precedence over the frame's mapper:

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Sequence
+from src.shared_contracts.declarations import WorkAreaDefinition
 
 
 class ICalibrationService(ABC):
@@ -35,6 +36,25 @@ class ICalibrationService(ABC):
     def measure_marker_heights(self) -> tuple[bool, str]: ...
 
     @abstractmethod
+    def get_work_area_definitions(self) -> list[WorkAreaDefinition]: ...
+
+    @abstractmethod
+    def get_active_work_area_id(self) -> str: ...
+
+    @abstractmethod
+    def set_active_work_area_id(self, area_id: str) -> None: ...
+
+    @abstractmethod
+    def save_height_mapping_area(
+        self,
+        area_key: str,
+        corners_norm: Sequence[tuple[float, float]],
+    ) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def get_height_mapping_area(self, area_key: str) -> list[tuple[float, float]]: ...
+
+    @abstractmethod
     def generate_area_grid(
         self,
         corners_norm: Sequence[tuple[float, float]],
@@ -45,6 +65,7 @@ class ICalibrationService(ABC):
     @abstractmethod
     def measure_area_grid(
         self,
+        area_id: str,
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
@@ -66,13 +87,13 @@ class ICalibrationService(ABC):
     def can_measure_marker_heights(self) -> bool: ...
 
     @abstractmethod
-    def verify_height_model(self) -> tuple[bool, str]: ...
+    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]: ...
 
     @abstractmethod
-    def get_height_calibration_data(self): ...
+    def get_height_calibration_data(self, area_id: str = ""): ...
 
     @abstractmethod
-    def has_saved_height_model(self) -> bool: ...
+    def has_saved_height_model(self, area_id: str = "") -> bool: ...
 
     @abstractmethod
     def restore_pending_safety_walls(self) -> bool: ...

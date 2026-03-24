@@ -1,19 +1,13 @@
 import logging
 
-from PyQt6.QtWidgets import QDialog, QLineEdit, QComboBox, QCheckBox, QVBoxLayout, QLabel
-
-from src.applications.base.app_dialog import (
-    AppDialog, DIALOG_INPUT_STYLE, DIALOG_COMBO_STYLE, DIALOG_CHECKBOX_STYLE,
-)
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
 from src.applications.robot_settings.model.mapper import RobotCalibrationMapper, RobotSettingsMapper
 from src.applications.robot_settings.model.robot_settings_model import RobotSettingsModel
-from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
 from src.applications.robot_settings.view.robot_settings_view import RobotSettingsView
 from src.engine.core.i_messaging_service import IMessagingService
-from src.engine.robot.configuration import MovementGroup
+from src.shared_contracts.declarations import MovementGroupType
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
@@ -28,7 +22,6 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._messaging = messaging
 
         self._view.save_requested.connect(self._on_save)
-        self._view.add_group_requested.connect(self._on_add_group)
         self._view.remove_group_requested.connect(self._on_remove_group)
         self._view.set_current_requested.connect(self._on_set_current)
         self._view.move_to_requested.connect(self._on_move_to)
@@ -47,22 +40,9 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view.load_config(flat)
         self._view.load_targeting_definitions(targeting_definitions)
 
-        extra_defs = {}
-        for slot_id, tool_name in self._model.get_slot_info():
-            if tool_name is None:
-                continue
-            for suffix in ("PICKUP", "DROPOFF"):
-                key = f"SLOT {slot_id} {suffix}"
-                extra_defs[key] = MovementGroupDef(
-                    name                     = key,
-                    group_type               = MovementGroupType.MULTI_POSITION,
-                    has_trajectory_execution = True,
-                    display_name             = f"Slot {slot_id} {suffix.capitalize()} — {tool_name}",
-                )
-
         self._view.load_movement_groups(
             self._model.get_expected_movement_groups(),
-            extra_defs=extra_defs,
+            definitions=self._model.get_movement_group_definitions(),
         )
 
     def stop(self) -> None:
@@ -100,21 +80,6 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         else:
             widget.add_point(position_str)
             self._logger.info("Added point to '%s': %s", group_name, position_str)
-
-    def _on_add_group(self) -> None:
-        dlg = _AddGroupDialog(parent=self._view)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        name, defn = dlg.get_values()
-        if not name:
-            show_warning(self._view, "Add Group", "Group name cannot be empty.")
-            return
-        existing = self._view.get_movement_groups()
-        if name in existing:
-            show_warning(self._view, "Add Group", f"A group named '{name}' already exists.")
-            return
-        self._view.add_movement_group(name, defn, MovementGroup())
-        self._logger.info("Added movement group '%s'", name)
 
     def _on_remove_group(self, name: str) -> None:
         if not ask_yes_no(self._view, "Remove Group",
@@ -197,72 +162,3 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             show_warning(self._view, label, msg)
         else:
             self._logger.info("%s completed successfully", label)
-
-class _AddGroupDialog(AppDialog):
-
-    _TYPE_OPTIONS = [
-        ("Single Position", MovementGroupType.SINGLE_POSITION),
-        ("Multi Position",  MovementGroupType.MULTI_POSITION),
-        ("Velocity Only",   MovementGroupType.VELOCITY_ONLY),
-    ]
-
-    def __init__(self, parent=None):
-        super().__init__("Add Movement Group", min_width=420, parent=parent)
-
-        root = QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(16)
-
-        # Name
-        root.addWidget(self._label("Group Name"))
-        self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("e.g. HOME, ROBOT_CALIBRATION, SLOT 2 PICKUP")
-        self._name_edit.setStyleSheet(DIALOG_INPUT_STYLE)
-        root.addWidget(self._name_edit)
-
-        # Type
-        root.addWidget(self._label("Type"))
-        self._type_combo = QComboBox()
-        self._type_combo.setStyleSheet(DIALOG_COMBO_STYLE)
-        for label, _ in self._TYPE_OPTIONS:
-            self._type_combo.addItem(label)
-        self._type_combo.currentIndexChanged.connect(self._on_type_changed)
-        root.addWidget(self._type_combo)
-
-        # Options
-        self._iterations_cb = QCheckBox("Has Iterations")
-        self._iterations_cb.setStyleSheet(DIALOG_CHECKBOX_STYLE)
-        root.addWidget(self._iterations_cb)
-
-        self._trajectory_cb = QCheckBox("Has Trajectory Execution")
-        self._trajectory_cb.setStyleSheet(DIALOG_CHECKBOX_STYLE)
-        root.addWidget(self._trajectory_cb)
-
-        root.addStretch()
-        root.addWidget(self._build_button_row(ok_label="Add"))
-        self._on_type_changed(0)
-
-    @staticmethod
-    def _label(text: str) -> QLabel:
-        from PyQt6.QtWidgets import QLabel
-        from pl_gui.settings.settings_view.styles import LABEL_STYLE
-        lbl = QLabel(text)
-        lbl.setStyleSheet(LABEL_STYLE)
-        return lbl
-
-    def _on_type_changed(self, idx: int) -> None:
-        gtype = self._TYPE_OPTIONS[idx][1]
-        self._iterations_cb.setVisible(gtype == MovementGroupType.MULTI_POSITION)
-        self._trajectory_cb.setVisible(gtype != MovementGroupType.VELOCITY_ONLY)
-
-    def get_values(self):
-        idx  = self._type_combo.currentIndex()
-        gtype = self._TYPE_OPTIONS[idx][1]
-        name  = self._name_edit.text().strip().upper()
-        defn  = MovementGroupDef(
-            name                     = name,
-            group_type               = gtype,
-            has_iterations           = self._iterations_cb.isChecked(),
-            has_trajectory_execution = self._trajectory_cb.isChecked(),
-        )
-        return name, defn

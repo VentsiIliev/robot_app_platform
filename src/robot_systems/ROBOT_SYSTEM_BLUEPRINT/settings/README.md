@@ -10,13 +10,13 @@ Put a settings module in `settings/` when all of these are true:
 - the data is not already a shared engine setting under `src/engine/`
 
 Examples:
-- targeting definitions
 - glue process settings
 - glue motor board topology
 - cell layout / addresses for one robot system
 
 Do not put these here:
 - `RobotSettings`
+- `MovementGroupSettings`
 - `RobotCalibrationSettings`
 - `ModbusConfig`
 - `CameraSettings`
@@ -31,7 +31,6 @@ Recommended pattern:
 ```text
 settings/
   __init__.py
-  targeting.py
   glue.py
   device_control.py
 ```
@@ -46,7 +45,6 @@ Each module should normally contain:
 Use the robot system or domain in the type name so ownership is obvious.
 
 Good:
-- `GlueTargetingSettings`
 - `GlueSettings`
 - `GlueMotorConfig`
 
@@ -117,8 +115,9 @@ Use the storage path to show ownership.
 
 Good examples:
 - `robot/config.json` for shared robot config
+- `robot/movement_groups.json` for shared movement-group values
 - `vision/camera_settings.json` for shared vision config
-- `targeting/definitions.json` for robot-system targeting
+- `targeting/definitions.json` for shared targeting definitions
 - `glue/settings.json` for glue-process settings
 - `hardware/motors.json` for robot-system-specific hardware mapping
 
@@ -134,7 +133,8 @@ Example:
 
 ```python
 self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
-self._targeting = self.get_settings(SettingsID.MY_TARGETING)
+self._movement_groups = self.get_settings(CommonSettingsID.MOVEMENT_GROUPS)
+self._targeting = self.get_settings(CommonSettingsID.TARGETING)
 ```
 
 ## Boundary rule

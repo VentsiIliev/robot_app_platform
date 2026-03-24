@@ -36,13 +36,15 @@ class CameraSettingsView(IApplicationView):
     JOG_FRAME_SELECTOR_ENABLED = True
 
     raw_mode_toggled               = pyqtSignal(bool)
-    save_area_requested            = pyqtSignal(str)
-    save_brightness_area_requested = pyqtSignal(list)
     value_changed_signal           = pyqtSignal(str, object, str)
     save_requested                 = pyqtSignal(dict)
     vision_state_changed           = pyqtSignal(str)
 
-    def __init__(self, settings_view: SettingsView, parent=None):
+    def __init__(
+        self,
+        settings_view: SettingsView,
+        parent=None,
+    ):
         self._settings_view = settings_view
         super().__init__("CameraSettings", parent)
 
@@ -75,9 +77,6 @@ class CameraSettingsView(IApplicationView):
         live_caption.setStyleSheet(_CAPTION_STYLE)
         live_caption.setFixedHeight(16)
         self._preview_label = CameraView()
-        self._preview_label.add_area("pickup_area")
-        self._preview_label.add_area("spray_area")
-        self._preview_label.add_area("brightness_area")
         self._preview_label.setMaximumHeight(280)
         layout.addWidget(live_caption, stretch=0)
         layout.addWidget(self._preview_label, stretch=1)
@@ -129,7 +128,6 @@ class CameraSettingsView(IApplicationView):
 
     def update_threshold_view(self, image) -> None:
         # threshold image arrives as single-channel grayscale numpy array
-        import numpy as np
         if image is None:
             return
         if len(image.shape) == 2:
@@ -138,15 +136,6 @@ class CameraSettingsView(IApplicationView):
         h, w, ch = image.shape
         qimg = QImage(image.data, w, h, ch * w, QImage.Format.Format_RGB888)
         self._threshold_label.set_frame(QPixmap.fromImage(qimg))
-
-    def set_area_corners(self, area_name: str, normalized_points: list) -> None:
-        if self._preview_label:
-            self._preview_label.set_area_corners(area_name, normalized_points)
-
-    def get_area_corners(self, area_name: str) -> list:
-        if self._preview_label:
-            return self._preview_label.get_area_corners(area_name)
-        return []
 
     # ── Properties ───────────────────────────────────────────────────
 

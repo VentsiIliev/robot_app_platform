@@ -65,8 +65,12 @@ class IVisionService(ABC):
     def camera_to_robot_matrix_path(self) -> str: ...
 
     @abstractmethod
+    def set_active_work_area(self, area_id: str | None) -> None:
+        """Switch the active work area used by vision."""
+
+    @abstractmethod
     def set_detection_area(self, area: str) -> None:
-        """Switch contour detection filter to 'pickup' or 'spray'."""
+        """Compatibility wrapper for switching the active work area."""
 
     @abstractmethod
     def get_capture_pos_offset(self) -> float: ...

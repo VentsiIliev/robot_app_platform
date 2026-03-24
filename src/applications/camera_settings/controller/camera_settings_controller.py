@@ -1,5 +1,4 @@
 import logging
-import dataclasses
 
 from PyQt6.QtCore import pyqtSignal
 
@@ -44,14 +43,6 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
         self._setup_subscriptions()
         settings = self._model.load()
         self._view.settings_view.set_values(CameraSettingsMapper.to_flat_dict(settings))
-
-        brightness_pts = settings.brightness_area_points
-        if brightness_pts:
-            w, h = settings.width, settings.height
-            normalized = [(px / w, py / h) for px, py in brightness_pts]
-            self._view.set_area_corners("brightness_area", normalized)
-
-        self._load_all_areas()
         self._view.destroyed.connect(self.stop)
 
     def stop(self) -> None:
@@ -105,8 +96,6 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
         self._view.save_requested.connect(self._on_save)
         self._view.value_changed_signal.connect(self._on_value_changed)
         self._view.raw_mode_toggled.connect(self._model.set_raw_mode)
-        self._view.save_area_requested.connect(self._on_save_area)
-        self._view.save_brightness_area_requested.connect(self._on_save_brightness_area)
 
     def _on_value_changed(self, key: str, value, component_name: str) -> None:
         if key in _TOGGLE_KEYS:
@@ -115,31 +104,3 @@ class CameraSettingsController(IApplicationController, BrokerSubscriptionMixin):
     def _on_save(self, flat: dict) -> None:
         settings = CameraSettingsMapper.from_flat_dict(flat, self._model.current_settings)
         self._model.save(settings)
-
-    def _on_save_area(self, area_name: str) -> None:
-        if not self._active:
-            return
-        points = self._view.get_area_corners(area_name)
-        if len(points) != 4:
-            self._logger.warning("Area %s has %d corners, need 4 to save", area_name, len(points))
-            return
-        ok, msg = self._model.save_work_area(area_name, points)
-        self._logger.info("Save work area '%s': %s — %s", area_name, ok, msg)
-
-    def _on_save_brightness_area(self, normalized_points: list) -> None:
-        if not self._active:
-            return
-        settings     = self._model.current_settings
-        w, h         = settings.width, settings.height
-        pixel_points = [(int(x * w), int(y * h)) for x, y in normalized_points]
-        updated      = dataclasses.replace(settings, brightness_area_points=pixel_points)
-        self._model.save(updated)
-        self._logger.debug("Brightness area saved: %d points", len(pixel_points))
-
-    def _load_all_areas(self) -> None:
-        for area_name in ("pickup_area", "spray_area"):
-            points = self._model.get_work_area(area_name)
-            if points:
-                self._view.set_area_corners(area_name, points)
-                self._logger.debug("Loaded %d corners for %s", len(points), area_name)
-

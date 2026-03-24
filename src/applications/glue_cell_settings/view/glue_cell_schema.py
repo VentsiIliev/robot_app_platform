@@ -12,7 +12,6 @@ CONNECTION_GROUP = SettingGroup("Connection", [
 CALIBRATION_GROUP = SettingGroup("Calibration", [
     SettingField("zero_offset",              "Zero Offset",              "double_spinbox", default=0.0,  min_val=-10000.0, max_val=10000.0, decimals=4, step=0.0001),
     SettingField("scale_factor",             "Scale Factor",             "double_spinbox", default=1.0,  min_val=-1000.0,  max_val=1000.0,  decimals=6, step=0.000001),
-    SettingField("temperature_compensation", "Temperature Compensation", "combo",          default="False", choices=["True", "False"]),
 ])
 
 MEASUREMENT_GROUP = SettingGroup("Measurement", [

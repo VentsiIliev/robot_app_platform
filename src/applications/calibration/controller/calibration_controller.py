@@ -86,8 +86,12 @@ class CalibrationController(IApplicationController):
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
+        active_area_id = self._model.get_active_work_area_id()
+        if active_area_id:
+            self._view.set_current_work_area_id(active_area_id)
         self._refresh_calibration_dependent_actions()
-        self._view.set_depth_map_enabled(self._model.has_saved_height_model())
+        self._load_height_mapping_areas()
+        self._view.set_depth_map_enabled(self._model.has_saved_height_model(self._view.current_work_area_id()))
 
     def stop(self) -> None:
         self._running = False
@@ -151,6 +155,8 @@ class CalibrationController(IApplicationController):
         self._view.verify_area_grid_requested.connect(self._on_verify_area_grid)
         self._view.view_depth_map_requested.connect(self._on_view_depth_map)
         self._view.verify_saved_model_requested.connect(self._on_verify_saved_model)
+        self._view.work_area_changed.connect(self._on_work_area_changed)
+        self._view.measurement_area_changed.connect(self._on_measurement_area_changed)
 
     def _log(self, ok: bool, msg: str) -> None:
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
@@ -217,13 +223,15 @@ class CalibrationController(IApplicationController):
 
         if event.state == ProcessState.STOPPED:
             self._bridge.process_finished.emit(True, "Robot calibration complete")
-            self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
+            self._bridge.depth_map_btn_enabled.emit(
+                self._model.has_saved_height_model(self._view.current_work_area_id())
+            )
         elif event.state == ProcessState.ERROR:
             self._bridge.process_finished.emit(False, event.message or "Robot calibration failed")
 
     def _on_view_depth_map(self) -> None:
         from src.applications.calibration.view.depth_map_dialog import DepthMapDialog
-        data = self._model.get_height_calibration_data()
+        data = self._model.get_height_calibration_data(self._view.current_work_area_id())
         if data is None:
             self._view.append_log("✗ No height calibration data available")
             return
@@ -301,7 +309,9 @@ class CalibrationController(IApplicationController):
         if not ok:
             return
 
-        self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
+        self._bridge.depth_map_btn_enabled.emit(
+            self._model.has_saved_height_model(self._view.current_work_area_id())
+        )
 
         should_verify = ask_yes_no(
             self._view,
@@ -309,9 +319,10 @@ class CalibrationController(IApplicationController):
             "Run 4-point verification against the saved piecewise triangle height model?",
         )
         if should_verify:
-            self._start_height_model_verification()
+            self._start_height_model_verification(self._view.current_work_area_id())
 
     def _on_generate_area_grid(self) -> None:
+        self._save_current_height_mapping_area()
         corners = self._view.get_measurement_area_corners()
         rows, cols = self._view.get_area_grid_shape()
         if len(corners) != 4:
@@ -326,6 +337,7 @@ class CalibrationController(IApplicationController):
         self._view.append_log(f"✓ Generated area grid: rows={rows} cols={cols} points={len(points)}")
 
     def _on_verify_area_grid(self) -> None:
+        self._save_current_height_mapping_area()
         corners = self._view.get_measurement_area_corners()
         rows, cols = self._view.get_area_grid_shape()
         if len(corners) != 4:
@@ -368,6 +380,7 @@ class CalibrationController(IApplicationController):
         thread.start()
 
     def _on_measure_area_grid(self) -> None:
+        self._save_current_height_mapping_area()
         corners = self._view.get_measurement_area_corners()
         rows, cols = self._view.get_area_grid_shape()
         if len(corners) != 4:
@@ -385,7 +398,8 @@ class CalibrationController(IApplicationController):
         self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
-        worker = _Worker(lambda: self._model.measure_area_grid(corners, rows, cols))
+        area_id = self._view.current_work_area_id()
+        worker = _Worker(lambda: self._model.measure_area_grid(area_id, corners, rows, cols))
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_area_grid_worker_done)
@@ -422,7 +436,9 @@ class CalibrationController(IApplicationController):
             self._model.restore_pending_safety_walls()
             return
 
-        self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model())
+        self._bridge.depth_map_btn_enabled.emit(
+            self._model.has_saved_height_model(self._view.current_work_area_id())
+        )
 
         should_verify = ask_yes_no(
             self._view,
@@ -430,7 +446,7 @@ class CalibrationController(IApplicationController):
             "Run 4-point verification against the saved area-grid height model?",
         )
         if should_verify:
-            self._start_height_model_verification()
+            self._start_height_model_verification(self._view.current_work_area_id())
         else:
             self._model.restore_pending_safety_walls()
 
@@ -520,7 +536,7 @@ class CalibrationController(IApplicationController):
         )
         self._view.set_verify_area_grid_busy(True, current, total)
 
-    def _start_height_model_verification(self) -> None:
+    def _start_height_model_verification(self, area_id: str) -> None:
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
@@ -528,7 +544,7 @@ class CalibrationController(IApplicationController):
         self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
-        worker = _Worker(self._model.verify_height_model)
+        worker = _Worker(lambda: self._model.verify_height_model(area_id))
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_test_worker_done)
@@ -540,10 +556,11 @@ class CalibrationController(IApplicationController):
         thread.start()
 
     def _on_verify_saved_model(self) -> None:
-        if not self._model.has_saved_height_model():
+        area_id = self._view.current_work_area_id()
+        if not self._model.has_saved_height_model(area_id):
             self._view.append_log("✗ No saved height model available")
             return
-        self._start_height_model_verification()
+        self._start_height_model_verification(area_id)
 
     # ── Thread helper ─────────────────────────────────────────────────
 
@@ -577,3 +594,29 @@ class CalibrationController(IApplicationController):
         can_measure = self._model.can_measure_marker_heights() and not self.is_calibrating()
         self._bridge.marker_height_btn_enabled.emit(can_measure)
         self._bridge.area_grid_btn_enabled.emit(can_measure)
+
+    def _load_height_mapping_areas(self) -> None:
+        for definition in self._model.get_work_area_definitions():
+            if not definition.supports_height_mapping:
+                continue
+            points = self._model.get_height_mapping_area(definition.id)
+            if points:
+                self._view.set_measurement_area_corners(definition.id, points)
+
+    def _save_current_height_mapping_area(self) -> None:
+        area_key = self._view.current_height_mapping_area_key()
+        if not area_key:
+            return
+        corners = self._view.get_measurement_area_corners()
+        if len(corners) != 4:
+            return
+        ok, msg = self._model.save_height_mapping_area(area_key, corners)
+        if not ok:
+            self._view.append_log(f"✗ {msg}")
+
+    def _on_work_area_changed(self, area_id: str) -> None:
+        self._model.set_active_work_area_id(area_id)
+        self._bridge.depth_map_btn_enabled.emit(self._model.has_saved_height_model(area_id))
+
+    def _on_measurement_area_changed(self) -> None:
+        self._save_current_height_mapping_area()

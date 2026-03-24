@@ -7,7 +7,7 @@ The `repositories` package provides JSON-backed persistent settings for all robo
 ## Architecture
 
 ```
-SettingsSpec (declared in BaseRobotSystem)
+SettingsSpec (declared in `src/shared_contracts/declarations/`)
        │
        │  consumed by
        ▼

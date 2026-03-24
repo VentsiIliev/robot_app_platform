@@ -5,7 +5,7 @@ import unittest
 
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.engine.repositories.settings_service_factory import build_from_specs
-from src.robot_systems.base_robot_system import SettingsSpec
+from src.shared_contracts.declarations import SettingsSpec
 from src.engine.robot.configuration import RobotSettingsSerializer
 from src.robot_systems.glue.settings_ids import SettingsID
 

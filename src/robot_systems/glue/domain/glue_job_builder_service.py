@@ -5,7 +5,6 @@ from typing import Any
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
-from src.robot_systems.glue.targeting.targeting_constants import TOOL_POINT
 
 
 class GlueJobBuildError(ValueError):
@@ -45,10 +44,12 @@ class GlueJobBuilderService:
         transformer: ICoordinateTransformer | None = None,
         resolver: VisionTargetResolver | None = None,
         z_min: float = 0.0,
+        target_point_name: str = "",
     ) -> None:
         self._transformer = transformer
         self._resolver = resolver
         self._z_min = float(z_min)
+        self._target_point_name = str(target_point_name or "").strip().lower()
 
     def build_job(self, matched_workpieces: list[dict[str, Any]]) -> GlueJob:
         segments: list[GlueJobSegment] = []
@@ -106,7 +107,7 @@ class GlueJobBuilderService:
             if self._resolver is not None:
                 result = self._resolver.resolve(
                     VisionPoseRequest(x_pixels=px, y_pixels=py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
-                    self._resolver.registry.by_name(TOOL_POINT),
+                    self._resolver.registry.by_name(self._target_point_name),
                 )
                 x, y, z, _, _, final_rz = result.robot_pose()
             else:

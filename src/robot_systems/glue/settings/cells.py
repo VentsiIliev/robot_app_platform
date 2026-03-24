@@ -3,12 +3,18 @@ from src.engine.hardware.weight.config import (
     CellsConfig as GlueCellsConfig,
     CellsConfigSerializer,
 )
+from src.shared_contracts.declarations import DispenseChannelDefinition
 
 
-def _default_cell(cell_id: int, url: str, motor_address: int = 0) -> CellConfig:
+def _default_cell(
+    cell_id: int,
+    url: str,
+    motor_address: int = 0,
+    glue_type: str = "",
+) -> CellConfig:
     return CellConfig(
         id=cell_id,
-        type="Type A",
+        type=glue_type,
         url=url,
         capacity=1000.0,
         fetch_timeout_seconds=5.0,
@@ -16,7 +22,6 @@ def _default_cell(cell_id: int, url: str, motor_address: int = 0) -> CellConfig:
         calibration=CalibrationConfig(
             zero_offset=0.0,
             scale_factor=1.0,
-            temperature_compensation=False,
         ),
         measurement=MeasurementConfig(
             sampling_rate=10,
@@ -29,20 +34,27 @@ def _default_cell(cell_id: int, url: str, motor_address: int = 0) -> CellConfig:
     )
 
 
-_DEFAULT_CELLS = GlueCellsConfig(
-    cells=[
-        _default_cell(0, "http://192.168.222.143/weight1", motor_address=0),
-        _default_cell(1, "http://192.168.222.143/weight2", motor_address=2),
-        _default_cell(2, "http://192.168.222.143/weight3", motor_address=4),
-    ]
-)
+def _default_url(cell_id: int) -> str:
+    return f"http://192.168.222.143/weight{int(cell_id) + 1}"
 
 
 class GlueCellsConfigSerializer(CellsConfigSerializer):
+    def __init__(self, default_channels: list[DispenseChannelDefinition] | None = None) -> None:
+        self._default_channels = list(default_channels or [])
 
     @property
     def settings_type(self) -> str:
         return "glue_cells"
 
     def get_default(self) -> GlueCellsConfig:
-        return _DEFAULT_CELLS
+        return GlueCellsConfig(
+            cells=[
+                _default_cell(
+                    definition.weight_cell_id,
+                    _default_url(definition.weight_cell_id),
+                    motor_address=definition.pump_motor_address,
+                    glue_type=definition.default_glue_type,
+                )
+                for definition in self._default_channels
+            ]
+        )

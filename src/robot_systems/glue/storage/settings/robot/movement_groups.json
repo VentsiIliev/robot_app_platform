@@ -1,0 +1,70 @@
+{
+  "MOVEMENT_GROUPS": {
+    "LOGIN": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true
+    },
+    "HOME": {
+      "velocity": 10,
+      "acceleration": 20,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-232.343, -93.902, 819.846, 180, 0, 90]"
+    },
+    "CALIBRATION": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-20.097, 331.717, 819.378, 179.915, 0.011, 0.001]"
+    },
+    "CLEAN": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": true,
+      "has_trajectory_execution": true,
+      "points": [
+        "[-165.037, -300.705, 298.201, 180, 0, 90]",
+        "[-165.037, -431.735, 298.201, 180, 0, 90]",
+        "[-165.037, -400, 298.201, 180, 0, 90]"
+      ]
+    },
+    "JOG": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": false
+    },
+    "SLOT 11 PICKUP": {
+      "velocity": 5,
+      "acceleration": 5,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "points": [
+        "[-278.085, -264.663, 588.053, -179.967, 0.030, 90.004]",
+        "[-277.963, -264.640, 524.414, 179.969, -0.009, 90.015]",
+        "[-277.617, -171.003, 524.372, 179.983, -0.037, 90.036]"
+      ]
+    },
+    "SLOT 11 DROPOFF": {
+      "velocity": 5,
+      "acceleration": 20,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "points": [
+        "[-277.617, -171.003, 524.372, 179.983, -0.037, 90.036]",
+        "[-277.191, -266.102, 524.205, 179.983, -0.029, 90.022]",
+        "[-276.856, -265.937, 604.211, 179.988, -0.025, 90.033]"
+      ]
+    }
+  }
+}

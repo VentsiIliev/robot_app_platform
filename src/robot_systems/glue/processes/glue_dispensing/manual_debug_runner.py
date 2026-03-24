@@ -12,6 +12,9 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[5]))
 
 from src.engine.process.executable_state_machine import StateMachineSnapshot
+from src.robot_systems.glue.domain.dispense_channels.dispense_channel_service import (
+    DispenseChannelService,
+)
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_context import DispensingContext
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_machine_factory import DispensingMachineFactory
@@ -150,7 +153,13 @@ class DispensingManualDriver:
         ctx.motor_service = self.motor_service
         ctx.generator = self.generator
         ctx.robot_service = self.robot_service
-        ctx.resolver = self.resolver
+        ctx.dispense_channel_service = DispenseChannelService(
+            pump_controller=GluePumpController(
+                self.motor_service,
+                use_segment_settings=self._config.use_segment_settings,
+            ),
+            glue_type_resolver=self.resolver,
+        )
         ctx.robot_tool = self._config.robot_tool
         ctx.robot_user = self._config.robot_user
         ctx.global_velocity = self._config.global_velocity
@@ -163,10 +172,6 @@ class DispensingManualDriver:
         ctx.pump_ready_timeout_s = self._config.pump_ready_timeout_s
         ctx.pump_thread_join_timeout_s = self._config.pump_thread_join_timeout_s
         ctx.pump_adjuster_poll_s = self._config.pump_adjuster_poll_s
-        ctx.pump_controller = GluePumpController(
-            self.motor_service,
-            use_segment_settings=self._config.use_segment_settings,
-        )
         self.context = ctx
         self.machine = DispensingMachineFactory().build(ctx, self._config)
         self.machine.reset()

@@ -11,9 +11,16 @@ from src.engine.core.i_messaging_service import IMessagingService
 class CameraSettingsFactory:
     _logger = logging.getLogger("CameraSettingsFactory")
 
-    def build(self, service: ICameraSettingsService, messaging: IMessagingService, jog_service=None):
+    def build(
+        self,
+        service: ICameraSettingsService,
+        messaging: IMessagingService,
+        jog_service=None,
+    ):
         from src.applications.camera_settings.mapper import CameraSettingsMapper
-        view, _ = camera_tab_factory(mapper=CameraSettingsMapper)
+        view, _ = camera_tab_factory(
+            mapper=CameraSettingsMapper,
+        )
         model      = CameraSettingsModel(service)
         controller = CameraSettingsController(model, view, messaging)
         return finalize_application_build(

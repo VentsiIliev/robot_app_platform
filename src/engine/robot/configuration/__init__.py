@@ -6,6 +6,10 @@ from .robot_settings import (
     RobotSettings,
     RobotSettingsSerializer,
 )
+from .movement_group_settings import (
+    MovementGroupSettings,
+    MovementGroupSettingsSerializer,
+)
 from .robot_calibration_settings import (
     AdaptiveMovementConfig,
     AxisMappingConfig,
@@ -25,6 +29,8 @@ __all__ = [
     "GlobalMotionSettings",
     "RobotSettings",
     "RobotSettingsSerializer",
+    "MovementGroupSettings",
+    "MovementGroupSettingsSerializer",
     "AdaptiveMovementConfig",
     "AxisMappingConfig",
     "CameraTcpOffsetCalibrationConfig",

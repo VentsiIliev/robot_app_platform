@@ -9,8 +9,8 @@ class ServiceID(str, Enum):
 
 class SettingsID(str, Enum):
     GLUE_SETTINGS = "glue_settings"
-    GLUE_TARGETING = "glue_targeting"
     GLUE_CELLS = "glue_cells"
+    DISPENSE_CHANNELS = "dispense_channels"
     GLUE_CATALOG = "glue_catalog"
     GLUE_MOTOR_CONFIG = "glue_motor_config"
 

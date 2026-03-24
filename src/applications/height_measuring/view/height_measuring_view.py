@@ -10,8 +10,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget, QMessageBox,
 )
 from src.applications.base.styled_message_box import show_warning
+from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.base.i_application_view import IApplicationView
-from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.height_measuring.view.height_measuring_schema import (
     CALIBRATION_GROUP, DETECTION_GROUP, MEASURING_GROUP,
@@ -62,7 +62,7 @@ class HeightMeasuringView(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._settings_view = SettingsView(component_name="HeightMeasuring")
+        self._settings_view = CollapsibleSettingsView(component_name="HeightMeasuring")
         self._settings_view.add_raw_tab("Measure",     self._build_measure_panel())
         self._settings_view.add_tab("Detection",   [DETECTION_GROUP])
         self._settings_view.add_tab("Calibration", [CALIBRATION_GROUP])

@@ -12,6 +12,19 @@ This package implements the internal state machine used by `GlueProcess` to exec
 
 `GlueProcess._on_start()` creates a `DispensingContext`, builds the machine through `DispensingMachineFactory`, and runs it on a daemon thread.
 
+Pump start/stop is now routed through a glue-domain facade:
+- `DispenseChannelService`
+
+That facade preserves the existing behavior:
+- resolve `glue_type` to a motor address
+- call `GluePumpController` for `pump_on()` / `pump_off()`
+
+The state machine still owns:
+- all timing
+- timeout handling
+- pause/resume/stop cleanup
+- pump-speed adjustment thread lifecycle
+
 For development and debugging there is also a manual driver in `manual_debug_runner.py`. It builds the same dispensing machine on top of a fake hardware stack and lets you advance the machine one state at a time.
 
 ---
@@ -106,6 +119,7 @@ All handlers share one `DispensingContext`. Important fields:
 | `paused_from_state` | state that last returned `PAUSED` |
 | `motor_started` | whether the pump is currently considered on |
 | `generator_started` | whether the generator is currently considered on |
+| `dispense_channel_service` | glue-domain facade for glue-type resolution and pump start/stop |
 | `pump_thread` | dynamic speed-adjustment thread |
 | `pump_ready_event` | readiness event for the pump thread |
 | `operation_just_completed` | completion flag used by the outer process |
@@ -118,7 +132,7 @@ Important direct context methods used by the handlers:
 | `pause_from(state)` | set `paused_from_state` |
 | `stop_with_progress(path_idx, point_idx)` | save progress before stop/error return |
 | `pause_with_progress(state, path_idx, point_idx)` | save progress and record pause origin |
-| `get_valid_motor_address_for_current_path()` | returns resolved address or `None` |
+| `get_valid_motor_address_for_current_path()` | returns the `DispenseChannelService`-resolved motor address or `None` |
 | `get_motion_velocity()` | resolves robot velocity from segment settings or global fallback |
 | `get_motion_acceleration()` | resolves robot acceleration from segment settings or global fallback |
 | `fail(kind, code, state, operation, message, exc=None, recoverable=False)` | records `last_error`, logs, and returns `ERROR` |
@@ -376,7 +390,7 @@ This section describes the real runtime branches returned by the handlers.
 - `PAUSED` if `run_allowed` is cleared
 - `STARTING_PUMP_ADJUSTMENT_THREAD` if spray is off or the motor is already started
 - `ERROR` if the motor address cannot be resolved
-- `ERROR` if `pump_controller.pump_on(...)` returns `False`
+- `ERROR` if `dispense_channel_service.start_dispense(...)` returns `False`
 - `STARTING_PUMP_ADJUSTMENT_THREAD` after successful pump start
 
 ### `STARTING_PUMP_ADJUSTMENT_THREAD`
@@ -425,7 +439,7 @@ This section describes the real runtime branches returned by the handlers.
 - `STOPPED` if `stop_event` is set
 - `PAUSED` if `run_allowed` is cleared
 - `ERROR` if the pump should be stopped between paths and the motor address cannot be resolved
-- `ERROR` if `pump_controller.pump_off(...)` returns `False`
+- `ERROR` if `dispense_channel_service.stop_dispense(...)` returns `False`
 - `ADVANCING_PATH` if pump shutdown succeeds
 - `ADVANCING_PATH` as a no-op if `turn_off_pump_between_paths=False`, spray is off, or the motor is already off
 
@@ -687,8 +701,8 @@ Possible error sources include:
 - timeout while reaching first point
 - generator start exception
 - invalid motor address in pump-on or pump-off path
-- `pump_on` failure
-- `pump_off` failure during normal path transition
+- `DispenseChannelService.start_dispense(...)` failure
+- `DispenseChannelService.stop_dispense(...)` failure during normal path transition
 - pump adjustment thread startup failure
 - missing pump ready event
 - pump ready timeout
@@ -709,6 +723,7 @@ ERROR
 ## Notes
 
 - `GlueProcess._on_pause()` and `_on_stop()` now use the same best-effort cleanup path as the terminal handlers when a dispensing context exists. The state handlers still act as a second, race-safe cleanup pass.
+- `DispenseChannelService` is intentionally thin in the current step. It preserves the old glue-type-to-motor-address resolution and `GluePumpController` behavior, while moving that responsibility out of the process layer.
 - The main polling and timeout values are now config-backed through `GlueDispensingConfig`, so tuning wait behavior no longer requires editing handler modules.
 - `WAITING_FOR_PUMP_THREAD` is the canonical source of progress capture during dynamic pump adjustment, because the thread result can carry both progress and a worker exception.
 - `COMPLETED` only performs final pump cleanup. The completion flag is set in `TURNING_OFF_GENERATOR`, not earlier.

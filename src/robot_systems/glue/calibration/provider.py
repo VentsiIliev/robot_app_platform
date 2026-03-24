@@ -14,8 +14,8 @@ class GlueRobotSystemCalibrationProvider(RobotSystemCalibrationProvider):
         self._robot_system = robot_system
 
     def build_calibration_navigation(self):
-        vision_service = self._robot_system.get_optional_service(CommonServiceID.VISION)
+        work_area_service = self._robot_system.get_service(CommonServiceID.WORK_AREAS)
         return CalibrationNavigationService(
             self._robot_system.get_service(CommonServiceID.NAVIGATION),
-            before_move=(lambda: vision_service.set_detection_area("spray")) if vision_service is not None else None,
+            before_move=(lambda: work_area_service.set_active_area_id("spray")),
         )

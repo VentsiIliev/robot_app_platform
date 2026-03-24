@@ -2,9 +2,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from src.bootstrap.shell_configurator import ShellConfigurator
-from src.robot_systems.base_robot_system import (
-    SystemMetadata, BaseRobotSystem, FolderSpec, ShellSetup,
-)
+from src.robot_systems.base_robot_system import BaseRobotSystem
+from src.shared_contracts.declarations import FolderSpec, ShellSetup, SystemMetadata
 
 
 # ---------------------------------------------------------------------------

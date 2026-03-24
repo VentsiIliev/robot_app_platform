@@ -1,6 +1,7 @@
 import logging
 from typing import Callable, Sequence
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.shared_contracts.declarations import WorkAreaDefinition
 
 _logger = logging.getLogger(__name__)
 
@@ -44,6 +45,34 @@ class StubCalibrationService(ICalibrationService):
         _logger.info("Stub: measure_marker_heights")
         return True, "Stub: marker height mapping complete"
 
+    def get_work_area_definitions(self) -> list[WorkAreaDefinition]:
+        return [
+            WorkAreaDefinition(
+                id="default",
+                label="Default",
+                color="#4CAF50",
+                supports_height_mapping=True,
+            )
+        ]
+
+    def get_active_work_area_id(self) -> str:
+        return "default"
+
+    def set_active_work_area_id(self, area_id: str) -> None:
+        _logger.info("Stub: set_active_work_area_id %s", area_id)
+
+    def save_height_mapping_area(
+        self,
+        area_key: str,
+        corners_norm: Sequence[tuple[float, float]],
+    ) -> tuple[bool, str]:
+        _logger.info("Stub: save_height_mapping_area %s %s", area_key, list(corners_norm))
+        return True, "Stub: saved height mapping area"
+
+    def get_height_mapping_area(self, area_key: str) -> list[tuple[float, float]]:
+        _logger.info("Stub: get_height_mapping_area %s", area_key)
+        return []
+
     def generate_area_grid(
         self,
         corners_norm: Sequence[tuple[float, float]],
@@ -55,11 +84,12 @@ class StubCalibrationService(ICalibrationService):
 
     def measure_area_grid(
         self,
+        area_id: str,
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
     ) -> tuple[bool, str]:
-        _logger.info("Stub: measure_area_grid rows=%d cols=%d corners=%s", rows, cols, list(corners_norm))
+        _logger.info("Stub: measure_area_grid area=%s rows=%d cols=%d corners=%s", area_id, rows, cols, list(corners_norm))
         return True, "Stub: area grid height mapping complete"
 
     def verify_area_grid(
@@ -86,14 +116,14 @@ class StubCalibrationService(ICalibrationService):
     def can_measure_marker_heights(self) -> bool:
         return True
 
-    def verify_height_model(self) -> tuple[bool, str]:
-        _logger.info("Stub: verify_height_model")
+    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]:
+        _logger.info("Stub: verify_height_model area=%s", area_id)
         return True, "Stub: height model verification complete"
 
-    def get_height_calibration_data(self):
+    def get_height_calibration_data(self, area_id: str = ""):
         return None
 
-    def has_saved_height_model(self) -> bool:
+    def has_saved_height_model(self, area_id: str = "") -> bool:
         return False
 
     def restore_pending_safety_walls(self) -> bool:

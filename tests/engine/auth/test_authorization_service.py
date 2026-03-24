@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 from src.engine.auth.i_permissions_repository import IPermissionsRepository
 from src.engine.auth.authorization_service import AuthorizationService
-from src.robot_systems.base_robot_system import ApplicationSpec
+from src.shared_contracts.declarations import ApplicationSpec
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

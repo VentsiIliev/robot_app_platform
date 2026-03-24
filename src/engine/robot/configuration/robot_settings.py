@@ -190,7 +190,6 @@ class RobotSettings:
             "TCP_Y_STEP_DISTANCE": self.tcp_y_step_distance,
             "TCP_Y_STEP_OFFSET": self.tcp_y_step_offset,
             "OFFSET_DIRECTION_MAP": self.offset_direction_map.to_dict(),
-            "MOVEMENT_GROUPS": {name: g.to_dict() for name, g in self.movement_groups.items()},
             "SAFETY_LIMITS": self.safety_limits.to_dict(),
             "GLOBAL_MOTION_SETTINGS": self.global_motion_settings.to_dict(),
         }

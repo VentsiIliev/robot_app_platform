@@ -1,5 +1,3 @@
-from dataclasses import dataclass
-from enum import Enum
 from typing import Callable, Dict, List, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -10,53 +8,16 @@ from PyQt6.QtWidgets import (
 )
 
 from src.engine.robot.configuration import MovementGroup
+from src.shared_contracts.declarations import (
+    MovementGroupDefinition,
+    MovementGroupType,
+)
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE,
     GROUP_STYLE, LABEL_STYLE, PRIMARY_DARK, PRIMARY_LIGHT,
 )
 from pl_gui.utils.utils_widgets.touch_spinbox import TouchSpinBox
-
-
-# ── Schema ────────────────────────────────────────────────────────────────────
-
-class MovementGroupType(Enum):
-    SINGLE_POSITION = "single_position"
-    MULTI_POSITION  = "multi_position"
-    VELOCITY_ONLY   = "velocity_only"
-
-
-@dataclass
-class MovementGroupDef:
-    name: str
-    group_type: MovementGroupType
-    has_iterations: bool = False
-    has_trajectory_execution: bool = False
-    display_name: Optional[str] = None   # shown in group box title; falls back to name
-
-
-MOVEMENT_GROUP_DEFINITIONS: Dict[str, MovementGroupDef] = {
-    "LOGIN_POS":       MovementGroupDef("LOGIN_POS",       MovementGroupType.SINGLE_POSITION),
-    "HOME_POS":        MovementGroupDef("HOME_POS",        MovementGroupType.SINGLE_POSITION),
-    "CALIBRATION_POS": MovementGroupDef("CALIBRATION_POS", MovementGroupType.SINGLE_POSITION),
-    "JOG":             MovementGroupDef("JOG",             MovementGroupType.VELOCITY_ONLY),
-    "NOZZLE CLEAN":    MovementGroupDef("NOZZLE CLEAN",    MovementGroupType.MULTI_POSITION,
-                                        has_iterations=True, has_trajectory_execution=True),
-    "TOOL CHANGER":    MovementGroupDef("TOOL CHANGER",    MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 0 PICKUP":   MovementGroupDef("SLOT 0 PICKUP",   MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 0 DROPOFF":  MovementGroupDef("SLOT 0 DROPOFF",  MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 1 PICKUP":   MovementGroupDef("SLOT 1 PICKUP",   MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 1 DROPOFF":  MovementGroupDef("SLOT 1 DROPOFF",  MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 4 PICKUP":   MovementGroupDef("SLOT 4 PICKUP",   MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-    "SLOT 4 DROPOFF":  MovementGroupDef("SLOT 4 DROPOFF",  MovementGroupType.MULTI_POSITION,
-                                        has_trajectory_execution=True),
-}
 
 
 _ACTION_BTN_STYLE = ACTION_BTN_STYLE
@@ -222,10 +183,10 @@ class MovementGroupWidget(QWidget):
     remove_requested             = pyqtSignal(str)
     add_current_requested        = pyqtSignal(str)  # group_name — multi position
 
-    def __init__(self, definition: MovementGroupDef, parent=None):
+    def __init__(self, definition: MovementGroupDefinition, parent=None):
         super().__init__(parent)
         self._def      = definition
-        self._name     = definition.name
+        self._name     = definition.id
         self._expanded = False
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -274,7 +235,7 @@ class MovementGroupWidget(QWidget):
 
     def _update_header_style(self, expanded: bool) -> None:
         arrow = "▲" if expanded else "▼"
-        title = self._def.display_name or self._def.name
+        title = self._def.label or self._def.id
         self._header.setText(f"  {arrow}   {title}")
         self._header.setStyleSheet(f"""
             QPushButton {{
@@ -306,14 +267,15 @@ class MovementGroupWidget(QWidget):
 
     def _build_body(self):
         # ── Remove button ──────────────────────────────────────────────
-        rm_row = QHBoxLayout()
-        rm_row.addStretch()
-        rm_btn = QPushButton("✕ Remove Group")
-        rm_btn.setStyleSheet(_GHOST_BTN_STYLE)
-        rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        rm_btn.clicked.connect(lambda: self.remove_requested.emit(self._name))
-        rm_row.addWidget(rm_btn)
-        self._body_layout.addLayout(rm_row)
+        if self._def.removable:
+            rm_row = QHBoxLayout()
+            rm_row.addStretch()
+            rm_btn = QPushButton("✕ Remove Group")
+            rm_btn.setStyleSheet(_GHOST_BTN_STYLE)
+            rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            rm_btn.clicked.connect(lambda: self.remove_requested.emit(self._name))
+            rm_row.addWidget(rm_btn)
+            self._body_layout.addLayout(rm_row)
 
         self._body_layout.addWidget(self._build_vel_acc_row())
 
@@ -640,7 +602,6 @@ class MovementGroupsTab(QWidget):
     move_to_requested = pyqtSignal(str, object)  # group_name, point_str or None
 
     execute_trajectory_requested = pyqtSignal(str)           # group_name
-    add_group_requested = pyqtSignal()
     remove_group_requested = pyqtSignal(str)  # group_name
     add_current_requested = pyqtSignal(str)   # group_name — for multi-position
 
@@ -648,32 +609,33 @@ class MovementGroupsTab(QWidget):
         super().__init__(parent)
         self.setStyleSheet(f"background: {BG_COLOR};")
         self._widgets: Dict[str, MovementGroupWidget] = {}
+        self._definitions: Dict[str, MovementGroupDefinition] = {}
 
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(16, 16, 16, 16)
         self._layout.setSpacing(16)
 
-        # ── Add Group toolbar ─────────────────────────────────────────
-        toolbar = QWidget()
-        toolbar.setStyleSheet("background: transparent;")
-        tb_layout = QHBoxLayout(toolbar)
-        tb_layout.setContentsMargins(0, 0, 0, 0)
-        tb_layout.addStretch()
-        add_btn = QPushButton("＋  Add Group")
-        add_btn.setStyleSheet(_ACTION_BTN_STYLE)
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.clicked.connect(self.add_group_requested.emit)
-        tb_layout.addWidget(add_btn)
-        self._layout.addWidget(toolbar)
-
         self._layout.addStretch()
 
-    def load(self, groups: Dict[str, MovementGroup], extra_defs: Dict[str, MovementGroupDef] = None) -> None:
-        extra_defs = extra_defs or {}
-        for name, group in groups.items():
+    def load(
+        self,
+        groups: Dict[str, MovementGroup],
+        definitions: List[MovementGroupDefinition] | None = None,
+    ) -> None:
+        definitions = list(definitions or [])
+        self._definitions = {definition.id: definition for definition in definitions}
+
+        ordered_names = [definition.id for definition in definitions]
+        for name in groups:
+            if name not in self._definitions:
+                inferred = self._infer_def(name, groups[name])
+                self._definitions[name] = inferred
+                ordered_names.append(name)
+
+        for name in ordered_names:
+            group = groups.get(name, self._definitions[name].build_default_group())
             if name not in self._widgets:
-                defn = extra_defs.get(name) or MOVEMENT_GROUP_DEFINITIONS.get(name) or self._infer_def(name, group)
-                widget = MovementGroupWidget(defn)
+                widget = MovementGroupWidget(self._definitions[name])
                 self._connect_widget(widget)
                 self._widgets[name] = widget
                 self._layout.insertWidget(self._layout.count() - 1, widget)
@@ -685,12 +647,13 @@ class MovementGroupsTab(QWidget):
     def get_widget(self, group_name: str) -> Optional[MovementGroupWidget]:
         return self._widgets.get(group_name)
 
-    def add_group(self, name: str, defn: MovementGroupDef, group: MovementGroup) -> None:
+    def add_group(self, name: str, defn: MovementGroupDefinition, group: MovementGroup) -> None:
         if name in self._widgets:
             return
         widget = MovementGroupWidget(defn)
         self._connect_widget(widget)
         self._widgets[name] = widget
+        self._definitions[name] = defn
         self._layout.insertWidget(self._layout.count() - 1, widget)  # before stretch
         widget.load(group)
 
@@ -703,21 +666,28 @@ class MovementGroupsTab(QWidget):
     # ── Private ───────────────────────────────────────────────────────────
 
     @staticmethod
-    def _infer_def(name: str, group: MovementGroup) -> MovementGroupDef:
+    def _infer_def(name: str, group: MovementGroup) -> MovementGroupDefinition:
         upper = name.upper()
         if "PICKUP" in upper or "DROPOFF" in upper:
-            return MovementGroupDef(name, MovementGroupType.MULTI_POSITION, has_trajectory_execution=True)
+            return MovementGroupDefinition(
+                id=name,
+                label=name,
+                group_type=MovementGroupType.MULTI_POSITION,
+                has_trajectory_execution=True,
+            )
         if group.position is not None:
             gtype = MovementGroupType.SINGLE_POSITION
         elif group.points:
             gtype = MovementGroupType.MULTI_POSITION
         else:
             gtype = MovementGroupType.VELOCITY_ONLY
-        return MovementGroupDef(
-            name=name,
+        return MovementGroupDefinition(
+            id=name,
+            label=name,
             group_type=gtype,
             has_iterations=group.has_iterations,
             has_trajectory_execution=group.has_trajectory_execution,
+            removable=True,
         )
 
     def _connect_widget(self, w: MovementGroupWidget) -> None:
@@ -741,4 +711,3 @@ class MovementGroupsTab(QWidget):
         w.execute_trajectory_requested.connect(self.execute_trajectory_requested)
         w.remove_requested.connect(self.remove_group_requested)
         w.add_current_requested.connect(self.set_current_requested)  # reuse same signal
-

@@ -4,9 +4,8 @@ from src.engine.hardware.weight.config import (
     CalibrationConfig, MeasurementConfig, CellConfig, CellsConfig, CellsConfigSerializer,
 )
 
-
-def _calib(offset=0.0, scale=1.0, temp=False):
-    return CalibrationConfig(zero_offset=offset, scale_factor=scale, temperature_compensation=temp)
+def _calib(offset=0.0, scale=1.0):
+    return CalibrationConfig(zero_offset=offset, scale_factor=scale)
 
 
 def _meas(sr=10, fc=1.0, avg=5, mn=0.0, mx=1000.0):
@@ -26,16 +25,14 @@ class TestCalibrationConfig(unittest.TestCase):
         c = CalibrationConfig.from_dict({})
         self.assertEqual(c.zero_offset, 0.0)
         self.assertEqual(c.scale_factor, 1.0)
-        self.assertFalse(c.temperature_compensation)
 
     def test_from_dict_values(self):
-        c = CalibrationConfig.from_dict({"zero_offset": 2.5, "scale_factor": 0.98, "temperature_compensation": True})
+        c = CalibrationConfig.from_dict({"zero_offset": 2.5, "scale_factor": 0.98})
         self.assertAlmostEqual(c.zero_offset, 2.5)
         self.assertAlmostEqual(c.scale_factor, 0.98)
-        self.assertTrue(c.temperature_compensation)
 
     def test_roundtrip(self):
-        c = _calib(1.1, 2.2, True)
+        c = _calib(1.1, 2.2)
         self.assertEqual(CalibrationConfig.from_dict(c.to_dict()), c)
 
     def test_frozen(self):

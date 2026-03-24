@@ -54,7 +54,6 @@ class GlueCellMapper:
 | `motor_address` | `cell.motor_address` |
 | `zero_offset` | `cell.calibration.zero_offset` |
 | `scale_factor` | `cell.calibration.scale_factor` |
-| `temperature_compensation` | `cell.calibration.temperature_compensation` |
 | `sampling_rate` | `cell.measurement.sampling_rate` |
 | `filter_cutoff` | `cell.measurement.filter_cutoff` |
 | `averaging_samples` | `cell.measurement.averaging_samples` |
@@ -67,7 +66,6 @@ class GlueCellMapper:
 |-------|---------|
 | `zero_offset`, `scale_factor`, `capacity`, `fetch_timeout_seconds`, `filter_cutoff`, `min/max_weight_threshold` | `float()` |
 | `sampling_rate`, `averaging_samples`, `data_fetch_interval_ms`, `motor_address` | `int()` |
-| `temperature_compensation` | `str(...) == "True"` |
 | `url`, `type` | `str()` |
 
 Uses `dataclasses.replace()` for immutable `CellConfig` fields, preserving all unspecified values from `original`.

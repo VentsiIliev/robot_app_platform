@@ -1,20 +1,20 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.robot_systems.glue.settings_ids import SettingsID
-from src.robot_systems.glue.service_ids import ServiceID
+from src.robot_systems.glue.component_ids import SettingsID, ServiceID
 from src.engine.hardware.weight.config import (
     CalibrationConfig, CellConfig, CellsConfig, MeasurementConfig,
 )
 from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
+from src.robot_systems.glue.settings.dispense_channels import DispenseChannelSettingsSerializer
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _calib():
-    return CalibrationConfig(0.0, 1.0, False)
+    return CalibrationConfig(0.0, 1.0)
 
 def _meas():
     return MeasurementConfig(10, 1.0, 5, 0.0, 1000.0)
@@ -29,17 +29,23 @@ def _cells(*ids):
 
 def _make_robot_system(cells=None):
     cfg = cells or _cells(0, 1, 2)
-    ss  = MagicMock()
-    ss.get.side_effect = lambda key: cfg if key == "glue_cells" else MagicMock()
+    channel_cfg = MagicMock()
+    ss = MagicMock()
+    ss.get.side_effect = lambda key: (
+        cfg if key == SettingsID.GLUE_CELLS
+        else channel_cfg if key == SettingsID.DISPENSE_CHANNELS
+        else MagicMock()
+    )
     app                   = MagicMock()
     app._settings_service = ss
     app.get_service.return_value          = MagicMock()
     app.get_optional_service.return_value = MagicMock()
+    app.get_dispense_channel_definitions.return_value = list(GlueRobotSystem.dispense_channels)
     return app
 
 def _spec():
     return next(
-        (s for s in GlueRobotSystem.shell.applications if s.name == "CellSettings"),
+        (s for s in GlueRobotSystem.shell.applications if s.name == "DispenseChannelSettings"),
         None,
     )
 
@@ -48,10 +54,10 @@ def _spec():
 # ApplicationSpec declaration
 # ---------------------------------------------------------------------------
 
-class TestGlueCellSettingsApplicationSpec(unittest.TestCase):
+class TestDispenseChannelSettingsApplicationSpec(unittest.TestCase):
 
     def test_spec_declared(self):
-        self.assertIsNotNone(_spec(), "CellSettings ApplicationSpec missing from GlueRobotSystem.shell.applications")
+        self.assertIsNotNone(_spec(), "DispenseChannelSettings ApplicationSpec missing from GlueRobotSystem.shell.applications")
 
     def test_spec_folder_id(self):
         self.assertEqual(_spec().folder_id, 2)
@@ -63,14 +69,14 @@ class TestGlueCellSettingsApplicationSpec(unittest.TestCase):
         self.assertIsNotNone(_spec().icon)
 
     def test_spec_name(self):
-        self.assertEqual(_spec().name, "CellSettings")
+        self.assertEqual(_spec().name, "DispenseChannelSettings")
 
 
 # ---------------------------------------------------------------------------
 # Factory — WidgetApplication construction
 # ---------------------------------------------------------------------------
 
-class TestGlueCellSettingsApplicationFactory(unittest.TestCase):
+class TestDispenseChannelSettingsApplicationFactory(unittest.TestCase):
 
     def test_factory_returns_widget_application(self):
         application = _spec().factory(_make_robot_system())
@@ -80,6 +86,7 @@ class TestGlueCellSettingsApplicationFactory(unittest.TestCase):
         app = _make_robot_system()
         _spec().factory(app)
         app.get_optional_service.assert_any_call(ServiceID.WEIGHT)
+        app.get_optional_service.assert_any_call(ServiceID.MOTOR)
 
     def test_factory_works_without_weight_service(self):
         app = _make_robot_system()
@@ -91,7 +98,7 @@ class TestGlueCellSettingsApplicationFactory(unittest.TestCase):
         application = _spec().factory(_make_robot_system())
         ms     = MagicMock()
         with patch(
-            "src.applications.glue_cell_settings.glue_cell_settings_factory.GlueCellSettingsFactory.build",
+            "src.robot_systems.glue.applications.dispense_channel_settings.dispense_channel_settings_factory.DispenseChannelSettingsFactory.build",
             return_value=MagicMock(),
         ) as mock_build:
             application._widget_factory(ms)
@@ -132,6 +139,28 @@ class TestGlueCellsSettingsSpec(unittest.TestCase):
 
     def test_serializer_settings_type(self):
         self.assertEqual(self._spec().serializer.settings_type, "glue_cells")
+
+
+class TestDispenseChannelsSettingsSpec(unittest.TestCase):
+
+    def _spec(self):
+        return next(
+            (s for s in GlueRobotSystem.settings_specs if s.name == SettingsID.DISPENSE_CHANNELS),
+            None,
+        )
+
+    def test_spec_declared(self):
+        self.assertIsNotNone(self._spec(), "dispense_channels SettingsSpec missing")
+
+    def test_spec_serializer_type(self):
+        self.assertIsInstance(self._spec().serializer, DispenseChannelSettingsSerializer)
+
+    def test_spec_path(self):
+        self.assertEqual(self._spec().storage_key, "glue/dispense_channels.json")
+
+    def test_serializer_default_has_channels(self):
+        default = self._spec().serializer.get_default()
+        self.assertGreater(len(default.channels), 0)
 
 
 # ---------------------------------------------------------------------------

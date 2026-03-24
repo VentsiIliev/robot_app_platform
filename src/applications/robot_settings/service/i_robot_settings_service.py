@@ -1,7 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional, List, Tuple
 
-from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
+from src.shared_contracts.declarations import MovementGroupDefinition
+from src.engine.robot.configuration import (
+    MovementGroup,
+    MovementGroupSettings,
+    RobotSettings,
+    RobotCalibrationSettings,
+)
 
 
 class IRobotSettingsService(ABC):
@@ -25,12 +31,21 @@ class IRobotSettingsService(ABC):
     def save_targeting_definitions(self, targeting: Any) -> None: ...
 
     @abstractmethod
+    def load_movement_groups(self) -> MovementGroupSettings: ...
+
+    @abstractmethod
+    def save_movement_groups(self, movement_groups: dict[str, MovementGroup]) -> None: ...
+
+    @abstractmethod
     def get_current_position(self) -> Optional[List[float]]: ...
 
     @abstractmethod
     def get_slot_info(self) -> List[Tuple[int, Optional[str]]]:
         """Returns (slot_id, tool_name) per slot. tool_name is None if the slot is unassigned."""
         ...
+
+    @abstractmethod
+    def get_movement_group_definitions(self) -> List[MovementGroupDefinition]: ...
 
     @abstractmethod
     def move_to_group(self, group_name: str) -> tuple[bool, str]:

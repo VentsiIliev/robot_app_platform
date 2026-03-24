@@ -5,11 +5,11 @@
       "type": "Type A",
       "url": "http://192.168.222.143/weight1",
       "capacity": 10000.0,
-      "fetch_timeout": 5,
+      "fetch_timeout_seconds": 5.0,
+      "data_fetch_interval_ms": 500,
       "calibration": {
         "zero_offset": 0.0,
-        "scale_factor": 1.0,
-        "temperature_compensation": false
+        "scale_factor": 1.0
       },
       "measurement": {
         "sampling_rate": 10,
@@ -25,11 +25,11 @@
       "type": "Type A",
       "url": "http://192.168.222.143/weight2",
       "capacity": 10000.0,
-      "fetch_timeout": 5,
+      "fetch_timeout_seconds": 5.0,
+      "data_fetch_interval_ms": 500,
       "calibration": {
         "zero_offset": 0.0,
-        "scale_factor": 1.0,
-        "temperature_compensation": false
+        "scale_factor": 1.0
       },
       "measurement": {
         "sampling_rate": 10,
@@ -38,18 +38,18 @@
         "min_weight_threshold": 0.0,
         "max_weight_threshold": 1000.0
       },
-      "motor_address": 0
+      "motor_address": 2
     },
     {
       "id": 2,
       "type": "Type A",
       "url": "http://192.168.222.143/weight3",
       "capacity": 10000.0,
-      "fetch_timeout": 5,
+      "fetch_timeout_seconds": 5.0,
+      "data_fetch_interval_ms": 500,
       "calibration": {
         "zero_offset": 0.0,
-        "scale_factor": 1.0,
-        "temperature_compensation": false
+        "scale_factor": 1.0
       },
       "measurement": {
         "sampling_rate": 10,
@@ -58,7 +58,7 @@
         "min_weight_threshold": 0.0,
         "max_weight_threshold": 1000.0
       },
-      "motor_address": 0
+      "motor_address": 4
     }
   ]
 }

@@ -12,7 +12,7 @@ from src.engine.hardware.weight.weight_cell_service import WeightCellService
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _calib():
-    return CalibrationConfig(zero_offset=1.5, scale_factor=0.97, temperature_compensation=True)
+    return CalibrationConfig(zero_offset=1.5, scale_factor=0.97)
 
 def _meas():
     return MeasurementConfig(10, 1.0, 5, 0.0, 1000.0)

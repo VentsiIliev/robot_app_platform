@@ -15,7 +15,6 @@ def _cell(cell_id: int, glue_type: str, motor_address: int):
         calibration=CalibrationConfig(
             zero_offset=0.0,
             scale_factor=1.0,
-            temperature_compensation=False,
         ),
         measurement=MeasurementConfig(
             sampling_rate=10,

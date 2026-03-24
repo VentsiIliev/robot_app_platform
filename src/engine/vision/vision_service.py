@@ -5,14 +5,16 @@ import logging
 from src.engine.core.i_health_checkable import IHealthCheckable
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.i_exposure_control import IExposureControl
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 _logger = logging.getLogger(__name__)
 
 
 class VisionService(IVisionService, IHealthCheckable,IExposureControl):
 
-    def __init__(self, vision_system):
+    def __init__(self, vision_system, work_area_service: IWorkAreaService | None = None):
         self._vision_system = vision_system
+        self._work_area_service = work_area_service
         self._running = False
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -110,7 +112,15 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         self._vision_system.camera_settings.set_brightness_auto(enabled)
 
     def set_detection_area(self, area: str) -> None:
-        self._vision_system.on_threshold_update({"region": area})
+        self.set_active_work_area(area)
+
+    def set_active_work_area(self, area_id: str | None) -> None:
+        if self._work_area_service is not None:
+            try:
+                self._work_area_service.set_active_area_id(area_id)
+            except KeyError as exc:
+                self._logger.warning("Ignoring invalid active work area %r: %s", area_id, exc)
+        self._vision_system.on_threshold_update({"region": area_id or ""})
 
     def get_capture_pos_offset(self) -> float:
         return self._vision_system.camera_settings.get_capture_pos_offset()

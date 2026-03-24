@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 import cv2
+import numpy as np
 
 from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber import FrameGrabber
 from src.engine.vision.implementation.VisionSystem.core.camera.remote_camera import RemoteCamera
@@ -17,6 +18,7 @@ from src.engine.vision.implementation.plvision.PLVision import ImageProcessing
 from src.engine.vision.implementation.VisionSystem.services import (
     ContourDetectionService, CalibrationService, ArucoDetectionService, BrightnessService, QrDetectionService,
 )
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 
 _logger = logging.getLogger(__name__)
@@ -26,12 +28,15 @@ DEFAULT_STORAGE_PATH = str(get_path_resolver().vision_system_root / 'storage')
 
 class VisionSystem:
 
-    def __init__(self, storage_path=None, messaging_service=None, service=None):
+    def __init__(self, storage_path=None, messaging_service=None, service=None,
+                 work_area_service: IWorkAreaService | None = None):
         self.optimal_camera_matrix = None
 
         self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
         self.service           = service or Service(data_storage_path=self.storage_path)
         self.messaging_service = messaging_service
+        self._work_area_service = work_area_service
+        self._active_area_id = work_area_service.get_active_area_id() if work_area_service is not None else ""
         self.service_id        = "vision_service"
 
         self.camera_settings = self.service.loadSettings()
@@ -39,7 +44,10 @@ class VisionSystem:
         self.load_calibration_data()
 
         # ── Services (no back-references to VisionSystem) ─────────────────────
-        self._brightness_service = BrightnessService(self.camera_settings)
+        self._brightness_service = BrightnessService(
+            self.camera_settings,
+            area_points_provider=self._get_active_brightness_area_points,
+        )
         self._aruco_service      = ArucoDetectionService(self.camera_settings)
         self._qr_service = QrDetectionService()
 
@@ -60,9 +68,6 @@ class VisionSystem:
             message_publisher = self.message_publisher,
             messaging_service = self.messaging_service,
         )
-
-        # ── Calibration state ────────────────────────────────────────────────
-        self.threshold_by_area = "spray"
 
         if self.service.cameraData is not None:
             self.cameraMatrix = self.service.get_camera_matrix()
@@ -112,7 +117,6 @@ class VisionSystem:
         self.service.loadPerspectiveMatrix()
         self.service.loadCameraCalibrationData()
         self.service.loadCameraToRobotMatrix()
-        self.service.loadWorkAreaPoints()
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -140,6 +144,16 @@ class VisionSystem:
     def stateTopic(self):
         return self.message_publisher.stateTopic if self.message_publisher else None
 
+    @property
+    def threshold_by_area(self) -> str:
+        return self._get_active_area_id()
+
+    @threshold_by_area.setter
+    def threshold_by_area(self, value: str) -> None:
+        self._active_area_id = str(value or "")
+        if self._work_area_service is not None:
+            self._work_area_service.set_active_area_id(value)
+
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def run(self):
@@ -166,12 +180,13 @@ class VisionSystem:
             return None, self.rawImage, None
 
         if self.camera_settings.get_contour_detection():
+            active_area = self._get_active_area_id()
             contours, self.correctedImage, _ = self._contour_service.detect(
                 image             = self.image,
-                threshold         = self._get_thresh_by_area(self.threshold_by_area),
+                threshold         = self._get_thresh_by_area(active_area),
                 is_calibrated     = self.cameraMatrix is not None,
                 correct_image_fn  = self.correctImage,
-                spray_area_points = self._get_area_points_by_region(self.threshold_by_area),
+                spray_area_points = self._get_area_points_by_region(active_area),
             )
             # `detect()` returns None when no contours pass the area filter.
             # Guard here so get_latest_contours() never returns None to callers.
@@ -263,39 +278,59 @@ class VisionSystem:
     # ── Work area ─────────────────────────────────────────────────────────────
 
     def saveWorkAreaPoints(self, data):
-        return self.service.saveWorkAreaPoints(data)
+        if self._work_area_service is None:
+            return False, "Work area service unavailable"
+        if not isinstance(data, dict):
+            return False, "Invalid work area payload"
+        area_type = str(data.get("area_type", "")).strip()
+        corners = data.get("corners")
+        if not area_type:
+            return False, "Area type is required"
+        if corners is None:
+            return False, "No points provided"
+        width = float(self.camera_settings.get_camera_width())
+        height = float(self.camera_settings.get_camera_height())
+        normalized = []
+        for point in np.asarray(corners).tolist():
+            if not isinstance(point, (list, tuple)) or len(point) != 2:
+                continue
+            normalized.append((float(point[0]) / width, float(point[1]) / height))
+        return self._work_area_service.save_work_area(area_type, normalized)
 
     def getWorkAreaPoints(self, area_type):
         if not area_type:
             return False, "Area type is required", None
-        if area_type not in ('pickup', 'spray', 'work'):
-            return False, f"Invalid area_type: {area_type!r}. Must be 'pickup', 'spray', or 'work'", None
-        try:
-            points = {
-                'pickup': self.service.pickupAreaPoints,
-                'spray':  self.service.sprayAreaPoints,
-                'work':   self.service.workAreaPoints,
-            }[area_type]
-            if points is not None:
-                return True, f"Work area points retrieved for {area_type}", (
-                    points.tolist() if hasattr(points, 'tolist') else points
-                )
+        if self._work_area_service is None:
+            return False, "Work area service unavailable", None
+        points = self._work_area_service.get_work_area(area_type)
+        if not points:
             return True, f"No saved points for {area_type}", None
-        except Exception as exc:
-            _logger.error("Error loading %s area points: %s", area_type, exc)
-            return False, f"Error loading {area_type} area points: {exc}", None
+        width = float(self.camera_settings.get_camera_width())
+        height = float(self.camera_settings.get_camera_height())
+        pixel_points = [(x * width, y * height) for x, y in points]
+        return True, f"Work area points retrieved for {area_type}", pixel_points
 
     # ── Threshold ─────────────────────────────────────────────────────────────
 
     def on_threshold_update(self, message) -> None:
-        self.threshold_by_area = message.get("region", "")
+        self._active_area_id = str(message.get("region", "") or "")
+        if self._work_area_service is None:
+            return
+        try:
+            self._work_area_service.set_active_area_id(message.get("region", ""))
+        except KeyError as exc:
+            _logger.warning("Ignoring invalid active work area update: %s", exc)
 
     def _get_thresh_by_area(self, area: str) -> int:
-        if area == "pickup":
+        definition = (
+            self._work_area_service.get_area_definition(area)
+            if self._work_area_service is not None and area
+            else None
+        )
+        profile = definition.threshold_profile if definition is not None else "default"
+        if profile == "pickup":
             return self.camera_settings.get_threshold_pickup_area()
-        if area == "spray":
-            return self.camera_settings.get_threshold()
-        raise ValueError(f"Invalid threshold area: {area!r}")
+        return self.camera_settings.get_threshold()
 
     def get_thresh_by_area(self, area: str) -> int:
         return self._get_thresh_by_area(area)
@@ -320,8 +355,27 @@ class VisionSystem:
             self.run()
 
     def _get_area_points_by_region(self, area: str):
-        if area == "pickup":
-            return self.service.pickupAreaPoints
-        if area == "spray":
-            return self.service.sprayAreaPoints
-        raise ValueError(f"Invalid area region: {area!r}")
+        if self._work_area_service is None or not area:
+            return None
+        return self._work_area_service.get_detection_roi_pixels(
+            area,
+            self.camera_settings.get_camera_width(),
+            self.camera_settings.get_camera_height(),
+        )
+
+    def _get_active_brightness_area_points(self):
+        active_area = self._get_active_area_id()
+        if self._work_area_service is None or not active_area:
+            return None
+        return self._work_area_service.get_brightness_roi_pixels(
+            active_area,
+            self.camera_settings.get_camera_width(),
+            self.camera_settings.get_camera_height(),
+        )
+
+    def _get_active_area_id(self) -> str:
+        if self._work_area_service is not None:
+            active = self._work_area_service.get_active_area_id()
+            if active:
+                self._active_area_id = active
+        return str(self._active_area_id or "")

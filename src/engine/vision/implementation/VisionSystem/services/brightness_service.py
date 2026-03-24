@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from typing import Callable, Optional
 
 from src.engine.vision.implementation.plvision.PLVision.PID.BrightnessController import BrightnessController
 from src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings import CameraSettings
@@ -11,8 +12,13 @@ _FALLBACK_AREA = [(940, 612), (1004, 614), (1004, 662), (940, 660)]
 
 class BrightnessService:
 
-    def __init__(self, camera_settings: CameraSettings):
+    def __init__(
+        self,
+        camera_settings: CameraSettings,
+        area_points_provider: Optional[Callable[[], np.ndarray | None]] = None,
+    ):
         self._settings          = camera_settings
+        self._area_points_provider = area_points_provider
         self._adjustment        = 0.0
         self.brightness_controller = BrightnessController(
             Kp       = camera_settings.get_brightness_kp(),
@@ -54,6 +60,13 @@ class BrightnessService:
     # ── Private ───────────────────────────────────────────────────────
 
     def _get_area_points(self) -> np.ndarray:
+        if self._area_points_provider is not None:
+            try:
+                points = self._area_points_provider()
+                if points is not None and len(points) == 4:
+                    return np.array(points, dtype=np.float32)
+            except Exception as exc:
+                _logger.error("Error reading dynamic brightness area, using settings fallback: %s", exc)
         try:
             pts = self._settings.get_brightness_area_points()
             if pts and len(pts) == 4:

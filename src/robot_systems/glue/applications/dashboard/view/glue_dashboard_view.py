@@ -70,7 +70,7 @@ class GlueDashboardView(IApplicationView):
 
         Layout path (read-only — pl_gui internals):
           DashboardWidget.layout_manager.main_layout [QVBoxLayout]
-            itemAt(0).layout()  → top_section [QHBoxLayout]
+            itemAt(0).layout() → top_section [QHBoxLayout]
               itemAt(0).widget() → preview_container [QWidget]
                 .layout().itemAt(1).widget() → aux_grid_container [QWidget / QGridLayout]
         """

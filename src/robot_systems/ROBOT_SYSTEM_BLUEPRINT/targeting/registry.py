@@ -1,24 +1,19 @@
 from __future__ import annotations
 
+from typing import Iterable
+
 from src.engine.robot.targeting import EndEffectorPoint, PointRegistry
 
 
-def build_my_point_registry(settings) -> PointRegistry:
+def build_my_point_registry(point_definitions: Iterable[dict]) -> PointRegistry:
     """TODO: Convert persisted target-point settings into a PointRegistry."""
-
-    if settings is None:
-        raise RuntimeError(
-            "MyRobotSystem targeting settings are not loaded. "
-            "Declare SettingsID.MY_TARGETING in settings_specs and load it in on_start()."
-        )
-
-    settings.ensure_defaults()
+    points_in = list(point_definitions or [])
     points = [
         EndEffectorPoint(
-            name=point.name,
-            offset_x=point.x_mm,
-            offset_y=point.y_mm,
+            name=str(point["name"]),
+            offset_x=float(point.get("x_mm", 0.0)),
+            offset_y=float(point.get("y_mm", 0.0)),
         )
-        for point in settings.points
+        for point in points_in
     ]
-    return PointRegistry(points=points, aliases=dict(settings.aliases))
+    return PointRegistry(points=points)

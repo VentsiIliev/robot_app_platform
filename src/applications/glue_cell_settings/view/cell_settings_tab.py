@@ -3,7 +3,7 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel
 
-from pl_gui.settings.settings_view.settings_view import SettingsView
+from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
 from pl_gui.settings.settings_view.styles import (
     BG_COLOR, ACTION_BTN_STYLE, LABEL_STYLE, BORDER, PRIMARY,
 )
@@ -56,7 +56,7 @@ class CellSettingsTab(QWidget):
         root.addWidget(monitor_bar)
 
         # ── Settings form ────────────────────────────────────────────
-        self._settings_view = SettingsView(
+        self._settings_view = CollapsibleSettingsView(
             component_name=f"CellSettings_{self._cell_id}",
             mapper=lambda cfg: cfg,
         )

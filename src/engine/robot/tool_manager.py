@@ -7,6 +7,7 @@ from .interfaces import IToolService
 from .interfaces.i_tool_changer import IToolChanger
 from .interfaces.i_motion_service import IMotionService
 from .interfaces.tool_definition import ToolDefinition
+from src.shared_contracts.declarations import ToolSlotDefinition
 
 
 class ToolManager(IToolService):
@@ -18,10 +19,16 @@ class ToolManager(IToolService):
         motion_service: IMotionService,
         tool_changer:   IToolChanger,
         robot_config,
+        movement_groups,
+        slot_definitions: List[ToolSlotDefinition] | None = None,
     ):
         self._motion         = motion_service
         self._tool_changer   = tool_changer
         self._robot_config   = robot_config
+        self._movement_groups = movement_groups
+        self._slot_definitions = {
+            int(slot.id): slot for slot in (slot_definitions or [])
+        }
         self._current_gripper: Optional[int] = None
         self._lock           = threading.Lock()
         self._logger         = logging.getLogger(self.__class__.__name__)
@@ -97,19 +104,27 @@ class ToolManager(IToolService):
     def _get_positions_and_config(self, gripper_id: int, operation: str):
         """
         Resolves positions and motion config for a gripper operation.
-        Uses naming convention: "SLOT {slot_id} {PICKUP|DROPOFF}" from robot config movement groups.
+        Prefers declared slot-to-movement-group bindings and falls back to the
+        historical "SLOT {slot_id} {PICKUP|DROPOFF}" naming convention.
         """
         slot_id = self._tool_changer.get_slot_id_by_tool_id(gripper_id)
         if slot_id is None:
             self._logger.warning("No slot found for gripper_id=%d", gripper_id)
             return None, None
 
-        group_name = f"SLOT {slot_id} {operation}"
-        group = self._robot_config.movement_groups.get(group_name)
+        group_name = self._resolve_group_name(slot_id, operation)
+        if not group_name:
+            self._logger.warning(
+                "No declared %s movement group for slot_id=%d",
+                operation.lower(),
+                slot_id,
+            )
+            return None, None
+        group = self._movement_groups.movement_groups.get(group_name)
         if group is None:
             self._logger.warning(
                 "Movement group '%s' not found in robot config — available: %s",
-                group_name, list(self._robot_config.movement_groups.keys()),
+                group_name, list(self._movement_groups.movement_groups.keys()),
             )
             return None, None
 
@@ -119,6 +134,15 @@ class ToolManager(IToolService):
             return None, None
 
         return positions, group
+
+    def _resolve_group_name(self, slot_id: int, operation: str) -> str:
+        slot = self._slot_definitions.get(int(slot_id))
+        if slot is not None:
+            if operation == "PICKUP" and slot.pickup_movement_group_id:
+                return slot.pickup_movement_group_id
+            if operation == "DROPOFF" and slot.dropoff_movement_group_id:
+                return slot.dropoff_movement_group_id
+        return f"SLOT {slot_id} {operation}"
 
     def _positions_from_group(self, group) -> List[List[float]]:
         """Returns list of positions from a MovementGroup (points take priority over position)."""

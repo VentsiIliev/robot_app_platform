@@ -2,6 +2,7 @@ from typing import Callable, Optional
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision import IVisionService
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 class GlueNavigationService:
 
@@ -14,10 +15,18 @@ class GlueNavigationService:
         navigation: NavigationService,
         vision: Optional[IVisionService] = None,
         robot_service: Optional[IRobotService] = None,
+        work_area_service: Optional[IWorkAreaService] = None,
+        observed_area_by_group: Optional[dict[str, str]] = None,
     ):
         self._nav = navigation
         self._vision = vision
         self._robot = robot_service
+        self._work_area_service = work_area_service
+        self._observed_area_by_group = {
+            str(group_id).strip(): str(area_id).strip()
+            for group_id, area_id in (observed_area_by_group or {}).items()
+            if str(group_id).strip() and str(area_id).strip()
+        }
 
     @property
     def _capture_z_offset(self) -> float:
@@ -50,13 +59,42 @@ class GlueNavigationService:
         z_offset: float = 0.0,
         wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
-        return (
+        ok = (
             self._move_with_z_offset(group_name, z_offset, wait_cancelled=wait_cancelled)
             if z_offset else self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
         )
+        if ok:
+            self._set_observed_area_for_group(group_name)
+        return ok
 
     def move_linear(self, group_name: str) -> bool:
-        return self._nav.move_linear_group(group_name)
+        ok = self._nav.move_linear_group(group_name)
+        if ok:
+            self._set_observed_area_for_group(group_name)
+        return ok
+
+    def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
+        ok = self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
+        if ok:
+            self._set_observed_area_for_group(group_name)
+        return ok
+
+    def move_linear_group(self, group_name: str) -> bool:
+        ok = self._nav.move_linear_group(group_name)
+        if ok:
+            self._set_observed_area_for_group(group_name)
+        return ok
+
+    def move_to_position(
+        self,
+        position: list,
+        group_name: str,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        ok = self._nav.move_to_position(position, group_name, wait_cancelled=wait_cancelled)
+        if ok:
+            self._set_observed_area_for_group(group_name)
+        return ok
 
     def get_group_names(self) -> list[str]:
         return self._nav.get_group_names()
@@ -94,5 +132,12 @@ class GlueNavigationService:
 
 
     def _set_area(self, area: str) -> None:
-        if self._vision is not None:
-            self._vision.set_detection_area(area)
+        if self._work_area_service is not None:
+            self._work_area_service.set_active_area_id(area)
+        elif self._vision is not None:
+            self._vision.set_active_work_area(area)
+
+    def _set_observed_area_for_group(self, group_name: str) -> None:
+        area_id = self._observed_area_by_group.get(str(group_name or "").strip())
+        if area_id:
+            self._set_area(area_id)

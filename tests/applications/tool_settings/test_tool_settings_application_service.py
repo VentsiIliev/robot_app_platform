@@ -2,10 +2,10 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.tool_settings.service.tool_settings_application_service import ToolSettingsApplicationService
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.configuration import ToolChangerSettings
 from src.engine.robot.interfaces.tool_definition import ToolDefinition
 from src.engine.robot.tool_changer import SlotConfig
-from src.robot_systems.glue.settings.tools import ToolChangerSettings
-from src.robot_systems.glue.settings_ids import SettingsID
 
 
 def _make_tc(tools=None, slots=None):
@@ -27,7 +27,7 @@ class TestToolSettingsApplicationServiceTools(unittest.TestCase):
         result = svc.get_tools()
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, 1)
-        ss.get.assert_called_with(SettingsID.TOOL_CHANGER_CONFIG)
+        ss.get.assert_called_with(CommonSettingsID.TOOL_CHANGER_CONFIG)
 
     def test_add_tool_duplicate_id_returns_false_no_save(self):
         tc = _make_tc(tools=[ToolDefinition(1, "G")])
@@ -47,7 +47,7 @@ class TestToolSettingsApplicationServiceTools(unittest.TestCase):
     def test_add_tool_saves_with_correct_key(self):
         svc, ss = _make_svc()
         svc.add_tool(5, "New")
-        self.assertEqual(ss.save.call_args[0][0], SettingsID.TOOL_CHANGER_CONFIG)
+        self.assertEqual(ss.save.call_args[0][0], CommonSettingsID.TOOL_CHANGER_CONFIG)
 
     def test_update_tool_existing_returns_true_and_saves(self):
         tc = _make_tc(tools=[ToolDefinition(1, "Old")])

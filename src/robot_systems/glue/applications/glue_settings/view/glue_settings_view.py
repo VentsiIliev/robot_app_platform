@@ -1,7 +1,7 @@
 from PyQt6.QtCore import pyqtSignal, QEvent
 from PyQt6.QtWidgets import QVBoxLayout
 
-from pl_gui.settings.settings_view.settings_view import SettingsView
+from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.base.i_application_view import IApplicationView
 from src.robot_systems.glue.applications.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.applications.glue_settings.view.glue_settings_schema import (
@@ -31,7 +31,7 @@ class GlueSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         self._glue_type_tab = GlueTypeTab()
-        self._settings_view = SettingsView(
+        self._settings_view = CollapsibleSettingsView(
             component_name="GlueSettings",
             mapper=GlueSettingsMapper.to_flat_dict,
         )

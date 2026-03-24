@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _get_pump_controller_exception(context):
-    getter = getattr(context.pump_controller, "get_last_exception", None)
+    getter = getattr(context.dispense_channel_service, "get_last_exception", None)
     if getter is None:
         return None
     exc = getter()
@@ -37,7 +37,10 @@ def handle_turning_on_pump(context) -> GlueDispensingState:
             message="Invalid motor address for current path",
         )
 
-    success = context.pump_controller.pump_on(motor_address, context.current_settings)
+    success, _ = context.dispense_channel_service.start_dispense(
+        context.current_settings.glue_type if context.current_settings is not None else None,
+        context.current_settings,
+    )
     if not success:
         return context.fail(
             kind=DispensingErrorKind.PUMP,
@@ -69,7 +72,10 @@ def handle_turning_off_pump(
                 operation="resolve_motor_address",
                 message="Invalid motor address during path transition",
             )
-        success = context.pump_controller.pump_off(motor_address, context.current_settings)
+        success, _ = context.dispense_channel_service.stop_dispense(
+            context.current_settings.glue_type if context.current_settings is not None else None,
+            context.current_settings,
+        )
         if not success:
             return context.fail(
                 kind=DispensingErrorKind.PUMP,

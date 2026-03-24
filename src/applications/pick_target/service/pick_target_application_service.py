@@ -13,11 +13,6 @@ from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
-from src.robot_systems.glue.targeting.targeting_constants import (
-    CALIBRATION_FRAME,
-    CAMERA_POINT,
-    PICKUP_FRAME,
-)
 
 _logger = logging.getLogger(__name__)
 
@@ -35,6 +30,9 @@ class PickTargetApplicationService(IPickTargetService):
         robot_config=None,
         navigation=None,
         height_measuring: Optional[IHeightMeasuringService] = None,
+        default_target_name: str = "",
+        calibration_frame_name: str = "",
+        pickup_frame_name: str = "",
     ):
         self._vision        = vision_service
         self._capture_snapshot_service = capture_snapshot_service
@@ -45,10 +43,17 @@ class PickTargetApplicationService(IPickTargetService):
         self._height_measuring  = height_measuring
         self._use_pickup_plane = False
         self._pickup_plane_rz = 90.0
+        self._default_target_name = str(default_target_name or "").strip().lower()
+        self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
+        self._pickup_frame_name = str(pickup_frame_name or "").strip().lower()
 
         self._registry = resolver.registry if resolver is not None else None
-        self._target_point = self._registry.by_name(CAMERA_POINT) if self._registry is not None else None
-        pickup_frame = resolver.get_frame(PICKUP_FRAME) if resolver is not None else None
+        self._target_point = (
+            self._registry.by_name(self._default_target_name)
+            if self._registry is not None and self._default_target_name
+            else None
+        )
+        pickup_frame = resolver.get_frame(self._pickup_frame_name) if resolver is not None and self._pickup_frame_name else None
         self._pickup_mapper = pickup_frame.mapper if pickup_frame is not None else None
 
     def set_target(self, target: str) -> None:
@@ -68,10 +73,10 @@ class PickTargetApplicationService(IPickTargetService):
 
     @property
     def _active_frame(self) -> str:
-        return PICKUP_FRAME if self._use_pickup_plane else CALIBRATION_FRAME
+        return self._pickup_frame_name if self._use_pickup_plane else self._calibration_frame_name
 
     def get_jog_reference_rz(self) -> float:
-        if self._active_frame == PICKUP_FRAME and self._pickup_mapper is not None:
+        if self._active_frame == self._pickup_frame_name and self._pickup_mapper is not None:
             return float(self._pickup_mapper.target_pose.rz)
         return 0.0
 

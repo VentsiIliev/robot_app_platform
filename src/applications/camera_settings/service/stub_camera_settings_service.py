@@ -23,11 +23,3 @@ class StubCameraSettingsService(ICameraSettingsService):
     def update_settings(self, settings: dict) -> tuple[bool, str]:
         _logger.info("StubCameraSettingsService: update_settings")
         return True, "Stub: settings updated"
-
-    def save_work_area(self, area_type: str, pixel_points) -> tuple[bool, str]:
-        _logger.info("StubCameraSettingsService: save_work_area %s %s", area_type, pixel_points)
-        return True, f"Stub: {area_type} saved"
-
-    def get_work_area(self, area_type: str) -> tuple[bool, str, any]:
-        _logger.info("StubCameraSettingsService: get_work_area %s", area_type)
-        return True, f"Stub: no saved area for {area_type}", None

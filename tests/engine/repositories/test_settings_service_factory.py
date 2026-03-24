@@ -19,7 +19,7 @@ from typing import Any, Dict
 from src.engine.repositories.interfaces import ISettingsSerializer
 from src.engine.repositories.settings_service import SettingsService
 from src.engine.repositories.settings_service_factory import build_from_specs
-from src.robot_systems.base_robot_system import SettingsSpec
+from src.shared_contracts.declarations import SettingsSpec
 
 class SettingsIDTestEnum(str, Enum):
     A = "a"

@@ -133,11 +133,11 @@ For a normal pick-and-place pickup, the order is:
    - the workflow resolves `PickAndPlaceConfig.pickup_target` through `PointRegistry`
    - `resolver.resolve(VisionPoseRequest(...), point, mapper=...)` then resolves that concrete end-effector point:
      - `camera` → camera-centered target (zero offset)
-     - `tool` → camera-center plus the rotated `camera_center → tool_point` offset
-     - `gripper` → camera-center plus the rotated `camera_center → gripper_point` offset
-   - all offsets come from the glue point registry builder, which reads measured reference points from `GlueTargetingSettings`
+     - `tool` → camera plus the rotated `camera → tool_point` offset
+     - `gripper` → camera plus the rotated `camera → gripper_point` offset
+   - all offsets come from the point-registry builder, which reads measured reference points from shared `TargetingSettings`
    - `PickAndPlaceConfig.pickup_target` supports the canonical names: `camera`, `tool`, `gripper`
-   - the registry still accepts legacy `camera_center` when loading older config values
+   - the registry resolves the configured named remote TCP directly
 6. `PickupCalculator`
    - no longer applies XY compensation
    - only applies Z heights and final orientation to the already resolved pickup XY

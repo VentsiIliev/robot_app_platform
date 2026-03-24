@@ -1,6 +1,6 @@
 # `src/applications/calibration/` — Calibration
 
-Single-screen workflow for calibrating the camera lens and the robot-to-camera spatial mapping. Delegates camera calibration to `VisionSystem` and robot calibration to the `GlueOperationCoordinator`.
+Single-screen workflow for calibrating the camera lens and the robot-to-camera spatial mapping. Delegates camera calibration to `VisionSystem`, robot calibration to the `GlueOperationCoordinator`, and shared area polygon persistence to the shared work-area service.
 
 ---
 
@@ -11,7 +11,7 @@ calibration/
 ├── service/
 │   ├── i_calibration_service.py              ← ICalibrationService
 │   ├── stub_calibration_service.py           ← In-memory stub (always returns success)
-│   └── calibration_application_service.py    ← Bridges vision_service + process_controller + transformer + standalone helpers
+│   └── calibration_application_service.py    ← Bridges vision_service + work_area_service + process_controller + transformer + standalone helpers
 ├── model/
 │   └── calibration_model.py                  ← Thin delegation to ICalibrationService
 ├── view/
@@ -61,6 +61,7 @@ CalibrationApplicationService(
     robot_config:        _IRobotConfig    = None,
     calib_config:        _ICalibConfig    = None,
     transformer:         ICoordinateTransformer = None,  # pixel → robot mm
+    work_area_service:   IWorkAreaService = None,        # shared ROI persistence
     camera_tcp_offset_calibrator: _ICameraTcpOffsetCalibrator = None,
     marker_height_mapping_service: _IMarkerHeightMappingService = None,
 )
@@ -74,6 +75,7 @@ CalibrationApplicationService(
 | `calibrate_camera_and_robot()` | `calibrate_camera()` first; if success → `process_controller.calibrate()` |
 | `calibrate_camera_tcp_offset()` | Requires `is_calibrated() == True`; then runs the dedicated camera-TCP offset calibration service |
 | `measure_marker_heights()` | Requires homography + height calibration; runs the standalone ArUco marker height-mapping workflow |
+| `save_height_mapping_area()` / `get_height_mapping_area()` | Persist/load the selected work-area polygon through the shared work-area service |
 | `generate_area_grid(...)` | Uses the user-defined 4-corner area and `rows/cols` to generate row-major grid points on the image |
 | `verify_area_grid(...)` | Sequentially simulates reachability for the generated grid using `robot_service.validate_pose(start, target)` and the same anchor-recovery policy as execution |
 | `measure_area_grid(...)` | Runs the standalone area-grid height-mapping workflow over the generated points |
@@ -155,9 +157,9 @@ After a successful marker-height run
   → height_service.measure_at(x_mm, y_mm) at each inferred point
   → log predicted height, measured height, signed error, mean abs error, max abs error
 
-User draws a 4-corner area in the camera view
+User selects a declared work area and draws a 4-corner polygon in the camera view
   → uses the built-in editable area overlay in `CameraView`
-  → corners are stored in normalized image coordinates
+  → corners are stored in the shared work-area settings for that selected area
 
 User sets "Rows" / "Cols" and presses "Generate Grid"
   → service.generate_area_grid(corners_norm, rows, cols)
@@ -246,6 +248,7 @@ service = CalibrationApplicationService(
     robot_config       = robot_system._robot_config,
     calib_config       = robot_system._robot_calibration,
     transformer        = transformer,
+    work_area_service  = robot_system.get_service(CommonServiceID.WORK_AREAS),
     camera_tcp_offset_calibrator = camera_tcp_offset_calibrator,
     marker_height_mapping_service = marker_height_mapping_service,
 )

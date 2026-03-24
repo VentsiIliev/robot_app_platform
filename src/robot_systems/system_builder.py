@@ -32,6 +32,7 @@ class _BuildContext:
     tool_changer: Any
     messaging_service: IMessagingService
     system_class: Type[BaseRobotSystem]
+    services: Dict[str, Any]
 
 
 ServiceBuilderFn = Callable[[_BuildContext], Optional[Any]]
@@ -98,6 +99,7 @@ class SystemBuilder:
             tool_changer=self._tool_changer,
             messaging_service=self._messaging_service,
             system_class=system_class,
+            services={},
         )
 
         # merge vision_service-level per-spec builders into registry (override defaults)
@@ -130,6 +132,7 @@ class SystemBuilder:
                 continue
 
             services[spec.name] = instance
+            ctx.services[spec.name] = instance
             _LOGGER.debug("Built '%s' → %s", spec.name, type(instance).__name__)
 
         system = system_class()
@@ -153,7 +156,10 @@ class SystemBuilder:
         has_tool_service = IToolService in declared_service_types
         has_tool_settings = CommonSettingsID.TOOL_CHANGER_CONFIG in declared_settings
         has_robot_config = CommonSettingsID.ROBOT_CONFIG in declared_settings
+        has_movement_groups = CommonSettingsID.MOVEMENT_GROUPS in declared_settings
         has_navigation_service = NavigationService in declared_service_types
+        from src.engine.work_areas.i_work_area_service import IWorkAreaService
+        has_work_area_service = IWorkAreaService in declared_service_types
         has_robot_calibration = CommonSettingsID.ROBOT_CALIBRATION in declared_settings
         has_height_settings = CommonSettingsID.HEIGHT_MEASURING_SETTINGS in declared_settings
         has_height_calibration = CommonSettingsID.HEIGHT_MEASURING_CALIBRATION in declared_settings
@@ -182,6 +188,12 @@ class SystemBuilder:
                 "CommonSettingsID.ROBOT_CONFIG in settings_specs. "
                 "The default tool builder requires robot configuration to resolve tool/user motion settings."
             )
+        if has_tool_service and not has_movement_groups:
+            raise RuntimeError(
+                f"{system_class.__name__} declares IToolService but does not declare "
+                "CommonSettingsID.MOVEMENT_GROUPS in settings_specs. "
+                "The default tool builder requires movement-group settings for pickup/dropoff paths."
+            )
         if has_tool_settings and not has_tool_service:
             raise RuntimeError(
                 f"{system_class.__name__} declares CommonSettingsID.TOOL_CHANGER_CONFIG but does not declare "
@@ -207,6 +219,23 @@ class SystemBuilder:
             raise RuntimeError(
                 f"{system_class.__name__} declares CommonSettingsID.ROBOT_CALIBRATION but does not declare "
                 "NavigationService in services. Robot calibration requires navigation to the CALIBRATION group."
+            )
+        if has_navigation_service and not has_movement_groups:
+            raise RuntimeError(
+                f"{system_class.__name__} declares NavigationService but does not declare "
+                "CommonSettingsID.MOVEMENT_GROUPS in settings_specs. "
+                "Navigation requires the dedicated movement-group settings."
+            )
+        if has_work_area_service and not CommonSettingsID.WORK_AREA_SETTINGS in declared_settings:
+            raise RuntimeError(
+                f"{system_class.__name__} declares IWorkAreaService but does not declare "
+                "CommonSettingsID.WORK_AREA_SETTINGS in settings_specs. "
+                "The shared work-area service requires dedicated work-area settings."
+            )
+        if CommonSettingsID.WORK_AREA_SETTINGS in declared_settings and not has_work_area_service:
+            raise RuntimeError(
+                f"{system_class.__name__} declares CommonSettingsID.WORK_AREA_SETTINGS but does not declare "
+                "IWorkAreaService in services. Add the shared work-area service or remove the unused settings spec."
             )
         if has_height_settings and not has_robot_config:
             raise RuntimeError(

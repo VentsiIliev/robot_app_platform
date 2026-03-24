@@ -7,11 +7,12 @@ from ..tool_manager import ToolManager
 
 class RobotToolService(IToolService):
 
-    def __init__(self, motion_service: IMotionService, robot_config, tool_changer):
+    def __init__(self, motion_service: IMotionService, robot_config, movement_groups, tool_changer):
         self._manager = ToolManager(
             motion_service=motion_service,
             tool_changer=tool_changer,
             robot_config=robot_config,
+            movement_groups=movement_groups,
         )
 
     @property

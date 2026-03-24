@@ -1,0 +1,16 @@
+{
+  "channels": [
+    {
+      "channel_id": "channel_1",
+      "glue_type": ""
+    },
+    {
+      "channel_id": "channel_2",
+      "glue_type": ""
+    },
+    {
+      "channel_id": "channel_3",
+      "glue_type": ""
+    }
+  ]
+}

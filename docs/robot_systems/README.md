@@ -46,12 +46,24 @@ class BaseRobotSystem(ABC):
     metadata:       ClassVar[SystemMetadata]      = SystemMetadata(name="UnnamedApp")
     services:       ClassVar[List[ServiceSpec]] = []
     settings_specs: ClassVar[List[SettingsSpec]] = []
+    work_areas:     ClassVar[List[WorkAreaDefinition]] = []
+    dispense_channels: ClassVar[List[DispenseChannelDefinition]] = []
+    movement_groups: ClassVar[List[MovementGroupDefinition]] = []
+    target_points: ClassVar[List[RemoteTcpDefinition]] = []
+    target_frames: ClassVar[List[TargetFrameDefinition]] = []
+    work_area_observers: ClassVar[List[WorkAreaObserverBinding]] = []
+    default_active_work_area_id: ClassVar[str] = ""
     shell:          ClassVar[ShellSetup]        = ShellSetup()
 
     def get_settings(self, name: str) -> Any: ...
     def get_settings_repo(self, name: str) -> ISettingsRepository: ...
     def get_service(self, name: str) -> Any: ...
     def get_optional_service(self, name: str) -> Optional[Any]: ...
+    def get_work_area_definitions(self) -> list[WorkAreaDefinition]: ...
+    def get_movement_group_definitions(self) -> list[MovementGroupDefinition]: ...
+    def get_target_point_definitions(self) -> list[RemoteTcpDefinition]: ...
+    def get_target_frame_definitions(self) -> list[TargetFrameDefinition]: ...
+    def get_work_area_observer_bindings(self) -> list[WorkAreaObserverBinding]: ...
     def get_targeting_provider(self): ...
     def get_calibration_provider(self): ...
     def get_height_measuring_provider(self): ...
@@ -73,6 +85,14 @@ class BaseRobotSystem(ABC):
 
 ### Spec Dataclasses
 
+Declaration classes now live under:
+- `src/shared_contracts/declarations/`
+
+The intended split is:
+- `src/shared_contracts/declarations/` holds shared system-description types
+- `src/robot_systems/` declares concrete system instances
+- `src/engine/` builds and runs them
+
 | Class | Fields | Purpose |
 |-------|--------|---------|
 | `SystemMetadata` | `name`, `version`, `description`, `author`, `settings_root`, `translations_root` | App identity; `settings_root` is the base path for settings, `translations_root` is the robot-system translation catalog directory |
@@ -81,6 +101,31 @@ class BaseRobotSystem(ABC):
 | `ShellSetup` | `folders: List[FolderSpec]`, `applications: List[ApplicationSpec]` | GUI shell structure |
 | `FolderSpec` | `folder_id`, `name`, `display_name`, `translation_key` | One navigation folder in the shell |
 | `ApplicationSpec` | `name`, `folder_id`, `icon`, `factory` | One application registered to a folder; `factory(robot_system) → IApplication` |
+| `RemoteTcpDefinition` | `name`, `display_name` | Declares a named remote TCP that the system exposes |
+| `DispenseChannelDefinition` | `id`, `label`, `weight_cell_id`, `pump_motor_address`, `default_glue_type` | Declares one logical dispense lane composed of one scale and one pump |
+| `ToolDefinition` | `id`, `name` | Declares one tool/gripper identity exposed by the system |
+| `ToolSlotDefinition` | `id`, `tool_id` | Declares one physical toolchanger slot and its default assignment |
+
+### Additional Declarations
+
+Robot systems can now declare reusable runtime semantics in addition to services and settings:
+
+| Declaration | Purpose |
+|-------|---------|
+| `work_areas` | Stable work-area ids and capabilities used by `CameraSettings`, `Calibration`, and runtime vision |
+| `dispense_channels` | Stable dispensing channel ids and pump/scale bindings used by glue-domain settings and dispensing services |
+| `tools` | Canonical tool/gripper identities used by the shared toolchanger settings |
+| `tool_slots` | Canonical slot ids, default slot-to-tool assignments, and declared pickup/dropoff movement-group bindings |
+| `movement_groups` | Stable movement-group ids and editing semantics used by `RobotSettings` |
+| `target_points` | Stable remote-TCP ids used by robot-system targeting providers and jog/vision resolution |
+| `target_frames` | Stable targeting-frame ids and work-area bindings used by robot-system targeting providers |
+| `work_area_observers` | Bind `area_id -> movement_group_id` so observation/navigation can be attached to work areas cleanly |
+| `default_active_work_area_id` | Robot-system-owned startup default for the active work area |
+
+Shared settings applications now split work-area ownership cleanly:
+- `CameraSettings` tunes the vision stack
+- `WorkAreaSettings` edits declared work-area ROIs
+- `Calibration` consumes those declared work areas for height mapping
 
 ### Service Injection
 
@@ -140,8 +185,9 @@ SystemBuilder.build(AppClass)
 | Service Type | Default Builder | Notes |
 |-------------|----------------|-------|
 | `IRobotService` | `build_robot_service` | Builds `RobotStatePublisher → RobotStateManager → RobotService`; starts state monitoring |
-| `NavigationService` | `build_navigation_service` | Builds `NavigationService(motion, settings)` using `CommonSettingsID.ROBOT_CONFIG` |
-| `IToolService` | `build_tool_service` | Shared default builder; requires `CommonSettingsID.TOOL_CHANGER_CONFIG` and `CommonSettingsID.ROBOT_CONFIG` |
+| `NavigationService` | `build_navigation_service` | Builds `NavigationService(motion, robot_config, movement_groups)` using `CommonSettingsID.ROBOT_CONFIG` and `CommonSettingsID.MOVEMENT_GROUPS` |
+| `IWorkAreaService` | `build_work_area_service` | Builds the shared work-area storage + active-area context using `CommonSettingsID.WORK_AREA_SETTINGS`, robot-system `work_areas`, and `default_active_work_area_id` |
+| `IToolService` | `build_tool_service` | Shared default builder; requires `CommonSettingsID.TOOL_CHANGER_CONFIG`, `CommonSettingsID.ROBOT_CONFIG`, and `CommonSettingsID.MOVEMENT_GROUPS` |
 | `IVisionService` | `build_vision_service` | Shared default builder; requires `CommonSettingsID.VISION_CAMERA_SETTINGS` and standard robot-system storage layout |
 
 Custom services (e.g., `IWeightCellService`) are registered via `ServiceSpec.builder` on the app class.
@@ -157,6 +203,10 @@ Current validation rules:
 - `CommonSettingsID.VISION_CAMERA_SETTINGS` requires `IVisionService`
 - `IToolService` requires `CommonSettingsID.TOOL_CHANGER_CONFIG`
 - `IToolService` requires `CommonSettingsID.ROBOT_CONFIG`
+- `IToolService` requires `CommonSettingsID.MOVEMENT_GROUPS`
+- `NavigationService` requires `CommonSettingsID.MOVEMENT_GROUPS`
+- `IWorkAreaService` requires `CommonSettingsID.WORK_AREA_SETTINGS`
+- `CommonSettingsID.WORK_AREA_SETTINGS` requires `IWorkAreaService`
 - `CommonSettingsID.TOOL_CHANGER_CONFIG` requires `IToolService`
 - `CommonSettingsID.ROBOT_CALIBRATION` requires:
   - `IRobotService`
@@ -217,6 +267,22 @@ app   = (
   - define robot-system-specific persisted settings under the robot system's `settings/` package
   - register them through `SettingsID` in `component_ids.py`
   - keep shared reusable settings in `src/engine/`, not in the robot system
+- **Movement groups are a dedicated shared settings domain**:
+  - `robot/config.json` should stay robot-oriented
+  - named positions and path groups now live in `robot/movement_groups.json`
+  - robot systems declare ids and semantics; settings files store only values
+- **Work-area observation is a binding, not embedded geometry**:
+  - keep area identity in `work_areas`
+  - bind observation/navigation through `work_area_observers`
+  - do not embed raw robot poses into work-area definitions
+- **Work-area storage is robot-system owned, not vision owned**:
+  - ROI polygons now live in `CommonSettingsID.WORK_AREA_SETTINGS`
+  - `CameraSettings` and `Calibration` edit the same shared work-area data
+  - `IVisionService` consumes the active work area; it no longer owns area persistence
+- **Active area is shared runtime state**:
+  - initialize it from `default_active_work_area_id`
+  - switch it through the shared work-area service
+  - do not couple vision logic to area names such as `pickup` / `spray`
 - **`required=False` in `ServiceSpec`**: The app starts successfully even if an optional service fails to build. `on_start()` uses `get_optional_service()` and checks for `None` before using optional services.
 - **`describe()`**: Class method that prints a human-readable summary of all specs. Useful for debugging and onboarding.
 

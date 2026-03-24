@@ -92,6 +92,9 @@ def _build_glue_process_driver_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = getattr(robot_system, "_robot_config", None)
+    tool_point_name = (
+        getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
+    )
     try:
         z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
     except Exception:
@@ -108,6 +111,7 @@ def _build_glue_process_driver_application(robot_system):
             transformer=base_transformer,
             resolver=resolver,
             z_min=z_min,
+            target_point_name=tool_point_name,
         ),
         glue_process=robot_system.coordinator.glue_process,
         navigation_service=robot_system.coordinator.glue_process.navigation_service,
@@ -121,6 +125,7 @@ def _build_glue_process_driver_application(robot_system):
             transformer=base_transformer,
             resolver=resolver,
             z_min=z_min,
+            target_point_name=tool_point_name,
         ),
         glue_process=robot_system.coordinator.glue_process,
         execution_service=execution_service,
@@ -185,6 +190,9 @@ def _build_workpiece_editor_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = robot_system._robot_config
+    tool_point_name = (
+        getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
+    )
 
     base_transformer, resolver = robot_system.get_shared_vision_resolver()
 
@@ -216,6 +224,7 @@ def _build_workpiece_editor_application(robot_system):
         resolver=resolver,
         z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        target_point_name=tool_point_name,
     )
 
     class _PendingLoader:
@@ -322,7 +331,31 @@ def _build_camera_settings_application(robot_system):
     factory = CameraSettingsFactory()
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: factory.build(service, ms, jog_service=jog_service)
+        widget_factory=lambda ms: factory.build(
+            service,
+            ms,
+            jog_service=jog_service,
+        )
+    )
+
+
+def _build_work_area_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.work_area_settings.work_area_settings_factory import WorkAreaSettingsFactory
+    from src.applications.work_area_settings.service.work_area_settings_application_service import (
+        WorkAreaSettingsApplicationService,
+    )
+
+    service = WorkAreaSettingsApplicationService(
+        work_area_service=robot_system.get_service(CommonServiceID.WORK_AREAS),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: WorkAreaSettingsFactory(
+            work_area_definitions=robot_system.get_work_area_definitions()
+        ).build(service, messaging=ms, jog_service=jog_service)
     )
 
 
@@ -341,11 +374,12 @@ def _build_calibration_application(robot_system):
     from src.engine.vision.homography_transformer import HomographyTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    work_area_service = robot_system.get_service(CommonServiceID.WORK_AREAS)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = robot_system._robot_config
     navigation_service = CalibrationNavigationService(
         robot_system.get_service(CommonServiceID.NAVIGATION),
-        before_move=(lambda: vision_service.set_detection_area("spray")) if vision_service is not None else None,
+        before_move=(lambda: work_area_service.set_active_area_id("spray")),
     )
     transformer = (
         HomographyTransformer(
@@ -396,14 +430,18 @@ def _build_calibration_application(robot_system):
         robot_config=robot_system._robot_config,
         calib_config=robot_system._robot_calibration,
         transformer=transformer,
+        work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
         use_marker_centre=True,
+        work_area_definitions=robot_system.get_work_area_definitions(),
     )
 
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: CalibrationFactory().build(service, messaging=ms, jog_service=jog_service)
+        widget_factory=lambda ms: CalibrationFactory(
+            work_area_definitions=robot_system.get_work_area_definitions()
+        ).build(service, messaging=ms, jog_service=jog_service)
     )
 
 
@@ -430,6 +468,9 @@ def _build_dashboard_application(system):
         z_min = 0.0
 
     base_transformer, resolver = system.get_shared_vision_resolver()
+    tool_point_name = (
+        getattr(system.get_target_point_definition("tool"), "name", "") or ""
+    )
     execution_service = (
         GlueJobExecutionService(
                 matching_service=MatchingService(
@@ -441,6 +482,7 @@ def _build_dashboard_application(system):
                 transformer=base_transformer,
                 resolver=resolver,
                 z_min=z_min,
+                target_point_name=tool_point_name,
             ),
             glue_process=coordinator.glue_process,
             navigation_service=coordinator.glue_process.navigation_service,
@@ -496,6 +538,30 @@ def _build_glue_cell_settings_application(robot_app):
     )
 
 
+def _build_dispense_channel_settings_application(robot_app):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.robot_systems.glue.applications.dispense_channel_settings import (
+        DispenseChannelSettingsFactory,
+        DispenseChannelSettingsService,
+    )
+
+    service = DispenseChannelSettingsService(
+        settings_service=robot_app._settings_service,
+        channel_settings_key=SettingsID.DISPENSE_CHANNELS,
+        cells_settings_key=SettingsID.GLUE_CELLS,
+        catalog_settings_key=SettingsID.GLUE_CATALOG,
+        glue_settings_key=SettingsID.GLUE_SETTINGS,
+        channel_definitions=robot_app.get_dispense_channel_definitions(),
+        weight_service=robot_app.get_optional_service(ServiceID.WEIGHT),
+        motor_service=robot_app.get_optional_service(ServiceID.MOTOR),
+    )
+    jog_service = build_robot_system_jog_service(robot_app)
+    return WidgetApplication(
+        widget_factory=lambda ms: DispenseChannelSettingsFactory().build(service, ms, jog_service=jog_service)
+    )
+
+
 def _build_robot_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
@@ -507,25 +573,37 @@ def _build_robot_settings_application(robot_app):
 
     def _save_targeting_definitions(data) -> None:
         robot_app._settings_service.save(
-            SettingsID.GLUE_TARGETING,
-            from_editor_dict(data, robot_app._settings_service.get(SettingsID.GLUE_TARGETING)),
+            CommonSettingsID.TARGETING,
+            from_editor_dict(
+                data,
+                robot_app._settings_service.get(CommonSettingsID.TARGETING),
+                robot_app.get_target_point_definitions(),
+                robot_app.get_target_frame_definitions(),
+            ),
         )
         robot_app.invalidate_shared_vision_resolver()
 
     service = RobotSettingsApplicationService(
         robot_app._settings_service,
         config_key=CommonSettingsID.ROBOT_CONFIG,
+        movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
         calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
         robot_service=robot_app.get_optional_service(CommonServiceID.ROBOT),
         tool_settings_key=CommonSettingsID.TOOL_CHANGER_CONFIG,
-        navigation_service=robot_app.get_service(CommonServiceID.NAVIGATION),
+        navigation_service=getattr(robot_app, "_navigation", None) or robot_app.get_service(CommonServiceID.NAVIGATION),
         load_targeting_definitions_fn=lambda: to_editor_dict(
-            robot_app._settings_service.get(SettingsID.GLUE_TARGETING)),
+            robot_app._settings_service.get(CommonSettingsID.TARGETING),
+            robot_app.get_target_point_definitions(),
+            robot_app.get_target_frame_definitions(),
+        ),
         save_targeting_definitions_fn=_save_targeting_definitions,
+        movement_group_definitions=robot_app.get_movement_group_definitions(),
     )
     jog_service = build_robot_system_jog_service(robot_app)
     return WidgetApplication(
-        widget_factory=lambda ms: RobotSettingsFactory().build(service, messaging=ms, jog_service=jog_service)
+        widget_factory=lambda ms: RobotSettingsFactory(
+            movement_group_definitions=robot_app.get_movement_group_definitions()
+        ).build(service, messaging=ms, jog_service=jog_service)
     )
 
 
@@ -575,6 +653,16 @@ def _build_pick_target_application(robot_system):
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     _, resolver = robot_system.get_shared_vision_resolver()
     height_service = getattr(robot_system, "_height_measuring_service", None)
+    default_target_name = (
+        robot_system.get_targeting_provider().get_default_target_name()
+        if robot_system.get_targeting_provider() is not None else ""
+    )
+    calibration_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("spray"), "name", "") or ""
+    )
+    pickup_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("pickup"), "name", "") or ""
+    )
     service = PickTargetApplicationService(
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
@@ -583,6 +671,9 @@ def _build_pick_target_application(robot_system):
         robot_config=robot_system._robot_config,
         navigation=robot_system._navigation,
         height_measuring=height_service,
+        default_target_name=default_target_name,
+        calibration_frame_name=calibration_frame_name,
+        pickup_frame_name=pickup_frame_name,
     )
     jog_service = build_robot_system_jog_service(robot_system, reference_rz_provider=service.get_jog_reference_rz)
     return WidgetApplication(
@@ -612,6 +703,24 @@ def _build_device_control_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: DeviceControlFactory().build(service, messaging=ms, jog_service=jog_service)
+    )
+
+
+def _build_aruco_z_probe_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.aruco_z_probe.aruco_z_probe_factory import ArucoZProbeFactory
+    from src.applications.aruco_z_probe.service.aruco_z_probe_application_service import (
+        ArucoZProbeApplicationService,
+    )
+
+    service = ArucoZProbeApplicationService(
+        navigation=getattr(robot_system, "_navigation", None),
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        robot_config=getattr(robot_system, "_robot_config", None),
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: ArucoZProbeFactory().build(service, messaging=ms)
     )
 
 

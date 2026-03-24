@@ -24,16 +24,15 @@
       "name": "calibration",
       "source_navigation_group": "",
       "target_navigation_group": "",
-      "use_height_correction": true
+      "use_height_correction": true,
+      "work_area_id": "spray"
     },
     {
       "name": "pickup",
       "source_navigation_group": "CALIBRATION",
       "target_navigation_group": "HOME",
-      "use_height_correction": false
+      "use_height_correction": false,
+      "work_area_id": "pickup"
     }
-  ],
-  "ALIASES": {
-    "camera_center": "camera"
-  }
+  ]
 }

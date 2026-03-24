@@ -3,13 +3,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
 from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
+from src.shared_contracts.declarations import DispenseChannelDefinition
 
-_DEFAULT_MOTORS = [
-    {"name": "Glue Pump 1", "address": 0, "error_prefix": 1},
-    {"name": "Glue Pump 2", "address": 2, "error_prefix": 2},
-    {"name": "Glue Pump 3", "address": 4, "error_prefix": 3},
-    {"name": "Glue Pump 4", "address": 6, "error_prefix": 4},
-]
+_DEFAULT_MOTORS = []
 
 _DEFAULT_BOARD = {
     "health_check_trigger_register": 17,
@@ -50,13 +46,29 @@ DeviceControlConfig = GlueMotorConfig
 
 
 class GlueMotorConfigSerializer(ISettingsSerializer[GlueMotorConfig]):
+    def __init__(self, default_channels: list[DispenseChannelDefinition] | None = None) -> None:
+        self._default_channels = list(default_channels or [])
+
+    def _default_motors(self) -> List[Dict[str, int | str]]:
+        if not self._default_channels:
+            return []
+        return [
+            {
+                "name": f"{definition.label or definition.id} Pump",
+                "address": int(definition.pump_motor_address),
+                "error_prefix": index,
+            }
+            for index, definition in enumerate(self._default_channels, start=1)
+        ]
 
     @property
     def settings_type(self) -> str:
         return "glue_motor_config"
 
     def get_default(self) -> GlueMotorConfig:
-        return GlueMotorConfig()
+        return GlueMotorConfig(
+            motors=[MotorSpec(**m) for m in self._default_motors()],
+        )
 
     def to_dict(self, settings: GlueMotorConfig) -> Dict[str, Any]:
         return {
@@ -74,7 +86,7 @@ class GlueMotorConfigSerializer(ISettingsSerializer[GlueMotorConfig]):
 
     def from_dict(self, data: Dict[str, Any]) -> GlueMotorConfig:
         board = data.get("board", _DEFAULT_BOARD)
-        raw   = data.get("motors", _DEFAULT_MOTORS)
+        raw = data.get("motors", self._default_motors())
         return GlueMotorConfig(
             motors=[
                 MotorSpec(
@@ -93,4 +105,3 @@ class GlueMotorConfigSerializer(ISettingsSerializer[GlueMotorConfig]):
 
 # Backwards-compatible alias
 DeviceControlConfigSerializer = GlueMotorConfigSerializer
-

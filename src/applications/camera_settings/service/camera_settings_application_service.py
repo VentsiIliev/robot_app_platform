@@ -9,7 +9,11 @@ from src.engine.vision.i_vision_service import IVisionService
 
 class CameraSettingsApplicationService(ICameraSettingsService):
 
-    def __init__(self, settings_service: ISettingsService, vision_service: IVisionService):
+    def __init__(
+        self,
+        settings_service: ISettingsService,
+        vision_service: IVisionService,
+    ):
         self._settings_service = settings_service
         self._vision_service   = vision_service
         self._settings_id      = CommonSettingsID.VISION_CAMERA_SETTINGS
@@ -30,9 +34,3 @@ class CameraSettingsApplicationService(ICameraSettingsService):
 
     def update_settings(self, settings: dict) -> tuple[bool, str]:
         return self._vision_service.update_settings(settings)
-
-    def save_work_area(self, area_type: str, pixel_points) -> tuple[bool, str]:
-        return self._vision_service.save_work_area(area_type, pixel_points)
-
-    def get_work_area(self, area_type: str) -> tuple[bool, str, any]:
-        return self._vision_service.get_work_area(area_type)

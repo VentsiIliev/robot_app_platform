@@ -7,7 +7,7 @@
   "Contour detection": true,
   "Draw contours": true,
   "Threshold": 100,
-  "Threshold pickup area": 150,
+  "Threshold pickup area": 100,
   "Epsilon": 0.002,
   "Min contour area": 1000.0,
   "Max contour area": 10000000.0,
@@ -29,7 +29,7 @@
     "Skip frames": 30
   },
   "Brightness Control": {
-    "Enable auto adjust": false,
+    "Enable auto adjust": true,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,

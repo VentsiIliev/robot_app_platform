@@ -30,12 +30,15 @@ class DispensingCleanupOps:
 
     def stop_pump_if_running(self) -> None:
         context = self._context
-        if not context.motor_started or not context.spray_on or context.pump_controller is None:
+        if not context.motor_started or not context.spray_on or context.dispense_channel_service is None:
             return
         motor_address = context.get_motor_address_for_current_path()
         if motor_address != -1:
             try:
-                context.pump_controller.pump_off(motor_address, context.current_settings)
+                context.dispense_channel_service.stop_dispense(
+                    context.current_settings.glue_type if context.current_settings is not None else None,
+                    context.current_settings,
+                )
             except Exception:
                 _logger.exception("pump_off failed during cleanup")
         context.mark_motor_stopped()

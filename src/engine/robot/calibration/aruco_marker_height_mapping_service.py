@@ -46,6 +46,7 @@ class _IHeightService(Protocol):
     def save_height_map(
         self,
         samples: list[list[float]],
+        area_id: str = "",
         marker_ids: Optional[list[int]] = None,
         point_labels: Optional[list[str]] = None,
         grid_rows: int = 0,
@@ -54,7 +55,7 @@ class _IHeightService(Protocol):
         planned_point_labels: Optional[list[str]] = None,
         unavailable_point_labels: Optional[list[str]] = None,
     ) -> None: ...
-    def get_depth_map_data(self): ...
+    def get_depth_map_data(self, area_id: str = ""): ...
 
 
 class _IRobotConfig(Protocol):
@@ -229,6 +230,7 @@ class ArucoMarkerHeightMappingService:
 
     def measure_area_grid(
         self,
+        area_id: str,
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
@@ -345,6 +347,7 @@ class ArucoMarkerHeightMappingService:
                 start_label="Area grid height mapping",
                 success_label="Area grid height mapping complete",
                 strict_fail_on_unreachable=False,
+                save_area_id=area_id,
                 recovery_anchor_mm=ordered_pairs[0][2] if ordered_pairs else None,
                 point_labels=[str(point_id) for point_id, _, _ in ordered_pairs],
                 grid_rows=rows,
@@ -356,13 +359,13 @@ class ArucoMarkerHeightMappingService:
         finally:
             self._height_service.end_measurement_session()
 
-    def verify_height_model(self) -> tuple[bool, str]:
+    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]:
         if self._height_service is None:
             return False, "Height measuring service unavailable"
         if not self._height_service.is_calibrated():
             return False, "Height measuring is not calibrated"
 
-        data = self._height_service.get_depth_map_data()
+        data = self._height_service.get_depth_map_data(area_id)
         if data is None or not data.has_data():
             return False, "No saved height map data available"
 
@@ -524,6 +527,7 @@ class ArucoMarkerHeightMappingService:
         start_label: str,
         success_label: str,
         strict_fail_on_unreachable: bool,
+        save_area_id: str = "",
         recovery_anchor_mm: tuple[float, float] | None,
         point_labels: Optional[list[str]] = None,
         grid_rows: int = 0,
@@ -543,6 +547,7 @@ class ArucoMarkerHeightMappingService:
                 self._save_samples(
                     samples,
                     self._extract_int_ids(report_rows) if save_ids else None,
+                    area_id=save_area_id,
                     point_labels=self._extract_labels(report_rows) if point_labels else None,
                     grid_rows=grid_rows,
                     grid_cols=grid_cols,
@@ -614,6 +619,7 @@ class ArucoMarkerHeightMappingService:
                         self._save_samples(
                             samples,
                             self._extract_int_ids(report_rows) if save_ids else None,
+                            area_id=save_area_id,
                             point_labels=self._extract_labels(report_rows) if point_labels else None,
                             grid_rows=grid_rows,
                             grid_cols=grid_cols,
@@ -637,6 +643,7 @@ class ArucoMarkerHeightMappingService:
                 self._save_samples(
                     samples,
                     self._extract_int_ids(report_rows) if save_ids else None,
+                    area_id=save_area_id,
                     point_labels=self._extract_labels(report_rows) if point_labels else None,
                     grid_rows=grid_rows,
                     grid_cols=grid_cols,
@@ -664,6 +671,7 @@ class ArucoMarkerHeightMappingService:
                     self._save_samples(
                         samples,
                         self._extract_int_ids(report_rows) if save_ids else None,
+                        area_id=save_area_id,
                         point_labels=self._extract_labels(report_rows) if point_labels else None,
                         grid_rows=grid_rows,
                         grid_cols=grid_cols,
@@ -707,6 +715,7 @@ class ArucoMarkerHeightMappingService:
         self._save_samples(
             samples,
             self._extract_int_ids(report_rows) if save_ids else None,
+            area_id=save_area_id,
             point_labels=self._extract_labels(report_rows) if point_labels else None,
             grid_rows=grid_rows,
             grid_cols=grid_cols,
@@ -783,6 +792,7 @@ class ArucoMarkerHeightMappingService:
         samples: list[list[float]],
         point_ids: Optional[list[int]] = None,
         *,
+        area_id: str = "",
         point_labels: Optional[list[str]] = None,
         grid_rows: int = 0,
         grid_cols: int = 0,
@@ -795,6 +805,7 @@ class ArucoMarkerHeightMappingService:
         try:
             self._height_service.save_height_map(
                 samples,
+                area_id=area_id,
                 marker_ids=point_ids,
                 point_labels=point_labels,
                 grid_rows=grid_rows,

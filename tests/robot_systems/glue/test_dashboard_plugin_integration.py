@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.robot_systems.glue.applications.dashboard.service.glue_dashboard_service import GlueDashboardService
+from src.robot_systems.glue.component_ids import ProcessID
 from src.robot_systems.glue.domain.glue_job_execution_service import GlueExecutionResult
-from src.robot_systems.glue.process_ids import ProcessID
 from src.applications.base.widget_application import WidgetApplication
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
@@ -27,7 +27,7 @@ def _make_cell(cell_id: int, glue_type: str = "Type A", capacity: float = 5000.0
     return CellConfig(
         id=cell_id, type=glue_type, url=f"http://cell{cell_id}", capacity=capacity,
         fetch_timeout_seconds=5.0, data_fetch_interval_ms=500,
-        calibration=CalibrationConfig(zero_offset=0.0, scale_factor=1.0, temperature_compensation=False),
+        calibration=CalibrationConfig(zero_offset=0.0, scale_factor=1.0),
         measurement=MeasurementConfig(
             sampling_rate=10, filter_cutoff=1.0, averaging_samples=5,
             min_weight_threshold=0.0, max_weight_threshold=10000.0,

@@ -70,10 +70,12 @@ def _build_robot_settings_application(robot_system):
 
     def _save_targeting_definitions(data) -> None:
         robot_system._settings_service.save(
-            SettingsID.MY_TARGETING,
+            CommonSettingsID.TARGETING,
             from_editor_dict(
                 data,
-                robot_system._settings_service.get(SettingsID.MY_TARGETING),
+                robot_system._settings_service.get(CommonSettingsID.TARGETING),
+                robot_system.get_target_point_definitions(),
+                robot_system.get_target_frame_definitions(),
             ),
         )
         robot_system.invalidate_shared_vision_resolver()
@@ -81,17 +83,23 @@ def _build_robot_settings_application(robot_system):
     service = RobotSettingsApplicationService(
         robot_system._settings_service,
         config_key=CommonSettingsID.ROBOT_CONFIG,
+        movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
         calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
         navigation_service=robot_system.get_service(CommonServiceID.NAVIGATION),
         load_targeting_definitions_fn=lambda: to_editor_dict(
-            robot_system._settings_service.get(SettingsID.MY_TARGETING)
+            robot_system._settings_service.get(CommonSettingsID.TARGETING),
+            robot_system.get_target_point_definitions(),
+            robot_system.get_target_frame_definitions(),
         ),
         save_targeting_definitions_fn=_save_targeting_definitions,
+        movement_group_definitions=robot_system.get_movement_group_definitions(),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
-        widget_factory=lambda ms: RobotSettingsFactory().build(
+        widget_factory=lambda ms: RobotSettingsFactory(
+            movement_group_definitions=robot_system.get_movement_group_definitions()
+        ).build(
             service,
             messaging=ms,
             jog_service=jog_service,
@@ -117,6 +125,31 @@ def _build_camera_settings_application(robot_system):
         widget_factory=lambda ms: CameraSettingsFactory().build(
             service,
             ms,
+            jog_service=jog_service,
+        )
+    )
+
+
+def _build_work_area_settings_application(robot_system):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.work_area_settings.service.work_area_settings_application_service import (
+        WorkAreaSettingsApplicationService,
+    )
+    from src.applications.work_area_settings.work_area_settings_factory import (
+        WorkAreaSettingsFactory,
+    )
+
+    service = WorkAreaSettingsApplicationService(
+        work_area_service=robot_system.get_service(CommonServiceID.WORK_AREAS),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: WorkAreaSettingsFactory(
+            work_area_definitions=robot_system.get_work_area_definitions()
+        ).build(
+            service,
+            messaging=ms,
             jog_service=jog_service,
         )
     )

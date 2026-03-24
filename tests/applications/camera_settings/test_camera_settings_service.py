@@ -27,16 +27,22 @@ def _make_settings_service(data: dict = None):
 def _make_vision_service():
     vs = MagicMock()
     vs.update_settings.return_value = (True, "ok")
-    vs.save_work_area.return_value  = (True, "saved")
-    vs.get_work_area.return_value   = (True, "ok", [(100, 200)])
     return vs
 
 
-def _make_app_service(data=None, vision=None):
+def _make_work_area_service():
+    service = MagicMock()
+    service.save_work_area.return_value = (True, "saved")
+    service.get_work_area.return_value = [(0.1, 0.2)]
+    return service
+
+
+def _make_app_service(data=None, vision=None, work_area_service=None):
     ss  = _make_settings_service(data)
     vs  = vision if vision is not None else _make_vision_service()
-    svc = CameraSettingsApplicationService(settings_service=ss, vision_service=vs)
-    return svc, ss, vs
+    was = work_area_service if work_area_service is not None else _make_work_area_service()
+    svc = CameraSettingsApplicationService(settings_service=ss, vision_service=vs, work_area_service=was)
+    return svc, ss, vs, was
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -70,7 +76,7 @@ class TestStubCameraSettingsService(unittest.TestCase):
         self.assertIsInstance(msg, str)
 
     def test_save_work_area_returns_true_tuple(self):
-        ok, msg = self._stub.save_work_area("roi", [(0, 0), (100, 100)])
+        ok, msg = self._stub.save_work_area("roi", [(0.0, 0.0), (0.5, 0.5)])
         self.assertTrue(ok)
         self.assertIsInstance(msg, str)
 
@@ -87,17 +93,17 @@ class TestStubCameraSettingsService(unittest.TestCase):
 class TestCameraSettingsApplicationServiceLoad(unittest.TestCase):
 
     def test_load_calls_settings_service_get(self):
-        svc, ss, _ = _make_app_service()
+        svc, ss, _, _ = _make_app_service()
         svc.load_settings()
         ss.get.assert_called_once()
 
     def test_load_returns_camera_settings_data(self):
-        svc, _, _ = _make_app_service()
+        svc, _, _, _ = _make_app_service()
         result = svc.load_settings()
         self.assertIsInstance(result, CameraSettingsData)
 
     def test_load_parses_index_from_raw(self):
-        svc, _, _ = _make_app_service(data={"Index": 2})
+        svc, _, _, _ = _make_app_service(data={"Index": 2})
         result = svc.load_settings()
         self.assertEqual(result.index, 2)
 
@@ -109,12 +115,12 @@ class TestCameraSettingsApplicationServiceLoad(unittest.TestCase):
 class TestCameraSettingsApplicationServiceSave(unittest.TestCase):
 
     def test_save_calls_settings_service_save(self):
-        svc, ss, _ = _make_app_service()
+        svc, ss, _, _ = _make_app_service()
         svc.save_settings(CameraSettingsData())
         ss.save.assert_called_once()
 
     def test_save_calls_vision_update_settings(self):
-        svc, _, vs = _make_app_service()
+        svc, _, vs, _ = _make_app_service()
         svc.save_settings(CameraSettingsData())
         vs.update_settings.assert_called_once()
 
@@ -126,14 +132,14 @@ class TestCameraSettingsApplicationServiceSave(unittest.TestCase):
 class TestCameraSettingsApplicationServiceUpdateSettings(unittest.TestCase):
 
     def test_update_delegates_to_vision(self):
-        svc, _, vs = _make_app_service()
+        svc, _, vs, _ = _make_app_service()
         vs.update_settings.return_value = (True, "updated")
         ok, msg = svc.update_settings({"threshold": 100})
         vs.update_settings.assert_called_once_with({"threshold": 100})
         self.assertTrue(ok)
 
     def test_update_passes_through_failure(self):
-        svc, _, vs = _make_app_service()
+        svc, _, vs, _ = _make_app_service()
         vs.update_settings.return_value = (False, "bad param")
         ok, msg = svc.update_settings({})
         self.assertFalse(ok)
@@ -147,7 +153,8 @@ class TestCameraSettingsApplicationServiceVisionOptional(unittest.TestCase):
 
     def test_constructed_without_vision_does_not_raise(self):
         ss = _make_settings_service()
-        CameraSettingsApplicationService(settings_service=ss, vision_service=None)
+        was = _make_work_area_service()
+        CameraSettingsApplicationService(settings_service=ss, vision_service=None, work_area_service=was)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -156,21 +163,21 @@ class TestCameraSettingsApplicationServiceVisionOptional(unittest.TestCase):
 
 class TestCameraSettingsApplicationServiceWorkArea(unittest.TestCase):
 
-    def test_save_work_area_delegates_to_vision(self):
-        svc, _, vs = _make_app_service()
-        svc.save_work_area("roi", [(0, 0)])
-        vs.save_work_area.assert_called_once_with("roi", [(0, 0)])
+    def test_save_work_area_delegates_to_work_area_service(self):
+        svc, _, _, was = _make_app_service()
+        svc.save_work_area("roi", [(0.1, 0.2)])
+        was.save_work_area.assert_called_once_with("roi", [(0.1, 0.2)])
 
-    def test_get_work_area_delegates_to_vision(self):
-        svc, _, vs = _make_app_service()
-        vs.get_work_area.return_value = (True, "ok", [(10, 20)])
+    def test_get_work_area_delegates_to_work_area_service(self):
+        svc, _, _, was = _make_app_service()
+        was.get_work_area.return_value = [(0.1, 0.2)]
         ok, msg, pts = svc.get_work_area("roi")
-        vs.get_work_area.assert_called_once_with("roi")
+        was.get_work_area.assert_called_once_with("roi")
         self.assertTrue(ok)
-        self.assertEqual(pts, [(10, 20)])
+        self.assertEqual(pts, [(0.1, 0.2)])
 
     def test_set_raw_mode_delegates_to_vision(self):
-        svc, _, vs = _make_app_service()
+        svc, _, vs, _ = _make_app_service()
         svc.set_raw_mode(True)
         vs.set_raw_mode.assert_called_once_with(True)
 

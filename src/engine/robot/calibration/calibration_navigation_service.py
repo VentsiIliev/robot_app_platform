@@ -13,8 +13,8 @@ class CalibrationNavigationService:
 
     Robot-system-specific side effects should be injected explicitly via
     ``before_move``. For example, the glue system uses that hook to switch the
-    active vision detection area to ``"spray"`` before moving, instead of
-    hiding that behavior inside a robot-system navigation facade.
+    active work area to ``"spray"`` before moving, instead of hiding that
+    behavior inside a robot-system navigation facade.
     """
 
     def __init__(

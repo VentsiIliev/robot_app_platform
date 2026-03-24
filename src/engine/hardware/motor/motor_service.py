@@ -72,6 +72,10 @@ class MotorService(IMotorService):
         initial_ramp_speed:          int,
         initial_ramp_speed_duration: float,
     ) -> bool:
+        speed = self._coerce_int(speed)
+        ramp_steps = self._coerce_int(ramp_steps, minimum=1)
+        initial_ramp_speed = self._coerce_int(initial_ramp_speed)
+        initial_ramp_speed_duration = float(initial_ramp_speed_duration)
         self._logger.info(
             "turn_on motor=%s speed=%s ramp_steps=%s initial_speed=%s initial_dur=%.2fs",
             motor_address, speed, ramp_steps, initial_ramp_speed, initial_ramp_speed_duration,
@@ -95,6 +99,9 @@ class MotorService(IMotorService):
         reverse_duration: float,
         ramp_steps:       int,
     ) -> bool:
+        speed_reverse = self._coerce_int(speed_reverse)
+        ramp_steps = self._coerce_int(ramp_steps, minimum=1)
+        reverse_duration = float(reverse_duration)
         self._logger.info(
             "turn_off motor=%s reverse_speed=%s duration=%.2fs",
             motor_address, speed_reverse, reverse_duration,
@@ -113,7 +120,7 @@ class MotorService(IMotorService):
 
     def set_speed(self, motor_address: int, speed: int) -> bool:
         try:
-            result = self._ramp(motor_address, speed, steps=1)
+            result = self._ramp(motor_address, self._coerce_int(speed), steps=1)
             if result:
                 self._logger.debug("Motor %s speed → %s", motor_address, speed)
             return result
@@ -133,7 +140,8 @@ class MotorService(IMotorService):
     # ── Internal ──────────────────────────────────────────────────────
 
     def _ramp(self, motor_address: int, target: int, steps: int) -> bool:
-        steps     = max(1, steps)
+        target = self._coerce_int(target)
+        steps = self._coerce_int(steps, minimum=1)
         increment = target // steps
         for i in range(steps):
             value     = increment * (i + 1)
@@ -148,3 +156,10 @@ class MotorService(IMotorService):
             if self._config.ramp_step_delay_s > 0:
                 time.sleep(self._config.ramp_step_delay_s)
         return True
+
+    @staticmethod
+    def _coerce_int(value, minimum: int | None = None) -> int:
+        coerced = int(float(value))
+        if minimum is not None:
+            coerced = max(minimum, coerced)
+        return coerced

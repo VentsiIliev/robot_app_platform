@@ -22,6 +22,7 @@ This blueprint is the robot-system equivalent of `APPLICATION_BLUEPRINT/`. It do
 - standardized dashboard service boundary
 - reusable targeting, frames, and jog wiring
 - reusable shared `RobotSettings` wiring, including targeting editing
+- declaration-first composition for domain concepts such as tools, slots, work areas, and dispense channels
 
 Use this blueprint as the reusability gate:
 - when adding a new shared robot-system feature, first make it work here
@@ -98,7 +99,6 @@ src/robot_systems/my_system/
     provider.py                optional when the system supports height measuring
   targeting/
     __init__.py
-    targeting_constants.py
     provider.py
     registry.py
     frames.py
@@ -235,14 +235,66 @@ Rules:
 Goal:
 - `settings_specs` can be filled with concrete `SettingsSpec(...)` entries
 
+System-description primitives such as:
+- `SettingsSpec`
+- `ServiceSpec`
+- `RemoteTcpDefinition`
+- `TargetFrameDefinition`
+- `MovementGroupDefinition`
+- `WorkAreaDefinition`
+- `ToolDefinition`
+- `ToolSlotDefinition`
+
+now live under:
+- `src/shared_contracts/declarations/`
+
 For systems that adopt the common robot contracts, prefer reusing the shared `RobotSettings` application instead of creating a system-specific robot-settings screen. The minimal reusable contract is:
 - `CommonSettingsID.ROBOT_CONFIG`
+- `CommonSettingsID.MOVEMENT_GROUPS`
 - `CommonSettingsID.ROBOT_CALIBRATION`
 - `CommonServiceID.NAVIGATION`
 
 Optional:
 - `CommonSettingsID.TOOL_CHANGER_CONFIG`
 - robot-system targeting adapter callbacks for the `Targeting` tab
+
+Movement groups are now split from robot config:
+- `robot/config.json`
+  - generic robot config only
+  - IP, tool/user, safety limits, TCP offsets, jog/global motion
+- `robot/movement_groups.json`
+  - saved values for declared named positions / path groups
+
+The robot system should declare movement-group semantics separately through:
+- `movement_groups`
+
+Each declaration should provide enough information for the shared `RobotSettings` UI to render correctly:
+- stable id
+- label
+- single-position / multi-position / velocity-only
+- whether iterations are supported
+- whether trajectory execution is supported
+
+Work areas follow the same declaration-first model:
+- declare `work_areas`
+- declare `target_points`
+- declare `target_frames`
+- declare `work_area_observers`
+- optionally declare `default_active_work_area_id`
+
+Runtime ownership is split cleanly:
+- `CommonSettingsID.WORK_AREA_SETTINGS`
+  - persists the shared per-area ROI data
+- `CommonServiceID.WORK_AREAS`
+  - owns the active work area and shared area lookup
+- `CommonServiceID.VISION`
+  - consumes the active area; it should not own area storage or area-name semantics
+
+Separation of concerns:
+- work area = semantic region
+- target frame = targeting-plane definition bound to a semantic work area
+- movement group = saved robot pose/path config
+- work-area observer = which declared movement group observes that area
 
 For systems that adopt the common vision contract, prefer reusing the shared `CameraSettings` application. The reusable contract is:
 - `CommonServiceID.VISION`
@@ -254,6 +306,19 @@ For systems that adopt the common tool contract, prefer reusing the shared `Tool
 In practice, systems should also declare:
 - `CommonServiceID.TOOLS`
 - `CommonSettingsID.ROBOT_CONFIG`
+
+Tooling follows the same declaration-first split as movement groups and work areas:
+- declare `tools`
+- declare `tool_slots`
+- persist editable runtime values in `tools/tool_changer.json`
+- construct `ToolChangerSettingsSerializer(default_tools=tools, default_slots=tool_slots)` in `settings_specs`
+
+If the system supports automatic tool pickup/dropoff, bind that explicitly in the slot declarations:
+- declare the pickup movement-group id on the slot
+- declare the dropoff movement-group id on the slot
+- declare those movement groups in `movement_groups`
+
+That keeps the tool runtime and the Robot Settings UI declaration-driven instead of inventing `SLOT {id} PICKUP/DROPOFF` rows from JSON at runtime.
 
 Recommended detailed pattern:
 - see `settings/README.md` in the blueprint
@@ -487,27 +552,31 @@ This keeps storage conventions identical across robot systems.
 If the robot system supports image-target -> robot-pose resolution or target-aware jogging, define targeting explicitly.
 
 ### Where to define target names and frame names
-File: `targeting/targeting_constants.py`
+Declare canonical targeting ids on `my_robot_system.py`:
+- `target_points`
+- `target_frames`
+
+Persist only editable values in:
+- shared `TargetingSettings` under `targeting/definitions.json`
 
 Example:
 
 ```python
-CAMERA_POINT = "camera"
-TRANSDUCER_POINT = "transducer"
-GRIPPER_POINT = "gripper"
+target_points = [
+    RemoteTcpDefinition(name="camera", display_name="camera"),
+    RemoteTcpDefinition(name="gripper", display_name="gripper"),
+]
 
-CALIBRATION_FRAME = "calibration"
-PICKUP_FRAME = "pickup"
-
-POINT_ALIASES = {
-    "camera_center": CAMERA_POINT,
-}
+target_frames = [
+    TargetFrameDefinition(name="calibration", work_area_id="default", use_height_correction=True),
+]
 ```
 
 Rules:
-- these are canonical internal ids
+- these declarations are the canonical internal ids
 - UI labels should be separate persisted values like `display_name`
 - do not rename required canonical ids just to change UI text
+- keep canonical point ids, frame ids, and default aliases on the robot system so runtime identity is visible from the robot-system declaration surface
 
 Rules:
 - frame names are robot-system vocabulary, not engine vocabulary
@@ -521,7 +590,7 @@ Rules:
 
 ### Where to persist point and frame definitions
 File:
-- `settings/targeting.py`
+- shared `TargetingSettings` under `targeting/definitions.json`
 - `storage/settings/targeting/definitions.json`
 
 Recommended persisted shape:
@@ -539,10 +608,7 @@ Recommended persisted shape:
       "target_navigation_group": "",
       "use_height_correction": true
     }
-  ],
-  "ALIASES": {
-    "camera_center": "camera"
-  }
+  ]
 }
 ```
 
@@ -728,6 +794,10 @@ Only add a custom builder if:
 11. Use standardized storage helpers from `BaseRobotSystem`
 12. Add translations under `storage/translations/`
 13. Register the robot system in bootstrap when ready
+
+If your robot system declares `work_areas`, expose the shared `WorkAreaSettings` application too:
+- `CameraSettings` should stay focused on camera tuning
+- `WorkAreaSettings` should own ROI editing for declared work areas
 
 ---
 

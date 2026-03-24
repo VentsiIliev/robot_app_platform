@@ -50,8 +50,7 @@ class DispensingContext:
         self.motor_service = None   # IMotorService
         self.generator = None       # IGeneratorController
         self.robot_service = None   # IRobotService
-        self.resolver = None        # IGlueTypeResolver
-        self.pump_controller = None # GluePumpController
+        self.dispense_channel_service = None  # IDispenseChannelService
         self.state_machine = None   # set by DispensingMachineFactory
 
         # Path progress and resume state
@@ -285,9 +284,9 @@ class DispensingContext:
         glue_type = settings.glue_type
         if not glue_type:
             return -1
-        if self.resolver is None:
+        if self.dispense_channel_service is None:
             return -1
-        return self.resolver.resolve(glue_type)
+        return self.dispense_channel_service.resolve_motor_address(glue_type)
 
     def get_valid_motor_address_for_current_path(self) -> int | None:
         motor_address = self.get_motor_address_for_current_path()

@@ -7,21 +7,27 @@ from ..interfaces.i_motion_service import IMotionService
 
 class NavigationService:
 
-    def __init__(self, motion: IMotionService, settings_key, settings_service=None):
-        if not isinstance(settings_key, Enum):
+    def __init__(self, motion: IMotionService, robot_config_key, movement_groups_key, settings_service=None):
+        if not isinstance(robot_config_key, Enum):
             raise TypeError(
-                f"NavigationService: settings_key must be an Enum value, "
-                f"got {type(settings_key).__name__!r}."
+                f"NavigationService: robot_config_key must be an Enum value, "
+                f"got {type(robot_config_key).__name__!r}."
+            )
+        if not isinstance(movement_groups_key, Enum):
+            raise TypeError(
+                f"NavigationService: movement_groups_key must be an Enum value, "
+                f"got {type(movement_groups_key).__name__!r}."
             )
         self._motion   = motion
-        self._key      = settings_key
+        self._robot_config_key = robot_config_key
+        self._movement_groups_key = movement_groups_key
         self._settings = settings_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
     def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
         try:
-            config   = self._get_config()
-            group    = self._get_group(config, group_name)
+            config = self._get_robot_config()
+            group  = self._get_group(group_name)
             position = group.parse_position()
             if position is None:
                 self._logger.error("Group '%s' has no position configured", group_name)
@@ -43,8 +49,8 @@ class NavigationService:
 
     def move_linear_group(self, group_name: str) -> bool:
         try:
-            config = self._get_config()
-            group  = self._get_group(config, group_name)
+            config = self._get_robot_config()
+            group  = self._get_group(group_name)
             points = group.parse_points()
             if not points:
                 self._logger.error("Group '%s' has no points configured", group_name)
@@ -66,17 +72,31 @@ class NavigationService:
 
     def get_group_names(self) -> list[str]:
         try:
-            return list(self._get_config().movement_groups.keys())
+            return list(self._get_movement_group_settings().movement_groups.keys())
         except Exception:
             return []
 
-    def _get_config(self):
+    def _get_robot_config(self):
         if self._settings is None:
             raise RuntimeError("NavigationService has no settings_service")
-        return self._settings.get(self._key)
+        return self._settings.get(self._robot_config_key)
 
-    def _get_group(self, config, name: str):
-        groups = getattr(config, "movement_groups", {})
+    def _get_movement_group_settings(self):
+        if self._settings is None:
+            raise RuntimeError("NavigationService has no settings_service")
+        settings = self._settings.get(self._movement_groups_key)
+        if settings.movement_groups:
+            return settings
+
+        robot_config = self._settings.get(self._robot_config_key)
+        legacy_groups = getattr(robot_config, "movement_groups", None)
+        if legacy_groups:
+            settings.movement_groups = dict(legacy_groups)
+            self._settings.save(self._movement_groups_key, settings)
+        return settings
+
+    def _get_group(self, name: str):
+        groups = self._get_movement_group_settings().movement_groups
         group  = groups.get(name)
         if group is None:
             raise KeyError(
@@ -93,8 +113,8 @@ class NavigationService:
     ) -> bool:
         """Move to an explicit position using the velocity/acceleration of the named group."""
         try:
-            config = self._get_config()
-            group  = self._get_group(config, group_name)
+            config = self._get_robot_config()
+            group  = self._get_group(group_name)
             return self._motion.move_ptp(
                 position=position,
                 tool=config.robot_tool,

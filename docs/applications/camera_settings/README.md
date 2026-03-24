@@ -1,6 +1,8 @@
 # `src/applications/camera_settings/` — Camera Settings
 
-Configures the vision system camera: resolution, brightness, contour thresholds, and work area regions. Persists settings via `ISettingsService` and pushes live updates to the running `VisionSystem`.
+Configures the vision system camera: resolution, brightness, contour thresholds, and calibration-related vision options. Persists camera settings via `ISettingsService` and pushes live camera-setting updates to the running `VisionSystem`.
+
+Work-area ROI editing has been moved into the shared [Work Area Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/work_area_settings/README.md) application.
 
 This is intended to be the shared camera-settings application for any robot system that adopts the common vision contract:
 - `CommonServiceID.VISION`
@@ -13,11 +15,11 @@ This is intended to be the shared camera-settings application for any robot syst
 ```
 camera_settings/
 ├── service/
-│   ├── i_camera_settings_service.py          ← ICameraSettingsService (6 methods)
+│   ├── i_camera_settings_service.py          ← ICameraSettingsService (4 methods)
 │   ├── stub_camera_settings_service.py        ← In-memory stub for standalone use
 │   └── camera_settings_application_service.py ← Delegates to SettingsService + VisionSystem
 ├── model/
-│   └── camera_settings_model.py               ← Load/save + pixel↔normalized conversion
+│   └── camera_settings_model.py               ← Load/save + raw-mode delegation
 ├── view/
 │   ├── camera_settings_view.py                ← Tab container
 │   ├── camera_tab.py                          ← Main camera settings panel
@@ -40,11 +42,7 @@ class ICameraSettingsService(ABC):
     def save_settings(self, settings: CameraSettingsData) -> None: ...
     def set_raw_mode(self, enabled: bool) -> None: ...
     def update_settings(self, settings: dict) -> tuple[bool, str]: ...
-    def save_work_area(self, area_type: str, pixel_points: List[Tuple[int, int]]) -> tuple[bool, str]: ...
-    def get_work_area(self, area_type: str) -> tuple[bool, str, Optional[List]]: ...
 ```
-
-`area_type` is one of `'pickup'`, `'spray'`, or `'work'`.
 
 ---
 
@@ -56,24 +54,17 @@ The live implementation. Constructed with `settings_service` and `vision_service
 - `save_settings()` — persists via `SettingsService`
 - `update_settings(dict)` — delegates to `vision_service.updateSettings(dict)`
 - `set_raw_mode(bool)` — forwards directly to `vision_service.rawMode`
-- `save_work_area()` / `get_work_area()` — delegate to `vision_service`
 
 ---
 
 ## `CameraSettingsModel`
 
-Thin delegation layer. Handles the pixel↔normalised coordinate conversion for work area points:
+Thin delegation layer for camera settings only.
 
-```python
-# Save: normalised → pixel
-pixel_points = [(int(x * width), int(y * height)) for x, y in normalised_points]
-service.save_work_area(area_type, pixel_points)
-
-# Load: pixel → normalised
-return [(px / width, py / height) for px, py in pixel_points]
-```
-
-`area_name` (e.g. `"spray_area"`) is mapped to `area_type` (`"spray"`) by stripping `"_area"`.
+The tabbed settings panels use the shared collapsible settings-view pattern:
+- every schema group is collapsible
+- groups are collapsed by default on load
+- the brightness-control group follows the same behavior
 
 ---
 
@@ -88,10 +79,6 @@ Large frozen-like dataclass (`~35` fields) covering:
 | Brightness | `brightness`, `brightness_auto`, `brightness_region` |
 | Contour detection | `contour_detection`, `threshold`, `threshold_pickup_area` |
 | Calibration | `calibration_enabled`, various calibration params |
-| Work area | `work_area`, `pickup_area`, `spray_area` point lists |
-
----
-
 ## `CameraSettingsMapper`
 
 Converts between the flat `CameraSettingsData` dataclass and the nested JSON dict format stored on disk:
@@ -109,10 +96,10 @@ Used by `CameraSettingsSerializer` (engine layer) to persist settings.
 
 ```python
 service = CameraSettingsApplicationService(
-    settings_service = robot_system._settings_service,
-    vision_service   = robot_system.get_service(CommonServiceID.VISION),
+    settings_service=robot_system._settings_service,
+    vision_service=robot_system.get_service(CommonServiceID.VISION),
 )
 return WidgetApplication(widget_factory=lambda ms: CameraSettingsFactory().build(service, ms))
 ```
 
-Use this app directly in any robot system that declares the shared vision service/settings contract. `ApplicationSpec` is typically placed in the Service folder with icon `fa5s.camera`.
+Use this app directly in any robot system that declares the shared vision contract. `ApplicationSpec` is typically placed in the Service folder with icon `fa5s.camera`.

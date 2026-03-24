@@ -8,6 +8,8 @@ from typing import Callable, Optional, Protocol, Sequence
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.vision.i_vision_service import IVisionService
+from src.shared_contracts.declarations import WorkAreaDefinition
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 _logger = logging.getLogger(__name__)
 
@@ -68,6 +70,7 @@ class _IHeightService(Protocol):
     def save_height_map(
         self,
         samples: list[list[float]],
+        area_id: str = "",
         marker_ids: Optional[list[int]] = None,
         point_labels: Optional[list[str]] = None,
         grid_rows: int = 0,
@@ -76,7 +79,7 @@ class _IHeightService(Protocol):
         planned_point_labels: Optional[list[str]] = None,
         unavailable_point_labels: Optional[list[str]] = None,
     ) -> None: ...
-    def get_depth_map_data(self): ...
+    def get_depth_map_data(self, area_id: str = ""): ...
 
 
 class _IRobotConfig(Protocol):
@@ -107,13 +110,14 @@ class _IMarkerHeightMappingService(Protocol):
     ) -> list[tuple[float, float]]: ...
     def measure_area_grid(
         self,
+        area_id: str,
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
         support_points_mm: list[tuple[str, float, float]] | None = None,
         skip_labels: set[str] | None = None,
     ) -> tuple[bool, str]: ...
-    def verify_height_model(self) -> tuple[bool, str]: ...
+    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]: ...
     def stop(self) -> None: ...
     def is_ready(self) -> bool: ...
 
@@ -124,9 +128,11 @@ class CalibrationApplicationService(ICalibrationService):
                  robot_service: _IRobotService = None, height_service: _IHeightService = None,
                  robot_config: _IRobotConfig = None, calib_config: _ICalibConfig = None,
                  transformer: ICoordinateTransformer = None,
+                 work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
-                 use_marker_centre: bool = False):
+                 use_marker_centre: bool = False,
+                 work_area_definitions: Optional[list[WorkAreaDefinition]] = None):
         self._vision_service      = vision_service
         self._process_controller  = process_controller
         self._robot_service       = robot_service
@@ -134,9 +140,11 @@ class CalibrationApplicationService(ICalibrationService):
         self._robot_config        = robot_config
         self._calib_config        = calib_config
         self._transformer         = transformer
+        self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
         self._use_marker_centre   = use_marker_centre
+        self._work_area_definitions = list(work_area_definitions or [])
         self._stop_test           = False
         self._pending_support_points_mm: list[tuple[str, float, float]] = []
         self._pending_skip_labels: set[str] = set()
@@ -290,6 +298,44 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Marker height mapping is not configured"
         return self._marker_height_mapping_service.measure_marker_heights()
 
+    def get_work_area_definitions(self) -> list[WorkAreaDefinition]:
+        return list(self._work_area_definitions)
+
+    def get_active_work_area_id(self) -> str:
+        if self._work_area_service is None:
+            return ""
+        return self._work_area_service.get_active_area_id() or ""
+
+    def set_active_work_area_id(self, area_id: str) -> None:
+        if self._work_area_service is None:
+            return
+        self._work_area_service.set_active_area_id(area_id)
+        if self._vision_service is not None:
+            try:
+                self._vision_service.set_active_work_area(area_id)
+            except Exception:
+                pass
+
+    def save_height_mapping_area(
+        self,
+        area_key: str,
+        corners_norm: Sequence[tuple[float, float]],
+    ) -> tuple[bool, str]:
+        if self._work_area_service is None:
+            return False, "Work area service unavailable"
+        return self._work_area_service.save_work_area(
+            area_key,
+            [(float(x), float(y)) for x, y in corners_norm],
+        )
+
+    def get_height_mapping_area(self, area_key: str) -> list[tuple[float, float]]:
+        if self._work_area_service is None:
+            return []
+        points = self._work_area_service.get_work_area(area_key)
+        if not points:
+            return []
+        return [(float(x), float(y)) for x, y in points]
+
     def generate_area_grid(
         self,
         corners_norm: Sequence[tuple[float, float]],
@@ -302,6 +348,7 @@ class CalibrationApplicationService(ICalibrationService):
 
     def measure_area_grid(
         self,
+        area_id: str,
         corners_norm: Sequence[tuple[float, float]],
         rows: int,
         cols: int,
@@ -324,6 +371,7 @@ class CalibrationApplicationService(ICalibrationService):
                 len(skip), sorted(skip),
             )
         return self._marker_height_mapping_service.measure_area_grid(
+            area_id,
             corners_norm, rows, cols,
             support_points_mm=support or None,
             skip_labels=skip or None,
@@ -675,19 +723,19 @@ class CalibrationApplicationService(ICalibrationService):
             return False
         return self._marker_height_mapping_service.is_ready()
 
-    def verify_height_model(self) -> tuple[bool, str]:
+    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]:
         if self._marker_height_mapping_service is None:
             return False, "Marker height mapping is not configured"
-        return self._marker_height_mapping_service.verify_height_model()
+        return self._marker_height_mapping_service.verify_height_model(area_id)
 
-    def has_saved_height_model(self) -> bool:
-        data = self.get_height_calibration_data()
+    def has_saved_height_model(self, area_id: str = "") -> bool:
+        data = self.get_height_calibration_data(area_id)
         return bool(data is not None and data.has_data())
 
-    def get_height_calibration_data(self):
+    def get_height_calibration_data(self, area_id: str = ""):
         if self._height_service is None:
             return None
-        return self._height_service.get_depth_map_data()
+        return self._height_service.get_depth_map_data(area_id)
 
     def restore_pending_safety_walls(self) -> bool:
         if self._marker_height_mapping_service is None:

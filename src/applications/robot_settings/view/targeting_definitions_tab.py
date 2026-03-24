@@ -55,7 +55,8 @@ class TargetingDefinitionsTab(QWidget):
         layout.addWidget(desc)
 
         self._points_table = QTableWidget(0, 5)
-        self._points_table.setHorizontalHeaderLabels(["Name", "Label", "X (mm)", "Y (mm)", "Aliases"])
+        self._points_table.setColumnCount(4)
+        self._points_table.setHorizontalHeaderLabels(["Name", "Label", "X (mm)", "Y (mm)"])
         self._points_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._points_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._points_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -149,8 +150,6 @@ class TargetingDefinitionsTab(QWidget):
             self._points_table.setItem(row, 1, QTableWidgetItem(str(point.get("display_name", point.get("name", "")))))
             self._points_table.setItem(row, 2, QTableWidgetItem(f"{float(point.get('x_mm', 0.0)):.3f}"))
             self._points_table.setItem(row, 3, QTableWidgetItem(f"{float(point.get('y_mm', 0.0)):.3f}"))
-            aliases = ", ".join(point.get("aliases", []))
-            self._points_table.setItem(row, 4, QTableWidgetItem(aliases))
 
     def _reload_frames_table(self) -> None:
         self._frames_table.setRowCount(0)
@@ -302,7 +301,6 @@ class _PointDialog(AppDialog):
         self._display_name = self._line_edit(str(data.get("display_name", data.get("name", ""))))
         self._x = self._line_edit(str(data.get("x_mm", 0.0)))
         self._y = self._line_edit(str(data.get("y_mm", 0.0)))
-        self._aliases = self._line_edit(", ".join(data.get("aliases", [])))
         self._name.setReadOnly(self._protected_name)
         if self._protected_name:
             self._name.setToolTip("This is a required system target id. Change Label instead.")
@@ -310,22 +308,15 @@ class _PointDialog(AppDialog):
         form.addRow(self._label("Label"), self._display_name)
         form.addRow(self._label("X (mm)"), self._x)
         form.addRow(self._label("Y (mm)"), self._y)
-        form.addRow(self._label("Aliases"), self._aliases)
         root.addLayout(form)
         root.addWidget(self._build_button_row(ok_label="Save"))
 
     def get_values(self) -> dict:
-        aliases = [
-            alias.strip().lower()
-            for alias in self._aliases.text().split(",")
-            if alias.strip()
-        ]
         return {
             "name": self._name.text().strip().lower(),
             "display_name": self._display_name.text().strip() or self._name.text().strip().lower(),
             "x_mm": float(self._x.text().strip() or 0.0),
             "y_mm": float(self._y.text().strip() or 0.0),
-            "aliases": aliases,
         }
 
     def accept(self) -> None:

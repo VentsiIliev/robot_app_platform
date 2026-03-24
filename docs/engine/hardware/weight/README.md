@@ -99,7 +99,6 @@ class CellConfig:
 class CalibrationConfig:
     zero_offset: float
     scale_factor: float
-    temperature_compensation: bool
 ```
 
 #### `MeasurementConfig`

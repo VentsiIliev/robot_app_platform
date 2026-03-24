@@ -13,10 +13,7 @@ class ServiceID(str, Enum):
 
 class SettingsID(str, Enum):
     # TODO: Keep only robot-system-specific setting ids here.
-    MY_TARGETING = "my_targeting"
-
-    def __str__(self) -> str:
-        return self.value
+    pass
 
 
 class ProcessID(str, Enum):

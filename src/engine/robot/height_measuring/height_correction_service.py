@@ -11,8 +11,9 @@ _logger = logging.getLogger(__name__)
 
 
 class HeightCorrectionService(IHeightCorrectionService):
-    def __init__(self, height_service: "IHeightMeasuringService"):
+    def __init__(self, height_service: "IHeightMeasuringService", area_id: str = ""):
         self._height_service = height_service
+        self._area_id = str(area_id or "")
         self._model: AreaGridHeightModel | None = None
 
     def reload(self) -> None:
@@ -20,7 +21,7 @@ class HeightCorrectionService(IHeightCorrectionService):
 
     def predict_z(self, x: float, y: float) -> float | None:
         if self._model is None:
-            data = self._height_service.get_depth_map_data()
+            data = self._height_service.get_depth_map_data(self._area_id)
             if data is None:
                 return None
             model = AreaGridHeightModel.from_depth_map(data)

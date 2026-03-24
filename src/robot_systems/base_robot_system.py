@@ -5,111 +5,28 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, ClassVar, Dict, List, Optional, Type, Callable, TYPE_CHECKING
-from dataclasses import dataclass, field
-from src.engine.repositories.interfaces import ISettingsSerializer, ISettingsRepository, ISettingsService
+from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
+from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
 from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
 from src.engine.vision.homography_transformer import HomographyTransformer
+from src.shared_contracts.declarations import (
+    DispenseChannelDefinition,
+    MovementGroupDefinition,
+    RemoteTcpDefinition,
+    RolePolicy,
+    ServiceSpec,
+    SettingsSpec,
+    ShellSetup,
+    SystemMetadata,
+    TargetFrameDefinition,
+    ToolDefinition,
+    ToolSlotDefinition,
+    WorkAreaDefinition,
+    WorkAreaObserverBinding,
+)
 if TYPE_CHECKING:
     from src.engine.process.service_health_registry import ServiceHealthRegistry
-
-# ---------------------------------------------------------------------------
-# Metadata primitives
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class FolderSpec:
-    folder_id: int
-    name: str
-    display_name: str
-    translation_key: str = ""
-
-    def __post_init__(self):
-        object.__setattr__(
-            self, "translation_key",
-            self.translation_key or f"folder.{self.name.lower()}"
-        )
-
-
-@dataclass(frozen=True)
-class ApplicationSpec:
-    name: str
-    folder_id: int
-    icon: str = "fa5s.cog"
-    factory: Optional[Callable] = field(default=None, compare=False)
-    app_id: str = ""    # stable snake_case key used in permissions — set once, never change
-
-    def __post_init__(self):
-        if not self.app_id:
-            object.__setattr__(self, "app_id", self.name.lower().replace(" ", "_"))
-
-
-@dataclass(frozen=True)
-class ShellSetup:
-    folders: List[FolderSpec] = field(default_factory=list)
-    applications: List[ApplicationSpec] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class RolePolicy:
-    role_values: List[str] = field(default_factory=list)
-    admin_role_value: str = "Admin"
-    default_permission_role_values: List[str] = field(default_factory=list)
-    protected_app_role_values: Dict[str, List[str]] = field(default_factory=dict)
-
-    def __post_init__(self):
-        role_values = [str(role) for role in self.role_values]
-        admin_role_value = str(self.admin_role_value)
-        default_roles = [str(role) for role in self.default_permission_role_values]
-        protected = {
-            str(app_id): [str(role) for role in role_values]
-            for app_id, role_values in self.protected_app_role_values.items()
-        }
-        object.__setattr__(self, "role_values", role_values)
-        object.__setattr__(self, "admin_role_value", admin_role_value)
-        object.__setattr__(self, "default_permission_role_values", default_roles)
-        object.__setattr__(self, "protected_app_role_values", protected)
-
-        known_roles = set(role_values)
-        if role_values and admin_role_value not in known_roles:
-            raise ValueError(
-                f"RolePolicy admin_role_value '{admin_role_value}' must be present in role_values"
-            )
-        if any(role not in known_roles for role in default_roles):
-            raise ValueError("RolePolicy default_permission_role_values must all be present in role_values")
-        for app_id, required_roles in protected.items():
-            if any(role not in known_roles for role in required_roles):
-                raise ValueError(
-                    f"RolePolicy protected_app_role_values for '{app_id}' contains unknown roles"
-                )
-
-
-@dataclass(frozen=True)
-class ServiceSpec:
-    name: str
-    service_type: Type
-    required: bool = True
-    description: str = ""
-    builder: Optional[Callable] = field(default=None, compare=False)
-
-
-
-@dataclass(frozen=True)
-class SystemMetadata:
-    name: str
-    version: str = "1.0.0"
-    description: str = ""
-    author: str = ""
-    settings_root: str = os.path.join("storage", "settings")  # base dir: "storage/settings/glue/" resolved at build time
-    translations_root: str = os.path.join("storage", "translations")
-
-@dataclass(frozen=True)
-class SettingsSpec:
-    name: str                          # key to retrieve via get_settings("robot_config")
-    serializer: ISettingsSerializer    # knows the type, default, and how to serialize
-    storage_key: str                   # relative filename: "robot/config.json"
-    required: bool = True
 
 # ---------------------------------------------------------------------------
 # Base vision_service
@@ -118,7 +35,7 @@ class SettingsSpec:
 class BaseRobotSystem(ABC):
     """
     Subclasses declare:
-        metadata: SystemMetadata       — identity
+        metadata: SystemMetadata — identity
         services: list[ServiceSpec] — required/optional service contracts
 
     Platform calls vision_service.start(services_dict) to resolve and inject.
@@ -127,6 +44,15 @@ class BaseRobotSystem(ABC):
     metadata: ClassVar[SystemMetadata] = SystemMetadata(name="UnnamedSystem")
     services: ClassVar[List[ServiceSpec]] = []
     settings_specs: ClassVar[List[SettingsSpec]] = []
+    work_areas: ClassVar[List[WorkAreaDefinition]] = []
+    movement_groups: ClassVar[List[MovementGroupDefinition]] = []
+    dispense_channels: ClassVar[List[DispenseChannelDefinition]] = []
+    tools: ClassVar[List[ToolDefinition]] = []
+    tool_slots: ClassVar[List[ToolSlotDefinition]] = []
+    target_points: ClassVar[List[RemoteTcpDefinition]] = []
+    target_frames: ClassVar[List[TargetFrameDefinition]] = []
+    work_area_observers: ClassVar[List[WorkAreaObserverBinding]] = []
+    default_active_work_area_id: ClassVar[str] = ""
     shell: ClassVar[ShellSetup] = ShellSetup()
     role_policy: ClassVar[RolePolicy] = RolePolicy()
 
@@ -190,6 +116,99 @@ class BaseRobotSystem(ABC):
 
     def get_targeting_provider(self):
         return getattr(self, "_targeting_provider", None)
+
+    def get_work_area_definitions(self) -> List[WorkAreaDefinition]:
+        return list(self.__class__.work_areas)
+
+    def get_movement_group_definitions(self) -> List[MovementGroupDefinition]:
+        return list(self.__class__.movement_groups)
+
+    def get_dispense_channel_definitions(self) -> List[DispenseChannelDefinition]:
+        return list(self.__class__.dispense_channels)
+
+    def get_dispense_channel_definition(self, channel_id: str) -> DispenseChannelDefinition | None:
+        normalized = str(channel_id or "").strip()
+        if not normalized:
+            return None
+        for definition in self.__class__.dispense_channels:
+            if str(definition.id).strip() == normalized:
+                return definition
+        return None
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return list(self.__class__.tools)
+
+    def get_tool_slot_definitions(self) -> List[ToolSlotDefinition]:
+        return list(self.__class__.tool_slots)
+
+    def get_tool_slot_definition(self, slot_id: int) -> ToolSlotDefinition | None:
+        for definition in self.__class__.tool_slots:
+            if int(definition.id) == int(slot_id):
+                return definition
+        return None
+
+    def get_tool_slot_definition_for_tool(self, tool_id: int) -> ToolSlotDefinition | None:
+        for definition in self.__class__.tool_slots:
+            if definition.tool_id is not None and int(definition.tool_id) == int(tool_id):
+                return definition
+        return None
+
+    def get_target_point_definitions(self) -> List[RemoteTcpDefinition]:
+        return list(self.__class__.target_points)
+
+    def get_target_point_definition(self, name: str) -> RemoteTcpDefinition | None:
+        normalized = str(name or "").strip().lower()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_points:
+            if str(definition.name).strip().lower() == normalized:
+                return definition
+        return None
+
+    def get_target_frame_definitions(self) -> List[TargetFrameDefinition]:
+        return list(self.__class__.target_frames)
+
+    def get_target_frame_definition(self, name: str) -> TargetFrameDefinition | None:
+        normalized = str(name or "").strip().lower()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_frames:
+            if str(definition.name).strip().lower() == normalized:
+                return definition
+        return None
+
+    def get_target_frame_for_work_area(self, work_area_id: str) -> TargetFrameDefinition | None:
+        normalized = str(work_area_id or "").strip()
+        if not normalized:
+            return None
+        for definition in self.__class__.target_frames:
+            if str(definition.work_area_id).strip() == normalized:
+                return definition
+        return None
+
+    def get_work_area_observer_bindings(self) -> List[WorkAreaObserverBinding]:
+        return list(self.__class__.work_area_observers)
+
+    def get_default_active_work_area_id(self) -> str:
+        return str(self.__class__.default_active_work_area_id or "").strip()
+
+    def get_observer_group_for_area(self, area_id: str) -> str | None:
+        area_id = str(area_id or "").strip()
+        if not area_id:
+            return None
+        for binding in self.__class__.work_area_observers:
+            if binding.area_id == area_id:
+                return binding.movement_group_id
+        return None
+
+    def get_observed_area_for_group(self, movement_group_id: str) -> str | None:
+        movement_group_id = str(movement_group_id or "").strip()
+        if not movement_group_id:
+            return None
+        for binding in self.__class__.work_area_observers:
+            if binding.movement_group_id == movement_group_id:
+                return binding.area_id
+        return None
 
     def get_calibration_provider(self):
         return getattr(self, "_calibration_provider", None)

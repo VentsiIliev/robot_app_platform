@@ -1,10 +1,16 @@
 from enum import Enum
 from typing import Callable, List, Optional, Tuple
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
-from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
+from src.engine.robot.configuration import (
+    MovementGroup,
+    MovementGroupSettings,
+    RobotSettings,
+    RobotCalibrationSettings,
+)
+from src.shared_contracts.declarations import MovementGroupDefinition
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.applications.robot_settings.service.i_robot_settings_service import IRobotSettingsService
-from src.engine.robot.features.navigation_service import NavigationService
+from src.applications.robot_settings.service.i_robot_settings_navigation import IRobotSettingsNavigation
 from src.engine.robot.enums.axis import RobotAxis, Direction
 
 class RobotSettingsApplicationService(IRobotSettingsService):
@@ -13,27 +19,51 @@ class RobotSettingsApplicationService(IRobotSettingsService):
         self,
         settings_service:  ISettingsService,
         config_key:        Enum,
+        movement_groups_key: Enum,
         calibration_key:   Enum,
         robot_service:     Optional[IRobotService] = None,
         tool_settings_key: Optional[Enum]          = None,
-        navigation_service: Optional[NavigationService] = None,
+        navigation_service: Optional[IRobotSettingsNavigation] = None,
         load_targeting_definitions_fn: Optional[Callable[[], object]] = None,
         save_targeting_definitions_fn: Optional[Callable[[object], None]] = None,
+        movement_group_definitions: Optional[List[MovementGroupDefinition]] = None,
     ):
         self._settings          = settings_service
         self._config_key        = config_key
+        self._movement_groups_key = movement_groups_key
         self._calibration_key   = calibration_key
         self._robot             = robot_service
         self._tool_settings_key = tool_settings_key
         self._navigation = navigation_service
         self._load_targeting_definitions_fn = load_targeting_definitions_fn
         self._save_targeting_definitions_fn = save_targeting_definitions_fn
+        self._movement_group_definitions = list(movement_group_definitions or [])
 
     def load_config(self) -> RobotSettings:
         return self._settings.get(self._config_key)
 
     def save_config(self, config: RobotSettings) -> None:
         self._settings.save(self._config_key, config)
+
+    def load_movement_groups(self) -> MovementGroupSettings:
+        settings = self._settings.get(self._movement_groups_key)
+        if settings.movement_groups:
+            return settings
+
+        # One-time compatibility migration from legacy robot/config.json.
+        legacy_config = self._settings.get(self._config_key)
+        legacy_groups = getattr(legacy_config, "movement_groups", None)
+        if legacy_groups:
+            migrated = MovementGroupSettings(movement_groups=dict(legacy_groups))
+            self._settings.save(self._movement_groups_key, migrated)
+            return migrated
+        return settings
+
+    def save_movement_groups(self, movement_groups: dict[str, MovementGroup]) -> None:
+        self._settings.save(
+            self._movement_groups_key,
+            MovementGroupSettings(movement_groups=dict(movement_groups)),
+        )
 
     def load_calibration(self) -> RobotCalibrationSettings:
         return self._settings.get(self._calibration_key)
@@ -74,6 +104,9 @@ class RobotSettingsApplicationService(IRobotSettingsService):
             ]
         except Exception:
             return []
+
+    def get_movement_group_definitions(self) -> List[MovementGroupDefinition]:
+        return list(self._movement_group_definitions)
 
     def move_to_group(self, group_name: str) -> tuple[bool, str]:
         if self._navigation is None:

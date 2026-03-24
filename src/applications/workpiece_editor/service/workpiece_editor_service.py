@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-from src.robot_systems.glue.targeting.targeting_constants import TOOL_POINT
-
 
 def _has_valid_contour(contour) -> bool:
     if contour is None:
@@ -42,7 +40,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  transformer:    Optional[ICoordinateTransformer] = None,
                  resolver:       Optional["VisionTargetResolver"] = None,
                  z_min:          float = 0.0,
-                 robot_service=None):
+                 robot_service=None,
+                 target_point_name: str = ""):
         self._vision             = vision_service
         self._capture_snapshot_service = capture_snapshot_service
         self._save_fn            = save_fn
@@ -55,6 +54,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._z_min              = z_min
         self._robot_service      = robot_service
         self._editing_storage_id = None
+        self._target_point_name  = str(target_point_name or "").strip().lower()
 
     def set_editing(self, storage_id) -> None:
         self._editing_storage_id = storage_id
@@ -214,7 +214,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             for px, py in pts_px:
                 tr = self._resolver.resolve(
                     VisionPoseRequest(float(px), float(py), z_mm=base_z, rz_degrees=rz, rx_degrees=rx, ry_degrees=ry),
-                    self._resolver.registry.by_name(TOOL_POINT),
+                    self._resolver.registry.by_name(self._target_point_name),
                 )
                 result.append(list(tr.robot_pose()))
             return result

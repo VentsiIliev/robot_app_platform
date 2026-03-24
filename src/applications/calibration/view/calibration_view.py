@@ -3,7 +3,7 @@ import numpy as np
 
 from PyQt6.QtWidgets import (
     QFormLayout, QHBoxLayout, QVBoxLayout, QWidget, QLabel,
-    QTextEdit, QSizePolicy, QSpinBox, QScrollArea,
+    QTextEdit, QSizePolicy, QSpinBox, QScrollArea, QComboBox,
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QPointF
 from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTextCursor
@@ -11,6 +11,7 @@ from PyQt6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QP
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.camera_view import CameraView
 from src.applications.base.i_application_view import IApplicationView
+from src.shared_contracts.declarations import WorkAreaDefinition
 
 _BG          = "#F8F9FA"
 _PANEL_BG    = "#FFFFFF"
@@ -197,7 +198,7 @@ class _GridCameraView(CameraView):
         ordered_labels = list(self._substitute_polygons.keys())
 
         # Build area clip path from the measurement area corners
-        area_corners = self.get_area_corners("measurement_area")
+        area_corners = self.get_area_corners(self._active_area) if self._active_area else []
         area_path: QPainterPath | None = None
         if len(area_corners) >= 3:
             area_path = QPainterPath()
@@ -263,11 +264,19 @@ class CalibrationView(IApplicationView):
     measure_area_grid_requested  = pyqtSignal()
     view_depth_map_requested     = pyqtSignal()
     verify_saved_model_requested = pyqtSignal()
+    work_area_changed            = pyqtSignal(str)
+    measurement_area_changed     = pyqtSignal()
 
-    def __init__(self, parent=None):
-        super().__init__("Calibration", parent)
+    def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None, parent=None):
         self._crosshair_on = False
         self._magnifier_on = False
+        self._work_area_definitions = [
+            definition
+            for definition in (work_area_definitions or [])
+            if definition.supports_height_mapping
+        ]
+        self._active_area_key: str | None = None
+        super().__init__("Calibration", parent)
 
     def setup_ui(self) -> None:
         root = QHBoxLayout(self)
@@ -315,8 +324,11 @@ class CalibrationView(IApplicationView):
         self._preview_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._preview_label.add_area("measurement_area", "#4CAF50")
-        self._preview_label.set_active_area("measurement_area")
+        for definition in self._work_area_definitions:
+            self._preview_label.add_area(definition.id, definition.color)
+        if self._work_area_definitions:
+            self._active_area_key = self._work_area_definitions[0].id
+            self._preview_label.set_active_area(self._active_area_key)
         self._preview_label.corner_updated.connect(self._on_measurement_area_changed)
         self._preview_label.empty_clicked.connect(self._on_measurement_area_empty_clicked)
 
@@ -335,12 +347,16 @@ class CalibrationView(IApplicationView):
         area_top.setSpacing(12)
 
         form = QFormLayout()
+        self._work_area_combo = QComboBox()
+        for definition in self._work_area_definitions:
+            self._work_area_combo.addItem(definition.label, definition.id)
         self._grid_rows_spin = QSpinBox()
         self._grid_rows_spin.setRange(2, 50)
         self._grid_rows_spin.setValue(5)
         self._grid_cols_spin = QSpinBox()
         self._grid_cols_spin.setRange(2, 50)
         self._grid_cols_spin.setValue(4)
+        form.addRow("Area:", self._work_area_combo)
         form.addRow("Rows:", self._grid_rows_spin)
         form.addRow("Cols:", self._grid_cols_spin)
         area_top.addLayout(form, stretch=0)
@@ -498,6 +514,13 @@ class CalibrationView(IApplicationView):
         self._crosshair_btn.clicked.connect(self._toggle_crosshair)
         self._magnifier_btn.clicked.connect(self._toggle_magnifier)
         self._stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
+        self._work_area_combo.currentIndexChanged.connect(self._on_work_area_changed)
+
+    def _on_work_area_changed(self) -> None:
+        self._active_area_key = self.current_height_mapping_area_key()
+        self._preview_label.set_active_area(self._active_area_key)
+        self._preview_label.set_grid_points([])
+        self.work_area_changed.emit(self.current_work_area_id())
 
     def _toggle_crosshair(self) -> None:
         self._crosshair_on = not self._crosshair_on
@@ -513,9 +536,11 @@ class CalibrationView(IApplicationView):
 
     def _on_measurement_area_changed(self, _area: str, _idx: int, _xn: float, _yn: float) -> None:
         self._preview_label.set_grid_points([])
+        self.measurement_area_changed.emit()
 
     def _on_measurement_area_empty_clicked(self, _area: str, _xn: float, _yn: float) -> None:
         self._preview_label.set_grid_points([])
+        self.measurement_area_changed.emit()
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -580,13 +605,57 @@ class CalibrationView(IApplicationView):
         self._clear_area_grid_btn.setEnabled(enabled)
         self._grid_rows_spin.setEnabled(enabled)
         self._grid_cols_spin.setEnabled(enabled)
+        self._work_area_combo.setEnabled(enabled)
+
+    @property
+    def work_area_definitions(self) -> list[WorkAreaDefinition]:
+        return list(self._work_area_definitions)
+
+    def current_work_area_id(self) -> str:
+        value = self._work_area_combo.currentData()
+        return str(value or "")
+
+    def set_current_work_area_id(self, area_id: str) -> None:
+        index = self._work_area_combo.findData(str(area_id or ""))
+        if index >= 0:
+            self._work_area_combo.setCurrentIndex(index)
+
+    def current_height_mapping_area_key(self) -> str | None:
+        area_id = self.current_work_area_id()
+        for definition in self._work_area_definitions:
+            if definition.id == area_id:
+                return definition.id
+        return None
+
+    def set_work_area_options(self, definitions: list[WorkAreaDefinition]) -> None:
+        self._work_area_definitions = [definition for definition in definitions if definition.supports_height_mapping]
+        self._work_area_combo.blockSignals(True)
+        self._work_area_combo.clear()
+        for definition in self._work_area_definitions:
+            self._work_area_combo.addItem(definition.label, definition.id)
+            self._preview_label.add_area(definition.id, definition.color)
+        self._work_area_combo.blockSignals(False)
+        self._on_work_area_changed()
 
     def get_measurement_area_corners(self) -> list[tuple[float, float]]:
-        return self._preview_label.get_area_corners("measurement_area")
+        area_key = self.current_height_mapping_area_key()
+        return self._preview_label.get_area_corners(area_key) if area_key else []
 
     def clear_measurement_area(self) -> None:
-        self._preview_label.clear_area("measurement_area")
+        area_key = self.current_height_mapping_area_key()
+        if area_key:
+            self._preview_label.clear_area(area_key)
         self._preview_label.set_grid_points([])
+
+    def set_measurement_area_corners(
+        self,
+        area_id: str,
+        corners: list[tuple[float, float]],
+    ) -> None:
+        for definition in self._work_area_definitions:
+            if definition.id == area_id:
+                self._preview_label.set_area_corners(definition.id, corners)
+                return
 
     def set_generated_grid_points(
         self,

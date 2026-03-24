@@ -11,6 +11,9 @@ from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.robot_systems.glue.navigation import GlueNavigationService
 from src.robot_systems.glue.component_ids import ProcessID
+from src.robot_systems.glue.domain.dispense_channels.i_dispense_channel_service import (
+    IDispenseChannelService,
+)
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_config import GlueDispensingConfig
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_context import DispensingContext
 from src.robot_systems.glue.processes.glue_dispensing.dispensing_machine_factory import DispensingMachineFactory
@@ -18,7 +21,6 @@ from src.robot_systems.glue.processes.glue_dispensing.dispensing_path import (
     DispensingPathEntry,
     normalize_dispensing_paths,
 )
-from src.robot_systems.glue.processes.glue_dispensing.glue_pump_controller import GluePumpController
 from src.robot_systems.glue.processes.glue_dispensing.i_glue_type_resolver import IGlueTypeResolver
 from src.engine.system import ISystemManager
 from src.shared_contracts.events.glue_process_events import GlueProcessTopics
@@ -31,7 +33,7 @@ class GlueProcess(BaseProcess):
         self,
         robot_service:      IRobotService,
         motor_service:      IMotorService,
-        resolver:           IGlueTypeResolver,
+        dispense_channels:  IDispenseChannelService,
         config:             GlueDispensingConfig,
         navigation_service: GlueNavigationService,
         messaging:          IMessagingService,
@@ -50,7 +52,7 @@ class GlueProcess(BaseProcess):
         self._robot             = robot_service
         self._motor_service     = motor_service
         self._generator         = generator
-        self._resolver          = resolver
+        self._dispense_channels = dispense_channels
         self._config            = config
         self.navigation_service = navigation_service
 
@@ -112,7 +114,7 @@ class GlueProcess(BaseProcess):
         ctx.motor_service       = self._motor_service
         ctx.generator           = self._generator
         ctx.robot_service       = self._robot
-        ctx.resolver            = self._resolver
+        ctx.dispense_channel_service = self._dispense_channels
         ctx.paths               = self._paths
         ctx.spray_on            = self._spray_on
         ctx.robot_tool          = self._config.robot_tool
@@ -127,11 +129,6 @@ class GlueProcess(BaseProcess):
         ctx.pump_ready_timeout_s = self._config.pump_ready_timeout_s
         ctx.pump_thread_join_timeout_s = self._config.pump_thread_join_timeout_s
         ctx.pump_adjuster_poll_s = self._config.pump_adjuster_poll_s
-        ctx.pump_controller     = GluePumpController(
-            self._motor_service,
-            use_segment_settings=self._config.use_segment_settings,
-        )
-
         machine = DispensingMachineFactory().build(ctx, self._config)
         self._context = ctx
         self._machine = machine

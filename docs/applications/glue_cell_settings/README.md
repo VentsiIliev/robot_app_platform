@@ -2,6 +2,8 @@
 
 The `glue_cell_settings` application provides a per-cell tabbed GUI for configuring weight cell hardware (connection URL, calibration, measurement parameters) and monitoring live weight readings and connection state. It differs from the standard application pattern in two ways: it uses `WidgetApplication` directly instead of wrapping `IApplication`, and its controller bridges background-thread broker callbacks to the Qt main thread using `_Bridge(QObject)`.
 
+This application is now a low-level editor for direct cell configuration. The glue shell uses `DispenseChannelSettings` as the primary operator-facing setup screen for channel-level glue dispensing.
+
 ---
 
 ## Architecture
@@ -111,5 +113,6 @@ widget = GlueCellSettingsFactory().build(
 - **`_Bridge(QObject)` for cross-thread safety**: Broker callbacks for weight and state arrive on background threads. Calling Qt setters directly from a background thread is unsafe. `GlueCellSettingsController` creates a `_Bridge` QObject with `pyqtSignal(int, float)` and `pyqtSignal(int, str)`. Lambda subscriptions emit to the bridge; bridge signals are connected to view setters via normal Qt signal routing (auto-connection queues across threads).
 - **`push_calibration` on every save**: After writing to disk, `GlueCellSettingsService` immediately calls `IWeightCellService.push_calibration(cell_id, config)` to apply the new calibration to the running hardware service without requiring a restart.
 - **`GlueCellSettingsFactory` queries cell IDs at build time**: `factory.build()` calls `service.get_cell_ids()` to know how many `CellSettingsTab` instances to create. This means the factory produces a view tailored to the actual cell count from settings.
+- **No temperature-compensation field**: The weight calibration model no longer includes `temperature_compensation`, so the legacy cell editor no longer exposes it.
 
 → Subpackages: [service/](service/README.md) · [model/](model/README.md) · [view/](view/README.md) · [controller/](controller/README.md)

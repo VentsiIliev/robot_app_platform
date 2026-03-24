@@ -18,10 +18,12 @@ class TargetFrame:
     def __init__(
         self,
         name: str,
+        work_area_id: str = "",
         mapper: Optional["PlanePoseMapper"] = None,
         height_correction: Optional["IHeightCorrectionService"] = None,
     ) -> None:
         self.name = name
+        self.work_area_id = str(work_area_id or "").strip()
         self.mapper = mapper
         self.height_correction = height_correction
 
@@ -35,4 +37,7 @@ class TargetFrame:
     def __repr__(self) -> str:
         has_mapper = self.mapper is not None
         has_hc = self.height_correction is not None
-        return f"TargetFrame({self.name!r}, mapper={has_mapper}, height_correction={has_hc})"
+        return (
+            f"TargetFrame({self.name!r}, work_area_id={self.work_area_id!r}, "
+            f"mapper={has_mapper}, height_correction={has_hc})"
+        )

@@ -8,21 +8,18 @@ from src.engine.repositories.interfaces.settings_serializer import ISettingsSeri
 class CalibrationConfig:
     zero_offset: float
     scale_factor: float
-    temperature_compensation: bool
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'CalibrationConfig':
         return cls(
             zero_offset=data.get("zero_offset", 0.0),
             scale_factor=data.get("scale_factor", 1.0),
-            temperature_compensation=data.get("temperature_compensation", False),
         )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "zero_offset": self.zero_offset,
             "scale_factor": self.scale_factor,
-            "temperature_compensation": self.temperature_compensation,
         }
 
 

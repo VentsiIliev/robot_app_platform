@@ -1,29 +1,28 @@
 from __future__ import annotations
 
 from src.engine.robot.targeting import EndEffectorPoint, PointRegistry
-from src.robot_systems.glue.settings.targeting import GlueTargetingSettings
-from src.robot_systems.glue.targeting.targeting_constants import CAMERA_POINT
+from typing import Iterable
 
-
-def build_glue_point_registry(targeting_settings: GlueTargetingSettings | None) -> PointRegistry:
-    if targeting_settings is None:
-        targeting_settings = GlueTargetingSettings.defaults()
-    else:
-        targeting_settings.ensure_defaults()
-
-    point_map = {point.name: point for point in targeting_settings.points}
-    camera_point = point_map.get(CAMERA_POINT)
-    cam_x = float(camera_point.x_mm) if camera_point is not None else 0.0
-    cam_y = float(camera_point.y_mm) if camera_point is not None else 0.0
+def build_glue_point_registry(
+    point_definitions: Iterable[dict],
+) -> PointRegistry:
+    points = list(point_definitions or [])
+    point_map = {
+        str(point.get("name", "")).strip().lower(): point
+        for point in points
+        if str(point.get("name", "")).strip()
+    }
+    camera_point = point_map.get("camera")
+    cam_x = float(camera_point.get("x_mm", 0.0)) if camera_point is not None else 0.0
+    cam_y = float(camera_point.get("y_mm", 0.0)) if camera_point is not None else 0.0
 
     return PointRegistry(
         points=[
             EndEffectorPoint(
-                point.name,
-                float(point.x_mm) - cam_x,
-                float(point.y_mm) - cam_y,
+                str(point["name"]),
+                float(point.get("x_mm", 0.0)) - cam_x,
+                float(point.get("y_mm", 0.0)) - cam_y,
             )
-            for point in targeting_settings.points
+            for point in points
         ],
-        aliases=targeting_settings.aliases,
     )

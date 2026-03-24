@@ -1,6 +1,6 @@
 # `src/robot_systems/glue/` — Glue Robot Application
 
-`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It currently declares 18 applications, 12 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
+`GlueRobotSystem` is the concrete robot application for automated glue dispensing. It currently declares 18 applications, 13 settings files, and 6 services. It is the only `BaseRobotSystem` subclass currently in the platform.
 
 ---
 
@@ -27,20 +27,37 @@ class GlueRobotSystem(BaseRobotSystem):
 | `ROBOT_CONFIG` | `RobotSettingsSerializer` | `robot/config.json` | `RobotSettings` |
 | `ROBOT_CALIBRATION` | `RobotCalibrationSettingsSerializer` | `robot/calibration.json` | `RobotCalibrationSettings` |
 | `GLUE_SETTINGS` | `GlueSettingsSerializer` | `glue/settings.json` | `GlueSettings` |
-| `GLUE_TARGETING` | `GlueTargetingSettingsSerializer` | `targeting/definitions.json` | Named point definitions, named frame definitions, and point aliases for glue targeting |
-| `GLUE_CELLS` | `GlueCellsConfigSerializer` | `glue/cells.json` | `GlueCellsConfig` (3 default cells) |
+| `TARGETING` | `TargetingSettingsSerializer` | `targeting/definitions.json` | Named remote TCP measurements and named frame definitions for shared targeting |
+| `GLUE_CELLS` | `GlueCellsConfigSerializer(default_channels=dispense_channels)` | `glue/cells.json` | Weight-cell runtime config seeded from declared dispense channels |
+| `DISPENSE_CHANNELS` | `DispenseChannelSettingsSerializer(default_channels=dispense_channels)` | `glue/dispense_channels.json` | Per-channel glue type selection keyed by declared channel id |
 | `GLUE_CATALOG` | `GlueCatalogSerializer` | `glue/catalog.json` | `GlueCatalog` (glue type library) |
 | `MODBUS_CONFIG` | `ModbusConfigSerializer` | `hardware/modbus.json` | `ModbusConfig` |
 | `VISION_CAMERA_SETTINGS` | `CameraSettingsSerializer` | `vision/camera_settings.json` | Camera settings |
-| `TOOL_CHANGER_CONFIG` | `ToolChangerSettingsSerializer` | `tools/tool_changer.json` | Tool changer config |
+| `TOOL_CHANGER_CONFIG` | `ToolChangerSettingsSerializer(default_tools=tools, default_slots=tool_slots)` | `tools/tool_changer.json` | Persisted toolchanger config seeded from glue tool/slot declarations |
 | `HEIGHT_MEASURING_SETTINGS` | `HeightMeasuringSettingsSerializer` | `height_measuring/settings.json` | Height-measuring settings |
 | `HEIGHT_MEASURING_CALIBRATION` | `LaserCalibrationDataSerializer` | `height_measuring/calibration_data.json` | Laser calibration data |
 | `DEPTH_MAP_DATA` | `DepthMapDataSerializer` | `height_measuring/depth_map.json` | Stored depth-map data |
-| `GLUE_MOTOR_CONFIG` | `GlueMotorConfigSerializer` | `hardware/motors.json` | Glue motor board config + motor topology |
+| `GLUE_MOTOR_CONFIG` | `GlueMotorConfigSerializer(default_channels=dispense_channels)` | `hardware/motors.json` | Glue motor board config + pump topology seeded from declared dispense channels |
 
 Files are resolved under `src/robot_systems/glue/storage/settings/`. `BaseRobotSystem.describe()` reports this as `storage/settings/gluesystem/` because it combines `settings_root` with `metadata.name.lower()`, but the actual checked-in glue system defaults live in the robot-system package under `storage/settings/`.
 
-`robot/config.json` now contains only generic robot/runtime settings. Glue targeting definitions live in `targeting/definitions.json`, outside the glue-dispensing settings namespace, so the targeting model can evolve independently of both platform-level robot configuration and glue-process settings.
+`robot/config.json` now contains only generic robot/runtime settings. Shared targeting definitions live in `targeting/definitions.json`, outside the glue-dispensing settings namespace, so the targeting model can evolve independently of both platform-level robot configuration and glue-process settings.
+
+Glue dispensing now follows the same declaration-first pattern as work areas, movement groups, tools, and targeting:
+- glue declares `dispense_channels`
+- `glue/cells.json` stores the low-level weight-cell runtime values for those channels
+- `hardware/motors.json` stores the low-level pump motor topology for those channels
+- `glue/dispense_channels.json` stores the operator-selected glue type per channel
+
+Toolchanger defaults now follow the same declaration-first rule:
+- glue declares `tools`
+- glue declares `tool_slots`
+- `tools/tool_changer.json` stores persisted editable state for that declared layout
+
+Slot pickup/dropoff movement now follows the same rule:
+- glue declares the slot pickup/dropoff movement groups in `movement_groups`
+- each `tool_slot` declaration binds to those group ids
+- `robot/movement_groups.json` stores only the editable values for those declared groups
 
 Non-settings storage paths are now standardized on `BaseRobotSystem` instead of being hardcoded as module globals in `application_wiring.py`. Shared runtime code uses:
 - `workpieces_storage_path()`
@@ -62,6 +79,15 @@ Non-settings storage paths are now standardized on `BaseRobotSystem` instead of 
 
 `build_weight_cell_service` reads `GLUE_CELLS` settings and calls `build_http_weight_cell_service(cells_config, messaging)`.
 
+Glue dispensing now also uses one glue-domain facade for pump control:
+- `DispenseChannelService`
+
+That service wraps:
+- glue-type -> motor-address resolution
+- pump start/stop through `GluePumpController`
+
+`GlueProcess` still owns the state machine, generator timing, and dynamic pump-adjustment thread behavior, but no longer drives pump start/stop through a raw resolver + controller pair directly.
+
 The glue system now relies on three shared engine assembly paths:
 
 - `IVisionService` → default builder
@@ -76,7 +102,7 @@ The glue system now relies on three shared engine assembly paths:
 | Folder | `folder_id` | Applications |
 |--------|------------|--------------|
 | Production | 1 | `GlueDashboard`, `WorkpieceEditor`, `WorkpieceLibrary` |
-| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `CellSettings`, `CameraSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
+| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `DispenseChannelSettings`, `WorkAreaSettings`, `CameraSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
 | Administration | 3 | `UserManagement` |
 | Tests | 4 | `BrokerDebug`, `ContourMatchingTester`, `GlueProcessDriver`, `HeightMeasuring`, `PickAndPlaceVisualizer`, `PickTarget` |
 
@@ -92,7 +118,8 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `RobotSettings` | `_build_robot_settings_application` | `RobotSettingsApplicationService(settings, robot, navigation)` |
 | `GlueSettings` | `_build_glue_settings_application` | `GlueSettingsApplicationService(settings)` |
 | `ModbusSettings` | `_build_modbus_settings_application` | `ModbusSettingsApplicationService(settings)` + `ModbusActionService()` |
-| `CellSettings` | `_build_glue_cell_settings_application` | `GlueCellSettingsService(settings, weight)` |
+| `DispenseChannelSettings` | `_build_dispense_channel_settings_application` | `DispenseChannelSettingsService(settings, weight, motor)` |
+| `WorkAreaSettings` | `_build_work_area_settings_application` | `WorkAreaSettingsApplicationService(work_area_service, vision)` |
 | `CameraSettings` | `_build_camera_settings_application` | `CameraSettingsApplicationService(settings, vision)` |
 | `Calibration` | `_build_calibration_application` | `CalibrationApplicationService(vision, coordinator)` |
 | `DeviceControl` | `_build_device_control_application` | `DeviceControlApplicationService(motor, settings)` |
@@ -104,6 +131,19 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `GlueProcessDriver` | `_build_glue_process_driver_application` | `GlueProcessDriverService(GlueProcess, MatchingService, GlueJobBuilderService, GlueJobExecutionService)` |
 | `BrokerDebug` | `_build_broker_debug_application` | `BrokerDebugApplicationService(messaging)` |
 | `UserManagement` | `_build_user_management_application` | `UserManagementApplicationService(CsvUserRepository)` |
+
+Tabbed settings-oriented screens in glue now use collapsed-by-default schema groups via the shared `CollapsibleSettingsView` pattern, including:
+- `RobotSettings`
+- `GlueSettings`
+- `CameraSettings`
+- `WorkAreaSettings`
+- `DispenseChannelSettings`
+- `HeightMeasuring`
+
+Work-area ownership is now explicit:
+- `WorkAreaSettings` edits work-area polygons
+- `CameraSettings` no longer owns robot work-area editing
+- `Calibration` reuses the same declared work areas
 
 ---
 
@@ -213,6 +253,16 @@ The glue system also owns one shared `VisionTargetResolver` runtime instance. It
 - `PickTargetApplicationService`
 - `GlueJobBuilderService`
 - `PickAndPlaceProcess` / `PickAndPlaceWorkflow`
+
+For glue dispensing, the layering is now:
+- `GlueProcess`
+  - process/state-machine orchestration
+- `DispenseChannelService`
+  - resolve glue type -> motor address and start/stop pump flow
+- `GluePumpController`
+  - low-level adapter onto `IMotorService`
+
+This keeps the process behavior unchanged while moving the domain boundary one level above the raw motor controller.
 
 That keeps point/frame definitions and TCP-delta logic consistent across the whole glue system.
 

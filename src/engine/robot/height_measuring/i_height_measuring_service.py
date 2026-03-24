@@ -30,6 +30,7 @@ class IHeightMeasuringService(ABC):
     def save_height_map(
         self,
         samples: List[List[float]],
+        area_id: str = "",
         marker_ids: Optional[List[int]] = None,
         point_labels: Optional[List[str]] = None,
         grid_rows: int = 0,
@@ -40,4 +41,4 @@ class IHeightMeasuringService(ABC):
     ) -> None: ...
 
     @abstractmethod
-    def get_depth_map_data(self) -> Optional["DepthMapData"]: ...
+    def get_depth_map_data(self, area_id: str = "") -> Optional["DepthMapData"]: ...

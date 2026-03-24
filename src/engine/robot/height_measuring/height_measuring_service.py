@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 
 from src.engine.repositories.interfaces.settings_repository import ISettingsRepository
-from src.engine.robot.height_measuring.depth_map_data import DepthMapData
+from src.engine.robot.height_measuring.depth_map_data import DepthMapData, DepthMapLibraryData
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationData
 from src.engine.robot.height_measuring.laser_detection_service import LaserDetectionService
@@ -52,6 +52,7 @@ class HeightMeasuringService(IHeightMeasuringService):
     def save_height_map(
         self,
         samples: List[List[float]],
+        area_id: str = "",
         marker_ids: Optional[List[int]] = None,
         point_labels: Optional[List[str]] = None,
         grid_rows: int = 0,
@@ -65,7 +66,9 @@ class HeightMeasuringService(IHeightMeasuringService):
         if self._depth_map_repo is None:
             _logger.warning("save_height_map: no depth_map_repository injected — cannot save depth map")
             return
+        key = str(area_id or "default")
         data = DepthMapData(
+            area_id=key,
             points=[list(s) for s in samples],
             marker_ids=[int(v) for v in marker_ids] if marker_ids else [],
             point_labels=[str(v) for v in point_labels] if point_labels else [],
@@ -75,18 +78,38 @@ class HeightMeasuringService(IHeightMeasuringService):
             planned_point_labels=[str(v) for v in planned_point_labels] if planned_point_labels else [],
             unavailable_point_labels=[str(v) for v in unavailable_point_labels] if unavailable_point_labels else [],
         )
-        self._depth_map_repo.save(data)
-        _logger.info("Depth map saved: %d points", len(samples))
+        library = self._load_depth_map_library()
+        library.set(key, data)
+        self._depth_map_repo.save(library)
+        _logger.info("Depth map saved for area '%s': %d points", key, len(samples))
 
-    def get_depth_map_data(self) -> Optional[DepthMapData]:
+    def get_depth_map_data(self, area_id: str = "") -> Optional[DepthMapData]:
         if self._depth_map_repo is None:
             return None
         try:
-            data = self._depth_map_repo.load()
-            return data if data.has_data() else None
+            library = self._load_depth_map_library()
+            key = str(area_id or "default")
+            if key in library.maps:
+                data = library.maps[key]
+                return data if data.has_data() else None
+            for data in library.maps.values():
+                if data.has_data():
+                    return data
+            return None
         except Exception as e:
             _logger.error("Failed to load depth map data: %s", e)
             return None
+
+    def _load_depth_map_library(self) -> DepthMapLibraryData:
+        if self._depth_map_repo is None:
+            return DepthMapLibraryData()
+        data = self._depth_map_repo.load()
+        if isinstance(data, DepthMapLibraryData):
+            return data
+        if isinstance(data, DepthMapData):
+            key = str(data.area_id or "default")
+            return DepthMapLibraryData(maps={key: data})
+        return DepthMapLibraryData()
 
     def begin_measurement_session(self) -> None:
         self._laser.begin_measurement_session()
