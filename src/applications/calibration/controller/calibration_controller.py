@@ -7,6 +7,7 @@ from src.applications.base.i_application_controller import IApplicationControlle
 from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration.view.calibration_view import CalibrationView
+from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.engine.core.i_messaging_service import IMessagingService
 from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.robot_events import RobotCalibrationTopics
@@ -42,6 +43,8 @@ class _Bridge(QObject):
     area_grid_btn_enabled   = pyqtSignal(bool)
     test_finished           = pyqtSignal(bool, str)
     marker_height_finished  = pyqtSignal(bool, str)
+    laser_calibration_finished = pyqtSignal(bool, str)
+    laser_detect_finished   = pyqtSignal(object)
     area_grid_finished      = pyqtSignal(bool, str)
     area_grid_verified      = pyqtSignal(bool, str, dict)
     area_grid_verify_progress = pyqtSignal(str, str, int, int)
@@ -77,6 +80,8 @@ class CalibrationController(IApplicationController):
         self._bridge.area_grid_btn_enabled.connect(self._view.set_measure_area_grid_enabled)
         self._bridge.test_finished.connect(self._on_test_finished)
         self._bridge.marker_height_finished.connect(self._on_marker_height_finished)
+        self._bridge.laser_calibration_finished.connect(self._on_laser_calibration_finished)
+        self._bridge.laser_detect_finished.connect(self._on_laser_detect_finished)
         self._bridge.area_grid_finished.connect(self._on_area_grid_finished)
         self._bridge.area_grid_verified.connect(self._on_area_grid_verified)
         self._bridge.area_grid_verify_progress.connect(self._on_area_grid_verify_progress)
@@ -148,6 +153,8 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
+        self._view.calibrate_laser_requested.connect(self._on_calibrate_laser)
+        self._view.detect_laser_requested.connect(self._on_detect_laser)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
         self._view.measure_marker_heights_requested.connect(self._on_measure_marker_heights)
         self._view.generate_area_grid_requested.connect(self._on_generate_area_grid)
@@ -320,6 +327,72 @@ class CalibrationController(IApplicationController):
         )
         if should_verify:
             self._start_height_model_verification(self._view.current_work_area_id())
+
+    def _on_calibrate_laser(self) -> None:
+        self._view.set_buttons_enabled(False)
+        self._view.set_laser_actions_enabled(False)
+        self._bridge.stop_btn_enabled.emit(True)
+        thread = QThread()
+        worker = _Worker(self._model.calibrate_laser)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_laser_calibration_worker_done)
+        worker.failed.connect(self._on_laser_calibration_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_laser_calibration_worker_done(self, result) -> None:
+        ok, msg = result
+        self._bridge.laser_calibration_finished.emit(ok, msg)
+
+    def _on_laser_calibration_worker_failed(self, error: str) -> None:
+        self._bridge.laser_calibration_finished.emit(False, f"Laser calibration error: {error}")
+
+    def _on_laser_calibration_finished(self, ok: bool, msg: str) -> None:
+        if not self._running:
+            return
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_buttons_enabled(True)
+        self._view.set_laser_actions_enabled(True)
+        self._bridge.stop_btn_enabled.emit(False)
+        self._refresh_calibration_dependent_actions()
+
+    def _on_detect_laser(self) -> None:
+        self._view.set_laser_actions_enabled(False)
+        thread = QThread()
+        worker = _Worker(self._model.detect_laser_once)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_laser_detect_worker_done)
+        worker.failed.connect(self._on_laser_detect_worker_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _on_laser_detect_worker_done(self, result) -> None:
+        self._bridge.laser_detect_finished.emit(result)
+
+    def _on_laser_detect_worker_failed(self, error: str) -> None:
+        self._bridge.laser_detect_finished.emit(
+            LaserDetectionResult(ok=False, message=f"Laser detection error: {error}")
+        )
+
+    def _on_laser_detect_finished(self, result: LaserDetectionResult) -> None:
+        if not self._running:
+            return
+        self._view.set_laser_actions_enabled(True)
+        if result.debug_image is not None:
+            self._view.update_camera_view(result.debug_image)
+        if result.ok:
+            extra = f", h={result.height_mm:.2f} mm" if result.height_mm is not None else ""
+            self._view.append_log(f"✓ {result.message}{extra}")
+        else:
+            self._view.append_log(f"✗ {result.message}")
 
     def _on_generate_area_grid(self) -> None:
         self._save_current_height_mapping_area()
@@ -591,6 +664,7 @@ class CalibrationController(IApplicationController):
         calibrated = self._model.is_calibrated()
         self._bridge.test_btn_enabled.emit(calibrated)
         self._bridge.camera_tcp_btn_enabled.emit(calibrated and not self.is_calibrating())
+        self._view.set_laser_actions_enabled(not self.is_calibrating())
         can_measure = self._model.can_measure_marker_heights() and not self.is_calibrating()
         self._bridge.marker_height_btn_enabled.emit(can_measure)
         self._bridge.area_grid_btn_enabled.emit(can_measure)

@@ -2,9 +2,14 @@ import logging
 import math
 import os
 import re
+import threading
 import time
 from typing import Callable, Optional, Protocol, Sequence
 
+import cv2
+import numpy as np
+
+from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.vision.i_vision_service import IVisionService
@@ -66,6 +71,7 @@ class _IRobotService(Protocol):
 
 class _IHeightService(Protocol):
     def is_calibrated(self) -> bool: ...
+    def get_calibration_data(self): ...
     def measure_at(self, x: float, y: float, *, already_at_xy: bool = False) -> Optional[float]: ...
     def save_height_map(
         self,
@@ -122,6 +128,15 @@ class _IMarkerHeightMappingService(Protocol):
     def is_ready(self) -> bool: ...
 
 
+class _ILaserCalibrator(Protocol):
+    def calibrate(self, initial_position: list, stop_event: threading.Event | None = None) -> bool: ...
+
+
+class _ILaserOps(Protocol):
+    def detect(self) -> tuple: ...
+    def restore(self) -> None: ...
+
+
 class CalibrationApplicationService(ICalibrationService):
 
     def __init__(self, vision_service: IVisionService, process_controller: _IProcessController,
@@ -131,6 +146,8 @@ class CalibrationApplicationService(ICalibrationService):
                  work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
+                 laser_calibration_service: Optional[_ILaserCalibrator] = None,
+                 laser_ops: Optional[_ILaserOps] = None,
                  use_marker_centre: bool = False,
                  work_area_definitions: Optional[list[WorkAreaDefinition]] = None):
         self._vision_service      = vision_service
@@ -143,9 +160,12 @@ class CalibrationApplicationService(ICalibrationService):
         self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
+        self._laser_calibration_service = laser_calibration_service
+        self._laser_ops = laser_ops
         self._use_marker_centre   = use_marker_centre
         self._work_area_definitions = list(work_area_definitions or [])
         self._stop_test           = False
+        self._stop_laser_calibration = threading.Event()
         self._pending_support_points_mm: list[tuple[str, float, float]] = []
         self._pending_skip_labels: set[str] = set()
 
@@ -198,8 +218,52 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Camera TCP offset calibration is not configured"
         return self._camera_tcp_offset_calibrator.calibrate()
 
+    def calibrate_laser(self) -> tuple[bool, str]:
+        if self._laser_calibration_service is None:
+            return False, "Laser calibration is not configured"
+        self._stop_laser_calibration.clear()
+        try:
+            current_pos = None
+            if self._robot_service is not None:
+                current_pos = self._robot_service.get_current_position()
+            initial_pos = list(current_pos) if current_pos else None
+            ok = self._laser_calibration_service.calibrate(
+                initial_pos,
+                stop_event=self._stop_laser_calibration,
+            )
+            if ok and self._height_service is not None:
+                self._height_service.reload_calibration()
+                return True, "Laser calibration complete"
+            if self._stop_laser_calibration.is_set():
+                return False, "Laser calibration cancelled"
+            return False, "Laser calibration failed — check laser and robot position"
+        except Exception as exc:
+            _logger.error("Laser calibration error: %s", exc)
+            return False, f"Laser calibration error: {exc}"
+
+    def detect_laser_once(self) -> LaserDetectionResult:
+        if self._laser_ops is None:
+            return LaserDetectionResult(ok=False, message="Laser detection not available")
+        try:
+            mask, _, closest = self._laser_ops.detect()
+            if closest is not None:
+                x, y = closest
+                return LaserDetectionResult(
+                    ok=True,
+                    message=f"Detected at ({x:.1f}, {y:.1f})",
+                    pixel_coords=(float(x), float(y)),
+                    height_mm=self._estimate_laser_height(float(x)),
+                    debug_image=self._build_laser_debug_image(mask, closest),
+                    mask=mask,
+                )
+            return LaserDetectionResult(ok=False, message="No laser line detected", mask=mask)
+        except Exception as exc:
+            _logger.error("Laser detection error: %s", exc)
+            return LaserDetectionResult(ok=False, message=f"Laser detection error: {exc}")
+
     def stop_calibration(self) -> None:
         self._process_controller.stop_calibration()
+        self._stop_laser_calibration.set()
         if self._camera_tcp_offset_calibrator is not None:
             self._camera_tcp_offset_calibrator.stop()
         if self._marker_height_mapping_service is not None:
@@ -744,3 +808,29 @@ class CalibrationApplicationService(ICalibrationService):
         if restore is None:
             return False
         return bool(restore())
+
+    def _build_laser_debug_image(self, mask: Optional[np.ndarray], closest: Optional[tuple]) -> np.ndarray:
+        frame = self._vision_service.get_latest_frame() if self._vision_service is not None else None
+        base = frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+        if mask is not None:
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 9))
+            mask_dilated = cv2.dilate(mask, kernel)
+            green_channel = np.zeros_like(base)
+            green_channel[:, :, 1] = mask_dilated
+            base = cv2.addWeighted(base, 1.0, green_channel, 1.0, 0)
+        if closest is not None:
+            cx, cy = int(closest[0]), int(closest[1])
+            cv2.circle(base, (cx, cy), 8, (0, 0, 255), 2)
+            cv2.drawMarker(base, (cx, cy), (0, 0, 255), cv2.MARKER_CROSS, 20, 2)
+        return base
+
+    def _estimate_laser_height(self, pixel_x: float) -> Optional[float]:
+        if self._height_service is None:
+            return None
+        data = self._height_service.get_calibration_data()
+        if data is None or not data.is_calibrated():
+            return None
+        delta = data.zero_reference_coords[0] - pixel_x
+        features = [delta ** (i + 1) for i in range(data.polynomial_degree)]
+        raw_height = sum(c * f for c, f in zip(data.polynomial_coefficients, features)) + data.polynomial_intercept
+        return raw_height - float(getattr(data, "zero_height_offset_mm", 0.0))

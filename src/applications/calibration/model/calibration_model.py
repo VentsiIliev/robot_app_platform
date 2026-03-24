@@ -1,4 +1,5 @@
 from src.applications.base.i_application_model import IApplicationModel
+from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.shared_contracts.declarations import WorkAreaDefinition
 
@@ -28,6 +29,12 @@ class CalibrationModel(IApplicationModel):
 
     def calibrate_camera_tcp_offset(self) -> tuple[bool, str]:
         return self._service.calibrate_camera_tcp_offset()
+
+    def calibrate_laser(self) -> tuple[bool, str]:
+        return self._service.calibrate_laser()
+
+    def detect_laser_once(self) -> LaserDetectionResult:
+        return self._service.detect_laser_once()
 
     def stop_calibration(self) -> None:
         self._service.stop_calibration()

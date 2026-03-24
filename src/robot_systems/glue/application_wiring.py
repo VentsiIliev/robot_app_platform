@@ -433,6 +433,8 @@ def _build_calibration_application(robot_system):
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
+        laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
+        laser_ops=getattr(robot_system, "_laser_detection_service", None),
         use_marker_centre=True,
         work_area_definitions=robot_system.get_work_area_definitions(),
     )

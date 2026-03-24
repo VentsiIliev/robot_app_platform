@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Sequence
+from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 
@@ -19,6 +20,12 @@ class ICalibrationService(ABC):
 
     @abstractmethod
     def calibrate_camera_tcp_offset(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def calibrate_laser(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def detect_laser_once(self) -> LaserDetectionResult: ...
 
     @abstractmethod
     def stop_calibration(self) -> None: ...
