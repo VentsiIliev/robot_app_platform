@@ -366,4 +366,4 @@ The calibration service now refreshes both `robot/calibration.json` and `robot/c
 | `glue_types.py` | Defines `Glue`, `GlueCatalog` dataclasses + `GlueCatalogSerializer` |
 | `device_control.py` | Defines `GlueMotorConfig`, `MotorSpec`, and `GlueMotorConfigSerializer` for `hardware/motors.json` |
 
-→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [pick_and_place/](processes/pick_and_place/README.md) · [targeting/](targeting/README.md)
+→ Subpackages: [settings/](settings/README.md) · [dashboard/](dashboard/README.md) · [glue_settings/](glue_settings/README.md) · [processes/](processes/README.md) · [targeting/](targeting/README.md) · [navigation/](navigation/README.md) · [domain/](domain/README.md) · [motor/](motor/README.md)

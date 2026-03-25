@@ -12,6 +12,7 @@ This package contains the settings dataclasses and serializers specific to the `
 | `glue_types.py` | Domain model + serializer | Glue type catalog (`GlueCatalog`, `Glue`) |
 | `cells.py` | Serializer subclass | `GlueCellsConfigSerializer` with glue-specific cell defaults |
 | `device_control.py` | Settings dataclass + serializer | `GlueMotorConfig` / `GlueMotorConfigSerializer` for glue motor board settings |
+| `glue_segment_settings_schema.py` | `SegmentSettingsSchema` instance | Per-segment dispensing field definitions used by the Workpiece Editor |
 
 ---
 
@@ -98,6 +99,44 @@ class GlueMotorConfig:
 `GlueMotorConfigSerializer` stores the register map under a top-level `"board"` object and the motor topology under `"motors"`. Default topology is four glue pumps at addresses `0/2/4/6` with error prefixes `1/2/3/4`.
 
 `build_motor_service()` reads this settings object and maps it into the generic engine-layer `MotorConfig`, so board register changes no longer require editing `service_builders.py`.
+
+---
+
+## `GLUE_SEGMENT_SETTINGS_SCHEMA` (`glue_segment_settings_schema.py`)
+
+A `SegmentSettingsSchema` instance that declares all per-segment dispensing fields shown in the Workpiece Editor UI. Each field specifies a `GlueSettingKey` name, a default string value, an optional tab name, and an optional validator.
+
+Fields declared in this schema (with defaults):
+
+| Field | Default | Tab | Notes |
+|-------|---------|-----|-------|
+| `spray_width` | `"10"` | | mm |
+| `spraying_height` | `"0"` | | mm above z_min |
+| `fan_speed` | `"100"` | | % |
+| `time_between_generator_and_glue` | `"1"` | | seconds |
+| `motor_speed` | `"500"` | | rpm |
+| `reverse_duration` | `"0.5"` | | seconds |
+| `speed_reverse` | `"3000"` | | rpm |
+| `rz_angle` | `"0"` | | degrees |
+| `glue_type` | `""` | | **required** (validator: non-empty) |
+| `generator_timeout` | `"5"` | | minutes |
+| `time_before_motion` | `"0.1"` | | seconds |
+| `time_before_stop` | `"1.0"` | | seconds |
+| `reach_start_threshold` | `"1.0"` | | mm |
+| `reach_end_threshold` | `"30.0"` | | mm |
+| `initial_ramp_speed_duration` | `"1.0"` | | seconds |
+| `initial_ramp_speed` | `"5000"` | | rpm |
+| `reverse_ramp_steps` | `"1"` | | count |
+| `forward_ramp_steps` | `"3"` | | count |
+| `glue_speed_coefficient` | `"5"` | | |
+| `glue_acceleration_coefficient` | `"0"` | | |
+| `adaptive_spacing_mm` | `"10"` | | mm |
+| `spline_density_multiplier` | `"2.0"` | | |
+| `smoothing_lambda` | `"0.0"` | | |
+| `velocity` | `"60"` | Motion | mm/s |
+| `acceleration` | `"30"` | Motion | mm/s² |
+
+This schema is imported by the Workpiece Editor application to render the per-segment settings form and validate inputs. The actual runtime values are stored inside each `GlueWorkpiece.sprayPattern` segment's `"settings"` dict.
 
 ---
 
