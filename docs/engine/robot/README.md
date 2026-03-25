@@ -217,9 +217,10 @@ The Calibration application uses `validate_pose(...)` only for precheck simulati
 |-----------|------------|------|
 | `interfaces/` | `IRobot`, `IMotionService`, `IRobotService`, `ISafetyChecker`, `IRobotStateProvider`, `IStatePublisher`, `IToolChanger`, `IToolService` | [interfaces/](interfaces/README.md) |
 | `configuration/` | `RobotSettings`, `SafetyLimits`, `MovementGroup`, `RobotCalibrationSettings` | [configuration/](configuration/README.md) |
-| `targeting/` | `PointRegistry`, `VisionTargetResolver`, `RobotSystemTargetingProvider` | generic image-target and jog-target resolution across robot systems |
-| `calibration/` | `build_robot_system_calibration_service`, `RobotSystemCalibrationProvider` | shared calibration builder with robot-system dependency adapter |
-| `height_measuring/` | `build_robot_system_height_measuring_services`, `RobotSystemHeightMeasuringProvider` | shared height-measuring builder with system-specific laser control provider |
+| `targeting/` | `PointRegistry`, `VisionTargetResolver`, `JogFramePoseResolver`, `RobotSystemTargetingProvider` | [targeting/](targeting/README.md) |
+| `calibration/` | `build_robot_system_calibration_service`, `RobotSystemCalibrationProvider` | [calibration/](calibration/README.md) |
+| `height_measuring/` | `IHeightMeasuringService`, `IHeightCorrectionService`, `HeightCorrectionService`, `build_robot_system_height_measuring_services` | [height_measuring/](height_measuring/README.md) |
+| `path_interpolation/` | `interpolate_path_linear`, `interpolate_path_spline_with_lambda`, `interpolate_path_two_stage` | [path_interpolation/](path_interpolation/README.md) |
 | `../../robot_systems/default_service_builders.py` | `build_tool_service`, `build_vision_service` | centralized shared default builders used by `SystemBuilder` |
 | `plane_pose_mapper.py` | `PlanePose`, `PlanePoseMapper` | reusable 2D rigid frame transform between robot pose frames |
 | `enums/` | `RobotAxis`, `Direction`, `ImageToRobotMapping` | [enums/](enums/README.md) |

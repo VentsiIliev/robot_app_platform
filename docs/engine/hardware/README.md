@@ -16,7 +16,10 @@ hardware/
 │   ├── http/           ← HTTP-based transport implementation
 │   ├── weight_cell_service.py
 │   └── config.py
-└── generator/          ← Generator controller service
+├── generator/          ← Generator controller service
+├── laser/              ← ILaserControl — hardware on/off interface for laser
+└── vacuum_pump/
+    └── interfaces/     ← IVacuumPumpController, IVacuumPumpTransport
 ```
 
 ---
@@ -57,6 +60,18 @@ Provides a relay on/off controller for generator hardware (`IGeneratorController
 - `NullGeneratorTimer` — no-op used when timeout tracking is not needed
 
 → See [generator/README.md](generator/README.md)
+
+### Laser (`laser/`)
+
+Minimal `ILaserControl` interface (`turn_on()` / `turn_off()`). No engine-level concrete implementation — robot systems supply their own via `RobotSystemHeightMeasuringProvider.build_laser_control()`. Used by `LaserDetectionService` in the height-measuring subsystem.
+
+→ See [laser/README.md](laser/README.md)
+
+### Vacuum Pump (`vacuum_pump/`)
+
+`IVacuumPumpController` (`turn_on() -> bool`, `turn_off() -> bool`) for high-level vacuum control, and `IVacuumPumpTransport` (semantic subtype of `IRegisterTransport`) for the hardware transport layer. Concrete implementations live in robot systems.
+
+→ See [vacuum_pump/README.md](vacuum_pump/README.md)
 
 ---
 

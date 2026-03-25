@@ -17,6 +17,8 @@ src/engine/
 │   │   └── modbus/             ← Serial/Modbus port management
 │   ├── generator/              ← Relay-switched generator controller + run timer
 │   ├── motor/                  ← Motor controller service (IMotorService)
+│   ├── laser/                  ← ILaserControl interface
+│   ├── vacuum_pump/            ← IVacuumPumpController, IVacuumPumpTransport
 │   └── weight/                 ← Weight cell service + HTTP transport
 │       ├── interfaces/
 │       └── http/
@@ -55,9 +57,13 @@ src/engine/
 │   ├── enums/                  ← RobotAxis, Direction, ImageToRobotMapping
 │   ├── safety/                 ← SafetyChecker (workspace bounds)
 │   ├── features/               ← NavigationService, RobotToolService
+│   ├── targeting/              ← VisionTargetResolver, JogFramePoseResolver, PointRegistry
+│   ├── height_measuring/       ← Laser height sensor services + correction interpolation
+│   ├── path_interpolation/     ← Linear + spline path densification utilities
 │   ├── services/               ← MotionService, RobotStateManager, RobotService
 │   └── drivers/
 │       └── fairino/            ← FairinoRobot, TestRobotWrapper
+├── work_areas/                 ← IWorkAreaService, WorkAreaService, normalised polygon storage
 └── vision/                     ← IVisionService interface + VisionSystem implementation
     ├── i_vision_service.py     ← IVisionService ABC
     ├── camera_settings_serializer.py
@@ -129,6 +135,12 @@ src/engine/
 | System manager | `SystemManager` / `ISystemManager` | [system/](system/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
+| Targeting | `VisionTargetResolver`, `JogFramePoseResolver` | [robot/targeting/](robot/targeting/README.md) |
+| Height measuring | `IHeightMeasuringService`, `HeightCorrectionService` | [robot/height_measuring/](robot/height_measuring/README.md) |
+| Path interpolation | `interpolate_path_two_stage` | [robot/path_interpolation/](robot/path_interpolation/README.md) |
+| Work areas | `IWorkAreaService`, `WorkAreaService` | [work_areas/](work_areas/README.md) |
+| Laser | `ILaserControl` | [hardware/laser/](hardware/laser/README.md) |
+| Vacuum pump | `IVacuumPumpController`, `IVacuumPumpTransport` | [hardware/vacuum_pump/](hardware/vacuum_pump/README.md) |
 | Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |
 
 ---
