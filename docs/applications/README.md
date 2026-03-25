@@ -45,6 +45,12 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `user_management/` | User account management backed by a CSV repository |
 | `contour_matching_tester/` | Offline workpiece-to-contour match testing tool |
 | `pick_target/` | Manual vision-to-robot target probe for homography, pickup-plane mapping, and TCP-offset debugging |
+| `login/` | Modal login dialog — password auth, QR code scanning, and first-run admin setup |
+| `device_control/` | Manual on/off control panel for laser, vacuum pump, motors, and generator |
+| `height_measuring/` | Laser height sensor calibration, detection tuning, and single-shot verification |
+| `aruco_z_probe/` | ArUco marker Z-sweep tool for measuring camera-Z displacement relationships |
+| `pick_and_place_visualizer/` | Live placement plane visualizer, step-mode debugger, and log panel for pick-and-place |
+| `work_area_settings/` | Shared work-area and detection ROI editor (separate from camera settings) |
 
 ---
 
