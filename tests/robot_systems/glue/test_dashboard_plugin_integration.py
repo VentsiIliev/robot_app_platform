@@ -93,10 +93,11 @@ def _make_robot_system(cells=None, catalog=None):
     ss, _, _ = _make_settings_service(cells, catalog)
     rs       = _make_robot_service()
     app      = MagicMock()
-    app.get_service.return_value          = rs
-    app.get_optional_service.return_value = None
-    app._settings_service                 = ss
-    app.coordinator                       = _make_runner()
+    app.get_service.return_value                   = rs
+    app.get_optional_service.return_value          = None
+    app._settings_service                          = ss
+    app.coordinator                                = _make_runner()
+    app.get_shared_vision_resolver.return_value    = (None, None)
     # app.health_registry is auto-created by MagicMock; .check(name) returns truthy
     return app, rs, ss
 

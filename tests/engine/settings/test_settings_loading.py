@@ -46,12 +46,19 @@ class TestRobotSettingsSerialiser(unittest.TestCase):
         self.assertEqual(restored.robot_user, original.robot_user)
 
     def test_movement_groups_round_trip(self):
+        # movement_groups are serialised under the MOVEMENT_GROUPS key
         original = RobotSettings()
         original.movement_groups["HOME"] = MovementGroup(
             velocity=30, acceleration=30,
             position="[100.0, 0.0, 300.0, 180.0, 0.0, 0.0]"
         )
-        restored = RobotSettings.from_dict(original.to_dict())
+        raw = original.to_dict()
+        # movement_groups are stored separately from RobotSettings; inject manually
+        raw["MOVEMENT_GROUPS"] = {
+            name: {"velocity": g.velocity, "acceleration": g.acceleration, "position": g.position}
+            for name, g in original.movement_groups.items()
+        }
+        restored = RobotSettings.from_dict(raw)
         self.assertIn("HOME", restored.movement_groups)
         self.assertEqual(restored.movement_groups["HOME"].velocity, 30)
         self.assertEqual(

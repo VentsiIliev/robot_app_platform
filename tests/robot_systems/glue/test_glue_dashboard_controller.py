@@ -14,7 +14,7 @@ class TestGlueDashboardController(unittest.TestCase):
         view = MagicMock()
         broker = MagicMock()
         controller = GlueDashboardController(model, view, broker)
-        controller._active = True
+        controller._is_active = True
         controller._run_blocking = MagicMock()
 
         controller._on_start()
@@ -27,7 +27,7 @@ class TestGlueDashboardController(unittest.TestCase):
         view = MagicMock()
         broker = MagicMock()
         controller = GlueDashboardController(model, view, broker)
-        controller._active = False
+        controller._is_active = False
         controller._run_blocking = MagicMock()
 
         controller._on_start()
@@ -39,7 +39,7 @@ class TestGlueDashboardController(unittest.TestCase):
         view = MagicMock()
         broker = MagicMock()
         controller = GlueDashboardController(model, view, broker)
-        controller._active = True
+        controller._is_active = True
         controller._view_ok = MagicMock(return_value=True)
 
         controller._on_process_state_str(ProcessState.ERROR.value, "glue", "Something failed")

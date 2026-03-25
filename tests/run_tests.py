@@ -1,3 +1,4 @@
+import io
 import logging
 import sys
 import unittest
@@ -15,7 +16,8 @@ def run() -> None:
     loader = unittest.TestLoader()
     suite = loader.discover(start_dir=str(TESTS_DIR), pattern="test_*.py", top_level_dir=str(ROOT))
 
-    runner = unittest.TextTestRunner(verbosity=2, stream=sys.stdout)
+    stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    runner = unittest.TextTestRunner(verbosity=2, stream=stream)
     result = runner.run(suite)
 
     total = result.testsRun

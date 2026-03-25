@@ -34,17 +34,17 @@ _STUB_WORKPIECES = [
 class StubContourMatchingTesterService(IContourMatchingTesterService):
 
     def get_workpieces(self) -> list:
-        print("[ContourMatchingTester] get_workpieces → 3 stub workpieces")
+        print("[ContourMatchingTester] get_workpieces -> 3 stub workpieces")
         return list(_STUB_WORKPIECES)
 
     def get_latest_contours(self) -> list:
-        print("[ContourMatchingTester] get_latest_contours → []")
+        print("[ContourMatchingTester] get_latest_contours -> []")
         return []
 
     def run_matching(self, workpieces: list, contours: list) -> Tuple[dict, int, List, List]:
-        print(f"[ContourMatchingTester] run_matching → {len(workpieces)} WPs, {len(contours)} contours")
+        print(f"[ContourMatchingTester] run_matching -> {len(workpieces)} WPs, {len(contours)} contours")
         return {"workpieces": [], "orientations": [], "mlConfidences": [], "mlResults": []}, 0, [], []
 
     def get_thumbnail(self, workpiece_index: int) -> Optional[bytes]:
-        print(f"[ContourMatchingTester] get_thumbnail({workpiece_index}) → None (stub)")
+        print(f"[ContourMatchingTester] get_thumbnail({workpiece_index}) -> None (stub)")
         return None

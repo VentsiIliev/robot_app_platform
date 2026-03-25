@@ -140,16 +140,14 @@ class TestSetPermissions(unittest.TestCase):
 
     def test_user_management_always_retains_admin(self):
         repo = MagicMock(spec=IPermissionsRepository)
-        repo.get_allowed_role_values.return_value = ["Admin"]
-        svc  = AuthorizationService(repo)
+        svc  = AuthorizationService(repo, protected_app_role_values={"user_management": ["Admin"]})
         svc.set_permissions("user_management", ["Operator", "Viewer"])
         stored = repo.set_allowed_role_values.call_args[0][1]
         self.assertIn("Admin", stored)
 
     def test_user_management_retains_other_roles_alongside_admin(self):
         repo = MagicMock(spec=IPermissionsRepository)
-        repo.get_allowed_role_values.return_value = ["Admin"]
-        svc  = AuthorizationService(repo)
+        svc  = AuthorizationService(repo, protected_app_role_values={"user_management": ["Admin"]})
         svc.set_permissions("user_management", ["Admin", "Operator"])
         stored = repo.set_allowed_role_values.call_args[0][1]
         self.assertIn("Admin", stored)

@@ -34,6 +34,7 @@ def _make_robot_system():
     app._settings_service   = ss
     app._messaging_service  = MagicMock()
     app.get_optional_service.return_value = None
+    app.get_shared_vision_resolver.return_value = (None, None)
     return app
 
 

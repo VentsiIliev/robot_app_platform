@@ -56,9 +56,9 @@ class TestJsonPermissionsRepository(unittest.TestCase):
         repo = self._make_repo({"my_app": ["Admin", "Viewer"]})
         self.assertEqual(repo.get_allowed_role_values("my_app"), ["Admin", "Viewer"])
 
-    def test_defaults_to_admin_for_unknown_app(self):
+    def test_defaults_to_empty_for_unknown_app(self):
         repo = self._make_repo({})
-        self.assertEqual(repo.get_allowed_role_values("unknown"), ["Admin"])
+        self.assertEqual(repo.get_allowed_role_values("unknown"), [])
 
     def test_returns_copy_not_internal_reference(self):
         repo = self._make_repo({"app": ["Admin"]})

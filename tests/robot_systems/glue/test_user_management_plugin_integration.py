@@ -6,6 +6,8 @@ Verifies:
 - factory produces a WidgetApplication
 - factory creates the service with a CSV repository
 """
+import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
@@ -14,9 +16,13 @@ from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 
 
 def _make_robot_system():
+    tmp = tempfile.mktemp(suffix=".json")
     app = MagicMock()
     app._settings_service = MagicMock()
     app.get_optional_service.return_value = None
+    app.__class__.role_policy = GlueRobotSystem.role_policy
+    app.permissions_storage_path.return_value = tmp
+    app.users_storage_path.return_value = tempfile.mktemp(suffix=".csv")
     return app
 
 

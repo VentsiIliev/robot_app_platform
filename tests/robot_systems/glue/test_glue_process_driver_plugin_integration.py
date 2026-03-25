@@ -21,6 +21,7 @@ def _make_robot_system():
     robot_system = MagicMock()
     robot_system._settings_service = MagicMock()
     robot_system.get_optional_service.return_value = None
+    robot_system.get_shared_vision_resolver.return_value = (None, None)
     robot_system.coordinator = MagicMock()
     robot_system.coordinator.glue_process = MagicMock()
     robot_system.coordinator.glue_process.get_dispensing_snapshot.return_value = {

@@ -14,11 +14,11 @@ from src.shared_contracts.events.localization_events import LocalizationTopics
 
 class TestDictTranslator(unittest.TestCase):
 
-    def test_translate_returns_empty_string_on_miss(self):
+    def test_translate_returns_none_on_miss(self):
         translator = DictTranslator({"Ctx": {"Hello": "Hallo"}})
 
-        self.assertEqual(translator.translate("Ctx", "Missing"), "")
-        self.assertEqual(translator.translate("Other", "Hello"), "")
+        self.assertIsNone(translator.translate("Ctx", "Missing"))
+        self.assertIsNone(translator.translate("Other", "Hello"))
 
     def test_is_empty_reflects_loaded_data(self):
         self.assertTrue(DictTranslator({}).isEmpty())

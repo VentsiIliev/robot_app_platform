@@ -1,6 +1,5 @@
 import numpy as np
 import numpy.typing as npt
-from scipy.interpolate import UnivariateSpline
 
 
 def _compute_arc_length_parameterization(path_array: npt.NDArray) -> tuple[npt.NDArray, float]:
@@ -75,6 +74,7 @@ def _fit_spline_dimension(
         Interpolated values at *t_new*, shape (M,).
     """
     try:
+        from scipy.interpolate import UnivariateSpline
         spline = UnivariateSpline(t, values, k=k, s=smoothing_lambda)
         return spline(t_new)
     except Exception as e:

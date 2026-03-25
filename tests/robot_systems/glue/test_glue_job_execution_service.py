@@ -164,6 +164,7 @@ class TestGlueJobExecutionService(unittest.TestCase):
             [],
             [],
         )
+        matching.get_last_capture_snapshot.return_value = None  # force fallback to vision service
         builder = MagicMock()
         builder.build_job.return_value = _job()
         builder.to_process_paths.return_value = [
