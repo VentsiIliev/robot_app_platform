@@ -11,7 +11,7 @@ from src.shared_contracts.events.weight_events import CellState, CellStateEvent,
 
 
 def _calib():
-    return CalibrationConfig(0.0, 1.0, False)
+    return CalibrationConfig(0.0, 1.0)
 
 def _meas():
     return MeasurementConfig(10, 1.0, 5, 0.0, 1000.0)

@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.vision.implementation.VisionSystem.core.models.contour import Contour
+from src.engine.robot.targeting.vision_target_resolver import TargetTransformResult
 from src.robot_systems.glue.domain.workpieces.model.glue_workpiece import GlueWorkpiece
 from src.robot_systems.glue.processes.pick_and_place.config import PickAndPlaceConfig, PlaneConfig
 from src.robot_systems.glue.processes.pick_and_place.errors import PickAndPlaceErrorCode, PickAndPlaceStage
@@ -16,6 +17,22 @@ from src.robot_systems.glue.processes.pick_and_place.planning import (
 )
 from src.robot_systems.glue.processes.pick_and_place.workflow import PickAndPlaceWorkflow
 from src.shared_contracts.events.process_events import ProcessState
+
+
+def _make_resolver(x=10.0, y=20.0):
+    resolver = MagicMock()
+    resolver.registry.by_name.return_value = MagicMock()
+    result = TargetTransformResult(
+        calibration_xy=(x, y),
+        plane_xy=(x, y),
+        final_xy=(x, y),
+        z=0.0,
+        rx=180.0,
+        ry=0.0,
+        rz=0.0,
+    )
+    resolver.resolve.return_value = result
+    return resolver
 
 
 class TestPickupCalculator(unittest.TestCase):
@@ -103,8 +120,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
-        transformer = MagicMock()
-        transformer.transform.return_value = (10.0, 20.0)
+        transformer = _make_resolver(10.0, 20.0)
         run_allowed = threading.Event()
         run_allowed.set()
 
@@ -114,7 +130,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             matching=matching,
             tools=tools,
             height=None,
-            transformer=transformer,
+            resolver=transformer,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             on_diagnostics=lambda snapshot: diagnostics.append(snapshot),
@@ -142,8 +158,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
-        transformer = MagicMock()
-        transformer.transform.return_value = (10.0, 20.0)
+        transformer = _make_resolver(10.0, 20.0)
         config = PickAndPlaceConfig()
         run_allowed = threading.Event()
         run_allowed.set()
@@ -154,7 +169,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             matching=matching,
             tools=tools,
             height=None,
-            transformer=transformer,
+            resolver=transformer,
             config=config,
             logger=logging.getLogger("pick-and-place-test"),
         )
@@ -182,8 +197,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
-        transformer = MagicMock()
-        transformer.transform.return_value = (10.0, 20.0)
+        transformer = _make_resolver(10.0, 20.0)
         run_allowed = threading.Event()
         run_allowed.set()
 
@@ -193,7 +207,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             matching=matching,
             tools=tools,
             height=None,
-            transformer=transformer,
+            resolver=transformer,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             step_gate=lambda name, _snapshot: checkpoints.append(name) or True,
@@ -239,7 +253,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             matching=matching,
             tools=tools,
             height=None,
-            transformer=transformer,
+            resolver=transformer,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             step_gate=lambda _name, _snapshot: False,

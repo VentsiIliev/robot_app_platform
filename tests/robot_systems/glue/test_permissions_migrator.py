@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import MagicMock, call
 
 from src.engine.auth.i_permissions_repository import IPermissionsRepository
-from src.robot_systems.glue.domain.permissions.permissions_migrator import ensure_permissions_current
+from src.engine.auth.permissions_migrator import ensure_permissions_current
 
 
 def _repo(data: dict) -> IPermissionsRepository:
@@ -22,12 +22,12 @@ class TestEnsurePermissionsCurrent(unittest.TestCase):
 
     def test_adds_missing_app_id_with_admin_default(self):
         repo = _repo({})
-        ensure_permissions_current(repo, known_app_ids=["dashboard"])
+        ensure_permissions_current(repo, known_app_ids=["dashboard"], default_role_values=["Admin"])
         repo.set_allowed_role_values.assert_called_once_with("dashboard", ["Admin"])
 
     def test_does_not_overwrite_existing_entry(self):
         repo = _repo({"dashboard": ["Admin", "Operator"]})
-        ensure_permissions_current(repo, known_app_ids=["dashboard"])
+        ensure_permissions_current(repo, known_app_ids=["dashboard"], default_role_values=["Admin"])
         repo.set_allowed_role_values.assert_not_called()
 
     def test_removes_stale_key_no_longer_in_known_ids(self):
@@ -35,18 +35,18 @@ class TestEnsurePermissionsCurrent(unittest.TestCase):
         # Capture what was written back
         written = {}
         repo.set_allowed_role_values.side_effect = lambda k, v: written.update({k: v})
-        ensure_permissions_current(repo, known_app_ids=[])
+        ensure_permissions_current(repo, known_app_ids=[], default_role_values=["Admin"])
         # old_app must not appear in any set_allowed_role_values call
         self.assertNotIn("old_app", written)
 
     def test_no_writes_when_already_in_sync(self):
         repo = _repo({"dashboard": ["Admin"], "settings": ["Admin"]})
-        ensure_permissions_current(repo, known_app_ids=["dashboard", "settings"])
+        ensure_permissions_current(repo, known_app_ids=["dashboard", "settings"], default_role_values=["Admin"])
         repo.set_allowed_role_values.assert_not_called()
 
     def test_adds_multiple_missing_apps(self):
         repo = _repo({})
-        ensure_permissions_current(repo, known_app_ids=["app_a", "app_b", "app_c"])
+        ensure_permissions_current(repo, known_app_ids=["app_a", "app_b", "app_c"], default_role_values=["Admin"])
         calls = {c.args[0] for c in repo.set_allowed_role_values.call_args_list}
         self.assertEqual(calls, {"app_a", "app_b", "app_c"})
 
@@ -54,7 +54,7 @@ class TestEnsurePermissionsCurrent(unittest.TestCase):
         repo = _repo({"stale_app": ["Admin"], "kept_app": ["Admin", "Operator"]})
         written = {}
         repo.set_allowed_role_values.side_effect = lambda k, v: written.update({k: v})
-        ensure_permissions_current(repo, known_app_ids=["kept_app", "new_app"])
+        ensure_permissions_current(repo, known_app_ids=["kept_app", "new_app"], default_role_values=["Admin"])
         # new_app should be added
         self.assertIn("new_app", written)
         # kept_app already exists and has correct values — not rewritten
@@ -66,7 +66,7 @@ class TestEnsurePermissionsCurrent(unittest.TestCase):
         repo = _repo({"app_a": ["Admin"], "app_b": ["Admin"]})
         written = {}
         repo.set_allowed_role_values.side_effect = lambda k, v: written.update({k: v})
-        ensure_permissions_current(repo, known_app_ids=[])
+        ensure_permissions_current(repo, known_app_ids=[], default_role_values=["Admin"])
         self.assertEqual(written, {})
 
 

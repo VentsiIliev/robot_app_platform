@@ -6,7 +6,8 @@ from unittest.mock import MagicMock
 from PyQt6.QtWidgets import QApplication
 from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-from src.robot_systems.glue.service_ids import ServiceID
+from src.engine.common_service_ids import CommonServiceID
+from src.robot_systems.glue.component_ids import ServiceID
 
 
 def _spec():
@@ -58,7 +59,7 @@ class TestGlueProcessDriverApplicationFactory(unittest.TestCase):
 
         _spec().factory(robot_system)
 
-        robot_system.get_optional_service.assert_any_call(ServiceID.VISION)
+        robot_system.get_optional_service.assert_any_call(CommonServiceID.VISION)
 
     def test_register_stores_messaging_service(self):
         application = _spec().factory(_make_robot_system())

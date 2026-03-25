@@ -14,7 +14,7 @@ from src.engine.robot.configuration import (
     RobotSettingsSerializer,
     SafetyLimits,
 )
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 
 APP_NAME = GlueRobotSystem.__name__.lower()  # "gluerobotsystem" — derived from actual class
 
@@ -79,7 +79,7 @@ class TestRobotSettingsSerializer(unittest.TestCase):
         self.serializer = RobotSettingsSerializer()
 
     def test_settings_type(self):
-        self.assertEqual(self.serializer.settings_type, SettingsID.ROBOT_CONFIG)
+        self.assertEqual(self.serializer.settings_type, CommonSettingsID.ROBOT_CONFIG)
 
     def test_get_default_returns_robot_settings(self):
         default = self.serializer.get_default()
@@ -101,10 +101,10 @@ class TestSettingsServiceIntegration(unittest.TestCase):
 
     def test_creates_default_file_and_loads_on_first_run(self):
         with tempfile.TemporaryDirectory() as tmp:
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
-            config = service.get(SettingsID.ROBOT_CONFIG)
+            config = service.get(CommonSettingsID.ROBOT_CONFIG)
 
             expected_path = os.path.join(tmp, APP_NAME, "robot", "config.json")
             self.assertTrue(os.path.exists(expected_path))
@@ -119,20 +119,20 @@ class TestSettingsServiceIntegration(unittest.TestCase):
             with open(path, "w") as f:
                 json.dump({"ROBOT_IP": "10.0.0.99", "ROBOT_TOOL": 5}, f)
 
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
-            config = service.get(SettingsID.ROBOT_CONFIG)
+            config = service.get(CommonSettingsID.ROBOT_CONFIG)
 
             self.assertEqual(config.robot_ip, "10.0.0.99")
             self.assertEqual(config.robot_tool, 5)
 
     def test_get_returns_cached_instance(self):
         with tempfile.TemporaryDirectory() as tmp:
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
-            first  = service.get(SettingsID.ROBOT_CONFIG)
-            second = service.get(SettingsID.ROBOT_CONFIG)
+            first  = service.get(CommonSettingsID.ROBOT_CONFIG)
+            second = service.get(CommonSettingsID.ROBOT_CONFIG)
             self.assertIs(first, second)
 
     def test_reload_returns_fresh_instance(self):
@@ -142,33 +142,33 @@ class TestSettingsServiceIntegration(unittest.TestCase):
             with open(path, "w") as f:
                 json.dump({"ROBOT_IP": "10.0.0.1", "ROBOT_TOOL": 1}, f)
 
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
-            first = service.get(SettingsID.ROBOT_CONFIG)
+            first = service.get(CommonSettingsID.ROBOT_CONFIG)
             self.assertEqual(first.robot_ip, "10.0.0.1")
 
             with open(path, "w") as f:
                 json.dump({"ROBOT_IP": "10.0.0.2", "ROBOT_TOOL": 1}, f)
 
-            reloaded = service.reload(SettingsID.ROBOT_CONFIG)
+            reloaded = service.reload(CommonSettingsID.ROBOT_CONFIG)
             self.assertEqual(reloaded.robot_ip, "10.0.0.2")
             self.assertIsNot(first, reloaded)
 
     def test_save_persists_to_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
-            config = service.get(SettingsID.ROBOT_CONFIG)
+            config = service.get(CommonSettingsID.ROBOT_CONFIG)
             config.robot_ip = "192.168.1.50"
-            service.save(SettingsID.ROBOT_CONFIG, config)
+            service.save(CommonSettingsID.ROBOT_CONFIG, config)
 
-            reloaded = service.reload(SettingsID.ROBOT_CONFIG)
+            reloaded = service.reload(CommonSettingsID.ROBOT_CONFIG)
             self.assertEqual(reloaded.robot_ip, "192.168.1.50")
 
     def test_not_enum_key_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
-            specs = [SettingsSpec(SettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
+            specs = [SettingsSpec(CommonSettingsID.ROBOT_CONFIG, RobotSettingsSerializer(), "robot/config.json")]
             service = build_from_specs(specs, settings_root=tmp, system_class=GlueRobotSystem)
 
             with self.assertRaises(TypeError):

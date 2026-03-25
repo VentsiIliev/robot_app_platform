@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.process.process_sequence import ProcessSequence
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.robot_systems.glue.processes.clean_process import CleanProcess
 from src.robot_systems.glue.processes.glue_operation_mode import GlueOperationMode
 from src.robot_systems.glue.processes.glue_operation_coordinator import GlueOperationCoordinator
@@ -54,7 +54,7 @@ def _robot(): return MagicMock()
 def _navigation_service(): return MagicMock()
 def _motor(): return MagicMock()
 def _resolver(): return MagicMock()
-def _glue_process(): return GlueProcess(robot_service=_robot(), motor_service=_motor(), resolver=_resolver(), config=GlueDispensingConfig(), navigation_service=_navigation_service(), messaging=_ms())
+def _glue_process(): return GlueProcess(robot_service=_robot(), motor_service=_motor(), dispense_channels=MagicMock(), config=GlueDispensingConfig(), navigation_service=_navigation_service(), messaging=_ms())
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CleanProcess

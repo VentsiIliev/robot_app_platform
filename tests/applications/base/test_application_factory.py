@@ -25,7 +25,8 @@ from src.applications.base.i_application_view import IApplicationView
 
 class _SimpleView:
     """Minimal stand-in for a view — plain object so attribute assignment is detectable."""
-    pass
+    def clean_up(self):
+        pass
 
 
 def _make_factory(model=None, view=None, controller=None):

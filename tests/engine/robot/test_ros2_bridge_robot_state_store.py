@@ -9,7 +9,10 @@ _ROS2_SCRIPTS_DIR = Path(
 if str(_ROS2_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_ROS2_SCRIPTS_DIR))
 
-from status.robot_state_store import RobotStateStore  # type: ignore
+try:
+    from status.robot_state_store import RobotStateStore  # type: ignore
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class TestRos2BridgeRobotStateStore(unittest.TestCase):

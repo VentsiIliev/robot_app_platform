@@ -7,6 +7,29 @@ from src.robot_systems.glue.domain.glue_job_builder_service import (
     GlueJobBuildError,
     GlueJobBuilderService,
 )
+from src.engine.robot.targeting.vision_target_resolver import TargetTransformResult
+
+
+def _make_resolver(offset_x=100.0, offset_y=200.0, z=0.0):
+    """Create a mock VisionTargetResolver that offsets coordinates."""
+    resolver = MagicMock()
+    resolver.registry.by_name.return_value = MagicMock()
+
+    def _resolve(request, point, **kwargs):
+        x = request.x_pixels + offset_x
+        y = request.y_pixels + offset_y
+        return TargetTransformResult(
+            calibration_xy=(x, y),
+            plane_xy=(x, y),
+            final_xy=(x, y),
+            z=request.z_mm,
+            rx=request.rx_degrees,
+            ry=request.ry_degrees,
+            rz=request.rz_degrees,
+        )
+
+    resolver.resolve.side_effect = _resolve
+    return resolver
 
 
 def _segment_settings(**overrides):
@@ -84,10 +107,8 @@ def _glue_workpiece(workpiece_id="111"):
 
 class TestGlueJobBuilderService(unittest.TestCase):
     def _service(self):
-        transformer = MagicMock()
-        transformer.is_available.return_value = True
-        transformer.transform.side_effect = lambda x, y: (x + 100.0, y + 200.0)
-        return GlueJobBuilderService(transformer=transformer, z_min=50.0), transformer
+        resolver = _make_resolver(offset_x=100.0, offset_y=200.0)
+        return GlueJobBuilderService(resolver=resolver, z_min=50.0), resolver
 
     def test_build_job_extracts_segments_in_contour_then_fill_order(self):
         service, _ = self._service()
@@ -169,10 +190,8 @@ class TestGlueJobBuilderService(unittest.TestCase):
 
         self.assertEqual(job.segments[0].points, [[101.0, 202.0, 70.0, 180.0, 0.0, 0.0], [103.0, 204.0, 70.0, 180.0, 0.0, 0.0]])
 
-    def test_build_job_raises_when_transformer_is_unavailable(self):
-        transformer = MagicMock()
-        transformer.is_available.return_value = False
-        service = GlueJobBuilderService(transformer=transformer, z_min=50.0)
+    def test_build_job_raises_when_resolver_is_unavailable(self):
+        service = GlueJobBuilderService(resolver=None, z_min=50.0)
 
         with self.assertRaises(GlueJobBuildError):
             service.build_job([_workpiece()])

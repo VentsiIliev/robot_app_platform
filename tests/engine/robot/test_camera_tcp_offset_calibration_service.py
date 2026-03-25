@@ -138,8 +138,8 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
 
             self.assertTrue(ok)
             self.assertIn("Camera TCP offset calibrated", msg)
-            self.assertAlmostEqual(robot_config.tcp_x_offset, expected_local_x, places=3)
-            self.assertAlmostEqual(robot_config.tcp_y_offset, expected_local_y, places=3)
+            self.assertAlmostEqual(robot_config.camera_to_tcp_x_offset, expected_local_x, places=3)
+            self.assertAlmostEqual(robot_config.camera_to_tcp_y_offset, expected_local_y, places=3)
             self.assertEqual(navigation.called, 1)
             self.assertEqual(len(settings.saved), 1)
             saved_key, saved_config = settings.saved[0]

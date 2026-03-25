@@ -3,7 +3,8 @@ from unittest.mock import MagicMock
 
 from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-from src.robot_systems.glue.service_ids import ServiceID
+from src.engine.common_service_ids import CommonServiceID
+from src.robot_systems.glue.component_ids import ServiceID
 
 
 def _make_robot_system():
@@ -50,7 +51,7 @@ class TestCalibrationApplicationFactory(unittest.TestCase):
         spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "Calibration")
         robot_app = _make_robot_system()
         spec.factory(robot_app)
-        robot_app.get_optional_service.assert_any_call(ServiceID.VISION)
+        robot_app.get_optional_service.assert_any_call(CommonServiceID.VISION)
 
     def test_register_stores_messaging_service(self):
         application, _ = self._build()

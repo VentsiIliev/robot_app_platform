@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from src.robot_systems.glue.applications.glue_process_driver.controller.glue_process_driver_controller import (
     GlueProcessDriverController,
 )
-from src.robot_systems.glue.process_ids import ProcessID
+from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.glue_process_events import GlueProcessTopics
 from src.shared_contracts.events.process_events import ProcessState, ProcessStateEvent, ProcessTopics
 

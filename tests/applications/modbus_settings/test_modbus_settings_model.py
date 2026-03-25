@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.applications.modbus_settings.model.mapper import ModbusSettingsMapper
 from src.applications.modbus_settings.model.modbus_settings_model import ModbusSettingsModel
@@ -194,28 +194,28 @@ class TestModbusSettingsApplicationService(unittest.TestCase):
     def test_load_config_reads_correct_key(self):
         from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
         ss, cfg = self._make_ss()
-        self.assertIs(ModbusSettingsApplicationService(ss,SettingsID.MODBUS_CONFIG).load_config(), cfg)
+        self.assertIs(ModbusSettingsApplicationService(ss,CommonSettingsID.MODBUS_CONFIG).load_config(), cfg)
         ss.get.assert_called_with("modbus_config")
 
     def test_save_config_writes_correct_key(self):
         from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
         ss, _ = self._make_ss()
         new   = ModbusConfig(port="COM7")
-        ModbusSettingsApplicationService(ss,SettingsID.MODBUS_CONFIG).save_config(new)
+        ModbusSettingsApplicationService(ss,CommonSettingsID.MODBUS_CONFIG).save_config(new)
         ss.save.assert_called_once_with("modbus_config", new)
 
     def test_service_has_no_detect_ports_method(self):
         """detect_ports belongs to IModbusActionService — not to the settings service."""
         from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
         ss, _ = self._make_ss()
-        svc   = ModbusSettingsApplicationService(ss,SettingsID.MODBUS_CONFIG)
+        svc   = ModbusSettingsApplicationService(ss,CommonSettingsID.MODBUS_CONFIG)
         self.assertFalse(hasattr(svc, "detect_ports"))
 
     def test_service_has_no_test_connection_method(self):
         """test_connection belongs to IModbusActionService — not to the settings service."""
         from src.applications.modbus_settings.service.modbus_settings_application_service import ModbusSettingsApplicationService
         ss, _ = self._make_ss()
-        svc   = ModbusSettingsApplicationService(ss,config_key=SettingsID.MODBUS_CONFIG)
+        svc   = ModbusSettingsApplicationService(ss,config_key=CommonSettingsID.MODBUS_CONFIG)
         self.assertFalse(hasattr(svc, "test_connection"))
 
 

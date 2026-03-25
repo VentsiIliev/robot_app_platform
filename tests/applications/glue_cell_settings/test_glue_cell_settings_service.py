@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.robot_systems.glue.component_ids import SettingsID
 from src.engine.hardware.weight.config import (
     CalibrationConfig, CellConfig, CellsConfig, MeasurementConfig,
 )
@@ -12,7 +12,7 @@ def _cells():
     return CellsConfig(cells=[
         CellConfig(id=0, type="T", url="http://h/w0", capacity=500.0,
                    fetch_timeout_seconds=5.0, data_fetch_interval_ms=500,
-                   calibration=CalibrationConfig(0.0, 1.0, False),
+                   calibration=CalibrationConfig(0.0, 1.0),
                    measurement=MeasurementConfig(10, 1.0, 5, 0.0, 1000.0)),
     ])
 

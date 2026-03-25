@@ -1,20 +1,24 @@
 import unittest
 from unittest.mock import MagicMock, call
 
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration import (
     RobotSettings,
     RobotCalibrationSettings,
     MovementGroup,
+    MovementGroupSettings,
 )
+from src.shared_contracts.declarations import MovementGroupDefinition, MovementGroupType
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper, RobotCalibrationMapper
 from src.applications.robot_settings.model.robot_settings_model import RobotSettingsModel
 
 
 def _make_service(config=None, calibration=None):
     service = MagicMock()
-    service.load_config.return_value      = config      or RobotSettings()
-    service.load_calibration.return_value = calibration or RobotCalibrationSettings()
+    service.load_config.return_value          = config      or RobotSettings()
+    service.load_calibration.return_value     = calibration or RobotCalibrationSettings()
+    service.load_movement_groups.return_value = MovementGroupSettings()
+    service.get_movement_group_definitions.return_value = []
     return service
 
 
@@ -31,7 +35,7 @@ class TestRobotSettingsModelLoad(unittest.TestCase):
         cfg   = RobotSettings(robot_ip="1.2.3.4")
         calib = RobotCalibrationSettings(z_target=500)
         model = RobotSettingsModel(_make_service(cfg, calib))
-        returned_cfg, returned_calib = model.load()
+        returned_cfg, returned_calib, _ = model.load()
         self.assertEqual(returned_cfg.robot_ip, "1.2.3.4")
         self.assertEqual(returned_calib.z_target, 500)
 
@@ -75,8 +79,7 @@ class TestRobotSettingsModelSave(unittest.TestCase):
         flat   = RobotSettingsMapper.to_flat_dict(RobotSettings())
         groups = {"HOME_POS": MovementGroup(velocity=100, acceleration=50)}
         model.save(flat, groups)
-        saved_config = service.save_config.call_args[0][0]
-        self.assertIn("HOME_POS", saved_config.movement_groups)
+        service.save_movement_groups.assert_called_once_with(groups)
 
     def test_save_updates_internal_config(self):
         model, service = self._loaded_model(RobotSettings(robot_ip="1.1.1.1"))
@@ -116,20 +119,20 @@ class TestRobotSettingsApplicationService(unittest.TestCase):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         cfg = RobotSettings(robot_ip="7.7.7.7")
         ss  = self._make_settings_service(config=cfg)
-        svc = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
+        svc = RobotSettingsApplicationService(ss, config_key=CommonSettingsID.ROBOT_CONFIG, movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS, calibration_key=CommonSettingsID.ROBOT_CALIBRATION)
         self.assertEqual(svc.load_config().robot_ip, "7.7.7.7")
 
     def test_load_calibration_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         calib = RobotCalibrationSettings(z_target=999)
         ss    = self._make_settings_service(calibration=calib)
-        svc   = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
+        svc   = RobotSettingsApplicationService(ss, config_key=CommonSettingsID.ROBOT_CONFIG, movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS, calibration_key=CommonSettingsID.ROBOT_CALIBRATION)
         self.assertEqual(svc.load_calibration().z_target, 999)
 
     def test_save_config_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         ss  = MagicMock()
-        svc = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
+        svc = RobotSettingsApplicationService(ss, config_key=CommonSettingsID.ROBOT_CONFIG, movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS, calibration_key=CommonSettingsID.ROBOT_CALIBRATION)
         cfg = RobotSettings()
         svc.save_config(cfg)
         ss.save.assert_called_once_with("robot_config", cfg)
@@ -137,7 +140,7 @@ class TestRobotSettingsApplicationService(unittest.TestCase):
     def test_save_calibration_delegates_to_settings_service(self):
         from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
         ss    = MagicMock()
-        svc   = RobotSettingsApplicationService(ss,config_key=SettingsID.ROBOT_CONFIG,calibration_key=SettingsID.ROBOT_CALIBRATION)
+        svc   = RobotSettingsApplicationService(ss, config_key=CommonSettingsID.ROBOT_CONFIG, movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS, calibration_key=CommonSettingsID.ROBOT_CALIBRATION)
         calib = RobotCalibrationSettings()
         svc.save_calibration(calib)
         ss.save.assert_called_once_with("robot_calibration", calib)
@@ -183,38 +186,30 @@ class TestRobotSettingsModelMotionDelegation(unittest.TestCase):
 
 class TestRobotSettingsModelExpectedMovementGroups(unittest.TestCase):
 
-    def _loaded(self, config=None):
-        cfg     = config or RobotSettings()
-        service = _make_service(config=cfg)
-        service.get_slot_info.return_value = []
-        model   = RobotSettingsModel(service)
+    def _loaded(self, movement_groups=None):
+        service = _make_service()
+        service.load_movement_groups.return_value = MovementGroupSettings(
+            movement_groups=dict(movement_groups or {})
+        )
+        model = RobotSettingsModel(service)
         model.load()
         return model, service
 
     def test_returns_existing_groups(self):
-        cfg = RobotSettings()
-        cfg.movement_groups = {"HOME": MovementGroup(velocity=50)}
-        model, _ = self._loaded(cfg)
+        model, _ = self._loaded({"HOME": MovementGroup(velocity=50)})
         self.assertIn("HOME", model.get_expected_movement_groups())
 
-    def test_adds_pickup_and_dropoff_for_assigned_tool(self):
+    def test_adds_groups_from_definitions(self):
         model, service = self._loaded()
-        service.get_slot_info.return_value = [(1, "Gripper")]
+        defn = MovementGroupDefinition("SLOT 1 PICKUP", MovementGroupType.MULTI_POSITION)
+        service.get_movement_group_definitions.return_value = [defn]
         result = model.get_expected_movement_groups()
-        self.assertIn("SLOT 1 PICKUP",  result)
-        self.assertIn("SLOT 1 DROPOFF", result)
+        self.assertIn("SLOT 1 PICKUP", result)
 
-    def test_skips_slot_with_no_tool(self):
-        model, service = self._loaded()
-        service.get_slot_info.return_value = [(1, None)]
-        result = model.get_expected_movement_groups()
-        self.assertNotIn("SLOT 1 PICKUP", result)
-
-    def test_does_not_overwrite_existing_slot_group(self):
-        cfg = RobotSettings()
-        cfg.movement_groups["SLOT 1 PICKUP"] = MovementGroup(velocity=99)
-        model, service = self._loaded(cfg)
-        service.get_slot_info.return_value = [(1, "Gripper")]
+    def test_does_not_overwrite_existing_group_from_definitions(self):
+        model, service = self._loaded({"SLOT 1 PICKUP": MovementGroup(velocity=99)})
+        defn = MovementGroupDefinition("SLOT 1 PICKUP", MovementGroupType.MULTI_POSITION)
+        service.get_movement_group_definitions.return_value = [defn]
         result = model.get_expected_movement_groups()
         self.assertEqual(result["SLOT 1 PICKUP"].velocity, 99)
 

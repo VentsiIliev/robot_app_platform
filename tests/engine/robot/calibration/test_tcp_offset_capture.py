@@ -32,8 +32,8 @@ class TestFinalizeTcpOffsetCalibration(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertIn("tcp_x_offset", message)
-        self.assertAlmostEqual(ctx.robot_config.tcp_x_offset, 10.25, places=3)
-        self.assertAlmostEqual(ctx.robot_config.tcp_y_offset, -20.0, places=3)
+        self.assertAlmostEqual(ctx.robot_config.camera_to_tcp_x_offset, 10.25, places=3)
+        self.assertAlmostEqual(ctx.robot_config.camera_to_tcp_y_offset, -20.0, places=3)
         ctx.settings_service.save.assert_called_once_with("robot_config", ctx.robot_config)
 
     def test_rejects_result_when_sample_spread_is_too_high(self):

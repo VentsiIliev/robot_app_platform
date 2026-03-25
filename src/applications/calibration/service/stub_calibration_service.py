@@ -28,6 +28,15 @@ class StubCalibrationService(ICalibrationService):
         _logger.info("Stub: calibrate_camera_tcp_offset")
         return True, "Stub: camera TCP offset calibrated"
 
+    def calibrate_laser(self) -> tuple[bool, str]:
+        _logger.info("Stub: calibrate_laser")
+        return True, "Stub: laser calibrated"
+
+    def detect_laser_once(self):
+        from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
+        _logger.info("Stub: detect_laser_once")
+        return LaserDetectionResult(ok=True, message="Stub: laser detected")
+
     def stop_calibration(self) -> None:
         _logger.info("Stub: stop_calibration")
 

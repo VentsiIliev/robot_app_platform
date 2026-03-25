@@ -42,8 +42,7 @@ def _make_ctrl(**model_overrides):
     model       = _make_model(**model_overrides)
     view        = _make_view()
     broker      = _make_broker()
-    jog_service = MagicMock()
-    ctrl        = CalibrationController(model, view, broker, jog_service)
+    ctrl        = CalibrationController(model, view, broker)
     return ctrl, model, view, broker
 
 

@@ -9,8 +9,11 @@ _ROS2_SCRIPTS_DIR = Path(
 if str(_ROS2_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_ROS2_SCRIPTS_DIR))
 
-from motion.execution.motion_coordinator import MotionCoordinator  # type: ignore
-from motion.execution.motion_queue import MotionQueue  # type: ignore
+try:
+    from motion.execution.motion_coordinator import MotionCoordinator  # type: ignore
+    from motion.execution.motion_queue import MotionQueue  # type: ignore
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class _FakeLogger:

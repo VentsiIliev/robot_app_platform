@@ -4,9 +4,6 @@ import time
 from typing import List, Optional, Tuple
 
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import cross_val_score
-from sklearn.preprocessing import PolynomialFeatures
 
 from src.engine.repositories.interfaces.settings_repository import ISettingsRepository
 from src.engine.robot.height_measuring.laser_calibration_data import LaserCalibrationData
@@ -127,6 +124,10 @@ class LaserCalibrationService:
         robot_initial_position: List[float],
         zero_ref: Tuple[float, float],
     ) -> LaserCalibrationData:
+        from sklearn.linear_model import LinearRegression  # lazy import — sklearn not always available
+        from sklearn.model_selection import cross_val_score
+        from sklearn.preprocessing import PolynomialFeatures
+
         heights = np.array([h for h, _ in points])
         deltas  = np.array([d for _, d in points]).reshape(-1, 1)
         cv_folds = min(5, len(points))

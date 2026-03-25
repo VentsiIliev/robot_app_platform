@@ -10,9 +10,12 @@ _ROS2_SCRIPTS_DIR = Path(
 if str(_ROS2_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_ROS2_SCRIPTS_DIR))
 
-from fairino_ros2_robot import FairinoRos2Robot  # type: ignore
-from motion.execution.motion_queue import MotionQueue  # type: ignore
-from enums import RobotAxis, Direction  # type: ignore
+try:
+    from fairino_ros2_robot import FairinoRos2Robot  # type: ignore
+    from motion.execution.motion_queue import MotionQueue  # type: ignore
+    from enums import RobotAxis, Direction  # type: ignore
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class _FakeLogger:

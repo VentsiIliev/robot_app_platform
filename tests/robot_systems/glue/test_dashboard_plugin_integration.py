@@ -56,7 +56,7 @@ def _make_glue_process(robot_service=None, messaging=None, navigation_service=No
     return GlueProcess(
         robot_service=robot_service or _make_robot_service(),
         motor_service=_make_motor_service(),
-        resolver=MagicMock(),
+        dispense_channels=MagicMock(),
         config=GlueDispensingConfig(),
         navigation_service=navigation_service or _make_navigation_service(),
         messaging=messaging or _make_messaging(),
@@ -169,8 +169,8 @@ class TestDashboardApplicationFactory(unittest.TestCase):
         vision.camera_to_robot_matrix_path = "/tmp/fake_matrix.npy"
         app._robot_config = MagicMock()
         app._robot_config.safety_limits.z_min = 100.0
-        app._robot_config.tcp_x_offset = 0.0
-        app._robot_config.tcp_y_offset = 0.0
+        app._robot_config.camera_to_tcp_x_offset = 0.0
+        app._robot_config.camera_to_tcp_y_offset = 0.0
         app.get_optional_service.side_effect = lambda service_id: vision if service_id == "vision" else None
         spec = next(s for s in GlueRobotSystem.shell.applications if s.name == "GlueDashboard")
         application = spec.factory(app)

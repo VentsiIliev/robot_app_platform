@@ -1,10 +1,12 @@
 import logging
 import time
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List
 
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import PolynomialFeatures
+
+if TYPE_CHECKING:
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import PolynomialFeatures
 
 from src.engine.repositories.interfaces.settings_repository import ISettingsRepository
 from src.engine.robot.height_measuring.depth_map_data import DepthMapData, DepthMapLibraryData
@@ -165,6 +167,9 @@ class HeightMeasuringService(IHeightMeasuringService):
 
     def _load_calibration(self) -> None:
         try:
+            from sklearn.linear_model import LinearRegression  # lazy import — sklearn not always available
+            from sklearn.preprocessing import PolynomialFeatures
+
             data = self._repo.load()
             if not data.is_calibrated():
                 _logger.info("No calibration data found")

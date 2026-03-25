@@ -25,7 +25,7 @@ class TestRobotSettingsFactory(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication(sys.argv)
 
     def _make_factory(self):
-        return RobotSettingsFactory(MagicMock(), MagicMock())
+        return RobotSettingsFactory()
 
     def test_build_returns_robot_settings_view(self):
         result = self._make_factory().build(_make_service())

@@ -40,9 +40,12 @@ if "control_msgs.action" not in sys.modules:
     sys.modules["control_msgs.action"] = control_msgs_action
     sys.modules["control_msgs.msg"] = control_msgs_msg
 
-from motion.execution.motion_coordinator import MotionCoordinator  # type: ignore
-from motion.execution.motion_queue import MotionQueue  # type: ignore
-from motion.execution.trajectory_executor import TrajectoryExecutor  # type: ignore
+try:
+    from motion.execution.motion_coordinator import MotionCoordinator  # type: ignore
+    from motion.execution.motion_queue import MotionQueue  # type: ignore
+    from motion.execution.trajectory_executor import TrajectoryExecutor  # type: ignore
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class _FakeLogger:

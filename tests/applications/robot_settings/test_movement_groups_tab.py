@@ -3,9 +3,10 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.robot.configuration import MovementGroup
+from src.shared_contracts.declarations import MovementGroupDefinition as MovementGroupDef, MovementGroupType
 from src.applications.robot_settings.view.movement_groups_tab import (
-    MovementGroupDef, MovementGroupType, MovementGroupsTab,
-    MovementGroupWidget, PositionEditorDialog, MOVEMENT_GROUP_DEFINITIONS,
+    MovementGroupsTab,
+    MovementGroupWidget, PositionEditorDialog,
 )
 
 
@@ -63,22 +64,7 @@ class TestMovementGroupsTabInferDef(unittest.TestCase):
 
     def test_name_preserved(self):
         defn = MovementGroupsTab._infer_def("MY_GROUP", MovementGroup())
-        self.assertEqual(defn.name, "MY_GROUP")
-
-
-class TestMovementGroupDefinitions(unittest.TestCase):
-
-    def test_home_pos_is_single_position(self):
-        self.assertEqual(MOVEMENT_GROUP_DEFINITIONS["HOME_POS"].group_type, MovementGroupType.SINGLE_POSITION)
-
-    def test_jog_is_velocity_only(self):
-        self.assertEqual(MOVEMENT_GROUP_DEFINITIONS["JOG"].group_type, MovementGroupType.VELOCITY_ONLY)
-
-    def test_nozzle_clean_has_iterations(self):
-        self.assertTrue(MOVEMENT_GROUP_DEFINITIONS["NOZZLE CLEAN"].has_iterations)
-
-    def test_tool_changer_has_trajectory_execution(self):
-        self.assertTrue(MOVEMENT_GROUP_DEFINITIONS["TOOL CHANGER"].has_trajectory_execution)
+        self.assertEqual(defn.id, "MY_GROUP")
 
 
 # ── Qt-dependent tests ────────────────────────────────────────────────────────
@@ -259,7 +245,8 @@ class TestMovementGroupsTab(unittest.TestCase):
 
     def test_load_uses_known_definition(self):
         tab = MovementGroupsTab()
-        tab.load({"HOME_POS": MovementGroup()})
+        defn = MovementGroupDef("HOME_POS", MovementGroupType.SINGLE_POSITION)
+        tab.load({"HOME_POS": MovementGroup()}, definitions=[defn])
         self.assertEqual(
             tab.get_widget("HOME_POS")._def.group_type,
             MovementGroupType.SINGLE_POSITION,
@@ -306,7 +293,7 @@ class TestMovementGroupsTab(unittest.TestCase):
     def test_load_with_extra_defs_uses_provided_definition(self):
         tab  = MovementGroupsTab()
         defn = MovementGroupDef("CUSTOM", MovementGroupType.MULTI_POSITION, has_trajectory_execution=True)
-        tab.load({"CUSTOM": MovementGroup()}, extra_defs={"CUSTOM": defn})
+        tab.load({"CUSTOM": MovementGroup()}, definitions=[defn])
         self.assertEqual(
             tab.get_widget("CUSTOM")._def.group_type,
             MovementGroupType.MULTI_POSITION,

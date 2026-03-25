@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration import RobotSettings, RobotCalibrationSettings
 from src.applications.base.widget_application import WidgetApplication
 from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
@@ -104,7 +104,7 @@ class TestRobotSettingsApplicationServiceIntegration(unittest.TestCase):
             cfg   if key == "robot_config"      else
             calib if key == "robot_calibration" else None
         )
-        return RobotSettingsApplicationService(ss,SettingsID.ROBOT_CONFIG,SettingsID.ROBOT_CALIBRATION), ss, cfg, calib
+        return RobotSettingsApplicationService(ss, CommonSettingsID.ROBOT_CONFIG, CommonSettingsID.MOVEMENT_GROUPS, CommonSettingsID.ROBOT_CALIBRATION), ss, cfg, calib
 
     def test_load_config_returns_correct_instance(self):
         svc, _, cfg, _ = self._make_service()

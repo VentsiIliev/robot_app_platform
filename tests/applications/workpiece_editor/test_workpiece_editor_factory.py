@@ -19,7 +19,7 @@ def _make_service():
 
 def _make_factory():
     messaging = MagicMock(spec=IMessagingService)
-    return WorkpieceEditorFactory(messaging=messaging), messaging
+    return WorkpieceEditorFactory(), messaging
 
 
 class TestWorkpieceEditorFactory(unittest.TestCase):
@@ -35,36 +35,36 @@ class TestWorkpieceEditorFactory(unittest.TestCase):
             factory._create_view()
 
     def test_build_returns_workpiece_editor_view(self):
-        factory, _ = _make_factory()
-        result = factory.build(_make_service())
+        factory, messaging = _make_factory()
+        result = factory.build(_make_service(), messaging=messaging)
         self.assertIsInstance(result, WorkpieceEditorView)
 
     def test_build_attaches_controller_to_view(self):
-        factory, _ = _make_factory()
-        view = factory.build(_make_service())
+        factory, messaging = _make_factory()
+        view = factory.build(_make_service(), messaging=messaging)
         self.assertIsInstance(view._controller, WorkpieceEditorController)
 
     def test_build_calls_get_form_schema(self):
-        factory, _ = _make_factory()
+        factory, messaging = _make_factory()
         svc = _make_service()
-        factory.build(svc)
+        factory.build(svc, messaging=messaging)
         svc.get_form_schema.assert_called_once()
 
     def test_build_calls_get_segment_config(self):
-        factory, _ = _make_factory()
+        factory, messaging = _make_factory()
         svc = _make_service()
-        factory.build(svc)
+        factory.build(svc, messaging=messaging)
         svc.get_segment_config.assert_called_once()
 
-    def test_controller_uses_messaging_from_factory_init(self):
+    def test_controller_uses_messaging_from_build(self):
         factory, messaging = _make_factory()
-        view = factory.build(_make_service())
+        view = factory.build(_make_service(), messaging=messaging)
         self.assertIs(view._controller._broker, messaging)
 
     def test_two_builds_produce_independent_views(self):
-        factory, _ = _make_factory()
-        v1 = factory.build(_make_service())
-        v2 = factory.build(_make_service())
+        factory, messaging = _make_factory()
+        v1 = factory.build(_make_service(), messaging=messaging)
+        v2 = factory.build(_make_service(), messaging=messaging)
         self.assertIsNot(v1, v2)
         self.assertIsNot(v1._controller, v2._controller)
 

@@ -23,6 +23,7 @@ def _schema(*required_keys):
 def _make_svc(vision=None, save_fn=None, update_fn=None, schema=None, id_exists_fn=None):
     return WorkpieceEditorService(
         vision_service=vision,
+        capture_snapshot_service=None,
         save_fn=save_fn   or (lambda d: (True, "saved")),
         update_fn=update_fn or (lambda sid, d: (True, "updated")),
         form_schema=schema if schema is not None else _schema(),
@@ -105,6 +106,7 @@ class TestWorkpieceEditorServiceGetters(unittest.TestCase):
         cfg = MagicMock()
         svc = WorkpieceEditorService(
             vision_service=None,
+            capture_snapshot_service=None,
             save_fn=lambda d: (True, ""),
             update_fn=lambda s, d: (True, ""),
             form_schema=_schema(),

@@ -11,8 +11,9 @@ from unittest.mock import MagicMock
 from src.applications.base.widget_application import WidgetApplication
 from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-from src.robot_systems.glue.service_ids import ServiceID
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_service_ids import CommonServiceID
+from src.robot_systems.glue.component_ids import ServiceID
+from src.robot_systems.glue.component_ids import SettingsID
 
 
 def _make_robot_system():
@@ -67,7 +68,7 @@ class TestWorkpieceEditorApplicationFactory(unittest.TestCase):
     def test_factory_fetches_vision_service_as_optional(self):
         robot_app = _make_robot_system()
         _spec().factory(robot_app)
-        robot_app.get_optional_service.assert_any_call(ServiceID.VISION)
+        robot_app.get_optional_service.assert_any_call(CommonServiceID.VISION)
 
     def test_register_stores_messaging_service(self):
         application = _spec().factory(_make_robot_system())

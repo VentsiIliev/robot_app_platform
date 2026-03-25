@@ -14,8 +14,8 @@ from src.applications.user_management.domain.user_schema import UserRecord
 from src.applications.user_management.domain.i_user_repository import IUserRepository
 from src.engine.auth.i_authenticated_user import IAuthenticatedUser
 from src.engine.auth.i_authentication_service import IAuthenticationService
-from src.robot_systems.glue.domain.auth.authenticated_user import AuthenticatedUser
-from src.robot_systems.glue.domain.auth.authentication_service import AuthenticationService
+from src.engine.auth.authenticated_user import AuthenticatedUser
+from src.engine.auth.authentication_service import AuthenticationService
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

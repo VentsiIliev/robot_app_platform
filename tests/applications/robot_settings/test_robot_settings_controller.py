@@ -20,11 +20,12 @@ def _make_model(config=None, calibration=None):
     model = MagicMock(spec=RobotSettingsModel)
     cfg   = config      or RobotSettings()
     calib = calibration or RobotCalibrationSettings()
-    model.load.return_value                         = (cfg, calib)
+    model.load.return_value                         = (cfg, calib, None)
     model._config                                   = cfg
     model._calibration                              = calib
     model.get_slot_info.return_value                = []
     model.get_expected_movement_groups.return_value = cfg.movement_groups
+    model.get_movement_group_definitions.return_value = []
     return model
 
 
@@ -38,7 +39,7 @@ def _make_jog():
 
 def _make_ctrl(model=None, view=None):
     return RobotSettingsController(model or _make_model(), view or _make_view(),
-                                   _make_messaging(), _make_jog())
+                                   _make_messaging())
 
 
 
@@ -47,13 +48,13 @@ class TestRobotSettingsControllerInit(unittest.TestCase):
     def test_wires_save_requested_signal(self):
         view  = _make_view()
         model = _make_model()
-        RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        RobotSettingsController(model, view, _make_messaging())
         view.save_requested.connect.assert_called_once()
 
     def test_wires_destroyed_signal(self):
         view  = _make_view()
         model = _make_model()
-        RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        RobotSettingsController(model, view, _make_messaging())
         view.destroyed.connect.assert_called_once()
 
 
@@ -62,7 +63,7 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
     def test_load_calls_model_load(self):
         view  = _make_view()
         model = _make_model(RobotSettings(robot_ip="1.2.3.4"))
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
         model.load.assert_called_once()
 
@@ -70,7 +71,7 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
         cfg   = RobotSettings(robot_ip="5.5.5.5")
         view  = _make_view()
         model = _make_model(cfg)
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
         view.load_config.assert_called_once()
         flat = view.load_config.call_args[0][0]
@@ -82,9 +83,9 @@ class TestRobotSettingsControllerLoad(unittest.TestCase):
         cfg.movement_groups = {"HOME_POS": MovementGroup(velocity=100)}
         view = _make_view()
         model = _make_model(cfg)
-        ctrl = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
-        view.load_movement_groups.assert_called_once_with(cfg.movement_groups, extra_defs={})
+        view.load_movement_groups.assert_called_once_with(cfg.movement_groups, definitions=[])
 
 
 class TestRobotSettingsControllerSave(unittest.TestCase):
@@ -94,13 +95,14 @@ class TestRobotSettingsControllerSave(unittest.TestCase):
         calib = calibration or RobotCalibrationSettings()
         view  = _make_view()
         model = _make_model(cfg, calib)
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
 
         flat    = RobotSettingsMapper.to_flat_dict(cfg)
         flat.update(RobotCalibrationMapper.to_flat_dict(calib))
-        view.get_values.return_value         = flat
-        view.get_movement_groups.return_value = {}
+        view.get_values.return_value               = flat
+        view.get_movement_groups.return_value      = {}
+        view.get_targeting_definitions.return_value = None
         return ctrl, model, view
 
     def test_on_save_calls_model_save(self):
@@ -128,34 +130,29 @@ class TestRobotSettingsControllerSave(unittest.TestCase):
     def test_stop_does_not_raise(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.stop()   # should be a no-op, must not raise
 
 class TestRobotSettingsControllerInitSignals(unittest.TestCase):
 
-    def test_wires_add_group_requested(self):
-        view = _make_view()
-        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
-        view.add_group_requested.connect.assert_called_once()
-
     def test_wires_remove_group_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        RobotSettingsController(_make_model(), view, _make_messaging())
         view.remove_group_requested.connect.assert_called_once()
 
     def test_wires_set_current_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        RobotSettingsController(_make_model(), view, _make_messaging())
         view.set_current_requested.connect.assert_called_once()
 
     def test_wires_move_to_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        RobotSettingsController(_make_model(), view, _make_messaging())
         view.move_to_requested.connect.assert_called_once()
 
     def test_wires_execute_requested(self):
         view = _make_view()
-        RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        RobotSettingsController(_make_model(), view, _make_messaging())
         view.execute_requested.connect.assert_called_once()
 
 
@@ -164,10 +161,11 @@ class TestRobotSettingsControllerAutoSave(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
-        view.get_values.return_value          = {}
-        view.get_movement_groups.return_value = {}
+        view.get_values.return_value               = {}
+        view.get_movement_groups.return_value      = {}
+        view.get_targeting_definitions.return_value = None
         return ctrl, model, view
 
     def test_auto_save_calls_model_save(self):
@@ -180,7 +178,7 @@ class TestRobotSettingsControllerAutoSave(unittest.TestCase):
         flat = {"robot_ip": "9.9.9.9"}
         view.get_values.return_value = flat
         ctrl._auto_save()
-        model.save.assert_called_once_with(flat, {})
+        self.assertEqual(model.save.call_args[0][0], flat)
 
     def test_auto_save_passes_movement_groups_from_view(self):
         ctrl, model, view = self._make_loaded()
@@ -200,7 +198,7 @@ class TestRobotSettingsControllerSetCurrent(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -220,7 +218,7 @@ class TestRobotSettingsControllerSetCurrent(unittest.TestCase):
         ctrl._on_set_current("MISSING")   # must not raise
 
     def test_calls_set_position_for_single_position_group(self):
-        from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
+        from src.shared_contracts.declarations import MovementGroupDefinition as MovementGroupDef, MovementGroupType
         ctrl, model, view = self._make_loaded()
         model.get_current_position.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, 0.0]
         widget = MagicMock()
@@ -230,7 +228,7 @@ class TestRobotSettingsControllerSetCurrent(unittest.TestCase):
         widget.set_position.assert_called_once_with("[100.000, 0.000, 300.000, 180.000, 0.000, 0.000]")
 
     def test_calls_add_point_for_multi_position_group(self):
-        from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
+        from src.shared_contracts.declarations import MovementGroupDefinition as MovementGroupDef, MovementGroupType
         ctrl, model, view = self._make_loaded()
         model.get_current_position.return_value = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
         widget = MagicMock()
@@ -245,67 +243,15 @@ class TestRobotSettingsControllerMotionDone(unittest.TestCase):
 
     @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
     def test_shows_warning_on_failure(self, mock_warn):
-        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging(), _make_jog())
+        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging())
         ctrl._on_motion_done(False, "HOME")
         mock_warn.assert_called_once()
 
     @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
     def test_no_warning_on_success(self, mock_warn):
-        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging(), _make_jog())
+        ctrl = RobotSettingsController(_make_model(), _make_view(), _make_messaging())
         ctrl._on_motion_done(True, "HOME")
         mock_warn.assert_not_called()
-
-
-class TestRobotSettingsControllerAddGroup(unittest.TestCase):
-
-    def _make_loaded(self):
-        view  = _make_view()
-        model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
-        ctrl.load()
-        view.get_values.return_value          = {}
-        view.get_movement_groups.return_value = {}
-        return ctrl, model, view
-
-    @patch("src.applications.robot_settings.controller.robot_settings_controller._AddGroupDialog")
-    def test_calls_add_movement_group_on_accept(self, MockDialog):
-        from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
-        from PyQt6.QtWidgets import QDialog
-        ctrl, _, view = self._make_loaded()
-        defn = MovementGroupDef("NEW", MovementGroupType.SINGLE_POSITION)
-        dlg  = MagicMock()
-        dlg.exec.return_value       = QDialog.DialogCode.Accepted
-        dlg.get_values.return_value = ("NEW", defn)
-        MockDialog.return_value     = dlg
-        view.get_movement_groups.return_value = {}
-        ctrl._on_add_group()
-        view.add_movement_group.assert_called_once()
-
-    @patch("src.applications.robot_settings.controller.robot_settings_controller._AddGroupDialog")
-    def test_does_nothing_on_cancel(self, MockDialog):
-        from PyQt6.QtWidgets import QDialog
-        ctrl, _, view = self._make_loaded()
-        dlg = MagicMock()
-        dlg.exec.return_value   = QDialog.DialogCode.Rejected
-        MockDialog.return_value = dlg
-        ctrl._on_add_group()
-        view.add_movement_group.assert_not_called()
-
-    @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
-    @patch("src.applications.robot_settings.controller.robot_settings_controller._AddGroupDialog")
-    def test_warns_on_duplicate_name(self, MockDialog, mock_warn):
-        from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
-        from PyQt6.QtWidgets import QDialog
-        ctrl, _, view = self._make_loaded()
-        defn = MovementGroupDef("HOME", MovementGroupType.SINGLE_POSITION)
-        dlg  = MagicMock()
-        dlg.exec.return_value       = QDialog.DialogCode.Accepted
-        dlg.get_values.return_value = ("HOME", defn)
-        MockDialog.return_value     = dlg
-        view.get_movement_groups.return_value = {"HOME": MovementGroup()}
-        ctrl._on_add_group()
-        mock_warn.assert_called_once()
-        view.add_movement_group.assert_not_called()
 
 
 class TestRobotSettingsControllerRemoveGroup(unittest.TestCase):
@@ -313,7 +259,7 @@ class TestRobotSettingsControllerRemoveGroup(unittest.TestCase):
     @patch("src.applications.robot_settings.controller.robot_settings_controller.ask_yes_no")
     def test_calls_remove_on_confirm(self, mock_ask):
         view = _make_view()
-        ctrl = RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        ctrl = RobotSettingsController(_make_model(), view, _make_messaging())
         mock_ask.return_value = True
         ctrl._on_remove_group("HOME")
         view.remove_movement_group.assert_called_once_with("HOME")
@@ -321,7 +267,7 @@ class TestRobotSettingsControllerRemoveGroup(unittest.TestCase):
     @patch("src.applications.robot_settings.controller.robot_settings_controller.ask_yes_no")
     def test_does_nothing_on_cancel(self, mock_ask):
         view = _make_view()
-        ctrl = RobotSettingsController(_make_model(), view, _make_messaging(), _make_jog())
+        ctrl = RobotSettingsController(_make_model(), view, _make_messaging())
         mock_ask.return_value = False
         ctrl._on_remove_group("HOME")
         view.remove_movement_group.assert_not_called()
@@ -331,7 +277,7 @@ class TestRobotSettingsControllerMoveTo(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}
@@ -353,7 +299,7 @@ class TestRobotSettingsControllerMoveTo(unittest.TestCase):
 
     @patch("src.applications.robot_settings.controller.robot_settings_controller.show_warning")
     def test_move_to_multi_pos_no_point_shows_warning(self, mock_warn):
-        from src.applications.robot_settings.view.movement_groups_tab import MovementGroupDef, MovementGroupType
+        from src.shared_contracts.declarations import MovementGroupDefinition as MovementGroupDef, MovementGroupType
         ctrl, _, view = self._make_loaded()
         widget = MagicMock()
         widget._def = MovementGroupDef("TRAJ", MovementGroupType.MULTI_POSITION)
@@ -392,7 +338,7 @@ class TestRobotSettingsControllerExecute(unittest.TestCase):
     def _make_loaded(self):
         view  = _make_view()
         model = _make_model()
-        ctrl  = RobotSettingsController(model, view, _make_messaging(), _make_jog())
+        ctrl  = RobotSettingsController(model, view, _make_messaging())
         ctrl.load()
         view.get_values.return_value          = {}
         view.get_movement_groups.return_value = {}

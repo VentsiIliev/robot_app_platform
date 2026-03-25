@@ -94,8 +94,10 @@ def _make_context():
     ctx.robot_service = MagicMock()
     ctx.motor_service = MagicMock()
     ctx.generator = MagicMock()
-    ctx.pump_controller = MagicMock()
-    ctx.resolver = MagicMock()
+    ctx.dispense_channel_service = MagicMock()
+    ctx.dispense_channel_service.resolve_motor_address.return_value = -1
+    ctx.dispense_channel_service.start_dispense.return_value = (True, "")
+    ctx.dispense_channel_service.stop_dispense.return_value = (True, "")
     ctx.robot_tool = 3
     ctx.robot_user = 7
     ctx.global_velocity = 12.5
@@ -578,7 +580,7 @@ class TestHandlePumpAdjustmentStartup(unittest.TestCase):
         ctx.current_settings = ctx.paths[0][1]
         ctx.current_point_index = 2
         ctx.spray_on = True
-        ctx.resolver.resolve.return_value = 42
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 42
 
         def _start_thread(self, motor_address, reach_end_threshold):
             self._context.pump_thread = MagicMock()
@@ -643,7 +645,7 @@ class TestHandlePumpAdjustmentStartup(unittest.TestCase):
         ctx.current_settings = ctx.paths[0][1]
         ctx.current_point_index = 1
         ctx.spray_on = True
-        ctx.resolver.resolve.return_value = 42
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 42
         start_thread.side_effect = RuntimeError("cannot start thread")
 
         state = handle_starting_pump_adjustment_thread(ctx, adjust_pump_speed=True)
@@ -662,19 +664,19 @@ class TestHandlePumpStates(unittest.TestCase):
         ctx = _make_context()
         ctx.current_settings = ctx.paths[0][1]
         ctx.spray_on = True
-        ctx.resolver.resolve.return_value = 8
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 8
 
         state = handle_turning_on_pump(ctx)
 
         self.assertEqual(state, GlueDispensingState.STARTING_PUMP_ADJUSTMENT_THREAD)
         self.assertTrue(ctx.motor_started)
-        ctx.pump_controller.pump_on.assert_called_once_with(8, ctx.current_settings)
+        ctx.dispense_channel_service.start_dispense.assert_called_once()
 
     def test_turning_on_pump_records_error_for_invalid_motor_address(self):
         ctx = _make_context()
         ctx.current_settings = ctx.paths[0][1]
         ctx.spray_on = True
-        ctx.resolver.resolve.return_value = -1
+        ctx.dispense_channel_service.resolve_motor_address.return_value = -1
 
         state = handle_turning_on_pump(ctx)
 
@@ -692,21 +694,21 @@ class TestHandlePumpStates(unittest.TestCase):
         ctx.current_settings = ctx.paths[0][1]
         ctx.spray_on = True
         ctx.motor_started = True
-        ctx.resolver.resolve.return_value = 8
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 8
 
         state = handle_turning_off_pump(ctx, turn_off_pump=True)
 
         self.assertEqual(state, GlueDispensingState.ADVANCING_PATH)
         self.assertFalse(ctx.motor_started)
-        ctx.pump_controller.pump_off.assert_called_once_with(8, ctx.current_settings)
+        ctx.dispense_channel_service.stop_dispense.assert_called_once()
 
     def test_turning_on_pump_records_controller_exception_details(self):
         ctx = _make_context()
         ctx.current_settings = ctx.paths[0][1]
         ctx.spray_on = True
-        ctx.resolver.resolve.return_value = 8
-        ctx.pump_controller.pump_on.return_value = False
-        ctx.pump_controller.get_last_exception.return_value = RuntimeError("pump on failed")
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 8
+        ctx.dispense_channel_service.start_dispense.return_value = (False, "pump on failed")
+        ctx.dispense_channel_service.get_last_exception.return_value = RuntimeError("pump on failed")
 
         state = handle_turning_on_pump(ctx)
 
@@ -742,9 +744,9 @@ class TestHandlePumpStates(unittest.TestCase):
         ctx.current_settings = ctx.paths[0][1]
         ctx.spray_on = True
         ctx.motor_started = True
-        ctx.resolver.resolve.return_value = 8
-        ctx.pump_controller.pump_off.return_value = False
-        ctx.pump_controller.get_last_exception.return_value = RuntimeError("pump off failed")
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 8
+        ctx.dispense_channel_service.stop_dispense.return_value = (False, "pump off failed")
+        ctx.dispense_channel_service.get_last_exception.return_value = RuntimeError("pump off failed")
 
         state = handle_turning_off_pump(ctx, turn_off_pump=True)
 
@@ -794,14 +796,15 @@ class TestHandleGeneratorStates(unittest.TestCase):
         ctx.motor_started = True
         ctx.generator_started = True
         ctx.current_settings = ctx.paths[0][1]
-        ctx.resolver.resolve.return_value = 11
+        ctx.get_segment_settings()  # convert raw dict to DispensingSegmentSettings
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 11
 
         state = handle_completed(ctx)
 
         self.assertEqual(state, GlueDispensingState.TURNING_OFF_GENERATOR)
         self.assertFalse(ctx.motor_started)
         self.assertTrue(ctx.generator_started)
-        ctx.pump_controller.pump_off.assert_called_once_with(11, ctx.current_settings)
+        ctx.dispense_channel_service.stop_dispense.assert_called_once()
         ctx.generator.turn_off.assert_not_called()
 
     def test_turning_off_generator_finishes_completion(self):
@@ -840,7 +843,8 @@ class TestTerminalErrorHandling(unittest.TestCase):
         ctx.generator_started = True
         ctx.motor_started = True
         ctx.current_settings = ctx.paths[0][1]
-        ctx.resolver.resolve.return_value = 11
+        ctx.get_segment_settings()  # convert raw dict to DispensingSegmentSettings
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 11
         ctx.fail(
             kind=DispensingErrorKind.PUMP,
             code=DispensingErrorCode.PUMP_ON_FAILED,
@@ -854,7 +858,7 @@ class TestTerminalErrorHandling(unittest.TestCase):
 
         self.assertEqual(state, GlueDispensingState.IDLE)
         ctx.robot_service.stop_motion.assert_called_once_with()
-        ctx.pump_controller.pump_off.assert_called_once_with(11, ctx.current_settings)
+        ctx.dispense_channel_service.stop_dispense.assert_called_once()
         ctx.generator.turn_off.assert_called_once_with()
         self.assertFalse(ctx.motor_started)
         self.assertFalse(ctx.generator_started)
@@ -916,7 +920,7 @@ class TestDispensingMachineIntegration(unittest.TestCase):
         ctx.robot_service.move_ptp.assert_called_once()
         ctx.robot_service.execute_trajectory.assert_not_called()
         ctx.generator.turn_on.assert_not_called()
-        ctx.pump_controller.pump_on.assert_not_called()
+        ctx.dispense_channel_service.start_dispense.assert_not_called()
 
     def test_machine_stops_and_cleans_up_when_stop_requested_before_start(self):
         ctx = _make_machine_context()
@@ -924,8 +928,9 @@ class TestDispensingMachineIntegration(unittest.TestCase):
         ctx.generator_started = True
         ctx.motor_started = True
         ctx.current_settings = ctx.paths[0][1]
+        ctx.get_segment_settings()  # convert raw dict to DispensingSegmentSettings
         ctx.stop_event.set()
-        ctx.resolver.resolve.return_value = 9
+        ctx.dispense_channel_service.resolve_motor_address.return_value = 9
 
         machine = DispensingMachineFactory().build(ctx, GlueDispensingConfig())
 
@@ -934,7 +939,7 @@ class TestDispensingMachineIntegration(unittest.TestCase):
         self.assertEqual(machine.current_state, GlueDispensingState.IDLE)
         ctx.robot_service.stop_motion.assert_called_once_with()
         ctx.generator.turn_off.assert_called_once_with()
-        ctx.pump_controller.pump_off.assert_called_once_with(9, ctx.current_settings)
+        ctx.dispense_channel_service.stop_dispense.assert_called_once()
         self.assertFalse(ctx.generator_started)
         self.assertFalse(ctx.motor_started)
 

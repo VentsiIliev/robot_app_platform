@@ -9,11 +9,14 @@ _ROS2_SCRIPTS_DIR = Path(
 if str(_ROS2_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_ROS2_SCRIPTS_DIR))
 
-from motion.execution.trajectory_optimizer import (  # type: ignore
-    RuckigTrajectoryOptimizer,
-    TotgTrajectoryOptimizer,
-    build_trajectory_optimizer,
-)
+try:
+    from motion.execution.trajectory_optimizer import (  # type: ignore
+        RuckigTrajectoryOptimizer,
+        TotgTrajectoryOptimizer,
+        build_trajectory_optimizer,
+    )
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class _FakeNode:

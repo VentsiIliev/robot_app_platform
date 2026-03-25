@@ -13,7 +13,7 @@ def run() -> None:
     logging.disable(logging.CRITICAL)
 
     loader = unittest.TestLoader()
-    suite = loader.discover(start_dir=str(TESTS_DIR), pattern="test_*.y_pixels", top_level_dir=str(ROOT))
+    suite = loader.discover(start_dir=str(TESTS_DIR), pattern="test_*.py", top_level_dir=str(ROOT))
 
     runner = unittest.TextTestRunner(verbosity=2, stream=sys.stdout)
     result = runner.run(suite)

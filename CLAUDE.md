@@ -6,22 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Run the application:**
 ```bash
-python src/bootstrap/main.y_pixels
+python src/bootstrap/main.py
 ```
 
 **Run all tests:**
 ```bash
-python tests/run_tests.y_pixels
+python tests/run_tests.py
 ```
 
 **Run a single test file:**
 ```bash
-python -m unittest tests/path/to/test_file.y_pixels -v
+python -m unittest tests/path/to/test_file.py -v
 ```
 
 **Run an application standalone (development without the full platform):**
 ```bash
-python src/applications/<app_name>/example_usage.y_pixels
+python src/applications/<app_name>/example_usage.py
 ```
 
 No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.

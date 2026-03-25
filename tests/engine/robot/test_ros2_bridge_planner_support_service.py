@@ -26,7 +26,10 @@ if "moveit_msgs" not in sys.modules:
     sys.modules["moveit_msgs"] = moveit_msgs
     sys.modules["moveit_msgs.srv"] = moveit_msgs.srv
 
-from motion.planning.planner_support_service import PlannerSupportService  # type: ignore
+try:
+    from motion.planning.planner_support_service import PlannerSupportService  # type: ignore
+except ImportError as _e:
+    raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
 
 class _FakeNode:

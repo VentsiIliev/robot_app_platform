@@ -2,9 +2,9 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.robot.safety.safety_checker import SafetyChecker
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 
-settings_key = SettingsID.ROBOT_CONFIG
+settings_key = CommonSettingsID.ROBOT_CONFIG
 class TestSafetyChecker(unittest.TestCase):
 
     def setUp(self):

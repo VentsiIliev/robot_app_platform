@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.robot_settings.service.robot_settings_application_service import RobotSettingsApplicationService
-from src.robot_systems.glue.settings_ids import SettingsID
+from src.engine.common_settings_ids import CommonSettingsID
 
 
 def _make_svc(robot=None, nav=None, tool_key=None, tool_settings=None):
@@ -11,8 +11,9 @@ def _make_svc(robot=None, nav=None, tool_key=None, tool_settings=None):
         ss.get.side_effect = lambda k: tool_settings if k == tool_key else None
     return RobotSettingsApplicationService(
         ss,
-        config_key=SettingsID.ROBOT_CONFIG,
-        calibration_key=SettingsID.ROBOT_CALIBRATION,
+        config_key=CommonSettingsID.ROBOT_CONFIG,
+        movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
+        calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
         robot_service=robot,
         tool_settings_key=tool_key,
         navigation_service=nav,
@@ -45,8 +46,9 @@ class TestGetSlotInfo(unittest.TestCase):
         ss.get.return_value = None
         svc = RobotSettingsApplicationService(
             ss,
-            config_key=SettingsID.ROBOT_CONFIG,
-            calibration_key=SettingsID.ROBOT_CALIBRATION,
+            config_key=CommonSettingsID.ROBOT_CONFIG,
+            movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
+            calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
             tool_settings_key="tool_key",
         )
         self.assertEqual(svc.get_slot_info(), [])
@@ -77,8 +79,9 @@ class TestGetSlotInfo(unittest.TestCase):
         ss.get.side_effect = RuntimeError("boom")
         svc = RobotSettingsApplicationService(
             ss,
-            config_key=SettingsID.ROBOT_CONFIG,
-            calibration_key=SettingsID.ROBOT_CALIBRATION,
+            config_key=CommonSettingsID.ROBOT_CONFIG,
+            movement_groups_key=CommonSettingsID.MOVEMENT_GROUPS,
+            calibration_key=CommonSettingsID.ROBOT_CALIBRATION,
             tool_settings_key="tool_key",
         )
         self.assertEqual(svc.get_slot_info(), [])

@@ -9,10 +9,10 @@ import os
 import tempfile
 import unittest
 
-from src.robot_systems.glue.domain.permissions.permissions_repository import PermissionsRepository
+from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
 
 
-class TestPermissionsRepository(unittest.TestCase):
+class TestJsonPermissionsRepository(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.NamedTemporaryFile(
@@ -26,11 +26,11 @@ class TestPermissionsRepository(unittest.TestCase):
 
     # ── helpers ────────────────────────────────────────────────────────────────
 
-    def _make_repo(self, initial: dict = None) -> PermissionsRepository:
+    def _make_repo(self, initial: dict = None) -> JsonPermissionsRepository:
         if initial is not None:
             with open(self._path, "w") as f:
                 json.dump(initial, f)
-        return PermissionsRepository(self._path)
+        return JsonPermissionsRepository(self._path)
 
     # ── construction ───────────────────────────────────────────────────────────
 
@@ -40,14 +40,14 @@ class TestPermissionsRepository(unittest.TestCase):
 
     def test_creates_empty_file_when_missing(self):
         os.unlink(self._path)
-        repo = PermissionsRepository(self._path)
+        repo = JsonPermissionsRepository(self._path)
         self.assertTrue(os.path.exists(self._path))
         self.assertEqual(repo.get_all(), {})
 
     def test_handles_empty_json_file(self):
         with open(self._path, "w") as f:
             f.write("{}")
-        repo = PermissionsRepository(self._path)
+        repo = JsonPermissionsRepository(self._path)
         self.assertEqual(repo.get_all(), {})
 
     # ── get_allowed_role_values ────────────────────────────────────────────────
@@ -73,7 +73,7 @@ class TestPermissionsRepository(unittest.TestCase):
         repo.set_allowed_role_values("new_app", ["Admin", "Operator"])
 
         # Re-load from disk to confirm persistence
-        repo2 = PermissionsRepository(self._path)
+        repo2 = JsonPermissionsRepository(self._path)
         self.assertEqual(repo2.get_allowed_role_values("new_app"), ["Admin", "Operator"])
 
     def test_set_overwrites_existing_entry(self):
@@ -108,7 +108,7 @@ class TestPermissionsRepository(unittest.TestCase):
         repo.set_allowed_role_values("glue_dashboard", ["Admin", "Operator", "Viewer"])
         repo.set_allowed_role_values("robot_settings", ["Admin"])
 
-        repo2 = PermissionsRepository(self._path)
+        repo2 = JsonPermissionsRepository(self._path)
         self.assertEqual(
             repo2.get_allowed_role_values("glue_dashboard"),
             ["Admin", "Operator", "Viewer"],

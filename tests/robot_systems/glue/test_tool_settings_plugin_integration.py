@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 
 from src.applications.base.widget_application import WidgetApplication
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
-from src.robot_systems.glue.settings_ids import SettingsID
 
 
 def _make_robot_system():

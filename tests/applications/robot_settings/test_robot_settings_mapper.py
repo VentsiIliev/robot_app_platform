@@ -22,8 +22,8 @@ class TestRobotSettingsMapperToFlatDict(unittest.TestCase):
             robot_ip="10.0.0.1",
             robot_tool=2,
             robot_user=1,
-            tcp_x_offset=1.5,
-            tcp_y_offset=2.5,
+            camera_to_tcp_x_offset=1.5,
+            camera_to_tcp_y_offset=2.5,
             tcp_x_step_distance=60.0,
             tcp_x_step_offset=0.05,
             tcp_y_step_distance=70.0,
@@ -50,8 +50,8 @@ class TestRobotSettingsMapperToFlatDict(unittest.TestCase):
 
     def test_tcp_offsets_present(self):
         flat = RobotSettingsMapper.to_flat_dict(self.config)
-        self.assertEqual(flat["tcp_x_offset"], 1.5)
-        self.assertEqual(flat["tcp_y_offset"], 2.5)
+        self.assertEqual(flat["camera_to_tcp_x_offset"], 1.5)
+        self.assertEqual(flat["camera_to_tcp_y_offset"], 2.5)
 
     def test_global_motion_present(self):
         flat = RobotSettingsMapper.to_flat_dict(self.config)
@@ -76,7 +76,7 @@ class TestRobotSettingsMapperToFlatDict(unittest.TestCase):
         flat = RobotSettingsMapper.to_flat_dict(self.config)
         expected = {
             "robot_ip", "robot_tool", "robot_user",
-            "tcp_x_offset", "tcp_y_offset",
+            "camera_to_tcp_x_offset", "camera_to_tcp_y_offset",
             "tcp_x_step_distance", "tcp_x_step_offset",
             "tcp_y_step_distance", "tcp_y_step_offset",
             "offset_pos_x", "offset_neg_x", "offset_pos_y", "offset_neg_y",
@@ -139,12 +139,12 @@ class TestRobotSettingsMapperFromFlatDict(unittest.TestCase):
 
     def test_full_roundtrip(self):
         config = RobotSettings(robot_ip="1.2.3.4", robot_tool=5, robot_user=2,
-                               tcp_x_offset=3.14, tcp_y_offset=2.71)
+                               camera_to_tcp_x_offset=3.14, camera_to_tcp_y_offset=2.71)
         flat   = RobotSettingsMapper.to_flat_dict(config)
         result = RobotSettingsMapper.from_flat_dict(flat, config)
         self.assertEqual(result.robot_ip,     config.robot_ip)
         self.assertEqual(result.robot_tool,   config.robot_tool)
-        self.assertEqual(result.tcp_x_offset, config.tcp_x_offset)
+        self.assertEqual(result.camera_to_tcp_x_offset, config.camera_to_tcp_x_offset)
 
 
 class TestRobotCalibrationMapperToFlatDict(unittest.TestCase):

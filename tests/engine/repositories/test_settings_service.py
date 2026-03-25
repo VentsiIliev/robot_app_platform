@@ -13,7 +13,7 @@ Covered:
 import unittest
 from unittest.mock import MagicMock
 
-from engine.repositories.test_settings_service_factory import SettingsIDTestEnum
+from tests.engine.repositories.test_settings_service_factory import SettingsIDTestEnum
 from src.engine.repositories.settings_service import SettingsService
 
 
