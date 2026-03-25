@@ -15,6 +15,8 @@ src/engine/
 ├── hardware/                   ← Hardware I/O drivers
 │   ├── communication/
 │   │   └── modbus/             ← Serial/Modbus port management
+│   ├── generator/              ← Relay-switched generator controller + run timer
+│   ├── motor/                  ← Motor controller service (IMotorService)
 │   └── weight/                 ← Weight cell service + HTTP transport
 │       ├── interfaces/
 │       └── http/
@@ -28,12 +30,22 @@ src/engine/
 │   ├── i_localization_service.py
 │   ├── dict_translator.py
 │   └── localization_service.py
-├── auth/                       ← Authentication, authorization, and session contracts
+├── auth/                       ← Authentication, authorization, and session
 │   ├── i_authenticated_user.py
 │   ├── i_auth_user_repository.py
+│   ├── i_authentication_service.py
+│   ├── i_authorization_service.py
+│   ├── i_permissions_admin_service.py
+│   ├── i_session_service.py
 │   ├── authentication_service.py
 │   ├── authorization_service.py
-│   └── user_session.py
+│   ├── user_session.py
+│   ├── json_permissions_repository.py
+│   └── permissions_migrator.py
+├── system/                     ← Single-process exclusivity lock
+│   ├── i_system_manager.py     ← ISystemManager ABC
+│   ├── system_manager.py       ← Thread-safe SystemManager
+│   └── system_state.py         ← SystemBusyState, SystemStateEvent, SystemTopics
 ├── repositories/               ← JSON-backed settings persistence
 │   ├── interfaces/
 │   └── json/
@@ -59,8 +71,8 @@ src/engine/
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                     robot_apps / applications                 │
-│           (GlueRobotSystem, ModbusSettingsApplication, …)        │
+│                     robot_apps / applications            │
+│           (GlueRobotSystem, ModbusSettingsApplication, …)│
 └────────────┬───────────────────────────┬─────────────────┘
              │ ISettingsService           │ IRobotService / IMessagingService
              ▼                           ▼
@@ -89,7 +101,17 @@ src/engine/
 │    └ ICellCalibrator           │
 │                                │
 │  ModbusActionService           │
+│  MotorService                  │
+│  GeneratorController           │
 └────────────────────────────────┘
+
+┌────────────────────┐     ┌────────────────────┐
+│      system/       │     │       auth/         │
+│                    │     │                     │
+│ SystemManager      │     │ AuthenticationService│
+│ ISystemManager     │     │ AuthorizationService │
+│ SystemBusyState    │     │ UserSession          │
+└────────────────────┘     └────────────────────┘
 ```
 
 ---
@@ -103,7 +125,8 @@ src/engine/
 | Weight cells | `WeightCellService` | [hardware/weight/](hardware/weight/README.md) |
 | Process lifecycle | `BaseProcess` / `IProcess` | [process/](process/README.md) |
 | Localization | `LocalizationService` | [localization/](localization/README.md) |
-| Auth | `AuthenticationService` / `AuthorizationService` / `UserSession` | documented in `src/engine/auth/` |
+| Auth | `AuthenticationService` / `AuthorizationService` / `UserSession` | [auth/](auth/README.md) |
+| System manager | `SystemManager` / `ISystemManager` | [system/](system/README.md) |
 | Settings | `SettingsService` | [repositories/](repositories/README.md) |
 | Robot control | `RobotService` | [robot/](robot/README.md) |
 | Vision | `VisionSystem` / `IVisionService` | [vision/](vision/README.md) |

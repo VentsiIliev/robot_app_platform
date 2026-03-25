@@ -47,6 +47,17 @@ Manages one or more weight measurement cells. Each cell runs an independent daem
 
 → See [weight/README.md](weight/README.md)
 
+### Generator (`generator/`)
+
+Provides a relay on/off controller for generator hardware (`IGeneratorController`). Reads back hardware state from a status register and optionally tracks run time with a configurable timeout callback. All transport exceptions are caught internally — callers never receive a raised exception.
+
+- `turn_on()` / `turn_off()` — write to relay register; return `bool` success
+- `get_state()` → `GeneratorState` — `is_on`, `is_healthy`, `elapsed_seconds`, `communication_errors`
+- `GeneratorTimer` — background daemon thread; fires `on_timeout` when `timeout_minutes` elapses
+- `NullGeneratorTimer` — no-op used when timeout tracking is not needed
+
+→ See [generator/README.md](generator/README.md)
+
 ---
 
 ## Integration Pattern
