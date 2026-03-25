@@ -328,6 +328,50 @@ class VisionTopics:
 
 See `docs/engine/vision/README.md` for the full `VisionSystem` API.
 
+> **Known typos in source** — `vision_events.py` defines `AUTO_BRIGHTNESS_START` and `AUTO_BRIGHTNESS_STOP` with the string `"vison-auto-brightness"` (missing `i`). Both constants also share the same string value, making them indistinguishable at runtime. These are bugs in the source file, not documentation errors.
+
+---
+
+## `workpiece_events.py` — Workpiece Navigation Events
+
+Defines the cross-application navigation contract that lets the workpiece library signal the workpiece editor to open a specific entry.
+
+### Topics
+
+```python
+class WorkpieceTopics:
+    OPEN_IN_EDITOR = "workpiece/open-in-editor"
+```
+
+### Payload
+
+Raw workpiece JSON `dict` — the persisted representation of a workpiece as stored in the repository. Subscribers (the workpiece editor) deserialise it back into a `GlueWorkpiece` domain object.
+
+| Topic | Direction | Publisher | Subscriber |
+|-------|-----------|-----------|------------|
+| `workpiece/open-in-editor` | Publish | `workpiece_library` controller — user double-clicks an entry | `workpiece_editor` controller — opens the entry for editing |
+
+---
+
+## `glue_process_events.py` — Glue Process Diagnostics
+
+Defines the topic constant for glue-specific process diagnostics, separate from the pick-and-place diagnostics event in `pick_and_place_events.py`.
+
+### Topics
+
+```python
+class GlueProcessTopics:
+    DIAGNOSTICS = "glue/process/diagnostics"
+```
+
+### Payload
+
+Diagnostics snapshot `dict` — structure is defined by the glue process publisher. Intended for operator-facing tooling and debugging; not used to command process behaviour.
+
+| Topic | Direction | Publisher | Subscriber |
+|-------|-----------|-----------|------------|
+| `glue/process/diagnostics` | Publish | Glue process / coordinator | Diagnostic panels, logging |
+
 ---
 
 ## Design Notes
