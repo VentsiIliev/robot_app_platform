@@ -17,12 +17,15 @@ from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
     BORDER,
-    GHOST_BTN_STYLE,
     GROUP_STYLE,
     LABEL_STYLE,
-    PRIMARY,
 )
 from pl_gui.utils.utils_widgets.camera_view import CameraView
+from src.applications.base.app_styles import (
+    APP_SECTION_HINT_STYLE,
+    app_state_label_style,
+    outlined_role_button_style,
+)
 from src.applications.base.i_application_view import IApplicationView
 from src.shared_contracts.declarations import WorkAreaDefinition
 
@@ -35,29 +38,8 @@ _STATE_COLORS = {
     "ERROR": ("#FF4466", "#1F0010"),
     "UNKNOWN": ("#555577", "#12121F"),
 }
-_STATE_LABEL_STYLE = """
-    QLabel {{
-        color: {fg};
-        background: {bg};
-        border-bottom: 2px solid {fg};
-        font-size: 9pt;
-        font-weight: bold;
-        letter-spacing: 1px;
-        padding: 4px 10px;
-    }}
-"""
-_SECTION_HINT_STYLE = "color: #666688; font-size: 9pt; background: transparent;"
 _BRIGHTNESS_COLOR = "#00CCFF"
-_ROLE_BTN_STYLE = (
-    GHOST_BTN_STYLE
-    + f"""
-QPushButton:checked {{
-    background-color: {PRIMARY};
-    color: white;
-    border-color: {PRIMARY};
-}}
-"""
-)
+_ROLE_BTN_STYLE = outlined_role_button_style()
 
 
 class WorkAreaSettingsView(IApplicationView):
@@ -99,7 +81,7 @@ class WorkAreaSettingsView(IApplicationView):
         self._state_label = QLabel("● UNKNOWN")
         self._state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._state_label.setFixedHeight(28)
-        self._state_label.setStyleSheet(_STATE_LABEL_STYLE.format(fg=fg, bg=bg))
+        self._state_label.setStyleSheet(app_state_label_style(fg=fg, bg=bg))
         layout.addWidget(self._state_label)
 
         self._preview_label = CameraView()
@@ -246,7 +228,7 @@ class WorkAreaSettingsView(IApplicationView):
     @pyqtSlot(str)
     def _on_vision_state_changed(self, state: str) -> None:
         fg, bg = _STATE_COLORS.get(state.upper(), _STATE_COLORS["UNKNOWN"])
-        self._state_label.setStyleSheet(_STATE_LABEL_STYLE.format(fg=fg, bg=bg))
+        self._state_label.setStyleSheet(app_state_label_style(fg=fg, bg=bg))
         self._state_label.setText(f"● {state.upper()}")
 
     def set_work_area_options(self, definitions: list[WorkAreaDefinition]) -> None:

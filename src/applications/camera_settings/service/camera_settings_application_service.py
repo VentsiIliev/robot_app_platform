@@ -28,9 +28,17 @@ class CameraSettingsApplicationService(ICameraSettingsService):
 
     def save_settings(self, settings: CameraSettingsData) -> None:
         from src.engine.vision.camera_settings_serializer import CameraSettings
-        raw = CameraSettings(data=CameraSettingsMapper.to_json(settings))
+        data = CameraSettingsMapper.to_json(settings)
+        try:
+            existing = self._settings_service.get(self._settings_id)
+            calibration_section = dict(existing.data.get("Calibration", {}))
+            if calibration_section:
+                data["Calibration"] = calibration_section
+        except Exception:
+            pass
+        raw = CameraSettings(data=data)
         self._settings_service.save(self._settings_id, raw)
-        self._vision_service.update_settings(CameraSettingsMapper.to_json(settings))
+        self._vision_service.update_settings(data)
 
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_service.set_raw_mode(enabled)

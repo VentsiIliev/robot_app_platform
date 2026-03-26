@@ -63,18 +63,6 @@ PREPROCESSING_GROUP = SettingGroup("Preprocessing", [
                  default=4, min_val=1, max_val=50, step=1, step_options=[1, 5]),
 ])
 
-CALIBRATION_GROUP = SettingGroup("Calibration", [
-    SettingField("chessboard_width",        "Chessboard Width",  "spinbox",
-                 default=32,   min_val=3,   max_val=50,   step=1),
-    SettingField("chessboard_height",       "Chessboard Height", "spinbox",
-                 default=20,   min_val=3,   max_val=50,   step=1),
-    SettingField("square_size_mm",          "Square Size",       "double_spinbox",
-                 default=25.0, min_val=1.0, max_val=200.0, step=0.5, decimals=1,
-                 suffix=" mm", step_options=[0.5, 1.0, 5.0]),
-    SettingField("calibration_skip_frames", "Skip Frames",       "spinbox",
-                 default=30,   min_val=1,   max_val=200,  step=1, step_options=[1, 5, 10]),
-])
-
 BRIGHTNESS_GROUP = SettingGroup("Brightness Control", [
     SettingField("brightness_auto",   "Auto Adjust",      "toggle",  default=True),
     SettingField("brightness_kp",     "Kp",               "double_spinbox",

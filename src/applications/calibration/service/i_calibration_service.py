@@ -1,10 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Sequence
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 
 class ICalibrationService(ABC):
+    @abstractmethod
+    def load_calibration_settings(self) -> CalibrationSettingsData | None: ...
+
+    @abstractmethod
+    def save_calibration_settings(self, settings: CalibrationSettingsData) -> None: ...
 
     @abstractmethod
     def capture_calibration_image(self) -> tuple[bool, str]: ...

@@ -1,12 +1,25 @@
 import logging
 from typing import Callable, Sequence
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 _logger = logging.getLogger(__name__)
 
 
 class StubCalibrationService(ICalibrationService):
+    def load_calibration_settings(self) -> CalibrationSettingsData | None:
+        return CalibrationSettingsData(
+            vision=CalibrationVisionSettings(),
+            robot=RobotCalibrationSettings(),
+            height=HeightMeasuringModuleSettings(),
+        )
+
+    def save_calibration_settings(self, settings: CalibrationSettingsData) -> None:
+        _logger.info("Stub: save_calibration_settings %s", settings)
 
     def capture_calibration_image(self) -> tuple[bool, str]:
         _logger.info("Stub: capture_calibration_image")

@@ -32,7 +32,8 @@ class GlueRobotSystem(BaseRobotSystem):
 | `DISPENSE_CHANNELS` | `DispenseChannelSettingsSerializer(default_channels=dispense_channels)` | `glue/dispense_channels.json` | Per-channel glue type selection keyed by declared channel id |
 | `GLUE_CATALOG` | `GlueCatalogSerializer` | `glue/catalog.json` | `GlueCatalog` (glue type library) |
 | `MODBUS_CONFIG` | `ModbusConfigSerializer` | `hardware/modbus.json` | `ModbusConfig` |
-| `VISION_CAMERA_SETTINGS` | `CameraSettingsSerializer` | `vision/camera_settings.json` | Camera settings |
+| `CALIBRATION_VISION_SETTINGS` | `CalibrationVisionSettingsSerializer` | `vision/calibration_settings.json` | Camera-calibration board settings |
+| `VISION_CAMERA_SETTINGS` | `CameraSettingsSerializer` | `vision/camera_settings.json` | Camera runtime settings |
 | `TOOL_CHANGER_CONFIG` | `ToolChangerSettingsSerializer(default_tools=tools, default_slots=tool_slots)` | `tools/tool_changer.json` | Persisted toolchanger config seeded from glue tool/slot declarations |
 | `HEIGHT_MEASURING_SETTINGS` | `HeightMeasuringSettingsSerializer` | `height_measuring/settings.json` | Height-measuring settings |
 | `HEIGHT_MEASURING_CALIBRATION` | `LaserCalibrationDataSerializer` | `height_measuring/calibration_data.json` | Laser calibration data |
@@ -102,7 +103,7 @@ The glue system now relies on three shared engine assembly paths:
 | Folder | `folder_id` | Applications |
 |--------|------------|--------------|
 | Production | 1 | `GlueDashboard`, `WorkpieceEditor`, `WorkpieceLibrary` |
-| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `DispenseChannelSettings`, `WorkAreaSettings`, `CameraSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
+| Service | 2 | `RobotSettings`, `GlueSettings`, `ModbusSettings`, `DispenseChannelSettings`, `WorkAreaSettings`, `CameraSettings`, `CalibrationSettings`, `DeviceControl`, `Calibration`, `ToolSettings` |
 | Administration | 3 | `UserManagement` |
 | Tests | 4 | `BrokerDebug`, `ContourMatchingTester`, `GlueProcessDriver`, `HeightMeasuring`, `PickAndPlaceVisualizer`, `PickTarget` |
 
@@ -121,6 +122,7 @@ All factories are defined in `application_wiring.py` with lazy imports.
 | `DispenseChannelSettings` | `_build_dispense_channel_settings_application` | `DispenseChannelSettingsService(settings, weight, motor)` |
 | `WorkAreaSettings` | `_build_work_area_settings_application` | `WorkAreaSettingsApplicationService(work_area_service, vision)` |
 | `CameraSettings` | `_build_camera_settings_application` | `CameraSettingsApplicationService(settings, vision)` |
+| `CalibrationSettings` | `_build_calibration_settings_application` | `CalibrationSettingsApplicationService(settings)` |
 | `Calibration` | `_build_calibration_application` | `CalibrationApplicationService(vision, coordinator)` |
 | `DeviceControl` | `_build_device_control_application` | `DeviceControlApplicationService(motor, settings)` |
 | `ToolSettings` | `_build_tool_settings_application` | `ToolSettingsApplicationService(settings)` |
@@ -136,14 +138,16 @@ Tabbed settings-oriented screens in glue now use collapsed-by-default schema gro
 - `RobotSettings`
 - `GlueSettings`
 - `CameraSettings`
+- `CalibrationSettings`
 - `WorkAreaSettings`
 - `DispenseChannelSettings`
 - `HeightMeasuring`
 
-Work-area ownership is now explicit:
+Settings/workflow ownership is now explicit:
 - `WorkAreaSettings` edits work-area polygons
-- `CameraSettings` no longer owns robot work-area editing
-- `Calibration` reuses the same declared work areas
+- `CameraSettings` tunes only the runtime vision stack
+- `CalibrationSettings` owns camera/robot/laser/height calibration configuration
+- `Calibration` runs the operational calibration workflow, reuses the same declared work areas, and now embeds the relevant phase settings inline on each workflow tab
 
 ---
 

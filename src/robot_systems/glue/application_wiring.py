@@ -339,6 +339,25 @@ def _build_camera_settings_application(robot_system):
     )
 
 
+def _build_calibration_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.calibration_settings import (
+        CalibrationSettingsApplicationService,
+        CalibrationSettingsFactory,
+    )
+
+    service = CalibrationSettingsApplicationService(robot_system._settings_service)
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: CalibrationSettingsFactory().build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
+    )
+
+
 def _build_work_area_settings_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
@@ -364,6 +383,7 @@ def _build_calibration_application(robot_system):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
+    from src.applications.calibration_settings import CalibrationSettingsApplicationService
     from src.engine.robot.calibration.aruco_marker_height_mapping_service import (
         ArucoMarkerHeightMappingService,
     )
@@ -433,6 +453,7 @@ def _build_calibration_application(robot_system):
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
+        calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
         use_marker_centre=True,

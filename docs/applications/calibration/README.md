@@ -1,6 +1,10 @@
 # `src/applications/calibration/` — Calibration
 
-Single-screen workflow for calibrating the camera lens and the robot-to-camera spatial mapping. Delegates camera calibration to `VisionSystem`, robot calibration to the `GlueOperationCoordinator`, and shared area polygon persistence to the shared work-area service.
+Workflow application for executing calibration tasks. Delegates camera calibration to `VisionSystem`, robot calibration to the `GlueOperationCoordinator`, laser calibration to the height-measuring calibration service, and shared area polygon persistence to the shared work-area service.
+
+Its view layer now uses the shared application style helpers from
+[app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py)
+instead of a calibration-local style module.
 
 ---
 
@@ -10,12 +14,16 @@ Single-screen workflow for calibrating the camera lens and the robot-to-camera s
 calibration/
 ├── service/
 │   ├── i_calibration_service.py              ← ICalibrationService
+│   ├── calibration_settings_bridge.py        ← Small bridge to the shared CalibrationSettings service
 │   ├── stub_calibration_service.py           ← In-memory stub (always returns success)
 │   └── calibration_application_service.py    ← Bridges vision_service + work_area_service + process_controller + transformer + standalone helpers
 ├── model/
 │   └── calibration_model.py                  ← Thin delegation to ICalibrationService
 ├── view/
-│   └── calibration_view.py                   ← Buttons + status display
+│   ├── calibration_view.py                   ← Composes preview + workflow tabs
+│   ├── calibration_preview_panel.py          ← Camera preview + activity log
+│   ├── calibration_controls_panel.py         ← Composes the workflow tabs
+│   └── calibration_phase_tabs.py             ← Dedicated tab widgets per calibration phase
 ├── controller/
 │   └── calibration_controller.py             ← Wires button signals → model methods
 └── calibration_factory.py
@@ -27,11 +35,15 @@ calibration/
 
 ```python
 class ICalibrationService(ABC):
+    def load_calibration_settings(self)       -> CalibrationSettingsData | None: ...
+    def save_calibration_settings(self, ...)  -> None: ...
     def capture_calibration_image(self)    -> tuple[bool, str]: ...
     def calibrate_camera(self)             -> tuple[bool, str]: ...
     def calibrate_robot(self)              -> tuple[bool, str]: ...
     def calibrate_camera_and_robot(self)   -> tuple[bool, str]: ...
     def calibrate_camera_tcp_offset(self)  -> tuple[bool, str]: ...
+    def calibrate_laser(self)              -> tuple[bool, str]: ...
+    def detect_laser_once(self)            -> LaserDetectionResult: ...
     def stop_calibration(self)             -> None: ...
     def is_calibrated(self)                -> bool: ...
     def test_calibration(self)             -> tuple[bool, str]: ...
@@ -80,6 +92,7 @@ CalibrationApplicationService(
 | `verify_area_grid(...)` | Sequentially simulates reachability for the generated grid using `robot_service.validate_pose(start, target)` and the same anchor-recovery policy as execution |
 | `measure_area_grid(...)` | Runs the standalone area-grid height-mapping workflow over the generated points |
 | `verify_height_model()` | Runs 4 interior verification measurements against the saved piecewise triangle height model |
+| `load_calibration_settings()` / `save_calibration_settings()` | Delegates to the extracted `CalibrationSettingsBridge`, which wraps the shared `CalibrationSettingsApplicationService` |
 | `stop_calibration()` | `process_controller.stop_calibration()` and stops the camera-TCP offset calibrator if one is active |
 | `is_calibrated()` | Checks that both matrix files exist on disk |
 | `test_calibration()` | Detects ArUco markers, converts pixels to robot mm via `transformer`, moves robot to each marker |
@@ -217,15 +230,26 @@ User presses "View Depth Map"
 
 - Left side:
   - large camera preview
-  - area-grid controls directly below the preview
+  - activity log directly below the preview
   - generated grid overlay, with unreachable precheck points shown in red after "Verify Grid"
 - Right side:
-  - capture
-  - calibration actions
-  - test / marker-height actions
-  - log
+  - `System`
+  - `Camera`
+  - `Robot`
+  - `Laser`
+  - `Height Mapping`
 
-This keeps the area-selection and grid-generation controls next to the image they affect.
+The `Height Mapping` tab now owns the area/grid definition controls, and each phase tab exposes the settings groups that directly affect that phase.
+
+Internally, each phase tab is now its own widget class:
+
+- `SystemCalibrationTab`
+- `CameraCalibrationTab`
+- `RobotCalibrationTab`
+- `LaserCalibrationTab`
+- `HeightMappingTab`
+
+This keeps the area-selection and grid-generation controls next to the workflow step that uses them, while the live preview and activity log stay together on the left.
 ```
 
 ---

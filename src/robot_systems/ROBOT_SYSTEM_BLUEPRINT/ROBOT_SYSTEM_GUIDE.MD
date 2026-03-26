@@ -5,7 +5,7 @@ Copy `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/`, rename every `My` / `my` / `RO
 The blueprint is also intentionally runnable in a minimal demo mode:
 - stub robot via `TestRobotWrapper`
 - shared login flow
-- shared `MyDashboard` + `CameraSettings` + `RobotSettings` + `ToolSettings` + `UserManagement` applications
+- shared `MyDashboard` + `CameraSettings` + `CalibrationSettings` + `RobotSettings` + `ToolSettings` + `UserManagement` applications
 - no unfinished hardware/process dependencies
 
 Run it with:
@@ -214,6 +214,7 @@ Rules:
 - shared infrastructure settings should use `CommonSettingsID`
   - `ROBOT_CONFIG`
   - `ROBOT_CALIBRATION`
+  - `CALIBRATION_VISION_SETTINGS`
   - `VISION_CAMERA_SETTINGS`
   - `TOOL_CHANGER_CONFIG`
   - `MODBUS_CONFIG`
@@ -252,6 +253,7 @@ For systems that adopt the common robot contracts, prefer reusing the shared `Ro
 - `CommonSettingsID.ROBOT_CONFIG`
 - `CommonSettingsID.MOVEMENT_GROUPS`
 - `CommonSettingsID.ROBOT_CALIBRATION`
+- `CommonSettingsID.CALIBRATION_VISION_SETTINGS`
 - `CommonServiceID.NAVIGATION`
 
 Optional:

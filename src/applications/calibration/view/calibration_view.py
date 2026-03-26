@@ -9,7 +9,11 @@ from PyQt6.QtWidgets import QHBoxLayout
 
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.calibration.view.calibration_controls_panel import CalibrationControlsPanel
-from src.applications.calibration.view.calibration_preview_panel import CalibrationPreviewPanel
+from src.applications.calibration.view.calibration_preview_panel import (
+    CalibrationAreaGridPanel,
+    CalibrationPreviewPanel,
+)
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.base.styled_message_box import show_warning
 from src.shared_contracts.declarations import WorkAreaDefinition
 
@@ -41,6 +45,7 @@ class CalibrationView(IApplicationView):
     measure_area_grid_requested = pyqtSignal()
     view_depth_map_requested = pyqtSignal()
     verify_saved_model_requested = pyqtSignal()
+    save_calibration_settings_requested = pyqtSignal(dict)
     work_area_changed = pyqtSignal(str)
     measurement_area_changed = pyqtSignal()
 
@@ -57,7 +62,14 @@ class CalibrationView(IApplicationView):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         self._preview_panel = CalibrationPreviewPanel(self._work_area_definitions)
+        self._area_grid_panel = CalibrationAreaGridPanel(
+            self._preview_panel.preview_label,
+            self._work_area_definitions,
+        )
+        self._preview_panel.preview_label.corner_updated.connect(self._area_grid_panel._on_measurement_area_changed)
+        self._preview_panel.preview_label.empty_clicked.connect(self._area_grid_panel._on_measurement_area_empty_clicked)
         self._controls_panel = CalibrationControlsPanel()
+        self._controls_panel.set_height_mapping_content(self._area_grid_panel)
         root.addWidget(self._preview_panel, stretch=3)
         root.addWidget(self._controls_panel, stretch=2)
         self._connect_signals()
@@ -92,19 +104,24 @@ class CalibrationView(IApplicationView):
         self._controls_panel.stop_robot_btn.clicked.connect(self.stop_calibration_requested.emit)
         self._controls_panel.crosshair_btn.clicked.connect(self._toggle_crosshair)
         self._controls_panel.magnifier_btn.clicked.connect(self._toggle_magnifier)
+        for button in self._controls_panel.iter_save_settings_buttons():
+            button.clicked.connect(self._emit_save_calibration_settings)
 
-        self._preview_panel.generate_area_grid_requested.connect(self.generate_area_grid_requested.emit)
-        self._preview_panel.verify_area_grid_requested.connect(self.verify_area_grid_requested.emit)
-        self._preview_panel.measure_area_grid_requested.connect(self.measure_area_grid_requested.emit)
-        self._preview_panel.view_depth_map_requested.connect(self.view_depth_map_requested.emit)
-        self._preview_panel.work_area_changed.connect(self.work_area_changed.emit)
-        self._preview_panel.measurement_area_changed.connect(self.measurement_area_changed.emit)
+        self._area_grid_panel.generate_area_grid_requested.connect(self.generate_area_grid_requested.emit)
+        self._area_grid_panel.verify_area_grid_requested.connect(self.verify_area_grid_requested.emit)
+        self._area_grid_panel.measure_area_grid_requested.connect(self.measure_area_grid_requested.emit)
+        self._area_grid_panel.view_depth_map_requested.connect(self.view_depth_map_requested.emit)
+        self._area_grid_panel.work_area_changed.connect(self.work_area_changed.emit)
+        self._area_grid_panel.measurement_area_changed.connect(self.measurement_area_changed.emit)
 
     def _toggle_crosshair(self) -> None:
         self._crosshair_on = self._controls_panel.toggle_crosshair()
 
     def _toggle_magnifier(self) -> None:
         self._magnifier_on = self._controls_panel.toggle_magnifier()
+
+    def _emit_save_calibration_settings(self) -> None:
+        self.save_calibration_settings_requested.emit(self._controls_panel.get_settings_values())
 
     def set_stop_calibration_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_stop_calibration_enabled(enabled)
@@ -119,17 +136,20 @@ class CalibrationView(IApplicationView):
         self._controls_panel.set_measure_marker_heights_enabled(enabled)
 
     def set_measure_area_grid_enabled(self, enabled: bool) -> None:
-        self._preview_panel.set_measure_area_grid_enabled(enabled)
+        self._area_grid_panel.set_measure_area_grid_enabled(enabled)
 
     def set_verify_area_grid_busy(self, busy: bool, current: int = 0, total: int = 0) -> None:
-        self._preview_panel.set_verify_area_grid_busy(busy, current, total)
+        self._area_grid_panel.set_verify_area_grid_busy(busy, current, total)
 
     def set_depth_map_enabled(self, enabled: bool) -> None:
-        self._preview_panel.set_depth_map_enabled(enabled)
+        self._area_grid_panel.set_depth_map_enabled(enabled)
         self._controls_panel.set_depth_map_enabled(enabled)
 
     def set_laser_actions_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_laser_actions_enabled(enabled)
+
+    def load_calibration_settings(self, _settings: CalibrationSettingsData | None, flat: dict) -> None:
+        self._controls_panel.set_settings_values(flat)
 
     def update_camera_view(self, image) -> None:
         if image is None:
@@ -145,41 +165,41 @@ class CalibrationView(IApplicationView):
         self._preview_panel.preview_label.set_frame(QPixmap.fromImage(qimg))
 
     def append_log(self, message: str) -> None:
-        self._controls_panel.append_log(message)
-        self._controls_panel.log.moveCursor(QTextCursor.MoveOperation.End)
+        self._preview_panel.log.append(message)
+        self._preview_panel.log.moveCursor(QTextCursor.MoveOperation.End)
 
     def clear_log(self) -> None:
-        self._controls_panel.clear_log()
+        self._preview_panel.log.clear()
 
     def set_buttons_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_enabled(enabled)
-        self._preview_panel.set_enabled(enabled)
+        self._area_grid_panel.set_enabled(enabled)
 
     @property
     def work_area_definitions(self) -> list[WorkAreaDefinition]:
         return list(self._work_area_definitions)
 
     def current_work_area_id(self) -> str:
-        return self._preview_panel.current_work_area_id()
+        return self._area_grid_panel.current_work_area_id()
 
     def set_current_work_area_id(self, area_id: str) -> None:
-        self._preview_panel.set_current_work_area_id(area_id)
+        self._area_grid_panel.set_current_work_area_id(area_id)
 
     def current_height_mapping_area_key(self) -> str | None:
-        return self._preview_panel.current_height_mapping_area_key()
+        return self._area_grid_panel.current_height_mapping_area_key()
 
     def set_work_area_options(self, definitions: list[WorkAreaDefinition]) -> None:
         self._work_area_definitions = [definition for definition in definitions if definition.supports_height_mapping]
-        self._preview_panel.set_work_area_options(self._work_area_definitions)
+        self._area_grid_panel.set_work_area_options(self._work_area_definitions)
 
     def get_measurement_area_corners(self) -> list[tuple[float, float]]:
-        return self._preview_panel.get_measurement_area_corners()
+        return self._area_grid_panel.get_measurement_area_corners()
 
     def clear_measurement_area(self) -> None:
-        self._preview_panel.clear_measurement_area()
+        self._area_grid_panel.clear_measurement_area()
 
     def set_measurement_area_corners(self, area_id: str, corners: list[tuple[float, float]]) -> None:
-        self._preview_panel.set_measurement_area_corners(area_id, corners)
+        self._area_grid_panel.set_measurement_area_corners(area_id, corners)
 
     def set_generated_grid_points(
         self,
@@ -188,17 +208,17 @@ class CalibrationView(IApplicationView):
         point_labels: list[str] | None = None,
         point_statuses: dict[str, str] | None = None,
     ) -> None:
-        self._preview_panel.set_generated_grid_points(
+        self._area_grid_panel.set_generated_grid_points(
             points,
             point_labels=point_labels,
             point_statuses=point_statuses,
         )
 
     def set_substitute_regions(self, polygons: dict[str, list[tuple[float, float]]]) -> None:
-        self._preview_panel.set_substitute_regions(polygons)
+        self._area_grid_panel.set_substitute_regions(polygons)
 
     def get_area_grid_shape(self) -> tuple[int, int]:
-        return self._preview_panel.get_area_grid_shape()
+        return self._area_grid_panel.get_area_grid_shape()
 
     @staticmethod
     def _draw_crosshair(image: np.ndarray) -> np.ndarray:

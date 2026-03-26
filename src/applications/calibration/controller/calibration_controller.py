@@ -6,6 +6,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
+from src.applications.calibration_settings.mapper import CalibrationSettingsMapper
 from src.applications.calibration.view.calibration_view import CalibrationView
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.engine.core.i_messaging_service import IMessagingService
@@ -91,6 +92,12 @@ class CalibrationController(IApplicationController):
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
+        calibration_settings = self._model.load_calibration_settings()
+        if calibration_settings is not None:
+            self._view.load_calibration_settings(
+                calibration_settings,
+                CalibrationSettingsMapper.to_flat_dict(calibration_settings),
+            )
         active_area_id = self._model.get_active_work_area_id()
         if active_area_id:
             self._view.set_current_work_area_id(active_area_id)
@@ -162,6 +169,7 @@ class CalibrationController(IApplicationController):
         self._view.verify_area_grid_requested.connect(self._on_verify_area_grid)
         self._view.view_depth_map_requested.connect(self._on_view_depth_map)
         self._view.verify_saved_model_requested.connect(self._on_verify_saved_model)
+        self._view.save_calibration_settings_requested.connect(self._on_save_calibration_settings)
         self._view.work_area_changed.connect(self._on_work_area_changed)
         self._view.measurement_area_changed.connect(self._on_measurement_area_changed)
 
@@ -171,6 +179,15 @@ class CalibrationController(IApplicationController):
     def _on_capture(self) -> None:
         ok, msg = self._model.capture_calibration_image()
         self._log(ok, msg)
+
+    def _on_save_calibration_settings(self, flat: dict) -> None:
+        current = self._model.load_calibration_settings()
+        if current is None:
+            self._view.append_log("✗ Calibration settings are not available")
+            return
+        updated = CalibrationSettingsMapper.from_flat_dict(flat, current)
+        self._model.save_calibration_settings(updated)
+        self._view.append_log("✓ Calibration settings saved")
 
     def _on_calibrate_camera(self) -> None:
         self._run_in_thread(self._model.calibrate_camera)

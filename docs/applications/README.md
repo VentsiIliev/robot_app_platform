@@ -31,7 +31,7 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 
 | Package | Description |
 |---------|-------------|
-| `base/` | Abstract base classes: `IApplication`, `ApplicationFactory`, `IApplicationModel`, `IApplicationView`, `IApplicationController` |
+| `base/` | Abstract base classes plus shared UI infrastructure such as `CollapsibleSettingsView`, dialogs, and `app_styles.py` |
 | `APPLICATION_BLUEPRINT/` | Copy-paste template with full guide in `APPLICATION_GUIDE.MD` |
 | `modbus_settings/` | Modbus serial port configuration — port detection + connection test |
 | `glue_cell_settings/` | Weight cell configuration + live readings per cell |
@@ -110,3 +110,4 @@ class YourRobotApp(BaseRobotSystem):
 - **Cross-thread safety**: When broker callbacks arrive from background threads (e.g., weight readings), controllers use a `_Bridge(QObject)` with `pyqtSignal` attributes to marshal data back to the Qt main thread safely. See `glue_cell_settings/controller/`.
 - **Blocking service calls**: When a service call may block the GUI (e.g., serial port detection), controllers dispatch a `QThread + _Worker` pair and track them in `_active: List[Tuple[QThread, _Worker]]`. See `modbus_settings/controller/`.
 - **Localization**: Views should prefer `self.tr(...)` for static strings and refresh text on `QEvent.LanguageChange`. Controllers should re-read dynamic strings via `QCoreApplication.translate(...)` or a localization service helper when the view emits its language-changed signal.
+- **Shared view styling**: Reusable application card/button/section styles should come from `src/applications/base/app_styles.py`. Avoid creating new per-application style modules for common patterns.

@@ -13,6 +13,7 @@ from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.engine.robot.targeting import TargetingSettingsSerializer
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettingsSerializer
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
@@ -179,6 +180,12 @@ class MyRobotSystem(BaseRobotSystem):
                 factory=application_wiring._build_camera_settings_application,
             ),
             ApplicationSpec(
+                name="CalibrationSettings",
+                folder_id=2,
+                icon="fa5s.sliders-h",
+                factory=application_wiring._build_calibration_settings_application,
+            ),
+            ApplicationSpec(
                 name="RobotSettings",
                 folder_id=2,
                 icon="mdi.robot-industrial",
@@ -222,6 +229,11 @@ class MyRobotSystem(BaseRobotSystem):
             CommonSettingsID.ROBOT_CALIBRATION,
             RobotCalibrationSettingsSerializer(),
             "robot/calibration.json",
+        ),
+        SettingsSpec(
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS,
+            CalibrationVisionSettingsSerializer(),
+            "vision/calibration_settings.json",
         ),
         SettingsSpec(
             CommonSettingsID.VISION_CAMERA_SETTINGS,

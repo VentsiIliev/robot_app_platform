@@ -2,12 +2,25 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.calibration.model.calibration_model import CalibrationModel
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.applications.base.i_application_model import IApplicationModel
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+
+
+def _make_calibration_settings():
+    return CalibrationSettingsData(
+        vision=CalibrationVisionSettings(chessboard_width=11),
+        robot=RobotCalibrationSettings(),
+        height=HeightMeasuringModuleSettings(),
+    )
 
 
 def _make_service(**overrides):
     svc = MagicMock(spec=ICalibrationService)
+    svc.load_calibration_settings.return_value       = overrides.get("settings", _make_calibration_settings())
     svc.capture_calibration_image.return_value  = overrides.get("capture",  (True,  "captured"))
     svc.calibrate_camera.return_value            = overrides.get("camera",   (True,  "cam ok"))
     svc.calibrate_robot.return_value             = overrides.get("robot",    (False, "not impl"))
@@ -68,6 +81,19 @@ class TestCalibrationModelDelegation(unittest.TestCase):
     def test_save_is_no_op(self):
         model = CalibrationModel(_make_service())
         model.save()  # must not raise
+
+    def test_load_calibration_settings_delegates_to_service(self):
+        settings = _make_calibration_settings()
+        svc = _make_service(settings=settings)
+        loaded = CalibrationModel(svc).load_calibration_settings()
+        svc.load_calibration_settings.assert_called_once()
+        self.assertIs(loaded, settings)
+
+    def test_save_calibration_settings_delegates_to_service(self):
+        settings = _make_calibration_settings()
+        svc = _make_service()
+        CalibrationModel(svc).save_calibration_settings(settings)
+        svc.save_calibration_settings.assert_called_once_with(settings)
 
 
 if __name__ == "__main__":

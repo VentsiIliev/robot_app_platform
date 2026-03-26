@@ -125,6 +125,7 @@ Robot systems can now declare reusable runtime semantics in addition to services
 Shared settings applications now split work-area ownership cleanly:
 - `CameraSettings` tunes the vision stack
 - `WorkAreaSettings` edits declared work-area ROIs
+- `CalibrationSettings` owns calibration-related configuration
 - `Calibration` consumes those declared work areas for height mapping
 
 ### Service Injection

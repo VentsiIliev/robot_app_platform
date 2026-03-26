@@ -33,12 +33,6 @@ class CameraSettingsData:
     erode_kernel_size:        int   = 3
     erode_iterations:         int   = 4
 
-    # Calibration
-    chessboard_width:         int   = 32
-    chessboard_height:        int   = 20
-    square_size_mm:           float = 25.0
-    calibration_skip_frames:  int   = 30
-
     # Brightness
     brightness_auto:          bool  = True
     brightness_kp:            float = 0.0

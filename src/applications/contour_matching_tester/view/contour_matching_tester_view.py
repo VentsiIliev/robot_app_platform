@@ -16,79 +16,31 @@ from pl_gui.settings.settings_view.styles import (
 )
 from pl_gui.utils.utils_widgets.camera_view import CameraView
 from pl_gui.utils.utils_widgets.table_helpers import make_table
+from src.applications.base.app_styles import (
+    compact_button_style,
+    emphasis_text_style,
+    list_style,
+    muted_text_style,
+    panel_style,
+    table_style,
+)
 from src.applications.base.i_application_view import IApplicationView
 
-_LIST_STYLE = f"""
-QListWidget {{
-    background: white;
-    color: {TEXT_COLOR};
-    border: 1px solid {BORDER};
-    border-radius: 4px;
-    font-size: 12px;
-}}
-QListWidget::item:selected {{ background: #EDE7F6; color: {TEXT_COLOR}; }}
-"""
+_LIST_STYLE = list_style()
+_TABLE_STYLE = table_style()
 
-_TABLE_STYLE = """
-QTableWidget {
-    background: white;
-    border: 1px solid #E0E0E0;
-    border-radius: 6px;
-    gridline-color: #F0F0F0;
-    font-size: 9pt;
-}
-QHeaderView::section {
-    background: #EDE7F6;
-    color: #1A1A2E;
-    font-weight: bold;
-    font-size: 9pt;
-    padding: 6px 4px;
-    border: none;
-    border-bottom: 1px solid #D0C8E0;
-}
-QTableWidget::item { padding: 4px; }
-QTableWidget::item:selected { background: rgba(144,91,169,0.15); color: #1A1A2E; }
-"""
+_CAPTURE_BTN_STYLE = compact_button_style(variant="secondary")
+_CAPTURE_ACTIVE_BTN_STYLE = compact_button_style(variant="primary")
 
-_CAPTURE_BTN_STYLE = f"""
-QPushButton {{
-    background-color: white;
-    color: {PRIMARY};
-    border: 2px solid {PRIMARY};
-    border-radius: 6px;
-    padding: 4px 14px;
-    font-size: 10pt;
-    font-weight: bold;
-    min-height: 32px;
-}}
-QPushButton:hover   {{ background-color: {PRIMARY_LIGHT}; }}
-QPushButton:pressed {{ background-color: {PRIMARY_LIGHT}; }}
-"""
+_STATUS_LIVE_STYLE     = emphasis_text_style(color="#2E7D32")
+_STATUS_CAPTURED_STYLE = emphasis_text_style(color="#905BA9")
 
-_CAPTURE_ACTIVE_BTN_STYLE = f"""
-QPushButton {{
-    background-color: {PRIMARY};
-    color: white;
-    border: 2px solid {PRIMARY};
-    border-radius: 6px;
-    padding: 4px 14px;
-    font-size: 10pt;
-    font-weight: bold;
-    min-height: 32px;
-}}
-QPushButton:hover   {{ background-color: #7A4E9A; }}
-QPushButton:pressed {{ background-color: #6B3E8B; }}
-"""
+_SUMMARY_OK_STYLE   = emphasis_text_style(color="#2E7D32", size_pt=11.0)
+_SUMMARY_WARN_STYLE = emphasis_text_style(color="#C62828", size_pt=11.0)
+_SUMMARY_IDLE_STYLE = muted_text_style(color="#888", size_pt=10.0)
 
-_STATUS_LIVE_STYLE     = "color: #2E7D32; font-size: 9pt; font-weight: bold; background: transparent;"
-_STATUS_CAPTURED_STYLE = "color: #905BA9; font-size: 9pt; font-weight: bold; background: transparent;"
-
-_SUMMARY_OK_STYLE   = "color: #2E7D32; font-size: 11pt; font-weight: bold; background: transparent;"
-_SUMMARY_WARN_STYLE = "color: #C62828; font-size: 11pt; font-weight: bold; background: transparent;"
-_SUMMARY_IDLE_STYLE = "color: #888; font-size: 10pt; background: transparent;"
-
-_THUMB_IDLE_STYLE   = "color: #aaa; font-size: 9pt; background: transparent; border: none;"
-_THUMB_NAME_STYLE   = f"color: {TEXT_COLOR}; font-size: 9pt; font-weight: bold; background: transparent; border: none;"
+_THUMB_IDLE_STYLE   = muted_text_style(color="#aaa")
+_THUMB_NAME_STYLE   = emphasis_text_style(color=TEXT_COLOR)
 
 _COLOR_HIGH = QColor("#E8F5E9")
 _COLOR_MED  = QColor("#FFF9C4")
@@ -124,7 +76,7 @@ class ContourMatchingTesterView(IApplicationView):
 
     def _build_camera_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
@@ -156,7 +108,7 @@ class ContourMatchingTesterView(IApplicationView):
 
     def _build_control_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
@@ -179,9 +131,7 @@ class ContourMatchingTesterView(IApplicationView):
 
         # ── Thumbnail preview ──
         thumb_frame = QFrame()
-        thumb_frame.setStyleSheet(
-            f"QFrame {{ background: white; border: 1px solid {BORDER}; border-radius: 6px; }}"
-        )
+        thumb_frame.setStyleSheet(f"QFrame {{ {panel_style()} }}")
         thumb_layout = QVBoxLayout(thumb_frame)
         thumb_layout.setContentsMargins(6, 6, 6, 6)
         thumb_layout.setSpacing(4)

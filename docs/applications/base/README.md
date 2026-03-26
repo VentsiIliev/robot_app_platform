@@ -2,7 +2,7 @@
 
 This package defines the abstract contracts and the generic wiring implementation shared by all applications. No application-specific logic lives here — only the interfaces and the template-method factory.
 
-It also contains reusable UI infrastructure that is safe to share across applications, such as styled dialogs and the broker-backed user notification presenter.
+It also contains reusable UI infrastructure that is safe to share across applications, such as styled dialogs, shared application styles, and the broker-backed user notification presenter.
 
 ---
 
@@ -242,6 +242,28 @@ Resolution order:
 3. apply `str.format(**params)` if formatting parameters are provided
 
 This keeps translation at the UI boundary instead of pushing localized strings into engine or robot-system code.
+
+---
+
+### `app_styles.py`
+
+**File:** `app_styles.py`
+
+Shared application-level style constants and helpers for views that need reusable cards, section text, state labels, and semantic button variants.
+
+Use it for:
+- app card panels
+- section labels and hints
+- primary / secondary / success / danger button styles
+- toggle button styles
+- state-label styles
+- shared divider widgets
+
+This sits above the lower-level `pl_gui.settings.settings_view.styles` palette:
+- `pl_gui...styles` remains the base design system
+- `src/applications/base/app_styles.py` is the shared application-facing composition layer
+
+Views should prefer importing shared application styles from `src/applications/base/app_styles.py` instead of creating new per-application style modules for common patterns.
 
 ---
 

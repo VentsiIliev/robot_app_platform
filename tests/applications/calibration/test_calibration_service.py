@@ -1,9 +1,21 @@
 import unittest
 from unittest.mock import MagicMock
 
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
 from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+
+
+def _make_calibration_settings():
+    return CalibrationSettingsData(
+        vision=CalibrationVisionSettings(chessboard_width=11),
+        robot=RobotCalibrationSettings(),
+        height=HeightMeasuringModuleSettings(),
+    )
 
 
 def _make_vision(capture=None, calibrate=None):
@@ -14,10 +26,19 @@ def _make_vision(capture=None, calibrate=None):
     return vs
 
 
-def _make_svc(capture=None, calibrate=None, calibrator=None):
+def _make_svc(capture=None, calibrate=None, calibrator=None, calibration_settings_service=None):
     vs = _make_vision(capture=capture, calibrate=calibrate)
     pc = MagicMock()
-    return CalibrationApplicationService(vs, pc, camera_tcp_offset_calibrator=calibrator), vs, pc
+    return (
+        CalibrationApplicationService(
+            vs,
+            pc,
+            camera_tcp_offset_calibrator=calibrator,
+            calibration_settings_service=calibration_settings_service,
+        ),
+        vs,
+        pc,
+    )
 
 
 class TestStubCalibrationService(unittest.TestCase):
@@ -52,6 +73,10 @@ class TestStubCalibrationService(unittest.TestCase):
         ok, msg = self._stub.calibrate_camera_tcp_offset()
         self.assertTrue(ok)
         self.assertIsInstance(msg, str)
+
+    def test_load_calibration_settings_returns_settings(self):
+        settings = self._stub.load_calibration_settings()
+        self.assertIsNotNone(settings)
 
 
 class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
@@ -130,6 +155,26 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         svc = CalibrationApplicationService(None, MagicMock())
         with self.assertRaises(Exception):
             svc.capture_calibration_image()
+
+    def test_load_calibration_settings_delegates_to_bridge_service(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        settings_service.load_settings.return_value = settings
+        svc, _, _ = _make_svc(calibration_settings_service=settings_service)
+
+        loaded = svc.load_calibration_settings()
+
+        settings_service.load_settings.assert_called_once()
+        self.assertIs(loaded, settings)
+
+    def test_save_calibration_settings_delegates_to_bridge_service(self):
+        settings_service = MagicMock()
+        settings = _make_calibration_settings()
+        svc, _, _ = _make_svc(calibration_settings_service=settings_service)
+
+        svc.save_calibration_settings(settings)
+
+        settings_service.save_settings.assert_called_once_with(settings)
 
 
 if __name__ == "__main__":

@@ -18,22 +18,11 @@ from PyQt6.QtWidgets import (
 )
 
 from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, LABEL_STYLE
+from src.applications.base.app_styles import compact_button_style, monospace_log_style, panel_style
 from src.applications.base.i_application_view import IApplicationView
 
-_LOG_STYLE = """
-QTextEdit {
-    background: #1E1E1E; color: #D4D4D4;
-    font-family: monospace; font-size: 9pt;
-    border: 1px solid #333; border-radius: 4px;
-}
-"""
-
-_STOP_STYLE = (
-    "QPushButton { background: #C62828; color: white; border-radius: 4px;"
-    " font-size: 9pt; padding: 4px 8px; }"
-    "QPushButton:hover { background: #D32F2F; }"
-    "QPushButton:disabled { background: #555; color: #888; }"
-)
+_LOG_STYLE = monospace_log_style(dark=True)
+_STOP_STYLE = compact_button_style(variant="danger")
 
 
 class ArucoZProbeView(IApplicationView):
@@ -155,8 +144,7 @@ class ArucoZProbeView(IApplicationView):
         self._prediction_label = QLabel("—")
         self._prediction_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._prediction_label.setStyleSheet(
-            "font-family: monospace; font-size: 9pt;"
-            " background: #1E1E1E; color: #D4D4D4;"
+            "font-family: monospace; font-size: 9pt; background: #1E1E1E; color: #D4D4D4;"
             " border: 1px solid #333; border-radius: 4px; padding: 4px;"
         )
         right_layout.addWidget(self._prediction_label)

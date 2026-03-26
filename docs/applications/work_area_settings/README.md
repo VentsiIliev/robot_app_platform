@@ -34,4 +34,5 @@ work_area_settings/
 - forwards that active area into `IVisionService` when available
 - shows live camera frames through `VisionTopics`
 
-The preview uses the shared `CameraView` widget and the same shared style constants as the other settings applications.
+The preview uses the shared `CameraView` widget and the shared application style helpers from
+[app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py).

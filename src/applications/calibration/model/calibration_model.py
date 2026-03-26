@@ -1,4 +1,5 @@
 from src.applications.base.i_application_model import IApplicationModel
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.shared_contracts.declarations import WorkAreaDefinition
@@ -14,6 +15,12 @@ class CalibrationModel(IApplicationModel):
 
     def save(self, *args, **kwargs) -> None:
         pass
+
+    def load_calibration_settings(self) -> CalibrationSettingsData | None:
+        return self._service.load_calibration_settings()
+
+    def save_calibration_settings(self, settings: CalibrationSettingsData) -> None:
+        self._service.save_calibration_settings(settings)
 
     def capture_calibration_image(self) -> tuple[bool, str]:
         return self._service.capture_calibration_image()

@@ -20,6 +20,7 @@ from src.engine.robot.height_measuring.settings import HeightMeasuringSettingsSe
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.engine.robot.targeting import TargetingSettingsSerializer
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettingsSerializer
 from src.engine.vision.camera_settings_serializer import CameraSettingsSerializer
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
@@ -238,6 +239,8 @@ class GlueRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_work_area_settings_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
                             factory=application_wiring._build_camera_settings_application),
+            ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
+                            factory=application_wiring._build_calibration_settings_application),
             ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
                             factory=application_wiring._build_device_control_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
@@ -294,6 +297,11 @@ class GlueRobotSystem(BaseRobotSystem):
         ),
         SettingsSpec(SettingsID.GLUE_CATALOG, GlueCatalogSerializer(), "glue/catalog.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
+        SettingsSpec(
+            CommonSettingsID.CALIBRATION_VISION_SETTINGS,
+            CalibrationVisionSettingsSerializer(),
+            "vision/calibration_settings.json",
+        ),
         SettingsSpec(CommonSettingsID.VISION_CAMERA_SETTINGS, CameraSettingsSerializer(),
                      "vision/camera_settings.json"),
         SettingsSpec(CommonSettingsID.WORK_AREA_SETTINGS, WorkAreaSettingsSerializer(), "vision/work_areas.json"),

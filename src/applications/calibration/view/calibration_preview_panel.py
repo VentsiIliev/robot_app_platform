@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QTextEdit,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -18,12 +19,13 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.camera_view import CameraView
-from src.applications.calibration.view.calibration_styles import (
-    _BG,
-    _BTN_SECONDARY,
-    _BTN_TEST,
-    _CAPTION,
-    _CARD_STYLE,
+from src.applications.base.app_styles import (
+    APP_BG,
+    APP_CAPTION_STYLE,
+    APP_CARD_STYLE,
+    APP_LOG_STYLE,
+    APP_PRIMARY_BUTTON_STYLE,
+    APP_SECONDARY_BUTTON_STYLE,
     section_hint,
     section_label,
 )
@@ -127,7 +129,7 @@ class _GridCameraView(CameraView):
             painter.setPen(pen)
 
 
-class CalibrationPreviewPanel(QWidget):
+class CalibrationAreaGridPanel(QWidget):
     work_area_changed = pyqtSignal(str)
     measurement_area_changed = pyqtSignal()
     generate_area_grid_requested = pyqtSignal()
@@ -135,46 +137,27 @@ class CalibrationPreviewPanel(QWidget):
     measure_area_grid_requested = pyqtSignal()
     view_depth_map_requested = pyqtSignal()
 
-    def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None, parent=None):
+    def __init__(
+        self,
+        preview_label: _GridCameraView,
+        work_area_definitions: list[WorkAreaDefinition] | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
+        self.preview_label = preview_label
         self._work_area_definitions = [
             definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
         ]
         self._active_area_key: str | None = None
-        self.setStyleSheet(f"background: {_BG};")
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        preview_card = QWidget()
-        preview_card.setStyleSheet(_CARD_STYLE)
-        preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.setSpacing(0)
-
-        caption = QLabel("Camera Preview")
-        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        caption.setFixedHeight(24)
-        caption.setStyleSheet(_CAPTION)
-
-        self.preview_label = _GridCameraView()
-        self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        for definition in self._work_area_definitions:
-            self.preview_label.add_area(definition.id, definition.color)
-        if self._work_area_definitions:
-            self._active_area_key = self._work_area_definitions[0].id
-            self.preview_label.set_active_area(self._active_area_key)
-        self.preview_label.corner_updated.connect(self._on_measurement_area_changed)
-        self.preview_label.empty_clicked.connect(self._on_measurement_area_empty_clicked)
-
-        preview_layout.addWidget(caption, stretch=0)
-        preview_layout.addWidget(self.preview_label, stretch=1)
-
         area_card = QWidget()
-        area_card.setStyleSheet(_CARD_STYLE)
+        area_card.setStyleSheet(APP_CARD_STYLE)
         area_layout = QVBoxLayout(area_card)
         area_layout.setContentsMargins(16, 12, 16, 16)
         area_layout.setSpacing(10)
@@ -205,16 +188,16 @@ class CalibrationPreviewPanel(QWidget):
         area_actions = QVBoxLayout()
         area_actions.setSpacing(8)
         self.generate_area_grid_btn = MaterialButton("▦  Generate Grid")
-        self.generate_area_grid_btn.setStyleSheet(_BTN_TEST)
+        self.generate_area_grid_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         area_actions.addWidget(self.generate_area_grid_btn)
 
         self.measure_area_grid_btn = MaterialButton("📐  Measure Area Grid")
-        self.measure_area_grid_btn.setStyleSheet(_BTN_TEST)
+        self.measure_area_grid_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.measure_area_grid_btn.setEnabled(False)
         area_actions.addWidget(self.measure_area_grid_btn)
 
         self.verify_area_grid_btn = MaterialButton("🧭  Verify Grid")
-        self.verify_area_grid_btn.setStyleSheet(_BTN_TEST)
+        self.verify_area_grid_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.verify_area_grid_btn.setEnabled(False)
         area_actions.addWidget(self.verify_area_grid_btn)
         area_actions.addStretch()
@@ -225,17 +208,16 @@ class CalibrationPreviewPanel(QWidget):
         area_bottom.setSpacing(8)
 
         self.clear_area_grid_btn = MaterialButton("✎  Clear Area")
-        self.clear_area_grid_btn.setStyleSheet(_BTN_SECONDARY)
+        self.clear_area_grid_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
         area_bottom.addWidget(self.clear_area_grid_btn)
 
         self.view_depth_map_btn = MaterialButton("📈  View Depth Map")
-        self.view_depth_map_btn.setStyleSheet(_BTN_TEST)
+        self.view_depth_map_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.view_depth_map_btn.setEnabled(False)
         area_bottom.addWidget(self.view_depth_map_btn)
 
         area_layout.addLayout(area_bottom)
 
-        layout.addWidget(preview_card, stretch=5)
         layout.addWidget(area_card, stretch=0)
 
         self.work_area_combo.currentIndexChanged.connect(self._on_work_area_changed)
@@ -342,3 +324,56 @@ class CalibrationPreviewPanel(QWidget):
 
     def get_area_grid_shape(self) -> tuple[int, int]:
         return int(self.grid_rows_spin.value()), int(self.grid_cols_spin.value())
+
+
+class CalibrationPreviewPanel(QWidget):
+    def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None, parent=None):
+        super().__init__(parent)
+        self._work_area_definitions = [
+            definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
+        ]
+        self.setStyleSheet(f"background: {APP_BG};")
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
+        preview_card = QWidget()
+        preview_card.setStyleSheet(APP_CARD_STYLE)
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
+
+        caption = QLabel("Camera Preview")
+        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        caption.setFixedHeight(24)
+        caption.setStyleSheet(APP_CAPTION_STYLE)
+
+        self.preview_label = _GridCameraView()
+        self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        for definition in self._work_area_definitions:
+            self.preview_label.add_area(definition.id, definition.color)
+        if self._work_area_definitions:
+            self.preview_label.set_active_area(self._work_area_definitions[0].id)
+
+        preview_layout.addWidget(caption, stretch=0)
+        preview_layout.addWidget(self.preview_label, stretch=1)
+
+        log_card = QWidget()
+        log_card.setStyleSheet(APP_CARD_STYLE)
+        log_layout = QVBoxLayout(log_card)
+        log_layout.setContentsMargins(16, 12, 16, 16)
+        log_layout.setSpacing(10)
+        log_layout.addWidget(section_label("Activity"))
+        log_layout.addWidget(section_hint("Live task output and verification reports appear here."))
+
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setStyleSheet(APP_LOG_STYLE)
+        self.log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        log_layout.addWidget(self.log, stretch=1)
+
+        layout.addWidget(preview_card, stretch=5)
+        layout.addWidget(log_card, stretch=2)

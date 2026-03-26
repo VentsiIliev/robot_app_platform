@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from src.applications.base.styled_message_box import show_warning
 from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
+from src.applications.base.app_styles import emphasis_text_style
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.height_measuring.view.height_measuring_schema import (
     CALIBRATION_GROUP, DETECTION_GROUP, MEASURING_GROUP,
@@ -67,7 +68,7 @@ class HeightMeasuringView(IApplicationView):
         group = QGroupBox("Status")
         layout = QVBoxLayout(group)
         self._status_label = QLabel("● Not Calibrated")
-        self._status_label.setStyleSheet("color: #e55; font-weight: bold;")
+        self._status_label.setStyleSheet(emphasis_text_style(color="#e55"))
         self._info_label = QLabel("")
         self._info_label.setWordWrap(True)
         layout.addWidget(self._status_label)
@@ -113,7 +114,7 @@ class HeightMeasuringView(IApplicationView):
     def set_calibration_status(self, is_calibrated: bool, info: Optional[dict]) -> None:
         if is_calibrated:
             self._status_label.setText("● Calibrated")
-            self._status_label.setStyleSheet("color: #5e5; font-weight: bold;")
+            self._status_label.setStyleSheet(emphasis_text_style(color="#5e5"))
             if info:
                 self._info_label.setText(
                     f"Degree: {info.get('degree', '?')}  |  "
@@ -122,7 +123,7 @@ class HeightMeasuringView(IApplicationView):
                 )
         else:
             self._status_label.setText("● Not Calibrated")
-            self._status_label.setStyleSheet("color: #e55; font-weight: bold;")
+            self._status_label.setStyleSheet(emphasis_text_style(color="#e55"))
             self._info_label.setText("")
 
     def set_settings(self, settings) -> None:

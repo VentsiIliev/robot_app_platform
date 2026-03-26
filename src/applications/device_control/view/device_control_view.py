@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QWidget,
 )
 from pl_gui.settings.settings_view.styles import BG_COLOR, GROUP_STYLE
+from src.applications.base.app_styles import indicator_dot_style, semantic_button_style
 
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.device_control.service.i_device_control_service import MotorEntry
@@ -17,37 +18,13 @@ _RED       = "#C62828"
 _RED_HOV   = "#B71C1C"
 _MUTED     = "#9E9E9E"
 
-_BTN_ON = f"""
-    QPushButton {{
-        background-color: {_GREEN}; color: white; border: none;
-        border-radius: 8px; padding: 0 16px; font-size: 11pt;
-        font-weight: bold; min-height: 44px;
-    }}
-    QPushButton:hover   {{ background-color: {_GREEN_HOV}; }}
-    QPushButton:pressed {{ background-color: {_GREEN_HOV}; }}
-    QPushButton:disabled {{ background-color: {_MUTED}; color: white; }}
-"""
-_BTN_OFF = f"""
-    QPushButton {{
-        background-color: {_RED}; color: white; border: none;
-        border-radius: 8px; padding: 0 16px; font-size: 11pt;
-        font-weight: bold; min-height: 44px;
-    }}
-    QPushButton:hover   {{ background-color: {_RED_HOV}; }}
-    QPushButton:pressed {{ background-color: {_RED_HOV}; }}
-    QPushButton:disabled {{ background-color: {_MUTED}; color: white; }}
-"""
-_BTN_NA = f"""
-    QPushButton {{
-        background-color: {_MUTED}; color: white; border: none;
-        border-radius: 8px; padding: 0 16px; font-size: 11pt;
-        font-weight: bold; min-height: 44px;
-    }}
-"""
+_BTN_ON = semantic_button_style(bg=_GREEN, hover_bg=_GREEN_HOV, disabled_bg=_MUTED)
+_BTN_OFF = semantic_button_style(bg=_RED, hover_bg=_RED_HOV, disabled_bg=_MUTED)
+_BTN_NA = semantic_button_style(bg=_MUTED, hover_bg=_MUTED, disabled_bg=_MUTED)
 
-_DOT_ON  = f"color: {_GREEN};  font-size: 18px; background: transparent;"
-_DOT_OFF = f"color: {_RED};    font-size: 18px; background: transparent;"
-_DOT_NA  = f"color: {_MUTED};  font-size: 18px; background: transparent;"
+_DOT_ON  = indicator_dot_style(color=_GREEN)
+_DOT_OFF = indicator_dot_style(color=_RED)
+_DOT_NA  = indicator_dot_style(color=_MUTED)
 
 _STATIC_DEVICES = [
     ("laser",       "Laser"),
@@ -202,4 +179,3 @@ class DeviceControlView(IApplicationView):
 
     def clean_up(self) -> None:
         pass
-

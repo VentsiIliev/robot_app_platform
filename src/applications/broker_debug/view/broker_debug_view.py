@@ -12,92 +12,33 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from pl_gui.utils.utils_widgets.table_helpers import make_table
+from src.applications.base.app_styles import (
+    APP_BG,
+    APP_CAPTION_STYLE,
+    APP_PANEL_BG,
+    compact_button_style,
+    divider,
+    input_style,
+    monospace_log_style,
+    panel_style,
+    section_label,
+    split_panel_style,
+    table_style,
+)
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.broker_debug.view.graph_widget import GraphWidget
 
-_BG       = "#F8F9FA"
-_PANEL    = "#FFFFFF"
-_BORDER   = "#E0E0E0"
-_PRIMARY  = "#905BA9"
-_TEXT     = "#1A1A2E"
-_MUTED    = "#888899"
-_DANGER   = "#D32F2F"
-_SUCCESS  = "#2E7D32"
+_TEXT = "#1A1A2E"
+_MUTED = "#888899"
+_PRIMARY = "#905BA9"
+_DANGER = "#D32F2F"
+_SUCCESS = "#2E7D32"
 
-_SECTION = "color: #1A1A2E; font-size: 9pt; font-weight: bold; background: transparent; padding: 4px 0;"
-_CAPTION = "color: #888899; font-size: 8pt; background: transparent; padding: 2px 0;"
-
-_LOG_STYLE = """
-QTextEdit {
-    background: #F3F4F8;
-    color: #1A1A2E;
-    border: 1px solid #E0E0E0;
-    border-radius: 6px;
-    font-family: monospace;
-    font-size: 8pt;
-    padding: 4px;
-}
-"""
-_TABLE_STYLE = """
-QTableWidget {
-    background: white;
-    border: 1px solid #E0E0E0;
-    border-radius: 6px;
-    gridline-color: #F0F0F0;
-    font-size: 9pt;
-}
-QHeaderView::section {
-    background: #EDE7F6;
-    color: #1A1A2E;
-    font-weight: bold;
-    font-size: 8pt;
-    padding: 4px;
-    border: none;
-    border-bottom: 1px solid #D0C8E0;
-}
-QTableWidget::item:selected { background: rgba(144,91,169,0.15); color: #1A1A2E; }
-"""
-_INPUT_STYLE = """
-QLineEdit {
-    background: white;
-    color: #1A1A2E;
-    border: 1.5px solid #E0E0E0;
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 9pt;
-}
-QLineEdit:focus { border-color: #905BA9; }
-"""
-_BTN_PRI = """
-MaterialButton {
-    background: #905BA9; color: white;
-    border-radius: 6px; font-weight: bold; min-height: 34px;
-}
-MaterialButton:hover { background: #7A4D90; }
-"""
-_BTN_SEC = """
-MaterialButton {
-    background: transparent; color: #905BA9;
-    border: 1.5px solid #905BA9;
-    border-radius: 6px; font-weight: bold; min-height: 34px;
-}
-MaterialButton:hover { background: rgba(144,91,169,0.08); }
-"""
-_BTN_DANGER = """
-MaterialButton {
-    background: transparent; color: #D32F2F;
-    border: 1.5px solid #D32F2F;
-    border-radius: 6px; font-weight: bold; min-height: 34px;
-}
-MaterialButton:hover { background: rgba(211,47,47,0.08); }
-"""
-
-
-def _divider() -> QWidget:
-    d = QWidget(); d.setFixedHeight(1); d.setStyleSheet(f"background:{_BORDER};"); return d
-
-def _label(text: str, style: str = _SECTION) -> QLabel:
-    l = QLabel(text); l.setStyleSheet(style); return l
+_TABLE_STYLE = table_style(header_font_pt=8.0, body_font_pt=9.0)
+_INPUT_STYLE = input_style()
+_BTN_PRI = compact_button_style(variant="primary", selector="MaterialButton")
+_BTN_SEC = compact_button_style(variant="secondary", selector="MaterialButton")
+_BTN_DANGER = compact_button_style(variant="danger", selector="MaterialButton")
 
 
 class BrokerDebugView(IApplicationView):
@@ -112,7 +53,7 @@ class BrokerDebugView(IApplicationView):
         super().__init__("BrokerDebug", parent)
 
     def setup_ui(self) -> None:
-        self.setStyleSheet(f"background: {_BG};")
+        self.setStyleSheet(f"background: {APP_BG};")
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -131,12 +72,12 @@ class BrokerDebugView(IApplicationView):
     # ── Left panel: topic table + graph ──────────────────────────────
 
     def _build_left(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f"background:{_BG};")
+        w = QWidget(); w.setStyleSheet(f"background:{APP_BG};")
         vl = QVBoxLayout(w); vl.setContentsMargins(12, 12, 12, 12); vl.setSpacing(8)
 
         # Header row
         hdr = QHBoxLayout(); hdr.setContentsMargins(0,0,0,0)
-        hdr.addWidget(_label("Active Topics"))
+        hdr.addWidget(section_label("Active Topics"))
         hdr.addStretch()
         self._refresh_btn = MaterialButton("↻ Refresh")
         self._refresh_btn.setStyleSheet(_BTN_SEC)
@@ -154,8 +95,8 @@ class BrokerDebugView(IApplicationView):
         self._table.setColumnWidth(2, 160)
         vl.addWidget(self._table)
 
-        vl.addWidget(_divider())
-        vl.addWidget(_label("Pub/Sub Graph"))
+        vl.addWidget(divider())
+        vl.addWidget(section_label("Pub/Sub Graph"))
 
         # Graph
         self._graph = GraphWidget()
@@ -167,17 +108,21 @@ class BrokerDebugView(IApplicationView):
     # ── Right panel: publish + spy log ───────────────────────────────
 
     def _build_right(self) -> QWidget:
-        w = QWidget(); w.setStyleSheet(f"background:{_PANEL}; border-left:1px solid {_BORDER};")
+        w = QWidget(); w.setStyleSheet(split_panel_style(bg=APP_PANEL_BG))
         vl = QVBoxLayout(w); vl.setContentsMargins(14, 12, 14, 12); vl.setSpacing(10)
 
         # ── Publish ───────────────────────────────────────────────────
-        vl.addWidget(_label("Publish Message"))
+        vl.addWidget(section_label("Publish Message"))
 
-        vl.addWidget(_label("Topic", _CAPTION))
+        topic_lbl = QLabel("Topic")
+        topic_lbl.setStyleSheet(APP_CAPTION_STYLE)
+        vl.addWidget(topic_lbl)
         self._pub_topic = QLineEdit(); self._pub_topic.setPlaceholderText("e.g. vision-vision_service/latest-image")
         self._pub_topic.setStyleSheet(_INPUT_STYLE); vl.addWidget(self._pub_topic)
 
-        vl.addWidget(_label("Payload", _CAPTION))
+        payload_lbl = QLabel("Payload")
+        payload_lbl.setStyleSheet(APP_CAPTION_STYLE)
+        vl.addWidget(payload_lbl)
         self._pub_payload = QLineEdit(); self._pub_payload.setPlaceholderText('e.g. {"value": 42}')
         self._pub_payload.setStyleSheet(_INPUT_STYLE); vl.addWidget(self._pub_payload)
 
@@ -189,11 +134,13 @@ class BrokerDebugView(IApplicationView):
         pub_row.addWidget(self._pub_btn); pub_row.addWidget(self._clear_pub_btn)
         vl.addLayout(pub_row)
 
-        vl.addWidget(_divider())
+        vl.addWidget(divider())
 
         # ── Spy subscribe ─────────────────────────────────────────────
-        vl.addWidget(_label("Spy on Topic"))
-        vl.addWidget(_label("Topic to watch", _CAPTION))
+        vl.addWidget(section_label("Spy on Topic"))
+        spy_lbl = QLabel("Topic to watch")
+        spy_lbl.setStyleSheet(APP_CAPTION_STYLE)
+        vl.addWidget(spy_lbl)
 
         spy_row = QHBoxLayout(); spy_row.setSpacing(8)
         self._spy_topic = QLineEdit(); self._spy_topic.setPlaceholderText("topic to spy on")
@@ -207,11 +154,11 @@ class BrokerDebugView(IApplicationView):
         spy_row.addWidget(self._unspy_btn)
         vl.addLayout(spy_row)
 
-        vl.addWidget(_divider())
+        vl.addWidget(divider())
 
         # ── Message log ───────────────────────────────────────────────
         log_hdr = QHBoxLayout(); log_hdr.setContentsMargins(0,0,0,0)
-        log_hdr.addWidget(_label("Message Log"))
+        log_hdr.addWidget(section_label("Message Log"))
         log_hdr.addStretch()
         self._clear_log_btn = MaterialButton("Clear Log")
         self._clear_log_btn.setStyleSheet(_BTN_SEC)
@@ -220,7 +167,7 @@ class BrokerDebugView(IApplicationView):
         vl.addLayout(log_hdr)
 
         self._log = QTextEdit(); self._log.setReadOnly(True)
-        self._log.setStyleSheet(_LOG_STYLE)
+        self._log.setStyleSheet(monospace_log_style(font_size_pt=8.0))
         self._log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         vl.addWidget(self._log, stretch=1)
 

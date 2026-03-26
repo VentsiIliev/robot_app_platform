@@ -5,6 +5,7 @@ from PyQt6.QtGui import QImage, QPixmap
 
 from pl_gui.settings.settings_view.settings_view import SettingsView
 from pl_gui.utils.utils_widgets.camera_view import CameraView
+from src.applications.base.app_styles import APP_CAPTION_STYLE, app_state_label_style
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.camera_settings.view.camera_controls_widget import CameraControlsWidget
 
@@ -17,19 +18,6 @@ _STATE_COLORS = {
     "ERROR":        ("#FF4466", "#1F0010"),
     "UNKNOWN":      ("#555577", "#12121F"),
 }
-_STATE_LABEL_STYLE = """
-    QLabel {{
-        color: {fg};
-        background: {bg};
-        border-bottom: 2px solid {fg};
-        font-size: 9pt;
-        font-weight: bold;
-        letter-spacing: 1px;
-        padding: 4px 10px;
-    }}
-"""
-_CAPTION_STYLE = "color: #666688; font-size: 8pt; background: transparent; padding: 2px 6px;"
-
 
 class CameraSettingsView(IApplicationView):
     SHOW_JOG_WIDGET = True
@@ -68,13 +56,13 @@ class CameraSettingsView(IApplicationView):
         self._state_label = QLabel("● UNKNOWN")
         self._state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._state_label.setFixedHeight(28)
-        self._state_label.setStyleSheet(_STATE_LABEL_STYLE.format(fg=fg, bg=bg))
+        self._state_label.setStyleSheet(app_state_label_style(fg=fg, bg=bg))
         layout.addWidget(self._state_label, stretch=0)
 
         # ── Live feed ─────────────────────────────────────────────────────
         live_caption = QLabel("Live")
         live_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        live_caption.setStyleSheet(_CAPTION_STYLE)
+        live_caption.setStyleSheet(APP_CAPTION_STYLE)
         live_caption.setFixedHeight(16)
         self._preview_label = CameraView()
         self._preview_label.setMaximumHeight(280)
@@ -84,7 +72,7 @@ class CameraSettingsView(IApplicationView):
         # ── Threshold feed ────────────────────────────────────────────────
         thresh_caption = QLabel("Threshold")
         thresh_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        thresh_caption.setStyleSheet(_CAPTION_STYLE)
+        thresh_caption.setStyleSheet(APP_CAPTION_STYLE)
         thresh_caption.setFixedHeight(16)
         self._threshold_label = CameraView()
         self._threshold_label.setMaximumHeight(280)
@@ -110,7 +98,7 @@ class CameraSettingsView(IApplicationView):
     @pyqtSlot(str)
     def _on_vision_state_changed(self, state: str) -> None:
         fg, bg = _STATE_COLORS.get(state.upper(), _STATE_COLORS["UNKNOWN"])
-        self._state_label.setStyleSheet(_STATE_LABEL_STYLE.format(fg=fg, bg=bg))
+        self._state_label.setStyleSheet(app_state_label_style(fg=fg, bg=bg))
         self._state_label.setText(f"● {state.upper()}")
 
     # ── Public setters ────────────────────────────────────────────────

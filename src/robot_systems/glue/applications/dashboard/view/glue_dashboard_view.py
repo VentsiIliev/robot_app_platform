@@ -1,6 +1,6 @@
 from __future__ import annotations
-from PyQt6.QtCore import pyqtSignal, QEvent, Qt
-from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtCore import pyqtSignal, QEvent, Qt, QSize
+from PyQt6.QtWidgets import QVBoxLayout, QSizePolicy
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from src.robot_systems.glue.applications.dashboard.ui.system_status_widget import SystemStatusWidget
 from src.robot_systems.glue.applications.dashboard.ui.dashboard_preview_widget import DashboardPreviewWidget
@@ -24,6 +24,8 @@ class GlueDashboardView(IApplicationView):
         super().__init__("Dashboard", parent)
 
     def setup_ui(self):
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMinimumSize(0, 0)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -32,6 +34,8 @@ class GlueDashboardView(IApplicationView):
             action_buttons=self._action_buttons,
             cards=self._cards_input,
         )
+        self._dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._dashboard.setMinimumSize(0, 0)
         layout.addWidget(self._dashboard)
         self._dashboard.start_requested.connect(self._on_inner_start)
         self._dashboard.stop_requested.connect(self._on_inner_stop)
@@ -129,3 +133,9 @@ class GlueDashboardView(IApplicationView):
         if event.type() == QEvent.Type.LanguageChange:
             self.language_changed.emit()
         super().changeEvent(event)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, 0)
+
+    def sizeHint(self) -> QSize:
+        return QSize(1180, 880)

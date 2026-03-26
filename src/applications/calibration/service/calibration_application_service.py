@@ -9,8 +9,13 @@ from typing import Callable, Optional, Protocol, Sequence
 import cv2
 import numpy as np
 
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.calibration_settings.service.i_calibration_settings_service import (
+    ICalibrationSettingsService,
+)
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.applications.calibration.service.calibration_settings_bridge import CalibrationSettingsBridge
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.vision.i_vision_service import IVisionService
 from src.shared_contracts.declarations import WorkAreaDefinition
@@ -146,6 +151,7 @@ class CalibrationApplicationService(ICalibrationService):
                  work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
+                 calibration_settings_service: Optional[ICalibrationSettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
                  laser_ops: Optional[_ILaserOps] = None,
                  use_marker_centre: bool = False,
@@ -160,6 +166,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
+        self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
         self._laser_calibration_service = laser_calibration_service
         self._laser_ops = laser_ops
         self._use_marker_centre   = use_marker_centre
@@ -193,6 +200,12 @@ class CalibrationApplicationService(ICalibrationService):
         return self._calib_config.acceleration
 
     # ── ICalibrationService ───────────────────────────────────────────
+
+    def load_calibration_settings(self) -> CalibrationSettingsData | None:
+        return self._calibration_settings.load()
+
+    def save_calibration_settings(self, settings: CalibrationSettingsData) -> None:
+        self._calibration_settings.save(settings)
 
     def capture_calibration_image(self) -> tuple[bool, str]:
         return self._vision_service.capture_calibration_image()

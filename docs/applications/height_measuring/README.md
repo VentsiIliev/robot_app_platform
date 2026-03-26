@@ -1,6 +1,6 @@
 # `src/applications/height_measuring/` — Height Measuring
 
-Configuration and calibration screen for the laser-based height measurement system. Operators tune laser detection parameters, run calibration to build the Z-to-pixel mapping model, and fire single-shot detections to verify the result. All hardware calls run on background threads.
+Settings screen for the laser-based height measurement system. Operators tune laser detection, laser calibration, and measuring parameters here. The operational laser workflow now lives in the `Calibration` application.
 
 ---
 
@@ -16,7 +16,7 @@ height_measuring/
 │   ├── height_measuring_model.py               ← Thin delegation
 │   └── mapper.py                               ← HeightMeasuringSettingsMapper (flat dict ↔ settings)
 ├── view/
-│   ├── height_measuring_view.py                ← CollapsibleSettingsView + camera feed + action buttons
+│   ├── height_measuring_view.py                ← CollapsibleSettingsView + overview/status
 │   └── height_measuring_schema.py              ← Settings form schema
 ├── controller/
 │   └── height_measuring_controller.py          ← BackgroundWorker, broker subscription for frames
@@ -79,11 +79,9 @@ Defines the `CollapsibleSettingsView` groups for the three settings sub-objects.
 
 ## Controller behaviour
 
-- `load()` — fetches current settings via `get_settings()` → `mapper.to_flat_dict()` → populates form; queries `is_calibrated()` to update status badge.
-- **Calibration** — `run_calibration()` is dispatched to a background thread. Progress is reported via the return value `(bool, str)`. `cancel_calibration()` can interrupt an in-progress run.
-- **Detect once** — `detect_once()` runs on a background thread. On completion, the `LaserDetectionResult` is shown in the view: `debug_image` overlaid on the camera feed, `height_mm` displayed as a measurement readout.
-- **Camera feed** — controller subscribes to `VisionTopics.LATEST_IMAGE` via `_Bridge` for cross-thread Qt-safe frame delivery to the camera preview widget.
-- **Save settings** — calls `mapper.from_flat_dict(flat, base)` (deep-copies base settings, merges form values) then `save_settings()`.
+- `load()` — fetches current settings via `get_settings()` → `mapper.to_flat_dict()` → populates form; queries `is_calibrated()` to update the overview status.
+- `save_settings()` — persists tuned detection/calibration/measuring parameters.
+- Live laser calibration and one-shot detection are no longer owned by this application.
 
 ---
 

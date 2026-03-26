@@ -4,6 +4,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
+from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtWidgets import QApplication, QWidget
+
 from src.bootstrap.logging_config import setup_logging
 from src.bootstrap.build_engine import EngineContext
 from src.bootstrap.application_loader import ApplicationLoader
@@ -11,12 +15,43 @@ from src.bootstrap.shell_configurator import ShellConfigurator
 from src.engine.localization.localization_service import LocalizationService
 from src.robot_systems.system_builder import SystemBuilder
 from src.robot_systems.glue.bootstrap_provider import GlueBootstrapProvider
-from PyQt6.QtWidgets import QApplication, QWidget
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
 _DEV_SKIP_LOGIN = True
 _BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
+
+
+class _FramelessHeaderDrag(QObject):
+    def __init__(self, window: QWidget, drag_widget: QWidget):
+        super().__init__(window)
+        self._window = window
+        self._drag_widget = drag_widget
+        self._dragging = False
+        self._press_offset = QPoint()
+        self._drag_widget.installEventFilter(self)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is not self._drag_widget:
+            return False
+
+        if event.type() == QEvent.Type.MouseButtonPress:
+            mouse_event = event
+            if isinstance(mouse_event, QMouseEvent) and mouse_event.button() == Qt.MouseButton.LeftButton:
+                self._dragging = True
+                self._press_offset = mouse_event.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
+                return True
+
+        if event.type() == QEvent.Type.MouseMove and self._dragging:
+            mouse_event = event
+            if isinstance(mouse_event, QMouseEvent):
+                self._window.move(mouse_event.globalPosition().toPoint() - self._press_offset)
+                return True
+
+        if event.type() in (QEvent.Type.MouseButtonRelease, QEvent.Type.Leave):
+            self._dragging = False
+
+        return False
 
 def main() -> None:
     setup_logging()
@@ -49,6 +84,9 @@ def main() -> None:
         widget_factory=lambda _: QWidget(),   # placeholder, never invoked during login
         languages=localization_svc.available_languages(),
     )
+    shell.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
+    shell.setFixedSize(1280, 1024)
+    shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
 

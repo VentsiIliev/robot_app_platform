@@ -4,11 +4,24 @@ from unittest.mock import MagicMock
 
 from src.applications.calibration.controller.calibration_controller import CalibrationController
 from src.applications.calibration.model.calibration_model import CalibrationModel
+from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.shared_contracts.events.vision_events import VisionTopics
+from src.engine.robot.configuration import RobotCalibrationSettings
+from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
+from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
+
+
+def _make_calibration_settings():
+    return CalibrationSettingsData(
+        vision=CalibrationVisionSettings(chessboard_width=11),
+        robot=RobotCalibrationSettings(),
+        height=HeightMeasuringModuleSettings(),
+    )
 
 
 def _make_model(**overrides):
     m = MagicMock(spec=CalibrationModel)
+    m.load_calibration_settings.return_value       = overrides.get("settings", _make_calibration_settings())
     m.capture_calibration_image.return_value = overrides.get("capture",  (True,  "captured"))
     m.calibrate_camera.return_value           = overrides.get("camera",   (True,  "cam ok"))
     m.calibrate_robot.return_value            = overrides.get("robot",    (False, "not impl"))
@@ -28,6 +41,8 @@ def _make_view():
     v.calibrate_robot_requested.connect = MagicMock()
     v.calibrate_sequence_requested = MagicMock()
     v.calibrate_sequence_requested.connect = MagicMock()
+    v.save_calibration_settings_requested = MagicMock()
+    v.save_calibration_settings_requested.connect = MagicMock()
     return v
 
 
@@ -101,6 +116,16 @@ class TestCalibrationControllerLoad(unittest.TestCase):
         ctrl, _, view, _ = _make_ctrl()
         ctrl.load()
         view.calibrate_sequence_requested.connect.assert_called_once()
+
+    def test_wires_save_calibration_settings_signal(self):
+        ctrl, _, view, _ = _make_ctrl()
+        ctrl.load()
+        view.save_calibration_settings_requested.connect.assert_called_once()
+
+    def test_load_pushes_calibration_settings_into_view(self):
+        ctrl, model, view, _ = _make_ctrl(settings=_make_calibration_settings())
+        ctrl.load()
+        view.load_calibration_settings.assert_called_once()
 
 
 class TestCalibrationControllerStop(unittest.TestCase):
@@ -185,6 +210,12 @@ class TestCalibrationControllerHandlers(unittest.TestCase):
         ctrl, _, view, _ = _make_ctrl()
         ctrl._log(False, "oops")
         view.append_log.assert_called_once_with("✗ oops")
+
+    def test_on_save_calibration_settings_updates_model_and_logs(self):
+        ctrl, model, view, _ = _make_ctrl(settings=_make_calibration_settings())
+        ctrl._on_save_calibration_settings({"calib_vision_chessboard_width": 12})
+        model.save_calibration_settings.assert_called_once()
+        view.append_log.assert_called_once_with("✓ Calibration settings saved")
 
 
 class TestCalibrationControllerCameraFrame(unittest.TestCase):

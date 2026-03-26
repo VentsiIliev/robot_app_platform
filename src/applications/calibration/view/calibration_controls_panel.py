@@ -1,30 +1,35 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QHBoxLayout,
-    QScrollArea,
-    QSizePolicy,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QScrollArea, QTabWidget, QVBoxLayout, QWidget
 
+from src.applications.calibration_settings.view.calibration_settings_schema import (
+    CALIBRATION_ADAPTIVE_GROUP,
+    CALIBRATION_AXIS_MAPPING_GROUP,
+    CALIBRATION_CAMERA_TCP_GROUP,
+    CALIBRATION_MARKER_GROUP,
+    HEIGHT_MAPPING_GROUP,
+    LASER_CALIBRATION_GROUP,
+    LASER_DETECTION_GROUP,
+    VISION_CALIBRATION_GROUP,
+)
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
-from src.applications.calibration.view.calibration_styles import (
-    _BTN_DANGER,
-    _BTN_OVERLAY_OFF,
-    _BTN_OVERLAY_ON,
-    _BTN_PRIMARY,
-    _BTN_SECONDARY,
-    _BTN_SEQUENCE,
-    _BTN_TEST,
-    _CARD_STYLE,
-    _LOG_STYLE,
-    _PANEL_BG,
-    divider,
-    section_hint,
-    section_label,
+from src.applications.base.app_styles import (
+    APP_DANGER_BUTTON_STYLE,
+    APP_PANEL_BG,
+    APP_PANEL_SPLIT_STYLE,
+    APP_PRIMARY_BUTTON_STYLE,
+    APP_SECONDARY_BUTTON_STYLE,
+    APP_SEQUENCE_BUTTON_STYLE,
+    APP_TOGGLE_OFF_BUTTON_STYLE,
+    APP_TOGGLE_ON_BUTTON_STYLE,
+)
+from src.applications.calibration.view.calibration_phase_tabs import (
+    CameraCalibrationTab,
+    HeightMappingTab,
+    LaserCalibrationTab,
+    RobotCalibrationTab,
+    SystemCalibrationTab,
 )
 
 
@@ -33,125 +38,65 @@ class CalibrationControlsPanel(QWidget):
         super().__init__(parent)
         self._crosshair_on = False
         self._magnifier_on = False
+        self._height_mapping_content: QWidget | None = None
+        self._phase_tabs: list[QWidget] = []
         self._build_ui()
 
     def _build_ui(self) -> None:
         content = QWidget()
-        content.setStyleSheet(f"background: {_PANEL_BG};")
+        content.setStyleSheet(f"background: {APP_PANEL_BG};")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
-
-        capture_card = QWidget()
-        capture_card.setStyleSheet(_CARD_STYLE)
-        capture_layout = QVBoxLayout(capture_card)
-        capture_layout.setContentsMargins(16, 12, 16, 16)
-        capture_layout.setSpacing(10)
-        capture_layout.addWidget(section_label("Step 1: Setup"))
-        capture_layout.addWidget(section_hint("Capture a fresh calibration image and enable overlays while defining the work area."))
+        self._tabs = QTabWidget()
+        self._tabs.setDocumentMode(True)
+        self._tabs.setStyleSheet(f"background: {APP_PANEL_BG};")
 
         self.capture_btn = MaterialButton("Capture Calibration Image")
-        self.capture_btn.setStyleSheet(_BTN_SECONDARY)
-        capture_layout.addWidget(self.capture_btn)
-
-        overlay_row = QHBoxLayout()
-        overlay_row.setSpacing(8)
+        self.capture_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
         self.crosshair_btn = MaterialButton("⊕  Crosshair")
-        self.crosshair_btn.setStyleSheet(_BTN_OVERLAY_OFF)
+        self.crosshair_btn.setStyleSheet(APP_TOGGLE_OFF_BUTTON_STYLE)
         self.magnifier_btn = MaterialButton("🔍  Magnifier")
-        self.magnifier_btn.setStyleSheet(_BTN_OVERLAY_OFF)
-        overlay_row.addWidget(self.crosshair_btn)
-        overlay_row.addWidget(self.magnifier_btn)
-        capture_layout.addLayout(overlay_row)
-        layout.addWidget(capture_card)
-
-        calibration_card = QWidget()
-        calibration_card.setStyleSheet(_CARD_STYLE)
-        calibration_layout = QVBoxLayout(calibration_card)
-        calibration_layout.setContentsMargins(16, 12, 16, 16)
-        calibration_layout.setSpacing(10)
-        calibration_layout.addWidget(section_label("Step 2: Camera and Robot Calibration"))
-        calibration_layout.addWidget(section_hint("Run camera calibration, robot calibration, or the full sequence. TCP offset becomes available after calibration succeeds."))
-
+        self.magnifier_btn.setStyleSheet(APP_TOGGLE_OFF_BUTTON_STYLE)
         self.calibrate_camera_btn = MaterialButton("Calibrate Camera")
-        self.calibrate_camera_btn.setStyleSheet(_BTN_PRIMARY)
-        calibration_layout.addWidget(self.calibrate_camera_btn)
-
+        self.calibrate_camera_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_robot_btn = MaterialButton("Calibrate Robot")
-        self.calibrate_robot_btn.setStyleSheet(_BTN_PRIMARY)
-        calibration_layout.addWidget(self.calibrate_robot_btn)
-
+        self.calibrate_robot_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_camera_tcp_offset_btn = MaterialButton("Calibrate Camera TCP Offset")
-        self.calibrate_camera_tcp_offset_btn.setStyleSheet(_BTN_PRIMARY)
+        self.calibrate_camera_tcp_offset_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_camera_tcp_offset_btn.setEnabled(False)
-        calibration_layout.addWidget(self.calibrate_camera_tcp_offset_btn)
-
         self.calibrate_sequence_btn = MaterialButton("Calibrate Camera → Robot")
-        self.calibrate_sequence_btn.setStyleSheet(_BTN_SEQUENCE)
-        calibration_layout.addWidget(self.calibrate_sequence_btn)
-
-        calibration_layout.addWidget(divider())
-
+        self.calibrate_sequence_btn.setStyleSheet(APP_SEQUENCE_BUTTON_STYLE)
         self.stop_robot_btn = MaterialButton("⏹  Stop Active Task")
-        self.stop_robot_btn.setStyleSheet(_BTN_DANGER)
+        self.stop_robot_btn.setStyleSheet(APP_DANGER_BUTTON_STYLE)
         self.stop_robot_btn.setEnabled(False)
-        calibration_layout.addWidget(self.stop_robot_btn)
-        layout.addWidget(calibration_card)
-
-        height_card = QWidget()
-        height_card.setStyleSheet(_CARD_STYLE)
-        height_layout = QVBoxLayout(height_card)
-        height_layout.setContentsMargins(16, 12, 16, 16)
-        height_layout.setSpacing(10)
-        height_layout.addWidget(section_label("Validation"))
-        height_layout.addWidget(section_hint("Use a quick calibration test before moving on to area-based height workflows."))
-
         self.test_calibration_btn = MaterialButton("▶  Test Calibration")
-        self.test_calibration_btn.setStyleSheet(_BTN_TEST)
+        self.test_calibration_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.test_calibration_btn.setEnabled(False)
-        height_layout.addWidget(self.test_calibration_btn)
-
         self.calibrate_laser_btn = MaterialButton("📡  Calibrate Laser")
-        self.calibrate_laser_btn.setStyleSheet(_BTN_TEST)
-        height_layout.addWidget(self.calibrate_laser_btn)
-
+        self.calibrate_laser_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.detect_laser_btn = MaterialButton("🔎  Detect Laser Once")
-        self.detect_laser_btn.setStyleSheet(_BTN_TEST)
-        height_layout.addWidget(self.detect_laser_btn)
-
+        self.detect_laser_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.measure_marker_heights_btn = MaterialButton("📏  Measure Marker Heights")
-        self.measure_marker_heights_btn.setStyleSheet(_BTN_TEST)
+        self.measure_marker_heights_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.measure_marker_heights_btn.setEnabled(False)
         self.measure_marker_heights_btn.hide()
-
         self.verify_saved_model_btn = MaterialButton("🧪  Verify Saved Model")
-        self.verify_saved_model_btn.setStyleSheet(_BTN_TEST)
+        self.verify_saved_model_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.verify_saved_model_btn.setEnabled(False)
-        height_layout.addWidget(self.verify_saved_model_btn)
-        layout.addWidget(height_card)
 
-        log_card = QWidget()
-        log_card.setStyleSheet(_CARD_STYLE)
-        log_layout = QVBoxLayout(log_card)
-        log_layout.setContentsMargins(16, 12, 16, 16)
-        log_layout.setSpacing(10)
-        log_layout.addWidget(section_label("Activity"))
-        log_layout.addWidget(section_hint("Live task output and verification reports appear here."))
-
-        self.log = QTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setStyleSheet(_LOG_STYLE)
-        self.log.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        log_layout.addWidget(self.log, stretch=1)
-        layout.addWidget(log_card, stretch=1)
-
-        layout.addStretch(1)
+        self._tabs.addTab(self._build_system_tab(), "System")
+        self._tabs.addTab(self._build_camera_tab(), "Camera")
+        self._tabs.addTab(self._build_robot_tab(), "Robot")
+        self._tabs.addTab(self._build_laser_tab(), "Laser")
+        self._tabs.addTab(self._build_height_tab(), "Height Mapping")
+        layout.addWidget(self._tabs, stretch=1)
 
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"background: {_PANEL_BG}; border-left: 1px solid #E0E0E0;")
+        scroll.setStyleSheet(APP_PANEL_SPLIT_STYLE)
         scroll.setWidget(content)
 
         outer = QVBoxLayout(self)
@@ -159,14 +104,87 @@ class CalibrationControlsPanel(QWidget):
         outer.setSpacing(0)
         outer.addWidget(scroll)
 
+    def _build_camera_tab(self) -> QWidget:
+        tab = CameraCalibrationTab(
+            capture_btn=self.capture_btn,
+            crosshair_btn=self.crosshair_btn,
+            magnifier_btn=self.magnifier_btn,
+            calibrate_camera_btn=self.calibrate_camera_btn,
+            settings_schemas=[VISION_CALIBRATION_GROUP],
+        )
+        self._phase_tabs.append(tab)
+        return tab
+
+    def _build_robot_tab(self) -> QWidget:
+        tab = RobotCalibrationTab(
+            calibrate_robot_btn=self.calibrate_robot_btn,
+            calibrate_tcp_btn=self.calibrate_camera_tcp_offset_btn,
+            test_btn=self.test_calibration_btn,
+            settings_schemas=[
+                CALIBRATION_ADAPTIVE_GROUP,
+                CALIBRATION_MARKER_GROUP,
+                CALIBRATION_AXIS_MAPPING_GROUP,
+                CALIBRATION_CAMERA_TCP_GROUP,
+            ],
+        )
+        self._phase_tabs.append(tab)
+        return tab
+
+    def _build_laser_tab(self) -> QWidget:
+        tab = LaserCalibrationTab(
+            calibrate_laser_btn=self.calibrate_laser_btn,
+            detect_laser_btn=self.detect_laser_btn,
+            settings_schemas=[LASER_DETECTION_GROUP, LASER_CALIBRATION_GROUP],
+        )
+        self._phase_tabs.append(tab)
+        return tab
+
+    def _build_height_tab(self) -> QWidget:
+        tab = HeightMappingTab(
+            verify_saved_model_btn=self.verify_saved_model_btn,
+            settings_schemas=[HEIGHT_MAPPING_GROUP],
+            height_mapping_content=self._height_mapping_content,
+        )
+        self._phase_tabs.append(tab)
+        self._height_tab = tab
+        return tab
+
+    def set_height_mapping_content(self, widget: QWidget) -> None:
+        self._height_mapping_content = widget
+        if hasattr(self, "_height_tab"):
+            self._height_tab.set_height_mapping_content(widget)
+
+    def iter_save_settings_buttons(self):
+        return [tab._save_button for tab in self._phase_tabs if getattr(tab, "_save_button", None) is not None]
+
+    def set_settings_values(self, flat: dict) -> None:
+        for tab in self._phase_tabs:
+            tab.set_settings_values(flat)
+
+    def get_settings_values(self) -> dict:
+        values: dict = {}
+        for tab in self._phase_tabs:
+            values.update(tab.get_settings_values())
+        return values
+
+    def _build_system_tab(self) -> QWidget:
+        return SystemCalibrationTab(
+            sequence_btn=self.calibrate_sequence_btn,
+            stop_btn=self.stop_robot_btn,
+        )
+
     def toggle_crosshair(self) -> bool:
         self._crosshair_on = not self._crosshair_on
-        self.crosshair_btn.setStyleSheet(_BTN_OVERLAY_ON if self._crosshair_on else _BTN_OVERLAY_OFF)
+        self.crosshair_btn.setStyleSheet(
+            APP_TOGGLE_ON_BUTTON_STYLE if self._crosshair_on else APP_TOGGLE_OFF_BUTTON_STYLE
+        )
         return self._crosshair_on
 
     def toggle_magnifier(self) -> bool:
         self._magnifier_on = not self._magnifier_on
-        self.magnifier_btn.setStyleSheet(_BTN_OVERLAY_ON if self._magnifier_on else _BTN_OVERLAY_OFF)
+        self.magnifier_btn.setStyleSheet(
+            APP_TOGGLE_ON_BUTTON_STYLE if self._magnifier_on else APP_TOGGLE_OFF_BUTTON_STYLE
+        )
         return self._magnifier_on
 
     def set_stop_calibration_enabled(self, enabled: bool) -> None:
@@ -187,12 +205,6 @@ class CalibrationControlsPanel(QWidget):
     def set_laser_actions_enabled(self, enabled: bool) -> None:
         self.calibrate_laser_btn.setEnabled(enabled)
         self.detect_laser_btn.setEnabled(enabled)
-
-    def append_log(self, message: str) -> None:
-        self.log.append(message)
-
-    def clear_log(self) -> None:
-        self.log.clear()
 
     def set_enabled(self, enabled: bool) -> None:
         for button in (

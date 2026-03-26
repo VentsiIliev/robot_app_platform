@@ -9,7 +9,6 @@ class CameraSettingsMapper:
     @staticmethod
     def from_json(data: dict) -> CameraSettingsData:
         pre   = data.get("Preprocessing",      {})
-        cal   = data.get("Calibration",        {})
         bri   = data.get("Brightness Control", {})
         aruco = data.get("Aruco",              {})
         points: List[Tuple[int, int]] = []
@@ -39,10 +38,6 @@ class CameraSettingsMapper:
             erode_enabled           = pre.get("Erode enabled",             True),
             erode_kernel_size       = pre.get("Erode kernel size",         3),
             erode_iterations        = pre.get("Erode iterations",          4),
-            chessboard_width        = cal.get("Chessboard width",          32),
-            chessboard_height       = cal.get("Chessboard height",         20),
-            square_size_mm          = cal.get("Square size (mm)",          25.0),
-            calibration_skip_frames = cal.get("Skip frames",               30),
             brightness_auto         = bri.get("Enable auto adjust",        True),
             brightness_kp           = bri.get("Kp",                        0.0),
             brightness_ki           = bri.get("Ki",                        0.2),
@@ -88,12 +83,6 @@ class CameraSettingsMapper:
                 "Erode enabled":      data.erode_enabled,
                 "Erode kernel size":  data.erode_kernel_size,
                 "Erode iterations":   data.erode_iterations,
-            },
-            "Calibration": {
-                "Chessboard width":  data.chessboard_width,
-                "Chessboard height": data.chessboard_height,
-                "Square size (mm)":  data.square_size_mm,
-                "Skip frames":       data.calibration_skip_frames,
             },
             "Brightness Control": bri,
             "Aruco": {

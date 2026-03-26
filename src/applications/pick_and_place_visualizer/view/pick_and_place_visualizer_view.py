@@ -13,57 +13,28 @@ from PyQt6.QtWidgets import (
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, TEXT_COLOR, PRIMARY,
 )
+from src.applications.base.app_styles import (
+    emphasis_text_style,
+    monospace_log_style,
+    panel_style,
+    table_style,
+    toggle_button_style,
+    muted_text_style,
+)
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.pick_and_place_visualizer.service.i_pick_and_place_visualizer_service import (
     SimResult, MatchedItem,
 )
 from src.applications.pick_and_place_visualizer.view.plane_canvas import PlaneCanvas
 
-_TABLE_STYLE = """
-QTableWidget {
-    background: white; border: 1px solid #E0E0E0;
-    border-radius: 4px; gridline-color: #F0F0F0; font-size: 9pt;
-}
-QHeaderView::section {
-    background: #EDE7F6; color: #1A1A2E; font-weight: bold;
-    font-size: 9pt; padding: 5px 4px; border: none;
-    border-bottom: 1px solid #D0C8E0;
-}
-QTableWidget::item { padding: 4px; }
-QTableWidget::item:selected { background: rgba(144,91,169,0.15); }
-"""
-
-_LOG_STYLE = """
-QPlainTextEdit {
-    background: #1E1E1E; color: #D4D4D4;
-    font-family: monospace; font-size: 9pt;
-    border: 1px solid #333; border-radius: 4px;
-}
-"""
-
-_STATE_RUNNING = "color: #2E7D32; font-size: 9pt; font-weight: bold; background: transparent;"
-_STATE_STOPPED = "color: #888;    font-size: 9pt; font-weight: bold; background: transparent;"
-_STATE_ERROR   = "color: #C62828; font-size: 9pt; font-weight: bold; background: transparent;"
+_TABLE_STYLE = table_style(radius=4)
+_LOG_STYLE = monospace_log_style(dark=True)
+_STATE_RUNNING = emphasis_text_style(color="#2E7D32")
+_STATE_STOPPED = emphasis_text_style(color="#888")
+_STATE_ERROR   = emphasis_text_style(color="#C62828")
 
 _MATCH_COLS = ["WP Name", "ID", "Gripper", "Orientation"]
-_SMALL_TOGGLE_STYLE = """
-QPushButton {
-    background: white;
-    color: #1A1A2E;
-    border: 1px solid #CFCFCF;
-    border-radius: 4px;
-    font-size: 9pt;
-    padding: 4px 10px;
-}
-QPushButton:checked {
-    background: #E6F4EA;
-    border-color: #2E7D32;
-    color: #1E4620;
-}
-QPushButton:hover {
-    background: #F6F6F6;
-}
-"""
+_SMALL_TOGGLE_STYLE = toggle_button_style()
 
 
 class PickAndPlaceVisualizerView(IApplicationView):
@@ -191,7 +162,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _build_camera_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
@@ -212,7 +183,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
         self._feed_label = QLabel("No feed")
         self._feed_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._feed_label.setStyleSheet(
-            f"color: #888; background: #F0F0F0; border: 1px solid {BORDER}; border-radius: 4px;"
+            f"{muted_text_style(color='#888')} border: 1px solid {BORDER}; border-radius: 4px; background: #F0F0F0;"
         )
         self._feed_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._feed_label.setMinimumSize(320, 220)
@@ -221,7 +192,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _build_plane_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
@@ -237,7 +208,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _build_match_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
@@ -248,12 +219,12 @@ class PickAndPlaceVisualizerView(IApplicationView):
         hdr_row.addWidget(hdr)
         hdr_row.addStretch()
         self._summary_label = QLabel("")
-        self._summary_label.setStyleSheet("color: #888; font-size: 9pt; background: transparent;")
+        self._summary_label.setStyleSheet(muted_text_style(color="#888"))
         hdr_row.addWidget(self._summary_label)
         layout.addLayout(hdr_row)
 
         self._step_status_label = QLabel("Current step: -")
-        self._step_status_label.setStyleSheet("color: #666; font-size: 9pt; background: transparent;")
+        self._step_status_label.setStyleSheet(muted_text_style(color="#666"))
         layout.addWidget(self._step_status_label)
 
         self._match_table = QTableWidget(0, len(_MATCH_COLS))
@@ -272,7 +243,7 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _build_log_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)

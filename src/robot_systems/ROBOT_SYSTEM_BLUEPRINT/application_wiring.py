@@ -130,6 +130,23 @@ def _build_camera_settings_application(robot_system):
     )
 
 
+def _build_calibration_settings_application(robot_system):
+    from src.applications.calibration_settings import (
+        CalibrationSettingsApplicationService,
+        CalibrationSettingsFactory,
+    )
+
+    service = CalibrationSettingsApplicationService(robot_system._settings_service)
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: CalibrationSettingsFactory().build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
+    )
+
+
 def _build_work_area_settings_application(robot_system):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.work_area_settings.service.work_area_settings_application_service import (

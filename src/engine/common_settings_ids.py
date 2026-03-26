@@ -5,6 +5,7 @@ class CommonSettingsID(str, Enum):
     ROBOT_CONFIG = "robot_config"
     MOVEMENT_GROUPS = "movement_groups"
     ROBOT_CALIBRATION = "robot_calibration"
+    CALIBRATION_VISION_SETTINGS = "calibration_vision_settings"
     MODBUS_CONFIG = "modbus_config"
     VISION_CAMERA_SETTINGS = "vision_camera_settings"
     TARGETING = "targeting"

@@ -6,7 +6,6 @@ from src.applications.camera_settings.view.camera_settings_view import CameraSet
 from src.applications.camera_settings.view.camera_settings_schema import (
     ARUCO_GROUP,
     BRIGHTNESS_GROUP,
-    CALIBRATION_GROUP,
     CONTOUR_GROUP,
     CORE_GROUP,
     PREPROCESSING_GROUP,
@@ -24,7 +23,6 @@ def camera_tab_factory(
     )
     settings_view.add_tab("Core", [CORE_GROUP])
     settings_view.add_tab("Detection", [CONTOUR_GROUP, PREPROCESSING_GROUP])
-    settings_view.add_tab("Calibration", [CALIBRATION_GROUP])
     settings_view.add_tab("ArUco", [ARUCO_GROUP])
 
     brightness_group_widget = CollapsibleGroup(BRIGHTNESS_GROUP)

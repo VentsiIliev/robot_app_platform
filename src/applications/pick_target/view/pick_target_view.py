@@ -11,33 +11,25 @@ from PyQt6.QtWidgets import (
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, PRIMARY,
 )
+from src.applications.base.app_styles import (
+    compact_button_style,
+    input_style,
+    monospace_log_style,
+    muted_text_style,
+    panel_style,
+    toggle_button_style,
+)
 from src.applications.base.i_application_view import IApplicationView
 
-_LOG_STYLE = """
-QPlainTextEdit {
-    background: #1E1E1E; color: #D4D4D4;
-    font-family: monospace; font-size: 9pt;
-    border: 1px solid #333; border-radius: 4px;
-}
-"""
+_LOG_STYLE = monospace_log_style(dark=True)
 
 _TCP_ON_STYLE  = "QPushButton { background: #2E7D32; color: white; border-radius: 4px; font-size: 9pt; padding: 4px 8px; } QPushButton:hover { background: #388E3C; }"
 _TCP_OFF_STYLE = ACTION_BTN_STYLE
 
-_ZOOM_BTN_STYLE = (
-    "QPushButton { border: 1px solid #CCC; border-radius: 3px; background: white;"
-    " font-size: 11pt; font-weight: bold; min-width: 24px; max-width: 24px;"
-    " min-height: 24px; max-height: 24px; }"
-    "QPushButton:hover { background: #EDE7F6; border-color: #905BA9; }"
-    "QPushButton:pressed { background: #D7C8EC; }"
-)
+_ZOOM_BTN_STYLE = compact_button_style(variant="secondary", min_height=24, radius=3)
 
 _OVERLAY_OFF_STYLE = ACTION_BTN_STYLE
-_OVERLAY_ON_STYLE  = (
-    "QPushButton { background: #E8F5E9; color: #2E7D32; border: 1px solid #4CAF50;"
-    " border-radius: 4px; font-size: 9pt; padding: 4px 8px; }"
-    "QPushButton:hover { background: #DCEDC8; }"
-)
+_OVERLAY_ON_STYLE  = toggle_button_style()
 
 # ── Magnifier tunables ────────────────────────────────────────────────────────
 _MAG_CROP_HALF   = 60    # x_pixels from center to crop edge
@@ -80,7 +72,7 @@ class _ZoomableImageWidget(QWidget):
             btn.setStyleSheet(_ZOOM_BTN_STYLE)
 
         self._pct_label.setStyleSheet(
-            "font-size: 9pt; color: #555; background: transparent; min-width: 40px;"
+            f"{muted_text_style(color='#555')} min-width: 40px;"
         )
 
         bar.addWidget(self._make_label("Zoom:"))
@@ -106,7 +98,7 @@ class _ZoomableImageWidget(QWidget):
 
         self._img_label = QLabel("No capture")
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setStyleSheet("background: #F0F0F0; border: none; color: #888;")
+        self._img_label.setStyleSheet(f"background: #F0F0F0; border: none; {muted_text_style(color='#888')}")
         self._scroll.setWidget(self._img_label)
 
         vp = self._scroll.viewport()
@@ -197,7 +189,7 @@ class _ZoomableImageWidget(QWidget):
     @staticmethod
     def _make_label(text: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        lbl.setStyleSheet(muted_text_style(color="#555"))
         return lbl
 
 
@@ -251,7 +243,7 @@ class PickTargetView(IApplicationView):
 
     def _build_image_panel(self, title: str, attr: str, placeholder: str = "No feed") -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
@@ -264,7 +256,7 @@ class PickTargetView(IApplicationView):
         label = QLabel(placeholder)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet(
-            f"color: #888; background: #F0F0F0; border: 1px solid {BORDER}; border-radius: 4px;"
+            f"{muted_text_style(color='#888')} border: 1px solid {BORDER}; border-radius: 4px; background: #F0F0F0;"
         )
         label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         setattr(self, attr, label)
@@ -273,7 +265,7 @@ class PickTargetView(IApplicationView):
 
     def _build_zoomable_capture_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
@@ -290,7 +282,7 @@ class PickTargetView(IApplicationView):
 
     def _build_control_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet(f"background: white; border: 1px solid {BORDER}; border-radius: 6px;")
+        panel.setStyleSheet(panel_style())
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -340,15 +332,12 @@ class PickTargetView(IApplicationView):
         self._traj_btn.clicked.connect(self.execute_trajectory_requested)
         layout.addWidget(self._traj_btn)
 
-        _spin_style = (
-            "QDoubleSpinBox { border: 1px solid #CCC; border-radius: 3px;"
-            " padding: 2px 4px; font-size: 9pt; }"
-        )
+        _spin_style = input_style(selector="QDoubleSpinBox", radius=3)
         traj_params = QHBoxLayout()
         traj_params.setSpacing(4)
 
         vel_lbl = QLabel("Vel:")
-        vel_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        vel_lbl.setStyleSheet(muted_text_style(color="#555"))
         self._traj_vel_spin = QDoubleSpinBox()
         self._traj_vel_spin.setRange(0.01, 1.0)
         self._traj_vel_spin.setSingleStep(0.05)
@@ -358,7 +347,7 @@ class PickTargetView(IApplicationView):
         self._traj_vel_spin.setStyleSheet(_spin_style)
 
         acc_lbl = QLabel("Acc:")
-        acc_lbl.setStyleSheet("font-size: 9pt; color: #555; background: transparent;")
+        acc_lbl.setStyleSheet(muted_text_style(color="#555"))
         self._traj_acc_spin = QDoubleSpinBox()
         self._traj_acc_spin.setRange(0.01, 1.0)
         self._traj_acc_spin.setSingleStep(0.05)

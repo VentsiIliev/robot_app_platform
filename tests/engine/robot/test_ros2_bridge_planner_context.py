@@ -11,7 +11,6 @@ if str(_ROS2_SCRIPTS_DIR) not in sys.path:
 
 try:
     from motion.planning.planner_context import PlannerContext  # type: ignore
-    from motion.planning.planner_support_service import PlannerSupportService  # type: ignore
     from motion.execution.motion_coordinator import MotionCoordinator  # type: ignore
     from motion.execution.motion_queue import MotionQueue  # type: ignore
     from status.robot_state_store import RobotStateStore  # type: ignore
@@ -66,6 +65,22 @@ class _FakeSafetyManager:
         return True, "ok"
 
 
+class _FakePlannerSupport:
+    def __init__(self):
+        self._fk = object()
+        self._ik = object()
+        self._validity = object()
+
+    def get_fk_client(self):
+        return self._fk
+
+    def get_ik_client(self):
+        return self._ik
+
+    def get_state_validity_client(self):
+        return self._validity
+
+
 class _FakeNode:
     def __init__(self):
         self._logger = _FakeLogger()
@@ -90,7 +105,7 @@ class TestRos2BridgePlannerContext(unittest.TestCase):
         self.queue = MotionQueue(max_size=4)
         self.safety_manager = _FakeSafetyManager()
         self.cart_path_client = _FakeClient()
-        self.planner_support = PlannerSupportService(node=self.node)
+        self.planner_support = _FakePlannerSupport()
         self.context = PlannerContext(
             node=self.node,
             state_store=self.state_store,
@@ -101,6 +116,7 @@ class TestRos2BridgePlannerContext(unittest.TestCase):
             ipp_client=object(),
             trajectory_executor=object(),
             planner_support=self.planner_support,
+            trajectory_optimizer=object(),
         )
 
     def test_proxies_motion_state(self):

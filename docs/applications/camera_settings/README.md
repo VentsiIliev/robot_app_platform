@@ -1,8 +1,9 @@
 # `src/applications/camera_settings/` — Camera Settings
 
-Configures the vision system camera: resolution, brightness, contour thresholds, and calibration-related vision options. Persists camera settings via `ISettingsService` and pushes live camera-setting updates to the running `VisionSystem`.
+Configures the vision system camera: resolution, brightness, contour thresholds, preprocessing, and ArUco options. Persists camera settings via `ISettingsService` and pushes live camera-setting updates to the running `VisionSystem`.
 
 Work-area ROI editing has been moved into the shared [Work Area Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/work_area_settings/README.md) application.
+Calibration-related settings have been moved into the shared [Calibration Settings](/home/ilv/Desktop/robot_app_platform/docs/applications/calibration_settings/README.md) application.
 
 This is intended to be the shared camera-settings application for any robot system that adopts the common vision contract:
 - `CommonServiceID.VISION`
@@ -27,7 +28,7 @@ camera_settings/
 │   └── camera_settings_schema.py              ← View field definitions
 ├── controller/
 │   └── camera_settings_controller.py
-├── camera_settings_data.py                    ← CameraSettingsData dataclass (~35 fields)
+├── camera_settings_data.py                    ← CameraSettingsData dataclass
 ├── mapper.py                                  ← CameraSettingsMapper.from_json() / to_json()
 └── camera_settings_factory.py
 ```
@@ -70,7 +71,7 @@ The tabbed settings panels use the shared collapsible settings-view pattern:
 
 ## `CameraSettingsData`
 
-Large frozen-like dataclass (`~35` fields) covering:
+Camera-only dataclass covering:
 
 | Group | Fields |
 |-------|--------|
@@ -78,7 +79,7 @@ Large frozen-like dataclass (`~35` fields) covering:
 | Camera | `camera_index`, `skip_frames` |
 | Brightness | `brightness`, `brightness_auto`, `brightness_region` |
 | Contour detection | `contour_detection`, `threshold`, `threshold_pickup_area` |
-| Calibration | `calibration_enabled`, various calibration params |
+| ArUco | `aruco_enabled`, `aruco_dictionary`, `aruco_flip_image` |
 ## `CameraSettingsMapper`
 
 Converts between the flat `CameraSettingsData` dataclass and the nested JSON dict format stored on disk:
@@ -88,7 +89,9 @@ CameraSettingsMapper.from_json(data: dict)   -> CameraSettingsData
 CameraSettingsMapper.to_json(data: CameraSettingsData) -> dict
 ```
 
-Used by `CameraSettingsSerializer` (engine layer) to persist settings.
+Used by `CameraSettingsSerializer` (engine layer) to persist camera-only settings.
+
+`CameraSettingsApplicationService.save_settings()` preserves any existing `Calibration` section in the stored vision JSON so the current calibration runtime data is not lost.
 
 ---
 
