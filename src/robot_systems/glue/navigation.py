@@ -101,8 +101,7 @@ class GlueNavigationService:
 
     def get_group_position(self, group_name: str) -> list[float] | None:
         try:
-            config = self._nav._get_config()
-            group = self._nav._get_group(config, group_name)
+            group = self._nav._get_group(group_name)
             position = group.parse_position()
             return list(position) if position is not None else None
         except Exception:
@@ -117,8 +116,7 @@ class GlueNavigationService:
         if not z_offset:
             return self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
         try:
-            config = self._nav._get_config()  # still needed to read position
-            group = self._nav._get_group(config, group_name)
+            group = self._nav._get_group(group_name)
             position = group.parse_position()
             if position is None:
                 return False

@@ -154,6 +154,8 @@ class CalibrationApplicationService(ICalibrationService):
                  calibration_settings_service: Optional[ICalibrationSettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
                  laser_ops: Optional[_ILaserOps] = None,
+                 observer_group_provider: Optional[Callable[[str], str | None]] = None,
+                 observer_position_provider: Optional[Callable[[str], list[float] | None]] = None,
                  use_marker_centre: bool = False,
                  work_area_definitions: Optional[list[WorkAreaDefinition]] = None):
         self._vision_service      = vision_service
@@ -169,6 +171,8 @@ class CalibrationApplicationService(ICalibrationService):
         self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
         self._laser_calibration_service = laser_calibration_service
         self._laser_ops = laser_ops
+        self._observer_group_provider = observer_group_provider
+        self._observer_position_provider = observer_position_provider
         self._use_marker_centre   = use_marker_centre
         self._work_area_definitions = list(work_area_definitions or [])
         self._stop_test           = False
@@ -198,6 +202,20 @@ class CalibrationApplicationService(ICalibrationService):
         if self._calib_config is None:
             return _DEFAULT_ACCELERATION
         return self._calib_config.acceleration
+
+    def _resolve_observer_pose(self, area_id: str = "") -> list[float] | None:
+        resolved_area_id = str(area_id or "").strip()
+        if not resolved_area_id:
+            return None
+        if self._observer_group_provider is None or self._observer_position_provider is None:
+            return None
+        observer_group = self._observer_group_provider(resolved_area_id)
+        if not observer_group:
+            return None
+        observer_position = self._observer_position_provider(observer_group)
+        if observer_position is None or len(observer_position) < 6:
+            return None
+        return list(observer_position)
 
     # ── ICalibrationService ───────────────────────────────────────────
 
@@ -281,6 +299,38 @@ class CalibrationApplicationService(ICalibrationService):
             self._camera_tcp_offset_calibrator.stop()
         if self._marker_height_mapping_service is not None:
             self._marker_height_mapping_service.stop()
+
+    def ensure_active_work_area_observed(self) -> tuple[bool, str]:
+        area_id = self.get_active_work_area_id()
+        if not area_id:
+            return False, "Select a work area first"
+        if self._observer_group_provider is None or self._observer_position_provider is None:
+            return True, ""
+        observer_group = self._observer_group_provider(area_id)
+        if not observer_group:
+            return True, ""
+        if self._robot_service is None:
+            return False, f"Move the robot to the '{observer_group}' observer position first"
+        observer_position = self._observer_position_provider(observer_group)
+        if not observer_position or len(observer_position) < 6:
+            return False, f"Observer position '{observer_group}' is not configured"
+        current_position = self._robot_service.get_current_position()
+        if not current_position or len(current_position) < 6:
+            return False, "Failed to get current robot position"
+
+        linear_tolerance_mm = 5.0
+        angular_tolerance_deg = 2.0
+        linear_ok = all(
+            abs(float(current_position[i]) - float(observer_position[i])) <= linear_tolerance_mm
+            for i in range(3)
+        )
+        angular_ok = all(
+            abs(float(current_position[i]) - float(observer_position[i])) <= angular_tolerance_deg
+            for i in range(3, 6)
+        )
+        if linear_ok and angular_ok:
+            return True, ""
+        return False, f"Move to the observer position '{observer_group}' first"
 
     def is_calibrated(self) -> bool:
         if self._vision_service is None:

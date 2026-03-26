@@ -94,6 +94,9 @@ class ICalibrationService(ABC):
     ) -> tuple[bool, str, dict]: ...
 
     @abstractmethod
+    def ensure_active_work_area_observed(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
     def stop_marker_height_measurement(self) -> None: ...
 
     @abstractmethod

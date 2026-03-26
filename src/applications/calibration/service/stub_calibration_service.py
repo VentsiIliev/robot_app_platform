@@ -132,6 +132,9 @@ class StubCalibrationService(ICalibrationService):
             "unreachable_labels": ["r1c3"],
         }
 
+    def ensure_active_work_area_observed(self) -> tuple[bool, str]:
+        return True, ""
+
     def stop_marker_height_measurement(self) -> None:
         _logger.info("Stub: stop_marker_height_measurement")
 

@@ -104,6 +104,9 @@ class CalibrationModel(IApplicationModel):
             progress_callback=progress_callback,
         )
 
+    def ensure_active_work_area_observed(self) -> tuple[bool, str]:
+        return self._service.ensure_active_work_area_observed()
+
     def stop_marker_height_measurement(self) -> None:
         self._service.stop_marker_height_measurement()
 

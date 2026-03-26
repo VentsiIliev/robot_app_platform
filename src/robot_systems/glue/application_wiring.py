@@ -442,6 +442,10 @@ def _build_calibration_application(robot_system):
         else None
     )
 
+    def _observer_position(group_id: str):
+        navigation = getattr(robot_system, "_navigation", None)
+        return navigation.get_group_position(group_id) if navigation is not None else None
+
     service = CalibrationApplicationService(
         vision_service=vision_service,
         process_controller=robot_system.coordinator,
@@ -456,6 +460,8 @@ def _build_calibration_application(robot_system):
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
+        observer_group_provider=robot_system.get_observer_group_for_area,
+        observer_position_provider=_observer_position,
         use_marker_centre=True,
         work_area_definitions=robot_system.get_work_area_definitions(),
     )

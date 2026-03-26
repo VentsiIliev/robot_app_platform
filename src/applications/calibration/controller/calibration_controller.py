@@ -433,6 +433,10 @@ class CalibrationController(IApplicationController):
         if len(corners) != 4:
             self._view.append_log("✗ Area grid verification needs exactly 4 corners")
             return
+        ok, msg = self._model.ensure_active_work_area_observed()
+        if not ok:
+            self._view.append_log(f"✗ {msg}")
+            return
         points = self._model.generate_area_grid(corners, rows, cols)
         if not points:
             self._view.append_log("✗ Failed to generate area grid for verification")
@@ -475,6 +479,10 @@ class CalibrationController(IApplicationController):
         rows, cols = self._view.get_area_grid_shape()
         if len(corners) != 4:
             self._view.append_log("✗ Area grid measurement needs exactly 4 corners")
+            return
+        ok, msg = self._model.ensure_active_work_area_observed()
+        if not ok:
+            self._view.append_log(f"✗ {msg}")
             return
         points = self._model.generate_area_grid(corners, rows, cols)
         if not points:
