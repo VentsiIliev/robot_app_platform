@@ -15,10 +15,10 @@
     "-Y": true
   },
   "SAFETY_LIMITS": {
-    "x_min": -500,
-    "x_max": 500,
-    "y_min": -500,
-    "y_max": 500,
+    "x_min": -900,
+    "x_max": 900,
+    "y_min": -900,
+    "y_max": 900,
     "z_min": 100,
     "z_max": 800,
     "rx_min": 170,

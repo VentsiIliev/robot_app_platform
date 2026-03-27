@@ -1,11 +1,11 @@
 {
-  "Index": 2,
+  "Index": 0,
   "Width": 1280,
   "Height": 720,
   "Skip frames": 30,
   "Capture position offset": 0.0,
   "Contour detection": true,
-  "Draw contours": true,
+  "Draw contours": false,
   "Threshold": 100,
   "Threshold pickup area": 150,
   "Epsilon": 0.004,
@@ -23,7 +23,7 @@
     "Erode iterations": 4
   },
   "Brightness Control": {
-    "Enable auto adjust": true,
+    "Enable auto adjust": false,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
@@ -53,7 +53,7 @@
   "Calibration": {
     "Chessboard width": 32,
     "Chessboard height": 20,
-    "Square size (mm)": 25,
+    "Square size (mm)": 25.0,
     "Skip frames": 30
   }
 }

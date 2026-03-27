@@ -219,6 +219,23 @@ class PaintRobotSystem(BaseRobotSystem):
         self._calibration_provider = PaintRobotSystemCalibrationProvider(self)
         self._calibration_service = build_robot_system_calibration_service(self)
 
+        from src.engine.robot.calibration.robot_calibration_process import RobotCalibrationProcess
+        from src.robot_systems.paint.calibration.coordinator import PaintCalibrationCoordinator
+        from src.robot_systems.paint.component_ids import ProcessID
+
+        self._calibration_process = RobotCalibrationProcess(
+            calibration_service=self._calibration_service,
+            messaging=self._messaging_service,
+            process_id=ProcessID.ROBOT_CALIBRATION,
+            system_manager=self._system_manager,
+            service_checker=self.health_registry.check,
+        )
+        self.register_managed_resource(self._calibration_process)
+        self._calibration_coordinator = PaintCalibrationCoordinator(
+            calibration_process=self._calibration_process,
+            messaging=self._messaging_service,
+        )
+
         self._main_process = PaintProcess(
             messaging=self._messaging_service,
             system_manager=self._system_manager,

@@ -1,6 +1,6 @@
 # `src/applications/calibration/` — Calibration
 
-Workflow application for executing calibration tasks. Delegates camera calibration to `VisionSystem`, robot calibration to the `GlueOperationCoordinator`, laser calibration to the height-measuring calibration service, and shared area polygon persistence to the shared work-area service.
+Workflow application for executing calibration tasks. Delegates camera calibration to `VisionSystem`, robot calibration to an optional process controller (e.g. `GlueOperationCoordinator`), laser calibration to the height-measuring calibration service, and shared area polygon persistence to the shared work-area service.
 
 Its view layer now uses the shared application style helpers from
 [app_styles.py](/home/ilv/Desktop/robot_app_platform/src/applications/base/app_styles.py)
@@ -67,7 +67,7 @@ All `tuple[bool, str]` returns carry `(success, message)`.
 ```python
 CalibrationApplicationService(
     vision_service:      IVisionService,                 # camera calibration ops
-    process_controller:  _IProcessController,            # robot calibration (coordinator.calibrate / stop_calibration)
+    process_controller:  Optional[_IProcessController] = None,  # robot calibration (coordinator.calibrate / stop_calibration); None = no-op
     robot_service:       _IRobotService   = None,        # move_ptp during test
     height_service:      _IHeightService  = None,
     robot_config:        _IRobotConfig    = None,
@@ -83,8 +83,8 @@ CalibrationApplicationService(
 |--------|-----------|
 | `capture_calibration_image()` | `vision_service.capture_calibration_image()` |
 | `calibrate_camera()` | `vision_service.calibrate_camera()` |
-| `calibrate_robot()` | `process_controller.calibrate()` → returns `(True, "started")` |
-| `calibrate_camera_and_robot()` | `calibrate_camera()` first; if success → `process_controller.calibrate()` |
+| `calibrate_robot()` | `process_controller.calibrate()` if set → returns `(True, "started")` |
+| `calibrate_camera_and_robot()` | `calibrate_camera()` first; if success → `process_controller.calibrate()` if set |
 | `calibrate_camera_tcp_offset()` | Requires `is_calibrated() == True`; then runs the dedicated camera-TCP offset calibration service |
 | `measure_marker_heights()` | Requires homography + height calibration; runs the standalone ArUco marker height-mapping workflow |
 | `save_height_mapping_area()` / `get_height_mapping_area()` | Persist/load the selected work-area polygon through the shared work-area service |
@@ -93,7 +93,7 @@ CalibrationApplicationService(
 | `measure_area_grid(...)` | Runs the standalone area-grid height-mapping workflow over the generated points |
 | `verify_height_model()` | Runs 4 interior verification measurements against the saved piecewise triangle height model |
 | `load_calibration_settings()` / `save_calibration_settings()` | Delegates to the extracted `CalibrationSettingsBridge`, which wraps the shared `CalibrationSettingsApplicationService` |
-| `stop_calibration()` | `process_controller.stop_calibration()` and stops the camera-TCP offset calibrator if one is active |
+| `stop_calibration()` | `process_controller.stop_calibration()` if set, and stops the camera-TCP offset calibrator if one is active |
 | `is_calibrated()` | Checks that both matrix files exist on disk |
 | `test_calibration()` | Detects ArUco markers, converts pixels to robot mm via `transformer`, moves robot to each marker |
 | `stop_test_calibration()` | Sets `_stop_test = True` to abort an in-progress test |
@@ -134,9 +134,10 @@ User presses "Calibrate Camera"
   → updates cameraMatrix, cameraDist, perspectiveMatrix in VisionSystem
 
 User presses "Calibrate Robot"
-  → coordinator.calibrate()
+  → process_controller.calibrate() (if configured)
   → starts RobotCalibrationProcess (see engine/robot/calibration/)
   → publishes process state events — controller subscribes via broker
+  → if process_controller is None, returns (True, "started") immediately with no robot motion
 
 User presses "Calibrate Camera TCP Offset"
   → service.calibrate_camera_tcp_offset()
@@ -261,29 +262,50 @@ This keeps the area-selection and grid-generation controls next to the workflow 
 
 ---
 
-## Wiring in `GlueRobotSystem`
+## Wiring
+
+The application is wired per robot system. `process_controller` is optional — pass `None` for systems that have no dedicated calibration coordinator.
+
+### `GlueRobotSystem`
+
+Passes `robot_system.coordinator` (a `GlueOperationCoordinator`) as `process_controller`, which drives the full robot calibration state machine.
 
 ```python
-vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
-transformer = (
-    HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-    if vision_service is not None else None
-)
-camera_tcp_offset_calibrator = CameraTcpOffsetCalibrationService(...)
-marker_height_mapping_service = ArucoMarkerHeightMappingService(...)
 service = CalibrationApplicationService(
     vision_service     = vision_service,
     process_controller = robot_system.coordinator,
     robot_service      = robot_system.get_optional_service(CommonServiceID.ROBOT),
-    height_service     = robot_system.get_optional_service(ServiceID.HEIGHT_MEASURING),
+    height_service     = robot_system._height_measuring_service,
     robot_config       = robot_system._robot_config,
     calib_config       = robot_system._robot_calibration,
     transformer        = transformer,
     work_area_service  = robot_system.get_service(CommonServiceID.WORK_AREAS),
-    camera_tcp_offset_calibrator = camera_tcp_offset_calibrator,
+    camera_tcp_offset_calibrator  = camera_tcp_offset_calibrator,
     marker_height_mapping_service = marker_height_mapping_service,
+    ...
 )
-return WidgetApplication(widget_factory=lambda ms: CalibrationFactory(ms, jog_service).build(service))
+```
+
+`ApplicationSpec`: `folder_id=2` (Service), icon `fa5s.crosshairs`.
+
+### `PaintRobotSystem`
+
+No coordinator — `process_controller` is omitted (defaults to `None`). The "Calibrate Robot" and "Calibrate Camera & Robot" buttons return success immediately without triggering robot motion through a process. All other calibration features (camera, laser, height mapping, TCP offset) work as normal.
+
+```python
+service = CalibrationApplicationService(
+    vision_service     = vision_service,
+    # process_controller omitted — no coordinator in the paint system
+    robot_service      = robot_system.get_optional_service(CommonServiceID.ROBOT),
+    height_service     = robot_system._height_measuring_service,
+    robot_config       = robot_system._robot_config,
+    calib_config       = robot_system._robot_calibration,
+    transformer        = transformer,
+    work_area_service  = robot_system.get_service(CommonServiceID.WORK_AREAS),
+    camera_tcp_offset_calibrator  = camera_tcp_offset_calibrator,
+    marker_height_mapping_service = marker_height_mapping_service,
+    ...
+)
 ```
 
 `ApplicationSpec`: `folder_id=2` (Service), icon `fa5s.crosshairs`.

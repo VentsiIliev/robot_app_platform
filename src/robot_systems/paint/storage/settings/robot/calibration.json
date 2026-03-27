@@ -9,7 +9,7 @@
   },
   "axis_mapping_config": {
     "marker_id": 4,
-    "move_mm": 100.0,
+    "move_mm": 50.0,
     "max_attempts": 100,
     "delay_after_move_s": 1.0
   },
@@ -33,7 +33,7 @@
     "max_acceptance_std_mm": 10.0
   },
   "run_height_measurement": true,
-  "z_target": 300,
+  "z_target": 200,
   "required_ids": [
     0,
     1,

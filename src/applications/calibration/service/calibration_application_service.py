@@ -251,14 +251,16 @@ class CalibrationApplicationService(ICalibrationService):
         return self._vision_service.calibrate_camera()
 
     def calibrate_robot(self) -> tuple[bool, str]:
-        self._process_controller.calibrate()
+        if self._process_controller is not None:
+            self._process_controller.calibrate()
         return True, "Robot calibration started"
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         ok, msg = self.calibrate_camera()
         if not ok:
             return False, f"Camera calibration failed: {msg}"
-        self._process_controller.calibrate()
+        if self._process_controller is not None:
+            self._process_controller.calibrate()
         return True, "Camera calibrated — robot calibration started"
 
     def calibrate_camera_tcp_offset(self) -> tuple[bool, str]:
@@ -312,7 +314,8 @@ class CalibrationApplicationService(ICalibrationService):
             return LaserDetectionResult(ok=False, message=f"Laser detection error: {exc}")
 
     def stop_calibration(self) -> None:
-        self._process_controller.stop_calibration()
+        if self._process_controller is not None:
+            self._process_controller.stop_calibration()
         self._stop_laser_calibration.set()
         if self._camera_tcp_offset_calibrator is not None:
             self._camera_tcp_offset_calibrator.stop()

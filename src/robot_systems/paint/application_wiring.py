@@ -153,7 +153,7 @@ def _build_calibration_application(robot_system):
     robot_config = robot_system._robot_config
     navigation_service = CalibrationNavigationService(
         robot_system.get_service(CommonServiceID.NAVIGATION),
-        before_move=(lambda: work_area_service.set_active_area_id("spray")),
+        before_move=(lambda: work_area_service.set_active_area_id("paint")),
     )
     transformer = (
         HomographyTransformer(
@@ -202,7 +202,7 @@ def _build_calibration_application(robot_system):
 
     service = CalibrationApplicationService(
         vision_service=vision_service,
-        process_controller=robot_system.coordinator,
+        process_controller=robot_system._calibration_coordinator,
         robot_service=robot_service,
         height_service=getattr(robot_system, '_height_measuring_service', None),
         robot_config=robot_system._robot_config,

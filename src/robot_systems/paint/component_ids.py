@@ -11,4 +11,5 @@ class SettingsID(str, Enum):
 
 class ProcessID(str, Enum):
     MAIN_PROCESS = "main_process"
+    ROBOT_CALIBRATION = "robot_calibration"
 
