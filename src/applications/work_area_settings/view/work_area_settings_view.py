@@ -106,7 +106,7 @@ class WorkAreaSettingsView(IApplicationView):
             "Select a declared work area, choose which ROI to edit, then place or drag the four corners on the preview."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet(_SECTION_HINT_STYLE)
+        hint.setStyleSheet(APP_SECTION_HINT_STYLE)
         layout.addWidget(hint)
 
         selector_box = QGroupBox("Selection")
@@ -149,7 +149,7 @@ class WorkAreaSettingsView(IApplicationView):
 
         self._active_area_label = QLabel("No ROI selected")
         self._active_area_label.setWordWrap(True)
-        self._active_area_label.setStyleSheet(_SECTION_HINT_STYLE)
+        self._active_area_label.setStyleSheet(APP_SECTION_HINT_STYLE)
         actions_layout.addWidget(self._active_area_label)
 
         self._save_btn = QPushButton("Save Selected ROI")

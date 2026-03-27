@@ -176,6 +176,119 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
 
         settings_service.save_settings.assert_called_once_with(settings)
 
+    def test_measure_area_grid_prefers_area_observer_pose(self):
+        marker_service = MagicMock()
+        marker_service.measure_area_grid.return_value = (True, "ok")
+        work_area_service = MagicMock()
+        work_area_service.get_active_area_id.return_value = "pickup"
+        height_service = MagicMock()
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        )
+
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            height_service=height_service,
+            work_area_service=work_area_service,
+            marker_height_mapping_service=marker_service,
+            observer_group_provider=lambda area_id: "HOME" if area_id == "pickup" else None,
+            observer_position_provider=lambda group: [10.0, 20.0, 30.0, 40.0, 50.0, 60.0] if group == "HOME" else None,
+        )
+        svc.is_calibrated = MagicMock(return_value=True)
+
+        ok, msg = svc.measure_area_grid("pickup", [(0.0, 0.0)] * 4, 2, 2)
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "ok")
+        marker_service.measure_area_grid.assert_called_once()
+        self.assertEqual(
+            marker_service.measure_area_grid.call_args.kwargs["measurement_pose"],
+            [10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+        )
+
+    def test_verify_height_model_prefers_area_observer_pose(self):
+        marker_service = MagicMock()
+        marker_service.verify_height_model.return_value = (True, "ok")
+        height_service = MagicMock()
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        )
+
+        svc = CalibrationApplicationService(
+            _make_vision(),
+            MagicMock(),
+            height_service=height_service,
+            marker_height_mapping_service=marker_service,
+            observer_group_provider=lambda area_id: "HOME" if area_id == "pickup" else None,
+            observer_position_provider=lambda group: [10.0, 20.0, 30.0, 40.0, 50.0, 60.0] if group == "HOME" else None,
+        )
+
+        ok, msg = svc.verify_height_model("pickup")
+
+        self.assertTrue(ok)
+        self.assertEqual(msg, "ok")
+        marker_service.verify_height_model.assert_called_once_with(
+            "pickup",
+            measurement_pose=[10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+        )
+
+    def test_verify_area_grid_uses_height_measurement_pose_instead_of_observer_pose(self):
+        robot_service = MagicMock()
+        robot_service.get_current_position.return_value = [100.0, 200.0, 300.0, 10.0, 20.0, 30.0]
+        robot_service.are_safety_walls_enabled.return_value = False
+        robot_service.validate_pose.return_value = {"reachable": True, "success": True}
+
+        transformer = MagicMock()
+        transformer.is_available.return_value = True
+        transformer.transform.side_effect = [
+            (10.0, 20.0),
+            (30.0, 40.0),
+            (50.0, 60.0),
+            (70.0, 80.0),
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+        ]
+
+        height_service = MagicMock()
+        height_service.is_calibrated.return_value = True
+        height_service.get_calibration_data.return_value = MagicMock(
+            robot_initial_position=[1.0, 2.0, 333.0, 44.0, 55.0, 66.0]
+        )
+
+        vision = _make_vision()
+        vision.get_camera_width.return_value = 1000.0
+        vision.get_camera_height.return_value = 1000.0
+
+        svc = CalibrationApplicationService(
+            vision,
+            MagicMock(),
+            robot_service=robot_service,
+            height_service=height_service,
+            transformer=transformer,
+            observer_group_provider=lambda area_id: "SPRAY_OBSERVER",
+            observer_position_provider=lambda group: [10.0, 20.0, 819.378, 179.915, 0.011, 0.001],
+        )
+        svc.is_calibrated = MagicMock(return_value=True)
+        svc.generate_area_grid = MagicMock(
+            return_value=[(0.1, 0.2), (0.3, 0.4), (0.5, 0.6), (0.7, 0.8)]
+        )
+
+        ok, _, _ = svc.verify_area_grid(
+            corners_norm=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            rows=2,
+            cols=2,
+        )
+
+        self.assertTrue(ok)
+        first_validate_call = robot_service.validate_pose.call_args_list[0]
+        self.assertEqual(
+            first_validate_call.args[1],
+            [10.0, 20.0, 333.0, 44.0, 55.0, 66.0],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -127,8 +127,13 @@ class _IMarkerHeightMappingService(Protocol):
         cols: int,
         support_points_mm: list[tuple[str, float, float]] | None = None,
         skip_labels: set[str] | None = None,
+        measurement_pose: list[float] | None = None,
     ) -> tuple[bool, str]: ...
-    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]: ...
+    def verify_height_model(
+        self,
+        area_id: str = "",
+        measurement_pose: list[float] | None = None,
+    ) -> tuple[bool, str]: ...
     def stop(self) -> None: ...
     def is_ready(self) -> bool: ...
 
@@ -216,6 +221,20 @@ class CalibrationApplicationService(ICalibrationService):
         if observer_position is None or len(observer_position) < 6:
             return None
         return list(observer_position)
+
+    def _resolve_measurement_pose(self, area_id: str = "") -> list[float] | None:
+        observer_pose = self._resolve_observer_pose(area_id)
+        if observer_pose is not None:
+            return observer_pose
+        return self._resolve_height_measurement_pose()
+
+    def _resolve_height_measurement_pose(self) -> list[float] | None:
+        if self._height_service is None:
+            return None
+        calib = self._height_service.get_calibration_data()
+        if calib is None or not getattr(calib, "robot_initial_position", None):
+            return None
+        return list(calib.robot_initial_position)
 
     # ── ICalibrationService ───────────────────────────────────────────
 
@@ -497,11 +516,15 @@ class CalibrationApplicationService(ICalibrationService):
                 "measure_area_grid: pre-skipping %d known-unreachable point(s): %s",
                 len(skip), sorted(skip),
             )
+        measurement_pose = self._resolve_measurement_pose(area_id)
+        if measurement_pose is None:
+            return False, "Height measurement calibration pose is unavailable"
         return self._marker_height_mapping_service.measure_area_grid(
             area_id,
             corners_norm, rows, cols,
             support_points_mm=support or None,
             skip_labels=skip or None,
+            measurement_pose=measurement_pose,
         )
 
     def verify_area_grid(
@@ -532,12 +555,17 @@ class CalibrationApplicationService(ICalibrationService):
         if not points:
             return False, "Failed to generate area grid points", {}
 
-        calib = self._height_service.get_calibration_data()
-        if calib is None or not getattr(calib, "robot_initial_position", None):
+        area_id = self.get_active_work_area_id()
+        measurement_pose = self._resolve_height_measurement_pose()
+        if measurement_pose is None or len(measurement_pose) < 6:
             return False, "Height measurement calibration pose is unavailable", {}
 
-        ref = list(calib.robot_initial_position)
-        pose_suffix = [float(ref[2]), float(ref[3]), float(ref[4]), float(ref[5])]
+        pose_suffix = [
+            float(measurement_pose[2]),
+            float(measurement_pose[3]),
+            float(measurement_pose[4]),
+            float(measurement_pose[5]),
+        ]
         current = self._robot_service.get_current_position()
         if not current or len(current) < 6:
             return False, "Failed to get current robot position", {}
@@ -616,6 +644,16 @@ class CalibrationApplicationService(ICalibrationService):
                 user=user,
                 start_joint_state=start_joint_state or state_joint_seeds.get(_state_key(start_state)),
             )
+            _logger.info(
+                "Area grid reachability validation: start=%s target=%s tool=%s user=%s reachable=%s reason=%s result=%s",
+                [round(float(v), 3) for v in start_state[:6]],
+                [round(float(v), 3) for v in target_state[:6]],
+                tool,
+                user,
+                result.get("reachable"),
+                result.get("reason"),
+                result,
+            )
             if bool(result.get("reachable")) and isinstance(result.get("target_joint_state"), dict):
                 state_joint_seeds[_state_key(target_state)] = result["target_joint_state"]
             validation_cache[cache_key] = result
@@ -632,9 +670,29 @@ class CalibrationApplicationService(ICalibrationService):
             if anchor_state is None:
                 return False, "Failed to determine grid anchor point", {}
 
+            _logger.info(
+                "Area grid verification started: area_id=%s current_pose=%s anchor_pose=%s points=%d pose_suffix=%s",
+                area_id,
+                [round(float(v), 3) for v in simulated_state[:6]],
+                [round(float(v), 3) for v in anchor_state[:6]],
+                total,
+                [round(float(v), 3) for v in pose_suffix],
+            )
             to_anchor = _validate_cached(simulated_state, anchor_state, None)
             if not bool(to_anchor.get("reachable")):
-                return False, "Current pose cannot reach the grid anchor point", {
+                _logger.warning(
+                    "Area grid verification anchor unreachable: area_id=%s current_pose=%s anchor_pose=%s result=%s",
+                    area_id,
+                    [round(float(v), 3) for v in simulated_state[:6]],
+                    [round(float(v), 3) for v in anchor_state[:6]],
+                    to_anchor,
+                )
+                reason = str(to_anchor.get("reason") or "").strip()
+                if reason == "target_pose_ik_failed":
+                    message = "Grid anchor pose is not reachable with the height-measuring pose"
+                else:
+                    message = "Current pose cannot reach the grid anchor point"
+                return False, message, {
                     "reachable_labels": [],
                     "direct_labels": [],
                     "via_anchor_labels": [],
@@ -853,7 +911,13 @@ class CalibrationApplicationService(ICalibrationService):
     def verify_height_model(self, area_id: str = "") -> tuple[bool, str]:
         if self._marker_height_mapping_service is None:
             return False, "Marker height mapping is not configured"
-        return self._marker_height_mapping_service.verify_height_model(area_id)
+        measurement_pose = self._resolve_measurement_pose(area_id)
+        if measurement_pose is None:
+            return False, "Height measurement calibration pose is unavailable"
+        return self._marker_height_mapping_service.verify_height_model(
+            area_id,
+            measurement_pose=measurement_pose,
+        )
 
     def has_saved_height_model(self, area_id: str = "") -> bool:
         data = self.get_height_calibration_data(area_id)

@@ -1,0 +1,1 @@
+from .paint_user_schema import build_paint_user_schema

@@ -183,6 +183,9 @@ User sets "Rows" / "Cols" and presses "Generate Grid"
 
 User presses "Verify Grid"
   → controller regenerates the current row-major grid and keeps it drawn on the preview
+  → controller first checks `ensure_active_work_area_observed()`
+  → if the active area has an observer binding and the robot is not already at that observer position, verification is refused and the UI logs a message such as:
+    - `Move to the observer position 'HOME' first`
   → controller starts a background worker so the UI stays responsive
   → "Verify Grid" changes to "Verifying Grid..." while the worker runs
   → service.verify_area_grid(corners_norm, rows, cols)
@@ -203,6 +206,8 @@ User presses "Verify Grid"
   → the log reports the direct / via-anchor / unreachable totals and lists any non-direct points
 
 User presses "Measure Area Grid"
+  → controller first checks `ensure_active_work_area_observed()`
+  → if the active area has an observer binding and the robot is not already at that observer position, measurement is refused before any worker thread starts
   → service.measure_area_grid(corners_norm, rows, cols)
   → transformer.reload() picks up latest matrix
   → each grid point is transformed through the homography
@@ -213,6 +218,8 @@ User presses "Measure Area Grid"
     - retry once
     - if still unreachable, skip it and continue
   → save measured samples plus grid metadata (`point_labels`, `grid_rows`, `grid_cols`)
+
+For area-aware workflows like `pickup`, both actions assume the robot is already standing at that area's configured observer pose before the run starts. They do not auto-move the robot to `HOME` or `CALIBRATION`; they fail fast and ask the operator to move there first.
 
 After a successful area-grid run
   → controller enables "View Depth Map"

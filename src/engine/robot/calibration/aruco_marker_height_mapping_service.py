@@ -236,6 +236,7 @@ class ArucoMarkerHeightMappingService:
         cols: int,
         support_points_mm: list[tuple[str, float, float]] | None = None,
         skip_labels: set[str] | None = None,
+        measurement_pose: list[float] | None = None,
     ) -> tuple[bool, str]:
         self._stop_event.clear()
 
@@ -258,15 +259,18 @@ class ArucoMarkerHeightMappingService:
         if not self._transformer.is_available():
             return False, "System not calibrated — run robot calibration first"
 
-        measurement_pose = self._resolve_measurement_pose()
-        if measurement_pose is None:
+        resolved_measurement_pose = list(measurement_pose) if measurement_pose is not None else self._resolve_measurement_pose()
+        if resolved_measurement_pose is None:
             return False, "Height measurement calibration pose is unavailable"
 
         current_pos = self._robot_service.get_current_position()
         if not current_pos or len(current_pos) < 6:
             return False, "Failed to get current robot position"
 
-        z_target, rx, ry, rz = measurement_pose
+        z_target = float(resolved_measurement_pose[2])
+        rx = float(resolved_measurement_pose[3])
+        ry = float(resolved_measurement_pose[4])
+        rz = float(resolved_measurement_pose[5])
         tool = int(getattr(self._robot_config, "robot_tool", 0))
         user = int(getattr(self._robot_config, "robot_user", 0))
         velocity = int(getattr(self._calib_config, "velocity", _DEFAULT_VELOCITY))
@@ -359,7 +363,11 @@ class ArucoMarkerHeightMappingService:
         finally:
             self._height_service.end_measurement_session()
 
-    def verify_height_model(self, area_id: str = "") -> tuple[bool, str]:
+    def verify_height_model(
+        self,
+        area_id: str = "",
+        measurement_pose: list[float] | None = None,
+    ) -> tuple[bool, str]:
         if self._height_service is None:
             return False, "Height measuring service unavailable"
         if not self._height_service.is_calibrated():
@@ -373,15 +381,14 @@ class ArucoMarkerHeightMappingService:
         if len(verification_points) < 4:
             return False, "Height model is not ready for 4-point verification"
 
-        calib = self._height_service.get_calibration_data()
-        if calib is None or not getattr(calib, "robot_initial_position", None):
+        resolved_measurement_pose = list(measurement_pose) if measurement_pose is not None else self._resolve_measurement_pose()
+        if resolved_measurement_pose is None:
             return False, "Height measurement calibration pose is unavailable"
 
-        ref = list(calib.robot_initial_position)
-        z_target = float(ref[2])
-        rx = float(ref[3])
-        ry = float(ref[4])
-        rz = float(ref[5])
+        z_target = float(resolved_measurement_pose[2])
+        rx = float(resolved_measurement_pose[3])
+        ry = float(resolved_measurement_pose[4])
+        rz = float(resolved_measurement_pose[5])
         anchor_xy = self._resolve_verification_anchor(data)
         tool = int(getattr(self._robot_config, "robot_tool", 0))
         user = int(getattr(self._robot_config, "robot_user", 0))

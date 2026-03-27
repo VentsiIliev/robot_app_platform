@@ -1,0 +1,27 @@
+{
+  "MOVEMENT_GROUPS": {
+    "HOME": {
+      "velocity": 50,
+      "acceleration": 30,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-38.178, 232.068, 597.951, -0.382, -0.212, 89.920]"
+    },
+    "CALIBRATION": {
+      "velocity": 50,
+      "acceleration": 30,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[385.201, 40.836, 541.181, -0.402, -0.246, -0.095]"
+    },
+    "JOG": {
+      "velocity": 0,
+      "acceleration": 0,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": false
+    }
+  }
+}

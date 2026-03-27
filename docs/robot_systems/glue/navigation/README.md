@@ -93,6 +93,12 @@ def get_group_names(self) -> list[str]: ...
 def get_group_position(self, group_name: str) -> list[float] | None: ...
 ```
 
+`get_group_position()` is also used outside direct motion:
+- calibration-area observer guards resolve `HOME` / `CALIBRATION` positions through it before starting area-grid verification or measurement
+- frame builders use it to construct `PlanePoseMapper` instances from declared navigation groups
+
+If the named group is missing or its saved position cannot be parsed, it returns `None`.
+
 ---
 
 ## Z-offset Mechanics
@@ -124,3 +130,4 @@ After a successful move the service calls `IWorkAreaService.set_active_area_id()
 - **Wrapper, not replacement** — `GlueNavigationService` delegates all motion to the underlying `NavigationService`; it adds no motion logic of its own.
 - **Optional dependencies** — `vision`, `robot_service`, and `work_area_service` are all optional. Missing services cause graceful degradation (no Z offset, no area activation) rather than errors.
 - **`wait_cancelled` propagation** — Callers that run navigation inside a process must pass `lambda: cancel_event.is_set()` to allow operator interruption without spinning a separate thread.
+- **Shared position lookup** — the same saved movement-group lookup is used for both runtime motion and observer-position checks, so `HOME` / `CALIBRATION` consistency depends on `get_group_position()` resolving the exact stored group definition from `NavigationService`.

@@ -270,7 +270,16 @@ class FairinoRos2Client:
         logger.debug("validate_pose → POST /reachability/pose payload=%s", payload)
         try:
             response = requests.post(f"{self.server_url}/reachability/pose", json=payload, timeout=15)
-            data = response.json()
+            try:
+                data = response.json()
+            except Exception:
+                body = response.text.strip()
+                logger.error(
+                    "validate_pose non-JSON response: http=%s body=%r",
+                    response.status_code,
+                    body[:1000],
+                )
+                raise
             self._mark_available()
             logger.debug("validate_pose ← http=%s raw=%s", response.status_code, data)
             return data

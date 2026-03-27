@@ -1,0 +1,8 @@
+{
+  "Calibration": {
+    "Chessboard width": 32,
+    "Chessboard height": 20,
+    "Square size (mm)": 25.0,
+    "Skip frames": 30
+  }
+}

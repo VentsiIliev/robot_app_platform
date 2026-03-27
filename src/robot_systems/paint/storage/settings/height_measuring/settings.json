@@ -1,0 +1,41 @@
+{
+  "detection": {
+    "min_intensity": 10.0,
+    "gaussian_blur_kernel": [
+      21,
+      21
+    ],
+    "gaussian_blur_sigma": 0.0,
+    "default_axis": "y",
+    "detection_delay_ms": 200,
+    "image_capture_delay_ms": 10,
+    "detection_samples": 5,
+    "max_detection_retries": 5
+  },
+  "calibration": {
+    "step_size_mm": 1.0,
+    "num_iterations": 50,
+    "calibration_velocity": 50.0,
+    "calibration_acceleration": 10.0,
+    "movement_threshold": 0.2,
+    "movement_timeout": 2.0,
+    "delay_between_move_detect_ms": 1000,
+    "calibration_max_attempts": 5,
+    "max_polynomial_degree": 6,
+    "calibration_initial_position": [
+      0.0,
+      0.0,
+      0.0,
+      180.0,
+      0.0,
+      0.0
+    ]
+  },
+  "measuring": {
+    "measurement_velocity": 20.0,
+    "measurement_acceleration": 10.0,
+    "measurement_threshold": 0.25,
+    "measurement_timeout": 10.0,
+    "delay_between_move_detect_ms": 500
+  }
+}

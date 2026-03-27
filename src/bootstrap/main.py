@@ -14,12 +14,13 @@ from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
 from src.engine.localization.localization_service import LocalizationService
 from src.robot_systems.system_builder import SystemBuilder
-from src.robot_systems.glue.bootstrap_provider import GlueBootstrapProvider
+from src.robot_systems.paint.bootstrap_provider import PaintBootstrapProvider
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
 _DEV_SKIP_LOGIN = True
-_BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
+_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+
 
 
 class _FramelessHeaderDrag(QObject):

@@ -213,6 +213,18 @@ Calibration now uses the generic engine-level
 That keeps the calibration path reusable without baking glue camera policy into
 the generic navigation abstraction.
 
+The calibration application still consumes glue-specific observer bindings from
+`GlueRobotSystem.work_area_observers`:
+
+- `pickup -> HOME`
+- `spray -> CALIBRATION`
+
+Area-grid verification and area-grid measurement now both enforce those bindings
+before a run starts. If the active work area has an observer group and the robot
+is not already at that saved navigation position, the calibration UI refuses the
+run and asks the operator to move to the observer pose first. The calibration app
+does not auto-move to `HOME` or `CALIBRATION` for those grid actions.
+
 Height measuring now follows the same pattern:
 
 - the generic engine builder assembles detector, detection, calibration, and
