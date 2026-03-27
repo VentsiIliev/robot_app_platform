@@ -2,6 +2,8 @@ import logging
 import sys
 from pathlib import Path
 
+from src.robot_systems.glue.bootstrap_provider import GlueBootstrapProvider
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
@@ -19,7 +21,8 @@ from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
 _DEV_SKIP_LOGIN = True
-_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+_BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
+# _BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
 
 
 
