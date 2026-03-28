@@ -71,6 +71,13 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.VELOCITY_ONLY,
         ),
 
+        MovementGroupDefinition(
+            id="PAINTING",
+            label="Painting",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+         ),
+
     ]
 
     target_points = [
