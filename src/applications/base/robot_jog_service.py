@@ -66,11 +66,22 @@ class RobotJogService:
         if self._robot is None:
             return
         try:
+            if not self._lock.acquire(blocking=False):
+                return
+            if self._prefers_incremental_jog():
+                try:
+                    self._robot.start_jog(
+                        RobotAxis.get_by_string(axis),
+                        Direction.get_by_string(direction),
+                        step,
+                    )
+                    return
+                finally:
+                    self._lock.release()
+
             resolver = self._current_pose_resolver()
             point = self._current_frame_point(resolver)
             if resolver is not None and point is not None:
-                if not self._lock.acquire(blocking=False):
-                    return
                 try:
                     current = self._robot.get_current_position()
                     target = resolver.resolve(current, axis, direction, step, point)
@@ -88,12 +99,16 @@ class RobotJogService:
                         return
                 finally:
                     self._lock.release()
+                    return
             self._robot.start_jog(
                 RobotAxis.get_by_string(axis),
                 Direction.get_by_string(direction),
                 step,
             )
+            self._lock.release()
         except Exception:
+            if self._lock.locked():
+                self._lock.release()
             pass
 
     def stop_jog(self) -> None:
@@ -123,3 +138,13 @@ class RobotJogService:
             except Exception:
                 return None
         return None
+
+    def _prefers_incremental_jog(self) -> bool:
+        robot = getattr(self._robot, "_robot", None)
+        prefers_incremental = getattr(robot, "prefers_incremental_jog", None)
+        if callable(prefers_incremental):
+            try:
+                return bool(prefers_incremental())
+            except Exception:
+                return False
+        return False

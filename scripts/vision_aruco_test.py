@@ -19,25 +19,25 @@ from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSys
 from src.engine.vision.implementation.VisionSystem.core.service.internal_service import Service
 from src.engine.vision.vision_service import VisionService
 from src.engine.work_areas.work_area_service import WorkAreaService
-from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 
 
 def _build_vision_service(active_area: str | None) -> VisionService:
     settings_service = build_from_specs(
-        GlueRobotSystem.settings_specs,
-        GlueRobotSystem.metadata.settings_root,
-        GlueRobotSystem,
+        PaintRobotSystem.settings_specs,
+        PaintRobotSystem.metadata.settings_root,
+        PaintRobotSystem,
     )
     work_area_service = WorkAreaService(
         settings_service=settings_service,
-        definitions=GlueRobotSystem.work_areas,
-        default_active_area_id=GlueRobotSystem.default_active_work_area_id,
+        definitions=PaintRobotSystem.work_areas,
+        default_active_area_id=PaintRobotSystem.default_active_work_area_id,
     )
     if active_area is not None:
         work_area_service.set_active_area_id(active_area)
 
     settings_repo = settings_service.get_repo(CommonSettingsID.VISION_CAMERA_SETTINGS)
-    data_storage_path = GlueRobotSystem.storage_path("settings", "vision", "data")
+    data_storage_path = PaintRobotSystem.storage_path("settings", "vision", "data")
     os.makedirs(data_storage_path, exist_ok=True)
 
     internal_service = Service(

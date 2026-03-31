@@ -228,7 +228,10 @@ class RefactoredRobotCalibrationPipeline:
             context.calibration_vision,
             context.calibration_robot_controller,
             context.axis_mapping_config,
+            context.stop_event,
         )
+        if not result.success:
+            context.calibration_error_message = result.message
         context.image_to_robot_mapping = result.data
         time.sleep(1)
         return result.next_state

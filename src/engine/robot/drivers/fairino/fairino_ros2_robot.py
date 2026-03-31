@@ -138,3 +138,6 @@ class FairinoRos2Robot(IRobot):
     # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
     def clone(self) -> 'IRobot':
         return FairinoRos2Robot(server_url=self._client.server_url)
+
+    def prefers_incremental_jog(self) -> bool:
+        return True

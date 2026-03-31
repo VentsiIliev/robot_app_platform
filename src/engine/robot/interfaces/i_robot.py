@@ -131,3 +131,7 @@ class IRobot(ABC):
     ) -> dict:
         """Optional remote pose reachability validation."""
         return {"supported": False, "reachable": False}
+
+    def prefers_incremental_jog(self) -> bool:
+        """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""
+        return False

@@ -17,6 +17,8 @@ class MotionService(IMotionService):
     _WAIT_TIMEOUT_S = 30.0
     _STOP_RETRY_DELAY_S = 0.05
     _STOP_ATTEMPTS = 3
+    _JOG_TARGET_REUSE_POS_MM = 5.0
+    _JOG_TARGET_REUSE_ANG_DEG = 2.0
 
     def __init__(
             self,
@@ -38,6 +40,8 @@ class MotionService(IMotionService):
 
     def _on_position(self, position: List[float]) -> None:
         self._cached_position = position
+        if self._last_jog_target and self._positions_close(position, self._last_jog_target):
+            self._last_jog_target = list(position)
 
     def move_ptp(
             self,
@@ -49,6 +53,7 @@ class MotionService(IMotionService):
             wait_to_reach=False,
             wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
+        self._last_jog_target = []
         violations = self._safety.get_violations(position)
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
@@ -84,6 +89,7 @@ class MotionService(IMotionService):
             wait_to_reach=False,
             wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
+        self._last_jog_target = []
         violations = self._safety.get_violations(position)
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
@@ -114,8 +120,10 @@ class MotionService(IMotionService):
         try:
             current = self._robot.get_current_position()
             self._logger.info(f"Current -> {current}")
-            if current and len(current) >= 3:
-                target = list(current)
+            base_position = self._select_jog_base_position(current)
+            self._logger.info(f"Jog base -> {base_position}")
+            if base_position and len(base_position) >= 3:
+                target = list(base_position)
 
                 idx = axis.value - 1  # X=0, Y=1, Z=2, RX=3, RY=4, RZ=5
                 if idx < len(target):
@@ -134,8 +142,12 @@ class MotionService(IMotionService):
                         axis, direction, step, ", ".join(violations),
                     )
                     return -1
+            else:
+                target = []
 
             ret = self._robot.start_jog(axis, direction, step, self._jog_vel, self._jog_acc)
+            if ret == 0 and target:
+                self._last_jog_target = list(target)
             self._logger.debug("start_jog ← ret=%s", ret)
             return ret
         except Exception:
@@ -185,6 +197,23 @@ class MotionService(IMotionService):
         col = cols[axis_idx]
         scale = direction_value * step
         return col[0] * scale, col[1] * scale, col[2] * scale
+
+    def _select_jog_base_position(self, current: List[float]) -> List[float]:
+        if self._last_jog_target and current and self._positions_close(current, self._last_jog_target):
+            return list(self._last_jog_target)
+        self._last_jog_target = []
+        return list(current) if current else []
+
+    @classmethod
+    def _positions_close(cls, a: List[float], b: List[float]) -> bool:
+        if len(a) < 6 or len(b) < 6:
+            return False
+        pos_dist = math.sqrt(sum((float(a[i]) - float(b[i])) ** 2 for i in range(3)))
+        ang_dist = max(
+            cls._wrapped_angle_delta_deg(float(a[i]), float(b[i]))
+            for i in range(3, 6)
+        )
+        return pos_dist <= cls._JOG_TARGET_REUSE_POS_MM and ang_dist <= cls._JOG_TARGET_REUSE_ANG_DEG
 
     def _wait_for_position(
             self,

@@ -19,8 +19,7 @@ def handle_axis_mapping_state(system, calibration_vision, calibration_robot_cont
         return StateResult(success=True, message="Axis mapping calibration successful",
                            next_state=RobotCalibrationStates.LOOKING_FOR_CHESSBOARD, data=mapping)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        _logger.error("Axis mapping calibration failed: %s", e)
         return StateResult(success=False, message=f"Axis mapping calibration failed: {e}",
                            next_state=RobotCalibrationStates.ERROR, data=None)
 
@@ -34,6 +33,8 @@ def get_marker_position(system, calibration_vision, MARKER_ID, MAX_ATTEMPTS, sto
         if frame is None:
             continue
         result = calibration_vision.detect_specific_marker(frame, MARKER_ID)
+        detected_ids = np.array(result.aruco_ids).flatten() if result.aruco_ids is not None else []
+        _logger.info("Detected IDs: %s for target marker %s", detected_ids, MARKER_ID)
         if result.found and result.aruco_ids is not None:
             ids = np.array(result.aruco_ids).flatten()
             if MARKER_ID in ids:
