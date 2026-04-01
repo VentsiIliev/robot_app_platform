@@ -136,40 +136,52 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         )
         return RobotCalibrationStates.ERROR
 
-    # Capture frame
-    capture_start = time.time()
-    iteration_image = context.wait_for_frame()
-    if iteration_image is None:
-        return RobotCalibrationStates.CANCELLED
-    capture_time = time.time() - capture_start
-
-    # Detect marker
-    detection_start = time.time()
-    result = context.calibration_vision.detect_specific_marker(iteration_image, marker_id)
-    marker_found = result.found
-    arucoCorners = result.aruco_corners
-    arucoIds = result.aruco_ids
-    detection_time = time.time() - detection_start
-
-    if not marker_found:
-        _logger.info(f"Marker {marker_id} not found during iteration {context.iteration_count}!")
-        return RobotCalibrationStates.ITERATE_ALIGNMENT  # Stay in state
-
-    # Process and compute error
-    processing_start = time.time()
-    context.calibration_vision.update_marker_top_left_corners(marker_id, arucoCorners, arucoIds)
-    
+    # Collect N frames and average the marker position to reduce detection noise
+    _N_SAMPLES = 5
     image_center_px = (
         context.vision_service.get_camera_width() // 2,
-        context.vision_service.get_camera_height() // 2
+        context.vision_service.get_camera_height() // 2,
     )
-
-    marker_top_left_px = context.calibration_vision.marker_top_left_corners[marker_id]
-    offset_x_px = marker_top_left_px[0] - image_center_px[0]
-    offset_y_px = marker_top_left_px[1] - image_center_px[1]
-    current_error_px = np.sqrt(offset_x_px ** 2 + offset_y_px ** 2)
-    
     newPpm = context.calibration_vision.PPM * context.ppm_scale
+
+    offset_samples: list = []
+    iteration_image = None
+    last_ids = None
+
+    capture_start = time.time()
+    for _ in range(_N_SAMPLES):
+        frame = context.wait_for_frame()
+        if frame is None:
+            return RobotCalibrationStates.CANCELLED
+        iteration_image = frame
+        res = context.calibration_vision.detect_specific_marker(frame, marker_id)
+        if res.found and res.aruco_ids is not None:
+            context.calibration_vision.update_marker_top_left_corners(
+                marker_id, res.aruco_corners, res.aruco_ids
+            )
+            mx, my = context.calibration_vision.marker_top_left_corners[marker_id]
+            offset_samples.append((float(mx) - image_center_px[0], float(my) - image_center_px[1]))
+            last_ids = res.aruco_ids
+    capture_time = time.time() - capture_start
+    detection_time = capture_time
+    processing_start = time.time()
+
+    marker_found = len(offset_samples) > 0
+
+    if not marker_found:
+        detected_ids = np.array(last_ids).flatten().tolist() if last_ids is not None else []
+        _logger.info(
+            "Marker %s not found in any of %s frames during iteration %s. Last detected IDs: %s",
+            marker_id, _N_SAMPLES, context.iteration_count, detected_ids,
+        )
+        context.flush_camera_buffer()
+        if context.interruptible_sleep(context.marker_not_found_retry_wait):
+            return RobotCalibrationStates.CANCELLED
+        return RobotCalibrationStates.ITERATE_ALIGNMENT  # Stay in state
+
+    offset_x_px = float(np.mean([s[0] for s in offset_samples]))
+    offset_y_px = float(np.mean([s[1] for s in offset_samples]))
+    current_error_px = np.sqrt(offset_x_px ** 2 + offset_y_px ** 2)
     current_error_mm = current_error_px / newPpm
     offset_x_mm = offset_x_px / newPpm
     offset_y_mm = offset_y_px / newPpm

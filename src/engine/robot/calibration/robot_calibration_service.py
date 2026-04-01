@@ -43,13 +43,34 @@ class RobotCalibrationService(IRobotCalibrationService):
     def run_calibration(self) -> tuple[bool, str]:
         self._status  = "running"
         handler       = self._attach_log_handler()
+        auto_brightness_locked = False
+        auto_brightness_adjustment_locked = False
+        vision_service = getattr(self._config, "vision_service", None)
         try:
+            if (
+                vision_service is not None
+                and vision_service.get_auto_brightness_enabled()
+            ):
+                auto_brightness_locked = vision_service.lock_auto_brightness_region()
+                if auto_brightness_locked:
+                    _logger.info("Locking auto brightness region during robot calibration")
+                else:
+                    _logger.warning("Unable to lock auto brightness region during robot calibration")
+                vision_service.lock_auto_brightness_adjustment()
+                auto_brightness_adjustment_locked = True
+                _logger.info("Freezing auto brightness adjustment during robot calibration")
             self._refresh_runtime_settings()
             self._pipeline = RefactoredRobotCalibrationPipeline(
                 self._config, self._adaptive_config, self._events_config
             )
             success, msg = self._pipeline.run()
         finally:
+            if vision_service is not None and auto_brightness_adjustment_locked:
+                _logger.info("Restoring adaptive auto brightness adjustment after robot calibration")
+                vision_service.unlock_auto_brightness_adjustment()
+            if vision_service is not None and auto_brightness_locked:
+                _logger.info("Restoring dynamic auto brightness region after robot calibration")
+                vision_service.unlock_auto_brightness_region()
             self._detach_log_handler(handler)
 
         self._calibrated = success

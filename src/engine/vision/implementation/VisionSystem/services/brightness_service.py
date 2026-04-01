@@ -17,9 +17,11 @@ class BrightnessService:
         camera_settings: CameraSettings,
         area_points_provider: Optional[Callable[[], np.ndarray | None]] = None,
     ):
-        self._settings          = camera_settings
+        self._settings = camera_settings
         self._area_points_provider = area_points_provider
-        self._adjustment        = 0.0
+        self._locked_area_points: np.ndarray | None = None
+        self._adjustment_locked = False
+        self._adjustment = 0.0
         self.brightness_controller = BrightnessController(
             Kp       = camera_settings.get_brightness_kp(),
             Ki       = camera_settings.get_brightness_ki(),
@@ -43,6 +45,9 @@ class BrightnessService:
         area = self._get_area_points()
 
         adjusted = self.brightness_controller.adjustBrightness(image, self._adjustment)
+        if self._adjustment_locked:
+            return adjusted
+
         current  = self.brightness_controller.calculateBrightness(adjusted, area)
         error    = self.brightness_controller.target - current
 
@@ -57,9 +62,33 @@ class BrightnessService:
 
         return self.brightness_controller.adjustBrightness(image, self._adjustment)
 
+    def lock_current_area(self) -> bool:
+        area = self._read_area_points()
+        if area is None:
+            return False
+        self._locked_area_points = np.array(area, dtype=np.float32)
+        return True
+
+    def unlock_area(self) -> None:
+        self._locked_area_points = None
+
+    def lock_adjustment(self) -> None:
+        self._adjustment_locked = True
+
+    def unlock_adjustment(self) -> None:
+        self._adjustment_locked = False
+
     # ── Private ───────────────────────────────────────────────────────
 
     def _get_area_points(self) -> np.ndarray:
+        if self._locked_area_points is not None:
+            return self._locked_area_points
+        area = self._read_area_points()
+        if area is not None:
+            return area
+        return np.array(_FALLBACK_AREA, dtype=np.float32)
+
+    def _read_area_points(self) -> np.ndarray | None:
         if self._area_points_provider is not None:
             try:
                 points = self._area_points_provider()
@@ -73,4 +102,4 @@ class BrightnessService:
                 return np.array([tuple(p) for p in pts], dtype=np.float32)
         except Exception as exc:
             _logger.error("Error reading brightness area from settings, using fallback: %s", exc)
-        return np.array(_FALLBACK_AREA, dtype=np.float32)
+        return None

@@ -38,7 +38,7 @@ class FindRequiredMarkersResult:
 
 class CalibrationVision:
     def __init__(self, vision_service, chessboard_size, square_size_mm, required_ids, debug_draw, debug,
-                 use_marker_centre: bool = False):
+                 use_marker_centre: bool = False, perspective_matrix=None):
         self.bottom_left_chessboard_corner_px = None
         self.chessboard_center_px = None
         self.original_chessboard_corners = None
@@ -53,11 +53,92 @@ class CalibrationVision:
         self.marker_top_left_corners_mm = {}
         self.PPM = None
         self.use_marker_centre = use_marker_centre
+        self.perspective_matrix = perspective_matrix
+
+    def _warp_frame(self, frame):
+        """Apply perspective correction to the whole image. Returns the frame unchanged when no matrix is set."""
+        if self.perspective_matrix is None or frame is None:
+            return frame
+        h, w = frame.shape[:2]
+        return cv2.warpPerspective(frame, self.perspective_matrix, (w, h))
+
+    def _compute_perspective_from_chessboard(self, frame):
+        """Detect chessboard on a raw frame and derive a perspective matrix from its 4 outer corners.
+
+        The chessboard is a known physical rectangle, so we map its detected
+        (potentially trapezoidal) corners to the ideal rectangular positions,
+        preserving scale and centroid.  Returns None when detection fails.
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        ret, corners = cv2.findChessboardCorners(gray, self.chessboard_size, None)
+        if not ret:
+            return None
+
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        corners_refined = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+
+        cols, rows = self.chessboard_size
+
+        tl = corners_refined[0, 0]
+        tr = corners_refined[cols - 1, 0]
+        br = corners_refined[(rows - 1) * cols + (cols - 1), 0]
+        bl = corners_refined[(rows - 1) * cols, 0]
+
+        src = np.array([tl, tr, br, bl], dtype=np.float32)
+        cx, cy = src.mean(axis=0)
+
+        phys_w = (cols - 1) * self.square_size_mm
+        phys_h = (rows - 1) * self.square_size_mm
+
+        h_span = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2.0
+        v_span = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2.0
+        avg_ppm = ((h_span / phys_w) + (v_span / phys_h)) / 2.0
+
+        dst_w = phys_w * avg_ppm
+        dst_h = phys_h * avg_ppm
+        dst = np.array([
+            [cx - dst_w / 2, cy - dst_h / 2],
+            [cx + dst_w / 2, cy - dst_h / 2],
+            [cx + dst_w / 2, cy + dst_h / 2],
+            [cx - dst_w / 2, cy + dst_h / 2],
+        ], dtype=np.float32)
+
+        matrix = cv2.getPerspectiveTransform(src, dst)
+        _logger.info("Perspective matrix derived from chessboard outer corners "
+                      "(tl=%s, tr=%s, br=%s, bl=%s)", tl, tr, br, bl)
+
+        tilt_x_rad = np.arctan2(matrix[0, 1], matrix[0, 0])
+        tilt_y_rad = np.arctan2(-matrix[1, 0], matrix[1, 1])
+        rx_deg = np.degrees(tilt_y_rad)
+        ry_deg = -np.degrees(tilt_x_rad)
+        _logger.info(
+            "📐 Camera tilt from chessboard perspective matrix:\n"
+            "  ┌─────────────────────────────────────────┐\n"
+            "  │  Axis │    rad    │    deg    │ Workobj  │\n"
+            "  ├─────────────────────────────────────────┤\n"
+            "  │  RX   │  %+.4f  │  %+.3f°  │  %+.3f°  │\n"
+            "  │  RY   │  %+.4f  │  %+.3f°  │  %+.3f°  │\n"
+            "  │  RZ   │   0.0000  │   0.000°  │   0.000° │\n"
+            "  └─────────────────────────────────────────┘",
+            tilt_y_rad, rx_deg, -rx_deg,
+            -tilt_x_rad, ry_deg, -ry_deg,
+        )
+
+        return matrix
 
     def find_chessboard_and_compute_ppm(self, frame) -> ChessboardDetectionResult:
         if frame is None:
             _logger.debug("No frame provided for chessboard detection")
             return ChessboardDetectionResult(found=False, ppm=None, bottom_left_px=None, message="No frame provided")
+
+        # If no perspective matrix exists yet, try to derive one from the chessboard
+        if self.perspective_matrix is None:
+            matrix = self._compute_perspective_from_chessboard(frame)
+            if matrix is not None:
+                self.perspective_matrix = matrix
+
+        # Warp the frame so all detection and coordinate extraction happen in corrected space
+        frame = self._warp_frame(frame)
 
         _logger.debug(f"Looking for chessboard of size: {self.chessboard_size}")
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -119,8 +200,8 @@ class CalibrationVision:
                 _logger.debug(f"Center corner: row {center_row}, col {center_col}, index {center_corner_index}")
 
                 self.chessboard_center_px = (
-                    float(corners_refined[center_corner_index, 0, 0]),  # x coordinate
-                    float(corners_refined[center_corner_index, 0, 1])  # y coordinate
+                    float(corners_refined[center_corner_index, 0, 0]),
+                    float(corners_refined[center_corner_index, 0, 1])
                 )
             _logger.debug(f"Chessboard center (px): {self.chessboard_center_px}")
 
@@ -170,6 +251,7 @@ class CalibrationVision:
         return ppm
 
     def find_required_aruco_markers(self, frame) -> FindRequiredMarkersResult:
+        frame = self._warp_frame(frame)
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(frame)
 
         if arucoIds is not None:
@@ -184,7 +266,7 @@ class CalibrationVision:
                         ref_pt = corners_4.mean(axis=0)     # rotation-invariant centre
                     else:
                         ref_pt = corners_4[0]               # top-left corner
-                    self.marker_top_left_corners[marker_id] = ref_pt
+                    self.marker_top_left_corners[marker_id] = ref_pt.astype(np.float32)
                     cv2.circle(frame, tuple(ref_pt.astype(int)), 2, (0, 255, 0), -1)
 
             _logger.debug(f"Currently have: {self.detected_ids}")
@@ -207,7 +289,7 @@ class CalibrationVision:
                 ref_pt = corners_4.mean(axis=0)     # rotation-invariant centre
             else:
                 ref_pt = corners_4[0]               # top-left corner
-            self.marker_top_left_corners[marker_id] = ref_pt
+            self.marker_top_left_corners[marker_id] = ref_pt.astype(np.float32)
 
             x_mm = (ref_pt[0] - self.bottom_left_chessboard_corner_px[0]) / self.PPM
             y_mm = (ref_pt[1] - self.bottom_left_chessboard_corner_px[1]) / self.PPM
@@ -229,6 +311,7 @@ class CalibrationVision:
     #         self.marker_top_left_corners_mm[marker_id] = (x_mm, y_mm)
 
     def detect_specific_marker(self, frame, marker_id) -> SpecificMarkerDetectionResult:
+        frame = self._warp_frame(frame)
         marker_found = False
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(image=frame)
         if arucoIds is not None and marker_id in arucoIds:

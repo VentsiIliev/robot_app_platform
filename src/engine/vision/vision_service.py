@@ -65,6 +65,9 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         corrected = self._vision_system.correctedImage
         return corrected if corrected is not None else self._vision_system.rawImage
 
+    def get_latest_corrected_frame(self) -> np.ndarray | None:
+        return self._vision_system.correctedImage
+
     def detect_aruco_markers(self, image: np.ndarray) -> tuple:
         return self._vision_system.detectArucoMarkers(image=image)
 
@@ -85,6 +88,27 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
 
     def set_draw_contours(self, enabled: bool) -> None:
         self._vision_system.camera_settings.set_draw_contours(enabled)
+
+    def get_auto_brightness_enabled(self) -> bool:
+        return bool(self._vision_system.camera_settings.get_brightness_auto())
+
+    def set_auto_brightness_enabled(self, enabled: bool) -> None:
+        self._vision_system.camera_settings.set_brightness_auto(enabled)
+
+    def lock_auto_brightness_region(self) -> bool:
+        return bool(self._vision_system.lock_auto_brightness_region())
+
+    def unlock_auto_brightness_region(self) -> None:
+        self._vision_system.unlock_auto_brightness_region()
+
+    def lock_auto_brightness_adjustment(self) -> None:
+        self._vision_system.lock_auto_brightness_adjustment()
+
+    def unlock_auto_brightness_adjustment(self) -> None:
+        self._vision_system.unlock_auto_brightness_adjustment()
+
+    def get_perspective_matrix(self):
+        return self._vision_system.perspectiveMatrix
 
     @property
     def camera_to_robot_matrix_path(self) -> str:
@@ -109,7 +133,7 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
             camera.set_auto_exposure(enabled)
         else:
             _logger.debug("set_auto_exposure: camera does not support exposure control, skipping")
-        self._vision_system.camera_settings.set_brightness_auto(enabled)
+        self.set_auto_brightness_enabled(enabled)
 
     def set_detection_area(self, area: str) -> None:
         self.set_active_work_area(area)

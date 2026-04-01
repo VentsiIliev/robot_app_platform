@@ -5,7 +5,8 @@
     "target_error_mm": 0.5,
     "max_error_ref": 100.0,
     "k": 2.0,
-    "derivative_scaling": 0.5
+    "derivative_scaling": 0.5,
+    "fast_iteration_wait": 1.0
   },
   "axis_mapping_config": {
     "marker_id": 4,
@@ -33,7 +34,7 @@
     "max_acceptance_std_mm": 10.0
   },
   "run_height_measurement": true,
-  "z_target": 200,
+  "z_target": 90,
   "required_ids": [
     0,
     1,

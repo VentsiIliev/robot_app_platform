@@ -265,6 +265,7 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int):
                 mapped_x_mm,
                 mapped_y_mm,
                 context.alignment_threshold_mm,
+                preserve_current_orientation=True,
             )
         except RuntimeError as exc:
             context.calibration_error_message = str(exc)

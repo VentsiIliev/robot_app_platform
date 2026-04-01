@@ -26,6 +26,7 @@ def handle_compute_offsets_state(context) -> RobotCalibrationStates:
         Next state to transition to
     """
     if context.calibration_vision.PPM is not None and context.bottom_left_chessboard_corner_px is not None:
+
         # Get image center in pixels
         image_center_px = (
             context.vision_service.get_camera_width() // 2,

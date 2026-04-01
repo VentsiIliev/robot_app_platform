@@ -40,6 +40,9 @@ class IVisionService(ABC):
     def get_latest_frame(self)-> np.ndarray: ...
 
     @abstractmethod
+    def get_latest_corrected_frame(self) -> np.ndarray | None: ...
+
+    @abstractmethod
     def detect_aruco_markers(self, image: np.ndarray) -> tuple: ...
 
     @abstractmethod
@@ -59,6 +62,24 @@ class IVisionService(ABC):
 
     @abstractmethod
     def set_draw_contours(self, enabled: bool) -> None: ...
+
+    @abstractmethod
+    def get_auto_brightness_enabled(self) -> bool: ...
+
+    @abstractmethod
+    def set_auto_brightness_enabled(self, enabled: bool) -> None: ...
+
+    @abstractmethod
+    def lock_auto_brightness_region(self) -> bool: ...
+
+    @abstractmethod
+    def unlock_auto_brightness_region(self) -> None: ...
+
+    @abstractmethod
+    def lock_auto_brightness_adjustment(self) -> None: ...
+
+    @abstractmethod
+    def unlock_auto_brightness_adjustment(self) -> None: ...
 
     @property
     @abstractmethod

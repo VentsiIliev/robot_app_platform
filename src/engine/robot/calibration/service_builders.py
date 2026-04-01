@@ -88,8 +88,9 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
         robot_config_key=CommonSettingsID.ROBOT_CONFIG,
         camera_tcp_offset_config=calib_settings.camera_tcp_offset,
         axis_mapping_config=calib_settings.axis_mapping,
-        use_ransac=True,
+        use_ransac=False,
         use_marker_centre=True,
+        perspective_matrix=None,
     )
 
     return RobotCalibrationService(

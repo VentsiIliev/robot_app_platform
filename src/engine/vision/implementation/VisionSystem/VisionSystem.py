@@ -170,10 +170,10 @@ class VisionSystem:
         if self.state_manager is not None:
             self.state_manager.update_state(ServiceState.IDLE)
 
-        self.rawImage = self.image.copy()
-
         if self.camera_settings.get_brightness_auto():
             self.image = self._brightness_service.adjust(self.image)
+
+        self.rawImage = self.image.copy()
 
         if self.rawMode:
             if self.message_publisher:
@@ -221,10 +221,15 @@ class VisionSystem:
             roi=self.roi,
         )
         if self.perspectiveMatrix is not None:
+            # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
             image = cv2.warpPerspective(
                 image, self.perspectiveMatrix,
                 (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
             )
+            # _logger.debug(f"Perspective Matrix: Applied!")
+        # else:
+        #     _logger.debug(f"Perspective Matrix: Not applied (None)")
+
         return image
 
     # ── Calibration ───────────────────────────────────────────────────────────
@@ -373,6 +378,18 @@ class VisionSystem:
             self.camera_settings.get_camera_width(),
             self.camera_settings.get_camera_height(),
         )
+
+    def lock_auto_brightness_region(self) -> bool:
+        return self._brightness_service.lock_current_area()
+
+    def unlock_auto_brightness_region(self) -> None:
+        self._brightness_service.unlock_area()
+
+    def lock_auto_brightness_adjustment(self) -> None:
+        self._brightness_service.lock_adjustment()
+
+    def unlock_auto_brightness_adjustment(self) -> None:
+        self._brightness_service.unlock_adjustment()
 
     def _get_active_area_id(self) -> str:
         if self._work_area_service is not None:

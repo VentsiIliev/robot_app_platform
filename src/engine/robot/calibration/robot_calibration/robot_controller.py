@@ -39,7 +39,8 @@ class CalibrationRobotController:
             wait_to_reach=blocking,
         )
 
-    def get_iterative_align_position(self, current_error_mm, offset_x_mm, offset_y_mm, alignment_threshold_mm):
+    def get_iterative_align_position(self, current_error_mm, offset_x_mm, offset_y_mm, alignment_threshold_mm,
+                                     preserve_current_orientation=False):
         min_step_mm        = self.adaptive_movement_config.min_step_mm
         max_step_mm        = self.adaptive_movement_config.max_step_mm
         target_error_mm    = alignment_threshold_mm
@@ -56,24 +57,39 @@ class CalibrationRobotController:
             max_move_mm *= max(damping_ratio, 0.05)
 
         if hasattr(self, 'previous_error_mm'):
-            error_change    = current_error_mm - self.previous_error_mm
-            derivative_factor = 1.0 / (1.0 + derivative_scaling * abs(error_change))
-            max_move_mm    *= derivative_factor
+            error_change = current_error_mm - self.previous_error_mm
+            if error_change > 0:  # error increased → possible overshoot, dampen
+                derivative_factor = 1.0 / (1.0 + derivative_scaling * error_change)
+                max_move_mm *= derivative_factor
 
         self.previous_error_mm = current_error_mm
 
         if current_error_mm < target_error_mm * 0.5:
             max_move_mm = min_step_mm
 
-        move_x_mm = max(-max_move_mm, min(max_move_mm, offset_x_mm))
-        move_y_mm = max(-max_move_mm, min(max_move_mm, offset_y_mm))
+        magnitude = np.sqrt(offset_x_mm ** 2 + offset_y_mm ** 2)
+        if magnitude > max_move_mm:
+            scale = max_move_mm / magnitude
+        elif magnitude > alignment_threshold_mm * 3:
+            scale = 1.0   # direct jump — far enough from target that noise is negligible
+        else:
+            scale = 0.5   # cautious approach in the noise-sensitive zone near target
+        move_x_mm = offset_x_mm * scale
+        move_y_mm = offset_y_mm * scale
 
         _logger.debug("Adaptive movement: max_move=%.1fmm (error=%.3fmm)", max_move_mm, current_error_mm)
         _logger.debug("Making iterative movement: X+=%.3fmm, Y+=%.3fmm", move_x_mm, move_y_mm)
 
         raw = self.robot_service.get_current_position()
         x, y, z, rx, ry, rz = self._require_pose(raw, "get_iterative_align_position")
-        return [x + move_x_mm, y + move_y_mm, z, rx, ry, rz]
+        if preserve_current_orientation:
+            # Keep the robot's current orientation (e.g. after a TCP-capture rotation).
+            return [x + move_x_mm, y + move_y_mm, z, rx, ry, rz]
+        cx, cy, cz, crx, cry, crz = self._require_pose(
+            self._calibration_position, "get_iterative_align_position/calibration_position"
+        )
+        # Preserve the original calibration orientation during fine alignment.
+        return [x + move_x_mm, y + move_y_mm, z, crx, cry, crz]
 
     def move_to_calibration_position(self):
         if self._navigation_service:
@@ -95,9 +111,12 @@ class CalibrationRobotController:
 
     def move_y_relative(self, dy_mm, blocking=False):
         raw = self.robot_service.get_current_position()
-        x, y, z, rx, ry, rz = self._require_pose(raw, "move_y_relative")
+        x, y, z, _, _, _ = self._require_pose(raw, "move_y_relative")
+        _, _, _, crx, cry, crz = self._require_pose(
+            self._calibration_position, "move_y_relative/calibration_position"
+        )
         return self.robot_service.move_ptp(
-            position=[x, y + dy_mm, z, rx, ry, rz],
+            position=[x, y + dy_mm, z, crx, cry, crz],
             tool=self._tool,
             user=self._user,
             velocity=self._velocity,
@@ -107,9 +126,12 @@ class CalibrationRobotController:
 
     def move_x_relative(self, dx_mm, blocking=False):
         raw = self.robot_service.get_current_position()
-        x, y, z, rx, ry, rz = self._require_pose(raw, "move_x_relative")
+        x, y, z, _, _, _ = self._require_pose(raw, "move_x_relative")
+        _, _, _, crx, cry, crz = self._require_pose(
+            self._calibration_position, "move_x_relative/calibration_position"
+        )
         return self.robot_service.move_ptp(
-            position=[x + dx_mm, y, z, rx, ry, rz],
+            position=[x + dx_mm, y, z, crx, cry, crz],
             tool=self._tool,
             user=self._user,
             velocity=self._velocity,

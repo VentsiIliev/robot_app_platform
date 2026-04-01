@@ -12,6 +12,7 @@ class AdaptiveMovementConfig:
     max_error_ref: float = 100.0
     k: float = 2.0
     derivative_scaling: float = 0.5
+    fast_iteration_wait: float = 1.0
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'AdaptiveMovementConfig':
@@ -22,6 +23,7 @@ class AdaptiveMovementConfig:
             max_error_ref=data.get("max_error_ref", 100.0),
             k=data.get("k", 2.0),
             derivative_scaling=data.get("derivative_scaling", 0.5),
+            fast_iteration_wait=data.get("fast_iteration_wait", 1.0),
         )
 
     def to_dict(self) -> Dict:
@@ -32,6 +34,7 @@ class AdaptiveMovementConfig:
             "max_error_ref": self.max_error_ref,
             "k": self.k,
             "derivative_scaling": self.derivative_scaling,
+            "fast_iteration_wait": self.fast_iteration_wait,
         }
 
 

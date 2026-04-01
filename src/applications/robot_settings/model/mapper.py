@@ -98,6 +98,7 @@ class RobotCalibrationMapper:
             "calib_max_error_ref":         am.max_error_ref,
             "calib_k":                     am.k,
             "calib_derivative_scaling":    am.derivative_scaling,
+            "calib_fast_iteration_wait":   am.fast_iteration_wait,
             "calib_run_height_measurement": settings.run_height_measurement,
             "calib_z_target":              settings.z_target,
             "calib_required_ids":          settings.required_ids,
@@ -139,6 +140,7 @@ class RobotCalibrationMapper:
         am.max_error_ref      = float(flat.get("calib_max_error_ref",      am.max_error_ref))
         am.k                  = float(flat.get("calib_k",                  am.k))
         am.derivative_scaling = float(flat.get("calib_derivative_scaling", am.derivative_scaling))
+        am.fast_iteration_wait = float(flat.get("calib_fast_iteration_wait", am.fast_iteration_wait))
         s.run_height_measurement = flat.get(
             "calib_run_height_measurement",
             s.run_height_measurement,

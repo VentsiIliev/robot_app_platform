@@ -40,10 +40,11 @@ CALIBRATION_ADAPTIVE_GROUP = SettingGroup("Adaptive Movement", [
 
 CALIBRATION_MARKER_GROUP = SettingGroup("Marker Detection", [
     SettingField("calib_run_height_measurement", "Measure Height",  "combo",   default="True", choices=["True", "False"]),
-    SettingField("calib_z_target",     "Z Target Height", "spinbox",  default=300,               min_val=0,   max_val=1000, suffix=" mm",   step=1, step_options=[1, 10, 50]),
-    SettingField("calib_required_ids", "Required IDs",    "int_list", default="0,1,2,3,4,5,6,8", min_val=0,   max_val=255),
-    SettingField("calib_velocity",     "Velocity",        "spinbox",  default=30,                min_val=1,   max_val=1000, suffix=" mm/s",  step=1, step_options=[1, 5, 10, 50]),
-    SettingField("calib_acceleration", "Acceleration",    "spinbox",  default=10,                min_val=1,   max_val=1000, suffix=" mm/s²", step=1, step_options=[1, 5, 10, 50]),
+    SettingField("calib_z_target",              "Z Target Height",  "spinbox",      default=300,  min_val=0,   max_val=1000,  suffix=" mm",   step=1,   step_options=[1, 10, 50]),
+    SettingField("calib_required_ids",          "Required IDs",     "int_list",     default="0,1,2,3,4,5,6,8", min_val=0, max_val=255),
+    SettingField("calib_velocity",              "Velocity",         "spinbox",      default=30,   min_val=1,   max_val=1000,  suffix=" mm/s",  step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_acceleration",          "Acceleration",     "spinbox",      default=10,   min_val=1,   max_val=1000,  suffix=" mm/s²", step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_fast_iteration_wait",   "Stability Wait",   "double_spinbox", default=1.0, min_val=0.0, max_val=10.0, suffix=" s",    step=0.1, decimals=1, step_options=[0.1, 0.5, 1.0]),
 ])
 
 SAFETY_LIMITS_GROUP = SettingGroup("Safety Limits", [

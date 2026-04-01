@@ -57,7 +57,8 @@ class RobotCalibrationConfig:
                  axis_mapping_config=None,
                  debug=False, step_by_step=False, live_visualization=False,
                  use_marker_centre: bool = False,
-                 use_ransac: bool = False):
+                 use_ransac: bool = False,
+                 perspective_matrix=None):
         self.vision_service = vision_service
         self.robot_service = robot_service
         self.robot_tool = robot_tool
@@ -82,3 +83,5 @@ class RobotCalibrationConfig:
         self.use_marker_centre = use_marker_centre
         # use RANSAC outlier rejection in findHomography instead of plain DLT
         self.use_ransac = use_ransac
+        # perspective matrix to correct detected pixel coordinates (None = no correction)
+        self.perspective_matrix = perspective_matrix

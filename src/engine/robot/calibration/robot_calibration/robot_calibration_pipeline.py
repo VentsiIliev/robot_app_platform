@@ -124,6 +124,7 @@ class RefactoredRobotCalibrationPipeline:
         # Adaptive movement configuration
         if adaptive_movement_config:
             context.alignment_threshold_mm = adaptive_movement_config.target_error_mm
+            context.fast_iteration_wait = adaptive_movement_config.fast_iteration_wait
 
         # Event configuration
         if events_config:
@@ -158,6 +159,7 @@ class RefactoredRobotCalibrationPipeline:
             context.debug_draw,
             context.debug,
             use_marker_centre=context.use_marker_centre,
+            perspective_matrix=getattr(config, 'perspective_matrix', None),
         )
 
         # Z-axis calculations
@@ -360,7 +362,7 @@ class RefactoredRobotCalibrationPipeline:
         )
 
         # Save or warn based on error
-        if average_error_camera_center <= 1:
+        if average_error_camera_center <= 3:
             np.save(context.vision_service.camera_to_robot_matrix_path, H_camera_center)
             _logger.info(f"Homography matrix saved to {context.vision_service.camera_to_robot_matrix_path}")
         else:

@@ -219,6 +219,54 @@ class CameraCalibrationService:
             except Exception as e:
                 _logger.warning(f"⚠️ Could not delete {file_path}: {e}")
 
+    def _compute_perspective_from_chessboard(self, corners_refined):
+        cols, rows = self.chessboardWidth, self.chessboardHeight
+        tl = corners_refined[0, 0]
+        tr = corners_refined[cols - 1, 0]
+        br = corners_refined[(rows - 1) * cols + (cols - 1), 0]
+        bl = corners_refined[(rows - 1) * cols, 0]
+
+        src = np.array([tl, tr, br, bl], dtype=np.float32)
+        cx, cy = src.mean(axis=0)
+
+        phys_w = (cols - 1) * self.squareSizeMM
+        phys_h = (rows - 1) * self.squareSizeMM
+
+        h_span = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2.0
+        v_span = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2.0
+        avg_ppm = ((h_span / phys_w) + (v_span / phys_h)) / 2.0
+
+        dst_w = phys_w * avg_ppm
+        dst_h = phys_h * avg_ppm
+        dst = np.array([
+            [cx - dst_w / 2, cy - dst_h / 2],
+            [cx + dst_w / 2, cy - dst_h / 2],
+            [cx + dst_w / 2, cy + dst_h / 2],
+            [cx - dst_w / 2, cy + dst_h / 2],
+        ], dtype=np.float32)
+
+        matrix = cv2.getPerspectiveTransform(src, dst)
+        _logger.info("Perspective matrix derived from chessboard outer corners "
+                      "(tl=%s, tr=%s, br=%s, bl=%s)", tl, tr, br, bl)
+
+        tilt_x_rad = np.arctan2(matrix[0, 1], matrix[0, 0])
+        tilt_y_rad = np.arctan2(-matrix[1, 0], matrix[1, 1])
+        rx_deg = np.degrees(tilt_y_rad)
+        ry_deg = -np.degrees(tilt_x_rad)
+        _logger.info(
+            "📐 Camera tilt from chessboard perspective matrix:\n"
+            "  ┌─────────────────────────────────────────┐\n"
+            "  │  Axis │    rad    │    deg    │ Workobj  │\n"
+            "  ├─────────────────────────────────────────┤\n"
+            "  │  RX   │  %+.4f  │  %+.3f°  │  %+.3f°  │\n"
+            "  │  RY   │  %+.4f  │  %+.3f°  │  %+.3f°  │\n"
+            "  │  RZ   │   0.0000  │   0.000°  │   0.000° │\n"
+            "  └─────────────────────────────────────────┘",
+            tilt_y_rad, rx_deg, -rx_deg,
+            -tilt_x_rad, ry_deg, -ry_deg,
+        )
+
+        return matrix
 
     def run(self, image, debug=True) -> CameraCalibrationServiceResult:
         """
@@ -414,7 +462,11 @@ class CameraCalibrationService:
                          mtx=camera_matrix,
                          dist=dist_coeffs)
                 
-                # Save perspective matrix if it was computed (for single image with ArUco markers)
+                # Compute perspective matrix from chessboard if not already set by ArUco path
+                if perspective_matrix_for_vision is None and imgpoints:
+                    perspective_matrix_for_vision = self._compute_perspective_from_chessboard(imgpoints[0])
+
+                # Save perspective matrix if available
                 if perspective_matrix_for_vision is not None:
                     perspective_file = os.path.join(self.STORAGE_PATH, 'perspectiveTransform.npy')
                     np.save(perspective_file, perspective_matrix_for_vision)
@@ -447,7 +499,7 @@ class CameraCalibrationService:
                     rvecs, tvecs,
                     camera_matrix, dist_coeffs
                 )
-                _logger.error(f"📊 Mean reprojection error: {mean_error:.4f} pixels")
+                _logger.info(f"📊 Mean reprojection error: {mean_error:.4f} pixels")
 
                 # self.visualize_reprojection(objpoints, imgpoints, rvecs, tvecs, camera_matrix, dist_coeffs)
                 return CameraCalibrationServiceResult(
@@ -509,7 +561,7 @@ class CameraCalibrationService:
             total_points += len(objpoints[i])
 
         mean_error = np.sqrt(total_error / total_points)
-        _logger.error(f"📊 Total mean reprojection error: {mean_error:.4f} pixels")
+        _logger.info(f"📊 Total mean reprojection error: {mean_error:.4f} pixels")
 
         return mean_error
 

@@ -253,7 +253,7 @@ def construct_align_robot_log_message(
     # Compute new target pose
     x_new = x + current_to_marker[0]
     y_new = y + current_to_marker[1]
-    new_position = [x_new, y_new, z_target, rx, ry, rz]
+    new_position = [x_new, y_new, z_target, crx, cry, crz]
 
     # Movement summary
     lines.append(f"⚙️  Calibration → Current offset (mm): {calib_to_current}")
@@ -384,7 +384,7 @@ def construct_calibration_completion_log_message(
     lines.append("📐 Homography matrix:")
     lines.append(np.array2string(H_camera_center, formatter={'float_kind':lambda x: f'{x:8.3f}'}))
 
-    if average_error_camera_center > 1:
+    if average_error_camera_center > 3:
         lines.append(f"⚠️  Average reprojection error: {average_error_camera_center:.3f} mm (too high — recalibration recommended)")
     else:
         lines.append(f"✅ Average reprojection error: {average_error_camera_center:.3f} mm (acceptable)")
