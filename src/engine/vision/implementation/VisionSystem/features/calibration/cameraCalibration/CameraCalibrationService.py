@@ -178,6 +178,37 @@ class CameraCalibrationService:
         except Exception as e:
             return False, None, f"Error detecting perspective correction markers: {str(e)}"
     
+
+    def _validate_calibration_result(self, camera_matrix, dist_coeffs, image_size, rms):
+        """Return a list of human-readable rejection reasons, or [] if the result looks sane."""
+        width, height = image_size
+        fx = float(camera_matrix[0, 0])
+        fy = float(camera_matrix[1, 1])
+        cx = float(camera_matrix[0, 2])
+        cy = float(camera_matrix[1, 2])
+        d = dist_coeffs.ravel()
+        k2 = float(d[1]) if len(d) > 1 else 0.0
+        k3 = float(d[4]) if len(d) > 4 else 0.0
+        hfov = np.degrees(2.0 * np.arctan2(width / 2.0, fx))
+        vfov = np.degrees(2.0 * np.arctan2(height / 2.0, fy))
+
+        errors = []
+        if not np.isfinite(rms):
+            errors.append("RMS is not finite")
+        if fx <= 0 or fy <= 0:
+            errors.append(f"Non-positive focal length fx={fx:.2f} fy={fy:.2f}")
+        if abs(cx - width / 2) > 0.2 * width:
+            errors.append(f"cx too far from center: {cx:.2f} (expected ~{width/2:.0f})")
+        if abs(cy - height / 2) > 0.2 * height:
+            errors.append(f"cy too far from center: {cy:.2f} (expected ~{height/2:.0f})")
+        if abs(k2) > 10:
+            errors.append(f"k2 suspiciously large: {k2:.3f}")
+        if abs(k3) > 50:
+            errors.append(f"k3 suspiciously large: {k3:.3f}")
+        if hfov < 15 or vfov < 10:
+            errors.append(f"FOV suspiciously narrow: HFOV={hfov:.2f}° VFOV={vfov:.2f}°")
+        return errors
+
     def computePerspectiveCorrection(self, image, src_corners, output_size=(1280, 720)):
         """
         Compute perspective transformation matrix and apply correction.
@@ -370,14 +401,21 @@ class CameraCalibrationService:
 
 
         valid_images = 0
+        detection_flags = (
+            cv2.CALIB_CB_ADAPTIVE_THRESH
+            | cv2.CALIB_CB_NORMALIZE_IMAGE
+            | cv2.CALIB_CB_FILTER_QUADS
+        )
         for idx, img in enumerate(self.calibrationImages):
             if img is None:
                 continue
 
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            # Find the chessboard corners
-            ret, corners = cv2.findChessboardCorners(gray, chessboard_size, None)
+            # Find the chessboard corners (robust flags first, fall back to default)
+            ret, corners = cv2.findChessboardCorners(gray, chessboard_size, detection_flags)
+            if not ret:
+                ret, corners = cv2.findChessboardCorners(gray, chessboard_size, None)
 
             if ret:
                 objpoints.append(objp)
@@ -387,10 +425,23 @@ class CameraCalibrationService:
                                             criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
                 imgpoints.append(corners2)
 
-                # Draw and save the corners for visualization
-                cv2.drawChessboardCorners(img, chessboard_size, corners2, ret)
+                # Log board coverage diagnostics
+                pts = corners2.reshape(-1, 2)
+                min_xy = pts.min(axis=0)
+                max_xy = pts.max(axis=0)
+                center_xy = pts.mean(axis=0)
+                bbox_w = max_xy[0] - min_xy[0]
+                bbox_h = max_xy[1] - min_xy[1]
+                _logger.info(
+                    "Image %d: board center=(%.1f, %.1f) bbox=(%.1f x %.1f px)",
+                    idx, center_xy[0], center_xy[1], bbox_w, bbox_h,
+                )
+
+                # Draw onto a copy so calibration images are not mutated
+                vis = img.copy()
+                cv2.drawChessboardCorners(vis, chessboard_size, corners2, ret)
                 output_path = os.path.join(self.STORAGE_PATH, f'calib_result_{idx:03d}.png')
-                cv2.imwrite(output_path, img)
+                cv2.imwrite(output_path, vis)
 
                 valid_images += 1
                 _logger.info(f"✅ Chessboard detected in image {idx}")
@@ -430,94 +481,103 @@ class CameraCalibrationService:
             _logger.info(f"Image points count: {len(imgpoints)} shape: {imgpoints[0].shape if imgpoints else 'N/A'}")
 
             self.imgpoints = imgpoints  # Store for coverage visualization
-            self.visualize_corner_coverage(img_shape=gray.shape)
-            ret, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-                objpoints, imgpoints, gray.shape[::-1], None, None
+            if imgpoints:
+                self.visualize_corner_coverage(img_shape=gray.shape)
+
+            # Seed with a physically plausible intrinsic matrix so the solver
+            # starts near a sane solution and is less likely to overfit weak data.
+            h, w = gray.shape[:2]
+            initial_camera_matrix = np.array([
+                [w, 0, w / 2.0],
+                [0, w, h / 2.0],
+                [0, 0, 1],
+            ], dtype=np.float64)
+            initial_dist_coeffs = np.zeros((5, 1), dtype=np.float64)
+
+            # FIX_K3: prevents high-order radial term from absorbing pose ambiguity.
+            # CALIB_USE_INTRINSIC_GUESS: let the seeded matrix guide the optimiser.
+            calib_flags = cv2.CALIB_USE_INTRINSIC_GUESS | cv2.CALIB_FIX_K3
+
+            rms, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+                objpoints, imgpoints, gray.shape[::-1],
+                initial_camera_matrix, initial_dist_coeffs,
+                flags=calib_flags,
             )
 
-            if ret:
-                fx = camera_matrix[0, 0]
-                fy = camera_matrix[1, 1]
-                cx = camera_matrix[0, 2]
-                cy = camera_matrix[1, 2]
-                _logger.info(f"Camera Matrix:\n{camera_matrix}")
+            # rms is the RMS reprojection error — not a boolean.
+            if not np.isfinite(rms):
+                raise ValueError(f"Calibration RMS is not finite: {rms}")
 
-                _logger.info(f"Distortion Coefficients:\n{dist_coeffs.ravel()}")
-
-
-                _logger.info(f"Camera calibrated: fx = {fx:.2f}, fy = {fy:.2f}, cx = {cx:.2f}, cy = {cy:.2f}")
-
-
-                # Save calibration results in both formats for compatibility
-                calibration_file = os.path.join(self.STORAGE_PATH, 'calibration_data.npz')
-                np.savez(calibration_file,
-                         camera_matrix=camera_matrix,
-                         dist_coeffs=dist_coeffs,
-                         rvecs=rvecs,
-                         tvecs=tvecs)
-                
-                # Also save in the old format for VisionSystem compatibility
-                old_calibration_file = os.path.join(self.STORAGE_PATH, 'camera_calibration.npz')
-                np.savez(old_calibration_file,
-                         mtx=camera_matrix,
-                         dist=dist_coeffs)
-                
-                # Compute perspective matrix from chessboard if not already set by ArUco path
-                if perspective_matrix_for_vision is None and imgpoints:
-                    perspective_matrix_for_vision = self._compute_perspective_from_chessboard(imgpoints[0])
-
-                # Save perspective matrix if available
-                if perspective_matrix_for_vision is not None:
-                    perspective_file = os.path.join(self.STORAGE_PATH, 'perspectiveTransform.npy')
-                    np.save(perspective_file, perspective_matrix_for_vision)
-                    _logger.info(f"🔄 Perspective transformation matrix saved to: {perspective_file}")
-
-                    message = "Perspective transformation matrix saved"
-                    self.publish(message)
-
-                # Store in instance variables
-                self.camera_matrix = camera_matrix
-                self.dist_coeffs = dist_coeffs
-                self.calibrated = True
-
-                _logger.info("✅ Camera calibration completed successfully!")
-
-                message = "✅ Camera calibration completed successfully!"
+            validation_errors = self._validate_calibration_result(
+                camera_matrix, dist_coeffs, gray.shape[::-1], rms
+            )
+            if validation_errors:
+                message = "Calibration rejected: " + "; ".join(validation_errors)
+                _logger.error("❌ %s", message)
                 self.publish(message)
+                return CameraCalibrationServiceResult(success=False, message=message)
 
-                _logger.info(f"📊 Calibration parameters saved to: {calibration_file}")
+            fx = camera_matrix[0, 0]
+            fy = camera_matrix[1, 1]
+            cx = camera_matrix[0, 2]
+            cy = camera_matrix[1, 2]
+            _logger.info(f"Calibration RMS: {rms:.6f}")
+            _logger.info(f"Camera Matrix:\n{camera_matrix}")
+            _logger.info(f"Distortion Coefficients:\n{dist_coeffs.ravel()}")
+            _logger.info(f"Camera calibrated: fx = {fx:.2f}, fy = {fy:.2f}, cx = {cx:.2f}, cy = {cy:.2f}")
 
-                _logger.info(f"📊 Legacy format saved to: {old_calibration_file}")
+            # Save calibration results in both formats for compatibility
+            calibration_file = os.path.join(self.STORAGE_PATH, 'calibration_data.npz')
+            np.savez(calibration_file,
+                     camera_matrix=camera_matrix,
+                     dist_coeffs=dist_coeffs,
+                     rvecs=rvecs,
+                     tvecs=tvecs)
 
-                message = f"📊 Calibration parameters saved successfully"
-                self.publish(message)
+            # Also save in the old format for VisionSystem compatibility
+            old_calibration_file = os.path.join(self.STORAGE_PATH, 'camera_calibration.npz')
+            np.savez(old_calibration_file,
+                     mtx=camera_matrix,
+                     dist=dist_coeffs)
 
-                message = f"Calibration successful with {valid_images} images"
-                self.publish(message)
-                mean_error = self.compute_total_reprojection_error(
-                    objpoints, imgpoints,
-                    rvecs, tvecs,
-                    camera_matrix, dist_coeffs
-                )
-                _logger.info(f"📊 Mean reprojection error: {mean_error:.4f} pixels")
+            # Compute perspective matrix from chessboard if not already set by ArUco path
+            if perspective_matrix_for_vision is None and imgpoints:
+                perspective_matrix_for_vision = self._compute_perspective_from_chessboard(imgpoints[0])
 
-                # self.visualize_reprojection(objpoints, imgpoints, rvecs, tvecs, camera_matrix, dist_coeffs)
-                return CameraCalibrationServiceResult(
-                    success=True,
-                    message=message,
-                    camera_matrix=camera_matrix,
-                    distortion_coefficients=dist_coeffs,
-                    perspective_matrix=perspective_matrix_for_vision,
-                )
-            else:
-                message = "Camera calibration failed during cv2.calibrateCamera"
-                _logger.error(f"❌ {message}")
+            # Save perspective matrix if available
+            if perspective_matrix_for_vision is not None:
+                perspective_file = os.path.join(self.STORAGE_PATH, 'perspectiveTransform.npy')
+                np.save(perspective_file, perspective_matrix_for_vision)
+                _logger.info(f"🔄 Perspective transformation matrix saved to: {perspective_file}")
+                self.publish("Perspective transformation matrix saved")
 
-                self.publish(message)
-                return CameraCalibrationServiceResult(
-                    success=False,
-                    message=message
-                )
+            # Store in instance variables
+            self.camera_matrix = camera_matrix
+            self.dist_coeffs = dist_coeffs
+            self.calibrated = True
+
+            _logger.info("✅ Camera calibration completed successfully!")
+            _logger.info(f"📊 Calibration parameters saved to: {calibration_file}")
+            _logger.info(f"📊 Legacy format saved to: {old_calibration_file}")
+
+            message = f"Calibration successful with {valid_images} images"
+            self.publish(f"✅ Camera calibration completed successfully!")
+            self.publish(f"📊 Calibration parameters saved successfully")
+            self.publish(message)
+
+            self._log_calibration_report(
+                camera_matrix, dist_coeffs,
+                objpoints, imgpoints, rvecs, tvecs,
+                gray.shape[::-1],  # (width, height)
+            )
+
+            return CameraCalibrationServiceResult(
+                success=True,
+                message=message,
+                camera_matrix=camera_matrix,
+                distortion_coefficients=dist_coeffs,
+                perspective_matrix=perspective_matrix_for_vision,
+            )
 
         except Exception as e:
             import traceback
@@ -597,6 +657,131 @@ class CameraCalibrationService:
             cv2.imwrite(output_path, img)
             _logger.info(f"📸 Reprojection visualization saved: {output_path}")
 
+
+    def _log_calibration_report(
+        self,
+        camera_matrix: np.ndarray,
+        dist_coeffs: np.ndarray,
+        objpoints: list,
+        imgpoints: list,
+        rvecs: list,
+        tvecs: list,
+        image_size: tuple,  # (width, height)
+    ) -> None:
+        """
+        Log a comprehensive calibration report: camera matrix, distortion coefficients,
+        FOV, pose coverage (extrinsics summary), and per-image reprojection errors + extrinsics.
+        """
+        width, height = image_size
+        fx = camera_matrix[0, 0]
+        fy = camera_matrix[1, 1]
+        cx = camera_matrix[0, 2]
+        cy = camera_matrix[1, 2]
+        skew = camera_matrix[0, 1]
+        aspect = fx / fy if fy != 0 else float("nan")
+
+        hfov = np.degrees(2.0 * np.arctan2(width / 2.0, fx))
+        vfov = np.degrees(2.0 * np.arctan2(height / 2.0, fy))
+
+        d = dist_coeffs.ravel()
+        dist_labels = ["k1", "k2", "p1", "p2", "k3", "k4", "k5", "k6"]
+        dist_parts = "  ".join(
+            f"{dist_labels[i]}={d[i]:+.6f}" for i in range(len(d))
+        )
+
+        # ── Extrinsic summary ─────────────────────────────────────────────────
+        txs = [float(t.ravel()[0]) for t in tvecs]
+        tys = [float(t.ravel()[1]) for t in tvecs]
+        tzs = [float(t.ravel()[2]) for t in tvecs]
+        rot_mags = [float(np.linalg.norm(r)) * 180.0 / np.pi for r in rvecs]
+
+        tx_min, tx_max = min(txs), max(txs)
+        ty_min, ty_max = min(tys), max(tys)
+        tz_min, tz_max = min(tzs), max(tzs)
+        rot_min, rot_max = min(rot_mags), max(rot_mags)
+
+        _logger.info(
+            "\n"
+            "╔══════════════════════════════════════════════════════════════╗\n"
+            "║              CAMERA CALIBRATION REPORT                      ║\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+            "║  INTRINSIC MATRIX                                            ║\n"
+            "║    fx  = %10.4f px      fy  = %10.4f px            ║\n"
+            "║    cx  = %10.4f px      cy  = %10.4f px            ║\n"
+            "║    skew= %10.6f         fx/fy ratio = %.6f          ║\n"
+            "║    image size: %d × %d px                                ║\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+            "║  DISTORTION COEFFICIENTS                                     ║\n"
+            "║    %s\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+            "║  FIELD OF VIEW                                               ║\n"
+            "║    H-FOV = %.2f °       V-FOV = %.2f °                  ║\n"
+            "╠══════════════════════════════════════════════════════════════╣\n"
+            "║  POSE COVERAGE  (board → camera, %d images)                ║\n"
+            "║    tx  [%+8.2f … %+8.2f] mm                             ║\n"
+            "║    ty  [%+8.2f … %+8.2f] mm                             ║\n"
+            "║    tz  [%+8.2f … %+8.2f] mm  (depth range)              ║\n"
+            "║    tilt [%6.2f … %6.2f] °   (rotation magnitude)        ║\n"
+            "╚══════════════════════════════════════════════════════════════╝",
+            fx, fy, cx, cy, skew, aspect, width, height,
+            dist_parts, hfov, vfov,
+            len(rvecs),
+            tx_min, tx_max, ty_min, ty_max, tz_min, tz_max, rot_min, rot_max,
+        )
+
+        # ── Per-image reprojection errors ─────────────────────────────────────
+        per_image_errors = []
+        per_image_max = []
+        for i, (objp, imgp, rvec, tvec) in enumerate(zip(objpoints, imgpoints, rvecs, tvecs)):
+            projected, _ = cv2.projectPoints(objp, rvec, tvec, camera_matrix, dist_coeffs)
+            diff = imgp.reshape(-1, 2) - projected.reshape(-1, 2)
+            errs = np.linalg.norm(diff, axis=1)
+            per_image_errors.append(float(errs.mean()))
+            per_image_max.append(float(errs.max()))
+
+        overall_mean = float(np.mean(per_image_errors))
+        overall_max = float(np.max(per_image_max))
+        overall_min = float(np.min(per_image_errors))
+        overall_std = float(np.std(per_image_errors))
+
+        best_idx = int(np.argmin(per_image_errors))
+        worst_idx = int(np.argmax(per_image_errors))
+
+        lines = ["\n  PER-IMAGE REPROJECTION ERRORS"]
+        lines.append(f"  {'Img':>4}  {'Mean (px)':>10}  {'Max (px)':>10}")
+        lines.append(f"  {'---':>4}  {'---------':>10}  {'--------':>10}")
+        for i, (mean_e, max_e) in enumerate(zip(per_image_errors, per_image_max)):
+            marker = " ◄ worst" if i == worst_idx else (" ◄ best" if i == best_idx else "")
+            lines.append(f"  {i:>4}  {mean_e:>10.4f}  {max_e:>10.4f}{marker}")
+        lines.append("")
+        lines.append(f"  SUMMARY  mean={overall_mean:.4f} px  max={overall_max:.4f} px  "
+                     f"min={overall_min:.4f} px  std={overall_std:.4f} px")
+        _logger.info("\n".join(lines))
+
+        # ── Per-image extrinsics ───────────────────────────────────────────────
+        ext_lines = ["\n  PER-IMAGE EXTRINSICS  (board→camera)"]
+        ext_lines.append(
+            f"  {'Img':>4}  {'tx (mm)':>9}  {'ty (mm)':>9}  {'tz (mm)':>9}  {'tilt (°)':>9}"
+        )
+        ext_lines.append(
+            f"  {'---':>4}  {'-------':>9}  {'-------':>9}  {'-------':>9}  {'--------':>9}"
+        )
+        for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+            t = tvec.ravel()
+            rot_deg = float(np.linalg.norm(rvec)) * 180.0 / np.pi
+            ext_lines.append(
+                f"  {i:>4}  {t[0]:>+9.2f}  {t[1]:>+9.2f}  {t[2]:>+9.2f}  {rot_deg:>9.2f}"
+            )
+        _logger.info("\n".join(ext_lines))
+
+        # ── Publish summary to UI ─────────────────────────────────────────────
+        summary = (
+            f"[Calibration Report] mean_err={overall_mean:.4f}px  max_err={overall_max:.4f}px  "
+            f"fx={fx:.1f} fy={fy:.1f} cx={cx:.1f} cy={cy:.1f}  "
+            f"HFOV={hfov:.1f}° VFOV={vfov:.1f}°  "
+            f"tz=[{tz_min:.1f}…{tz_max:.1f}]mm  tilt=[{rot_min:.1f}…{rot_max:.1f}]°"
+        )
+        self.publish(summary)
 
     def visualize_corner_coverage(self, img_shape=None, point_size=3):
         """

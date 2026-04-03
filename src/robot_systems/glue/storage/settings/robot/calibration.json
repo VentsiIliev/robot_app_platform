@@ -15,7 +15,7 @@
     "delay_after_move_s": 1.0
   },
   "camera_tcp_offset_config": {
-    "run_during_robot_calibration": true,
+    "run_during_robot_calibration": false,
     "max_markers_for_tcp_capture": 4,
     "marker_id": 4,
     "rotation_step_deg": 25.0,

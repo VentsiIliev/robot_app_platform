@@ -267,6 +267,8 @@ class GlueRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_pick_target_application),
             ApplicationSpec(name="ArucoZProbe", folder_id=4, icon="fa5s.search",
                             factory=application_wiring._build_aruco_z_probe_application),
+            ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
+                            factory=application_wiring._build_intrinsic_capture_application),
         ],
     )
 

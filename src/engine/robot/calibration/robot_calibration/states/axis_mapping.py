@@ -39,9 +39,12 @@ def get_marker_position(system, calibration_vision, MARKER_ID, MAX_ATTEMPTS, sto
             ids = np.array(result.aruco_ids).flatten()
             if MARKER_ID in ids:
                 idx = np.where(ids == MARKER_ID)[0][0]
-                corner = result.aruco_corners[idx][0]
-                corner = np.asarray(corner).flatten()
-                x_px, y_px = float(corner[0]), float(corner[1])
+                corners_4 = np.asarray(result.aruco_corners[idx][0])  # shape (4, 2)
+                if calibration_vision.use_marker_centre:
+                    ref_pt = corners_4.mean(axis=0)
+                else:
+                    ref_pt = corners_4[0]
+                x_px, y_px = float(ref_pt[0]), float(ref_pt[1])
                 return x_px, y_px
     raise RuntimeError(f"Marker {MARKER_ID} not found during axis mapping.")
 

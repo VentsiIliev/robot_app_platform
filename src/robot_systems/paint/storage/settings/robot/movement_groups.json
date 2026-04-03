@@ -14,7 +14,15 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[350.937, -66.934, 503.803, -0.141, -0.048, -0.048]"
+      "position": "[337.874, -66.989, 544.004, -0.145, -0.067, -0.022]"
+    },
+    "CAMERA_CALIBRATION": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[337.863, -66.989, 394.023, -0.151, -0.072, -0.015]"
     },
     "JOG": {
       "velocity": 0,

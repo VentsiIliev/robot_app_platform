@@ -735,6 +735,25 @@ def _build_device_control_application(robot_system):
     )
 
 
+def _build_intrinsic_capture_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.intrinsic_calibration_capture.service.intrinsic_capture_service import (
+        IntrinsicCaptureService,
+    )
+    from src.applications.intrinsic_calibration_capture.intrinsic_capture_factory import (
+        IntrinsicCaptureFactory,
+    )
+
+    service = IntrinsicCaptureService(
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        robot_config=robot_system._robot_config,
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: IntrinsicCaptureFactory().build(service, messaging=ms)
+    )
+
+
 def _build_aruco_z_probe_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.aruco_z_probe.aruco_z_probe_factory import ArucoZProbeFactory

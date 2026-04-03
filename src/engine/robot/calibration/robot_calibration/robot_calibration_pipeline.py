@@ -354,7 +354,10 @@ class RefactoredRobotCalibrationPipeline:
         src_pts = np.array(camera_points, dtype=np.float32)
         dst_pts = np.array(robot_positions, dtype=np.float32)
         method = cv2.RANSAC if context.use_ransac else 0
-        H_camera_center, status = cv2.findHomography(src_pts, dst_pts, method, 2.0)
+        # threshold only matters for RANSAC; with method=0 it is used post-hoc to label
+        # points as within/outside the tolerance band — it does NOT exclude any points from the fit.
+        reprojection_report_threshold_mm = 3.0
+        H_camera_center, status = cv2.findHomography(src_pts, dst_pts, method, reprojection_report_threshold_mm)
 
         # Test and validate
         average_error_camera_center, _ = metrics.test_calibration(

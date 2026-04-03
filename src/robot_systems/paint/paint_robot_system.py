@@ -66,6 +66,13 @@ class PaintRobotSystem(BaseRobotSystem):
         ),
 
         MovementGroupDefinition(
+            id="CAMERA_CALIBRATION",
+            label="Camera Calibration",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+
+        MovementGroupDefinition(
             id="JOG",
             label="Jog",
             group_type=MovementGroupType.VELOCITY_ONLY,
@@ -147,7 +154,11 @@ class PaintRobotSystem(BaseRobotSystem):
             ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
                             factory=application_wiring._build_broker_debug_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
-                            factory=application_wiring._build_user_management_application)
+                            factory=application_wiring._build_user_management_application),
+            ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
+                            factory=application_wiring._build_intrinsic_capture_application),
+            ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
+                            factory=application_wiring._build_hand_eye_calibration_application),
         ],
     )
 

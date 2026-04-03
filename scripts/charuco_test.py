@@ -587,7 +587,7 @@ if __name__ == "__main__":
     #     board_img=new_board_img,
     # )
 
-    real_image_path = r"D:\GitHub\robot_app_platform\scripts\20260403_062514.jpg"
+    real_image_path = r"/home/ilv/Desktop/robot_app_platform/scripts/20260403_062514.jpg"
     # resize to 1280 720 for faster processing and better visualization on smaller screens
     real_image = cv2.imread(real_image_path)
     if real_image is not None:

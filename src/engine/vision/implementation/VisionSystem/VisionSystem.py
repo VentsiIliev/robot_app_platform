@@ -109,8 +109,8 @@ class VisionSystem:
         )
         self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
-        self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
 
@@ -220,12 +220,12 @@ class VisionSystem:
             optimal_camera_matrix=self.optimal_camera_matrix,
             roi=self.roi,
         )
-        if self.perspectiveMatrix is not None:
-            # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
-            image = cv2.warpPerspective(
-                image, self.perspectiveMatrix,
-                (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-            )
+        # if self.perspectiveMatrix is not None:
+        #     # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
+        #     image = cv2.warpPerspective(
+        #         image, self.perspectiveMatrix,
+        #         (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
+        #     )
             # _logger.debug(f"Perspective Matrix: Applied!")
         # else:
         #     _logger.debug(f"Perspective Matrix: Not applied (None)")

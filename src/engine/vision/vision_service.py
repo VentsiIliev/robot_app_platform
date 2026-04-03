@@ -68,6 +68,9 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def get_latest_corrected_frame(self) -> np.ndarray | None:
         return self._vision_system.correctedImage
 
+    def get_latest_raw_frame(self) -> np.ndarray | None:
+        return self._vision_system.rawImage
+
     def detect_aruco_markers(self, image: np.ndarray) -> tuple:
         return self._vision_system.detectArucoMarkers(image=image)
 

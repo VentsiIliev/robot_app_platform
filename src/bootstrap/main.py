@@ -38,8 +38,8 @@ def _pin_process_to_non_rt_cores() -> None:
 
 
 _DEV_SKIP_LOGIN = True
-_BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
-# _BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+# _BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
+_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
 
 
 

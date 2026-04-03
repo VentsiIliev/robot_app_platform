@@ -288,3 +288,45 @@ def _build_robot_settings_application(robot_app):
     )
 
 
+def _build_intrinsic_capture_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.intrinsic_calibration_capture.service.intrinsic_capture_service import (
+        IntrinsicCaptureService,
+    )
+    from src.applications.intrinsic_calibration_capture.intrinsic_capture_factory import (
+        IntrinsicCaptureFactory,
+    )
+
+    service = IntrinsicCaptureService(
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        robot_config=robot_system._robot_config,
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: IntrinsicCaptureFactory().build(service, messaging=ms)
+    )
+
+
+def _build_hand_eye_calibration_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.engine.vision.capture_snapshot_service import CaptureSnapshotService
+    from src.applications.hand_eye_calibration.service.hand_eye_service import HandEyeCalibrationService
+    from src.applications.hand_eye_calibration.hand_eye_calibration_factory import HandEyeCalibrationFactory
+
+    def _factory(ms):
+        snapshot_svc = CaptureSnapshotService(
+            vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+            robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        )
+        service = HandEyeCalibrationService(
+            snapshot_service=snapshot_svc,
+            robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+            vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+            robot_config=robot_system._robot_config,
+            messaging=ms,
+        )
+        return HandEyeCalibrationFactory().build(service, messaging=ms)
+
+    return WidgetApplication(widget_factory=_factory)
+
+

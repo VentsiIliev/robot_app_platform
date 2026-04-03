@@ -14,7 +14,7 @@ class MotionService(IMotionService):
     _WAIT_THRESHOLD_MM = 0.5
     _WAIT_THRESHOLD_DEG = 1.0
     _WAIT_DELAY_S = 0.1
-    _WAIT_TIMEOUT_S = 30.0
+    _WAIT_TIMEOUT_S = 10.0
     _STOP_RETRY_DELAY_S = 0.05
     _STOP_ATTEMPTS = 3
     _JOG_TARGET_REUSE_POS_MM = 5.0

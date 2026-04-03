@@ -262,7 +262,7 @@ def construct_align_robot_log_message(
 
     # Execution result
     if result is not None:
-        if not result:
+        if result:
             lines.append(f"✅ Movement to marker {marker_id} succeeded.")
         else:
             lines.append(f"❌ Movement to marker {marker_id} failed.")
