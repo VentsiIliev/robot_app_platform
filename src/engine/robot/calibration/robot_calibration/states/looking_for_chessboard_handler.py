@@ -6,7 +6,9 @@ in the camera feed to establish the reference coordinate vision_service.
 """
 import logging
 _logger = logging.getLogger(__name__)
+import os
 import cv2
+import numpy as np
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 from src.engine.robot.calibration.robot_calibration.logging import construct_chessboard_state_log_message
 
@@ -48,6 +50,7 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
     if found:
         # Store the pixels per millimeter for later use
         context.calibration_vision.PPM = ppm
+        _log_chessboard_pose(context)
         
         # Draw debug visualizations if enabled
         if context.debug and context.debug_draw:
@@ -77,3 +80,45 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
     else:
         # Stay in current state if chessboard not found
         return RobotCalibrationStates.LOOKING_FOR_CHESSBOARD
+
+
+def _log_chessboard_pose(context) -> None:
+    """Compute and log chessboard pose via solvePnP for diagnostic purposes."""
+    corners = getattr(context.calibration_vision, "original_chessboard_corners", None)
+    if corners is None:
+        return
+
+    try:
+        storage_dir = os.path.dirname(context.vision_service.camera_to_robot_matrix_path)
+        data = np.load(os.path.join(storage_dir, "camera_calibration.npz"))
+        K, dist = data["mtx"], data["dist"]
+    except Exception as exc:
+        _logger.warning("Chessboard PnP: could not load camera calibration: %s", exc)
+        return
+
+    cols, rows = context.chessboard_size
+    sq = float(context.square_size_mm)
+    objp = np.zeros((cols * rows, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:cols, 0:rows].T.reshape(-1, 2) * sq
+    img_pts = corners.reshape(-1, 2).astype(np.float32)
+
+    ok, rvec, tvec = cv2.solvePnP(objp, img_pts, K, dist, flags=cv2.SOLVEPNP_ITERATIVE)
+    if not ok:
+        _logger.warning("Chessboard PnP: solvePnP failed")
+        return
+
+    projected, _ = cv2.projectPoints(objp, rvec, tvec, K, dist)
+    reproj_error = float(np.sqrt(np.mean((projected.reshape(-1, 2) - img_pts) ** 2)))
+    tx, ty, tz = tvec.flatten()
+    rx, ry, rz = rvec.flatten()
+
+    robot_pose = context.calibration_robot_controller.get_current_position()
+    if robot_pose and len(robot_pose) >= 6:
+        pose_str = "robot=(x=%.2f y=%.2f z=%.2f rx=%.4f ry=%.4f rz=%.4f)" % tuple(robot_pose[:6])
+    else:
+        pose_str = "robot=unavailable"
+
+    _logger.info(
+        "Chessboard PnP pose — tvec=(x=%.2f y=%.2f z=%.2f)mm  rvec=(%.4f, %.4f, %.4f)rad  reproj=%.3fpx  %s",
+        tx, ty, tz, rx, ry, rz, reproj_error, pose_str,
+    )

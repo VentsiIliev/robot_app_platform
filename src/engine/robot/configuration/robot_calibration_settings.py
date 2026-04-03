@@ -69,17 +69,18 @@ class CameraTcpOffsetCalibrationConfig:
     max_markers_for_tcp_capture: int = 2
     marker_id: int = 4
     rotation_step_deg: float = 15.0
-    iterations: int = 6
+    iterations: int = 4
     approach_z: float = 300.0
     approach_rx: float = 180.0
     approach_ry: float = 0.0
     approach_rz: float = 0.0
     velocity: int = 20
     acceleration: int = 10
-    settle_time_s: float = 1.0
+    settle_time_s: float = 0.5
     detection_attempts: int = 20
     retry_delay_s: float = 0.1
     recenter_max_iterations: int = 20
+    recenter_stability_wait_s: float = 0.4
     min_samples: int = 3
     max_acceptance_std_mm: float = 10.0
 
@@ -97,10 +98,11 @@ class CameraTcpOffsetCalibrationConfig:
             approach_rz=float(data.get("approach_rz", 0.0)),
             velocity=int(data.get("velocity", 20)),
             acceleration=int(data.get("acceleration", 10)),
-            settle_time_s=float(data.get("settle_time_s", 1.0)),
+            settle_time_s=float(data.get("settle_time_s", 0.5)),
             detection_attempts=int(data.get("detection_attempts", 20)),
             retry_delay_s=float(data.get("retry_delay_s", 0.1)),
             recenter_max_iterations=int(data.get("recenter_max_iterations", 20)),
+            recenter_stability_wait_s=float(data.get("recenter_stability_wait_s", 0.4)),
             min_samples=int(data.get("min_samples", 3)),
             max_acceptance_std_mm=float(data.get("max_acceptance_std_mm", 10.0)),
         )
@@ -122,6 +124,7 @@ class CameraTcpOffsetCalibrationConfig:
             "detection_attempts": self.detection_attempts,
             "retry_delay_s": self.retry_delay_s,
             "recenter_max_iterations": self.recenter_max_iterations,
+            "recenter_stability_wait_s": self.recenter_stability_wait_s,
             "min_samples": self.min_samples,
             "max_acceptance_std_mm": self.max_acceptance_std_mm,
         }

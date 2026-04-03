@@ -93,6 +93,7 @@ class RobotCalibrationContext(Context):
         # Height map samples collected during HEIGHT_SAMPLE states
         self.height_map_samples: list = []  # [[x, y, height_mm], ...]
         self.fast_iteration_wait = 1
+        self.marker_not_found_retry_wait = 0.5
         
         # Timing and performance tracking
         self.state_timings = {}

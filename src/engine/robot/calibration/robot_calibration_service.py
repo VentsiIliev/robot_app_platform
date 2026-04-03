@@ -45,7 +45,9 @@ class RobotCalibrationService(IRobotCalibrationService):
         handler       = self._attach_log_handler()
         auto_brightness_locked = False
         auto_brightness_adjustment_locked = False
+        safety_walls_were_enabled = False
         vision_service = getattr(self._config, "vision_service", None)
+        robot_service  = getattr(self._config, "robot_service", None)
         try:
             if (
                 vision_service is not None
@@ -60,11 +62,23 @@ class RobotCalibrationService(IRobotCalibrationService):
                 auto_brightness_adjustment_locked = True
                 _logger.info("Freezing auto brightness adjustment during robot calibration")
             self._refresh_runtime_settings()
+            if robot_service is not None and hasattr(robot_service, "are_safety_walls_enabled"):
+                safety_walls_were_enabled = bool(robot_service.are_safety_walls_enabled())
+                if safety_walls_were_enabled:
+                    if robot_service.disable_safety_walls():
+                        _logger.info("Safety walls disabled for robot calibration")
+                    else:
+                        _logger.warning("Failed to disable safety walls before calibration — continuing anyway")
             self._pipeline = RefactoredRobotCalibrationPipeline(
                 self._config, self._adaptive_config, self._events_config
             )
             success, msg = self._pipeline.run()
         finally:
+            if robot_service is not None and safety_walls_were_enabled and hasattr(robot_service, "enable_safety_walls"):
+                if robot_service.enable_safety_walls():
+                    _logger.info("Safety walls re-enabled after robot calibration")
+                else:
+                    _logger.warning("Failed to re-enable safety walls after calibration")
             if vision_service is not None and auto_brightness_adjustment_locked:
                 _logger.info("Restoring adaptive auto brightness adjustment after robot calibration")
                 vision_service.unlock_auto_brightness_adjustment()

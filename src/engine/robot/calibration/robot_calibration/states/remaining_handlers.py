@@ -23,6 +23,13 @@ from src.engine.robot.calibration.robot_calibration.tcp_offset_capture import (
     finalize_tcp_offset_calibration,
     should_capture_tcp_offset_for_current_marker,
 )
+from src.engine.robot.calibration.robot_calibration.ppm_utils import (
+    adaptive_stability_wait,
+    clear_ppm_probe,
+    get_working_ppm,
+    store_ppm_probe,
+    try_refine_ppm,
+)
 
 wait_to_reach_position = True #TODO set to False only for testing!
 
@@ -73,9 +80,10 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     # Retry if failed
     if not result:
         retry_attempted = True
-        if len(context.robot_positions_for_calibration) != 0:
+        first_id = sorted(list(context.required_ids))[0]
+        if first_id in context.robot_positions_for_calibration:
             context.calibration_robot_controller.move_to_position(
-                context.robot_positions_for_calibration[0], blocking=wait_to_reach_position
+                context.robot_positions_for_calibration[first_id], blocking=wait_to_reach_position
             )
         result = context.calibration_robot_controller.move_to_position(new_position, blocking=wait_to_reach_position)
 
@@ -107,6 +115,8 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     if result:
         if context.interruptible_sleep(1.0):
             return RobotCalibrationStates.CANCELLED
+        context.calibration_robot_controller.reset_derivative_state()
+        clear_ppm_probe(context)        # robot teleports to new marker — invalidate probe
         return RobotCalibrationStates.ITERATE_ALIGNMENT
     else:
         return RobotCalibrationStates.ERROR
@@ -136,13 +146,16 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         )
         return RobotCalibrationStates.ERROR
 
+    # Query robot position NOW (before move) — used to refine PPM from observed pixel/mm ratio.
+    _robot_pos_now = context.calibration_robot_controller.get_current_position()
+
     # Collect N frames and average the marker position to reduce detection noise
-    _N_SAMPLES = 5
+    _N_SAMPLES = 3
     image_center_px = (
         context.vision_service.get_camera_width() // 2,
         context.vision_service.get_camera_height() // 2,
     )
-    newPpm = context.calibration_vision.PPM * context.ppm_scale
+    newPpm = get_working_ppm(context)
 
     offset_samples: list = []
     iteration_image = None
@@ -182,6 +195,14 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     offset_x_px = float(np.mean([s[0] for s in offset_samples]))
     offset_y_px = float(np.mean([s[1] for s in offset_samples]))
     current_error_px = np.sqrt(offset_x_px ** 2 + offset_y_px ** 2)
+
+    # ── Online PPM refinement (shared logic — see ppm_utils.py) ──────────────
+    newPpm = try_refine_ppm(
+        context, _robot_pos_now, current_error_px,
+        label=f"marker {marker_id} iter {context.iteration_count}",
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     current_error_mm = current_error_px / newPpm
     offset_x_mm = offset_x_px / newPpm
     offset_y_mm = offset_y_px / newPpm
@@ -198,6 +219,14 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             current_pose = context.calibration_robot_controller.get_current_position()
             time.sleep(0.05)
 
+        _logger.info(
+            "Homography sample — marker=%d  pose=[x=%.3f y=%.3f z=%.3f rx=%.4f ry=%.4f rz=%.4f]  "
+            "final_error=%.3fmm  iterations=%d",
+            marker_id,
+            current_pose[0], current_pose[1], current_pose[2],
+            current_pose[3], current_pose[4], current_pose[5],
+            current_error_mm, context.iteration_count,
+        )
         context.robot_positions_for_calibration[marker_id] = current_pose
         context.debug_draw.draw_image_center(iteration_image)
         show_live_feed(context, iteration_image, current_error_mm, broadcast_image=context.broadcast_events)
@@ -237,9 +266,14 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             )
             return RobotCalibrationStates.ERROR
 
-        # Stability wait
+        # Stability wait — scale with current error as proxy for move size:
+        # tiny correction near threshold settles in <0.1 s; full wait only for large moves.
+        # Store probe state now so next iteration can refine PPM from this move.
+        store_ppm_probe(context, _robot_pos_now, current_error_px)
+        _scaled_wait = adaptive_stability_wait(context, current_error_mm)
+        _logger.debug("Stability wait: %.2fs (error=%.3fmm, configured=%.1fs)", _scaled_wait, current_error_mm, context.fast_iteration_wait)
         stability_start = time.time()
-        if context.interruptible_sleep(context.fast_iteration_wait):
+        if context.interruptible_sleep(_scaled_wait):
             return RobotCalibrationStates.CANCELLED
         stability_time = time.time() - stability_start
         

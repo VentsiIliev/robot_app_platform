@@ -310,6 +310,24 @@ class CalibrationVision:
     #         # update marker top-left corner in mm
     #         self.marker_top_left_corners_mm[marker_id] = (x_mm, y_mm)
 
+    def collect_reference_sample(self, frame) -> dict:
+        """
+        Detect required markers in a single frame and return their corner positions.
+        Does NOT update internal state — used exclusively for multi-frame averaging.
+        Returns {marker_id: np.ndarray([x, y], float32)} for each detected required marker.
+        """
+        frame = self._warp_frame(frame)
+        arucoCorners, arucoIds, _ = self.vision_service.detect_aruco_markers(frame)
+        sample = {}
+        if arucoIds is None:
+            return sample
+        for i, marker_id in enumerate(arucoIds.flatten()):
+            if marker_id in self.required_ids:
+                corners_4 = arucoCorners[i][0]
+                ref_pt = corners_4.mean(axis=0) if self.use_marker_centre else corners_4[0]
+                sample[marker_id] = ref_pt.astype(np.float32)
+        return sample
+
     def detect_specific_marker(self, frame, marker_id) -> SpecificMarkerDetectionResult:
         frame = self._warp_frame(frame)
         marker_found = False

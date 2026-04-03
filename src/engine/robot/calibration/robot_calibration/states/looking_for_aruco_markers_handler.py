@@ -8,9 +8,13 @@ in the camera feed to proceed with calibration.
 import cv2
 import threading
 import queue
+import numpy as np
+from collections import defaultdict
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 import logging
 _logger = logging.getLogger(__name__)
+
+_N_REFERENCE_FRAMES = 10
 
 # Global thread-safe queue for live feed frames
 _live_feed_queue = queue.Queue(maxsize=2)  # Keep only latest 2 frames
@@ -53,10 +57,44 @@ def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
         cv2.imwrite("new_development/NewCalibrationMethod/aruco_detection_frame.png", frame)
 
     if all_found:
+        _collect_averaged_reference_pixels(context, _N_REFERENCE_FRAMES)
         return RobotCalibrationStates.ALL_ARUCO_FOUND
     else:
         # Stay in current state if not all markers found
         return RobotCalibrationStates.LOOKING_FOR_ARUCO_MARKERS
+
+
+def _collect_averaged_reference_pixels(context, n_frames: int) -> None:
+    """
+    Collect n_frames detections and replace marker_top_left_corners with the
+    per-marker mean position.  Only frames where a marker is actually detected
+    contribute to its average, so a momentary miss does not corrupt the result.
+    """
+    samples = defaultdict(list)
+
+    for _ in range(n_frames):
+        if context.stop_event.is_set():
+            break
+        frame = context.wait_for_frame()
+        if frame is None:
+            break
+        per_frame = context.calibration_vision.collect_reference_sample(frame)
+        for marker_id, pt in per_frame.items():
+            samples[marker_id].append(pt)
+
+    averaged = {
+        marker_id: np.mean(pts, axis=0).astype(np.float32)
+        for marker_id, pts in samples.items()
+        if pts
+    }
+
+    if averaged:
+        context.calibration_vision.marker_top_left_corners.update(averaged)
+        _logger.info(
+            "Reference pixels averaged over %d frames: %s",
+            n_frames,
+            {k: v.tolist() for k, v in averaged.items()},
+        )
 
 
 def show_live_feed(context, frame, current_error_mm=None, window_name="Calibration Live Feed", draw_overlay=True, broadcast_image=False):

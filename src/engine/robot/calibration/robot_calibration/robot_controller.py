@@ -29,13 +29,13 @@ class CalibrationRobotController:
 
     # ── Motion ────────────────────────────────────────────────────────
 
-    def move_to_position(self, position, blocking=False):
+    def move_to_position(self, position, blocking=False, velocity=None, acceleration=None):
         return self.robot_service.move_ptp(
             position=position,
             tool=self._tool,
             user=self._user,
-            velocity=self._velocity,
-            acceleration=self._acceleration,
+            velocity=velocity if velocity is not None else self._velocity,
+            acceleration=acceleration if acceleration is not None else self._acceleration,
             wait_to_reach=blocking,
         )
 
@@ -71,7 +71,7 @@ class CalibrationRobotController:
         if magnitude > max_move_mm:
             scale = max_move_mm / magnitude
         elif magnitude > alignment_threshold_mm * 3:
-            scale = 1.0   # direct jump — far enough from target that noise is negligible
+            scale = 0.5   # half-step for large errors — prevents oscillation when PPM or mapping has any offset
         else:
             scale = 0.5   # cautious approach in the noise-sensitive zone near target
         move_x_mm = offset_x_mm * scale
@@ -138,3 +138,8 @@ class CalibrationRobotController:
             acceleration=self._acceleration,
             wait_to_reach=blocking,
         )
+
+    def reset_derivative_state(self):
+        """Clear the derivative term so the first iteration of a new marker is not wrongly damped."""
+        if hasattr(self, 'previous_error_mm'):
+            del self.previous_error_mm

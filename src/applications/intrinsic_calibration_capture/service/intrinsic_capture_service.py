@@ -883,10 +883,10 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
     def _move_absolute(self, pose: List[float]) -> bool:
         return self._robot.move_ptp(
             position=pose,
-            tool=self._cfg.robot_tool,
-            user=self._cfg.robot_user,
-            velocity=self._cfg.velocity,
-            acceleration=self._cfg.acceleration,
+            tool=self._robot_config.robot_tool,
+            user=self._robot_config.robot_user,
+            velocity=self._config.velocity,
+            acceleration=self._config.acceleration,
             wait_to_reach=True,
         )
 
