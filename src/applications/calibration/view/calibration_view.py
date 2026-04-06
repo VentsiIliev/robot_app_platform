@@ -13,8 +13,13 @@ from src.applications.calibration.view.calibration_preview_panel import (
     CalibrationAreaGridPanel,
     CalibrationPreviewPanel,
 )
+from src.applications.calibration.view.robot_calibration_preview_dialog import (
+    RobotCalibrationPreviewDialog,
+)
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.base.styled_message_box import show_warning
+from src.applications.calibration.service.i_calibration_service import RobotCalibrationPreview
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 _CROSSHAIR_COLOR = (0, 255, 80)
@@ -32,6 +37,8 @@ class CalibrationView(IApplicationView):
 
     capture_requested = pyqtSignal()
     calibrate_camera_requested = pyqtSignal()
+    intrinsic_auto_capture_requested = pyqtSignal()
+    intrinsic_auto_capture_stop_requested = pyqtSignal()
     calibrate_robot_requested = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
     calibrate_camera_tcp_offset_requested = pyqtSignal()
@@ -91,6 +98,8 @@ class CalibrationView(IApplicationView):
     def _connect_signals(self) -> None:
         self._controls_panel.capture_btn.clicked.connect(self.capture_requested.emit)
         self._controls_panel.calibrate_camera_btn.clicked.connect(self.calibrate_camera_requested.emit)
+        self._controls_panel.intrinsic_auto_capture.start_requested.connect(self.intrinsic_auto_capture_requested.emit)
+        self._controls_panel.intrinsic_auto_capture.stop_requested.connect(self.intrinsic_auto_capture_stop_requested.emit)
         self._controls_panel.calibrate_robot_btn.clicked.connect(self.calibrate_robot_requested.emit)
         self._controls_panel.calibrate_sequence_btn.clicked.connect(self.calibrate_sequence_requested.emit)
         self._controls_panel.calibrate_camera_tcp_offset_btn.clicked.connect(
@@ -151,6 +160,15 @@ class CalibrationView(IApplicationView):
     def load_calibration_settings(self, _settings: CalibrationSettingsData | None, flat: dict) -> None:
         self._controls_panel.set_settings_values(flat)
 
+    def set_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        self._controls_panel.intrinsic_auto_capture.set_config(config)
+
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        return self._controls_panel.intrinsic_auto_capture.get_config()
+
+    def set_intrinsic_auto_capture_running(self, running: bool) -> None:
+        self._controls_panel.intrinsic_auto_capture.set_running(running)
+
     def update_camera_view(self, image) -> None:
         if image is None:
             return
@@ -174,6 +192,10 @@ class CalibrationView(IApplicationView):
     def set_buttons_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_enabled(enabled)
         self._area_grid_panel.set_enabled(enabled)
+
+    def confirm_robot_calibration_preview(self, preview: RobotCalibrationPreview) -> bool:
+        dialog = RobotCalibrationPreviewDialog(preview, self)
+        return dialog.exec() == dialog.DialogCode.Accepted
 
     @property
     def work_area_definitions(self) -> list[WorkAreaDefinition]:

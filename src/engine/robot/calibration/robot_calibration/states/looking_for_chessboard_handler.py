@@ -9,6 +9,7 @@ _logger = logging.getLogger(__name__)
 import os
 import cv2
 import numpy as np
+from src.engine.robot.calibration.robot_calibration.overlay import draw_image_center
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 from src.engine.robot.calibration.robot_calibration.logging import construct_chessboard_state_log_message
 
@@ -42,7 +43,7 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
         found=found,
         ppm=ppm if found else None,
         bottom_left_corner=context.bottom_left_chessboard_corner_px,
-        debug_enabled=context.debug and context.debug_draw is not None,
+        debug_enabled=context.debug,
         detection_message=result.message
     )
     _logger.info(message)
@@ -52,29 +53,8 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
         context.calibration_vision.PPM = ppm
         _log_chessboard_pose(context)
         
-        # Draw debug visualizations if enabled
-        if context.debug and context.debug_draw:
-            # Draw the bottom-left corner
-            if context.bottom_left_chessboard_corner_px is not None:
-                bottom_left_px = tuple(context.bottom_left_chessboard_corner_px.astype(int))
-                cv2.circle(chessboard_frame, bottom_left_px, 8, (0, 0, 255), -1)  # Red circle
-                cv2.putText(chessboard_frame, "BL", (bottom_left_px[0] + 10, bottom_left_px[1] - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-            # Draw the chessboard center if available
-            if context.chessboard_center_px is not None:
-                chessboard_center_int = (int(context.chessboard_center_px[0]), int(context.chessboard_center_px[1]))
-                cv2.circle(chessboard_frame, chessboard_center_int, 2, (255, 255, 0), -1)  # Yellow circle
-                cv2.putText(chessboard_frame, "CB Center",
-                            (chessboard_center_int[0] + 15, chessboard_center_int[1] - 15),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-            # Draw image center
-            context.debug_draw.draw_image_center(chessboard_frame)
-
-        # Save debug image if enabled
         if context.debug:
-            cv2.imwrite("new_development/NewCalibrationMethod/chessboard_frame.png", chessboard_frame)
+            draw_image_center(chessboard_frame)
         
         return RobotCalibrationStates.CHESSBOARD_FOUND
     else:

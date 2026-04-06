@@ -99,9 +99,14 @@ class RobotCalibrationMapper:
             "calib_k":                     am.k,
             "calib_derivative_scaling":    am.derivative_scaling,
             "calib_fast_iteration_wait":   am.fast_iteration_wait,
+            "calib_initial_align_y_scale": am.initial_align_y_scale,
             "calib_run_height_measurement": settings.run_height_measurement,
             "calib_z_target":              settings.z_target,
             "calib_required_ids":          settings.required_ids,
+            "calib_candidate_ids":         settings.candidate_ids,
+            "calib_min_targets":           settings.min_targets,
+            "calib_max_targets":           settings.max_targets,
+            "calib_min_target_separation_px": settings.min_target_separation_px,
             "calib_velocity":              settings.velocity,
             "calib_acceleration":          settings.acceleration,
             "calib_axis_marker_id":        ax.marker_id,
@@ -141,12 +146,21 @@ class RobotCalibrationMapper:
         am.k                  = float(flat.get("calib_k",                  am.k))
         am.derivative_scaling = float(flat.get("calib_derivative_scaling", am.derivative_scaling))
         am.fast_iteration_wait = float(flat.get("calib_fast_iteration_wait", am.fast_iteration_wait))
+        am.initial_align_y_scale = float(
+            flat.get("calib_initial_align_y_scale", am.initial_align_y_scale)
+        )
         s.run_height_measurement = flat.get(
             "calib_run_height_measurement",
             s.run_height_measurement,
         ) in ("True", "true", True)
         s.z_target            = int(flat.get("calib_z_target",             s.z_target))
         s.required_ids        = flat.get("calib_required_ids",             s.required_ids)
+        s.candidate_ids       = flat.get("calib_candidate_ids",            s.candidate_ids)
+        s.min_targets         = int(flat.get("calib_min_targets",          s.min_targets))
+        s.max_targets         = int(flat.get("calib_max_targets",          s.max_targets))
+        s.min_target_separation_px = float(
+            flat.get("calib_min_target_separation_px", s.min_target_separation_px)
+        )
         s.velocity            = int(flat.get("calib_velocity",             s.velocity))
         s.acceleration        = int(flat.get("calib_acceleration",         s.acceleration))
 

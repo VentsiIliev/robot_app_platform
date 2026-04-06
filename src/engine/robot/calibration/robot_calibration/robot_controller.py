@@ -70,10 +70,8 @@ class CalibrationRobotController:
         magnitude = np.sqrt(offset_x_mm ** 2 + offset_y_mm ** 2)
         if magnitude > max_move_mm:
             scale = max_move_mm / magnitude
-        elif magnitude > alignment_threshold_mm * 3:
-            scale = 0.5   # half-step for large errors — prevents oscillation when PPM or mapping has any offset
         else:
-            scale = 0.5   # cautious approach in the noise-sensitive zone near target
+            scale = 1.0   # magnitude fits within the allowed step — take the full correction
         move_x_mm = offset_x_mm * scale
         move_y_mm = offset_y_mm * scale
 

@@ -22,7 +22,7 @@ from src.engine.work_areas.work_area_service import WorkAreaService
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 
 GRID_IDS = {
-    1:  "TL", 8:  "TC", 13:  "TR",
+    1:  "TL", 7:  "TC", 13:  "TR",
     132: "ML", 140: "MC", 164: "MR",
     297: "BL", 321: "BC", 262: "BR",
 }

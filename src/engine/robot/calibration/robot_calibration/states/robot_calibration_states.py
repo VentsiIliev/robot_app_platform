@@ -88,6 +88,7 @@ class RobotCalibrationTransitionRules:
             },
 
             RobotCalibrationStates.ALIGN_ROBOT: {
+                RobotCalibrationStates.ALIGN_ROBOT,  # Allow retry/re-plan on fallback target activation
                 RobotCalibrationStates.ITERATE_ALIGNMENT,
                 RobotCalibrationStates.ERROR,
                 RobotCalibrationStates.CANCELLED,

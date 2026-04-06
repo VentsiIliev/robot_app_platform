@@ -384,6 +384,9 @@ def _build_calibration_application(robot_system):
     from src.applications.calibration.calibration_factory import CalibrationFactory
     from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
     from src.applications.calibration_settings import CalibrationSettingsApplicationService
+    from src.applications.intrinsic_calibration_capture.service.intrinsic_capture_service import (
+        IntrinsicCaptureService,
+    )
     from src.engine.robot.calibration.aruco_marker_height_mapping_service import (
         ArucoMarkerHeightMappingService,
     )
@@ -391,7 +394,7 @@ def _build_calibration_application(robot_system):
         CameraTcpOffsetCalibrationService,
     )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
-    from src.engine.vision.homography_transformer import HomographyTransformer
+    from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     work_area_service = robot_system.get_service(CommonServiceID.WORK_AREAS)
@@ -402,13 +405,13 @@ def _build_calibration_application(robot_system):
         before_move=(lambda: work_area_service.set_active_area_id("spray")),
     )
     transformer = (
-        HomographyTransformer(
+        HomographyResidualTransformer(
             vision_service.camera_to_robot_matrix_path,
             camera_to_tcp_x_offset=robot_config.camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=robot_config.camera_to_tcp_y_offset,
         )
         if vision_service is not None and robot_config is not None else
-        HomographyTransformer(vision_service.camera_to_robot_matrix_path)
+        HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
         if vision_service is not None else None
     )
     camera_tcp_offset_calibrator = (
@@ -441,6 +444,16 @@ def _build_calibration_application(robot_system):
            and robot_config is not None
         else None
     )
+    intrinsic_capture_service = (
+        IntrinsicCaptureService(
+            robot_service=robot_service,
+            vision_service=vision_service,
+            robot_config=robot_system._robot_config,
+            messaging=getattr(robot_system, "_messaging_service", None),
+            default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
+        )
+        if vision_service is not None and robot_service is not None and robot_config is not None else None
+    )
 
     def _observer_position(group_id: str):
         navigation = getattr(robot_system, "_navigation", None)
@@ -457,6 +470,7 @@ def _build_calibration_application(robot_system):
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
+        intrinsic_capture_service=intrinsic_capture_service,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
@@ -748,6 +762,8 @@ def _build_intrinsic_capture_application(robot_system):
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         robot_config=robot_system._robot_config,
+        messaging=getattr(robot_system, "_messaging_service", None),
+        default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
     )
     return WidgetApplication(
         widget_factory=lambda ms: IntrinsicCaptureFactory().build(service, messaging=ms)

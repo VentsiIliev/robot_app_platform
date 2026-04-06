@@ -33,6 +33,47 @@ from src.engine.robot.calibration.robot_calibration.ppm_utils import (
 
 wait_to_reach_position = True #TODO set to False only for testing!
 
+
+def _get_target_marker_ids(context) -> list[int]:
+    if getattr(context, "target_marker_ids", None):
+        return list(context.target_marker_ids)
+    return sorted(list(context.required_ids))
+
+
+def _get_recovery_marker_id(context) -> int | None:
+    recovery_marker_id = getattr(context, "recovery_marker_id", None)
+    if recovery_marker_id is not None:
+        return int(recovery_marker_id)
+    target_ids = _get_target_marker_ids(context)
+    return int(target_ids[0]) if target_ids else None
+
+
+def _try_activate_fallback_target(context, failed_marker_id: int, reason: str) -> bool:
+    target_ids = _get_target_marker_ids(context)
+    if context.current_marker_id >= len(target_ids):
+        return False
+
+    active_ids = set(target_ids)
+    neighbor_ids = getattr(context, "marker_neighbor_ids", {}).get(failed_marker_id, [])
+    for candidate_id in neighbor_ids:
+        if candidate_id in active_ids or candidate_id in getattr(context, "failed_target_ids", set()):
+            continue
+        if candidate_id not in context.markers_offsets_mm:
+            continue
+        old_id = target_ids[context.current_marker_id]
+        target_ids[context.current_marker_id] = candidate_id
+        context.target_marker_ids = target_ids
+        context.failed_target_ids.add(int(old_id))
+        context.skipped_target_ids.add(int(old_id))
+        _logger.warning(
+            "Replacing calibration target %s with nearby marker %s due to %s",
+            old_id,
+            candidate_id,
+            reason,
+        )
+        return True
+    return False
+
 def handle_align_robot_state(context) -> RobotCalibrationStates:
     """
     Handle the ALIGN_ROBOT state.
@@ -42,7 +83,7 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     if context.stop_event.is_set():
         return RobotCalibrationStates.CANCELLED
 
-    required_ids_list = sorted(list(context.required_ids))
+    required_ids_list = _get_target_marker_ids(context)
     marker_id = required_ids_list[context.current_marker_id]
     context.iteration_count = 0
 
@@ -69,6 +110,14 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
         calib_to_marker[1] - calib_to_current[1]
     )
 
+    initial_align_y_scale = float(
+        getattr(context.calibration_robot_controller.adaptive_movement_config, "initial_align_y_scale", 1.0)
+    )
+    current_to_marker = (
+        current_to_marker[0],
+        current_to_marker[1] * initial_align_y_scale,
+    )
+
     x_new = x + current_to_marker[0]
     y_new = y + current_to_marker[1]
     z_new = context.Z_target
@@ -80,10 +129,10 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     # Retry if failed
     if not result:
         retry_attempted = True
-        first_id = sorted(list(context.required_ids))[0]
-        if first_id in context.robot_positions_for_calibration:
+        recovery_marker_id = _get_recovery_marker_id(context)
+        if recovery_marker_id in context.robot_positions_for_calibration:
             context.calibration_robot_controller.move_to_position(
-                context.robot_positions_for_calibration[first_id], blocking=wait_to_reach_position
+                context.robot_positions_for_calibration[recovery_marker_id], blocking=wait_to_reach_position
             )
         result = context.calibration_robot_controller.move_to_position(new_position, blocking=wait_to_reach_position)
 
@@ -98,6 +147,8 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
                 f"Could not reach target position after retry. "
                 f"Check robot safety limits and workspace boundaries."
             )
+            if _try_activate_fallback_target(context, marker_id, "movement failure"):
+                return RobotCalibrationStates.ALIGN_ROBOT
             return RobotCalibrationStates.ERROR
 
     # Log the alignment operation
@@ -111,12 +162,20 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
         retry_attempted=retry_attempted,
     )
     _logger.info(message)
+    _logger.info(
+        "Initial align compensation for marker %s: y_scale=%.3f adjusted_correction=(%.3f, %.3f)",
+        marker_id,
+        initial_align_y_scale,
+        float(current_to_marker[0]),
+        float(current_to_marker[1]),
+    )
 
     if result:
         if context.interruptible_sleep(1.0):
             return RobotCalibrationStates.CANCELLED
         context.calibration_robot_controller.reset_derivative_state()
         clear_ppm_probe(context)        # robot teleports to new marker — invalidate probe
+        context._last_error_mm_for_sampling = None  # reset so first iteration uses 1 sample
         return RobotCalibrationStates.ITERATE_ALIGNMENT
     else:
         return RobotCalibrationStates.ERROR
@@ -129,7 +188,7 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     This state iteratively refines the robot position until the marker
     is aligned with the image center within the specified threshold.
     """
-    required_ids_list = sorted(list(context.required_ids))
+    required_ids_list = _get_target_marker_ids(context)
     marker_id = required_ids_list[context.current_marker_id]
     context.iteration_count += 1
 
@@ -144,13 +203,23 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             f"after {context.max_iterations} iterations. "
             f"Required precision: {context.alignment_threshold_mm}mm"
         )
+        if _try_activate_fallback_target(context, marker_id, "max iterations exceeded"):
+            return RobotCalibrationStates.ALIGN_ROBOT
         return RobotCalibrationStates.ERROR
 
     # Query robot position NOW (before move) — used to refine PPM from observed pixel/mm ratio.
     _robot_pos_now = context.calibration_robot_controller.get_current_position()
 
-    # Collect N frames and average the marker position to reduce detection noise
-    _N_SAMPLES = 3
+    # Collect N frames and average the marker position to reduce detection noise.
+    # Large errors don't need many samples — one frame is enough to know you're 10 mm off.
+    # Near the threshold, averaging matters most to avoid accepting a noisy reading.
+    _current_error_for_sampling = getattr(context, "_last_error_mm_for_sampling", None)
+    if _current_error_for_sampling is None or _current_error_for_sampling > 5.0:
+        _N_SAMPLES = 1
+    elif _current_error_for_sampling > 2.0:
+        _N_SAMPLES = 2
+    else:
+        _N_SAMPLES = 3
     image_center_px = (
         context.vision_service.get_camera_width() // 2,
         context.vision_service.get_camera_height() // 2,
@@ -206,6 +275,7 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     current_error_mm = current_error_px / newPpm
     offset_x_mm = offset_x_px / newPpm
     offset_y_mm = offset_y_px / newPpm
+    context._last_error_mm_for_sampling = current_error_mm
     processing_time = time.time() - processing_start
 
     alignment_success = current_error_mm <= context.alignment_threshold_mm
@@ -228,7 +298,6 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             current_error_mm, context.iteration_count,
         )
         context.robot_positions_for_calibration[marker_id] = current_pose
-        context.debug_draw.draw_image_center(iteration_image)
         show_live_feed(context, iteration_image, current_error_mm, broadcast_image=context.broadcast_events)
 
         if should_capture_tcp_offset_for_current_marker(context):
@@ -247,6 +316,8 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         except RuntimeError as e:
             _logger.error("Cannot compute iterative position: %s", e)
             context.calibration_error_message = str(e)
+            if _try_activate_fallback_target(context, marker_id, "iterative movement failure"):
+                return RobotCalibrationStates.ALIGN_ROBOT
             return RobotCalibrationStates.ERROR
         
         movement_start = time.time()
@@ -277,7 +348,6 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             return RobotCalibrationStates.CANCELLED
         stability_time = time.time() - stability_start
         
-        context.debug_draw.draw_image_center(iteration_image)
         show_live_feed(context, iteration_image, current_error_mm, broadcast_image=context.broadcast_events)
 
     # Log iteration results
@@ -325,7 +395,8 @@ def handle_done_state(context) -> RobotCalibrationStates:
     
     This state manages the transition between markers and final completion.
     """
-    if context.current_marker_id < len(context.required_ids) - 1:
+    target_ids = _get_target_marker_ids(context)
+    if context.current_marker_id < len(target_ids) - 1:
         # Move to the next marker
         context.current_marker_id += 1
         return RobotCalibrationStates.ALIGN_ROBOT
@@ -358,8 +429,9 @@ def handle_error_state(context) -> RobotCalibrationStates:
     _logger.error(f"CALIBRATION FAILED: {error_message}")
 
     # Log additional context for debugging
+    total_targets = len(_get_target_marker_ids(context))
     _logger.error( f"Calibration context: "
-        f"Current marker: {context.current_marker_id}/{len(context.required_ids) if context.required_ids else 0}, "
+        f"Current marker: {context.current_marker_id}/{total_targets}, "
         f"Iteration: {context.iteration_count}/{context.max_iterations}, "
         f"Markers successfully calibrated: {len(context.robot_positions_for_calibration)}")
 
@@ -369,11 +441,11 @@ def handle_error_state(context) -> RobotCalibrationStates:
         try:
             # Create structured error notification
             error_notification = {
-                "status": "error",
-                "message": error_message,
-                "details": {
-                    "current_marker": context.current_marker_id,
-                    "total_markers": len(context.required_ids) if context.required_ids else 0,
+                    "status": "error",
+                    "message": error_message,
+                    "details": {
+                        "current_marker": context.current_marker_id,
+                    "total_markers": total_targets,
                     "successful_markers": len(context.robot_positions_for_calibration),
                     "iteration_count": context.iteration_count,
                     "max_iterations": context.max_iterations

@@ -33,12 +33,17 @@ class RobotCalibrationContext(Context):
         self.calibration_vision = None
         self.axis_mapping_config = None
         self.stop_event = threading.Event()
-        self.debug_draw = None
         self.broker = None
         self.state_machine = None
         
         # Configuration
         self.required_ids = set()
+        self.candidate_ids = set()
+        self.target_marker_ids: list[int] = []
+        self.recovery_marker_id: int | None = None
+        self.min_targets = 4
+        self.max_targets = 0
+        self.min_target_separation_px = 120.0
         self.chessboard_size = None
         self.square_size_mm = None
         self.alignment_threshold_mm = 1.0
@@ -74,6 +79,11 @@ class RobotCalibrationContext(Context):
         self.robot_positions_for_calibration = {}
         self.camera_points_for_homography = {}
         self.image_to_robot_mapping = None
+        self.marker_neighbor_ids: dict[int, list[int]] = {}
+        self.available_marker_points_px: dict[int, tuple[float, float]] = {}
+        self.failed_target_ids: set[int] = set()
+        self.skipped_target_ids: set[int] = set()
+        self.target_selection_report: dict = {}
         self.camera_tcp_offset_config = None
         self.camera_tcp_offset_samples: list = []
         self.camera_tcp_offset_captured_markers = set()
@@ -157,7 +167,9 @@ class RobotCalibrationContext(Context):
         return {
             # Progress tracking
             "current_marker_id": self.current_marker_id,
-            "total_markers": len(self.required_ids) if self.required_ids else 0,
+            "total_markers": len(self.target_marker_ids) if self.target_marker_ids else (len(self.required_ids) if self.required_ids else 0),
+            "target_markers": list(self.target_marker_ids),
+            "recovery_marker_id": self.recovery_marker_id,
             "iteration_count": self.iteration_count,
             "max_iterations": self.max_iterations,
             

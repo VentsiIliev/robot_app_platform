@@ -1,8 +1,23 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Callable, Sequence
+import numpy as np
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.shared_contracts.declarations import WorkAreaDefinition
+
+
+@dataclass(frozen=True)
+class RobotCalibrationPreview:
+    ok: bool
+    message: str
+    frame: np.ndarray | None = None
+    available_ids: list[int] | None = None
+    selected_ids: list[int] | None = None
+    min_targets: int = 0
+    max_targets: int = 0
+    report: dict | None = None
 
 
 class ICalibrationService(ABC):
@@ -19,7 +34,25 @@ class ICalibrationService(ABC):
     def calibrate_camera(self) -> tuple[bool, str]: ...
 
     @abstractmethod
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig: ...
+
+    @abstractmethod
+    def save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None: ...
+
+    @abstractmethod
+    def start_intrinsic_auto_capture(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def stop_intrinsic_auto_capture(self) -> None: ...
+
+    @abstractmethod
+    def is_intrinsic_auto_capture_running(self) -> bool: ...
+
+    @abstractmethod
     def calibrate_robot(self) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    def preview_robot_calibration(self) -> RobotCalibrationPreview: ...
 
     @abstractmethod
     def calibrate_camera_and_robot(self) -> tuple[bool, str]: ...
@@ -40,7 +73,7 @@ class ICalibrationService(ABC):
     def is_calibrated(self) -> bool: ...
 
     @abstractmethod
-    def test_calibration(self) -> tuple[bool, str]: ...
+    def test_calibration(self, model_name: str = "homography") -> tuple[bool, str]: ...
 
     @abstractmethod
     def stop_test_calibration(self) -> None: ...

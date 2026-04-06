@@ -3,10 +3,11 @@
     "min_step_mm": 0.1,
     "max_step_mm": 25.0,
     "target_error_mm": 0.25,
-    "max_error_ref": 100.0,
+    "max_error_ref": 30.0,
     "k": 2.0,
     "derivative_scaling": 0.5,
-    "fast_iteration_wait": 1.0
+    "fast_iteration_wait": 0.8,
+    "initial_align_y_scale": 1.0
   },
   "axis_mapping_config": {
     "marker_id": 140,
@@ -15,7 +16,7 @@
     "delay_after_move_s": 1.0
   },
   "camera_tcp_offset_config": {
-    "run_during_robot_calibration": false,
+    "run_during_robot_calibration": true,
     "max_markers_for_tcp_capture": 4,
     "marker_id": 4,
     "rotation_step_deg": 25.0,
@@ -39,13 +40,35 @@
   "required_ids": [
     1,
     7,
-    13,
+    15,
+    70,
+    79,
     132,
     140,
     164,
+    203,
+    211,
     297,
     262
   ],
+  "candidate_ids": [
+    1,
+    7,
+    13,
+    70,
+    79,
+    132,
+    140,
+    164,
+    203,
+    211,
+    297,
+    262,
+    329
+  ],
+  "min_targets": 11,
+  "max_targets": 20,
+  "min_target_separation_px": 120.0,
   "velocity": 30,
   "acceleration": 10
 }

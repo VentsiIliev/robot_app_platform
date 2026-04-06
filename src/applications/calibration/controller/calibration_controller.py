@@ -4,11 +4,13 @@ from typing import List, Tuple, Callable
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
 
 from src.applications.base.i_application_controller import IApplicationController
-from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.calibration.model.calibration_model import CalibrationModel
 from src.applications.calibration_settings.mapper import CalibrationSettingsMapper
 from src.applications.calibration.view.calibration_view import CalibrationView
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import (
+    INTRINSIC_CAPTURE_PROGRESS_TOPIC,
+)
 from src.engine.core.i_messaging_service import IMessagingService
 from src.robot_systems.glue.component_ids import ProcessID
 from src.shared_contracts.events.robot_events import RobotCalibrationTopics
@@ -98,6 +100,8 @@ class CalibrationController(IApplicationController):
                 calibration_settings,
                 CalibrationSettingsMapper.to_flat_dict(calibration_settings),
             )
+        self._view.set_intrinsic_capture_config(self._model.get_intrinsic_capture_config())
+        self._view.set_intrinsic_auto_capture_running(self._model.is_intrinsic_auto_capture_running())
         active_area_id = self._model.get_active_work_area_id()
         if active_area_id:
             self._view.set_current_work_area_id(active_area_id)
@@ -126,6 +130,7 @@ class CalibrationController(IApplicationController):
     def _subscribe(self) -> None:
         self._sub(VisionTopics.LATEST_IMAGE, self._on_latest_image_raw)
         self._sub(RobotCalibrationTopics.ROBOT_CALIBRATION_LOG, self._on_calibration_log_raw)
+        self._sub(INTRINSIC_CAPTURE_PROGRESS_TOPIC, self._on_intrinsic_capture_log_raw)
         self._sub(ProcessTopics.state(_CALIBRATION_PROCESS_ID), self._on_calibration_process_state)
 
     def _on_latest_image_raw(self, msg) -> None:
@@ -135,6 +140,9 @@ class CalibrationController(IApplicationController):
                 self._bridge.camera_frame.emit(frame)
 
     def _on_calibration_log_raw(self, msg) -> None:
+        self._bridge.log_received.emit(str(msg))
+
+    def _on_intrinsic_capture_log_raw(self, msg) -> None:
         self._bridge.log_received.emit(str(msg))
 
     # ── Bridge → View (main thread) ───────────────────────────────────
@@ -157,6 +165,8 @@ class CalibrationController(IApplicationController):
     def _connect_signals(self) -> None:
         self._view.capture_requested.connect(self._on_capture)
         self._view.calibrate_camera_requested.connect(self._on_calibrate_camera)
+        self._view.intrinsic_auto_capture_requested.connect(self._on_intrinsic_auto_capture)
+        self._view.intrinsic_auto_capture_stop_requested.connect(self._on_stop_intrinsic_auto_capture)
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
@@ -192,7 +202,29 @@ class CalibrationController(IApplicationController):
     def _on_calibrate_camera(self) -> None:
         self._run_in_thread(self._model.calibrate_camera)
 
+    def _on_intrinsic_auto_capture(self) -> None:
+        self._model.save_intrinsic_capture_config(self._view.get_intrinsic_capture_config())
+        ok, msg = self._model.start_intrinsic_auto_capture()
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_intrinsic_auto_capture_running(self._model.is_intrinsic_auto_capture_running())
+        if ok:
+            self._poll_intrinsic_auto_capture()
+
+    def _on_stop_intrinsic_auto_capture(self) -> None:
+        self._model.stop_intrinsic_auto_capture()
+        self._view.append_log("• Intrinsic auto capture stop requested")
+        self._view.set_intrinsic_auto_capture_running(self._model.is_intrinsic_auto_capture_running())
+
     def _on_calibrate_robot(self) -> None:
+        preview = self._model.preview_robot_calibration()
+        if preview.frame is None and not preview.ok:
+            self._view.append_log(f"✗ {preview.message}")
+            return
+
+        if not self._view.confirm_robot_calibration_preview(preview):
+            self._view.append_log("• Robot calibration cancelled before start")
+            return
+
         self._view.set_buttons_enabled(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
         _, msg = self._model.calibrate_robot()
@@ -263,6 +295,7 @@ class CalibrationController(IApplicationController):
         dlg.exec()
 
     def _on_test_calibration(self) -> None:
+        model_name = "homography"
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
@@ -270,7 +303,7 @@ class CalibrationController(IApplicationController):
         self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
-        worker = _Worker(self._model.test_calibration)
+        worker = _Worker(lambda: self._model.test_calibration(model_name))
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_test_worker_done)
@@ -292,6 +325,22 @@ class CalibrationController(IApplicationController):
         if not self._running:
             return
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+
+    def _poll_intrinsic_auto_capture(self) -> None:
+        from PyQt6.QtCore import QTimer
+        timer = QTimer()
+        timer.setInterval(500)
+
+        def _check():
+            running = self._model.is_intrinsic_auto_capture_running()
+            self._view.set_intrinsic_auto_capture_running(running)
+            if not running:
+                timer.stop()
+                timer.deleteLater()
+
+        timer.timeout.connect(_check)
+        timer.start()
+        self._intrinsic_capture_timer = timer
         self._model.restore_pending_safety_walls()
         self._view.set_buttons_enabled(True)
         self._bridge.stop_btn_enabled.emit(False)

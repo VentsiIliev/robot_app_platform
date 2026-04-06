@@ -9,8 +9,12 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from src.applications.intrinsic_calibration_capture.core.acquisition import capture_intrinsic_dataset
-from src.applications.intrinsic_calibration_capture.core.data import BoardType, CaptureSample, ImageInfo
+from src.engine.robot.calibration.intrinsic_capture import (
+    BoardType,
+    CaptureSample,
+    ImageInfo,
+    capture_intrinsic_dataset,
+)
 from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import (
     ARUCO_DICT_OPTIONS,
     INTRINSIC_CAPTURE_PROGRESS_TOPIC,
@@ -27,11 +31,12 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
     platform's IRobotService and IVisionService.
     """
 
-    def __init__(self, robot_service, vision_service, robot_config, messaging=None):
+    def __init__(self, robot_service, vision_service, robot_config, messaging=None, default_output_dir: str | None = None):
         self._robot = robot_service
         self._vision = vision_service
         self._robot_config = robot_config
         self._messaging = messaging
+        self._configured_default_output_dir = str(default_output_dir or "").strip()
         self._config = IntrinsicCaptureConfig()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -76,6 +81,20 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
             if raw is not None:
                 return raw
         return self._vision.get_latest_frame()
+
+    def _get_capture_frame(self) -> np.ndarray:
+        """Return a raw frame for dataset capture.
+
+        Intrinsic calibration must use raw sensor images, not annotated or processed frames.
+        """
+        if self._vision is None:
+            raise RuntimeError("Vision service unavailable")
+        if not hasattr(self._vision, "get_latest_raw_frame"):
+            raise RuntimeError("Vision service does not expose get_latest_raw_frame(); intrinsic capture requires raw images")
+        frame = self._vision.get_latest_raw_frame()
+        if frame is None:
+            raise RuntimeError("Vision service returned no raw frame; intrinsic capture requires raw images")
+        return frame
 
     def get_config(self) -> IntrinsicCaptureConfig:
         return self._config
@@ -260,7 +279,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
         self._lock_brightness()
         try:
             cfg = self._config
-            output_dir = cfg.output_dir or os.path.join(os.getcwd(), "intrinsic_capture_output")
+            output_dir = cfg.output_dir or self._default_output_dir()
             os.makedirs(output_dir, exist_ok=True)
 
             cw = cfg.chessboard_width or self._vision.get_chessboard_width()
@@ -301,7 +320,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
                 get_pose_fn=self._robot.get_current_position,
                 move_relative_fn=self._move_relative,
                 move_absolute_fn=self._move_absolute,
-                grab_frame_fn=self._get_raw_frame,
+                grab_frame_fn=self._get_capture_frame,
                 save_frame_fn=lambda frame, tag: self._save_frame(frame, tag, output_dir),
                 image_info=image_info,
                 pattern_size=pattern_size,
@@ -354,6 +373,14 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
             self._publish(f"ERROR: {e}")
         finally:
             self._unlock_brightness()
+
+    def _default_output_dir(self) -> str:
+        if self._configured_default_output_dir:
+            return self._configured_default_output_dir
+        camera_to_robot_matrix_path = getattr(self._vision, "camera_to_robot_matrix_path", None) if self._vision is not None else None
+        if camera_to_robot_matrix_path:
+            return os.path.join(os.path.dirname(camera_to_robot_matrix_path), "intrinsic_capture_output")
+        return os.path.join(os.getcwd(), "intrinsic_capture_output")
 
     # ── Calibration ───────────────────────────────────────────────────────────
 

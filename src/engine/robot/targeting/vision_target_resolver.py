@@ -61,7 +61,10 @@ class VisionTargetResolver:
 
         calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
         plane_xy = _map_plane(calibration_xy, active_mapper)
-        camera_xy, tcp_delta = self._apply_tcp_delta(plane_xy, current_rz, active_mapper)
+        if _is_camera_point(point):
+            camera_xy, tcp_delta = plane_xy, (0.0, 0.0)
+        else:
+            camera_xy, tcp_delta = self._apply_tcp_delta(plane_xy, current_rz, active_mapper)
 
         if point.offset_x == 0.0 and point.offset_y == 0.0:
             final_xy = camera_xy
@@ -123,3 +126,7 @@ def _rotate_xy(x: float, y: float, rz_deg: float) -> Tuple[float, float]:
     cos_a = math.cos(angle_rad)
     sin_a = math.sin(angle_rad)
     return (x * cos_a - y * sin_a, x * sin_a + y * cos_a)
+
+
+def _is_camera_point(point: EndEffectorPoint) -> bool:
+    return str(point.name).strip().lower() == "camera"

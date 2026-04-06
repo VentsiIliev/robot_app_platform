@@ -33,7 +33,7 @@ class HttpCellTransport(ICellTransport, ICellCalibrator):
             self._logger.info("Cell %s connected", self._config.id)
             return True
         except Exception:
-            self._logger.exception("connect() failed for %s", self._base_url)
+            # self._logger.exception("connect() failed for %s", self._base_url)
             self._connected = False
             return False
 

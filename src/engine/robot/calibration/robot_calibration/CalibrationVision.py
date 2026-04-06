@@ -37,7 +37,7 @@ class FindRequiredMarkersResult:
 
 
 class CalibrationVision:
-    def __init__(self, vision_service, chessboard_size, square_size_mm, required_ids, debug_draw, debug,
+    def __init__(self, vision_service, chessboard_size, square_size_mm, required_ids, debug,
                  use_marker_centre: bool = False, perspective_matrix=None):
         self.bottom_left_chessboard_corner_px = None
         self.chessboard_center_px = None
@@ -45,7 +45,6 @@ class CalibrationVision:
         self.vision_service = vision_service
         self.chessboard_size = chessboard_size  # (cols, rows)
         self.square_size_mm = square_size_mm
-        self.debug_draw = debug_draw
         self.debug = debug
         self.required_ids = required_ids
         self.detected_ids = set()
@@ -53,7 +52,9 @@ class CalibrationVision:
         self.marker_top_left_corners_mm = {}
         self.PPM = None
         self.use_marker_centre = use_marker_centre
-        self.perspective_matrix = perspective_matrix
+        self.perspective_matrix = None
+        if perspective_matrix is not None:
+            _logger.info("Robot calibration perspective transform is disabled; using raw vision frames")
 
     def _warp_frame(self, frame):
         """Apply perspective correction to the whole image. Returns the frame unchanged when no matrix is set."""
@@ -131,20 +132,9 @@ class CalibrationVision:
             _logger.debug("No frame provided for chessboard detection")
             return ChessboardDetectionResult(found=False, ppm=None, bottom_left_px=None, message="No frame provided")
 
-        # If no perspective matrix exists yet, try to derive one from the chessboard
-        if self.perspective_matrix is None:
-            matrix = self._compute_perspective_from_chessboard(frame)
-            if matrix is not None:
-                self.perspective_matrix = matrix
-
-        # Warp the frame so all detection and coordinate extraction happen in corrected space
-        frame = self._warp_frame(frame)
-
         _logger.debug(f"Looking for chessboard of size: {self.chessboard_size}")
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         ret, corners = cv2.findChessboardCorners(gray, self.chessboard_size, None)
-        cv2.imwrite("robot_calibration_chessboard_detection_debug.png", frame)
-
         if ret:
             _logger.info(f"Found chessboard! Detected {len(corners)} corners")
             criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
@@ -155,11 +145,6 @@ class CalibrationVision:
             self.bottom_left_chessboard_corner_px = corners_refined[(rows - 1) * cols, 0]
 
             _logger.debug(f"Bottom-left chessboard corner (px): {self.bottom_left_chessboard_corner_px}")
-            # Draw bottom-left corner marker
-            bottom_left_px = tuple(self.bottom_left_chessboard_corner_px.astype(int))
-            cv2.circle(frame, bottom_left_px, 8, (0, 0, 255), -1)  # Red circle
-            cv2.putText(frame, "BL", (bottom_left_px[0] + 10, bottom_left_px[1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
             # --- Compute chessboard center ---
             _logger.debug(f"Chessboard dimensions: {rows} rows x {cols} cols")
@@ -205,16 +190,9 @@ class CalibrationVision:
                 )
             _logger.debug(f"Chessboard center (px): {self.chessboard_center_px}")
 
-            if self.debug:
-                self.debug_draw.draw_image_center(frame)
-
             ppm = self.__compute_ppm_from_corners(corners_refined)
-
-            cv2.drawChessboardCorners(frame, self.chessboard_size, corners_refined, ret)
             return ChessboardDetectionResult(found=True, ppm=ppm, bottom_left_px=self.bottom_left_chessboard_corner_px, message="Chessboard detected successfully")
         else:
-            cv2.putText(frame, "No chessboard detected", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             self.bottom_left_chessboard_corner_px = None
             return ChessboardDetectionResult(found=False, ppm=None, bottom_left_px=None, message="Chessboard not detected")
 
@@ -251,7 +229,6 @@ class CalibrationVision:
         return ppm
 
     def find_required_aruco_markers(self, frame) -> FindRequiredMarkersResult:
-        frame = self._warp_frame(frame)
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(frame)
 
         if arucoIds is not None:
@@ -267,7 +244,6 @@ class CalibrationVision:
                     else:
                         ref_pt = corners_4[0]               # top-left corner
                     self.marker_top_left_corners[marker_id] = ref_pt.astype(np.float32)
-                    cv2.circle(frame, tuple(ref_pt.astype(int)), 2, (0, 255, 0), -1)
 
             _logger.debug(f"Currently have: {self.detected_ids}")
             _logger.debug(f"Still missing: {self.required_ids - self.detected_ids}")
@@ -310,26 +286,26 @@ class CalibrationVision:
     #         # update marker top-left corner in mm
     #         self.marker_top_left_corners_mm[marker_id] = (x_mm, y_mm)
 
-    def collect_reference_sample(self, frame) -> dict:
+    def collect_reference_sample(self, frame, allowed_ids=None) -> dict:
         """
         Detect required markers in a single frame and return their corner positions.
         Does NOT update internal state — used exclusively for multi-frame averaging.
-        Returns {marker_id: np.ndarray([x, y], float32)} for each detected required marker.
+        Returns {marker_id: np.ndarray([x, y], float32)} for each detected marker.
         """
-        frame = self._warp_frame(frame)
         arucoCorners, arucoIds, _ = self.vision_service.detect_aruco_markers(frame)
         sample = {}
+        allowed_id_set = None if allowed_ids is None else {int(marker_id) for marker_id in allowed_ids}
         if arucoIds is None:
             return sample
         for i, marker_id in enumerate(arucoIds.flatten()):
-            if marker_id in self.required_ids:
-                corners_4 = arucoCorners[i][0]
-                ref_pt = corners_4.mean(axis=0) if self.use_marker_centre else corners_4[0]
-                sample[marker_id] = ref_pt.astype(np.float32)
+            if allowed_id_set is not None and int(marker_id) not in allowed_id_set:
+                continue
+            corners_4 = arucoCorners[i][0]
+            ref_pt = corners_4.mean(axis=0) if self.use_marker_centre else corners_4[0]
+            sample[int(marker_id)] = ref_pt.astype(np.float32)
         return sample
 
     def detect_specific_marker(self, frame, marker_id) -> SpecificMarkerDetectionResult:
-        frame = self._warp_frame(frame)
         marker_found = False
         arucoCorners, arucoIds, image = self.vision_service.detect_aruco_markers(image=frame)
         if arucoIds is not None and marker_id in arucoIds:
@@ -338,5 +314,3 @@ class CalibrationVision:
                                              aruco_corners=arucoCorners,
                                              aruco_ids=arucoIds,
                                              frame=frame)
-
-

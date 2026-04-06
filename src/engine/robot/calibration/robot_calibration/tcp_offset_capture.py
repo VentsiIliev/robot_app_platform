@@ -31,7 +31,7 @@ def capture_tcp_offset_for_current_marker(context) -> bool:
     if cfg is None or not getattr(cfg, "run_during_robot_calibration", False):
         return True
 
-    required_ids_list = sorted(list(context.required_ids))
+    required_ids_list = list(getattr(context, "target_marker_ids", None) or sorted(list(context.required_ids)))
     marker_id = required_ids_list[context.current_marker_id]
     if not hasattr(context, "camera_tcp_offset_captured_markers"):
         context.camera_tcp_offset_captured_markers = set()
@@ -169,6 +169,8 @@ def _build_tcp_offset_summary(
     std_x: float,
     std_y: float,
 ) -> str:
+    dx_arr = np.array([sample.local_dx for sample in samples], dtype=np.float64)
+    dy_arr = np.array([sample.local_dy for sample in samples], dtype=np.float64)
     lines = [
         "=== TCP OFFSET CALIBRATION SUMMARY ===",
         f"Samples used: {len(samples)}",
@@ -207,6 +209,8 @@ def _build_tcp_offset_summary(
             "Final aggregate:",
             f"  mean_local=({offset_x:.6f}, {offset_y:.6f})",
             f"  std_local=({std_x:.6f}, {std_y:.6f})",
+            f"  range_local_x=({dx_arr.min():.6f}, {dx_arr.max():.6f}) span={dx_arr.max() - dx_arr.min():.6f}",
+            f"  range_local_y=({dy_arr.min():.6f}, {dy_arr.max():.6f}) span={dy_arr.max() - dy_arr.min():.6f}",
             "====================================",
         ]
     )
@@ -277,14 +281,18 @@ def _move_and_realign_marker(context, marker_id: int, target_rz: float):
     clear_ppm_probe(context)
     context.calibration_robot_controller.reset_derivative_state()
 
+    cfg_rz = getattr(context, "camera_tcp_offset_config", None)
+    reference_rz = float(getattr(cfg_rz, "approach_rz", 0.0)) if cfg_rz is not None else 0.0
+    camera_rotation_deg = target_rz - reference_rz
     return _align_marker_to_center(
         context,
         marker_id,
         max_iterations=getattr(context.camera_tcp_offset_config, "recenter_max_iterations", context.max_iterations),
+        camera_rotation_deg=camera_rotation_deg,
     )
 
 
-def _align_marker_to_center(context, marker_id: int, max_iterations: int):
+def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera_rotation_deg: float = 0.0):
     image_center_px = (
         context.vision_service.get_camera_width() // 2,
         context.vision_service.get_camera_height() // 2,
@@ -324,7 +332,23 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int):
 
         offset_x_mm = offset_x_px / ppm
         offset_y_mm = offset_y_px / ppm
-        mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(offset_x_mm, offset_y_mm)
+
+        if camera_rotation_deg != 0.0:
+            # The camera has rotated by camera_rotation_deg relative to the reference
+            # pose at which the axis mapping was calibrated.  Pixel offsets are now in
+            # the rotated camera frame; de-rotate them back to the reference frame
+            # before applying the axis mapping so the robot moves in the correct
+            # direction.  Without this correction the X/Y corrections flip signs
+            # repeatedly at large rotation angles (≥ 25°), causing 30+ iteration
+            # oscillation instead of clean convergence.
+            theta = math.radians(camera_rotation_deg)
+            cos_t = math.cos(theta)
+            sin_t = math.sin(theta)
+            derotated_x_mm = offset_x_mm * cos_t + offset_y_mm * sin_t
+            derotated_y_mm = -offset_x_mm * sin_t + offset_y_mm * cos_t
+            mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(derotated_x_mm, derotated_y_mm)
+        else:
+            mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(offset_x_mm, offset_y_mm)
         try:
             iterative_position = context.calibration_robot_controller.get_iterative_align_position(
                 current_error_mm,

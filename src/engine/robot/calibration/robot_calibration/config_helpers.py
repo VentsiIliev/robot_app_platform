@@ -3,13 +3,23 @@ from src.engine.vision import IVisionService
 
 
 class AdaptiveMovementConfig:
-    def __init__(self, min_step_mm, max_step_mm, target_error_mm, max_error_ref, k, derivative_scaling):
+    def __init__(
+        self,
+        min_step_mm,
+        max_step_mm,
+        target_error_mm,
+        max_error_ref,
+        k,
+        derivative_scaling,
+        initial_align_y_scale: float = 1.0,
+    ):
         self.min_step_mm = min_step_mm  # minimum movement (for very small errors)
         self.max_step_mm = max_step_mm  # maximum movement for very large misalignment's
         self.target_error_mm = target_error_mm  # desired error to reach
         self.max_error_ref = max_error_ref  # error at which we reach max step
         self.k = k  # responsiveness (1.0 = smooth, 2.0 = faster reaction)
         self.derivative_scaling = derivative_scaling  # how strongly derivative term reduces step
+        self.initial_align_y_scale = initial_align_y_scale  # feed-forward Y compensation for first marker move
 
     def to_dict(self):
         return {
@@ -18,7 +28,8 @@ class AdaptiveMovementConfig:
             "target_error_mm": self.target_error_mm,
             "max_error_ref": self.max_error_ref,
             "k": self.k,
-            "derivative_scaling": self.derivative_scaling
+            "derivative_scaling": self.derivative_scaling,
+            "initial_align_y_scale": self.initial_align_y_scale,
         }
 
 
@@ -47,6 +58,10 @@ class RobotCalibrationConfig:
     def __init__(self, vision_service, robot_service, navigation_service,
                  height_measuring_service, required_ids, z_target,
                  robot_tool, robot_user,
+                 candidate_ids=None,
+                 min_targets: int | None = None,
+                 max_targets: int | None = None,
+                 min_target_separation_px: float = 120.0,
                  velocity: int = 30, acceleration: int = 10,
                  run_height_measurement: bool = True,
                  settings_service=None,
@@ -74,6 +89,10 @@ class RobotCalibrationConfig:
         self.navigation_service = navigation_service
         self.height_measuring_service = height_measuring_service
         self.required_ids = required_ids
+        self.candidate_ids = list(candidate_ids) if candidate_ids else []
+        self.min_targets = min_targets
+        self.max_targets = max_targets
+        self.min_target_separation_px = min_target_separation_px
         self.z_target = z_target
         self.axis_mapping_config = axis_mapping_config
         self.debug = debug

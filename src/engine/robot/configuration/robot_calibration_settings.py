@@ -13,6 +13,7 @@ class AdaptiveMovementConfig:
     k: float = 2.0
     derivative_scaling: float = 0.5
     fast_iteration_wait: float = 1.0
+    initial_align_y_scale: float = 1.0
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'AdaptiveMovementConfig':
@@ -24,6 +25,7 @@ class AdaptiveMovementConfig:
             k=data.get("k", 2.0),
             derivative_scaling=data.get("derivative_scaling", 0.5),
             fast_iteration_wait=data.get("fast_iteration_wait", 1.0),
+            initial_align_y_scale=data.get("initial_align_y_scale", 1.0),
         )
 
     def to_dict(self) -> Dict:
@@ -35,6 +37,7 @@ class AdaptiveMovementConfig:
             "k": self.k,
             "derivative_scaling": self.derivative_scaling,
             "fast_iteration_wait": self.fast_iteration_wait,
+            "initial_align_y_scale": self.initial_align_y_scale,
         }
 
 
@@ -138,6 +141,10 @@ class RobotCalibrationSettings:
     run_height_measurement: bool = True
     z_target: int = 300
     required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
+    candidate_ids: List[int] = field(default_factory=list)
+    min_targets: int = 4
+    max_targets: int = 0
+    min_target_separation_px: float = 120.0
     velocity: int = 30
     acceleration: int = 10
 
@@ -152,6 +159,10 @@ class RobotCalibrationSettings:
             run_height_measurement=bool(data.get("run_height_measurement", True)),
             z_target=data.get("z_target", 300),
             required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
+            candidate_ids=data.get("candidate_ids", []),
+            min_targets=int(data.get("min_targets", 4)),
+            max_targets=int(data.get("max_targets", 0)),
+            min_target_separation_px=float(data.get("min_target_separation_px", 120.0)),
             velocity=int(data.get("velocity", 30)),
             acceleration=int(data.get("acceleration", 10)),
         )
@@ -164,6 +175,10 @@ class RobotCalibrationSettings:
             "run_height_measurement": self.run_height_measurement,
             "z_target": self.z_target,
             "required_ids": self.required_ids,
+            "candidate_ids": self.candidate_ids,
+            "min_targets": self.min_targets,
+            "max_targets": self.max_targets,
+            "min_target_separation_px": self.min_target_separation_px,
             "velocity": self.velocity,
             "acceleration": self.acceleration,
         }

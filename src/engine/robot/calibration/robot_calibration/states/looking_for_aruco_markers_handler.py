@@ -10,7 +10,9 @@ import threading
 import queue
 import numpy as np
 from collections import defaultdict
+from src.engine.robot.calibration.robot_calibration.overlay import draw_live_overlay
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
+from src.engine.robot.calibration.robot_calibration.target_planning import build_target_selection_plan
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -47,24 +49,58 @@ def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
     if context.live_visualization:
         show_live_feed(context, all_aruco_detection_frame, 0, broadcast_image=context.broadcast_events)
 
-    # Find required ArUco markers
+    # Find candidate markers in the current frame
     result = context.calibration_vision.find_required_aruco_markers(all_aruco_detection_frame)
     frame = result.frame
-    all_found = result.found
 
-    # Save debug image
-    if context.debug:
-        cv2.imwrite("new_development/NewCalibrationMethod/aruco_detection_frame.png", frame)
-
-    if all_found:
-        _collect_averaged_reference_pixels(context, _N_REFERENCE_FRAMES)
+    averaged = _collect_averaged_reference_pixels(context, _N_REFERENCE_FRAMES)
+    if len(averaged) >= max(4, int(getattr(context, "min_targets", 4))):
+        selection_plan = build_target_selection_plan(
+            averaged,
+            image_width=context.vision_service.get_camera_width(),
+            image_height=context.vision_service.get_camera_height(),
+            min_targets=int(getattr(context, "min_targets", 4)),
+            max_targets=int(getattr(context, "max_targets", 0) or len(averaged)),
+            min_target_separation_px=float(getattr(context, "min_target_separation_px", 120.0)),
+            preferred_ids=sorted(int(marker_id) for marker_id in getattr(context, "candidate_ids", set())),
+        )
+        context.available_marker_points_px = {
+            int(marker_id): tuple(float(v) for v in point)
+            for marker_id, point in averaged.items()
+        }
+        context.target_marker_ids = list(selection_plan.selected_ids)
+        context.recovery_marker_id = (
+            int(context.target_marker_ids[0]) if context.target_marker_ids else None
+        )
+        context.marker_neighbor_ids = selection_plan.neighbor_ids
+        context.target_selection_report = selection_plan.report
+        context.failed_target_ids.clear()
+        context.skipped_target_ids.clear()
+        context.calibration_vision.detected_ids = set(averaged)
+        context.calibration_vision.marker_top_left_corners = dict(averaged)
+        _logger.info(
+            "Calibration target grid created: available_ids=%s preferred_available_ids=%s selected_ids=%s added_ids=%s rejected_ids=%s min_targets=%d max_targets=%d report=%s",
+            sorted(int(marker_id) for marker_id in averaged),
+            list(selection_plan.report.get("preferred_available_ids", [])),
+            context.target_marker_ids,
+            list(selection_plan.report.get("added_ids", [])),
+            list(selection_plan.report.get("rejected_ids", [])),
+            int(getattr(context, "min_targets", 4)),
+            int(getattr(context, "max_targets", 0) or len(averaged)),
+            selection_plan.report,
+        )
         return RobotCalibrationStates.ALL_ARUCO_FOUND
     else:
         # Stay in current state if not all markers found
+        _logger.info(
+            "Detected %d candidate markers; waiting for at least %d before selecting calibration targets",
+            len(averaged),
+            max(4, int(getattr(context, "min_targets", 4))),
+        )
         return RobotCalibrationStates.LOOKING_FOR_ARUCO_MARKERS
 
 
-def _collect_averaged_reference_pixels(context, n_frames: int) -> None:
+def _collect_averaged_reference_pixels(context, n_frames: int) -> dict[int, np.ndarray]:
     """
     Collect n_frames detections and replace marker_top_left_corners with the
     per-marker mean position.  Only frames where a marker is actually detected
@@ -78,7 +114,7 @@ def _collect_averaged_reference_pixels(context, n_frames: int) -> None:
         frame = context.wait_for_frame()
         if frame is None:
             break
-        per_frame = context.calibration_vision.collect_reference_sample(frame)
+        per_frame = context.calibration_vision.collect_reference_sample(frame, allowed_ids=None)
         for marker_id, pt in per_frame.items():
             samples[marker_id].append(pt)
 
@@ -89,12 +125,12 @@ def _collect_averaged_reference_pixels(context, n_frames: int) -> None:
     }
 
     if averaged:
-        context.calibration_vision.marker_top_left_corners.update(averaged)
         _logger.info(
             "Reference pixels averaged over %d frames: %s",
             n_frames,
             {k: v.tolist() for k, v in averaged.items()},
         )
+    return averaged
 
 
 def show_live_feed(context, frame, current_error_mm=None, window_name="Calibration Live Feed", draw_overlay=True, broadcast_image=False):
@@ -186,40 +222,3 @@ def stop_live_feed_thread():
         except queue.Empty:
             break
 
-
-def draw_live_overlay(context, frame, current_error_mm=None):
-    """Draw comprehensive live visualization overlay"""
-    if not context.live_visualization:
-        return frame
-
-    from src.engine.robot.calibration.robot_calibration import visualizer
-
-    # Get current state name
-    state_name = context.get_current_state_name()
-
-    # Draw image center (always visible)
-    if hasattr(context, 'debug_draw') and context.debug_draw:
-        context.debug_draw.draw_image_center(frame)
-
-    # Draw progress bar
-    progress = (context.current_marker_id / len(context.required_ids)) * 100 if context.required_ids else 0
-    visualizer.draw_progress_bar(frame, progress)
-    visualizer.draw_status_text(frame, state_name)
-
-    # Current marker info
-    if hasattr(context, 'current_marker_id') and context.required_ids:
-        required_ids_list = sorted(list(context.required_ids))
-        if context.current_marker_id < len(required_ids_list):
-            current_marker = required_ids_list[context.current_marker_id]
-            visualizer.draw_current_marker_info(frame, current_marker, context.current_marker_id, required_ids_list)
-
-    # Iteration info (during iterative alignment)
-    current_state = getattr(context.state_machine, 'current_state', None) if context.state_machine else None
-    if current_state == RobotCalibrationStates.ITERATE_ALIGNMENT:
-        visualizer.draw_iteration_info(frame, context.iteration_count, context.max_iterations)
-        
-        if current_error_mm is not None:
-            visualizer.draw_current_error_mm(frame, current_error_mm, context.alignment_threshold_mm)
-
-    visualizer.draw_progress_text(frame, progress)
-    return frame

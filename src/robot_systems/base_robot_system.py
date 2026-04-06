@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
 from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
 from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
-from src.engine.vision.homography_transformer import HomographyTransformer
+from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 from src.shared_contracts.declarations import (
     DispenseChannelDefinition,
     MovementGroupDefinition,
@@ -261,8 +261,8 @@ class BaseRobotSystem(ABC):
             return None
         robot_config = getattr(self, "_robot_config", None)
         if robot_config is None:
-            return HomographyTransformer(vision_service.camera_to_robot_matrix_path)
-        return HomographyTransformer(
+            return HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
+        return HomographyResidualTransformer(
             vision_service.camera_to_robot_matrix_path,
             camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
             camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),

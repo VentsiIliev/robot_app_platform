@@ -134,6 +134,12 @@ class RobotCalibrationService(IRobotCalibrationService):
             live_calibration = settings.get(calibration_key)
             if live_calibration is not None:
                 self._config.required_ids = live_calibration.required_ids
+                self._config.candidate_ids = getattr(live_calibration, "candidate_ids", [])
+                self._config.min_targets = getattr(live_calibration, "min_targets", None)
+                self._config.max_targets = getattr(live_calibration, "max_targets", None)
+                self._config.min_target_separation_px = float(
+                    getattr(live_calibration, "min_target_separation_px", 120.0)
+                )
                 self._config.z_target = live_calibration.z_target
                 self._config.velocity = live_calibration.velocity
                 self._config.acceleration = live_calibration.acceleration

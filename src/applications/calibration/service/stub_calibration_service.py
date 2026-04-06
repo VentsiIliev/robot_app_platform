@@ -56,9 +56,9 @@ class StubCalibrationService(ICalibrationService):
     def is_calibrated(self) -> bool:
         return False
 
-    def test_calibration(self) -> tuple[bool, str]:
-        _logger.info("Stub: test_calibration")
-        return True, "Stub: test calibration complete"
+    def test_calibration(self, model_name: str = "homography") -> tuple[bool, str]:
+        _logger.info("Stub: test_calibration model=%s", model_name)
+        return True, f"Stub: test calibration complete ({model_name})"
 
     def stop_test_calibration(self) -> None:
         _logger.info("Stub: stop_test_calibration")

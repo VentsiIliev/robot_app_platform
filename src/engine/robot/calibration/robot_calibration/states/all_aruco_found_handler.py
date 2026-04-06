@@ -24,8 +24,13 @@ def handle_all_aruco_found_state(context) -> RobotCalibrationStates:
     Returns:
         Next state to transition to
     """
-    # Store camera points for homography computation
-    context.camera_points_for_homography = context.calibration_vision.marker_top_left_corners.copy()
+    # Freeze the pre-alignment marker reference pixels for final model fitting.
+    # Iterative alignment updates live marker detections near the image center,
+    # which must not overwrite the original calibration correspondences.
+    context.camera_points_for_homography = {
+        int(marker_id): tuple(float(v) for v in top_left_corner_px)
+        for marker_id, top_left_corner_px in context.calibration_vision.marker_top_left_corners.items()
+    }
 
     # Convert marker positions from pixels to millimeters
     if context.calibration_vision.PPM is not None and context.bottom_left_chessboard_corner_px is not None:
@@ -45,9 +50,15 @@ def handle_all_aruco_found_state(context) -> RobotCalibrationStates:
         marker_top_left_corners_px=context.calibration_vision.marker_top_left_corners,
         marker_top_left_corners_mm=context.calibration_vision.marker_top_left_corners_mm,
         ppm=context.calibration_vision.PPM,
-        bottom_left_corner_px=context.bottom_left_chessboard_corner_px
+        bottom_left_corner_px=context.bottom_left_chessboard_corner_px,
+        selected_ids=list(getattr(context, "target_marker_ids", [])),
     )
 
     _logger.info(message)
+    _logger.info(
+        "Calibration targets ready: selected_ids=%s available_ids=%s",
+        list(getattr(context, "target_marker_ids", [])),
+        sorted(int(marker_id) for marker_id in context.calibration_vision.marker_top_left_corners.keys()),
+    )
 
     return RobotCalibrationStates.COMPUTE_OFFSETS

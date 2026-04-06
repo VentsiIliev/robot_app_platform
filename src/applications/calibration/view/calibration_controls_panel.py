@@ -31,6 +31,7 @@ from src.applications.calibration.view.calibration_phase_tabs import (
     RobotCalibrationTab,
     SystemCalibrationTab,
 )
+from src.applications.calibration.view.intrinsic_auto_capture_widget import IntrinsicAutoCaptureWidget
 
 
 class CalibrationControlsPanel(QWidget):
@@ -54,6 +55,7 @@ class CalibrationControlsPanel(QWidget):
 
         self.capture_btn = MaterialButton("Capture Calibration Image")
         self.capture_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
+        self.intrinsic_auto_capture = IntrinsicAutoCaptureWidget()
         self.crosshair_btn = MaterialButton("⊕  Crosshair")
         self.crosshair_btn.setStyleSheet(APP_TOGGLE_OFF_BUTTON_STYLE)
         self.magnifier_btn = MaterialButton("🔍  Magnifier")
@@ -110,6 +112,7 @@ class CalibrationControlsPanel(QWidget):
             crosshair_btn=self.crosshair_btn,
             magnifier_btn=self.magnifier_btn,
             calibrate_camera_btn=self.calibrate_camera_btn,
+            auto_capture_widget=self.intrinsic_auto_capture,
             settings_schemas=[VISION_CALIBRATION_GROUP],
         )
         self._phase_tabs.append(tab)
@@ -214,3 +217,4 @@ class CalibrationControlsPanel(QWidget):
             self.calibrate_sequence_btn,
         ):
             button.setEnabled(enabled)
+        self.intrinsic_auto_capture.setEnabled(enabled)

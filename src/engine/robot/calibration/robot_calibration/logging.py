@@ -108,6 +108,7 @@ def construct_aruco_state_log_message(
     marker_top_left_corners_mm: Optional[Dict[int, Tuple[float, float]]] = None,
     ppm: Optional[float] = None,
     bottom_left_corner_px: Optional[np.ndarray] = None,
+    selected_ids: Optional[list[int]] = None,
 ) -> str:
     """
     Construct a structured log message summarizing the ALL_ARUCO_FOUND state.
@@ -129,7 +130,10 @@ def construct_aruco_state_log_message(
         lines.append("❌ No ArUco markers detected.")
         return "\n".join(lines)
 
-    lines.append(f"✅ All required ArUco markers found: {detected_ids}")
+    sorted_detected_ids = sorted(int(marker_id) for marker_id in detected_ids)
+    lines.append(f"✅ Detected calibration candidates: {sorted_detected_ids}")
+    if selected_ids is not None:
+        lines.append(f"🎯 Selected calibration targets: {list(selected_ids)}")
 
     # Pixel-space information
     lines.append("📍 Marker top-left corners (x_pixels):")
@@ -347,7 +351,14 @@ def construct_calibration_completion_log_message(
     status,
     average_error_camera_center,
     matrix_path,
-    total_calibration_time
+    total_calibration_time,
+    *,
+    candidate_ids=None,
+    selected_ids=None,
+    used_ids=None,
+    skipped_ids=None,
+    failed_ids=None,
+    recovery_marker_id=None,
 ) -> str:
     """
     Construct a structured log message summarizing the calibration completion phase.
@@ -367,9 +378,25 @@ def construct_calibration_completion_log_message(
     lines = [
         "🎯 === ROBOT_CALIBRATION COMPLETE ===",
         f"📍 Total markers processed: {len(sorted_robot_items)}",
+    ]
+
+    if candidate_ids is not None:
+        lines.append(f"🧩 Candidate marker IDs: {list(candidate_ids)}")
+    if selected_ids is not None:
+        lines.append(f"🎯 Selected target IDs: {list(selected_ids)}")
+    if used_ids is not None:
+        lines.append(f"✅ Used marker IDs: {list(used_ids)}")
+    if skipped_ids:
+        lines.append(f"⏭️ Skipped marker IDs: {list(skipped_ids)}")
+    if failed_ids:
+        lines.append(f"⚠️ Failed marker IDs: {list(failed_ids)}")
+    if recovery_marker_id is not None:
+        lines.append(f"🛟 Recovery marker ID: {int(recovery_marker_id)}")
+
+    lines.extend([
         "",
         "🤖 Robot positions (mm):"
-    ]
+    ])
 
     for marker_id, position in sorted_robot_items:
         lines.append(f"  • ID {marker_id}: {np.round(position, 3).tolist()}")

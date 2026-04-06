@@ -1,7 +1,8 @@
 from src.applications.base.i_application_model import IApplicationModel
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
-from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.applications.calibration.service.i_calibration_service import ICalibrationService, RobotCalibrationPreview
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 
@@ -28,8 +29,26 @@ class CalibrationModel(IApplicationModel):
     def calibrate_camera(self) -> tuple[bool, str]:
         return self._service.calibrate_camera()
 
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        return self._service.get_intrinsic_capture_config()
+
+    def save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        self._service.save_intrinsic_capture_config(config)
+
+    def start_intrinsic_auto_capture(self) -> tuple[bool, str]:
+        return self._service.start_intrinsic_auto_capture()
+
+    def stop_intrinsic_auto_capture(self) -> None:
+        self._service.stop_intrinsic_auto_capture()
+
+    def is_intrinsic_auto_capture_running(self) -> bool:
+        return self._service.is_intrinsic_auto_capture_running()
+
     def calibrate_robot(self) -> tuple[bool, str]:
         return self._service.calibrate_robot()
+
+    def preview_robot_calibration(self) -> RobotCalibrationPreview:
+        return self._service.preview_robot_calibration()
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         return self._service.calibrate_camera_and_robot()
@@ -49,8 +68,8 @@ class CalibrationModel(IApplicationModel):
     def is_calibrated(self) -> bool:
         return self._service.is_calibrated()
 
-    def test_calibration(self) -> tuple[bool, str]:
-        return self._service.test_calibration()
+    def test_calibration(self, model_name: str = "homography") -> tuple[bool, str]:
+        return self._service.test_calibration(model_name)
 
     def stop_test_calibration(self) -> None:
         self._service.stop_test_calibration()

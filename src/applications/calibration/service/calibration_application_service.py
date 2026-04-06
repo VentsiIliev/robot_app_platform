@@ -4,6 +4,7 @@ import os
 import re
 import threading
 import time
+import json
 from typing import Callable, Optional, Protocol, Sequence
 
 import cv2
@@ -13,10 +14,15 @@ from src.applications.calibration_settings.calibration_settings_data import Cali
 from src.applications.calibration_settings.service.i_calibration_settings_service import (
     ICalibrationSettingsService,
 )
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import (
+    IntrinsicCaptureConfig,
+)
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
-from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.applications.calibration.service.i_calibration_service import ICalibrationService, RobotCalibrationPreview
 from src.applications.calibration.service.calibration_settings_bridge import CalibrationSettingsBridge
+from src.engine.robot.calibration.robot_calibration import metrics
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.robot.calibration.robot_calibration.target_planning import build_target_selection_plan
 from src.engine.vision.i_vision_service import IVisionService
 from src.shared_contracts.declarations import WorkAreaDefinition
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
@@ -147,6 +153,14 @@ class _ILaserOps(Protocol):
     def restore(self) -> None: ...
 
 
+class _IIntrinsicCaptureService(Protocol):
+    def start_capture(self) -> None: ...
+    def stop_capture(self) -> None: ...
+    def is_running(self) -> bool: ...
+    def get_config(self) -> IntrinsicCaptureConfig: ...
+    def save_config(self, config: IntrinsicCaptureConfig) -> None: ...
+
+
 class CalibrationApplicationService(ICalibrationService):
 
     def __init__(self, vision_service: IVisionService, process_controller: _IProcessController,
@@ -159,6 +173,7 @@ class CalibrationApplicationService(ICalibrationService):
                  calibration_settings_service: Optional[ICalibrationSettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
                  laser_ops: Optional[_ILaserOps] = None,
+                 intrinsic_capture_service: Optional[_IIntrinsicCaptureService] = None,
                  observer_group_provider: Optional[Callable[[str], str | None]] = None,
                  observer_position_provider: Optional[Callable[[str], list[float] | None]] = None,
                  use_marker_centre: bool = False,
@@ -176,6 +191,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
         self._laser_calibration_service = laser_calibration_service
         self._laser_ops = laser_ops
+        self._intrinsic_capture_service = intrinsic_capture_service
         self._observer_group_provider = observer_group_provider
         self._observer_position_provider = observer_position_provider
         self._use_marker_centre   = use_marker_centre
@@ -198,6 +214,30 @@ class CalibrationApplicationService(ICalibrationService):
             return None
         return set(self._calib_config.required_ids)
 
+    def _candidate_ids(self) -> set[int]:
+        if self._calib_config is None:
+            return set()
+        candidate_ids = getattr(self._calib_config, "candidate_ids", None)
+        if candidate_ids:
+            return {int(v) for v in candidate_ids}
+        return {int(v) for v in getattr(self._calib_config, "required_ids", [])}
+
+    def _min_targets(self) -> int:
+        if self._calib_config is None:
+            return 4
+        return max(4, int(getattr(self._calib_config, "min_targets", 4) or 4))
+
+    def _max_targets(self, default: int) -> int:
+        if self._calib_config is None:
+            return default
+        configured = int(getattr(self._calib_config, "max_targets", 0) or 0)
+        return configured if configured > 0 else default
+
+    def _min_target_separation_px(self) -> float:
+        if self._calib_config is None:
+            return 120.0
+        return float(getattr(self._calib_config, "min_target_separation_px", 120.0))
+
     def _movement_velocity(self) -> int:
         if self._calib_config is None:
             return _DEFAULT_VELOCITY
@@ -207,6 +247,66 @@ class CalibrationApplicationService(ICalibrationService):
         if self._calib_config is None:
             return _DEFAULT_ACCELERATION
         return self._calib_config.acceleration
+
+    def _load_test_calibration_report(self) -> dict | None:
+        if self._vision_service is None:
+            return None
+        matrix_path = self._vision_service.camera_to_robot_matrix_path
+        report_path = metrics.derive_calibration_artifact_paths(matrix_path)["report_path"]
+        if not os.path.isfile(report_path):
+            return None
+        with open(report_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _load_homography_residual_model(self) -> metrics.HomographyResidualModel | metrics.HomographyTPSResidualModel | None:
+        if self._vision_service is None:
+            return None
+        matrix_path = self._vision_service.camera_to_robot_matrix_path
+        residual_path = metrics.derive_calibration_artifact_paths(matrix_path)["homography_residual_path"]
+        if not os.path.isfile(residual_path):
+            return None
+        with open(residual_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        basis = payload.get("basis", "quadratic_uv")
+        if basis == "tps":
+            return metrics.HomographyTPSResidualModel(
+                homography_matrix=payload["homography_matrix"],
+                support_points=payload["support_points"],
+                dx_residuals=payload["dx_residuals"],
+                dy_residuals=payload["dy_residuals"],
+            )
+        return metrics.HomographyResidualModel(
+            homography_matrix=np.asarray(payload.get("homography_matrix", []), dtype=np.float64).reshape(3, 3),
+            dx_coeffs=np.asarray(payload.get("dx_coeffs", []), dtype=np.float64).reshape(-1),
+            dy_coeffs=np.asarray(payload.get("dy_coeffs", []), dtype=np.float64).reshape(-1),
+        )
+
+    @staticmethod
+    def _training_marker_ids_from_report(report: dict | None) -> set[int]:
+        if not report:
+            return set()
+        metadata = report.get("metadata") or {}
+        used_marker_ids = metadata.get("used_marker_ids")
+        if used_marker_ids is not None:
+            return {int(marker_id) for marker_id in used_marker_ids}
+        return {int(label) for label in report.get("point_labels", [])}
+
+    def _predict_robot_xy(self, model_name: str, px: float, py: float) -> tuple[float, float] | None:
+        residual_model = None
+        if model_name in {"homography", "homography_residual"}:
+            residual_model = self._load_homography_residual_model()
+        if model_name == "homography_residual":
+            if residual_model is None:
+                raise RuntimeError("Homography residual artifact is not available")
+            prediction = residual_model.predict([float(px), float(py)])
+            return float(prediction[0]), float(prediction[1])
+        if model_name == "homography" and residual_model is not None:
+            prediction = residual_model.predict([float(px), float(py)])
+            return float(prediction[0]), float(prediction[1])
+
+        if self._transformer is None:
+            raise RuntimeError("Homography transformer unavailable")
+        return self._transformer.transform(float(px), float(py))
 
     def _resolve_observer_pose(self, area_id: str = "") -> list[float] | None:
         resolved_area_id = str(area_id or "").strip()
@@ -236,6 +336,240 @@ class CalibrationApplicationService(ICalibrationService):
             return None
         return list(calib.robot_initial_position)
 
+    def _get_active_work_area_polygon_px(self) -> list[tuple[float, float]]:
+        area_id = self.get_active_work_area_id()
+        if not area_id or self._work_area_service is None or self._vision_service is None:
+            return []
+        points_norm = self._work_area_service.get_work_area(area_id)
+        if not points_norm:
+            return []
+        width = float(self._vision_service.get_camera_width())
+        height = float(self._vision_service.get_camera_height())
+        return [
+            (float(xn) * width, float(yn) * height)
+            for xn, yn in points_norm
+        ]
+
+    def _extract_marker_reference_point(self, marker_corners: np.ndarray) -> tuple[float, float]:
+        corners_4 = marker_corners[0]
+        if self._use_marker_centre:
+            px, py = corners_4.mean(axis=0)
+        else:
+            px, py = corners_4[0]
+        return float(px), float(py)
+
+    def _detect_marker_points(
+        self,
+        frame: np.ndarray,
+        *,
+        work_area_polygon_px: list[tuple[float, float]] | None = None,
+        exclude_ids: set[int] | None = None,
+    ) -> dict[int, np.ndarray]:
+        corners, ids, _ = self._vision_service.detect_aruco_markers(frame)
+        if ids is None or len(ids) == 0:
+            return {}
+        excluded = {int(v) for v in (exclude_ids or set())}
+        polygon = list(work_area_polygon_px or [])
+        detected_points: dict[int, np.ndarray] = {}
+        for marker_id, marker_corners in zip(ids.flatten(), corners):
+            marker_id = int(marker_id)
+            if marker_id in excluded:
+                continue
+            px, py = self._extract_marker_reference_point(marker_corners)
+            if len(polygon) >= 3 and not _point_in_polygon(px, py, polygon):
+                continue
+            detected_points[marker_id] = np.asarray([px, py], dtype=np.float32)
+        return detected_points
+
+    def _select_test_marker_ids(self, detected_points: dict[int, np.ndarray]) -> tuple[list[int], dict]:
+        if not detected_points:
+            return [], {"available_ids": [], "selected_ids": []}
+        available_ids = sorted(int(marker_id) for marker_id in detected_points.keys())
+        points_by_id = {
+            int(marker_id): np.asarray(point, dtype=np.float64).reshape(2)
+            for marker_id, point in detected_points.items()
+        }
+        all_points = np.asarray(list(points_by_id.values()), dtype=np.float64).reshape(-1, 2)
+        min_x, min_y = np.min(all_points, axis=0)
+        max_x, max_y = np.max(all_points, axis=0)
+        width = max(1.0, float(max_x - min_x))
+        height = max(1.0, float(max_y - min_y))
+
+        region_order = [
+            "top_left", "top_center", "top_right",
+            "mid_left", "center", "mid_right",
+            "bottom_left", "bottom_center", "bottom_right",
+        ]
+        region_targets = {
+            "top_left": (1.0 / 6.0, 1.0 / 6.0),
+            "top_center": (0.5, 1.0 / 6.0),
+            "top_right": (5.0 / 6.0, 1.0 / 6.0),
+            "mid_left": (1.0 / 6.0, 0.5),
+            "center": (0.5, 0.5),
+            "mid_right": (5.0 / 6.0, 0.5),
+            "bottom_left": (1.0 / 6.0, 5.0 / 6.0),
+            "bottom_center": (0.5, 5.0 / 6.0),
+            "bottom_right": (5.0 / 6.0, 5.0 / 6.0),
+        }
+
+        remaining_ids = set(available_ids)
+        selected_ids: list[int] = []
+        selected_regions: list[str] = []
+        region_candidates: dict[str, list[int]] = {}
+
+        for region in region_order:
+            tx_norm, ty_norm = region_targets[region]
+            target = np.array([min_x + tx_norm * width, min_y + ty_norm * height], dtype=np.float64)
+            ranked = sorted(
+                remaining_ids,
+                key=lambda marker_id: (
+                    float(np.linalg.norm(points_by_id[marker_id] - target)),
+                    marker_id,
+                ),
+            )
+            region_candidates[region] = ranked[:5]
+            if not ranked:
+                continue
+            chosen = ranked[0]
+            selected_ids.append(int(chosen))
+            selected_regions.append(region)
+            remaining_ids.discard(chosen)
+
+        report = {
+            "available_ids": available_ids,
+            "selected_ids": list(selected_ids),
+            "selected_regions": selected_regions,
+            "region_candidates": region_candidates,
+            "selection_strategy": "3x3_region_spread",
+        }
+        return selected_ids, report
+
+    def _detect_specific_marker_point(
+        self,
+        marker_id: int,
+        *,
+        work_area_polygon_px: list[tuple[float, float]] | None = None,
+        retries: int = 6,
+        retry_delay_s: float = 0.2,
+    ) -> tuple[float, float] | None:
+        polygon = list(work_area_polygon_px or [])
+        for _ in range(max(1, retries)):
+            if self._stop_test:
+                return None
+            frame = self._vision_service.get_latest_frame()
+            if frame is None:
+                time.sleep(retry_delay_s)
+                continue
+            corners, ids, _ = self._vision_service.detect_aruco_markers(frame)
+            if ids is None or len(ids) == 0:
+                time.sleep(retry_delay_s)
+                continue
+            for detected_id, marker_corners in zip(ids.flatten(), corners):
+                if int(detected_id) != int(marker_id):
+                    continue
+                px, py = self._extract_marker_reference_point(marker_corners)
+                if len(polygon) >= 3 and not _point_in_polygon(px, py, polygon):
+                    return None
+                return px, py
+            time.sleep(retry_delay_s)
+        return None
+
+    def _save_test_calibration_report(self, model_name: str, payload: dict) -> str | None:
+        if self._vision_service is None:
+            return None
+        matrix_path = self._vision_service.camera_to_robot_matrix_path
+        base, _ = os.path.splitext(matrix_path)
+        report_path = f"{base}_validation_{model_name}.json"
+        with open(report_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        return report_path
+
+    @staticmethod
+    def _summarize_scalar_values(values: list[float]) -> dict:
+        if not values:
+            return {"count": 0, "mean": None, "median": None, "max": None}
+        array = np.asarray(values, dtype=np.float64)
+        return {
+            "count": int(array.size),
+            "mean": float(np.mean(array)),
+            "median": float(np.median(array)),
+            "max": float(np.max(array)),
+        }
+
+    @staticmethod
+    def _draw_robot_calibration_preview(
+        image: np.ndarray,
+        detected_points: dict[int, np.ndarray],
+        selected_ids: list[int],
+        work_area_polygon_px: list[tuple[float, float]] | None = None,
+    ) -> None:
+        if image is None or image.size == 0:
+            return
+
+        selected_set = {int(marker_id) for marker_id in selected_ids}
+        polygon = list(work_area_polygon_px or [])
+
+        if len(polygon) >= 3:
+            polygon_pts = np.asarray(polygon, dtype=np.int32).reshape(-1, 1, 2)
+            cv2.polylines(image, [polygon_pts], True, (255, 120, 40), 2, cv2.LINE_AA)
+            cv2.putText(
+                image,
+                "Work area",
+                tuple(np.int32(polygon_pts[0][0] + np.array([8, -8]))),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (255, 120, 40),
+                1,
+                cv2.LINE_AA,
+            )
+
+        selected_points = [
+            np.asarray(detected_points[marker_id], dtype=np.float32).reshape(2)
+            for marker_id in selected_ids
+            if marker_id in detected_points
+        ]
+
+        if len(selected_points) >= 3:
+            pts = np.asarray(selected_points, dtype=np.float32)
+            hull = cv2.convexHull(pts.reshape(-1, 1, 2))
+            cv2.polylines(image, [np.int32(hull)], True, (30, 200, 255), 2, cv2.LINE_AA)
+
+            rect = (0, 0, max(1, image.shape[1]), max(1, image.shape[0]))
+            subdiv = cv2.Subdiv2D(rect)
+            for point in pts:
+                subdiv.insert((float(point[0]), float(point[1])))
+            for triangle in subdiv.getTriangleList():
+                tri = np.asarray(triangle, dtype=np.float32).reshape(3, 2)
+                if np.all(
+                    (tri[:, 0] >= 0)
+                    & (tri[:, 0] < image.shape[1])
+                    & (tri[:, 1] >= 0)
+                    & (tri[:, 1] < image.shape[0])
+                ):
+                    corners = np.int32(tri)
+                    cv2.line(image, tuple(corners[0]), tuple(corners[1]), (70, 160, 70), 1, cv2.LINE_AA)
+                    cv2.line(image, tuple(corners[1]), tuple(corners[2]), (70, 160, 70), 1, cv2.LINE_AA)
+                    cv2.line(image, tuple(corners[2]), tuple(corners[0]), (70, 160, 70), 1, cv2.LINE_AA)
+
+        for marker_id, point in sorted(detected_points.items()):
+            x, y = int(round(float(point[0]))), int(round(float(point[1])))
+            is_selected = marker_id in selected_set
+            color = (40, 220, 80) if is_selected else (180, 180, 180)
+            radius = 8 if is_selected else 5
+            thickness = 2 if is_selected else 1
+            cv2.circle(image, (x, y), radius, color, thickness, cv2.LINE_AA)
+            label_prefix = "T" if is_selected else "D"
+            cv2.putText(
+                image,
+                f"{label_prefix}:{marker_id}",
+                (x + 8, y - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.48,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
+
     # ── ICalibrationService ───────────────────────────────────────────
 
     def load_calibration_settings(self) -> CalibrationSettingsData | None:
@@ -250,10 +584,130 @@ class CalibrationApplicationService(ICalibrationService):
     def calibrate_camera(self) -> tuple[bool, str]:
         return self._vision_service.calibrate_camera()
 
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        if self._intrinsic_capture_service is None:
+            return IntrinsicCaptureConfig()
+        return self._intrinsic_capture_service.get_config()
+
+    def save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        if self._intrinsic_capture_service is None:
+            return
+        self._intrinsic_capture_service.save_config(config)
+
+    def start_intrinsic_auto_capture(self) -> tuple[bool, str]:
+        if self._intrinsic_capture_service is None:
+            return False, "Intrinsic auto capture service unavailable"
+        if self._intrinsic_capture_service.is_running():
+            return False, "Intrinsic auto capture already running"
+        self._intrinsic_capture_service.start_capture()
+        return True, "Intrinsic auto capture started"
+
+    def stop_intrinsic_auto_capture(self) -> None:
+        if self._intrinsic_capture_service is None:
+            return
+        self._intrinsic_capture_service.stop_capture()
+
+    def is_intrinsic_auto_capture_running(self) -> bool:
+        return bool(self._intrinsic_capture_service is not None and self._intrinsic_capture_service.is_running())
+
     def calibrate_robot(self) -> tuple[bool, str]:
         if self._process_controller is not None:
             self._process_controller.calibrate()
         return True, "Robot calibration started"
+
+    def preview_robot_calibration(self) -> RobotCalibrationPreview:
+        frame = self._vision_service.get_latest_frame()
+        if frame is None:
+            return RobotCalibrationPreview(
+                ok=False,
+                message="No camera frame available for robot calibration preview",
+            )
+
+        corners, ids, image = self._vision_service.detect_aruco_markers(frame)
+        vis = (image if image is not None else frame).copy()
+        if ids is None or len(ids) == 0:
+            return RobotCalibrationPreview(
+                ok=False,
+                message="No ArUco markers detected in the current frame",
+                frame=vis,
+                available_ids=[],
+                selected_ids=[],
+            )
+
+        candidate_ids = self._candidate_ids()
+        work_area_polygon_px = self._get_active_work_area_polygon_px()
+        detected_points: dict[int, np.ndarray] = {}
+        for marker_id, marker_corners in zip(ids.flatten(), corners):
+            marker_id = int(marker_id)
+            corners_4 = marker_corners[0]
+            ref_pt = corners_4.mean(axis=0) if self._use_marker_centre else corners_4[0]
+            if len(work_area_polygon_px) >= 3 and not _point_in_polygon(
+                float(ref_pt[0]),
+                float(ref_pt[1]),
+                work_area_polygon_px,
+            ):
+                continue
+            detected_points[marker_id] = np.asarray(ref_pt, dtype=np.float32)
+
+        if not detected_points:
+            if len(work_area_polygon_px) >= 3:
+                self._draw_robot_calibration_preview(vis, {}, [], work_area_polygon_px)
+            return RobotCalibrationPreview(
+                ok=False,
+                message=(
+                    "No configured candidate markers were detected inside the active work area"
+                    if len(work_area_polygon_px) >= 3
+                    else "No configured candidate markers were detected in the current frame"
+                ),
+                frame=vis,
+                available_ids=[],
+                selected_ids=[],
+            )
+
+        min_targets = self._min_targets()
+        max_targets = self._max_targets(default=len(detected_points))
+        selection_plan = build_target_selection_plan(
+            detected_points,
+            image_width=self._vision_service.get_camera_width(),
+            image_height=self._vision_service.get_camera_height(),
+            min_targets=min_targets,
+            max_targets=max_targets,
+            min_target_separation_px=self._min_target_separation_px(),
+            preferred_ids=sorted(candidate_ids),
+        )
+        _logger.info(
+            "Robot calibration preview target grid: available_ids=%s preferred_available_ids=%s selected_ids=%s added_ids=%s rejected_ids=%s work_area_constrained=%s",
+            sorted(int(marker_id) for marker_id in detected_points),
+            list(selection_plan.report.get("preferred_available_ids", [])),
+            list(selection_plan.selected_ids),
+            list(selection_plan.report.get("added_ids", [])),
+            list(selection_plan.report.get("rejected_ids", [])),
+            len(work_area_polygon_px) >= 3,
+        )
+        self._draw_robot_calibration_preview(
+            vis,
+            detected_points,
+            selection_plan.selected_ids,
+            work_area_polygon_px,
+        )
+        ok = len(selection_plan.selected_ids) >= min_targets
+        message = (
+            f"Detected {len(detected_points)} candidate markers"
+            f"{' inside the active work area' if len(work_area_polygon_px) >= 3 else ''}"
+            f" and selected {len(selection_plan.selected_ids)} targets"
+            if ok else
+            f"Only {len(selection_plan.selected_ids)} spread targets available; need at least {min_targets}"
+        )
+        return RobotCalibrationPreview(
+            ok=ok,
+            message=message,
+            frame=vis,
+            available_ids=sorted(detected_points),
+            selected_ids=list(selection_plan.selected_ids),
+            min_targets=min_targets,
+            max_targets=max_targets,
+            report=selection_plan.report,
+        )
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         ok, msg = self.calibrate_camera()
@@ -362,7 +816,7 @@ class CalibrationApplicationService(ICalibrationService):
         camera_matrix = os.path.join(storage_dir, "camera_calibration.npz")
         return os.path.isfile(robot_matrix) and os.path.isfile(camera_matrix)
 
-    def test_calibration(self) -> tuple[bool, str]:
+    def test_calibration(self, model_name: str = "homography") -> tuple[bool, str]:
         self._stop_test = False
 
         if self._vision_service is None:
@@ -370,72 +824,173 @@ class CalibrationApplicationService(ICalibrationService):
         if self._robot_service is None:
             return False, "Robot service unavailable"
 
-        frame = self._vision_service.get_latest_frame()
-        if frame is None:
-            return False, "No camera frame available"
+        model_name = str(model_name or "homography").strip().lower()
+        if model_name not in {"homography", "homography_residual"}:
+            return False, f"Unsupported test calibration model: {model_name}"
 
-        corners, ids, _ = self._vision_service.detect_aruco_markers(frame)
-        if ids is None or len(ids) == 0:
-            return False, "No ArUco markers detected in current frame"
+        auto_brightness_locked = False
+        auto_brightness_adjustment_locked = False
+        try:
+            if self._vision_service.get_auto_brightness_enabled():
+                auto_brightness_locked = self._vision_service.lock_auto_brightness_region()
+                if auto_brightness_locked:
+                    _logger.info("Locking auto brightness region during test calibration")
+                else:
+                    _logger.warning("Unable to lock auto brightness region during test calibration")
+                self._vision_service.lock_auto_brightness_adjustment()
+                auto_brightness_adjustment_locked = True
+                _logger.info("Freezing auto brightness adjustment during test calibration")
 
-        if self._transformer is not None:
-            self._transformer.reload()
+            frame = self._vision_service.get_latest_frame()
+            if frame is None:
+                return False, "No camera frame available"
 
-        if self._transformer is None or not self._transformer.is_available():
-            return False, "System not calibrated — run calibration first"
+            if self._transformer is not None:
+                self._transformer.reload()
+            if self._transformer is None or not self._transformer.is_available():
+                return False, "System not calibrated — run calibration first"
 
-        current_pos = self._robot_service.get_current_position()
-        if not current_pos or len(current_pos) < 6:
-            return False, "Failed to get current robot position"
+            report = self._load_test_calibration_report()
+            training_ids = self._training_marker_ids_from_report(report)
+            work_area_polygon_px = self._get_active_work_area_polygon_px()
 
-        rx, ry, rz = current_pos[3], current_pos[4], current_pos[5]
-        required = self._required_ids()
-        tool     = self._robot_tool()
-        user     = self._robot_user()
-        velocity = self._movement_velocity()
-        accel    = self._movement_acceleration()
-        z_target = self._calib_config.z_target if self._calib_config else 300
+            current_pos = self._robot_service.get_current_position()
+            if not current_pos or len(current_pos) < 6:
+                return False, "Failed to get current robot position"
 
-        _logger.info(
-            "test_calibration: tool=%d user=%d vel=%d acc=%d z=%d required=%s",
-            tool, user, velocity, accel, z_target, required,
-        )
+            rx, ry, rz = current_pos[3], current_pos[4], current_pos[5]
+            tool     = self._robot_tool()
+            user     = self._robot_user()
+            velocity = self._movement_velocity()
+            accel    = self._movement_acceleration()
+            z_target = self._calib_config.z_target if self._calib_config else 300
 
-        # Sort detections by marker ID (smallest → largest)
-        sorted_pairs = sorted(zip(ids.flatten(), corners), key=lambda p: int(p[0]))
-
-        moved = 0
-        for marker_id, marker_corners in sorted_pairs:
-            if self._stop_test:
-                return True, f"Test stopped — moved to {moved}/{len(ids)} marker(s)"
-
-            if required is not None and int(marker_id) not in required:
-                _logger.debug("Skipping marker %d — not in required_ids", marker_id)
-                continue
-
-            # Use marker centre (mean of 4 corners) or top-left corner (index 0)
-            # depending on how the homography was computed.
-            if self._use_marker_centre:
-                px, py = marker_corners[0].mean(axis=0)
-            else:
-                px, py = marker_corners[0][0]
-            x_mm, y_mm = self._transformer.transform(float(px), float(py))
-
-            _logger.info("Moving to marker %d: (%.2f, %.2f) mm", marker_id, x_mm, y_mm)
-            ok = self._robot_service.move_ptp(
-                position=[x_mm, y_mm, z_target, rx, ry, rz],
-                tool=tool,
-                user=user,
-                velocity=velocity,
-                acceleration=accel,
-                wait_to_reach=True,
+            _logger.info(
+                "test_calibration: model=%s tool=%d user=%d vel=%d acc=%d z=%d training_ids=%s",
+                model_name, tool, user, velocity, accel, z_target, sorted(training_ids),
             )
-            if not ok:
-                return False, f"Move to marker {marker_id} failed"
-            moved += 1
-            time.sleep(1)
+            if model_name == "homography":
+                effective_model = "homography_residual" if self._load_homography_residual_model() is not None else "homography"
+                _logger.info("test_calibration: effective_model=%s", effective_model)
+            detected_points = self._detect_marker_points(
+                frame,
+                work_area_polygon_px=work_area_polygon_px,
+                exclude_ids=training_ids,
+            )
+            if not detected_points:
+                return False, "No non-training ArUco markers detected in the active work area"
 
-        return True, f"Test complete — moved to {moved} marker(s)"
+            selected_test_ids, selection_report = self._select_test_marker_ids(detected_points)
+            _logger.info(
+                "Test calibration targets: available_ids=%s selected_ids=%s training_ids=%s model=%s",
+                sorted(int(marker_id) for marker_id in detected_points.keys()),
+                list(selected_test_ids),
+                sorted(int(marker_id) for marker_id in training_ids),
+                model_name,
+            )
+            if not selected_test_ids:
+                return False, "No non-training test markers selected"
+
+            marker_results: list[dict] = []
+            for marker_id in selected_test_ids:
+                if self._stop_test:
+                    break
+
+                px, py = detected_points[marker_id]
+                prediction = self._predict_robot_xy(model_name, float(px), float(py))
+                if prediction is None:
+                    marker_results.append(
+                        {
+                            "marker_id": int(marker_id),
+                            "success": False,
+                            "note": "model did not return a prediction for this marker",
+                        }
+                    )
+                    _logger.info("Skipping test marker %d — model produced no prediction", marker_id)
+                    continue
+
+                x_mm, y_mm = prediction
+                _logger.info(
+                    "Test calibration move: marker=%d model=%s predicted_xy=(%.3f, %.3f)",
+                    marker_id,
+                    model_name,
+                    x_mm,
+                    y_mm,
+                )
+                ok = self._robot_service.move_ptp(
+                    position=[x_mm, y_mm, z_target, rx, ry, rz],
+                    tool=tool,
+                    user=user,
+                    velocity=velocity,
+                    acceleration=accel,
+                    wait_to_reach=True,
+                )
+                if not ok:
+                    marker_results.append(
+                        {
+                            "marker_id": int(marker_id),
+                            "success": False,
+                            "note": "initial move failed",
+                        }
+                    )
+                    continue
+
+                time.sleep(0.8)
+                observed_point = self._detect_specific_marker_point(
+                    marker_id,
+                    work_area_polygon_px=work_area_polygon_px,
+                )
+                current_robot_pos = self._robot_service.get_current_position()
+                result = {
+                    "marker_id": int(marker_id),
+                    "success": True,
+                    "predicted_xy_mm": [float(x_mm), float(y_mm)],
+                    "observed_marker_point_px": [float(observed_point[0]), float(observed_point[1])] if observed_point is not None else None,
+                    "robot_xy_mm": (
+                        [float(current_robot_pos[0]), float(current_robot_pos[1])]
+                        if current_robot_pos and len(current_robot_pos) >= 2
+                        else None
+                    ),
+                    "note": "visual inspection target reached" if observed_point is not None else "marker not visible after move",
+                }
+                marker_results.append(result)
+                _logger.info(
+                    "Test calibration result: marker=%d success=%s observed_point=%s robot_xy=%s note=%s",
+                    marker_id,
+                    result.get("success"),
+                    result.get("observed_marker_point_px"),
+                    result.get("robot_xy_mm"),
+                    result.get("note"),
+                )
+
+            successful = [row for row in marker_results if row.get("success")]
+            summary = {
+                "tested_count": len(marker_results),
+                "successful_count": len(successful),
+                "failed_count": len(marker_results) - len(successful),
+            }
+            report_payload = {
+                "model": model_name,
+                "selected_test_ids": [int(marker_id) for marker_id in selected_test_ids],
+                "training_ids": sorted(int(marker_id) for marker_id in training_ids),
+                "selection_report": selection_report,
+                "results": marker_results,
+                "summary": summary,
+            }
+            report_path = self._save_test_calibration_report(model_name, report_payload)
+            if not successful:
+                return False, f"No test markers were reached successfully using {model_name}"
+            return True, (
+                f"Test complete using {model_name} on {len(successful)}/{len(marker_results)} markers for visual inspection"
+                + (f", report={report_path}" if report_path else "")
+            )
+        finally:
+            if auto_brightness_adjustment_locked:
+                _logger.info("Restoring adaptive auto brightness adjustment after test calibration")
+                self._vision_service.unlock_auto_brightness_adjustment()
+            if auto_brightness_locked:
+                _logger.info("Restoring dynamic auto brightness region after test calibration")
+                self._vision_service.unlock_auto_brightness_region()
 
     def stop_test_calibration(self) -> None:
         self._stop_test = True

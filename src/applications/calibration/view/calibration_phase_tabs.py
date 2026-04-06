@@ -86,6 +86,7 @@ class CameraCalibrationTab(_BaseCalibrationTab):
         crosshair_btn: QWidget,
         magnifier_btn: QWidget,
         calibrate_camera_btn: QWidget,
+        auto_capture_widget: QWidget | None,
         settings_schemas: list,
         parent=None,
     ):
@@ -102,6 +103,9 @@ class CameraCalibrationTab(_BaseCalibrationTab):
         self.add_layout(overlay_row)
         self.add_divider()
         self.add_widget(calibrate_camera_btn)
+        if auto_capture_widget is not None:
+            self.add_divider()
+            self.add_widget(auto_capture_widget)
         self.add_settings_groups(settings_schemas)
         self.add_save_button()
 
