@@ -3,6 +3,11 @@
     "Chessboard width": 32,
     "Chessboard height": 20,
     "Square size (mm)": 25.0,
+    "Reference board mode": "charuco",
+    "ChArUco board width": 33,
+    "ChArUco board height": 21,
+    "ChArUco square size (mm)": 25.0,
+    "ChArUco marker size (mm)": 18.0,
     "Skip frames": 30
   }
 }

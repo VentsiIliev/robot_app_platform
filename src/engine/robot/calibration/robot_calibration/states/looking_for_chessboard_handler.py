@@ -10,6 +10,7 @@ import os
 import cv2
 import numpy as np
 from src.engine.robot.calibration.robot_calibration.overlay import draw_image_center
+from src.engine.robot.calibration.robot_calibration.live_feed import show_live_feed
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 from src.engine.robot.calibration.robot_calibration.logging import construct_chessboard_state_log_message
 
@@ -31,6 +32,14 @@ def handle_looking_for_chessboard_state(context) -> RobotCalibrationStates:
     chessboard_frame = context.wait_for_frame()
     if chessboard_frame is None:
         return RobotCalibrationStates.CANCELLED
+
+    if context.live_visualization or context.broadcast_events:
+        show_live_feed(
+            context,
+            chessboard_frame,
+            current_error_mm=None,
+            broadcast_image=context.broadcast_events,
+        )
 
     # Find chessboard and compute pixels per millimeter
     result = context.calibration_vision.find_chessboard_and_compute_ppm(chessboard_frame)
@@ -76,10 +85,14 @@ def _log_chessboard_pose(context) -> None:
         _logger.warning("Chessboard PnP: could not load camera calibration: %s", exc)
         return
 
-    cols, rows = context.chessboard_size
-    sq = float(context.square_size_mm)
-    objp = np.zeros((cols * rows, 3), np.float32)
-    objp[:, :2] = np.mgrid[0:cols, 0:rows].T.reshape(-1, 2) * sq
+    board_obj_pts = getattr(context.calibration_vision, "original_board_object_points", None)
+    if board_obj_pts is not None:
+        objp = np.asarray(board_obj_pts, dtype=np.float32).reshape(-1, 3)
+    else:
+        cols, rows = context.chessboard_size
+        sq = float(context.square_size_mm)
+        objp = np.zeros((cols * rows, 3), np.float32)
+        objp[:, :2] = np.mgrid[0:cols, 0:rows].T.reshape(-1, 2) * sq
     img_pts = corners.reshape(-1, 2).astype(np.float32)
 
     ok, rvec, tvec = cv2.solvePnP(objp, img_pts, K, dist, flags=cv2.SOLVEPNP_ITERATIVE)

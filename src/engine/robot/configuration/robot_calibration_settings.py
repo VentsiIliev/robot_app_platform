@@ -14,6 +14,7 @@ class AdaptiveMovementConfig:
     derivative_scaling: float = 0.5
     fast_iteration_wait: float = 1.0
     initial_align_y_scale: float = 1.0
+    post_align_settle_s: float = 0.3
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'AdaptiveMovementConfig':
@@ -26,6 +27,7 @@ class AdaptiveMovementConfig:
             derivative_scaling=data.get("derivative_scaling", 0.5),
             fast_iteration_wait=data.get("fast_iteration_wait", 1.0),
             initial_align_y_scale=data.get("initial_align_y_scale", 1.0),
+            post_align_settle_s=float(data.get("post_align_settle_s", 0.3)),
         )
 
     def to_dict(self) -> Dict:
@@ -38,6 +40,7 @@ class AdaptiveMovementConfig:
             "derivative_scaling": self.derivative_scaling,
             "fast_iteration_wait": self.fast_iteration_wait,
             "initial_align_y_scale": self.initial_align_y_scale,
+            "post_align_settle_s": self.post_align_settle_s,
         }
 
 
@@ -142,9 +145,15 @@ class RobotCalibrationSettings:
     z_target: int = 300
     required_ids: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6, 8])
     candidate_ids: List[int] = field(default_factory=list)
-    min_targets: int = 4
-    max_targets: int = 0
     min_target_separation_px: float = 120.0
+    homography_target_count: int = 16
+    residual_target_count: int = 14
+    validation_target_count: int = 6
+    test_target_count: int = 10
+    auto_skip_known_unreachable_markers: bool = True
+    unreachable_marker_failure_threshold: int = 1
+    known_unreachable_marker_ids: List[int] = field(default_factory=list)
+    unreachable_marker_failure_counts: Dict[int, int] = field(default_factory=dict)
     velocity: int = 30
     acceleration: int = 10
 
@@ -160,9 +169,20 @@ class RobotCalibrationSettings:
             z_target=data.get("z_target", 300),
             required_ids=data.get("required_ids", [0, 1, 2, 3, 4, 5, 6, 8]),
             candidate_ids=data.get("candidate_ids", []),
-            min_targets=int(data.get("min_targets", 4)),
-            max_targets=int(data.get("max_targets", 0)),
             min_target_separation_px=float(data.get("min_target_separation_px", 120.0)),
+            homography_target_count=int(data.get("homography_target_count", 16)),
+            residual_target_count=int(data.get("residual_target_count", 14)),
+            validation_target_count=int(data.get("validation_target_count", 6)),
+            test_target_count=int(data.get("test_target_count", 10)),
+            auto_skip_known_unreachable_markers=bool(data.get("auto_skip_known_unreachable_markers", True)),
+            unreachable_marker_failure_threshold=int(data.get("unreachable_marker_failure_threshold", 1)),
+            known_unreachable_marker_ids=[
+                int(marker_id) for marker_id in data.get("known_unreachable_marker_ids", [])
+            ],
+            unreachable_marker_failure_counts={
+                int(marker_id): int(count)
+                for marker_id, count in (data.get("unreachable_marker_failure_counts", {}) or {}).items()
+            },
             velocity=int(data.get("velocity", 30)),
             acceleration=int(data.get("acceleration", 10)),
         )
@@ -176,9 +196,15 @@ class RobotCalibrationSettings:
             "z_target": self.z_target,
             "required_ids": self.required_ids,
             "candidate_ids": self.candidate_ids,
-            "min_targets": self.min_targets,
-            "max_targets": self.max_targets,
             "min_target_separation_px": self.min_target_separation_px,
+            "homography_target_count": self.homography_target_count,
+            "residual_target_count": self.residual_target_count,
+            "validation_target_count": self.validation_target_count,
+            "test_target_count": self.test_target_count,
+            "auto_skip_known_unreachable_markers": self.auto_skip_known_unreachable_markers,
+            "unreachable_marker_failure_threshold": self.unreachable_marker_failure_threshold,
+            "known_unreachable_marker_ids": self.known_unreachable_marker_ids,
+            "unreachable_marker_failure_counts": self.unreachable_marker_failure_counts,
             "velocity": self.velocity,
             "acceleration": self.acceleration,
         }

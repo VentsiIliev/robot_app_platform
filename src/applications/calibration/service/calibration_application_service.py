@@ -22,7 +22,10 @@ from src.applications.calibration.service.i_calibration_service import ICalibrat
 from src.applications.calibration.service.calibration_settings_bridge import CalibrationSettingsBridge
 from src.engine.robot.calibration.robot_calibration import metrics
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
-from src.engine.robot.calibration.robot_calibration.target_planning import build_target_selection_plan
+from src.engine.robot.calibration.robot_calibration.target_planning import (
+    build_partitioned_target_selection_plan,
+    build_target_selection_plan,
+)
 from src.engine.vision.i_vision_service import IVisionService
 from src.shared_contracts.declarations import WorkAreaDefinition
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
@@ -56,6 +59,12 @@ def _point_in_polygon(px: float, py: float, polygon: list[tuple[float, float]]) 
             inside = not inside
         j = i
     return inside
+
+
+def _format_marker_id_log_block(title: str, marker_ids: list[int] | tuple[int, ...] | set[int]) -> str:
+    ids = [int(v) for v in marker_ids]
+    ids_text = ", ".join(str(v) for v in ids) if ids else "-"
+    return f"{title} ({len(ids)}): [{ids_text}]"
 
 
 class _IProcessController(Protocol):
@@ -222,21 +231,40 @@ class CalibrationApplicationService(ICalibrationService):
             return {int(v) for v in candidate_ids}
         return {int(v) for v in getattr(self._calib_config, "required_ids", [])}
 
-    def _min_targets(self) -> int:
-        if self._calib_config is None:
-            return 4
-        return max(4, int(getattr(self._calib_config, "min_targets", 4) or 4))
-
-    def _max_targets(self, default: int) -> int:
-        if self._calib_config is None:
-            return default
-        configured = int(getattr(self._calib_config, "max_targets", 0) or 0)
-        return configured if configured > 0 else default
-
     def _min_target_separation_px(self) -> float:
         if self._calib_config is None:
             return 120.0
         return float(getattr(self._calib_config, "min_target_separation_px", 120.0))
+
+    def _homography_target_count(self) -> int:
+        if self._calib_config is None:
+            return 16
+        return max(4, int(getattr(self._calib_config, "homography_target_count", 16) or 16))
+
+    def _residual_target_count(self) -> int:
+        if self._calib_config is None:
+            return 10
+        return max(0, int(getattr(self._calib_config, "residual_target_count", 10) or 0))
+
+    def _validation_target_count(self) -> int:
+        if self._calib_config is None:
+            return 6
+        return max(0, int(getattr(self._calib_config, "validation_target_count", 6) or 0))
+
+    def _test_target_count(self) -> int:
+        if self._calib_config is None:
+            return 10
+        return max(1, int(getattr(self._calib_config, "test_target_count", 10) or 10))
+
+    def _known_unreachable_marker_ids(self) -> set[int]:
+        if self._calib_config is None:
+            return set()
+        if not bool(getattr(self._calib_config, "auto_skip_known_unreachable_markers", True)):
+            return set()
+        return {
+            int(marker_id)
+            for marker_id in (getattr(self._calib_config, "known_unreachable_marker_ids", []) or [])
+        }
 
     def _movement_velocity(self) -> int:
         if self._calib_config is None:
@@ -286,10 +314,34 @@ class CalibrationApplicationService(ICalibrationService):
         if not report:
             return set()
         metadata = report.get("metadata") or {}
+        used_marker_ids = metadata.get("training_marker_ids")
+        if used_marker_ids is not None:
+            return {int(marker_id) for marker_id in used_marker_ids}
         used_marker_ids = metadata.get("used_marker_ids")
         if used_marker_ids is not None:
             return {int(marker_id) for marker_id in used_marker_ids}
         return {int(label) for label in report.get("point_labels", [])}
+
+    @staticmethod
+    def _all_calibration_marker_ids_from_report(report: dict | None) -> set[int]:
+        if not report:
+            return set()
+        metadata = report.get("metadata") or {}
+        combined: set[int] = set()
+        for key in (
+            "training_marker_ids",
+            "homography_marker_ids",
+            "residual_marker_ids",
+            "validation_marker_ids",
+            "selected_target_ids",
+            "used_marker_ids",
+        ):
+            values = metadata.get(key)
+            if values is not None:
+                combined.update(int(marker_id) for marker_id in values)
+        if not combined:
+            combined.update(int(label) for label in report.get("point_labels", []))
+        return combined
 
     def _predict_robot_xy(self, model_name: str, px: float, py: float) -> tuple[float, float] | None:
         residual_model = None
@@ -381,68 +433,36 @@ class CalibrationApplicationService(ICalibrationService):
             detected_points[marker_id] = np.asarray([px, py], dtype=np.float32)
         return detected_points
 
-    def _select_test_marker_ids(self, detected_points: dict[int, np.ndarray]) -> tuple[list[int], dict]:
+    def _select_test_marker_ids(self, detected_points: dict[int, np.ndarray], *, target_count: int | None = None) -> tuple[list[int], dict]:
         if not detected_points:
             return [], {"available_ids": [], "selected_ids": []}
-        available_ids = sorted(int(marker_id) for marker_id in detected_points.keys())
-        points_by_id = {
-            int(marker_id): np.asarray(point, dtype=np.float64).reshape(2)
+        known_unreachable = self._known_unreachable_marker_ids()
+        usable_points = {
+            int(marker_id): point
             for marker_id, point in detected_points.items()
+            if int(marker_id) not in known_unreachable
         }
-        all_points = np.asarray(list(points_by_id.values()), dtype=np.float64).reshape(-1, 2)
-        min_x, min_y = np.min(all_points, axis=0)
-        max_x, max_y = np.max(all_points, axis=0)
-        width = max(1.0, float(max_x - min_x))
-        height = max(1.0, float(max_y - min_y))
-
-        region_order = [
-            "top_left", "top_center", "top_right",
-            "mid_left", "center", "mid_right",
-            "bottom_left", "bottom_center", "bottom_right",
-        ]
-        region_targets = {
-            "top_left": (1.0 / 6.0, 1.0 / 6.0),
-            "top_center": (0.5, 1.0 / 6.0),
-            "top_right": (5.0 / 6.0, 1.0 / 6.0),
-            "mid_left": (1.0 / 6.0, 0.5),
-            "center": (0.5, 0.5),
-            "mid_right": (5.0 / 6.0, 0.5),
-            "bottom_left": (1.0 / 6.0, 5.0 / 6.0),
-            "bottom_center": (0.5, 5.0 / 6.0),
-            "bottom_right": (5.0 / 6.0, 5.0 / 6.0),
-        }
-
-        remaining_ids = set(available_ids)
-        selected_ids: list[int] = []
-        selected_regions: list[str] = []
-        region_candidates: dict[str, list[int]] = {}
-
-        for region in region_order:
-            tx_norm, ty_norm = region_targets[region]
-            target = np.array([min_x + tx_norm * width, min_y + ty_norm * height], dtype=np.float64)
-            ranked = sorted(
-                remaining_ids,
-                key=lambda marker_id: (
-                    float(np.linalg.norm(points_by_id[marker_id] - target)),
-                    marker_id,
-                ),
-            )
-            region_candidates[region] = ranked[:5]
-            if not ranked:
-                continue
-            chosen = ranked[0]
-            selected_ids.append(int(chosen))
-            selected_regions.append(region)
-            remaining_ids.discard(chosen)
-
-        report = {
-            "available_ids": available_ids,
-            "selected_ids": list(selected_ids),
-            "selected_regions": selected_regions,
-            "region_candidates": region_candidates,
-            "selection_strategy": "3x3_region_spread",
-        }
-        return selected_ids, report
+        if not usable_points:
+            return [], {
+                "available_ids": sorted(int(marker_id) for marker_id in detected_points),
+                "known_unreachable_ids": sorted(known_unreachable),
+                "selected_ids": [],
+            }
+        requested = max(1, int(target_count or self._test_target_count()))
+        selection_plan = build_target_selection_plan(
+            usable_points,
+            image_width=self._vision_service.get_camera_width(),
+            image_height=self._vision_service.get_camera_height(),
+            min_targets=min(requested, len(usable_points)),
+            max_targets=min(requested, len(usable_points)),
+            min_target_separation_px=self._min_target_separation_px(),
+            preferred_ids=[],
+        )
+        report = dict(selection_plan.report)
+        report["selection_strategy"] = "spread_holdout"
+        report["requested_target_count"] = requested
+        report["known_unreachable_ids"] = sorted(known_unreachable)
+        return list(selection_plan.selected_ids), report
 
     def _detect_specific_marker_point(
         self,
@@ -502,11 +522,23 @@ class CalibrationApplicationService(ICalibrationService):
         detected_points: dict[int, np.ndarray],
         selected_ids: list[int],
         work_area_polygon_px: list[tuple[float, float]] | None = None,
+        *,
+        all_detected_points: dict[int, np.ndarray] | None = None,
+        report: dict | None = None,
     ) -> None:
         if image is None or image.size == 0:
             return
 
         selected_set = {int(marker_id) for marker_id in selected_ids}
+        all_detected_points = {
+            int(marker_id): np.asarray(point, dtype=np.float32).reshape(2)
+            for marker_id, point in (all_detected_points or detected_points).items()
+        }
+        report = dict(report or {})
+        homography_set = {int(marker_id) for marker_id in report.get("homography_ids", [])}
+        residual_set = {int(marker_id) for marker_id in report.get("residual_ids", [])}
+        validation_set = {int(marker_id) for marker_id in report.get("validation_ids", [])}
+        known_unreachable_set = {int(marker_id) for marker_id in report.get("known_unreachable_ids", [])}
         polygon = list(work_area_polygon_px or [])
 
         if len(polygon) >= 3:
@@ -551,14 +583,41 @@ class CalibrationApplicationService(ICalibrationService):
                     cv2.line(image, tuple(corners[1]), tuple(corners[2]), (70, 160, 70), 1, cv2.LINE_AA)
                     cv2.line(image, tuple(corners[2]), tuple(corners[0]), (70, 160, 70), 1, cv2.LINE_AA)
 
-        for marker_id, point in sorted(detected_points.items()):
+        for marker_id, point in sorted(all_detected_points.items()):
             x, y = int(round(float(point[0]))), int(round(float(point[1])))
+            is_candidate = marker_id in detected_points
             is_selected = marker_id in selected_set
-            color = (40, 220, 80) if is_selected else (180, 180, 180)
-            radius = 8 if is_selected else 5
-            thickness = 2 if is_selected else 1
+            if marker_id in homography_set:
+                color = (40, 220, 80)
+                label_prefix = "H"
+                radius = 8
+                thickness = 2
+            elif marker_id in residual_set:
+                color = (255, 180, 40)
+                label_prefix = "R"
+                radius = 8
+                thickness = 2
+            elif marker_id in validation_set:
+                color = (40, 180, 255)
+                label_prefix = "V"
+                radius = 8
+                thickness = 2
+            elif marker_id in known_unreachable_set:
+                color = (60, 60, 220)
+                label_prefix = "U"
+                radius = 6
+                thickness = 2
+            elif is_candidate:
+                color = (180, 180, 180)
+                label_prefix = "D"
+                radius = 5
+                thickness = 1
+            else:
+                color = (90, 90, 90)
+                label_prefix = "X"
+                radius = 4
+                thickness = 1
             cv2.circle(image, (x, y), radius, color, thickness, cv2.LINE_AA)
-            label_prefix = "T" if is_selected else "D"
             cv2.putText(
                 image,
                 f"{label_prefix}:{marker_id}",
@@ -636,11 +695,13 @@ class CalibrationApplicationService(ICalibrationService):
 
         candidate_ids = self._candidate_ids()
         work_area_polygon_px = self._get_active_work_area_polygon_px()
+        all_detected_points: dict[int, np.ndarray] = {}
         detected_points: dict[int, np.ndarray] = {}
         for marker_id, marker_corners in zip(ids.flatten(), corners):
             marker_id = int(marker_id)
             corners_4 = marker_corners[0]
             ref_pt = corners_4.mean(axis=0) if self._use_marker_centre else corners_4[0]
+            all_detected_points[marker_id] = np.asarray(ref_pt, dtype=np.float32)
             if len(work_area_polygon_px) >= 3 and not _point_in_polygon(
                 float(ref_pt[0]),
                 float(ref_pt[1]),
@@ -662,51 +723,112 @@ class CalibrationApplicationService(ICalibrationService):
                 frame=vis,
                 available_ids=[],
                 selected_ids=[],
+                report={
+                    "all_detected_ids": sorted(all_detected_points),
+                    "all_detected_count": len(all_detected_points),
+                    "in_work_area_count": 0,
+                },
             )
 
-        min_targets = self._min_targets()
-        max_targets = self._max_targets(default=len(detected_points))
-        selection_plan = build_target_selection_plan(
-            detected_points,
+        required_total = (
+            self._homography_target_count()
+            + self._residual_target_count()
+            + self._validation_target_count()
+        )
+        known_unreachable = self._known_unreachable_marker_ids()
+        usable_detected_points = {
+            int(marker_id): point
+            for marker_id, point in detected_points.items()
+            if int(marker_id) not in known_unreachable
+        }
+        if not usable_detected_points:
+            self._draw_robot_calibration_preview(
+                vis,
+                {},
+                [],
+                work_area_polygon_px,
+                all_detected_points=all_detected_points,
+                report={"known_unreachable_ids": sorted(known_unreachable)},
+            )
+            return RobotCalibrationPreview(
+                ok=False,
+                message="All detected candidate markers are currently marked as known unreachable",
+                frame=vis,
+                available_ids=[],
+                selected_ids=[],
+                report={
+                    "all_detected_ids": sorted(all_detected_points),
+                    "all_detected_count": len(all_detected_points),
+                    "in_work_area_count": len(detected_points),
+                    "known_unreachable_ids": sorted(known_unreachable),
+                },
+            )
+        selection_plan = build_partitioned_target_selection_plan(
+            usable_detected_points,
             image_width=self._vision_service.get_camera_width(),
             image_height=self._vision_service.get_camera_height(),
-            min_targets=min_targets,
-            max_targets=max_targets,
+            homography_targets=self._homography_target_count(),
+            residual_targets=self._residual_target_count(),
+            validation_targets=self._validation_target_count(),
             min_target_separation_px=self._min_target_separation_px(),
             preferred_ids=sorted(candidate_ids),
         )
         _logger.info(
-            "Robot calibration preview target grid: available_ids=%s preferred_available_ids=%s selected_ids=%s added_ids=%s rejected_ids=%s work_area_constrained=%s",
-            sorted(int(marker_id) for marker_id in detected_points),
-            list(selection_plan.report.get("preferred_available_ids", [])),
+            "Robot calibration preview target grid: available_ids=%s auto_skipped_known_unreachable_ids=%s homography_ids=%s residual_ids=%s validation_ids=%s execution_ids=%s work_area_constrained=%s",
+            sorted(int(marker_id) for marker_id in usable_detected_points),
+            sorted(int(marker_id) for marker_id in known_unreachable if marker_id in detected_points),
+            list(selection_plan.homography_ids or []),
+            list(selection_plan.residual_ids or []),
+            list(selection_plan.validation_ids or []),
             list(selection_plan.selected_ids),
-            list(selection_plan.report.get("added_ids", [])),
-            list(selection_plan.report.get("rejected_ids", [])),
             len(work_area_polygon_px) >= 3,
+        )
+        _logger.info(
+            "Robot calibration preview details:\n%s\n%s\n%s\n%s\n%s\n%s\n%s",
+            _format_marker_id_log_block("Homography", selection_plan.homography_ids or []),
+            _format_marker_id_log_block("Residual", selection_plan.residual_ids or []),
+            _format_marker_id_log_block("Validation", selection_plan.validation_ids or []),
+            _format_marker_id_log_block("Selected total", selection_plan.selected_ids),
+            _format_marker_id_log_block("In work area", sorted(int(marker_id) for marker_id in detected_points)),
+            _format_marker_id_log_block("Known unreachable", sorted(int(marker_id) for marker_id in known_unreachable)),
+            _format_marker_id_log_block("All detected", sorted(int(marker_id) for marker_id in all_detected_points)),
         )
         self._draw_robot_calibration_preview(
             vis,
-            detected_points,
+            usable_detected_points,
             selection_plan.selected_ids,
             work_area_polygon_px,
+            all_detected_points=all_detected_points,
+            report={
+                **selection_plan.report,
+                "known_unreachable_ids": sorted(known_unreachable),
+            },
         )
-        ok = len(selection_plan.selected_ids) >= min_targets
+        ok = (
+            len(selection_plan.homography_ids or []) >= self._homography_target_count()
+            and len(selection_plan.residual_ids or []) >= self._residual_target_count()
+            and len(selection_plan.validation_ids or []) >= self._validation_target_count()
+        )
         message = (
             f"Detected {len(detected_points)} candidate markers"
             f"{' inside the active work area' if len(work_area_polygon_px) >= 3 else ''}"
             f" and selected {len(selection_plan.selected_ids)} targets"
             if ok else
-            f"Only {len(selection_plan.selected_ids)} spread targets available; need at least {min_targets}"
+            f"Only {len(selection_plan.selected_ids)} targets available; need H={self._homography_target_count()}, R={self._residual_target_count()}, V={self._validation_target_count()} (total {required_total})"
         )
         return RobotCalibrationPreview(
             ok=ok,
             message=message,
             frame=vis,
-            available_ids=sorted(detected_points),
+            available_ids=sorted(usable_detected_points),
             selected_ids=list(selection_plan.selected_ids),
-            min_targets=min_targets,
-            max_targets=max_targets,
-            report=selection_plan.report,
+            report={
+                **selection_plan.report,
+                "all_detected_ids": sorted(all_detected_points),
+                "all_detected_count": len(all_detected_points),
+                "in_work_area_count": len(detected_points),
+                "known_unreachable_ids": sorted(known_unreachable),
+            },
         )
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
@@ -852,6 +974,7 @@ class CalibrationApplicationService(ICalibrationService):
 
             report = self._load_test_calibration_report()
             training_ids = self._training_marker_ids_from_report(report)
+            calibration_used_ids = self._all_calibration_marker_ids_from_report(report)
             work_area_polygon_px = self._get_active_work_area_polygon_px()
 
             current_pos = self._robot_service.get_current_position()
@@ -866,8 +989,8 @@ class CalibrationApplicationService(ICalibrationService):
             z_target = self._calib_config.z_target if self._calib_config else 300
 
             _logger.info(
-                "test_calibration: model=%s tool=%d user=%d vel=%d acc=%d z=%d training_ids=%s",
-                model_name, tool, user, velocity, accel, z_target, sorted(training_ids),
+                "test_calibration: model=%s tool=%d user=%d vel=%d acc=%d z=%d training_ids=%s excluded_ids=%s",
+                model_name, tool, user, velocity, accel, z_target, sorted(training_ids), sorted(calibration_used_ids),
             )
             if model_name == "homography":
                 effective_model = "homography_residual" if self._load_homography_residual_model() is not None else "homography"
@@ -875,17 +998,21 @@ class CalibrationApplicationService(ICalibrationService):
             detected_points = self._detect_marker_points(
                 frame,
                 work_area_polygon_px=work_area_polygon_px,
-                exclude_ids=training_ids,
+                exclude_ids=calibration_used_ids,
             )
             if not detected_points:
-                return False, "No non-training ArUco markers detected in the active work area"
+                return False, "No non-calibration ArUco markers detected in the active work area"
 
-            selected_test_ids, selection_report = self._select_test_marker_ids(detected_points)
+            selected_test_ids, selection_report = self._select_test_marker_ids(
+                detected_points,
+                target_count=self._test_target_count(),
+            )
             _logger.info(
-                "Test calibration targets: available_ids=%s selected_ids=%s training_ids=%s model=%s",
+                "Test calibration targets: available_ids=%s selected_ids=%s training_ids=%s excluded_ids=%s model=%s",
                 sorted(int(marker_id) for marker_id in detected_points.keys()),
                 list(selected_test_ids),
                 sorted(int(marker_id) for marker_id in training_ids),
+                sorted(int(marker_id) for marker_id in calibration_used_ids),
                 model_name,
             )
             if not selected_test_ids:
@@ -973,6 +1100,7 @@ class CalibrationApplicationService(ICalibrationService):
                 "model": model_name,
                 "selected_test_ids": [int(marker_id) for marker_id in selected_test_ids],
                 "training_ids": sorted(int(marker_id) for marker_id in training_ids),
+                "excluded_calibration_ids": sorted(int(marker_id) for marker_id in calibration_used_ids),
                 "selection_report": selection_report,
                 "results": marker_results,
                 "summary": summary,

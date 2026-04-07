@@ -139,6 +139,12 @@ User presses "Calibrate Robot"
   → publishes process state events — controller subscribes via broker
   → if process_controller is None, returns (True, "started") immediately with no robot motion
 
+Current visualization boundary for robot calibration:
+  → engine calibration can already render semantic overlay data such as current target, progress, iteration count, and current error
+  → OpenCV-window display is now isolated in `engine/robot/calibration/robot_calibration/live_feed.py`
+  → overlay drawing is isolated in `engine/robot/calibration/robot_calibration/overlay_renderer.py`
+  → this makes the next UI step straightforward: the Calibration application can consume the same live frames / status data and render them in-app instead of relying on the OpenCV debug window
+
 User presses "Calibrate Camera TCP Offset"
   → service.calibrate_camera_tcp_offset()
   → requires existing camera + robot calibration files

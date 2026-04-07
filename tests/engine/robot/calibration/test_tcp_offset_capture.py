@@ -125,6 +125,9 @@ class TestCaptureTcpOffsetForCurrentMarker(unittest.TestCase):
         ctx = MagicMock()
         ctx.required_ids = {0}
         ctx.current_marker_id = 0
+        ctx.target_plan.target_marker_ids = [0]
+        ctx.target_plan.required_ids = [0]
+        ctx.progress.current_marker_id = 0
         ctx.stop_event.is_set.return_value = False
         ctx.camera_tcp_offset_config = MagicMock(
             run_during_robot_calibration=True,
@@ -167,6 +170,9 @@ class TestCaptureTcpOffsetForCurrentMarker(unittest.TestCase):
         ctx = MagicMock()
         ctx.required_ids = {0}
         ctx.current_marker_id = 0
+        ctx.target_plan.target_marker_ids = [0]
+        ctx.target_plan.required_ids = [0]
+        ctx.progress.current_marker_id = 0
         ctx.stop_event.is_set.return_value = False
         ctx.camera_tcp_offset_config = MagicMock(
             run_during_robot_calibration=True,
@@ -192,7 +198,13 @@ class TestCaptureTcpOffsetForCurrentMarker(unittest.TestCase):
             ok = capture_tcp_offset_for_current_marker(ctx)
 
         self.assertFalse(ok)
-        restore_mock.assert_called_with(ctx, reference_pose, "restore tcp-offset reference pose after failure")
+        restore_mock.assert_called_with(
+            ctx,
+            reference_pose,
+            "restore tcp-offset reference pose after failure",
+            velocity=1,
+            acceleration=1,
+        )
         self.assertEqual(ctx.robot_positions_for_calibration[0], reference_pose)
 
 

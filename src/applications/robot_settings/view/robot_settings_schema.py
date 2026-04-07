@@ -44,8 +44,6 @@ CALIBRATION_MARKER_GROUP = SettingGroup("Marker Detection", [
     SettingField("calib_z_target",              "Z Target Height",  "spinbox",      default=300,  min_val=0,   max_val=1000,  suffix=" mm",   step=1,   step_options=[1, 10, 50]),
     SettingField("calib_required_ids",          "Required IDs",     "int_list",     default="0,1,2,3,4,5,6,8", min_val=0, max_val=255),
     SettingField("calib_candidate_ids",         "Candidate IDs",    "int_list",     default="", min_val=0, max_val=999),
-    SettingField("calib_min_targets",           "Min Targets",      "spinbox",      default=4, min_val=4, max_val=100, step=1, step_options=[1, 2, 4, 8, 12]),
-    SettingField("calib_max_targets",           "Max Targets",      "spinbox",      default=0, min_val=0, max_val=100, step=1, step_options=[0, 4, 8, 12, 16]),
     SettingField("calib_min_target_separation_px", "Min Separation", "double_spinbox", default=120.0, min_val=0.0, max_val=2000.0, decimals=1, suffix=" px", step=1.0, step_options=[1, 10, 50, 100, 150]),
     SettingField("calib_velocity",              "Velocity",         "spinbox",      default=30,   min_val=1,   max_val=1000,  suffix=" mm/s",  step=1,   step_options=[1, 5, 10, 50]),
     SettingField("calib_acceleration",          "Acceleration",     "spinbox",      default=10,   min_val=1,   max_val=1000,  suffix=" mm/s²", step=1,   step_options=[1, 5, 10, 50]),

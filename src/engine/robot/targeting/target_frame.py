@@ -31,6 +31,8 @@ class TargetFrame:
         """Return the height-correction contribution in mm at robot position (x, y)."""
         if self.height_correction is None:
             return 0.0
+
+        return 0.0
         dz = self.height_correction.predict_z(x, y)
         return dz if dz is not None else 0.0
 

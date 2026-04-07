@@ -5,23 +5,20 @@ Handles the state where the vision_service is looking for all required ArUco mar
 in the camera feed to proceed with calibration.
 """
 
-import cv2
-import threading
-import queue
-import numpy as np
 from collections import defaultdict
-from src.engine.robot.calibration.robot_calibration.overlay import draw_live_overlay
-from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
-from src.engine.robot.calibration.robot_calibration.target_planning import build_target_selection_plan
 import logging
+
+import numpy as np
+
+from src.engine.robot.calibration.robot_calibration.live_feed import show_live_feed
+from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
+from src.engine.robot.calibration.robot_calibration.target_planning import (
+    build_partitioned_target_selection_plan,
+)
+
 _logger = logging.getLogger(__name__)
 
 _N_REFERENCE_FRAMES = 10
-
-# Global thread-safe queue for live feed frames
-_live_feed_queue = queue.Queue(maxsize=2)  # Keep only latest 2 frames
-_live_feed_thread = None
-_live_feed_thread_stop = threading.Event()
 
 
 def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
@@ -54,21 +51,55 @@ def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
     frame = result.frame
 
     averaged = _collect_averaged_reference_pixels(context, _N_REFERENCE_FRAMES)
-    if len(averaged) >= max(4, int(getattr(context, "min_targets", 4))):
-        selection_plan = build_target_selection_plan(
-            averaged,
+    known_unreachable_ids = set()
+    if getattr(context, "auto_skip_known_unreachable_markers", True):
+        known_unreachable_ids = {
+            int(marker_id)
+            for marker_id in (getattr(context, "known_unreachable_marker_ids", set()) or set())
+        }
+    filtered_averaged = {
+        int(marker_id): point
+        for marker_id, point in averaged.items()
+        if int(marker_id) not in known_unreachable_ids
+    }
+    auto_skipped_ids = sorted(
+        int(marker_id) for marker_id in averaged.keys() if int(marker_id) in known_unreachable_ids
+    )
+    if auto_skipped_ids and getattr(context, "auto_skip_known_unreachable_markers", True):
+        _logger.info(
+            "Auto-skipping known-unreachable calibration markers: ids=%s",
+            auto_skipped_ids,
+        )
+    required_partition_count = max(
+        4,
+        int(getattr(context, "homography_target_count", 16)),
+    ) + max(
+        0,
+        int(getattr(context, "residual_target_count", 10)),
+    ) + max(
+        0,
+        int(getattr(context, "validation_target_count", 6)),
+    )
+    if len(filtered_averaged) >= required_partition_count:
+        selection_plan = build_partitioned_target_selection_plan(
+            filtered_averaged,
             image_width=context.vision_service.get_camera_width(),
             image_height=context.vision_service.get_camera_height(),
-            min_targets=int(getattr(context, "min_targets", 4)),
-            max_targets=int(getattr(context, "max_targets", 0) or len(averaged)),
+            homography_targets=int(getattr(context, "homography_target_count", 16)),
+            residual_targets=int(getattr(context, "residual_target_count", 10)),
+            validation_targets=int(getattr(context, "validation_target_count", 6)),
             min_target_separation_px=float(getattr(context, "min_target_separation_px", 120.0)),
             preferred_ids=sorted(int(marker_id) for marker_id in getattr(context, "candidate_ids", set())),
         )
         context.available_marker_points_px = {
             int(marker_id): tuple(float(v) for v in point)
-            for marker_id, point in averaged.items()
+            for marker_id, point in filtered_averaged.items()
         }
-        context.target_marker_ids = list(selection_plan.selected_ids)
+        context.homography_marker_ids = list(selection_plan.homography_ids or [])
+        context.residual_marker_ids = list(selection_plan.residual_ids or [])
+        context.validation_marker_ids = list(selection_plan.validation_ids or [])
+        context.execution_marker_ids = list(selection_plan.execution_ids or selection_plan.selected_ids)
+        context.target_marker_ids = list(context.execution_marker_ids)
         context.recovery_marker_id = (
             int(context.target_marker_ids[0]) if context.target_marker_ids else None
         )
@@ -76,26 +107,26 @@ def handle_looking_for_aruco_markers_state(context) -> RobotCalibrationStates:
         context.target_selection_report = selection_plan.report
         context.failed_target_ids.clear()
         context.skipped_target_ids.clear()
-        context.calibration_vision.detected_ids = set(averaged)
-        context.calibration_vision.marker_top_left_corners = dict(averaged)
+        context.calibration_vision.detected_ids = set(filtered_averaged)
+        context.calibration_vision.marker_top_left_corners = dict(filtered_averaged)
         _logger.info(
-            "Calibration target grid created: available_ids=%s preferred_available_ids=%s selected_ids=%s added_ids=%s rejected_ids=%s min_targets=%d max_targets=%d report=%s",
-            sorted(int(marker_id) for marker_id in averaged),
-            list(selection_plan.report.get("preferred_available_ids", [])),
-            context.target_marker_ids,
-            list(selection_plan.report.get("added_ids", [])),
-            list(selection_plan.report.get("rejected_ids", [])),
-            int(getattr(context, "min_targets", 4)),
-            int(getattr(context, "max_targets", 0) or len(averaged)),
+            "Calibration target grid created: available_ids=%s auto_skipped_known_unreachable_ids=%s homography_ids=%s residual_ids=%s validation_ids=%s execution_ids=%s report=%s",
+            sorted(int(marker_id) for marker_id in filtered_averaged),
+            auto_skipped_ids,
+            list(context.homography_marker_ids),
+            list(context.residual_marker_ids),
+            list(context.validation_marker_ids),
+            list(context.target_marker_ids),
             selection_plan.report,
         )
         return RobotCalibrationStates.ALL_ARUCO_FOUND
     else:
         # Stay in current state if not all markers found
         _logger.info(
-            "Detected %d candidate markers; waiting for at least %d before selecting calibration targets",
+            "Detected %d usable candidate markers after auto-skip (raw=%d); waiting for at least %d before selecting calibration targets",
+            len(filtered_averaged),
             len(averaged),
-            max(4, int(getattr(context, "min_targets", 4))),
+            required_partition_count,
         )
         return RobotCalibrationStates.LOOKING_FOR_ARUCO_MARKERS
 
@@ -131,94 +162,3 @@ def _collect_averaged_reference_pixels(context, n_frames: int) -> dict[int, np.n
             {k: v.tolist() for k, v in averaged.items()},
         )
     return averaged
-
-
-def show_live_feed(context, frame, current_error_mm=None, window_name="Calibration Live Feed", draw_overlay=True, broadcast_image=False):
-    """Show live camera feed with overlays (non-blocking)"""
-
-    # Publish to broker immediately (this is fast)
-    if broadcast_image and context.broker and context.CALIBRATION_IMAGE_TOPIC:
-        context.broker.publish(context.CALIBRATION_IMAGE_TOPIC, frame)
-
-    if not context.live_visualization:
-        return False
-
-    # Apply overlays if enabled
-    if draw_overlay:
-        display_frame = draw_live_overlay(context, frame.copy(), current_error_mm)
-    else:
-        display_frame = frame.copy()
-    
-    # Add frame to queue for background thread to display (non-blocking)
-    try:
-        # Remove old frames if queue is full
-        while _live_feed_queue.full():
-            try:
-                _live_feed_queue.get_nowait()
-            except queue.Empty:
-                break
-        _live_feed_queue.put_nowait((window_name, display_frame))
-    except queue.Full:
-        pass  # Skip if queue is full
-
-    # Start background thread if not already running
-    global _live_feed_thread
-    if _live_feed_thread is None or not _live_feed_thread.is_alive():
-        _live_feed_thread_stop.clear()
-        _live_feed_thread = threading.Thread(
-            target=_live_feed_display_worker,
-            daemon=True,
-            name="LiveFeedDisplayThread"
-        )
-        _live_feed_thread.start()
-
-    return False  # Continue
-
-
-def _live_feed_display_worker():
-    """Background worker thread that displays frames from the queue"""
-    while not _live_feed_thread_stop.is_set():
-        try:
-            # Get frame from queue with timeout
-            window_name, display_frame = _live_feed_queue.get(timeout=0.1)
-
-            # Show frame
-            cv2.imshow(window_name, display_frame)
-
-            # Check for exit key
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                _logger.info("Live feed stopped by user (q pressed)")
-                _live_feed_thread_stop.set()
-                break
-            elif key == ord('s'):
-                # Save current frame
-                import time
-                cv2.imwrite(f"live_capture_{time.time():.0f}.png", display_frame)
-            elif key == ord('p'):
-                # Pause/resume
-                cv2.waitKey(0)
-
-        except queue.Empty:
-            # No frame available, just check for key presses
-            cv2.waitKey(1)
-            continue
-        except Exception as e:
-            _logger.error(f"Error in live feed display thread: {e}")
-            break
-
-
-def stop_live_feed_thread():
-    """Stop the live feed display thread gracefully"""
-    global _live_feed_thread
-    _live_feed_thread_stop.set()
-    if _live_feed_thread and _live_feed_thread.is_alive():
-        _live_feed_thread.join(timeout=2.0)
-    _live_feed_thread = None
-    # Clear the queue
-    while not _live_feed_queue.empty():
-        try:
-            _live_feed_queue.get_nowait()
-        except queue.Empty:
-            break
-

@@ -62,6 +62,13 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
             "without a messaging service. Ensure EngineContext and SystemBuilder wiring are used."
         )
 
+    vision_calib_settings = settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+    if vision_calib_settings is None:
+        raise RuntimeError(
+            f"{robot_system.__class__.__name__} cannot build calibration service "
+            "without calibration vision settings. Ensure CommonSettingsID.CALIBRATION_VISION_SETTINGS is declared and loaded."
+        )
+
     events_config = RobotCalibrationEventsConfig(
         broker=messaging_service,
         calibration_start_topic=RobotCalibrationTopics.ROBOT_CALIBRATION_START,
@@ -77,9 +84,23 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
         height_measuring_service=height_service,
         required_ids=calib_settings.required_ids,
         candidate_ids=getattr(calib_settings, "candidate_ids", []),
-        min_targets=getattr(calib_settings, "min_targets", None),
-        max_targets=getattr(calib_settings, "max_targets", None),
         min_target_separation_px=float(getattr(calib_settings, "min_target_separation_px", 120.0)),
+        homography_target_count=int(getattr(calib_settings, "homography_target_count", 16)),
+        residual_target_count=int(getattr(calib_settings, "residual_target_count", 14)),
+        validation_target_count=int(getattr(calib_settings, "validation_target_count", 6)),
+        test_target_count=int(getattr(calib_settings, "test_target_count", 10)),
+        auto_skip_known_unreachable_markers=bool(
+            getattr(calib_settings, "auto_skip_known_unreachable_markers", True)
+        ),
+        unreachable_marker_failure_threshold=int(
+            getattr(calib_settings, "unreachable_marker_failure_threshold", 1)
+        ),
+        known_unreachable_marker_ids=list(
+            getattr(calib_settings, "known_unreachable_marker_ids", []) or []
+        ),
+        unreachable_marker_failure_counts=dict(
+            getattr(calib_settings, "unreachable_marker_failure_counts", {}) or {}
+        ),
         z_target=calib_settings.z_target,
         robot_tool=robot_settings.robot_tool,
         robot_user=robot_settings.robot_user,
@@ -92,6 +113,11 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
         robot_config_key=CommonSettingsID.ROBOT_CONFIG,
         camera_tcp_offset_config=calib_settings.camera_tcp_offset,
         axis_mapping_config=calib_settings.axis_mapping,
+        reference_board_mode=str(getattr(vision_calib_settings, "reference_board_mode", "auto") or "auto"),
+        charuco_board_width=getattr(vision_calib_settings, "charuco_board_width", None),
+        charuco_board_height=getattr(vision_calib_settings, "charuco_board_height", None),
+        charuco_square_size_mm=getattr(vision_calib_settings, "charuco_square_size_mm", None),
+        charuco_marker_size_mm=getattr(vision_calib_settings, "charuco_marker_size_mm", None),
         use_ransac=False,
         use_marker_centre=True,
         perspective_matrix=None,

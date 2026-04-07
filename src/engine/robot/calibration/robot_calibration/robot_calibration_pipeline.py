@@ -23,7 +23,18 @@ from src.engine.robot.calibration.robot_calibration.config_helpers import (
 )
 from src.engine.robot.calibration.robot_calibration.logging import (
     get_log_timing_summary, 
-    construct_calibration_completion_log_message
+)
+from src.engine.robot.calibration.robot_calibration.model_fitting import (
+    build_calibration_dataset,
+    build_calibration_model,
+)
+from src.engine.robot.calibration.robot_calibration.calibration_report import (
+    build_calibration_reports,
+    save_calibration_model_report,
+    save_homography_residual_artifact,
+)
+from src.engine.robot.calibration.robot_calibration.live_feed import (
+    stop_live_feed_thread,
 )
 from src.engine.robot.calibration.robot_calibration.robot_controller import CalibrationRobotController
 from src.engine.robot.calibration.robot_calibration.RobotCalibrationContext import RobotCalibrationContext
@@ -35,16 +46,24 @@ from src.engine.robot.calibration.robot_calibration.states.looking_for_chessboar
 from src.engine.robot.calibration.robot_calibration.states.chessboard_found_handler import handle_chessboard_found_state
 from src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler import (
     handle_looking_for_aruco_markers_state,
-    stop_live_feed_thread
 )
 from src.engine.robot.calibration.robot_calibration.states.all_aruco_found_handler import handle_all_aruco_found_state
 from src.engine.robot.calibration.robot_calibration.states.compute_offsets_handler import handle_compute_offsets_state
-from src.engine.robot.calibration.robot_calibration.states.remaining_handlers import (
+from src.engine.robot.calibration.robot_calibration.states.align_robot import (
     handle_align_robot_state,
-    handle_capture_tcp_offset_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.error_handling import (
+    set_calibration_error,
+)
+from src.engine.robot.calibration.robot_calibration.states.iterate_alignment import (
     handle_iterate_alignment_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.tcp_offset_state import (
+    handle_capture_tcp_offset_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.terminal_states import (
     handle_done_state,
-    handle_error_state
+    handle_error_state,
 )
 
 # Import state machine components
@@ -99,17 +118,43 @@ class RefactoredRobotCalibrationPipeline:
         context.vision_service = config.vision_service
         context.required_ids = set(config.required_ids)
         context.candidate_ids = set(getattr(config, "candidate_ids", []) or config.required_ids)
-        context.min_targets = max(4, int(getattr(config, "min_targets", len(context.required_ids) or 4) or 4))
-        configured_max_targets = int(getattr(config, "max_targets", 0) or 0)
-        context.max_targets = configured_max_targets if configured_max_targets > 0 else len(context.required_ids or context.candidate_ids)
         context.min_target_separation_px = float(getattr(config, "min_target_separation_px", 120.0))
+        context.homography_target_count = max(
+            4,
+            int(getattr(config, "homography_target_count", 16) or 16),
+        )
+        context.residual_target_count = max(
+            0,
+            int(getattr(config, "residual_target_count", 14) or 0),
+        )
+        context.validation_target_count = max(
+            0,
+            int(getattr(config, "validation_target_count", 6) or 0),
+        )
+        context.auto_skip_known_unreachable_markers = bool(
+            getattr(config, "auto_skip_known_unreachable_markers", True)
+        )
+        context.unreachable_marker_failure_threshold = max(
+            1,
+            int(getattr(config, "unreachable_marker_failure_threshold", 1) or 1),
+        )
+        context.known_unreachable_marker_ids = {
+            int(marker_id)
+            for marker_id in (getattr(config, "known_unreachable_marker_ids", []) or [])
+        }
+        context.unreachable_marker_failure_counts = {
+            int(marker_id): int(count)
+            for marker_id, count in (getattr(config, "unreachable_marker_failure_counts", {}) or {}).items()
+        }
         context.Z_target = config.z_target
         context.axis_mapping_config = config.axis_mapping_config
         context.use_marker_centre = getattr(config, 'use_marker_centre', False)
+        context.reference_board_mode = str(getattr(config, "reference_board_mode", "auto") or "auto").lower()
         context.use_ransac = getattr(config, 'use_ransac', False)
         context.camera_tcp_offset_config = getattr(config, "camera_tcp_offset_config", None)
         context.run_height_measurement = getattr(config, "run_height_measurement", True)
         context.settings_service = getattr(config, "settings_service", None)
+        context.calibration_settings_key = getattr(config, "calibration_settings_key", None)
         context.robot_config = getattr(config, "robot_config", None)
         context.robot_config_key = getattr(config, "robot_config_key", None)
 
@@ -123,11 +168,39 @@ class RefactoredRobotCalibrationPipeline:
             context.vision_service.get_chessboard_height()
         )
         context.square_size_mm = context.vision_service.get_square_size_mm()
+        charuco_w = getattr(config, "charuco_board_width", None)
+        charuco_h = getattr(config, "charuco_board_height", None)
+        charuco_sq = getattr(config, "charuco_square_size_mm", None)
+        context.charuco_board_size = (int(charuco_w), int(charuco_h)) if charuco_w and charuco_h else None
+        if charuco_sq:
+            context.square_size_mm = float(charuco_sq)
+        context.charuco_marker_size_mm = (
+            float(getattr(config, "charuco_marker_size_mm", 0.0) or 0.0) or None
+        )
+
+        _logger.info(
+            "Robot calibration board config loaded: reference_board_mode=%s chessboard_size=%s chessboard_square_mm=%.3f charuco_board_size=%s charuco_square_mm=%s charuco_marker_mm=%s",
+            context.reference_board_mode,
+            context.chessboard_size,
+            float(context.vision_service.get_square_size_mm()),
+            context.charuco_board_size,
+            (
+                f"{float(getattr(config, 'charuco_square_size_mm', 0.0)):.3f}"
+                if getattr(config, 'charuco_square_size_mm', None)
+                else 'fallback-to-chessboard-square'
+            ),
+            (
+                f"{float(context.charuco_marker_size_mm):.3f}"
+                if context.charuco_marker_size_mm is not None
+                else 'auto(0.75*square)'
+            ),
+        )
 
         # Adaptive movement configuration
         if adaptive_movement_config:
             context.alignment_threshold_mm = adaptive_movement_config.target_error_mm
             context.fast_iteration_wait = adaptive_movement_config.fast_iteration_wait
+            context.post_align_settle_s = getattr(adaptive_movement_config, "post_align_settle_s", 0.3)
 
         # Event configuration
         if events_config:
@@ -160,6 +233,9 @@ class RefactoredRobotCalibrationPipeline:
             context.candidate_ids,
             context.debug,
             use_marker_centre=context.use_marker_centre,
+            reference_board_mode=context.reference_board_mode,
+            charuco_board_size=context.charuco_board_size,
+            charuco_marker_size_mm=context.charuco_marker_size_mm,
         )
 
         # Z-axis calculations
@@ -233,7 +309,7 @@ class RefactoredRobotCalibrationPipeline:
             context.stop_event,
         )
         if not result.success:
-            context.calibration_error_message = result.message
+            set_calibration_error(context, result.message)
         context.image_to_robot_mapping = result.data
         time.sleep(1)
         return result.next_state
@@ -269,8 +345,9 @@ class RefactoredRobotCalibrationPipeline:
     def _handle_done(self, context):
         next_state = handle_done_state(context)
         # If we're truly done (all markers processed), stop the state machine
-        target_ids = list(getattr(context, "target_marker_ids", None) or sorted(list(context.required_ids)))
-        if next_state == RobotCalibrationStates.DONE and context.current_marker_id >= len(target_ids) - 1:
+        target_ids = list(context.target_plan.target_marker_ids or context.target_plan.required_ids)
+        current_marker_id = context.progress.current_marker_id
+        if next_state == RobotCalibrationStates.DONE and current_marker_id >= len(target_ids) - 1:
             self.calibration_state_machine.stop_execution()
         return next_state
 
@@ -290,12 +367,19 @@ class RefactoredRobotCalibrationPipeline:
         try:
             _logger.info("=== STARTING REFACTORED ROBOT_CALIBRATION RUN ===")
             _logger.info(
-                "Calibration candidates configured: candidate_ids=%s required_ids=%s min_targets=%s max_targets=%s",
-                sorted(int(marker_id) for marker_id in self.calibration_context.candidate_ids),
-                sorted(int(marker_id) for marker_id in self.calibration_context.required_ids),
-                self.calibration_context.min_targets,
-                self.calibration_context.max_targets,
+                "Calibration candidates configured: candidate_ids=%s required_ids=%s homography_target_count=%s residual_target_count=%s validation_target_count=%s",
+                list(self.calibration_context.target_plan.candidate_ids),
+                list(self.calibration_context.target_plan.required_ids),
+                self.calibration_context.homography_target_count,
+                self.calibration_context.residual_target_count,
+                self.calibration_context.validation_target_count,
             )
+            if self.calibration_context.known_unreachable_marker_ids:
+                _logger.info(
+                    "Known unreachable calibration markers will be skipped: ids=%s threshold=%s",
+                    sorted(int(marker_id) for marker_id in self.calibration_context.known_unreachable_marker_ids),
+                    self.calibration_context.unreachable_marker_failure_threshold,
+                )
 
 
 
@@ -308,6 +392,7 @@ class RefactoredRobotCalibrationPipeline:
 
             # Start total calibration timer
             self.calibration_context.total_calibration_start_time = time.time()
+            self.calibration_context.progress.total_calibration_start_time = self.calibration_context.total_calibration_start_time
 
             # Run the state machine
             self.calibration_state_machine.start_execution(delay=0.2)
@@ -330,7 +415,7 @@ class RefactoredRobotCalibrationPipeline:
 
             import traceback
             traceback.print_exc()
-            return False
+            return False, str(e)
         finally:
             # Always clean up the live feed thread when calibration ends
             _logger.info("=== ROBOT_CALIBRATION FINISHED ===")
@@ -349,112 +434,81 @@ class RefactoredRobotCalibrationPipeline:
 
         _logger.info("--- Calibration Process Complete ---")
 
-        used_marker_ids = sorted(int(marker_id) for marker_id in context.robot_positions_for_calibration.keys())
-        effective_camera_points = {
-            int(marker_id): context.camera_points_for_homography[marker_id]
-            for marker_id in used_marker_ids
-            if marker_id in context.camera_points_for_homography
-        }
-        dropped_camera_ids = sorted(
-            int(marker_id)
-            for marker_id in context.camera_points_for_homography.keys()
-            if int(marker_id) not in effective_camera_points
-        )
-        if dropped_camera_ids:
+        dataset = build_calibration_dataset(context)
+        if dataset.dropped_camera_ids:
             _logger.info(
                 "Finalizing calibration with used correspondences only: used_camera_ids=%s dropped_detected_only_ids=%s",
-                sorted(int(marker_id) for marker_id in effective_camera_points.keys()),
-                dropped_camera_ids,
+                sorted(int(marker_id) for marker_id in context.artifacts.camera_points_for_homography.keys()),
+                dataset.dropped_camera_ids,
             )
-        context.camera_points_for_homography = effective_camera_points
-
-        labels, src_pts, dst_pts = metrics.prepare_correspondence_points(
-            context.camera_points_for_homography,
-            context.robot_positions_for_calibration,
-        )
-        sorted_robot_items = [
-            (label, context.robot_positions_for_calibration[label])
-            for label in labels
-        ]
-        sorted_camera_items = [
-            (label, context.camera_points_for_homography[label])
-            for label in labels
-        ]
-
-        H_camera_center, status = metrics.compute_homography_from_arrays(
-            src_pts,
-            dst_pts,
-            use_ransac=context.use_ransac,
-        )
-
-        # Test and validate
-        average_error_camera_center, _ = metrics.test_calibration(
-            H_camera_center, src_pts, dst_pts, "transformation_to_camera_center"
-        )
-
-        model_report = metrics.build_calibration_model_report(
-            context.camera_points_for_homography,
-            context.robot_positions_for_calibration,
+        model_result = build_calibration_model(
+            dataset,
             use_ransac=context.use_ransac,
             metadata={
-                "candidate_ids": sorted(int(marker_id) for marker_id in context.candidate_ids),
-                "selected_target_ids": list(getattr(context, "target_marker_ids", []) or labels),
-                "used_marker_ids": list(labels),
-                "skipped_marker_ids": sorted(int(marker_id) for marker_id in getattr(context, "skipped_target_ids", set())),
-                "failed_marker_ids": sorted(int(marker_id) for marker_id in getattr(context, "failed_target_ids", set())),
-                "dropped_detected_only_ids": dropped_camera_ids,
-                "recovery_marker_id": getattr(context, "recovery_marker_id", None),
-                "selection_report": getattr(context, "target_selection_report", {}),
+                "candidate_ids": list(context.target_plan.candidate_ids),
+                "selected_target_ids": list(context.target_plan.target_marker_ids),
+                "homography_marker_ids": list(context.target_plan.homography_marker_ids),
+                "residual_marker_ids": list(context.target_plan.residual_marker_ids),
+                "validation_marker_ids": list(context.target_plan.validation_marker_ids),
+                "training_marker_ids": list(dataset.homography_training_ids),
+                "residual_training_marker_ids": list(dataset.residual_training_ids),
+                "used_marker_ids": list(dataset.used_marker_ids),
+                "skipped_marker_ids": list(context.artifacts.skipped_target_ids),
+                "failed_marker_ids": list(context.artifacts.failed_target_ids),
+                "dropped_detected_only_ids": list(dataset.dropped_camera_ids),
+                "known_unreachable_marker_ids": sorted(
+                    int(marker_id) for marker_id in getattr(context, "known_unreachable_marker_ids", set())
+                ),
+                "unreachable_marker_failure_counts": {
+                    int(marker_id): int(count)
+                    for marker_id, count in getattr(context, "unreachable_marker_failure_counts", {}).items()
+                },
+                "recovery_marker_id": context.target_plan.recovery_marker_id,
+                "selection_report": dict(context.target_plan.target_selection_report),
             },
-        )
-        artifact_paths = metrics.derive_calibration_artifact_paths(
-            context.vision_service.camera_to_robot_matrix_path,
         )
 
         # Save or warn based on error
-        if average_error_camera_center <= 3:
-            np.save(context.vision_service.camera_to_robot_matrix_path, H_camera_center)
+        if model_result.average_error_mm <= 3:
+            np.save(context.vision_service.camera_to_robot_matrix_path, model_result.homography_matrix)
             _logger.info(f"Homography matrix saved to {context.vision_service.camera_to_robot_matrix_path}")
         else:
-            _logger.warning(f"High reprojection error: {average_error_camera_center:.3f} mm")
+            _logger.warning(f"High reprojection error: {model_result.average_error_mm:.3f} mm")
 
         # End final state timer and log summary
         context.end_state_timer()
-        total_calibration_time = time.time() - context.total_calibration_start_time
+        total_calibration_time = time.time() - context.progress.total_calibration_start_time
 
         # Log timing summary
-        if context.state_timings:
-            summary = get_log_timing_summary(context.state_timings)
+        if context.timing.state_timings:
+            summary = get_log_timing_summary(context.timing.state_timings)
             _logger.info(summary)
 
         # Structured final log
-        completion_log = construct_calibration_completion_log_message(
-            sorted_robot_items=sorted_robot_items,
-            sorted_camera_items=sorted_camera_items,
-            H_camera_center=H_camera_center,
-            status=status,
-            average_error_camera_center=average_error_camera_center,
-            matrix_path=context.vision_service.camera_to_robot_matrix_path,
+        report_bundle = build_calibration_reports(
+            context=context,
+            model_result=model_result,
+            candidate_ids=list(context.target_plan.candidate_ids),
+            selected_ids=list(context.target_plan.target_marker_ids or model_result.labels),
+            used_ids=list(model_result.labels),
+            skipped_ids=list(context.artifacts.skipped_target_ids),
+            failed_ids=list(context.artifacts.failed_target_ids),
+            recovery_marker_id=context.target_plan.recovery_marker_id,
             total_calibration_time=total_calibration_time,
-            candidate_ids=sorted(int(marker_id) for marker_id in context.candidate_ids),
-            selected_ids=list(getattr(context, "target_marker_ids", []) or labels),
-            used_ids=list(labels),
-            skipped_ids=sorted(int(marker_id) for marker_id in getattr(context, "skipped_target_ids", set())),
-            failed_ids=sorted(int(marker_id) for marker_id in getattr(context, "failed_target_ids", set())),
-            recovery_marker_id=getattr(context, "recovery_marker_id", None),
         )
-        _logger.info(completion_log)
-        metrics.save_homography_residual_artifact(
-            model_report["artifacts"]["homography_tps_residual"],
-            artifact_paths["homography_residual_path"],
+        _logger.info(report_bundle.completion_log)
+        save_homography_residual_artifact(
+            model_result.model_report["artifacts"]["homography_tps_residual"],
+            report_bundle.artifact_paths["homography_residual_path"],
         )
-        metrics.save_calibration_model_report(
-            model_report,
-            artifact_paths["report_path"],
+        save_calibration_model_report(
+            model_result.model_report,
+            report_bundle.artifact_paths["report_path"],
         )
-        _logger.info("Homography residual artifact saved to %s", artifact_paths["homography_residual_path"])
-        _logger.info("Calibration model report saved to %s", artifact_paths["report_path"])
-        _logger.info(metrics.format_model_comparison_report(model_report))
+        _logger.info("Homography residual artifact saved to %s", report_bundle.artifact_paths["homography_residual_path"])
+        _logger.info("Calibration model report saved to %s", report_bundle.artifact_paths["report_path"])
+        _logger.info(report_bundle.model_comparison_report)
+        _logger.info(report_bundle.calibration_analysis_report)
 
         # Broadcast calibration stop event
         if context.broadcast_events:

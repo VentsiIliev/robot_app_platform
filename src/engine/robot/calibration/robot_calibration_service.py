@@ -135,10 +135,32 @@ class RobotCalibrationService(IRobotCalibrationService):
             if live_calibration is not None:
                 self._config.required_ids = live_calibration.required_ids
                 self._config.candidate_ids = getattr(live_calibration, "candidate_ids", [])
-                self._config.min_targets = getattr(live_calibration, "min_targets", None)
-                self._config.max_targets = getattr(live_calibration, "max_targets", None)
                 self._config.min_target_separation_px = float(
                     getattr(live_calibration, "min_target_separation_px", 120.0)
+                )
+                self._config.homography_target_count = int(
+                    getattr(live_calibration, "homography_target_count", 16)
+                )
+                self._config.residual_target_count = int(
+                    getattr(live_calibration, "residual_target_count", 14)
+                )
+                self._config.validation_target_count = int(
+                    getattr(live_calibration, "validation_target_count", 6)
+                )
+                self._config.test_target_count = int(
+                    getattr(live_calibration, "test_target_count", 10)
+                )
+                self._config.auto_skip_known_unreachable_markers = bool(
+                    getattr(live_calibration, "auto_skip_known_unreachable_markers", True)
+                )
+                self._config.unreachable_marker_failure_threshold = int(
+                    getattr(live_calibration, "unreachable_marker_failure_threshold", 1)
+                )
+                self._config.known_unreachable_marker_ids = list(
+                    getattr(live_calibration, "known_unreachable_marker_ids", []) or []
+                )
+                self._config.unreachable_marker_failure_counts = dict(
+                    getattr(live_calibration, "unreachable_marker_failure_counts", {}) or {}
                 )
                 self._config.z_target = live_calibration.z_target
                 self._config.velocity = live_calibration.velocity

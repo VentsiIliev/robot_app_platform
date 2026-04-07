@@ -46,6 +46,21 @@ _SUBSTITUTE_PALETTE = [
     (QColor("#00838F"), QColor(0, 131, 143, 55)),
 ]
 
+_CALIB_STATUS_BAR_STYLE = "background: #EEF3F7; border-top: 1px solid #D5DEE7;"
+_CALIB_STATUS_LABEL_STYLE = (
+    "color: #16324A; background: #F8FBFD; border: 1px solid #D4E0EA; "
+    "border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 600;"
+)
+_CALIB_STATUS_ERROR_IDLE_STYLE = _CALIB_STATUS_LABEL_STYLE
+_CALIB_STATUS_ERROR_OK_STYLE = (
+    "color: #0F5132; background: #E8F6EE; border: 1px solid #B9E2C5; "
+    "border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700;"
+)
+_CALIB_STATUS_ERROR_WARN_STYLE = (
+    "color: #842029; background: #FBEAEC; border: 1px solid #F1BCC3; "
+    "border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700;"
+)
+
 
 class _GridCameraView(CameraView):
     def __init__(self, parent=None):
@@ -361,6 +376,26 @@ class CalibrationPreviewPanel(QWidget):
         preview_layout.addWidget(caption, stretch=0)
         preview_layout.addWidget(self.preview_label, stretch=1)
 
+        status_bar = QWidget()
+        status_bar.setStyleSheet(_CALIB_STATUS_BAR_STYLE)
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(12, 8, 12, 8)
+        status_layout.setSpacing(16)
+        self.calibration_state_label = QLabel("State: idle")
+        self.calibration_target_label = QLabel("Target: -")
+        self.calibration_progress_label = QLabel("Progress: 0/0")
+        self.calibration_error_label = QLabel("Error: -")
+        for widget in (
+            self.calibration_state_label,
+            self.calibration_target_label,
+            self.calibration_progress_label,
+            self.calibration_error_label,
+        ):
+            widget.setStyleSheet(_CALIB_STATUS_LABEL_STYLE)
+            status_layout.addWidget(widget)
+        status_layout.addStretch(1)
+        preview_layout.addWidget(status_bar, stretch=0)
+
         log_card = QWidget()
         log_card.setStyleSheet(APP_CARD_STYLE)
         log_layout = QVBoxLayout(log_card)
@@ -377,3 +412,38 @@ class CalibrationPreviewPanel(QWidget):
 
         layout.addWidget(preview_card, stretch=5)
         layout.addWidget(log_card, stretch=2)
+
+    def set_robot_calibration_status(self, payload: dict | None) -> None:
+        if not payload:
+            self.calibration_state_label.setText("State: idle")
+            self.calibration_target_label.setText("Target: -")
+            self.calibration_progress_label.setText("Progress: 0/0")
+            self.calibration_error_label.setText("Error: -")
+            self.calibration_error_label.setStyleSheet(_CALIB_STATUS_ERROR_IDLE_STYLE)
+            return
+
+        state_name = str(payload.get("state_name") or "idle")
+        active_target = payload.get("active_target_id")
+        current_index = int(payload.get("current_marker_index") or 0)
+        total_targets = int(payload.get("total_targets") or 0)
+        current_error = payload.get("current_error_mm")
+        threshold = payload.get("alignment_threshold_mm")
+
+        self.calibration_state_label.setText(f"State: {state_name}")
+        self.calibration_target_label.setText(
+            f"Target: {active_target if active_target is not None else '-'}"
+        )
+        if total_targets > 0:
+            self.calibration_progress_label.setText(f"Progress: {min(current_index + 1, total_targets)}/{total_targets}")
+        else:
+            self.calibration_progress_label.setText("Progress: 0/0")
+
+        if current_error is None:
+            self.calibration_error_label.setText("Error: -")
+            self.calibration_error_label.setStyleSheet(_CALIB_STATUS_ERROR_IDLE_STYLE)
+        else:
+            self.calibration_error_label.setText(f"Error: {float(current_error):.3f} mm")
+            if threshold is not None and float(current_error) <= float(threshold):
+                self.calibration_error_label.setStyleSheet(_CALIB_STATUS_ERROR_OK_STYLE)
+            else:
+                self.calibration_error_label.setStyleSheet(_CALIB_STATUS_ERROR_WARN_STYLE)

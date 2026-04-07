@@ -61,10 +61,14 @@ class VisionTargetResolver:
 
         calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
         plane_xy = _map_plane(calibration_xy, active_mapper)
-        if _is_camera_point(point):
-            camera_xy, tcp_delta = plane_xy, (0.0, 0.0)
-        else:
-            camera_xy, tcp_delta = self._apply_tcp_delta(plane_xy, current_rz, active_mapper)
+        # Always apply the TCP-rotation delta so that the camera center lands on
+        # the target regardless of the robot's current rz.  The calibration matrix
+        # was built at rz≈0; at any other angle the 103 mm camera-to-TCP offset
+        # sweeps ~103 mm in the plane, producing a large landing error when the
+        # correction is skipped.  Camera points have offset=(0,0) so this path is
+        # equivalent to the previous behaviour at rz=0 (delta==0) while being
+        # correct for all other angles.
+        camera_xy, tcp_delta = self._apply_tcp_delta(plane_xy, current_rz, active_mapper)
 
         if point.offset_x == 0.0 and point.offset_y == 0.0:
             final_xy = camera_xy

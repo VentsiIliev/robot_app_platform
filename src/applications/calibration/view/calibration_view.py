@@ -59,6 +59,7 @@ class CalibrationView(IApplicationView):
     def __init__(self, work_area_definitions: list[WorkAreaDefinition] | None = None, parent=None):
         self._crosshair_on = False
         self._magnifier_on = False
+        self._robot_overlay_payload: dict | None = None
         self._work_area_definitions = [
             definition for definition in (work_area_definitions or []) if definition.supports_height_mapping
         ]
@@ -172,7 +173,9 @@ class CalibrationView(IApplicationView):
     def update_camera_view(self, image) -> None:
         if image is None:
             return
-        frame = image
+        frame = image.copy()
+        if self._robot_overlay_payload:
+            frame = self._draw_robot_calibration_overlay(frame, self._robot_overlay_payload)
         if self._crosshair_on:
             frame = self._draw_crosshair(frame)
         if self._magnifier_on:
@@ -181,6 +184,10 @@ class CalibrationView(IApplicationView):
         h, w, ch = rgb.shape
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
         self._preview_panel.preview_label.set_frame(QPixmap.fromImage(qimg))
+
+    def set_robot_calibration_status(self, payload: dict | None) -> None:
+        self._robot_overlay_payload = payload
+        self._preview_panel.set_robot_calibration_status(payload)
 
     def append_log(self, message: str) -> None:
         self._preview_panel.log.append(message)
@@ -241,6 +248,56 @@ class CalibrationView(IApplicationView):
 
     def get_area_grid_shape(self) -> tuple[int, int]:
         return self._area_grid_panel.get_area_grid_shape()
+
+    @staticmethod
+    def _draw_robot_calibration_overlay(image: np.ndarray, payload: dict | None) -> np.ndarray:
+        if not payload:
+            return image
+
+        frame = image.copy()
+        state_name = str(payload.get("state_name") or "")
+        active_target = payload.get("active_target_id")
+        active_target_px = payload.get("active_target_px")
+        current_error_mm = payload.get("current_error_mm")
+        current_index = int(payload.get("current_marker_index") or 0)
+        total_targets = int(payload.get("total_targets") or 0)
+        iteration = int(payload.get("iteration_count") or 0)
+        max_iterations = int(payload.get("max_iterations") or 0)
+
+        panel_h = 90
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (12, 12), (520, 12 + panel_h), (18, 26, 38), -1)
+        cv2.addWeighted(overlay, 0.45, frame, 0.55, 0.0, frame)
+
+        lines = [f"State: {state_name}"]
+        if active_target is not None:
+            lines.append(f"Target: {active_target} ({current_index + 1}/{total_targets})")
+        elif total_targets > 0:
+            lines.append(f"Progress: {current_index}/{total_targets}")
+        if current_error_mm is not None:
+            lines.append(f"Error: {float(current_error_mm):.3f} mm")
+        if max_iterations > 0:
+            lines.append(f"Iteration: {iteration}/{max_iterations}")
+
+        y = 38
+        for i, line in enumerate(lines):
+            scale = 0.7 if i == 0 else 0.62
+            thickness = 2 if i == 0 else 1
+            cv2.putText(frame, line, (24, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (235, 245, 250), thickness, cv2.LINE_AA)
+            y += 22
+
+        if active_target_px is not None:
+            tx = int(round(float(active_target_px[0])))
+            ty = int(round(float(active_target_px[1])))
+            h, w = frame.shape[:2]
+            cx, cy = w // 2, h // 2
+            cv2.circle(frame, (tx, ty), 16, (0, 215, 255), 2, cv2.LINE_AA)
+            cv2.circle(frame, (tx, ty), 4, (0, 215, 255), -1, cv2.LINE_AA)
+            cv2.line(frame, (cx, cy), (tx, ty), (0, 215, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"T{active_target}", (tx + 10, ty - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 215, 255), 2, cv2.LINE_AA)
+            cv2.drawMarker(frame, (cx, cy), (60, 255, 120), cv2.MARKER_CROSS, 22, 2, cv2.LINE_AA)
+
+        return frame
 
     @staticmethod
     def _draw_crosshair(image: np.ndarray) -> np.ndarray:

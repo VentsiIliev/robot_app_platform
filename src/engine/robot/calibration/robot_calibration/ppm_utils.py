@@ -1,7 +1,7 @@
 """
 Shared PPM (pixels-per-mm) online-refinement helpers.
 
-Used by both ``handle_iterate_alignment_state`` (remaining_handlers.py) and
+Used by both ``handle_iterate_alignment_state`` (iterate_alignment.py) and
 ``_align_marker_to_center`` (tcp_offset_capture.py) so the logic lives in
 exactly one place.
 
@@ -130,4 +130,3 @@ def adaptive_stability_wait(context, current_error_mm: float) -> float:
     return _MIN_SETTLE_S + (context.fast_iteration_wait - _MIN_SETTLE_S) * min(
         current_error_mm / _MAX_ERR_REF_MM, 1.0
     )
-

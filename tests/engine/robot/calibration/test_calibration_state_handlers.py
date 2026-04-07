@@ -11,37 +11,52 @@ import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
-from src.engine.robot.calibration.robot_calibration.states.looking_for_chessboard_handler import (
-    handle_looking_for_chessboard_state,
+from src.engine.robot.calibration.robot_calibration.RobotCalibrationContext import (
+    RobotCalibrationContext,
 )
-from src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler import (
-    handle_looking_for_aruco_markers_state,
+from src.engine.robot.calibration.robot_calibration.overlay_renderer import (
+    NoOpCalibrationRenderer,
 )
-from src.engine.robot.calibration.robot_calibration.states.remaining_handlers import (
+from src.engine.robot.calibration.robot_calibration.states.align_robot import (
     handle_align_robot_state,
-    handle_capture_tcp_offset_state,
-    handle_iterate_alignment_state,
-    handle_done_state,
 )
 from src.engine.robot.calibration.robot_calibration.states.handle_height_sample_state import (
     handle_height_sample_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.iterate_alignment import (
+    handle_iterate_alignment_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
+from src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler import (
+    handle_looking_for_aruco_markers_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.looking_for_chessboard_handler import (
+    handle_looking_for_chessboard_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.tcp_offset_state import (
+    handle_capture_tcp_offset_state,
+)
+from src.engine.robot.calibration.robot_calibration.states.terminal_states import (
+    handle_done_state,
 )
 
 
 # ── Context factory ────────────────────────────────────────────────────────────
 
 def _make_context(**overrides):
-    ctx = MagicMock()
+    ctx = RobotCalibrationContext()
     ctx.stop_event = threading.Event()
     ctx.debug = False
     ctx.live_visualization = False
     ctx.broadcast_events = False
+    ctx.calibration_renderer = NoOpCalibrationRenderer()
     ctx.iteration_count = 0
     ctx.max_iterations = 50
     ctx.alignment_threshold_mm = 1.0
     ctx.fast_iteration_wait = 0.01   # fast for tests
     ctx.required_ids = {0, 1}
+    ctx.target_plan.required_ids = [0, 1]
+    ctx.target_plan.target_marker_ids = [0, 1]
     ctx.current_marker_id = 0
     ctx.robot_positions_for_calibration = {}
     ctx.Z_target = 100.0
@@ -50,12 +65,16 @@ def _make_context(**overrides):
     ctx.image_to_robot_mapping = MagicMock()
     ctx.image_to_robot_mapping.map.return_value = (0.0, 0.0)
     ctx.calibration_robot_controller = MagicMock()
+    ctx.calibration_robot_controller.adaptive_movement_config = MagicMock(
+        initial_align_y_scale=1.0,
+    )
     ctx.calibration_robot_controller.get_current_position.return_value = [0, 0, 100, 0, 0, 0]
     ctx.calibration_robot_controller.get_calibration_position.return_value = [0, 0, 100, 0, 0, 0]
     ctx.calibration_robot_controller.move_to_position.return_value = True
     ctx.calibration_robot_controller.get_iterative_align_position.return_value = [1, 1, 100, 0, 0, 0]
     ctx.calibration_vision = MagicMock()
     ctx.calibration_vision.PPM = 10.0
+    ctx.calibration_vision.marker_top_left_corners = {}
     ctx.vision_service = MagicMock()
     ctx.vision_service.get_latest_frame.return_value = MagicMock()
     ctx.vision_service.get_camera_width.return_value = 640
@@ -82,22 +101,12 @@ def _make_context(**overrides):
     ctx.settings_service = MagicMock()
     ctx.robot_config_key = "robot_config"
 
-    # Wire helpers to mirror the real RobotCalibrationContext behaviour
-    def _wait_for_frame():
-        while True:
-            if ctx.stop_event.is_set():
-                return None
-            frame = ctx.vision_service.get_latest_frame()
-            if frame is not None:
-                return frame
-    ctx.wait_for_frame = _wait_for_frame
-
-    def _interruptible_sleep(seconds):
-        return ctx.stop_event.wait(timeout=seconds)
-    ctx.interruptible_sleep = _interruptible_sleep
-
     for k, v in overrides.items():
         setattr(ctx, k, v)
+    if ctx.target_plan.required_ids is None:
+        ctx.target_plan.required_ids = sorted(list(ctx.required_ids))
+    if not ctx.target_plan.target_marker_ids:
+        ctx.target_plan.target_marker_ids = list(ctx.target_plan.required_ids)
     return ctx
 
 
@@ -177,7 +186,23 @@ class TestLookingForArucoMarkersHandler(unittest.TestCase):
         ctx.calibration_vision.find_required_aruco_markers.return_value = MagicMock(
             found=True, frame=MagicMock()
         )
-        result = handle_looking_for_aruco_markers_state(ctx)
+        selection_plan = MagicMock(
+            homography_ids=[0],
+            residual_ids=[],
+            validation_ids=[],
+            execution_ids=[0],
+            selected_ids=[0],
+            neighbor_ids={},
+            report={},
+        )
+        with patch(
+            "src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler._collect_averaged_reference_pixels",
+            return_value={0: np.array([10.0, 10.0]), 1: np.array([20.0, 20.0]), 2: np.array([30.0, 30.0]), 3: np.array([40.0, 40.0])},
+        ), patch(
+            "src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler.build_partitioned_target_selection_plan",
+            return_value=selection_plan,
+        ):
+            result = handle_looking_for_aruco_markers_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ALL_ARUCO_FOUND)
 
     def test_markers_not_found_stays_in_looking(self):
@@ -185,7 +210,11 @@ class TestLookingForArucoMarkersHandler(unittest.TestCase):
         ctx.calibration_vision.find_required_aruco_markers.return_value = MagicMock(
             found=False, frame=MagicMock()
         )
-        result = handle_looking_for_aruco_markers_state(ctx)
+        with patch(
+            "src.engine.robot.calibration.robot_calibration.states.looking_for_aruco_markers_handler._collect_averaged_reference_pixels",
+            return_value={0: np.array([10.0, 10.0])},
+        ):
+            result = handle_looking_for_aruco_markers_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.LOOKING_FOR_ARUCO_MARKERS)
 
 
@@ -374,7 +403,7 @@ class TestDoneHandler(unittest.TestCase):
 
 class TestCaptureTcpOffsetHandler(unittest.TestCase):
 
-    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    @patch("src.engine.robot.calibration.robot_calibration.states.tcp_offset_state.capture_tcp_offset_for_current_marker")
     def test_returns_sample_height_when_capture_succeeds(self, capture_mock):
         ctx = _make_context()
         ctx.camera_tcp_offset_config.run_during_robot_calibration = True
@@ -386,7 +415,7 @@ class TestCaptureTcpOffsetHandler(unittest.TestCase):
         self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
         capture_mock.assert_called_once_with(ctx)
 
-    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    @patch("src.engine.robot.calibration.robot_calibration.states.tcp_offset_state.capture_tcp_offset_for_current_marker")
     def test_returns_error_when_capture_fails(self, capture_mock):
         ctx = _make_context()
         ctx.camera_tcp_offset_config.run_during_robot_calibration = True
@@ -397,7 +426,7 @@ class TestCaptureTcpOffsetHandler(unittest.TestCase):
 
         self.assertEqual(result, RobotCalibrationStates.SAMPLE_HEIGHT)
 
-    @patch("src.engine.robot.calibration.robot_calibration.states.remaining_handlers.capture_tcp_offset_for_current_marker")
+    @patch("src.engine.robot.calibration.robot_calibration.states.tcp_offset_state.capture_tcp_offset_for_current_marker")
     def test_skips_capture_when_max_markers_already_captured(self, capture_mock):
         ctx = _make_context()
         ctx.camera_tcp_offset_config.run_during_robot_calibration = True

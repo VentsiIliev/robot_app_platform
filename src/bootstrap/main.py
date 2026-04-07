@@ -38,8 +38,8 @@ def _pin_process_to_non_rt_cores() -> None:
 
 
 _DEV_SKIP_LOGIN = True
-_BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
-# _BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+# _BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
+_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
 
 
 
@@ -81,6 +81,11 @@ def main() -> None:
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
     logging.getLogger("RobotStatePublisher").setLevel(logging.WARNING)
     logging.getLogger("urllib3.connectionpool").setLevel(logging.WARNING)
+    logging.getLogger("HttpCellTransport").setLevel(logging.WARNING)
+    logging.getLogger("HttpCellTransport[cell=0]").setLevel(logging.WARNING)
+    logging.getLogger("HttpCellTransport[cell=1]").setLevel(logging.WARNING)
+    logging.getLogger("HttpCellTransport[cell=2]").setLevel(logging.WARNING)
+    logging.getLogger("WeightCellService").setLevel(logging.WARNING)
 
     # 1 — engine singletons
     ctx = EngineContext.build()

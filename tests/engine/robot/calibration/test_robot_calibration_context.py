@@ -76,6 +76,33 @@ class TestRobotCalibrationContextReset(unittest.TestCase):
         ctx.reset()
         self.assertIsNone(ctx.calibration_error_message)
 
+    def test_legacy_properties_proxy_to_grouped_views(self):
+        ctx = RobotCalibrationContext()
+        ctx.current_marker_id = 3
+        ctx.iteration_count = 7
+        ctx.target_marker_ids = [11, 22]
+        ctx.failed_target_ids.add(22)
+        ctx.camera_points_for_homography = {11: (100.0, 200.0)}
+
+        self.assertEqual(ctx.progress.current_marker_id, 3)
+        self.assertEqual(ctx.progress.iteration_count, 7)
+        self.assertEqual(ctx.target_plan.target_marker_ids, [11, 22])
+        self.assertEqual(ctx.artifacts.failed_target_ids, {22})
+        self.assertEqual(ctx.artifacts.camera_points_for_homography, {11: (100.0, 200.0)})
+
+    def test_grouped_views_are_initialized_with_mutable_containers(self):
+        ctx = RobotCalibrationContext()
+
+        ctx.failed_target_ids.add(1)
+        ctx.skipped_target_ids.add(2)
+        ctx.camera_tcp_offset_captured_markers.add(3)
+        ctx.camera_tcp_offset_samples.append("sample")
+
+        self.assertEqual(ctx.artifacts.failed_target_ids, {1})
+        self.assertEqual(ctx.artifacts.skipped_target_ids, {2})
+        self.assertEqual(ctx.artifacts.camera_tcp_offset_captured_markers, {3})
+        self.assertEqual(ctx.artifacts.camera_tcp_offset_samples, ["sample"])
+
 
 if __name__ == "__main__":
     unittest.main()

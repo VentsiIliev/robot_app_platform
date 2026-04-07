@@ -9,6 +9,9 @@ from src.engine.robot.calibration.robot_calibration.ppm_utils import (
     clear_ppm_probe,
     get_working_ppm,
 )
+from src.engine.robot.calibration.robot_calibration.states.error_handling import (
+    set_calibration_error,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -27,17 +30,15 @@ class CameraTcpOffsetSample:
 
 
 def capture_tcp_offset_for_current_marker(context) -> bool:
-    cfg = getattr(context, "camera_tcp_offset_config", None)
+    cfg = context.camera_tcp_offset_config
     if cfg is None or not getattr(cfg, "run_during_robot_calibration", False):
         return True
 
-    required_ids_list = list(getattr(context, "target_marker_ids", None) or sorted(list(context.required_ids)))
-    marker_id = required_ids_list[context.current_marker_id]
-    if not hasattr(context, "camera_tcp_offset_captured_markers"):
-        context.camera_tcp_offset_captured_markers = set()
+    required_ids_list = list(context.target_plan.target_marker_ids or context.target_plan.required_ids)
+    marker_id = required_ids_list[context.progress.current_marker_id]
     current_pose = context.calibration_robot_controller.get_current_position()
     if not current_pose or len(current_pose) < 6:
-        context.calibration_error_message = "Current pose unavailable before TCP offset capture"
+        set_calibration_error(context, "Current pose unavailable before TCP offset capture")
         return False
 
     reference_pose = _move_and_realign_marker(context, marker_id, cfg.approach_rz)
@@ -45,8 +46,6 @@ def capture_tcp_offset_for_current_marker(context) -> bool:
         return False
 
     context.robot_positions_for_calibration[marker_id] = list(reference_pose)
-    if not hasattr(context, "camera_tcp_offset_samples"):
-        context.camera_tcp_offset_samples = []
 
     # Snapshot ppm_working — TCP rotation fools the axis mapping so ppm_obs would be
     # systematically underestimated (≈ true_ppm × cos(rotation_angle)).  Refinement
@@ -75,7 +74,7 @@ def capture_tcp_offset_for_current_marker(context) -> bool:
                     sample_rz_deg=sample_rz,
                 )
             except ValueError as exc:
-                context.calibration_error_message = str(exc)
+                set_calibration_error(context, str(exc))
                 _restore_reference_pose(context, reference_pose, "after invalid TCP offset sample")
                 return False
             sample = CameraTcpOffsetSample(
@@ -122,10 +121,10 @@ def capture_tcp_offset_for_current_marker(context) -> bool:
 
 
 def finalize_tcp_offset_calibration(context) -> tuple[bool, str]:
-    cfg = getattr(context, "camera_tcp_offset_config", None)
+    cfg = context.camera_tcp_offset_config
     samples = [
         sample
-        for sample in getattr(context, "camera_tcp_offset_samples", [])
+        for sample in context.camera_tcp_offset_samples
         if not math.isclose(float(sample.sample_rz), float(sample.reference_rz), abs_tol=1e-9)
     ]
     min_samples = getattr(cfg, "min_samples", 3)
@@ -146,9 +145,9 @@ def finalize_tcp_offset_calibration(context) -> tuple[bool, str]:
             f"(limit {max_std:.3f}mm)"
         )
 
-    robot_config = getattr(context, "robot_config", None)
-    settings_service = getattr(context, "settings_service", None)
-    robot_config_key = getattr(context, "robot_config_key", "robot_config")
+    robot_config = context.robot_config
+    settings_service = context.settings_service
+    robot_config_key = context.robot_config_key or "robot_config"
     if robot_config is None or settings_service is None:
         return False, "Robot config/settings unavailable for saving TCP offsets"
 
@@ -218,14 +217,14 @@ def _build_tcp_offset_summary(
 
 
 def should_capture_tcp_offset_for_current_marker(context) -> bool:
-    cfg = getattr(context, "camera_tcp_offset_config", None)
+    cfg = context.camera_tcp_offset_config
     if cfg is None:
         return False
     if not getattr(cfg, "run_during_robot_calibration", False):
         return False
     if getattr(cfg, "iterations", 0) <= 0:
         return False
-    captured_markers = getattr(context, "camera_tcp_offset_captured_markers", set())
+    captured_markers = context.camera_tcp_offset_captured_markers
     max_markers = max(0, int(getattr(cfg, "max_markers_for_tcp_capture", 0)))
     if max_markers > 0 and len(captured_markers) >= max_markers:
         return False
@@ -235,10 +234,10 @@ def should_capture_tcp_offset_for_current_marker(context) -> bool:
 def _move_and_realign_marker(context, marker_id: int, target_rz: float):
     start_pose = context.calibration_robot_controller.get_current_position()
     if not start_pose or len(start_pose) < 6:
-        context.calibration_error_message = "Current pose unavailable during TCP offset capture"
+        set_calibration_error(context, "Current pose unavailable during TCP offset capture")
         return None
 
-    cfg = getattr(context, "camera_tcp_offset_config", None)
+    cfg = context.camera_tcp_offset_config
     _vel = int(getattr(cfg, "velocity", 20)) if cfg is not None else None
     _acc = int(getattr(cfg, "acceleration", 10)) if cfg is not None else None
 
@@ -262,16 +261,18 @@ def _move_and_realign_marker(context, marker_id: int, target_rz: float):
                 "(actual=%.3f, error=%.3f deg) — aborting sample to prevent corrupt data",
                 target_rz, actual_rz, rz_error,
             )
-            context.calibration_error_message = (
+            set_calibration_error(
+                context,
                 f"TCP rotation failed: target_rz={target_rz:.3f} actual_rz={actual_rz:.3f} "
-                f"(error={rz_error:.3f} deg > 2.0 deg limit)"
+                f"(error={rz_error:.3f} deg > 2.0 deg limit)",
+                log_level="warning",
             )
             return None
     else:
         _logger.warning("TCP rotation verify: could not read back robot pose after rotation move")
 
     if context.interruptible_sleep(getattr(context.camera_tcp_offset_config, "settle_time_s", 0.0)):
-        context.calibration_error_message = "TCP offset capture cancelled during settle wait"
+        set_calibration_error(context, "TCP offset capture cancelled during settle wait", log_level="warning")
         return None
 
     # Robot just rotated — its XY shifted by the TCP offset, so the probe from the
@@ -281,7 +282,7 @@ def _move_and_realign_marker(context, marker_id: int, target_rz: float):
     clear_ppm_probe(context)
     context.calibration_robot_controller.reset_derivative_state()
 
-    cfg_rz = getattr(context, "camera_tcp_offset_config", None)
+    cfg_rz = context.camera_tcp_offset_config
     reference_rz = float(getattr(cfg_rz, "approach_rz", 0.0)) if cfg_rz is not None else 0.0
     camera_rotation_deg = target_rz - reference_rz
     return _align_marker_to_center(
@@ -300,12 +301,12 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
 
     for iteration in range(1, max_iterations + 1):
         if context.stop_event.is_set():
-            context.calibration_error_message = "TCP offset capture cancelled"
+            set_calibration_error(context, "TCP offset capture cancelled", log_level="warning")
             return None
 
         frame = context.wait_for_frame()
         if frame is None:
-            context.calibration_error_message = "TCP offset capture cancelled while waiting for frame"
+            set_calibration_error(context, "TCP offset capture cancelled while waiting for frame", log_level="warning")
             return None
 
         result = context.calibration_vision.detect_specific_marker(frame, marker_id)
@@ -358,7 +359,7 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
                 preserve_current_orientation=True,
             )
         except RuntimeError as exc:
-            context.calibration_error_message = str(exc)
+            set_calibration_error(context, str(exc))
             return None
 
 
@@ -375,12 +376,14 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
             marker_id, iteration, current_error_mm, _scaled_wait, _tcp_max_wait, context.fast_iteration_wait,
         )
         if context.interruptible_sleep(_scaled_wait):
-            context.calibration_error_message = "TCP offset capture cancelled during recenter wait"
+            set_calibration_error(context, "TCP offset capture cancelled during recenter wait", log_level="warning")
             return None
 
-    context.calibration_error_message = (
+    set_calibration_error(
+        context,
         f"TCP offset capture failed: could not recenter marker {marker_id} "
-        f"after {max_iterations} iterations"
+        f"after {max_iterations} iterations",
+        log_level="warning",
     )
     return None
 
@@ -390,7 +393,7 @@ def _move_to_pose(context, pose, label: str, velocity=None, acceleration=None):
         pose, blocking=True, velocity=velocity, acceleration=acceleration
     )
     if not ok:
-        context.calibration_error_message = f"TCP offset capture move failed: {label}"
+        set_calibration_error(context, f"TCP offset capture move failed: {label}")
         return None
     return pose
 
@@ -398,7 +401,7 @@ def _move_to_pose(context, pose, label: str, velocity=None, acceleration=None):
 def _restore_reference_pose(context, reference_pose, reason: str) -> None:
     if reference_pose is None:
         return
-    cfg = getattr(context, "camera_tcp_offset_config", None)
+    cfg = context.camera_tcp_offset_config
     _vel = int(getattr(cfg, "velocity", 20)) if cfg is not None else None
     _acc = int(getattr(cfg, "acceleration", 10)) if cfg is not None else None
     restored = _move_to_pose(context, reference_pose, f"restore tcp-offset reference pose {reason}", velocity=_vel, acceleration=_acc)

@@ -104,8 +104,6 @@ class RobotCalibrationMapper:
             "calib_z_target":              settings.z_target,
             "calib_required_ids":          settings.required_ids,
             "calib_candidate_ids":         settings.candidate_ids,
-            "calib_min_targets":           settings.min_targets,
-            "calib_max_targets":           settings.max_targets,
             "calib_min_target_separation_px": settings.min_target_separation_px,
             "calib_velocity":              settings.velocity,
             "calib_acceleration":          settings.acceleration,
@@ -156,8 +154,6 @@ class RobotCalibrationMapper:
         s.z_target            = int(flat.get("calib_z_target",             s.z_target))
         s.required_ids        = flat.get("calib_required_ids",             s.required_ids)
         s.candidate_ids       = flat.get("calib_candidate_ids",            s.candidate_ids)
-        s.min_targets         = int(flat.get("calib_min_targets",          s.min_targets))
-        s.max_targets         = int(flat.get("calib_max_targets",          s.max_targets))
         s.min_target_separation_px = float(
             flat.get("calib_min_target_separation_px", s.min_target_separation_px)
         )

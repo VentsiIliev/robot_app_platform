@@ -36,6 +36,7 @@ class _Worker(QObject):
 
 class _Bridge(QObject):
     camera_frame            = pyqtSignal(object)
+    robot_calibration_status = pyqtSignal(object)
     log_received            = pyqtSignal(str)
     process_finished        = pyqtSignal(bool, str)
     camera_process_finished = pyqtSignal(bool, str)
@@ -75,6 +76,7 @@ class CalibrationController(IApplicationController):
         self._running = True
         self._active = True
         self._bridge.camera_frame.connect(self._on_camera_frame)
+        self._bridge.robot_calibration_status.connect(self._on_robot_calibration_status)
         self._bridge.log_received.connect(self._on_log_received)
         self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
         self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
@@ -129,6 +131,7 @@ class CalibrationController(IApplicationController):
 
     def _subscribe(self) -> None:
         self._sub(VisionTopics.LATEST_IMAGE, self._on_latest_image_raw)
+        self._sub(RobotCalibrationTopics.ROBOT_CALIBRATION_IMAGE, self._on_robot_calibration_image_raw)
         self._sub(RobotCalibrationTopics.ROBOT_CALIBRATION_LOG, self._on_calibration_log_raw)
         self._sub(INTRINSIC_CAPTURE_PROGRESS_TOPIC, self._on_intrinsic_capture_log_raw)
         self._sub(ProcessTopics.state(_CALIBRATION_PROCESS_ID), self._on_calibration_process_state)
@@ -141,6 +144,12 @@ class CalibrationController(IApplicationController):
 
     def _on_calibration_log_raw(self, msg) -> None:
         self._bridge.log_received.emit(str(msg))
+
+    def _on_robot_calibration_image_raw(self, msg) -> None:
+        if not isinstance(msg, dict):
+            return
+        overlay = msg.get("overlay")
+        self._bridge.robot_calibration_status.emit(overlay)
 
     def _on_intrinsic_capture_log_raw(self, msg) -> None:
         self._bridge.log_received.emit(str(msg))
@@ -155,6 +164,10 @@ class CalibrationController(IApplicationController):
     def _on_camera_frame(self, frame) -> None:
         if self._active and frame is not None:
             self._view.update_camera_view(frame)
+
+    def _on_robot_calibration_status(self, payload) -> None:
+        if self._active:
+            self._view.set_robot_calibration_status(payload)
 
     def _on_log_received(self, msg: str) -> None:
         if self._running:
@@ -275,6 +288,7 @@ class CalibrationController(IApplicationController):
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
             self._robot_process_running = False
             self._bridge.stop_btn_enabled.emit(False)
+            self._bridge.robot_calibration_status.emit(None)
             self._refresh_calibration_dependent_actions()
 
         if event.state == ProcessState.STOPPED:

@@ -18,6 +18,11 @@ class CalibrationSettingsMapper:
             "calib_vision_chessboard_width": data.vision.chessboard_width,
             "calib_vision_chessboard_height": data.vision.chessboard_height,
             "calib_vision_square_size_mm": data.vision.square_size_mm,
+            "calib_vision_reference_board_mode": data.vision.reference_board_mode,
+            "calib_vision_charuco_board_width": data.vision.charuco_board_width,
+            "calib_vision_charuco_board_height": data.vision.charuco_board_height,
+            "calib_vision_charuco_square_size_mm": data.vision.charuco_square_size_mm,
+            "calib_vision_charuco_marker_size_mm": data.vision.charuco_marker_size_mm,
             "calib_vision_skip_frames": data.vision.calibration_skip_frames,
             **RobotCalibrationMapper.to_flat_dict(data.robot),
             "min_intensity": detection.min_intensity,
@@ -50,6 +55,15 @@ class CalibrationSettingsMapper:
         vision.chessboard_width = int(flat.get("calib_vision_chessboard_width", vision.chessboard_width))
         vision.chessboard_height = int(flat.get("calib_vision_chessboard_height", vision.chessboard_height))
         vision.square_size_mm = float(flat.get("calib_vision_square_size_mm", vision.square_size_mm))
+        vision.reference_board_mode = str(flat.get("calib_vision_reference_board_mode", vision.reference_board_mode))
+        vision.charuco_board_width = int(flat.get("calib_vision_charuco_board_width", vision.charuco_board_width))
+        vision.charuco_board_height = int(flat.get("calib_vision_charuco_board_height", vision.charuco_board_height))
+        vision.charuco_square_size_mm = float(
+            flat.get("calib_vision_charuco_square_size_mm", vision.charuco_square_size_mm)
+        )
+        vision.charuco_marker_size_mm = float(
+            flat.get("calib_vision_charuco_marker_size_mm", vision.charuco_marker_size_mm)
+        )
         vision.calibration_skip_frames = int(
             flat.get("calib_vision_skip_frames", vision.calibration_skip_frames)
         )

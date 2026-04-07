@@ -2,7 +2,6 @@ import json
 import logging
 from dataclasses import dataclass
 from itertools import combinations
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -215,6 +214,39 @@ def evaluate_homography_residual_fit(labels, src_pts, dst_pts, use_ransac: bool 
 
 def build_homography_tps_residual_model(src_pts, dst_pts, use_ransac: bool = False) -> HomographyTPSResidualModel:
     H, _ = compute_homography_from_arrays(src_pts, dst_pts, use_ransac=use_ransac)
+    return build_homography_tps_residual_model_from_base(H, src_pts, dst_pts)
+
+
+def build_homography_residual_model_from_base(
+    homography_matrix,
+    src_pts,
+    dst_pts,
+) -> HomographyResidualModel:
+    H = np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3)
+    base_predictions = cv2.perspectiveTransform(
+        np.asarray(src_pts, dtype=np.float32).reshape(-1, 1, 2),
+        H,
+    ).reshape(-1, 2).astype(np.float64)
+    residuals = np.asarray(dst_pts, dtype=np.float64).reshape(-1, 2) - base_predictions
+    design = np.asarray(
+        [_quadratic_uv_features(point) for point in np.asarray(src_pts, dtype=np.float64).reshape(-1, 2)],
+        dtype=np.float64,
+    )
+    dx_coeffs, _, _, _ = np.linalg.lstsq(design, residuals[:, 0], rcond=None)
+    dy_coeffs, _, _, _ = np.linalg.lstsq(design, residuals[:, 1], rcond=None)
+    return HomographyResidualModel(
+        homography_matrix=H,
+        dx_coeffs=np.asarray(dx_coeffs, dtype=np.float64),
+        dy_coeffs=np.asarray(dy_coeffs, dtype=np.float64),
+    )
+
+
+def build_homography_tps_residual_model_from_base(
+    homography_matrix,
+    src_pts,
+    dst_pts,
+) -> HomographyTPSResidualModel:
+    H = np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3)
     base_predictions = cv2.perspectiveTransform(
         np.asarray(src_pts, dtype=np.float32).reshape(-1, 1, 2),
         H,
@@ -237,6 +269,68 @@ def evaluate_homography_tps_residual_fit(labels, src_pts, dst_pts, use_ransac: b
         "artifact": model.to_dict(),
         "records": records,
         "summary": _summarize_records(records),
+    }
+
+
+def evaluate_homography_residual_fit_from_model(labels, src_pts, dst_pts, model: HomographyResidualModel) -> dict:
+    predictions = [model.predict(point) for point in src_pts]
+    records = _build_error_records(labels, src_pts, dst_pts, predictions, model_name="homography_residual")
+    return {
+        "model": "homography_residual",
+        "artifact": model.to_dict(),
+        "records": records,
+        "summary": _summarize_records(records),
+    }
+
+
+def evaluate_homography_tps_residual_fit_from_model(labels, src_pts, dst_pts, model: HomographyTPSResidualModel) -> dict:
+    predictions = [model.predict(point) for point in src_pts]
+    records = _build_error_records(labels, src_pts, dst_pts, predictions, model_name="homography_tps_residual")
+    return {
+        "model": "homography_tps_residual",
+        "artifact": model.to_dict(),
+        "records": records,
+        "summary": _summarize_records(records),
+    }
+
+
+def evaluate_model_on_holdout(
+    labels,
+    src_pts,
+    dst_pts,
+    *,
+    homography_matrix=None,
+    homography_residual_model: HomographyResidualModel | None = None,
+    homography_tps_residual_model: HomographyTPSResidualModel | None = None,
+) -> dict:
+    labels = [int(v) for v in labels]
+    src_pts = np.asarray(src_pts, dtype=np.float64).reshape(-1, 2)
+    dst_pts = np.asarray(dst_pts, dtype=np.float64).reshape(-1, 2)
+    fit: dict[str, dict] = {}
+
+    if homography_matrix is not None:
+        predictions = cv2.perspectiveTransform(
+            np.asarray(src_pts, dtype=np.float32).reshape(-1, 1, 2),
+            np.asarray(homography_matrix, dtype=np.float64),
+        ).reshape(-1, 2)
+        records = _build_error_records(labels, src_pts, dst_pts, predictions, model_name="homography")
+        fit["homography"] = {"records": records, "summary": _summarize_records(records)}
+
+    if homography_residual_model is not None:
+        predictions = [homography_residual_model.predict(point) for point in src_pts]
+        records = _build_error_records(labels, src_pts, dst_pts, predictions, model_name="homography_residual")
+        fit["homography_residual"] = {"records": records, "summary": _summarize_records(records)}
+
+    if homography_tps_residual_model is not None:
+        predictions = [homography_tps_residual_model.predict(point) for point in src_pts]
+        records = _build_error_records(labels, src_pts, dst_pts, predictions, model_name="homography_tps_residual")
+        fit["homography_tps_residual"] = {"records": records, "summary": _summarize_records(records)}
+
+    return {
+        "point_labels": labels,
+        "camera_points": [[float(v) for v in pt] for pt in src_pts],
+        "robot_points": [[float(v) for v in pt] for pt in dst_pts],
+        "fit": fit,
     }
 
 
@@ -317,6 +411,8 @@ def build_calibration_model_report(
     robot_positions_for_calibration,
     use_ransac: bool = False,
     metadata: dict | None = None,
+    validation_camera_points=None,
+    validation_robot_positions=None,
 ) -> dict:
     labels, src_pts, dst_pts = prepare_correspondence_points(
         camera_points_for_homography,
@@ -353,90 +449,161 @@ def build_calibration_model_report(
             "homography_tps_residual": fit_tps["artifact"],
         },
     }
+    if validation_camera_points and validation_robot_positions:
+        validation_labels, validation_src_pts, validation_dst_pts = prepare_correspondence_points(
+            validation_camera_points,
+            validation_robot_positions,
+        )
+        report["validation"] = evaluate_model_on_holdout(
+            validation_labels,
+            validation_src_pts,
+            validation_dst_pts,
+            homography_matrix=fit_h["matrix"],
+            homography_residual_model=build_homography_residual_model(src_pts, dst_pts, use_ransac=use_ransac),
+            homography_tps_residual_model=build_homography_tps_residual_model(src_pts, dst_pts, use_ransac=use_ransac),
+        )
+    if metadata:
+        report["metadata"] = _to_json_ready(metadata)
+    return report
+
+
+def build_split_calibration_model_report(
+    homography_camera_points,
+    homography_robot_points,
+    residual_camera_points,
+    residual_robot_points,
+    *,
+    use_ransac: bool = False,
+    metadata: dict | None = None,
+    validation_camera_points=None,
+    validation_robot_positions=None,
+) -> dict:
+    homography_labels, homography_src_pts, homography_dst_pts = prepare_correspondence_points(
+        homography_camera_points,
+        homography_robot_points,
+    )
+    fit_h = evaluate_homography_fit(homography_labels, homography_src_pts, homography_dst_pts, use_ransac=use_ransac)
+
+    residual_labels = []
+    residual_src_pts = np.empty((0, 2), dtype=np.float64)
+    residual_dst_pts = np.empty((0, 2), dtype=np.float64)
+    fit_hr = {
+        "model": "homography_residual",
+        "artifact": None,
+        "records": [],
+        "summary": _summarize_records([]),
+    }
+    fit_tps = {
+        "model": "homography_tps_residual",
+        "artifact": None,
+        "records": [],
+        "summary": _summarize_records([]),
+    }
+    quadratic_model = None
+    tps_model = None
+
+    if residual_camera_points and residual_robot_points:
+        residual_labels, residual_src_pts, residual_dst_pts = prepare_correspondence_points(
+            residual_camera_points,
+            residual_robot_points,
+        )
+        quadratic_model = build_homography_residual_model_from_base(
+            fit_h["matrix"], residual_src_pts, residual_dst_pts
+        )
+        fit_hr = evaluate_homography_residual_fit_from_model(
+            residual_labels, residual_src_pts, residual_dst_pts, quadratic_model
+        )
+        if len(residual_labels) >= 3:
+            tps_model = build_homography_tps_residual_model_from_base(
+                fit_h["matrix"], residual_src_pts, residual_dst_pts
+            )
+            fit_tps = evaluate_homography_tps_residual_fit_from_model(
+                residual_labels, residual_src_pts, residual_dst_pts, tps_model
+            )
+
+    report = {
+        "support_point_count": len(homography_labels),
+        "point_labels": homography_labels,
+        "camera_points": [[float(v) for v in pt] for pt in homography_src_pts],
+        "robot_points": [[float(v) for v in pt] for pt in homography_dst_pts],
+        "residual_support_point_count": len(residual_labels),
+        "residual_point_labels": residual_labels,
+        "residual_camera_points": [[float(v) for v in pt] for pt in residual_src_pts],
+        "residual_robot_points": [[float(v) for v in pt] for pt in residual_dst_pts],
+        "fit": {
+            "homography": {
+                "summary": fit_h["summary"],
+                "records": fit_h["records"],
+                "status": fit_h["status"],
+            },
+            "homography_residual": {
+                "summary": fit_hr["summary"],
+                "records": fit_hr["records"],
+            },
+            "homography_tps_residual": {
+                "summary": fit_tps["summary"],
+                "records": fit_tps["records"],
+            },
+        },
+        "artifacts": {
+            "homography_matrix": np.asarray(fit_h["matrix"], dtype=np.float64),
+            "homography_status": fit_h["status"],
+            "homography_residual": fit_hr["artifact"],
+            "homography_tps_residual": fit_tps["artifact"],
+        },
+    }
+
+    if validation_camera_points and validation_robot_positions:
+        validation_labels, validation_src_pts, validation_dst_pts = prepare_correspondence_points(
+            validation_camera_points,
+            validation_robot_positions,
+        )
+        report["validation"] = evaluate_model_on_holdout(
+            validation_labels,
+            validation_src_pts,
+            validation_dst_pts,
+            homography_matrix=fit_h["matrix"],
+            homography_residual_model=quadratic_model,
+            homography_tps_residual_model=tps_model,
+        )
     if metadata:
         report["metadata"] = _to_json_ready(metadata)
     return report
 
 
 def save_calibration_model_report(report: dict, report_path: str) -> None:
-    payload = _to_json_ready(report)
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    from src.engine.robot.calibration.robot_calibration.calibration_report import (
+        save_calibration_model_report as _save_calibration_model_report,
+    )
+    _save_calibration_model_report(report, report_path)
 
 
 def save_homography_residual_artifact(homography_residual_artifact: dict, path: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(_to_json_ready(homography_residual_artifact), f, indent=2)
+    from src.engine.robot.calibration.robot_calibration.calibration_report import (
+        save_homography_residual_artifact as _save_homography_residual_artifact,
+    )
+    _save_homography_residual_artifact(homography_residual_artifact, path)
 
 
 def derive_calibration_artifact_paths(matrix_path: str) -> dict:
-    base = Path(matrix_path)
-    stem = base.stem
-    return {
-        "homography_residual_path": str(base.with_name(f"{stem}_homography_residual.json")),
-        "report_path": str(base.with_name(f"{stem}_model_report.json")),
-    }
+    from src.engine.robot.calibration.robot_calibration.calibration_report import (
+        derive_calibration_artifact_paths as _derive_calibration_artifact_paths,
+    )
+    return _derive_calibration_artifact_paths(matrix_path)
 
 
 def format_model_comparison_report(report: dict) -> str:
-    fit_h = report["fit"]["homography"]["summary"]
-    fit_hr = report["fit"]["homography_residual"]["summary"]
-    fit_tps = report["fit"].get("homography_tps_residual", {}).get("summary")
-
-    lines = [
-        "=== CALIBRATION MODEL COMPARISON REPORT ===",
-        f"Support points: {report['support_point_count']}",
-    ]
-
-    metadata = report.get("metadata") or {}
-    if metadata:
-        if metadata.get("candidate_ids") is not None:
-            lines.append(f"Candidate IDs: {metadata['candidate_ids']}")
-        if metadata.get("selected_target_ids") is not None:
-            lines.append(f"Selected target IDs: {metadata['selected_target_ids']}")
-        if metadata.get("used_marker_ids") is not None:
-            lines.append(f"Used marker IDs: {metadata['used_marker_ids']}")
-        if metadata.get("skipped_marker_ids"):
-            lines.append(f"Skipped marker IDs: {metadata['skipped_marker_ids']}")
-        if metadata.get("failed_marker_ids"):
-            lines.append(f"Failed marker IDs: {metadata['failed_marker_ids']}")
-        if metadata.get("recovery_marker_id") is not None:
-            lines.append(f"Recovery marker ID: {metadata['recovery_marker_id']}")
-
-    lines.extend([
-        "",
-        "Reprojection error on support points:",
-        _format_summary_line("Homography                  ", fit_h),
-        _format_summary_line("Homography + Quadratic      ", fit_hr),
-    ])
-    if fit_tps:
-        lines.append(
-            _format_summary_line("Homography + TPS (active)   ", fit_tps)
-            + "  [exact interpolant — 0 on training points by design]"
-        )
-
-    lines.extend(["", "Per-point comparison:"])
-
-    homography_by_label = {row["label"]: row for row in report["fit"]["homography"]["records"]}
-    quadratic_by_label = {row["label"]: row for row in report["fit"]["homography_residual"]["records"]}
-    tps_by_label = (
-        {row["label"]: row for row in report["fit"]["homography_tps_residual"]["records"]}
-        if fit_tps else {}
+    from src.engine.robot.calibration.robot_calibration.calibration_report import (
+        format_model_comparison_report as _format_model_comparison_report,
     )
+    return _format_model_comparison_report(report)
 
-    for label in report["point_labels"]:
-        h_err = homography_by_label[label]["error_mm"]
-        q_err = quadratic_by_label[label]["error_mm"]
-        parts = [
-            f"  ID {label:3d}: homography={_fmt_error(h_err)} mm",
-            f"+quadratic={_fmt_error(q_err)} mm (Δ{_fmt_delta(h_err, q_err)})",
-        ]
-        if tps_by_label:
-            t_err = tps_by_label[label]["error_mm"]
-            parts.append(f"+tps={_fmt_error(t_err)} mm (Δ{_fmt_delta(h_err, t_err)})")
-        lines.append("  ".join(parts))
 
-    return "\n".join(lines)
+def format_calibration_analysis_report(report: dict) -> str:
+    from src.engine.robot.calibration.robot_calibration.calibration_report import (
+        format_calibration_analysis_report as _format_calibration_analysis_report,
+    )
+    return _format_calibration_analysis_report(report)
 
 
 def _build_error_records(labels, src_pts, dst_pts, predictions, model_name: str) -> list[dict]:
@@ -474,6 +641,22 @@ def _build_single_record(label, camera_point, robot_point, prediction, model_nam
 
 def _summarize_records(records: list[dict]) -> dict:
     valid_errors = np.array([row["error_mm"] for row in records if row.get("error_mm") is not None], dtype=np.float64)
+    valid_dx = np.array(
+        [
+            float(row["predicted_robot_point"][0] - row["robot_point"][0])
+            for row in records
+            if row.get("predicted_robot_point") is not None and row.get("robot_point") is not None
+        ],
+        dtype=np.float64,
+    )
+    valid_dy = np.array(
+        [
+            float(row["predicted_robot_point"][1] - row["robot_point"][1])
+            for row in records
+            if row.get("predicted_robot_point") is not None and row.get("robot_point") is not None
+        ],
+        dtype=np.float64,
+    )
     if valid_errors.size == 0:
         return {
             "count": len(records),
@@ -481,8 +664,14 @@ def _summarize_records(records: list[dict]) -> dict:
             "unavailable_count": len(records),
             "mean_mm": None,
             "median_mm": None,
+            "std_mm": None,
             "p90_mm": None,
+            "p95_mm": None,
             "max_mm": None,
+            "mean_dx_mm": None,
+            "std_dx_mm": None,
+            "mean_dy_mm": None,
+            "std_dy_mm": None,
         }
     return {
         "count": len(records),
@@ -490,8 +679,14 @@ def _summarize_records(records: list[dict]) -> dict:
         "unavailable_count": int(len(records) - valid_errors.size),
         "mean_mm": float(np.mean(valid_errors)),
         "median_mm": float(np.median(valid_errors)),
+        "std_mm": float(np.std(valid_errors)),
         "p90_mm": float(np.percentile(valid_errors, 90)),
+        "p95_mm": float(np.percentile(valid_errors, 95)),
         "max_mm": float(np.max(valid_errors)),
+        "mean_dx_mm": float(np.mean(valid_dx)) if valid_dx.size else None,
+        "std_dx_mm": float(np.std(valid_dx)) if valid_dx.size else None,
+        "mean_dy_mm": float(np.mean(valid_dy)) if valid_dy.size else None,
+        "std_dy_mm": float(np.std(valid_dy)) if valid_dy.size else None,
     }
 
 
@@ -505,7 +700,26 @@ def _format_summary_line(model_name: str, summary: dict) -> str:
         f"  {model_name}: "
         f"count={summary['count']} valid={summary['valid_count']} unavailable={summary['unavailable_count']} "
         f"mean={_fmt_error(summary['mean_mm'])} median={_fmt_error(summary['median_mm'])} "
-        f"p90={_fmt_error(summary['p90_mm'])} max={_fmt_error(summary['max_mm'])}"
+        f"std={_fmt_error(summary.get('std_mm'))} "
+        f"p90={_fmt_error(summary['p90_mm'])} p95={_fmt_error(summary.get('p95_mm'))} max={_fmt_error(summary['max_mm'])} "
+        f"dx_mean={_fmt_error(summary.get('mean_dx_mm'))} dx_std={_fmt_error(summary.get('std_dx_mm'))} "
+        f"dy_mean={_fmt_error(summary.get('mean_dy_mm'))} dy_std={_fmt_error(summary.get('std_dy_mm'))}"
+    )
+
+
+def _format_analysis_line(model_name: str, summary: dict) -> str:
+    return (
+        f"  {model_name}: "
+        f"mean={_fmt_error(summary.get('mean_mm'))} "
+        f"median={_fmt_error(summary.get('median_mm'))} "
+        f"std={_fmt_error(summary.get('std_mm'))} "
+        f"p90={_fmt_error(summary.get('p90_mm'))} "
+        f"p95={_fmt_error(summary.get('p95_mm'))} "
+        f"max={_fmt_error(summary.get('max_mm'))} "
+        f"dx_mean={_fmt_error(summary.get('mean_dx_mm'))} "
+        f"dx_std={_fmt_error(summary.get('std_dx_mm'))} "
+        f"dy_mean={_fmt_error(summary.get('mean_dy_mm'))} "
+        f"dy_std={_fmt_error(summary.get('std_dy_mm'))}"
     )
 
 

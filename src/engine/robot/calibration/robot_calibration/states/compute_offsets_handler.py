@@ -10,6 +10,9 @@ _logger = logging.getLogger(__name__)
 
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 from src.engine.robot.calibration.robot_calibration.logging import construct_compute_offsets_log_message
+from src.engine.robot.calibration.robot_calibration.states.error_handling import (
+    fail_calibration,
+)
 
 
 def handle_compute_offsets_state(context) -> RobotCalibrationStates:
@@ -26,6 +29,12 @@ def handle_compute_offsets_state(context) -> RobotCalibrationStates:
         Next state to transition to
     """
     if context.calibration_vision.PPM is not None and context.bottom_left_chessboard_corner_px is not None:
+        # Keep COMPUTE_OFFSETS in the same coordinate frame as
+        # marker_top_left_corners_mm, which is derived with the raw chessboard PPM.
+        # Iterative refinement at target height uses ppm_working later, but mixing
+        # scaled PPM here with raw-chessboard mm coordinates inflates the initial
+        # move and can send the first marker out of FOV.
+        base_ppm = float(context.calibration_vision.PPM)
 
         # Get image center in pixels
         image_center_px = (
@@ -34,8 +43,8 @@ def handle_compute_offsets_state(context) -> RobotCalibrationStates:
         )
 
         # Convert image center to mm relative to bottom-left of chessboard
-        center_x_mm = (image_center_px[0] - context.bottom_left_chessboard_corner_px[0]) / context.calibration_vision.PPM
-        center_y_mm = (image_center_px[1] - context.bottom_left_chessboard_corner_px[1]) / context.calibration_vision.PPM
+        center_x_mm = (image_center_px[0] - context.bottom_left_chessboard_corner_px[0]) / base_ppm
+        center_y_mm = (image_center_px[1] - context.bottom_left_chessboard_corner_px[1]) / base_ppm
 
         # Calculate offsets for all markers relative to image center
         for marker_id, marker_mm in context.calibration_vision.marker_top_left_corners_mm.items():
@@ -51,7 +60,7 @@ def handle_compute_offsets_state(context) -> RobotCalibrationStates:
 
         # Build unified log message for offset computation
         message = construct_compute_offsets_log_message(
-            ppm=context.calibration_vision.PPM,
+            ppm=base_ppm,
             bottom_left_corner_px=context.bottom_left_chessboard_corner_px,
             image_center_px=image_center_px,
             marker_top_left_corners_mm=context.calibration_vision.marker_top_left_corners_mm,
@@ -72,9 +81,9 @@ def handle_compute_offsets_state(context) -> RobotCalibrationStates:
         _logger.error(f"Offset computation failed: {error_msg}")
 
         # Store specific error details for UI notification
-        context.calibration_error_message = (
+        return fail_calibration(
+            context,
             f"Calibration failed during offset computation. "
             f"Missing required data: {', '.join(missing_data)}. "
-            f"Chessboard detection may have failed."
+            f"Chessboard detection may have failed.",
         )
-        return RobotCalibrationStates.ERROR

@@ -59,9 +59,15 @@ class RobotCalibrationConfig:
                  height_measuring_service, required_ids, z_target,
                  robot_tool, robot_user,
                  candidate_ids=None,
-                 min_targets: int | None = None,
-                 max_targets: int | None = None,
                  min_target_separation_px: float = 120.0,
+                 homography_target_count: int | None = None,
+                 residual_target_count: int | None = None,
+                 validation_target_count: int | None = None,
+                 test_target_count: int | None = None,
+                 auto_skip_known_unreachable_markers: bool = True,
+                 unreachable_marker_failure_threshold: int = 1,
+                 known_unreachable_marker_ids=None,
+                 unreachable_marker_failure_counts=None,
                  velocity: int = 30, acceleration: int = 10,
                  run_height_measurement: bool = True,
                  settings_service=None,
@@ -70,6 +76,11 @@ class RobotCalibrationConfig:
                  robot_config_key: str | None = None,
                  camera_tcp_offset_config=None,
                  axis_mapping_config=None,
+                 reference_board_mode: str = "auto",
+                 charuco_board_width: int | None = None,
+                 charuco_board_height: int | None = None,
+                 charuco_square_size_mm: float | None = None,
+                 charuco_marker_size_mm: float | None = None,
                  debug=False, step_by_step=False, live_visualization=False,
                  use_marker_centre: bool = False,
                  use_ransac: bool = False,
@@ -90,11 +101,22 @@ class RobotCalibrationConfig:
         self.height_measuring_service = height_measuring_service
         self.required_ids = required_ids
         self.candidate_ids = list(candidate_ids) if candidate_ids else []
-        self.min_targets = min_targets
-        self.max_targets = max_targets
         self.min_target_separation_px = min_target_separation_px
+        self.homography_target_count = homography_target_count
+        self.residual_target_count = residual_target_count
+        self.validation_target_count = validation_target_count
+        self.test_target_count = test_target_count
+        self.auto_skip_known_unreachable_markers = auto_skip_known_unreachable_markers
+        self.unreachable_marker_failure_threshold = unreachable_marker_failure_threshold
+        self.known_unreachable_marker_ids = list(known_unreachable_marker_ids or [])
+        self.unreachable_marker_failure_counts = dict(unreachable_marker_failure_counts or {})
         self.z_target = z_target
         self.axis_mapping_config = axis_mapping_config
+        self.reference_board_mode = reference_board_mode
+        self.charuco_board_width = charuco_board_width
+        self.charuco_board_height = charuco_board_height
+        self.charuco_square_size_mm = charuco_square_size_mm
+        self.charuco_marker_size_mm = charuco_marker_size_mm
         self.debug = debug
         self.step_by_step = step_by_step
         self.live_visualization = live_visualization

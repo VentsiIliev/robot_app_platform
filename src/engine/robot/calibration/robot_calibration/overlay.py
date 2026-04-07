@@ -1,100 +1,54 @@
-import cv2
-import numpy as np
+from src.engine.robot.calibration.robot_calibration.overlay_renderer import (
+    OverlayStatus,
+    OpenCvCalibrationRenderer,
+    get_calibration_renderer,
+)
 
 
 def draw_image_center(frame) -> None:
-    if frame is None:
-        return
-    frame_height, frame_width = frame.shape[:2]
-    center_x, center_y = frame_width // 2, frame_height // 2
-    color = (255, 0, 0)
-    cv2.line(frame, (0, center_y), (frame_width, center_y), color, 1)
-    cv2.line(frame, (center_x, 0), (center_x, frame_height), color, 1)
-    cv2.circle(frame, (center_x, center_y), 2, color, -1)
+    # Compatibility wrapper kept for existing call sites.
+    OpenCvCalibrationRenderer().draw_image_center(frame)
+
+
+def build_overlay_status(context, current_error_mm=None) -> dict:
+    target_ids = list(context.target_plan.target_marker_ids or context.target_plan.required_ids or sorted(list(context.required_ids)))
+    current_index = int(context.progress.current_marker_id)
+    active_target_id = None
+    active_target_px = None
+    available_marker_points_px = dict(context.artifacts.available_marker_points_px or {})
+    if target_ids and 0 <= current_index < len(target_ids):
+        active_target_id = int(target_ids[current_index])
+        point = available_marker_points_px.get(active_target_id)
+        if point is not None:
+            active_target_px = (float(point[0]), float(point[1]))
+    progress_pct = (current_index / len(target_ids)) * 100 if target_ids else 0.0
+    return {
+        "state_name": context.get_current_state_name(),
+        "target_ids": list(target_ids),
+        "active_target_id": active_target_id,
+        "active_target_px": active_target_px,
+        "current_marker_index": current_index,
+        "total_targets": len(target_ids),
+        "iteration_count": int(context.progress.iteration_count),
+        "max_iterations": int(context.progress.max_iterations),
+        "alignment_threshold_mm": float(context.progress.alignment_threshold_mm),
+        "current_error_mm": None if current_error_mm is None else float(current_error_mm),
+        "progress_pct": float(progress_pct),
+    }
 
 
 def draw_live_overlay(context, frame, current_error_mm=None):
     if frame is None or not context.live_visualization:
         return frame
 
-    draw_image_center(frame)
-
-    target_ids = list(getattr(context, "target_marker_ids", None) or sorted(list(context.required_ids)))
-    progress = (context.current_marker_id / len(target_ids)) * 100 if target_ids else 0.0
-    _draw_progress_bar(frame, progress)
-    _draw_status_text(frame, context.get_current_state_name())
-
-    if target_ids and 0 <= context.current_marker_id < len(target_ids):
-        _draw_marker_info(frame, target_ids[context.current_marker_id], context.current_marker_id, len(target_ids))
-
-    current_state = getattr(context.state_machine, "current_state", None) if context.state_machine else None
-    if current_state is not None and current_state.name == "ITERATE_ALIGNMENT":
-        _draw_iteration_info(frame, context.iteration_count, context.max_iterations)
-        if current_error_mm is not None:
-            _draw_error_info(frame, current_error_mm, context.alignment_threshold_mm)
-
-    _draw_progress_text(frame, progress)
-    return frame
-
-
-def _draw_progress_bar(frame, progress: float) -> None:
-    left = 10
-    bottom = frame.shape[0] - 30
-    top = frame.shape[0] - 50
-    width = 300
-    fill_width = int(max(0.0, min(100.0, progress)) * 3)
-    cv2.rectangle(frame, (left, top), (left + fill_width, bottom), (0, 255, 0), -1)
-    cv2.rectangle(frame, (left, top), (left + width, bottom), (255, 255, 255), 2)
-
-
-def _draw_status_text(frame, status_text: str) -> None:
-    cv2.putText(frame, f"State: {status_text}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-
-def _draw_marker_info(frame, marker_id: int, marker_index: int, total_markers: int) -> None:
-    cv2.putText(
-        frame,
-        f"Marker: {marker_id} ({marker_index + 1}/{total_markers})",
-        (10, 55),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2,
+    overlay_payload = build_overlay_status(context, current_error_mm)
+    status = OverlayStatus(
+        state_name=overlay_payload["state_name"],
+        target_ids=overlay_payload["target_ids"],
+        current_marker_index=overlay_payload["current_marker_index"],
+        iteration_count=overlay_payload["iteration_count"],
+        max_iterations=overlay_payload["max_iterations"],
+        alignment_threshold_mm=overlay_payload["alignment_threshold_mm"],
+        current_error_mm=overlay_payload["current_error_mm"],
     )
-
-
-def _draw_iteration_info(frame, iteration_count: int, max_iterations: int) -> None:
-    cv2.putText(
-        frame,
-        f"Iteration: {iteration_count}/{max_iterations}",
-        (10, 80),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 0),
-        2,
-    )
-
-
-def _draw_error_info(frame, current_error_mm: float, threshold_mm: float) -> None:
-    color = (0, 255, 0) if current_error_mm <= threshold_mm else (0, 0, 255)
-    cv2.putText(
-        frame,
-        f"Error: {current_error_mm:.3f}mm",
-        (10, 105),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        color,
-        2,
-    )
-
-
-def _draw_progress_text(frame, progress: float) -> None:
-    cv2.putText(
-        frame,
-        f"Progress: {progress:.0f}%",
-        (10, frame.shape[0] - 60),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 255, 255),
-        2,
-    )
+    return get_calibration_renderer(context).render_live_overlay(frame, status)

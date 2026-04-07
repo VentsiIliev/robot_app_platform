@@ -4,6 +4,15 @@ Engine-level service for robot-to-camera spatial calibration. Moves the robot th
 
 The package also contains a separate camera-TCP offset calibration routine. That routine assumes the homography already exists, repeatedly centers one configured ArUco marker under the camera, samples several wrist `rz` rotations, solves the rotating local XY offset between the camera center and the real robot TCP, and saves the result back into `RobotSettings.camera_to_tcp_x_offset` / `camera_to_tcp_y_offset`.
 
+The main robot-calibration package has also been refactored into clearer seams:
+
+- state orchestration in the pipeline and per-state handler modules
+- dataset/model construction in `model_fitting.py`
+- report/artifact generation in `calibration_report.py`
+- centralized failure handling in `states/error_handling.py`
+- swappable overlay rendering in `overlay_renderer.py`
+- live window / display-thread handling in `live_feed.py`
+
 It also contains two standalone post-calibration surface-mapping routines:
 
 - ArUco marker height mapping
@@ -40,13 +49,16 @@ src/engine/robot/calibration/
 └── robot_calibration/
     ├── RobotCalibrationContext.py          ← All mutable state for one calibration run
     ├── robot_calibration_pipeline.py      ← Assembles + runs the ExecutableStateMachine
+    ├── model_fitting.py                   ← Builds partitioned calibration datasets + model inputs
+    ├── calibration_report.py              ← Builds report payloads and saves calibration artifacts
     ├── config_helpers.py                  ← RobotCalibrationConfig, AdaptiveMovementConfig, RobotCalibrationEventsConfig
     ├── CalibrationVision.py               ← Camera helper (frame capture + ArUco detection wrappers)
     ├── robot_controller.py                ← CalibrationRobotController (moves robot to target positions)
     ├── metrics.py                         ← Alignment error calculation utilities
     ├── tcp_offset_capture.py              ← Main-calibration TCP-offset capture/solve helper
-    ├── visualizer.py                      ← Optional live debug overlay
-    ├── debug.py                           ← DebugDraw helper
+    ├── overlay.py                         ← Overlay compatibility wrappers
+    ├── overlay_renderer.py                ← Renderer seam: OpenCV / no-op / future UI renderer
+    ├── live_feed.py                       ← Live visualization queue + display thread
     ├── logging.py                         ← Log summary + completion message builders
     └── states/
         ├── robot_calibration_states.py    ← RobotCalibrationStates enum + transition rules
@@ -57,10 +69,34 @@ src/engine/robot/calibration/
         ├── looking_for_aruco_markers_handler.py
         ├── all_aruco_found_handler.py
         ├── compute_offsets_handler.py
-        ├── remaining_handlers.py          ← align_robot, iterate_alignment, done, error
+        ├── align_robot.py
+        ├── iterate_alignment.py
+        ├── tcp_offset_state.py
+        ├── terminal_states.py
+        ├── fallback_targets.py
+        ├── error_handling.py
         ├── handle_height_sample_state.py
         └── state_result.py
 ```
+
+### Current calibration-model split
+
+The final calibration solve is intentionally partitioned:
+
+1. base homography is fit from `homography_marker_ids` only
+2. residual / TPS correction is fit from `residual_marker_ids` only
+3. validation metrics are computed from `validation_marker_ids` only
+
+This separation now lives in `model_fitting.py` and is reported through `calibration_report.py`, so swapping model implementations no longer requires changing the state-machine code.
+
+### Visualization split
+
+Live visualization is now separated into two layers:
+
+- `overlay_renderer.py`: draws semantic calibration status onto a frame
+- `live_feed.py`: publishes frames, manages the display queue, and owns the OpenCV window thread
+
+This makes it possible to keep the calibration pipeline unchanged while later wiring the same overlay/status data into the Calibration application UI instead of an OpenCV window.
 
 ---
 

@@ -15,8 +15,6 @@ class RobotCalibrationPreview:
     frame: np.ndarray | None = None
     available_ids: list[int] | None = None
     selected_ids: list[int] | None = None
-    min_targets: int = 0
-    max_targets: int = 0
     report: dict | None = None
 
 
