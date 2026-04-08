@@ -1,5 +1,7 @@
 import logging
+import threading
 
+from PyQt6.QtCore import QObject, pyqtSignal
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
@@ -11,6 +13,11 @@ from src.shared_contracts.declarations import MovementGroupType
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
+class _MotionBridge(QObject):
+    done = pyqtSignal(object, str)
+    failed = pyqtSignal(str, str)
+
+
 class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: RobotSettingsModel, view: RobotSettingsView,
@@ -20,6 +27,9 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view     = view
         self._logger   = logging.getLogger(self.__class__.__name__)
         self._messaging = messaging
+        self._motion_bridge = _MotionBridge()
+        self._motion_bridge.done.connect(self._on_motion_done)
+        self._motion_bridge.failed.connect(self._on_motion_failed)
 
         self._view.save_requested.connect(self._on_save)
         self._view.remove_group_requested.connect(self._on_remove_group)
@@ -47,6 +57,14 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def stop(self) -> None:
         self._stop_threads()
+        try:
+            self._motion_bridge.done.disconnect(self._on_motion_done)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self._motion_bridge.failed.disconnect(self._on_motion_failed)
+        except (RuntimeError, TypeError):
+            pass
 
     def _on_save(self, _values: dict) -> None:
         try:
@@ -147,10 +165,15 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._logger.debug("Failed to publish targeting-definitions change event", exc_info=True)
 
     def _run_blocking(self, fn, label: str) -> None:
-        self._run_in_thread(
-            fn=fn,
-            on_done=lambda result: self._on_motion_done(result, label),
-        )
+        def _work() -> None:
+            try:
+                result = fn()
+            except Exception as exc:
+                self._motion_bridge.failed.emit(str(exc), label)
+                return
+            self._motion_bridge.done.emit(result, label)
+
+        threading.Thread(target=_work, daemon=True).start()
 
     def _on_motion_done(self, result, label: str) -> None:
         ok, reason = result if isinstance(result, tuple) else (bool(result), "")
@@ -162,3 +185,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             show_warning(self._view, label, msg)
         else:
             self._logger.info("%s completed successfully", label)
+
+    def _on_motion_failed(self, error: str, label: str) -> None:
+        self._logger.exception("%s raised an unexpected error: %s", label, error)
+        show_warning(
+            self._view,
+            label,
+            error or f"Unexpected error while running '{label}'.",
+        )

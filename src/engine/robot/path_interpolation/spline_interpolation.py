@@ -47,6 +47,67 @@ def _compute_sample_count(n_original: int, total_length: float, target_spacing_m
     return max(n_original * 2, int(np.ceil(total_length / target_spacing_mm)))
 
 
+def _compute_vertex_turn_weights(path_array: npt.NDArray) -> npt.NDArray:
+    """Return a curvature-like weight in [0, 1] for each path vertex.
+
+    Weight is derived from the turning angle between consecutive XYZ segments.
+    Straight runs approach 0, sharp bends approach 1.
+    """
+    n = len(path_array)
+    weights = np.zeros(n, dtype=float)
+    if n < 3:
+        return weights
+
+    diffs = np.diff(path_array[:, :3], axis=0)
+    norms = np.linalg.norm(diffs, axis=1)
+
+    for i in range(1, n - 1):
+        n0 = norms[i - 1]
+        n1 = norms[i]
+        if n0 <= 1e-9 or n1 <= 1e-9:
+            continue
+        v0 = diffs[i - 1] / n0
+        v1 = diffs[i] / n1
+        dot = float(np.clip(np.dot(v0, v1), -1.0, 1.0))
+        angle = float(np.arccos(dot))
+        weights[i] = angle / np.pi
+
+    return weights
+
+
+def _build_adaptive_t_samples(
+    t: npt.NDArray,
+    path_array: npt.NDArray,
+    target_spacing_mm: float,
+    curvature_gain: float,
+) -> npt.NDArray:
+    """Sample more densely near turns while preserving base spacing on straights."""
+    if len(path_array) < 2:
+        return np.array([0.0, 1.0])
+
+    diffs = np.diff(path_array[:, :3], axis=0)
+    seg_lengths = np.linalg.norm(diffs, axis=1)
+    turn_weights = _compute_vertex_turn_weights(path_array)
+
+    t_samples = [0.0]
+    for i, seg_len in enumerate(seg_lengths):
+        if seg_len <= 1e-9:
+            continue
+
+        local_turn = max(turn_weights[i], turn_weights[i + 1])
+        local_multiplier = 1.0 + curvature_gain * local_turn
+        effective_spacing = target_spacing_mm / local_multiplier
+        subdivisions = max(1, int(np.ceil(seg_len / max(effective_spacing, 1e-6))))
+
+        seg_t = np.linspace(t[i], t[i + 1], subdivisions + 1)
+        t_samples.extend(seg_t[1:].tolist())
+
+    t_new = np.array(t_samples, dtype=float)
+    t_new[0] = 0.0
+    t_new[-1] = 1.0
+    return t_new
+
+
 def _fit_spline_dimension(
     t: npt.NDArray,
     values: npt.NDArray,
@@ -87,6 +148,7 @@ def interpolate_path_spline_with_lambda(
     target_spacing_mm: float = 5.0,
     k: int = 3,
     smoothing_lambda: float = 0.0,
+    curvature_gain: float = 3.0,
 ) -> list[list[float]]:
     """Smooth a path using univariate splines with arc-length parameterization.
 
@@ -104,6 +166,8 @@ def interpolate_path_spline_with_lambda(
             0.0 = exact interpolation (a curve passes through every input point).
             Increasing this allows the curve to deviate from the input points
             for a smoother result.
+        curvature_gain: Extra sampling density multiplier applied near turns.
+            0.0 disables adaptive density and falls back to uniform arc-length sampling.
 
     Returns:
         Smoothed path as a list of M points with the same dimensionality as
@@ -127,8 +191,11 @@ def interpolate_path_spline_with_lambda(
         if len(t) < k + 1:
             return path
 
-    total_points = _compute_sample_count(len(path_array), total_length, target_spacing_mm)
-    t_new = np.linspace(0, 1, total_points)
+    if curvature_gain > 0.0:
+        t_new = _build_adaptive_t_samples(t, path_array, target_spacing_mm, curvature_gain)
+    else:
+        total_points = _compute_sample_count(len(path_array), total_length, target_spacing_mm)
+        t_new = np.linspace(0, 1, total_points)
 
     interpolated_dims = []
     for dim in range(path_array.shape[1]):

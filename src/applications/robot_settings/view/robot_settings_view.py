@@ -19,6 +19,7 @@ from src.applications.robot_settings.view.robot_settings_schema import (
 class RobotSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no business logic."""
     SHOW_JOG_WIDGET = True
+    JOG_LIVE_POSITION_ENABLED = True
     JOG_FRAME_SELECTOR_ENABLED = True
 
     save_requested = pyqtSignal(dict)

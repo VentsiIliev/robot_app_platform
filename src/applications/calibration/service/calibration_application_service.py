@@ -995,6 +995,7 @@ class CalibrationApplicationService(ICalibrationService):
             if model_name == "homography":
                 effective_model = "homography_residual" if self._load_homography_residual_model() is not None else "homography"
                 _logger.info("test_calibration: effective_model=%s", effective_model)
+
             detected_points = self._detect_marker_points(
                 frame,
                 work_area_polygon_px=work_area_polygon_px,
@@ -1003,16 +1004,23 @@ class CalibrationApplicationService(ICalibrationService):
             if not detected_points:
                 return False, "No non-calibration ArUco markers detected in the active work area"
 
-            selected_test_ids, selection_report = self._select_test_marker_ids(
-                detected_points,
-                target_count=self._test_target_count(),
+            known_unreachable = self._known_unreachable_marker_ids()
+            selected_test_ids = sorted(
+                mk for mk in (int(m) for m in detected_points.keys())
+                if mk not in known_unreachable
             )
+            selection_report = {
+                "available_ids": sorted(int(m) for m in detected_points),
+                "known_unreachable_ids": sorted(known_unreachable),
+                "selected_ids": selected_test_ids,
+                "selection_strategy": "all_ascending",
+            }
             _logger.info(
                 "Test calibration targets: available_ids=%s selected_ids=%s training_ids=%s excluded_ids=%s model=%s",
-                sorted(int(marker_id) for marker_id in detected_points.keys()),
-                list(selected_test_ids),
-                sorted(int(marker_id) for marker_id in training_ids),
-                sorted(int(marker_id) for marker_id in calibration_used_ids),
+                sorted(int(m) for m in detected_points.keys()),
+                selected_test_ids,
+                sorted(int(m) for m in training_ids),
+                sorted(int(m) for m in calibration_used_ids),
                 model_name,
             )
             if not selected_test_ids:
@@ -1026,23 +1034,18 @@ class CalibrationApplicationService(ICalibrationService):
                 px, py = detected_points[marker_id]
                 prediction = self._predict_robot_xy(model_name, float(px), float(py))
                 if prediction is None:
-                    marker_results.append(
-                        {
-                            "marker_id": int(marker_id),
-                            "success": False,
-                            "note": "model did not return a prediction for this marker",
-                        }
-                    )
+                    marker_results.append({
+                        "marker_id": int(marker_id),
+                        "success": False,
+                        "note": "model did not return a prediction for this marker",
+                    })
                     _logger.info("Skipping test marker %d — model produced no prediction", marker_id)
                     continue
 
                 x_mm, y_mm = prediction
                 _logger.info(
                     "Test calibration move: marker=%d model=%s predicted_xy=(%.3f, %.3f)",
-                    marker_id,
-                    model_name,
-                    x_mm,
-                    y_mm,
+                    marker_id, model_name, x_mm, y_mm,
                 )
                 ok = self._robot_service.move_ptp(
                     position=[x_mm, y_mm, z_target, rx, ry, rz],
@@ -1053,13 +1056,11 @@ class CalibrationApplicationService(ICalibrationService):
                     wait_to_reach=True,
                 )
                 if not ok:
-                    marker_results.append(
-                        {
-                            "marker_id": int(marker_id),
-                            "success": False,
-                            "note": "initial move failed",
-                        }
-                    )
+                    marker_results.append({
+                        "marker_id": int(marker_id),
+                        "success": False,
+                        "note": "initial move failed",
+                    })
                     continue
 
                 time.sleep(0.8)
@@ -1072,13 +1073,19 @@ class CalibrationApplicationService(ICalibrationService):
                     "marker_id": int(marker_id),
                     "success": True,
                     "predicted_xy_mm": [float(x_mm), float(y_mm)],
-                    "observed_marker_point_px": [float(observed_point[0]), float(observed_point[1])] if observed_point is not None else None,
+                    "observed_marker_point_px": (
+                        [float(observed_point[0]), float(observed_point[1])]
+                        if observed_point is not None else None
+                    ),
                     "robot_xy_mm": (
                         [float(current_robot_pos[0]), float(current_robot_pos[1])]
-                        if current_robot_pos and len(current_robot_pos) >= 2
-                        else None
+                        if current_robot_pos and len(current_robot_pos) >= 2 else None
                     ),
-                    "note": "visual inspection target reached" if observed_point is not None else "marker not visible after move",
+                    "note": (
+                        "visual inspection target reached"
+                        if observed_point is not None
+                        else "marker not visible after move"
+                    ),
                 }
                 marker_results.append(result)
                 _logger.info(
@@ -1098,9 +1105,9 @@ class CalibrationApplicationService(ICalibrationService):
             }
             report_payload = {
                 "model": model_name,
-                "selected_test_ids": [int(marker_id) for marker_id in selected_test_ids],
-                "training_ids": sorted(int(marker_id) for marker_id in training_ids),
-                "excluded_calibration_ids": sorted(int(marker_id) for marker_id in calibration_used_ids),
+                "selected_test_ids": [int(m) for m in selected_test_ids],
+                "training_ids": sorted(int(m) for m in training_ids),
+                "excluded_calibration_ids": sorted(int(m) for m in calibration_used_ids),
                 "selection_report": selection_report,
                 "results": marker_results,
                 "summary": summary,
@@ -1109,7 +1116,8 @@ class CalibrationApplicationService(ICalibrationService):
             if not successful:
                 return False, f"No test markers were reached successfully using {model_name}"
             return True, (
-                f"Test complete using {model_name} on {len(successful)}/{len(marker_results)} markers for visual inspection"
+                f"Test complete using {model_name} on "
+                f"{len(successful)}/{len(marker_results)} markers for visual inspection"
                 + (f", report={report_path}" if report_path else "")
             )
         finally:

@@ -17,6 +17,21 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
+def _derive_interpolation_from_blend_radius(
+    blend_radius_mm: float,
+) -> tuple[float, float]:
+    """Use blend radius as the primary interpolation control when provided."""
+    if blend_radius_mm <= 0.0:
+        return 10.0, 2.0
+
+    # One-knob mode:
+    # - base spacing scales with radius so larger blends use fewer support points
+    # - blend sampling stays roughly at half-radius resolution
+    effective_adaptive_spacing = max(5.0, blend_radius_mm * 2.0)
+    effective_spline_density = 2.0
+    return effective_adaptive_spacing, effective_spline_density
+
+
 def _has_valid_contour(contour) -> bool:
     if contour is None:
         return False
@@ -55,6 +70,12 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._robot_service      = robot_service
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
+        self._last_interpolation_preview_contours: list[np.ndarray] = []
+        self._last_interpolation_preview_paths: list[list[list[float]]] = []
+        self._last_original_preview_paths: list[list[list[float]]] = []
+        self._last_pre_smoothed_preview_paths: list[list[list[float]]] = []
+        self._last_linear_preview_paths: list[list[list[float]]] = []
+        self._last_execution_preview_jobs: list[dict] = []
 
     def set_editing(self, storage_id) -> None:
         self._editing_storage_id = storage_id
@@ -115,6 +136,12 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def execute_workpiece(self, data: dict) -> tuple[bool, str]:
         from src.engine.robot.path_interpolation.combined_interpolation import interpolate_path_two_stage
 
+        self._last_interpolation_preview_contours = []
+        self._last_interpolation_preview_paths = []
+        self._last_original_preview_paths = []
+        self._last_pre_smoothed_preview_paths = []
+        self._last_linear_preview_paths = []
+        self._last_execution_preview_jobs = []
         form_data   = data.get("form_data", data)
         editor_data = data.get("editor_data")
         merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
@@ -157,45 +184,124 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return False, "No executable paths after transformation"
 
         total_spline_pts = 0
+        preview_contours: list[np.ndarray] = []
+        preview_paths: list[list[list[float]]] = []
+        original_paths: list[list[list[float]]] = []
+        pre_smoothed_paths: list[list[list[float]]] = []
+        linear_paths: list[list[list[float]]] = []
         for path_pts, settings, pattern_type in robot_paths:
-            adaptive_spacing  = _safe_float(settings.get("adaptive_spacing_mm"),  10.0)
-            spline_multiplier = _safe_float(settings.get("spline_density_multiplier"), 2.0)
-            smoothing_lambda  = _safe_float(settings.get("smoothing_lambda"),       0.0)
+            original_paths.append([list(pt) for pt in path_pts])
+            blend_radius_mm   = _safe_float(settings.get("blend_radius_mm"),        0.0)
+            pre_smooth_max_deviation_mm = _safe_float(settings.get("pre_smooth_max_deviation_mm"), 1.0)
+            adaptive_spacing, spline_multiplier = _derive_interpolation_from_blend_radius(
+                blend_radius_mm,
+            )
             vel               = _safe_float(settings.get("velocity"),              60.0)
             acc               = _safe_float(settings.get("acceleration"),          30.0)
 
-            linear, spline = interpolate_path_two_stage(
+            pre_smoothed, linear, spline = interpolate_path_two_stage(
                 path_pts,
                 adaptive_spacing_mm=adaptive_spacing,
                 spline_density_multiplier=spline_multiplier,
-                smoothing_lambda=smoothing_lambda,
+                return_pre_smoothed=True,
+                blend_radius_mm=blend_radius_mm,
+                pre_smooth_max_deviation_mm=pre_smooth_max_deviation_mm,
             )
             total_spline_pts += len(spline)
+            pre_smoothed_paths.append([list(pt) for pt in pre_smoothed])
+            linear_paths.append([list(pt) for pt in linear])
+            preview_paths.append([list(pt) for pt in spline])
 
             _logger.info(
-                "[EXECUTE] %s: %d → %d linear → %d spline pts | "
-                "spacing=%.1fmm density=%.1fx λ=%.1f vel=%.0f acc=%.0f",
-                pattern_type, len(path_pts), len(linear), len(spline),
-                adaptive_spacing, spline_multiplier, smoothing_lambda, vel, acc,
+                "[EXECUTE] %s: %d raw → %d pre-smooth → %d linear → %d blended pts | "
+                "blend=%.1fmm pre-smooth-dev=%.2fmm spacing=%.1fmm density=%.1fx vel=%.0f acc=%.0f",
+                pattern_type, len(path_pts), len(pre_smoothed), len(linear), len(spline),
+                blend_radius_mm, pre_smooth_max_deviation_mm, adaptive_spacing, spline_multiplier, vel, acc,
             )
             for j, pt in enumerate(spline[:3]):
                 _logger.debug("[EXECUTE] %s spline[%d]: %s", pattern_type, j, pt)
 
-            # ── robot command ────────────────────────────────────────────
-            if self._robot_service is not None:
-                result = self._robot_service.execute_trajectory(spline, vel=vel, acc=acc, blocking=True)
-                if result not in (0, True, None):
-                    return False, f"Trajectory execution failed with code {result}"
-                _logger.info("[EXECUTE] Sent %d waypoints to robot (vel=%.0f acc=%.0f)",
-                             len(spline), vel, acc)
-            else:
-                _logger.info("[EXECUTE] [DRY RUN] Would send %d waypoints to robot (vel=%.0f acc=%.0f)",
-                             len(spline), vel, acc)
+            preview_contours.extend(self._build_preview_contours(spline))
+            self._last_execution_preview_jobs.append(
+                {
+                    "path": [list(pt) for pt in spline],
+                    "vel": vel,
+                    "acc": acc,
+                    "pattern_type": pattern_type,
+                }
+            )
+            _logger.info(
+                "[EXECUTE] [PREVIEW ONLY] Prepared %d interpolated waypoints (vel=%.0f acc=%.0f)",
+                len(spline), vel, acc,
+            )
 
-        run_label = "Dry run" if self._robot_service is None else "Executed"
+        self._last_interpolation_preview_contours = preview_contours
+        self._last_interpolation_preview_paths = preview_paths
+        self._last_original_preview_paths = original_paths
+        self._last_pre_smoothed_preview_paths = pre_smoothed_paths
+        self._last_linear_preview_paths = linear_paths
         _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
                      len(robot_paths), total_spline_pts)
-        return True, f"{run_label}: {len(robot_paths)} path(s), {total_spline_pts} waypoints"
+        return True, f"Previewed: {len(robot_paths)} path(s), {total_spline_pts} interpolated waypoints"
+
+    def get_last_interpolation_preview_contours(self) -> list:
+        return list(self._last_interpolation_preview_contours)
+
+    def get_last_interpolation_preview_paths(self) -> list:
+        return [
+            [list(pt) for pt in path]
+            for path in self._last_interpolation_preview_paths
+        ]
+
+    def get_last_original_preview_paths(self) -> list:
+        return [
+            [list(pt) for pt in path]
+            for path in self._last_original_preview_paths
+        ]
+
+    def get_last_pre_smoothed_preview_paths(self) -> list:
+        return [
+            [list(pt) for pt in path]
+            for path in self._last_pre_smoothed_preview_paths
+        ]
+
+    def get_last_linear_preview_paths(self) -> list:
+        return [
+            [list(pt) for pt in path]
+            for path in self._last_linear_preview_paths
+        ]
+
+    def get_last_execution_preview_paths(self) -> list:
+        return [
+            [list(pt) for pt in (job.get("path") or [])]
+            for job in self._last_execution_preview_jobs
+        ]
+
+    def execute_last_preview_paths(self) -> tuple[bool, str]:
+        if not self._last_execution_preview_jobs:
+            return False, "No previewed paths available to execute"
+        if self._robot_service is None:
+            return False, "Robot service is not available"
+
+        total_waypoints = 0
+        for job in self._last_execution_preview_jobs:
+            spline = job.get("path") or []
+            vel = float(job.get("vel", 60.0))
+            acc = float(job.get("acc", 30.0))
+            pattern_type = str(job.get("pattern_type", "Path"))
+            if not spline:
+                continue
+
+            result = self._robot_service.execute_trajectory(spline, vel=vel, acc=acc, blocking=True)
+            if result not in (0, True, None):
+                return False, f"{pattern_type} trajectory execution failed with code {result}"
+            total_waypoints += len(spline)
+            _logger.info(
+                "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot (vel=%.0f acc=%.0f)",
+                len(spline), vel, acc,
+            )
+
+        return True, f"Executed {len(self._last_execution_preview_jobs)} path(s), {total_waypoints} waypoints"
 
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
         """Convert (N, 2) pixel points + segment settings → [[x, y, z, rx_degrees, ry_degrees, rz_degrees], ...]."""
@@ -230,6 +336,24 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 rx_coord, ry_coord = float(px), float(py)
             result.append([rx_coord, ry_coord, base_z, rx, ry, rz])
         return result
+
+    def _build_preview_contours(self, spline_points: list[list[float]]) -> list[np.ndarray]:
+        if self._transformer is None or not self._transformer.is_available():
+            return []
+
+        preview_xy: list[list[float]] = []
+        for pt in spline_points:
+            try:
+                px, py = self._transformer.inverse_transform(float(pt[0]), float(pt[1]))
+            except Exception:
+                continue
+            preview_xy.append([float(px), float(py)])
+
+        if len(preview_xy) < 2:
+            return []
+
+        contour = np.array(preview_xy, dtype=np.float32).reshape(-1, 1, 2)
+        return [contour]
 
     def _merge(self, form_data: dict, editor_data) -> dict:
         if not isinstance(editor_data, ContourEditorData):

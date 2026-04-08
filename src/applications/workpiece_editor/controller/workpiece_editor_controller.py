@@ -2,13 +2,15 @@ import logging
 from typing import List, Tuple, Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
 from src.applications.workpiece_editor.view.workpiece_editor_view import WorkpieceEditorView
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
-from src.applications.base.styled_message_box import show_warning
+from src.applications.base.styled_message_box import show_warning, show_info, show_critical
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
 
@@ -29,6 +31,7 @@ class WorkpieceEditorController(IApplicationController):
         self._active         = False
         self._camera_active  = True          # ← controls whether feed updates are forwarded
         self._logger         = logging.getLogger(self.__class__.__name__)
+        self._preview_dialog = None
 
     def load(self) -> None:
         self._active        = True
@@ -194,6 +197,78 @@ class WorkpieceEditorController(IApplicationController):
         payload = {"form_data": data, "editor_data": editor_data}
         ok, msg = self._model.execute_workpiece(payload)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
+        if ok:
+            try:
+                preview_contours = self._model.get_last_interpolation_preview_contours()
+                if preview_contours:
+                    self._view.update_contours(preview_contours)
+                original_paths = self._model.get_last_original_preview_paths()
+                pre_smoothed_paths = self._model.get_last_pre_smoothed_preview_paths()
+                linear_paths = self._model.get_last_linear_preview_paths()
+                preview_paths = self._model.get_last_interpolation_preview_paths()
+                execution_paths = self._model.get_last_execution_preview_paths()
+                if original_paths or preview_paths:
+                    self._show_interpolation_plot(
+                        original_paths,
+                        pre_smoothed_paths,
+                        linear_paths,
+                        preview_paths,
+                        execution_paths,
+                    )
+            except Exception:
+                self._logger.debug("Failed to update interpolation preview contours", exc_info=True)
+
+    def _show_interpolation_plot(
+        self,
+        original_paths: list[list[list[float]]],
+        pre_smoothed_paths: list[list[list[float]]],
+        linear_paths: list[list[list[float]]],
+        preview_paths: list[list[list[float]]],
+        execution_paths: list[list[list[float]]],
+    ) -> None:
+        from src.engine.robot.path_interpolation.debug_plotting import plot_trajectory_debug
+
+        image_path = plot_trajectory_debug(
+            original_paths,
+            linear_paths,
+            preview_paths,
+            execution_paths,
+            pre_smoothed_paths=pre_smoothed_paths,
+        )
+        if not image_path:
+            return
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Interpolated Path Preview")
+        dialog.resize(1100, 800)
+
+        layout = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        image_label = QLabel(scroll)
+        pixmap = QPixmap(image_path)
+        image_label.setPixmap(pixmap)
+        image_label.setScaledContents(False)
+        scroll.setWidget(image_label)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        execute_btn = QPushButton("Execute")
+        execute_btn.clicked.connect(self._on_execute_preview_confirmed)
+        button_row.addWidget(execute_btn)
+        layout.addLayout(button_row)
+
+        self._preview_dialog = dialog
+        dialog.show()
+
+    def _on_execute_preview_confirmed(self) -> None:
+        ok, msg = self._model.execute_last_preview_paths()
+        self._logger.info("Execute preview paths: %s — %s", ok, msg)
+        if ok:
+            show_info(self._preview_dialog or self._view, "Execution Started", msg)
+        else:
+            show_critical(self._preview_dialog or self._view, "Execution Failed", msg)
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)

@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any, Optional
 
 import cv2
+import math
 import numpy as np
 
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
@@ -106,14 +107,11 @@ class WorkpieceAdapter:
 
         pts = []
         for i, seg in enumerate(segments):
-            if not seg.points:
+            sampled = WorkpieceAdapter._sample_segment_points(seg)
+            if not sampled:
                 continue
-            # First segment: take all points.
-            # Subsequent segments: skip points[0] — it is the shared junction
-            # with the previous segment's last point (would be a duplicate).
             start = 1 if (i > 0 and pts) else 0
-            for pt in seg.points[start:]:
-                pts.append([pt.x(), pt.y()])
+            pts.extend(sampled[start:])
 
         return (
             np.array(pts, dtype=np.float32).reshape(-1, 1, 2)
@@ -151,10 +149,43 @@ class WorkpieceAdapter:
         return normalized
     @staticmethod
     def _segment_to_contour_array(segment: Segment) -> Optional[np.ndarray]:
-        if not segment.points:
+        sampled = WorkpieceAdapter._sample_segment_points(segment)
+        if not sampled:
             return None
-        return np.array([[pt.x(), pt.y()] for pt in segment.points],
-                        dtype=np.float32).reshape(-1, 1, 2)
+        return np.array(sampled, dtype=np.float32).reshape(-1, 1, 2)
+
+    @staticmethod
+    def _sample_segment_points(segment: Segment, samples_per_curve: int = 12) -> list[list[float]]:
+        points = getattr(segment, "points", None) or []
+        controls = getattr(segment, "controls", None) or []
+        if not points:
+            return []
+
+        sampled: list[list[float]] = [[float(points[0].x()), float(points[0].y())]]
+
+        for i in range(1, len(points)):
+            p0, p1 = points[i - 1], points[i]
+            cp = controls[i - 1] if i - 1 < len(controls) else None
+            if WorkpieceAdapter._is_effective_control_point(p0, cp, p1):
+                for j in range(1, samples_per_curve + 1):
+                    t = j / samples_per_curve
+                    x = (1 - t) ** 2 * p0.x() + 2 * (1 - t) * t * cp.x() + t ** 2 * p1.x()
+                    y = (1 - t) ** 2 * p0.y() + 2 * (1 - t) * t * cp.y() + t ** 2 * p1.y()
+                    sampled.append([float(x), float(y)])
+            else:
+                sampled.append([float(p1.x()), float(p1.y())])
+
+        return sampled
+
+    @staticmethod
+    def _is_effective_control_point(p0, cp, p1, threshold: float = 1.0) -> bool:
+        if cp is None:
+            return False
+        dx, dy = p1.x() - p0.x(), p1.y() - p0.y()
+        if dx == 0 and dy == 0:
+            return False
+        distance = abs(dy * cp.x() - dx * cp.y() + p1.x() * p0.y() - p1.y() * p0.x()) / math.hypot(dx, dy)
+        return distance > threshold
 
     @classmethod
     def print_summary(cls, editor_data: ContourEditorData) -> None:

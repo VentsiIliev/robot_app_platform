@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from src.applications.base.collapsible_settings_view import CollapsibleGroup
@@ -45,7 +47,9 @@ class _BaseCalibrationTab(QWidget):
 
     def add_settings_groups(self, schemas: list) -> None:
         for schema in schemas:
-            group = CollapsibleGroup(schema)
+            single_column_schema = deepcopy(schema)
+            single_column_schema.columns = 1
+            group = CollapsibleGroup(single_column_schema)
             self._settings_groups.append(group)
             self._card_layout.addWidget(group)
 

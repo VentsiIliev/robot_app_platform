@@ -21,3 +21,4 @@ class SettingField:
 class SettingGroup:
     title: str
     fields: List[SettingField] = field(default_factory=list)
+    columns: int = 2

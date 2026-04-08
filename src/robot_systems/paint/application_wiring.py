@@ -205,6 +205,7 @@ def _build_calibration_application(robot_system):
             robot_config=robot_system._robot_config,
             messaging=getattr(robot_system, "_messaging_service", None),
             default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
+            settings_service=robot_system._settings_service,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
@@ -317,6 +318,7 @@ def _build_intrinsic_capture_application(robot_system):
         robot_config=robot_system._robot_config,
         messaging=getattr(robot_system, "_messaging_service", None),
         default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
+        settings_service=robot_system._settings_service,
     )
     return WidgetApplication(
         widget_factory=lambda ms: IntrinsicCaptureFactory().build(service, messaging=ms)

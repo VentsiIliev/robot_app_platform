@@ -77,5 +77,9 @@
   "known_unreachable_marker_ids": [],
   "unreachable_marker_failure_counts": {},
   "velocity": 30,
-  "acceleration": 10
+  "acceleration": 10,
+  "travel_velocity": 30,
+  "travel_acceleration": 10,
+  "iterative_velocity": 30,
+  "iterative_acceleration": 10
 }

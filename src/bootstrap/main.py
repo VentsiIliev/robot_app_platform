@@ -18,6 +18,7 @@ from src.bootstrap.shell_configurator import ShellConfigurator
 from src.engine.localization.localization_service import LocalizationService
 from src.robot_systems.system_builder import SystemBuilder
 from src.robot_systems.paint.bootstrap_provider import PaintBootstrapProvider
+from src.robot_systems.welding.bootstrap_provider import WeldingBootstrapProvider
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
@@ -39,7 +40,8 @@ def _pin_process_to_non_rt_cores() -> None:
 
 _DEV_SKIP_LOGIN = True
 # _BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
-_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+# _BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
+_BOOTSTRAP_PROVIDER = WeldingBootstrapProvider()
 
 
 

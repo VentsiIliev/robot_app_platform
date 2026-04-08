@@ -69,6 +69,8 @@ class RobotCalibrationConfig:
                  known_unreachable_marker_ids=None,
                  unreachable_marker_failure_counts=None,
                  velocity: int = 30, acceleration: int = 10,
+                 travel_velocity: int | None = None, travel_acceleration: int | None = None,
+                 iterative_velocity: int | None = None, iterative_acceleration: int | None = None,
                  run_height_measurement: bool = True,
                  settings_service=None,
                  calibration_settings_key: str | None = None,
@@ -91,6 +93,10 @@ class RobotCalibrationConfig:
         self.robot_user = robot_user
         self.velocity = velocity
         self.acceleration = acceleration
+        self.travel_velocity = travel_velocity if travel_velocity is not None else velocity
+        self.travel_acceleration = travel_acceleration if travel_acceleration is not None else acceleration
+        self.iterative_velocity = iterative_velocity if iterative_velocity is not None else velocity
+        self.iterative_acceleration = iterative_acceleration if iterative_acceleration is not None else acceleration
         self.run_height_measurement = run_height_measurement
         self.settings_service = settings_service
         self.calibration_settings_key = calibration_settings_key

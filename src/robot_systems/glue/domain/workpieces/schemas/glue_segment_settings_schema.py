@@ -26,9 +26,8 @@ def build_glue_segment_settings_schema(glue_types: list) -> SegmentSettingsSchem
             SegmentSettingSpec("velocity",                                           "Velocity",                 "10",    "Robot"),
             SegmentSettingSpec("acceleration",                                       "Acceleration",             "10",    "Robot"),
             SegmentSettingSpec(GlueSettingKey.RZ_ANGLE.value,                       "Rz Angle",                 "0",     "Robot"),
-            SegmentSettingSpec("adaptive_spacing_mm",                                "Adaptive Spacing (mm)",    "10",    "Robot"),
-            SegmentSettingSpec("spline_density_multiplier",                          "Spline Density",           "2.0",   "Robot"),
-            SegmentSettingSpec("smoothing_lambda",                                   "Smoothing Lambda",         "0.0",   "Robot"),
+            SegmentSettingSpec("blend_radius_mm",                                    "Blend Radius (mm)",        "0.0",   "Robot"),
+            SegmentSettingSpec("pre_smooth_max_deviation_mm",                        "Pre-Smooth Deviation (mm)","1.0",   "Robot"),
             # Generator
             SegmentSettingSpec(GlueSettingKey.TIME_BETWEEN_GENERATOR_AND_GLUE.value,"Time Gen → Glue",          "1",     "Generator"),
             SegmentSettingSpec(GlueSettingKey.GENERATOR_TIMEOUT.value,              "Generator Timeout",        "5",     "Generator"),

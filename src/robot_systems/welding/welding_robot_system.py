@@ -141,6 +141,8 @@ class WeldingRobotSystem(BaseRobotSystem):
         applications=[
             ApplicationSpec(name="WeldingDashboard", folder_id=1, icon="fa5s.tachometer-alt",
                             factory=application_wiring._build_dashboard_application),
+            ApplicationSpec(name="WeldingContourEditor", folder_id=1, icon="fa5s.draw-polygon",
+                            factory=application_wiring._build_welding_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                             factory=application_wiring._build_robot_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
@@ -267,8 +269,6 @@ class WeldingRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
-
-
 
 
 

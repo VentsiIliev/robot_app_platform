@@ -88,7 +88,7 @@ class FairinoRos2Client:
             logger.error("move_cartesian error: %s", e, exc_info=True)
             return -1
 
-    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True):
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
         payload = {
             "position": self._to_float_list(position),
             "tool": tool,
@@ -96,6 +96,7 @@ class FairinoRos2Client:
             "vel": vel,
             "acc": acc,
             "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
         }
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
@@ -113,11 +114,26 @@ class FairinoRos2Client:
             logger.error("move_liner error: %s", e, exc_info=True)
             return -1
 
-    def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False):
+    def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer="TOTG"):
         sanitized_path = [self._to_float_list(p) for p in path] if path else path
-        payload = {"path": sanitized_path, "rx_degrees": rx, "ry_degrees": ry, "rz_degrees": rz, "vel": vel, "acc": acc, "blocking": blocking}
-        logger.debug("execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s",
-                     len(path) if path else 0, blocking, vel, acc)
+        payload = {
+            "path": sanitized_path,
+            "rx_degrees": rx,
+            "ry_degrees": ry,
+            "rz_degrees": rz,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        logger.debug(
+            "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s",
+            len(path) if path else 0,
+            blocking,
+            vel,
+            acc,
+            trajectory_optimizer,
+        )
         try:
             response = requests.post(f"{self.server_url}/execute/path", json=payload, timeout=120)
             raw = response.json()

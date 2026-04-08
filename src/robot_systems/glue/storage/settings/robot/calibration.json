@@ -6,7 +6,7 @@
     "max_error_ref": 30.0,
     "k": 2.0,
     "derivative_scaling": 0.5,
-    "fast_iteration_wait": 0.2,
+    "fast_iteration_wait": 0.8,
     "initial_align_y_scale": 1.0,
     "post_align_settle_s": 0.3
   },
@@ -79,6 +79,7 @@
     255,
     256,
     257,
+    271,
     272,
     273,
     274,
@@ -166,8 +167,13 @@
     "288": 1,
     "304": 1,
     "287": 1,
-    "303": 1
+    "303": 1,
+    "271": 1
   },
   "velocity": 60,
-  "acceleration": 10
+  "acceleration": 10,
+  "travel_velocity": 60,
+  "travel_acceleration": 10,
+  "iterative_velocity": 10,
+  "iterative_acceleration": 10
 }

@@ -44,8 +44,9 @@ class GenericSettingGroup(QGroupBox):
         grid = QGridLayout()
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(16)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
+        column_count = max(1, int(getattr(self._group, "columns", 2) or 2))
+        for idx in range(column_count):
+            grid.setColumnStretch(idx, 1)
 
         row = 0
         col = 0
@@ -70,15 +71,15 @@ class GenericSettingGroup(QGroupBox):
             self._handlers[f.key] = handler
 
             if handler.full_width:
-                if col == 1:
+                if col != 0:
                     row += 1
-                grid.addWidget(cell, row, 0, 1, 2)
+                grid.addWidget(cell, row, 0, 1, column_count)
                 row += 1
                 col = 0
             else:
                 grid.addWidget(cell, row, col)
                 col += 1
-                if col == 2:
+                if col == column_count:
                     col = 0
                     row += 1
 

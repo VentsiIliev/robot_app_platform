@@ -35,6 +35,48 @@ _logger = logging.getLogger(__name__)
 wait_to_reach_position = True  # TODO set to False only for testing!
 
 
+def _capture_marker_offsets_px(context, marker_id: int, sample_count: int, image_center_px: tuple[int, int]):
+    offset_samples: list[tuple[float, float]] = []
+    iteration_image = None
+    last_ids = None
+
+    capture_start = time.time()
+    for _ in range(sample_count):
+        frame = context.wait_for_frame()
+        if frame is None:
+            return None, None, None, None, None
+        iteration_image = frame
+        res = context.calibration_vision.detect_specific_marker(frame, marker_id)
+        if res.found and res.aruco_ids is not None:
+            context.calibration_vision.update_marker_top_left_corners(
+                marker_id, res.aruco_corners, res.aruco_ids
+            )
+            mx, my = context.calibration_vision.marker_top_left_corners[marker_id]
+            offset_samples.append((float(mx) - image_center_px[0], float(my) - image_center_px[1]))
+            last_ids = res.aruco_ids
+
+    capture_time = time.time() - capture_start
+    return offset_samples, iteration_image, last_ids, capture_time, capture_time
+
+
+def _verify_alignment_after_settle(context, marker_id: int, alignment_threshold_mm: float, image_center_px: tuple[int, int], new_ppm: float):
+    verification_frame = context.wait_for_frame()
+    if verification_frame is None:
+        return None, None, None, None
+
+    res = context.calibration_vision.detect_specific_marker(verification_frame, marker_id)
+    if not res.found or res.aruco_ids is None:
+        return verification_frame, None, None, None
+
+    context.calibration_vision.update_marker_top_left_corners(marker_id, res.aruco_corners, res.aruco_ids)
+    mx, my = context.calibration_vision.marker_top_left_corners[marker_id]
+    verify_offset_x_px = float(mx) - image_center_px[0]
+    verify_offset_y_px = float(my) - image_center_px[1]
+    verify_error_px = np.sqrt(verify_offset_x_px ** 2 + verify_offset_y_px ** 2)
+    verify_error_mm = verify_error_px / new_ppm
+    return verification_frame, verify_error_mm, verify_offset_x_px, verify_offset_y_px
+
+
 def _get_radial_iterative_damping(context, marker_id: int, iteration_count: int) -> float:
     if iteration_count > 2:
         return 1.0
@@ -101,26 +143,14 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     )
     new_ppm = get_working_ppm(context)
 
-    offset_samples: list = []
-    iteration_image = None
-    last_ids = None
-
-    capture_start = time.time()
-    for _ in range(sample_count):
-        frame = context.wait_for_frame()
-        if frame is None:
-            return RobotCalibrationStates.CANCELLED
-        iteration_image = frame
-        res = context.calibration_vision.detect_specific_marker(frame, marker_id)
-        if res.found and res.aruco_ids is not None:
-            context.calibration_vision.update_marker_top_left_corners(
-                marker_id, res.aruco_corners, res.aruco_ids
-            )
-            mx, my = context.calibration_vision.marker_top_left_corners[marker_id]
-            offset_samples.append((float(mx) - image_center_px[0], float(my) - image_center_px[1]))
-            last_ids = res.aruco_ids
-    capture_time = time.time() - capture_start
-    detection_time = capture_time
+    offset_samples, iteration_image, last_ids, capture_time, detection_time = _capture_marker_offsets_px(
+        context,
+        marker_id,
+        sample_count,
+        image_center_px,
+    )
+    if offset_samples is None:
+        return RobotCalibrationStates.CANCELLED
     processing_start = time.time()
 
     if not offset_samples:
@@ -154,22 +184,61 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     result = None
 
     if alignment_success:
-        start_time = time.time()
-        while time.time() - start_time < 0.5:
-            current_pose = context.calibration_robot_controller.get_current_position()
-            time.sleep(0.05)
-
+        settle_s = 0.5
         _logger.info(
-            "Homography sample - marker=%d  pose=[x=%.3f y=%.3f z=%.3f rx=%.4f ry=%.4f rz=%.4f]  "
-            "final_error=%.3fmm  iterations=%d",
+            "Marker %s reached threshold at iteration %s (error=%.3fmm). "
+            "Settling for %.2fs before strict re-verification.",
+            marker_id,
+            progress.iteration_count,
+            current_error_mm,
+            settle_s,
+        )
+        if context.interruptible_sleep(settle_s):
+            return RobotCalibrationStates.CANCELLED
+
+        verification_frame, verify_error_mm, verify_offset_x_px, verify_offset_y_px = _verify_alignment_after_settle(
+            context,
+            marker_id,
+            alignment_threshold_mm,
+            image_center_px,
+            new_ppm,
+        )
+        if verification_frame is None:
+            return RobotCalibrationStates.CANCELLED
+
+        if verify_error_mm is None:
+            _logger.warning(
+                "Strict post-settle verification failed for marker %s: marker not found. Continuing iterative alignment.",
+                marker_id,
+            )
+            context.flush_camera_buffer()
+            return RobotCalibrationStates.ITERATE_ALIGNMENT
+
+        if verify_error_mm > alignment_threshold_mm:
+            _logger.info(
+                "Strict post-settle verification rejected marker %s: verify_error=%.3fmm threshold=%.3fmm offsets_px=(%.2f, %.2f). Continuing alignment.",
+                marker_id,
+                verify_error_mm,
+                alignment_threshold_mm,
+                verify_offset_x_px,
+                verify_offset_y_px,
+            )
+            show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
+            context._last_error_mm_for_sampling = verify_error_mm
+            return RobotCalibrationStates.ITERATE_ALIGNMENT
+
+        current_pose = context.calibration_robot_controller.get_current_position()
+        _logger.info(
+            "Homography sample accepted after strict verification - marker=%d pose=[x=%.3f y=%.3f z=%.3f rx=%.4f ry=%.4f rz=%.4f] verify_error=%.3fmm iterations=%d",
             marker_id,
             current_pose[0], current_pose[1], current_pose[2],
             current_pose[3], current_pose[4], current_pose[5],
-            current_error_mm, progress.iteration_count,
+            verify_error_mm,
+            progress.iteration_count,
         )
         context.robot_positions_for_calibration[marker_id] = current_pose
         artifacts.robot_positions_for_calibration = dict(context.robot_positions_for_calibration)
-        show_live_feed(context, iteration_image, current_error_mm, broadcast_image=context.broadcast_events)
+        show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
 
         if should_capture_tcp_offset_for_current_marker(context):
             return RobotCalibrationStates.CAPTURE_TCP_OFFSET
@@ -202,7 +271,10 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
         return fail_calibration(context, str(exc))
 
     movement_start = time.time()
-    result = context.calibration_robot_controller.move_to_position(iterative_position, blocking=wait_to_reach_position)
+    result = context.calibration_robot_controller.move_to_iterative_position(
+        iterative_position,
+        blocking=wait_to_reach_position,
+    )
     movement_time = time.time() - movement_start
 
     if not result:

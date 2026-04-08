@@ -6,13 +6,16 @@ _logger = logging.getLogger(__name__)
 
 class CalibrationRobotController:
     def __init__(self, robot_service, navigation_service, tool: int, user: int, adaptive_movement_config,
-                 velocity: int = 30, acceleration: int = 10):
+                 velocity: int = 30, acceleration: int = 10,
+                 iterative_velocity: int | None = None, iterative_acceleration: int | None = None):
         self.robot_service = robot_service
         self._navigation_service = navigation_service
         self._tool = tool
         self._user = user
         self._velocity = velocity
         self._acceleration = acceleration
+        self._iterative_velocity = iterative_velocity if iterative_velocity is not None else velocity
+        self._iterative_acceleration = iterative_acceleration if iterative_acceleration is not None else acceleration
         self.adaptive_movement_config = adaptive_movement_config
         self._calibration_position = None
 
@@ -36,6 +39,16 @@ class CalibrationRobotController:
             user=self._user,
             velocity=velocity if velocity is not None else self._velocity,
             acceleration=acceleration if acceleration is not None else self._acceleration,
+            wait_to_reach=blocking,
+        )
+
+    def move_to_iterative_position(self, position, blocking=False, velocity=None, acceleration=None):
+        return self.robot_service.move_ptp(
+            position=position,
+            tool=self._tool,
+            user=self._user,
+            velocity=velocity if velocity is not None else self._iterative_velocity,
+            acceleration=acceleration if acceleration is not None else self._iterative_acceleration,
             wait_to_reach=blocking,
         )
 

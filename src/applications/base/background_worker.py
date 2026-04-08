@@ -36,9 +36,10 @@ Notes
 """
 from __future__ import annotations
 
+import logging
 from typing import Callable, List, Optional, Tuple
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
 
 class _Worker(QObject):
@@ -58,6 +59,24 @@ class _Worker(QObject):
             self.failed.emit(str(exc))
 
 
+class _UiRelay(QObject):
+    """Ensures result/error callbacks run on the GUI thread."""
+
+    def __init__(self, on_done: Callable, on_error: Optional[Callable] = None) -> None:
+        super().__init__()
+        self._on_done = on_done
+        self._on_error = on_error
+
+    @pyqtSlot(object)
+    def handle_finished(self, result) -> None:
+        self._on_done(result)
+
+    @pyqtSlot(str)
+    def handle_failed(self, message: str) -> None:
+        if self._on_error is not None:
+            self._on_error(message)
+
+
 class BackgroundWorker:
     """
     Mixin that provides ``_run_in_thread()`` for controller classes.
@@ -69,7 +88,8 @@ class BackgroundWorker:
     """
 
     def __init__(self) -> None:
-        self._active: List[Tuple[QThread, _Worker]] = []
+        self._active: List[Tuple[QThread, _Worker, _UiRelay]] = []
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def _run_in_thread(
         self,
@@ -94,25 +114,40 @@ class BackgroundWorker:
         """
         thread = QThread()
         worker = _Worker(fn)
+        relay = _UiRelay(on_done=on_done, on_error=on_error)
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)
-        worker.finished.connect(on_done)
+        worker.finished.connect(relay.handle_finished)
         worker.finished.connect(thread.quit)
         if on_error is not None:
-            worker.failed.connect(on_error)
+            worker.failed.connect(relay.handle_failed)
             worker.failed.connect(thread.quit)
         thread.finished.connect(self._on_thread_finished)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(relay.deleteLater)
+        thread.finished.connect(thread.deleteLater)
 
-        self._active.append((thread, worker))
+        self._active.append((thread, worker, relay))
         thread.start()
 
     def _stop_threads(self, timeout_ms: int = 3000) -> None:
         """Quit and wait for every running thread.  Call from ``stop()``."""
-        for thread, _ in self._active:
+        still_running: List[Tuple[QThread, _Worker, _UiRelay]] = []
+        for thread, worker, relay in self._active:
+            if not thread.isRunning():
+                continue
             thread.quit()
-            thread.wait(timeout_ms)
-        self._active.clear()
+            if thread.wait(timeout_ms):
+                continue
+
+            self._logger.warning(
+                "Background worker thread did not stop within %d ms; waiting for completion to avoid QThread shutdown crash",
+                timeout_ms,
+            )
+            thread.wait()
+            still_running.append((thread, worker, relay))
+        self._active = [(t, w, r) for t, w, r in still_running if t.isRunning()]
 
     def _on_thread_finished(self) -> None:
-        self._active = [(t, w) for t, w in self._active if t.isRunning()]
+        self._active = [(t, w, r) for t, w, r in self._active if t.isRunning()]

@@ -286,16 +286,9 @@ class CalibrationView(IApplicationView):
             cv2.putText(frame, line, (24, y), cv2.FONT_HERSHEY_SIMPLEX, scale, (235, 245, 250), thickness, cv2.LINE_AA)
             y += 22
 
-        if active_target_px is not None:
-            tx = int(round(float(active_target_px[0])))
-            ty = int(round(float(active_target_px[1])))
-            h, w = frame.shape[:2]
-            cx, cy = w // 2, h // 2
-            cv2.circle(frame, (tx, ty), 16, (0, 215, 255), 2, cv2.LINE_AA)
-            cv2.circle(frame, (tx, ty), 4, (0, 215, 255), -1, cv2.LINE_AA)
-            cv2.line(frame, (cx, cy), (tx, ty), (0, 215, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, f"T{active_target}", (tx + 10, ty - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 215, 255), 2, cv2.LINE_AA)
-            cv2.drawMarker(frame, (cx, cy), (60, 255, 120), cv2.MARKER_CROSS, 22, 2, cv2.LINE_AA)
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        cv2.drawMarker(frame, (cx, cy), (60, 255, 120), cv2.MARKER_CROSS, 22, 2, cv2.LINE_AA)
 
         return frame
 

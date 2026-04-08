@@ -156,9 +156,15 @@ class RobotCalibrationSettings:
     unreachable_marker_failure_counts: Dict[int, int] = field(default_factory=dict)
     velocity: int = 30
     acceleration: int = 10
+    travel_velocity: int = 30
+    travel_acceleration: int = 10
+    iterative_velocity: int = 30
+    iterative_acceleration: int = 10
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
+        velocity = int(data.get("velocity", 30))
+        acceleration = int(data.get("acceleration", 10))
         return cls(
             adaptive_movement=AdaptiveMovementConfig.from_dict(data.get("adaptive_movement_config", {})),
             axis_mapping=AxisMappingConfig.from_dict(data.get("axis_mapping_config", {})),
@@ -183,8 +189,12 @@ class RobotCalibrationSettings:
                 int(marker_id): int(count)
                 for marker_id, count in (data.get("unreachable_marker_failure_counts", {}) or {}).items()
             },
-            velocity=int(data.get("velocity", 30)),
-            acceleration=int(data.get("acceleration", 10)),
+            velocity=velocity,
+            acceleration=acceleration,
+            travel_velocity=int(data.get("travel_velocity", velocity)),
+            travel_acceleration=int(data.get("travel_acceleration", acceleration)),
+            iterative_velocity=int(data.get("iterative_velocity", velocity)),
+            iterative_acceleration=int(data.get("iterative_acceleration", acceleration)),
         )
 
     def to_dict(self) -> Dict:
@@ -205,8 +215,12 @@ class RobotCalibrationSettings:
             "unreachable_marker_failure_threshold": self.unreachable_marker_failure_threshold,
             "known_unreachable_marker_ids": self.known_unreachable_marker_ids,
             "unreachable_marker_failure_counts": self.unreachable_marker_failure_counts,
-            "velocity": self.velocity,
-            "acceleration": self.acceleration,
+            "velocity": self.travel_velocity,
+            "acceleration": self.travel_acceleration,
+            "travel_velocity": self.travel_velocity,
+            "travel_acceleration": self.travel_acceleration,
+            "iterative_velocity": self.iterative_velocity,
+            "iterative_acceleration": self.iterative_acceleration,
         }
 
 

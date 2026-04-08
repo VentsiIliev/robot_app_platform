@@ -1,7 +1,8 @@
 import logging
+import threading
 from functools import partial
 
-from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QObject, QRunnable, QThreadPool, QTimer, pyqtSignal, pyqtSlot
 
 from src.applications.base.robot_jog_service import RobotJogService
 from src.engine.core.i_messaging_service import IMessagingService
@@ -11,8 +12,62 @@ _logger = logging.getLogger(__name__)
 
 
 class _Bridge(QObject):
-    position_received = pyqtSignal(list)
     frame_options_received = pyqtSignal(object, str)
+
+    def __init__(self, view, apply_frame_options):
+        super().__init__()
+        self._view = view
+        self._apply_frame_options = apply_frame_options
+        self._lock = threading.Lock()
+        self._latest_position: list = []
+        self._position_dirty = False
+        self._position_timer = QTimer(self)
+        self._position_timer.setInterval(100)
+        self._position_timer.timeout.connect(self.flush_position)
+        self._position_timer.start()
+        self.frame_options_received.connect(self.handle_frame_options)
+        self._destroy_slot_connected = True
+        view.destroyed.connect(self.handle_view_destroyed)
+
+    def ingest_position(self, pos: list) -> None:
+        with self._lock:
+            self._latest_position = list(pos or [])
+            self._position_dirty = True
+
+    @pyqtSlot()
+    def flush_position(self) -> None:
+        if self._view is None:
+            return
+        with self._lock:
+            if not self._position_dirty:
+                return
+            position = list(self._latest_position)
+            self._position_dirty = False
+        self._view.set_jog_position(position)
+
+    @pyqtSlot(object, str)
+    def handle_frame_options(self, names_obj, default: str) -> None:
+        if self._view is None:
+            return
+        self._apply_frame_options(names_obj, default)
+
+    @pyqtSlot()
+    def handle_view_destroyed(self) -> None:
+        self.stop()
+
+    def stop(self) -> None:
+        self._position_timer.stop()
+        try:
+            self.frame_options_received.disconnect(self.handle_frame_options)
+        except (RuntimeError, TypeError):
+            pass
+        if self._view is not None and self._destroy_slot_connected:
+            try:
+                self._view.destroyed.disconnect(self.handle_view_destroyed)
+            except (RuntimeError, TypeError):
+                pass
+            self._destroy_slot_connected = False
+        self._view = None
 
 
 class _FireAndForget(QRunnable):
@@ -56,18 +111,16 @@ class JogController:
         self._view      = view
         self._service   = jog_service
         self._messaging = messaging
-        self._bridge    = _Bridge()
+        self._bridge    = _Bridge(view, self._apply_frame_options)
         self._subs      = []
-
-        self._bridge.position_received.connect(view.set_jog_position)
-        self._bridge.frame_options_received.connect(self._apply_frame_options)
         view.jog_requested.connect(self._on_jog)
         view.jog_stopped.connect(self._on_jog_stop)
 
     def start(self) -> None:
-        cb = self._on_position
-        self._messaging.subscribe(RobotTopics.POSITION, cb)
-        self._subs.append((RobotTopics.POSITION, cb))
+        if bool(getattr(self._view, "JOG_LIVE_POSITION_ENABLED", True)):
+            cb = self._on_position
+            self._messaging.subscribe(RobotTopics.POSITION, cb)
+            self._subs.append((RobotTopics.POSITION, cb))
         targeting_cb = self._on_targeting_definitions_changed
         self._messaging.subscribe(RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb)
         self._subs.append((RobotTopics.TARGETING_DEFINITIONS_CHANGED, targeting_cb))
@@ -77,9 +130,19 @@ class JogController:
         for topic, cb in self._subs:
             self._messaging.unsubscribe(topic, cb)
         self._subs.clear()
+        try:
+            self._view.jog_requested.disconnect(self._on_jog)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            self._view.jog_stopped.disconnect(self._on_jog_stop)
+        except (RuntimeError, TypeError):
+            pass
+        self._bridge.stop()
+        self._bridge.deleteLater()
 
     def _on_position(self, pos: list) -> None:
-        self._bridge.position_received.emit(pos if pos else [])
+        self._bridge.ingest_position(pos if pos else [])
 
     def _on_targeting_definitions_changed(self, _payload=None) -> None:
         self._refresh_frame_options()

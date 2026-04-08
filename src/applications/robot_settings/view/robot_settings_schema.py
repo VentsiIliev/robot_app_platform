@@ -45,8 +45,10 @@ CALIBRATION_MARKER_GROUP = SettingGroup("Marker Detection", [
     SettingField("calib_required_ids",          "Required IDs",     "int_list",     default="0,1,2,3,4,5,6,8", min_val=0, max_val=255),
     SettingField("calib_candidate_ids",         "Candidate IDs",    "int_list",     default="", min_val=0, max_val=999),
     SettingField("calib_min_target_separation_px", "Min Separation", "double_spinbox", default=120.0, min_val=0.0, max_val=2000.0, decimals=1, suffix=" px", step=1.0, step_options=[1, 10, 50, 100, 150]),
-    SettingField("calib_velocity",              "Velocity",         "spinbox",      default=30,   min_val=1,   max_val=1000,  suffix=" mm/s",  step=1,   step_options=[1, 5, 10, 50]),
-    SettingField("calib_acceleration",          "Acceleration",     "spinbox",      default=10,   min_val=1,   max_val=1000,  suffix=" mm/s²", step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_travel_velocity",       "Travel Velocity",     "spinbox",      default=30,   min_val=1,   max_val=1000,  suffix=" mm/s",  step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_travel_acceleration",   "Travel Acceleration", "spinbox",      default=10,   min_val=1,   max_val=1000,  suffix=" mm/s²", step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_iterative_velocity",    "Iter Align Velocity", "spinbox",      default=30,   min_val=1,   max_val=1000,  suffix=" mm/s",  step=1,   step_options=[1, 5, 10, 50]),
+    SettingField("calib_iterative_acceleration", "Iter Align Accel",  "spinbox",      default=10,   min_val=1,   max_val=1000,  suffix=" mm/s²", step=1,   step_options=[1, 5, 10, 50]),
     SettingField("calib_fast_iteration_wait",   "Stability Wait",   "double_spinbox", default=1.0, min_val=0.0, max_val=10.0, suffix=" s",    step=0.1, decimals=1, step_options=[0.1, 0.5, 1.0]),
 ])
 

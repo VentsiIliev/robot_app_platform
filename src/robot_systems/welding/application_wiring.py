@@ -1,7 +1,10 @@
 import logging
+import json
+import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
+from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -25,6 +28,82 @@ def _build_capture_snapshot_service(robot_system):
     return CaptureSnapshotService(
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+    )
+
+
+def _build_welding_contour_editor_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
+    from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.welding.domain.contour_editor_schema import (
+        build_welding_contour_form_schema,
+        build_welding_segment_settings_schema,
+    )
+
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
+    robot_config = getattr(robot_system, "_robot_config", None)
+    transformer, _ = robot_system.get_shared_vision_resolver()
+    storage_dir = robot_system.storage_path("contours")
+
+    os.makedirs(storage_dir, exist_ok=True)
+
+    def _save_payload(storage_id: str, data: dict) -> tuple[bool, str]:
+        try:
+            path = os.path.join(storage_dir, f"{storage_id}.json")
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2)
+            return True, f"Saved contour '{storage_id}'"
+        except Exception as exc:
+            _logger.exception("Failed to save welding contour %s", storage_id)
+            return False, str(exc)
+
+    def _save_fn(data: dict) -> tuple[bool, str]:
+        contour_id = str(data.get("workpieceId", "")).strip()
+        if not contour_id:
+            return False, "Contour ID is required"
+        return _save_payload(contour_id, data)
+
+    def _update_fn(storage_id: str, data: dict) -> tuple[bool, str]:
+        contour_id = str(data.get("workpieceId", "")).strip() or str(storage_id).strip()
+        if not contour_id:
+            return False, "Contour ID is required"
+        return _save_payload(contour_id, data)
+
+    def _id_exists_fn(contour_id: str) -> bool:
+        return os.path.exists(os.path.join(storage_dir, f"{str(contour_id).strip()}.json"))
+
+    z_min = 0.0
+    if robot_config is not None:
+        try:
+            z_min = float(robot_config.safety_limits.z_min)
+        except Exception:
+            z_min = 0.0
+
+    service = WorkpieceEditorService(
+        vision_service=vision_service,
+        capture_snapshot_service=capture_snapshot_service,
+        save_fn=_save_fn,
+        update_fn=_update_fn,
+        form_schema=build_welding_contour_form_schema(),
+        segment_config=SegmentEditorConfig(schema=build_welding_segment_settings_schema()),
+        id_exists_fn=_id_exists_fn,
+        transformer=transformer,
+        resolver=None,
+        z_min=z_min,
+        robot_service=robot_service,
+        target_point_name="",
+    )
+
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: WorkpieceEditorFactory().build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
     )
 
 
@@ -205,6 +284,7 @@ def _build_calibration_application(robot_system):
             robot_config=robot_system._robot_config,
             messaging=getattr(robot_system, "_messaging_service", None),
             default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
+            settings_service=robot_system._settings_service,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
@@ -317,6 +397,7 @@ def _build_intrinsic_capture_application(robot_system):
         robot_config=robot_system._robot_config,
         messaging=getattr(robot_system, "_messaging_service", None),
         default_output_dir=robot_system.storage_path("settings", "vision", "data", "intrinsic_capture_output"),
+        settings_service=robot_system._settings_service,
     )
     return WidgetApplication(
         widget_factory=lambda ms: IntrinsicCaptureFactory().build(service, messaging=ms)

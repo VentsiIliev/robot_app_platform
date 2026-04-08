@@ -165,6 +165,10 @@ class RobotCalibrationService(IRobotCalibrationService):
                 self._config.z_target = live_calibration.z_target
                 self._config.velocity = live_calibration.velocity
                 self._config.acceleration = live_calibration.acceleration
+                self._config.travel_velocity = int(getattr(live_calibration, "travel_velocity", live_calibration.velocity))
+                self._config.travel_acceleration = int(getattr(live_calibration, "travel_acceleration", live_calibration.acceleration))
+                self._config.iterative_velocity = int(getattr(live_calibration, "iterative_velocity", live_calibration.velocity))
+                self._config.iterative_acceleration = int(getattr(live_calibration, "iterative_acceleration", live_calibration.acceleration))
                 self._config.run_height_measurement = live_calibration.run_height_measurement
                 self._config.camera_tcp_offset_config = live_calibration.camera_tcp_offset
                 self._config.axis_mapping_config = live_calibration.axis_mapping

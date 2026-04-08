@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+from dataclasses import replace
 from typing import List, Optional, Tuple
 
 import cv2
@@ -21,6 +22,7 @@ from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_
     IntrinsicCaptureConfig,
     IIntrinsicCaptureService,
 )
+from src.engine.common_settings_ids import CommonSettingsID
 
 _logger = logging.getLogger(__name__)
 
@@ -31,12 +33,21 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
     platform's IRobotService and IVisionService.
     """
 
-    def __init__(self, robot_service, vision_service, robot_config, messaging=None, default_output_dir: str | None = None):
+    def __init__(
+        self,
+        robot_service,
+        vision_service,
+        robot_config,
+        messaging=None,
+        default_output_dir: str | None = None,
+        settings_service=None,
+    ):
         self._robot = robot_service
         self._vision = vision_service
         self._robot_config = robot_config
         self._messaging = messaging
         self._configured_default_output_dir = str(default_output_dir or "").strip()
+        self._settings_service = settings_service
         self._config = IntrinsicCaptureConfig()
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -97,10 +108,57 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
         return frame
 
     def get_config(self) -> IntrinsicCaptureConfig:
-        return self._config
+        return self._resolved_config()
 
     def save_config(self, config: IntrinsicCaptureConfig) -> None:
         self._config = config
+
+    def _resolved_config(self) -> IntrinsicCaptureConfig:
+        cfg = replace(self._config)
+        if self._settings_service is None:
+            return cfg
+
+        try:
+            vision_defaults = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
+        except Exception:
+            vision_defaults = None
+
+        if vision_defaults is None:
+            return cfg
+
+        if str(cfg.board_type).lower() == "charuco":
+            cfg.chessboard_width = int(
+                cfg.chessboard_width
+                or getattr(vision_defaults, "charuco_board_width", 0)
+                or 0
+            )
+            cfg.chessboard_height = int(
+                cfg.chessboard_height
+                or getattr(vision_defaults, "charuco_board_height", 0)
+                or 0
+            )
+            cfg.square_size_mm = float(
+                cfg.square_size_mm
+                or getattr(vision_defaults, "charuco_square_size_mm", 0.0)
+                or 0.0
+            )
+            cfg.marker_size_mm = float(
+                cfg.marker_size_mm
+                or getattr(vision_defaults, "charuco_marker_size_mm", 0.0)
+                or (cfg.square_size_mm * 0.75 if cfg.square_size_mm else 0.0)
+            )
+            return cfg
+
+        cfg.chessboard_width = int(
+            cfg.chessboard_width or getattr(vision_defaults, "chessboard_width", 0) or 0
+        )
+        cfg.chessboard_height = int(
+            cfg.chessboard_height or getattr(vision_defaults, "chessboard_height", 0) or 0
+        )
+        cfg.square_size_mm = float(
+            cfg.square_size_mm or getattr(vision_defaults, "square_size_mm", 0.0) or 0.0
+        )
+        return cfg
 
     # ── Coverage tracking ─────────────────────────────────────────────────────
 
@@ -215,7 +273,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
 
     def _annotate_frame(self, frame: np.ndarray) -> np.ndarray:
         try:
-            board_type = BoardType(self._config.board_type)
+            board_type = BoardType(self._resolved_config().board_type)
             if board_type == BoardType.CHARUCO:
                 return self._annotate_charuco(frame)
             return self._annotate_chessboard(frame)
@@ -226,7 +284,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
         from src.engine.vision.implementation.VisionSystem.features.calibration.charuco import (
             AutoCharucoBoardDetector,
         )
-        cfg = self._config
+        cfg = self._resolved_config()
         sq = cfg.square_size_mm or 25.0
         mk = cfg.marker_size_mm or sq * 0.75
         dict_id = ARUCO_DICT_OPTIONS.get(cfg.aruco_dict, cv2.aruco.DICT_4X4_250)
@@ -257,7 +315,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
         return vis
 
     def _annotate_chessboard(self, frame: np.ndarray) -> np.ndarray:
-        cfg = self._config
+        cfg = self._resolved_config()
         cw, ch = cfg.chessboard_width, cfg.chessboard_height
         if cw == 0 or ch == 0:
             return frame
@@ -278,7 +336,7 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
     def _run(self) -> None:
         self._lock_brightness()
         try:
-            cfg = self._config
+            cfg = self._resolved_config()
             output_dir = cfg.output_dir or self._default_output_dir()
             os.makedirs(output_dir, exist_ok=True)
 

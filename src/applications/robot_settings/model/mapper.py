@@ -105,8 +105,10 @@ class RobotCalibrationMapper:
             "calib_required_ids":          settings.required_ids,
             "calib_candidate_ids":         settings.candidate_ids,
             "calib_min_target_separation_px": settings.min_target_separation_px,
-            "calib_velocity":              settings.velocity,
-            "calib_acceleration":          settings.acceleration,
+            "calib_travel_velocity":       getattr(settings, "travel_velocity", settings.velocity),
+            "calib_travel_acceleration":   getattr(settings, "travel_acceleration", settings.acceleration),
+            "calib_iterative_velocity":    getattr(settings, "iterative_velocity", settings.velocity),
+            "calib_iterative_acceleration": getattr(settings, "iterative_acceleration", settings.acceleration),
             "calib_axis_marker_id":        ax.marker_id,
             "calib_axis_move_mm":          ax.move_mm,
             "calib_axis_max_attempts":     ax.max_attempts,
@@ -157,8 +159,16 @@ class RobotCalibrationMapper:
         s.min_target_separation_px = float(
             flat.get("calib_min_target_separation_px", s.min_target_separation_px)
         )
-        s.velocity            = int(flat.get("calib_velocity",             s.velocity))
-        s.acceleration        = int(flat.get("calib_acceleration",         s.acceleration))
+        travel_velocity = int(flat.get("calib_travel_velocity", flat.get("calib_velocity", getattr(s, "travel_velocity", s.velocity))))
+        travel_acceleration = int(flat.get("calib_travel_acceleration", flat.get("calib_acceleration", getattr(s, "travel_acceleration", s.acceleration))))
+        iterative_velocity = int(flat.get("calib_iterative_velocity", getattr(s, "iterative_velocity", travel_velocity)))
+        iterative_acceleration = int(flat.get("calib_iterative_acceleration", getattr(s, "iterative_acceleration", travel_acceleration)))
+        s.velocity            = travel_velocity
+        s.acceleration        = travel_acceleration
+        s.travel_velocity     = travel_velocity
+        s.travel_acceleration = travel_acceleration
+        s.iterative_velocity  = iterative_velocity
+        s.iterative_acceleration = iterative_acceleration
 
         ax.marker_id          = int(flat.get("calib_axis_marker_id",        ax.marker_id))
         ax.move_mm            = float(flat.get("calib_axis_move_mm",        ax.move_mm))

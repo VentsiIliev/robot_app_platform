@@ -19,6 +19,7 @@ class IApplicationView(AppWidget):
     """
 
     SHOW_JOG_WIDGET = False
+    JOG_LIVE_POSITION_ENABLED = True
     JOG_FRAME_SELECTOR_ENABLED = False
     JOG_DRAWER_SIDE = "right"
     JOG_DRAWER_WIDTH = 320
