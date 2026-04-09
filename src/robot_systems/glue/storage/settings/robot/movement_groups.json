@@ -16,8 +16,8 @@
       "position": "[-232.343, -93.902, 819.846, 180, 0, 90]"
     },
     "CALIBRATION": {
-      "velocity": 10,
-      "acceleration": 10,
+      "velocity": 50,
+      "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,

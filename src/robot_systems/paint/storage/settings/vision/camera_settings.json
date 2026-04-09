@@ -5,7 +5,7 @@
   "Skip frames": 30,
   "Capture position offset": 0.0,
   "Contour detection": true,
-  "Draw contours": false,
+  "Draw contours": true,
   "Threshold": 100,
   "Threshold pickup area": 150,
   "Epsilon": 0.004,

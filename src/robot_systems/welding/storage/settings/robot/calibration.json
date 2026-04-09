@@ -39,33 +39,10 @@
   "run_height_measurement": false,
   "z_target": 90,
   "required_ids": [
-    1,
-    7,
-    15,
-    70,
-    79,
-    132,
-    140,
-    164,
-    203,
-    211,
-    297,
-    262
+
   ],
   "candidate_ids": [
-    1,
-    7,
-    13,
-    70,
-    79,
-    132,
-    140,
-    164,
-    203,
-    211,
-    297,
-    262,
-    329
+
   ],
   "min_target_separation_px": 100.0,
   "homography_target_count": 16,

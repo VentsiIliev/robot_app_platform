@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import numpy as np
+
 from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
 from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
 
@@ -41,7 +43,13 @@ class IWorkpieceEditorService(ABC):
     def get_last_execution_preview_paths(self) -> list: ...
 
     @abstractmethod
-    def execute_last_preview_paths(self) -> tuple[bool, str]: ...
+    def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]: ...
+
+    @abstractmethod
+    def get_last_pivot_motion_preview(self) -> tuple[list[list[np.ndarray]], list[float] | None]: ...
+
+    @abstractmethod
+    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]: ...
 
     @abstractmethod
     def set_editing(self, storage_id: Optional[str]) -> None:

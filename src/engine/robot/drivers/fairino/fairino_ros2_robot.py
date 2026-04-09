@@ -118,10 +118,30 @@ class FairinoRos2Robot(IRobot):
         self._client.disable()
         logger.info("disable ← done")
 
-    def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False):
-        logger.debug("execute_trajectory → waypoints=%d rx_degrees=%s ry_degrees=%s rz_degrees=%s vel=%s acc=%s blocking=%s",
-                     len(path) if path else 0, rx, ry, rz, vel, acc, blocking)
-        self._client.execute_path(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=blocking)
+    def execute_trajectory(
+        self,
+        path,
+        rx=180,
+        ry=0,
+        rz=0,
+        vel=0.1,
+        acc=0.1,
+        blocking=False,
+        orientation_mode: str = "constant",
+    ):
+        logger.debug(
+            "execute_trajectory → waypoints=%d rx_degrees=%s ry_degrees=%s rz_degrees=%s vel=%s acc=%s blocking=%s orientation_mode=%s",
+            len(path) if path else 0, rx, ry, rz, vel, acc, blocking, orientation_mode)
+        self._client.execute_path(
+            path,
+            rx=rx,
+            ry=ry,
+            rz=rz,
+            vel=vel,
+            acc=acc,
+            blocking=blocking,
+            orientation_mode=orientation_mode,
+        )
         logger.debug("execute_trajectory ← done")
 
     def reset_all_errors(self) -> int:

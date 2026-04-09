@@ -91,7 +91,6 @@ class ContourDetectionService:
         return list(contours), gray  # gray is pre-blur — sharper gradients for sub-pixel
 
     def _approx_contours(self, contours: list) -> list:
-        return contours
         eps = self._settings.get_epsilon()
         return [
             cv2.approxPolyDP(c, eps * cv2.arcLength(c, True), True)

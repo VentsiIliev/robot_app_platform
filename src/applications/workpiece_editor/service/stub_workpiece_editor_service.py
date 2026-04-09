@@ -30,7 +30,15 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: execute_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece executed"
 
+    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
+        _logger.info("Stub: execute_last_preview_paths mode=%s", mode)
+        return True, f"Stub: executed preview paths in {mode} mode"
 
+    def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
+        return [], None
+
+    def get_last_pivot_motion_preview(self):
+        return [], None
 
     def set_editing(self, storage_id) -> None:
         _logger.info("Stub: set_editing storage_id=%s", storage_id)

@@ -50,7 +50,7 @@ class PaintNavigationService:
     ) -> bool:
         ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset, wait_cancelled=wait_cancelled)
         if ok:
-            self._set_area("spray")
+            self._set_observed_area_for_group(self._GROUP_CALIBRATION)
         return ok
 
     def move_to(

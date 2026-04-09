@@ -14,15 +14,15 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[375.496, -74.983, 660.888, -179.152, -0.002, 0.055]"
+      "position": "[385.349, -74.921, 611.112, 179.713, 0.779, 0.052]"
     },
     "CAMERA_CALIBRATION": {
-      "velocity": 10,
-      "acceleration": 10,
+      "velocity": 80,
+      "acceleration": 40,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[375.449, -75.019, 510.907, -179.163, -0.003, 0.049]"
+      "position": "[435.412, -74.870, 410.978, -179.171, -0.011, 0.052]"
     },
     "JOG": {
       "velocity": 0,
@@ -32,11 +32,12 @@
       "has_trajectory_execution": false
     },
     "PAINTING": {
-      "velocity": 0,
-      "acceleration": 0,
+      "velocity": 10,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
-      "has_trajectory_execution": true
+      "has_trajectory_execution": true,
+      "position": "[435.351, -24.921, 311.056, -179.175, -0.017, 0.051]"
     }
   }
 }

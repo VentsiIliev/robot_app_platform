@@ -67,9 +67,28 @@ class RobotService(IRobotService):
     def get_state_topic(self) -> str:
         return self._state.state_topic
 
-    def execute_trajectory(self, path, rx=180, ry=0, rz=0, vel=0.1, acc=0.1, blocking=False):
+    def execute_trajectory(
+        self,
+        path,
+        rx=180,
+        ry=0,
+        rz=0,
+        vel=0.1,
+        acc=0.1,
+        blocking=False,
+        orientation_mode: str = "constant",
+    ):
         """Send a Cartesian path to the robot driver as a trajectory (not safety-checked)."""
-        return self._robot.execute_trajectory(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=blocking)
+        return self._robot.execute_trajectory(
+            path,
+            rx=rx,
+            ry=ry,
+            rz=rz,
+            vel=vel,
+            acc=acc,
+            blocking=blocking,
+            orientation_mode=orientation_mode,
+        )
 
     def get_execution_status(self):
         return self._robot.get_execution_status()

@@ -199,9 +199,6 @@ class WorkpieceEditorController(IApplicationController):
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
         if ok:
             try:
-                preview_contours = self._model.get_last_interpolation_preview_contours()
-                if preview_contours:
-                    self._view.update_contours(preview_contours)
                 original_paths = self._model.get_last_original_preview_paths()
                 pre_smoothed_paths = self._model.get_last_pre_smoothed_preview_paths()
                 linear_paths = self._model.get_last_linear_preview_paths()
@@ -216,7 +213,7 @@ class WorkpieceEditorController(IApplicationController):
                         execution_paths,
                     )
             except Exception:
-                self._logger.debug("Failed to update interpolation preview contours", exc_info=True)
+                self._logger.debug("Failed to show interpolation preview", exc_info=True)
 
     def _show_interpolation_plot(
         self,
@@ -254,21 +251,71 @@ class WorkpieceEditorController(IApplicationController):
 
         button_row = QHBoxLayout()
         button_row.addStretch(1)
-        execute_btn = QPushButton("Execute")
-        execute_btn.clicked.connect(self._on_execute_preview_confirmed)
-        button_row.addWidget(execute_btn)
+        execute_continuous_btn = QPushButton("Execute Continuous")
+        execute_continuous_btn.clicked.connect(
+            lambda: self._on_execute_preview_confirmed("continuous")
+        )
+        button_row.addWidget(execute_continuous_btn)
+        execute_pose_path_btn = QPushButton("Execute Pose Path")
+        execute_pose_path_btn.clicked.connect(
+            lambda: self._on_execute_preview_confirmed("pose_path")
+        )
+        button_row.addWidget(execute_pose_path_btn)
+        execute_pivot_path_btn = QPushButton("Execute Pivot Path")
+        execute_pivot_path_btn.clicked.connect(
+            lambda: self._on_execute_preview_confirmed("pivot_path")
+        )
+        button_row.addWidget(execute_pivot_path_btn)
         layout.addLayout(button_row)
 
         self._preview_dialog = dialog
         dialog.show()
 
-    def _on_execute_preview_confirmed(self) -> None:
-        ok, msg = self._model.execute_last_preview_paths()
-        self._logger.info("Execute preview paths: %s — %s", ok, msg)
+    def _on_execute_preview_confirmed(self, mode: str) -> None:
+        if mode == "pivot_path":
+            try:
+                source_paths = self._model.get_last_execution_preview_paths()
+                pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
+                motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
+                if source_paths and pivot_paths:
+                    self._show_pivot_path_plot(source_paths, pivot_paths, pivot_pose, motion_snapshots)
+            except Exception:
+                self._logger.debug("Failed to show pivot path preview", exc_info=True)
+        ok, msg = self._model.execute_last_preview_paths(mode=mode)
+        self._logger.info("Execute preview paths (%s): %s — %s", mode, ok, msg)
         if ok:
             show_info(self._preview_dialog or self._view, "Execution Started", msg)
         else:
             show_critical(self._preview_dialog or self._view, "Execution Failed", msg)
+
+    def _show_pivot_path_plot(
+        self,
+        source_paths: list[list[list[float]]],
+        pivot_paths: list[list[list[float]]],
+        pivot_pose: list[float] | None,
+        motion_snapshots=None,
+    ) -> None:
+        from src.engine.robot.path_interpolation.debug_plotting import plot_pivot_path_debug
+
+        image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)
+        if not image_path:
+            return
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Pivot Path Preview")
+        dialog.resize(1000, 700)
+
+        layout = QVBoxLayout(dialog)
+        scroll = QScrollArea(dialog)
+        image_label = QLabel(scroll)
+        pixmap = QPixmap(image_path)
+        image_label.setPixmap(pixmap)
+        image_label.setScaledContents(False)
+        scroll.setWidget(image_label)
+        scroll.setWidgetResizable(True)
+        layout.addWidget(scroll)
+
+        dialog.show()
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)

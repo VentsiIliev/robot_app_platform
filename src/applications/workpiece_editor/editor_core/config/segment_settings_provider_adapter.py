@@ -22,10 +22,14 @@ class SegmentSettingsProviderAdapter(ISettingsProvider):
         return self._schema.combo_key
 
     def get_available_material_types(self):    # ISettingsProvider contract
-        return self._schema.combo_options
+        # Some systems (e.g. paint/welding test editors) have per-segment
+        # settings but no material-type combo field. The contour editor's
+        # settings dialog still expects a non-empty list here to consider the
+        # settings provider "connected", so return a benign placeholder.
+        return self._schema.combo_options or ["Settings"]
 
     def get_default_material_type(self):       # ISettingsProvider contract
-        return self._schema.combo_options[0] if self._schema.combo_options else ""
+        return self._schema.combo_options[0] if self._schema.combo_options else "Settings"
 
     def get_setting_label(self, key: str):
         return self._schema.get_label(key)

@@ -143,3 +143,93 @@ def plot_trajectory_debug(
         import traceback
         traceback.print_exc()
         return None
+
+
+def plot_pivot_path_debug(
+    source_paths,
+    pivot_paths,
+    pivot_pose,
+    motion_snapshots=None,
+    save_dir="debug_plots",
+):
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+        ax1.set_title('Pivot Path XY')
+        ax1.set_xlabel('X (mm)')
+        ax1.set_ylabel('Y (mm)')
+        ax1.grid(True)
+
+        ax2.set_title('Pivot Path RZ')
+        ax2.set_xlabel('Point Index')
+        ax2.set_ylabel('RZ (deg)')
+        ax2.grid(True)
+
+        if motion_snapshots is None:
+            motion_snapshots = [None] * len(pivot_paths)
+
+        for i, (source, pivot, snapshots) in enumerate(zip(source_paths, pivot_paths, motion_snapshots)):
+            source_arr = np.array(source, dtype=float)
+            pivot_arr = np.array(pivot, dtype=float)
+            if len(source_arr):
+                ax1.plot(
+                    source_arr[:, 0], source_arr[:, 1],
+                    'o-', color='blue', alpha=0.6, markersize=3,
+                    label=f'Source {i+1}' if i == 0 else '',
+                )
+            if len(pivot_arr):
+                ax1.plot(
+                    pivot_arr[:, 0], pivot_arr[:, 1],
+                    'x-', color='magenta', linewidth=1.5, markersize=4,
+                    label=f'Pivot {i+1}' if i == 0 else '',
+                )
+                ax2.plot(
+                    np.arange(len(pivot_arr)), pivot_arr[:, 5],
+                    'x-', color='magenta', linewidth=1.5, markersize=4,
+                    label=f'Pivot RZ {i+1}' if i == 0 else '',
+                )
+            if snapshots:
+                sample_count = min(8, len(snapshots))
+                sample_indices = np.linspace(0, len(snapshots) - 1, sample_count, dtype=int)
+                for sample_idx, snapshot_index in enumerate(sample_indices):
+                    shape = np.array(snapshots[int(snapshot_index)], dtype=float)
+                    if len(shape) == 0:
+                        continue
+                    alpha = 0.15 + 0.65 * (sample_idx / max(sample_count - 1, 1))
+                    ax1.plot(
+                        shape[:, 0], shape[:, 1],
+                        '-', color='black', linewidth=1.0, alpha=alpha,
+                    )
+                    ax1.plot(
+                        [shape[-1, 0], shape[0, 0]],
+                        [shape[-1, 1], shape[0, 1]],
+                        '-', color='black', linewidth=1.0, alpha=alpha,
+                    )
+
+        if pivot_pose and len(pivot_pose) >= 2:
+            ax1.scatter(
+                [float(pivot_pose[0])], [float(pivot_pose[1])],
+                c='red', s=80, marker='+', linewidths=2,
+                label='Pivot',
+            )
+
+        ax1.set_title('Pivot Path XY / Motion Snapshots')
+        ax1.legend()
+        ax1.axis('equal')
+        ax2.legend()
+        plt.tight_layout()
+
+        filename = f"pivot_path_debug_{timestamp}.png"
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=150, bbox_inches='tight')
+        print(f"✓ Saved pivot path debug plot to: {filepath}")
+        plt.close()
+        return filepath
+    except Exception as e:
+        print(f"⚠️ Error creating pivot plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return None

@@ -1,5 +1,8 @@
 import logging
+import os
 from typing import Callable, Optional, TYPE_CHECKING
+from datetime import datetime
+import cv2
 import numpy as np
 
 from src.applications.workpiece_editor.editor_core.config import WorkpieceFormSchema
@@ -15,6 +18,7 @@ if TYPE_CHECKING:
     from src.engine.robot.targeting import VisionTargetResolver
 
 _logger = logging.getLogger(__name__)
+_MAX_PREVIEW_CONTOUR_POINTS = 180
 
 
 def _derive_interpolation_from_blend_radius(
@@ -32,6 +36,67 @@ def _derive_interpolation_from_blend_radius(
     return effective_adaptive_spacing, effective_spline_density
 
 
+def _resample_execution_path(
+    path: list[list[float]],
+    target_spacing_mm: float,
+) -> list[list[float]]:
+    if len(path) < 3:
+        return [list(point) for point in path]
+
+    target_spacing_mm = max(1.0, float(target_spacing_mm))
+    resampled: list[list[float]] = [list(path[0])]
+    carry_mm = 0.0
+
+    for i in range(len(path) - 1):
+        start = np.array(path[i], dtype=float)
+        end = np.array(path[i + 1], dtype=float)
+        segment = end[:3] - start[:3]
+        seg_len = float(np.linalg.norm(segment))
+        if seg_len <= 1e-9:
+            continue
+
+        distance_along = target_spacing_mm - carry_mm if carry_mm > 1e-9 else target_spacing_mm
+        while distance_along < seg_len - 1e-9:
+            ratio = distance_along / seg_len
+            point = (start + ratio * (end - start)).tolist()
+            if any(abs(float(a) - float(b)) > 1e-9 for a, b in zip(resampled[-1], point)):
+                resampled.append(point)
+            distance_along += target_spacing_mm
+
+        remaining = seg_len - (distance_along - target_spacing_mm)
+        carry_mm = 0.0 if remaining >= target_spacing_mm - 1e-9 else remaining
+
+    if any(abs(float(a) - float(b)) > 1e-9 for a, b in zip(resampled[-1], path[-1])):
+        resampled.append(list(path[-1]))
+    return resampled
+
+
+def _fast_inverse_preview_points(transformer, robot_xy_points: np.ndarray) -> np.ndarray | None:
+    if robot_xy_points.size == 0:
+        return np.empty((0, 2), dtype=np.float32)
+
+    h_inv = getattr(transformer, "_H_inv", None)
+    if h_inv is None:
+        model = getattr(transformer, "_model", None)
+        homography = getattr(model, "homography_matrix", None)
+        if homography is not None:
+            try:
+                h_inv = np.linalg.inv(np.asarray(homography, dtype=np.float64).reshape(3, 3))
+            except Exception:
+                h_inv = None
+
+    if h_inv is None:
+        return None
+
+    try:
+        return cv2.perspectiveTransform(
+            np.asarray(robot_xy_points, dtype=np.float32).reshape(-1, 1, 2),
+            np.asarray(h_inv, dtype=np.float64),
+        ).reshape(-1, 2)
+    except Exception:
+        return None
+
+
 def _has_valid_contour(contour) -> bool:
     if contour is None:
         return False
@@ -40,6 +105,181 @@ def _has_valid_contour(contour) -> bool:
     if isinstance(contour, list):
         return len(contour) >= 3
     return False
+
+
+def _compute_path_aligned_rz_degrees(
+    robot_xy_points: list[tuple[float, float]],
+    base_rz_offset_degrees: float = 0.0,
+) -> list[float]:
+    """Compute per-waypoint RZ from local turn accumulation.
+
+    The first segment keeps the base orientation. Each subsequent waypoint adds
+    only the turn angle between the previous and next segment. That means the
+    robot does not pre-rotate on segment 0->1; it starts rotating from the next
+    segment onward, which matches "rotate at the corner while continuing".
+    """
+    if not robot_xy_points:
+        return []
+    if len(robot_xy_points) == 1:
+        return [float(base_rz_offset_degrees)]
+    if len(robot_xy_points) == 2:
+        return [float(base_rz_offset_degrees), float(base_rz_offset_degrees)]
+
+    segment_headings: list[float] = []
+    for index in range(len(robot_xy_points) - 1):
+        current = robot_xy_points[index]
+        nxt = robot_xy_points[index + 1]
+
+        dx = float(nxt[0]) - float(current[0])
+        dy = float(nxt[1]) - float(current[1])
+        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+            heading_deg = segment_headings[-1] if segment_headings else 0.0
+        else:
+            heading_deg = float(np.degrees(np.arctan2(dy, dx)))
+            if segment_headings:
+                while heading_deg - segment_headings[-1] > 180.0:
+                    heading_deg -= 360.0
+                while heading_deg - segment_headings[-1] < -180.0:
+                    heading_deg += 360.0
+        segment_headings.append(heading_deg)
+
+    rz_values: list[float] = [float(base_rz_offset_degrees), float(base_rz_offset_degrees)]
+    current_rz = float(base_rz_offset_degrees)
+    for index in range(1, len(segment_headings)):
+        turn_delta = float(segment_headings[index] - segment_headings[index - 1])
+        current_rz += turn_delta
+        rz_values.append(current_rz)
+
+    return rz_values[:len(robot_xy_points)]
+
+
+def _rotate_xy_about(point_xy: tuple[float, float], angle_degrees: float, pivot_xy: tuple[float, float]) -> tuple[float, float]:
+    angle_rad = float(np.radians(angle_degrees))
+    cos_a = float(np.cos(angle_rad))
+    sin_a = float(np.sin(angle_rad))
+    px, py = float(point_xy[0]), float(point_xy[1])
+    ox, oy = float(pivot_xy[0]), float(pivot_xy[1])
+    dx = px - ox
+    dy = py - oy
+    return (
+        ox + cos_a * dx - sin_a * dy,
+        oy + sin_a * dx + cos_a * dy,
+    )
+
+
+def _unwrap_degrees(previous: float, current: float) -> float:
+    value = float(current)
+    prev = float(previous)
+    while value - prev > 180.0:
+        value -= 360.0
+    while value - prev < -180.0:
+        value += 360.0
+    return value
+
+
+def _build_pivot_projected_path(
+    path: list[list[float]],
+    pivot_pose: list[float],
+) -> list[list[float]]:
+    center_path, _ = _simulate_pivot_projected_motion(path, pivot_pose)
+    return center_path
+
+
+def _simulate_pivot_projected_motion(
+    path: list[list[float]],
+    pivot_pose: list[float],
+) -> tuple[list[list[float]], list[np.ndarray]]:
+    """Build a rigid-body center-grasp paint path around a fixed pivot.
+
+    Model:
+    - the robot holds the workpiece at its center (centroid),
+    - the paint position stays fixed at ``pivot_pose[:2]``,
+    - the whole contour is rotated/transformed as one rigid body,
+    - the first segment is aligned to the fixed paint axis,
+    - after each segment alignment the rigid body is translated along that
+      fixed axis by the segment length so the next contour point reaches the
+      pivot.
+    """
+    if not path:
+        return [], []
+    if len(path) == 1:
+        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)]
+
+    pivot_x = float(pivot_pose[0])
+    pivot_y = float(pivot_pose[1])
+    pivot_z = float(pivot_pose[2]) if len(pivot_pose) >= 3 else float(path[0][2])
+    rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
+    ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
+    base_rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
+    # Keep the active painting edge below the pivot; local -Y is the paint axis.
+    paint_axis_heading = base_rz - 90.0
+
+    points = np.array([[float(point[0]), float(point[1])] for point in path], dtype=float)
+    if len(points) < 2:
+        return (
+            [[float(points[0][0]), float(points[0][1]), pivot_z, rx, ry, base_rz]],
+            [points.copy()],
+        )
+
+    def _centroid_xy(current_points: np.ndarray) -> tuple[float, float]:
+        return (float(np.mean(current_points[:, 0])), float(np.mean(current_points[:, 1])))
+
+    def _rotate_shape(current_points: np.ndarray, angle_deg: float, pivot_xy: tuple[float, float]) -> np.ndarray:
+        return np.array(
+            [_rotate_xy_about((float(point[0]), float(point[1])), angle_deg, pivot_xy) for point in current_points],
+            dtype=float,
+        )
+
+    def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
+        dx = float(point_b[0] - point_a[0])
+        dy = float(point_b[1] - point_a[1])
+        return float(np.degrees(np.arctan2(dy, dx)))
+
+    pivot_xy = (pivot_x, pivot_y)
+
+    initial_heading = _segment_heading_deg(points[0], points[1])
+    initial_rotation = _unwrap_degrees(0.0, paint_axis_heading - initial_heading)
+    points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
+    translate_to_pivot = np.array([pivot_x - float(points[0][0]), pivot_y - float(points[0][1])], dtype=float)
+    points = points + translate_to_pivot
+
+    current_rz = _unwrap_degrees(base_rz, base_rz + initial_rotation)
+    result: list[list[float]] = []
+    snapshots: list[np.ndarray] = []
+    center_xy = _centroid_xy(points)
+    result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+    snapshots.append(points.copy())
+
+    axis_vector = np.array(
+        [
+            float(np.cos(np.radians(paint_axis_heading))),
+            float(np.sin(np.radians(paint_axis_heading))),
+        ],
+        dtype=float,
+    )
+
+    for index in range(len(points) - 1):
+        current_point = points[index]
+        next_point = points[index + 1]
+        segment_length = float(np.linalg.norm(next_point - current_point))
+        if segment_length <= 1e-9:
+            center_xy = _centroid_xy(points)
+            result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+            snapshots.append(points.copy())
+            continue
+
+        segment_heading = _segment_heading_deg(current_point, next_point)
+        rotation_delta = _unwrap_degrees(0.0, paint_axis_heading - segment_heading)
+        if abs(rotation_delta) > 1e-9:
+            points = _rotate_shape(points, rotation_delta, pivot_xy)
+            current_rz = _unwrap_degrees(current_rz, current_rz + rotation_delta)
+
+        points = points - axis_vector * segment_length
+        center_xy = _centroid_xy(points)
+        result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+        snapshots.append(points.copy())
+
+    return result[:len(path)], snapshots[:len(path)]
 
 
 class WorkpieceEditorService(IWorkpieceEditorService):
@@ -55,6 +295,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  transformer:    Optional[ICoordinateTransformer] = None,
                  resolver:       Optional["VisionTargetResolver"] = None,
                  z_min:          float = 0.0,
+                 base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
+                 rz_mode:        str = "constant",
+                 post_execute_callback: Optional[Callable[[], bool]] = None,
+                 debug_dump_dir: Optional[str] = None,
                  robot_service=None,
                  target_point_name: str = ""):
         self._vision             = vision_service
@@ -67,6 +311,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._transformer        = transformer
         self._resolver           = resolver
         self._z_min              = z_min
+        self._base_position_provider = base_position_provider
+        self._rz_mode            = str(rz_mode or "constant").strip().lower()
+        self._post_execute_callback = post_execute_callback
+        self._debug_dump_dir     = debug_dump_dir
         self._robot_service      = robot_service
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
@@ -184,7 +432,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return False, "No executable paths after transformation"
 
         total_spline_pts = 0
-        preview_contours: list[np.ndarray] = []
         preview_paths: list[list[list[float]]] = []
         original_paths: list[list[list[float]]] = []
         pre_smoothed_paths: list[list[list[float]]] = []
@@ -207,39 +454,51 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 blend_radius_mm=blend_radius_mm,
                 pre_smooth_max_deviation_mm=pre_smooth_max_deviation_mm,
             )
-            total_spline_pts += len(spline)
+            execution_spacing_mm = max(6.0, adaptive_spacing * 0.75)
+            execution_spline = _resample_execution_path(spline, target_spacing_mm=execution_spacing_mm)
+            total_spline_pts += len(execution_spline)
             pre_smoothed_paths.append([list(pt) for pt in pre_smoothed])
             linear_paths.append([list(pt) for pt in linear])
             preview_paths.append([list(pt) for pt in spline])
 
             _logger.info(
-                "[EXECUTE] %s: %d raw → %d pre-smooth → %d linear → %d blended pts | "
-                "blend=%.1fmm pre-smooth-dev=%.2fmm spacing=%.1fmm density=%.1fx vel=%.0f acc=%.0f",
-                pattern_type, len(path_pts), len(pre_smoothed), len(linear), len(spline),
-                blend_radius_mm, pre_smooth_max_deviation_mm, adaptive_spacing, spline_multiplier, vel, acc,
+                "[EXECUTE] %s: %d raw → %d pre-smooth → %d linear → %d blended pts → %d execute pts | "
+                "blend=%.1fmm pre-smooth-dev=%.2fmm spacing=%.1fmm density=%.1fx exec-spacing=%.1fmm vel=%.0f acc=%.0f",
+                pattern_type, len(path_pts), len(pre_smoothed), len(linear), len(spline), len(execution_spline),
+                blend_radius_mm, pre_smooth_max_deviation_mm, adaptive_spacing, spline_multiplier, execution_spacing_mm, vel, acc,
             )
-            for j, pt in enumerate(spline[:3]):
-                _logger.debug("[EXECUTE] %s spline[%d]: %s", pattern_type, j, pt)
+            for j, pt in enumerate(execution_spline[:3]):
+                _logger.debug("[EXECUTE] %s execute[%d]: %s", pattern_type, j, pt)
 
-            preview_contours.extend(self._build_preview_contours(spline))
             self._last_execution_preview_jobs.append(
                 {
                     "path": [list(pt) for pt in spline],
+                    "execution_path": [list(pt) for pt in execution_spline],
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,
                 }
             )
             _logger.info(
-                "[EXECUTE] [PREVIEW ONLY] Prepared %d interpolated waypoints (vel=%.0f acc=%.0f)",
-                len(spline), vel, acc,
+                "[EXECUTE] Prepared %d preview waypoints and %d execution waypoints (vel=%.0f acc=%.0f)",
+                len(spline), len(execution_spline), vel, acc,
             )
 
-        self._last_interpolation_preview_contours = preview_contours
+        self._last_interpolation_preview_contours = []
         self._last_interpolation_preview_paths = preview_paths
         self._last_original_preview_paths = original_paths
         self._last_pre_smoothed_preview_paths = pre_smoothed_paths
         self._last_linear_preview_paths = linear_paths
+        self._write_debug_path_dump(
+            original_paths=original_paths,
+            pre_smoothed_paths=pre_smoothed_paths,
+            linear_paths=linear_paths,
+            preview_paths=preview_paths,
+            execution_paths=[
+                [list(pt) for pt in (job.get("execution_path") or job.get("path") or [])]
+                for job in self._last_execution_preview_jobs
+            ],
+        )
         _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
                      len(robot_paths), total_spline_pts)
         return True, f"Previewed: {len(robot_paths)} path(s), {total_spline_pts} interpolated waypoints"
@@ -273,81 +532,294 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def get_last_execution_preview_paths(self) -> list:
         return [
-            [list(pt) for pt in (job.get("path") or [])]
+            [list(pt) for pt in (job.get("execution_path") or job.get("path") or [])]
             for job in self._last_execution_preview_jobs
         ]
 
-    def execute_last_preview_paths(self) -> tuple[bool, str]:
+    def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
+        pivot_pose = self._resolve_base_position()
+        if pivot_pose is None or len(pivot_pose) < 3:
+            return [], pivot_pose
+        paths = []
+        for job in self._last_execution_preview_jobs:
+            source_path = job.get("execution_path") or job.get("path") or []
+            if not source_path:
+                continue
+            center_path, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            paths.append(center_path)
+        return paths, list(pivot_pose)
+
+    def get_last_pivot_motion_preview(self):
+        pivot_pose = self._resolve_base_position()
+        if pivot_pose is None or len(pivot_pose) < 3:
+            return [], pivot_pose
+        motion = []
+        for job in self._last_execution_preview_jobs:
+            source_path = job.get("execution_path") or job.get("path") or []
+            if not source_path:
+                continue
+            _, snapshots = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            motion.append(snapshots)
+        return motion, list(pivot_pose)
+
+    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
         if not self._last_execution_preview_jobs:
             return False, "No previewed paths available to execute"
         if self._robot_service is None:
             return False, "Robot service is not available"
 
+        mode = str(mode or "continuous").strip().lower()
+        if mode not in {"continuous", "pose_path", "pivot_path", "segmented"}:
+            return False, f"Unsupported execution mode: {mode}"
+
         total_waypoints = 0
         for job in self._last_execution_preview_jobs:
-            spline = job.get("path") or []
+            spline = job.get("execution_path") or job.get("path") or []
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
             if not spline:
                 continue
 
-            result = self._robot_service.execute_trajectory(spline, vel=vel, acc=acc, blocking=True)
-            if result not in (0, True, None):
-                return False, f"{pattern_type} trajectory execution failed with code {result}"
+            if mode == "continuous":
+                result = self._robot_service.execute_trajectory(
+                    spline, vel=vel, acc=acc, blocking=True)
+                if result not in (0, True, None):
+                    return False, f"{pattern_type} trajectory execution failed with code {result}"
+            elif mode == "pose_path":
+                result = self._robot_service.execute_trajectory(
+                    spline,
+                    vel=vel,
+                    acc=acc,
+                    blocking=True,
+                    orientation_mode="per_waypoint",
+                )
+                if result not in (0, True, None):
+                    return False, f"{pattern_type} pose-path execution failed with code {result}"
+            elif mode == "pivot_path":
+                pivot_pose = self._resolve_base_position()
+                if pivot_pose is None or len(pivot_pose) < 3:
+                    return False, "Pivot-path execution requires a valid base/pivot position"
+                pivot_path = _build_pivot_projected_path(spline, pivot_pose)
+                result = self._robot_service.execute_trajectory(
+                    pivot_path,
+                    vel=vel,
+                    acc=acc,
+                    blocking=True,
+                    orientation_mode="per_waypoint",
+                )
+                if result not in (0, True, None):
+                    return False, f"{pattern_type} pivot-path execution failed with code {result}"
+            else:
+                result = self._execute_segmented_preview_path(spline, vel=vel, acc=acc)
+                if not result:
+                    return False, f"{pattern_type} segmented execution failed"
             total_waypoints += len(spline)
             _logger.info(
-                "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot (vel=%.0f acc=%.0f)",
-                len(spline), vel, acc,
+                "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
+                len(spline), mode, vel, acc,
             )
 
-        return True, f"Executed {len(self._last_execution_preview_jobs)} path(s), {total_waypoints} waypoints"
+        if self._post_execute_callback is not None:
+            try:
+                moved = bool(self._post_execute_callback())
+            except Exception:
+                _logger.exception("[EXECUTE] Post-execute callback failed")
+                return False, "Execution finished, but return-to-calibration failed"
+            if not moved:
+                return False, "Execution finished, but return-to-calibration failed"
+            _logger.info("[EXECUTE] Returned to post-execution position")
+
+        return True, (
+            f"Executed {len(self._last_execution_preview_jobs)} path(s), "
+            f"{total_waypoints} waypoints in {mode} mode"
+        )
+
+    def _execute_segmented_preview_path(
+        self,
+        path: list[list[float]],
+        vel: float,
+        acc: float,
+    ) -> bool:
+        """Execute the already-interpolated path point-by-point.
+
+        This preserves the current smoothing/interpolation output while avoiding
+        the shared continuous execute_path backend, making it easier to inspect
+        how the robot behaves at corners and orientation changes.
+        """
+        if len(path) < 2:
+            return True
+
+        for waypoint in path[1:]:
+            if len(waypoint) < 6:
+                _logger.error("[EXECUTE] Segmented mode requires 6D waypoints, got: %s", waypoint)
+                return False
+            ok = self._robot_service.move_linear(
+                position=list(waypoint[:6]),
+                tool=0,
+                user=0,
+                velocity=vel,
+                acceleration=acc,
+                blendR=0.0,
+                wait_to_reach=True,
+            )
+            if not ok:
+                _logger.error("[EXECUTE] Segmented move_linear failed at waypoint=%s", waypoint)
+                return False
+        return True
 
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
         """Convert (N, 2) pixel points + segment settings → [[x, y, z, rx_degrees, ry_degrees, rz_degrees], ...]."""
         try:
             _defaults = self._segment_config.schema.get_defaults()
             spray_height = float(str(settings.get("spraying_height", _defaults.get("spraying_height", "0"))).replace(",", ""))
-            base_z = self._z_min + spray_height
-            rz = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
+            base_position = self._resolve_base_position()
+            base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
+            rz_offset = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
         except (ValueError, TypeError):
-            base_z, rz = 0.0, 0.0
+            base_z, rz_offset = 0.0, 0.0
         rx, ry = 180.0, 0.0
+        robot_xy_points: list[tuple[float, float]] = []
 
         if self._resolver is not None:
             from src.engine.robot.targeting import VisionPoseRequest
-            result = []
-            for px, py in pts_px:
-                tr = self._resolver.resolve(
-                    VisionPoseRequest(float(px), float(py), z_mm=base_z, rz_degrees=rz, rx_degrees=rx, ry_degrees=ry),
-                    self._resolver.registry.by_name(self._target_point_name),
+
+            target_point = self._resolver.registry.by_name(self._target_point_name)
+            seeded_results = [
+                self._resolver.resolve(
+                    VisionPoseRequest(
+                        float(px),
+                        float(py),
+                        z_mm=base_z,
+                        rz_degrees=rz_offset,
+                        rx_degrees=rx,
+                        ry_degrees=ry,
+                    ),
+                    target_point,
                 )
-                result.append(list(tr.robot_pose()))
-            return result
+                for px, py in pts_px
+            ]
+            robot_xy_points = [
+                (float(result.final_xy[0]), float(result.final_xy[1]))
+                for result in seeded_results
+            ]
+        else:
+            if self._transformer is None or not self._transformer.is_available():
+                _logger.warning("[EXECUTE] No calibration transformer — using raw pixel coords")
+            for px, py in pts_px:
+                if self._transformer is not None and self._transformer.is_available():
+                    rx_coord, ry_coord = self._transformer.transform(float(px), float(py))
+                else:
+                    rx_coord, ry_coord = float(px), float(py)
+                robot_xy_points.append((float(rx_coord), float(ry_coord)))
 
-        if self._transformer is None or not self._transformer.is_available():
-            _logger.warning("[EXECUTE] No calibration transformer — using raw pixel coords")
+        if self._rz_mode == "path_tangent":
+            rz_values = _compute_path_aligned_rz_degrees(robot_xy_points, base_rz_offset_degrees=rz_offset)
+        else:
+            rz_values = [float(rz_offset) for _ in robot_xy_points]
 
-        result = []
-        for px, py in pts_px:
-            if self._transformer is not None and self._transformer.is_available():
-                rx_coord, ry_coord = self._transformer.transform(float(px), float(py))
-            else:
-                rx_coord, ry_coord = float(px), float(py)
-            result.append([rx_coord, ry_coord, base_z, rx, ry, rz])
+        if self._resolver is not None:
+            # Keep XY geometry fixed once it has been resolved from the image.
+            # Per-waypoint RZ is attached afterward so orientation changes do not
+            # re-run TCP-offset compensation and warp the contour shape.
+            result = [
+                [
+                    float(seed.final_xy[0]),
+                    float(seed.final_xy[1]),
+                    float(seed.z),
+                    rx,
+                    ry,
+                    float(rz),
+                ]
+                for seed, rz in zip(seeded_results, rz_values)
+            ]
+        else:
+            result = [
+                [float(x), float(y), float(base_z), rx, ry, float(rz)]
+                for (x, y), rz in zip(robot_xy_points, rz_values)
+            ]
+        if result:
+            _logger.debug(
+                "[EXECUTE] RZ mode=%s first headings=%s",
+                self._rz_mode,
+                [round(float(point[5]), 3) for point in result[: min(5, len(result))]],
+            )
         return result
+
+    def _resolve_base_position(self) -> Optional[list[float]]:
+        provider = self._base_position_provider
+        if provider is None:
+            return None
+        try:
+            position = provider()
+        except Exception:
+            _logger.debug("WorkpieceEditorService: base position provider failed", exc_info=True)
+            return None
+        if not position or len(position) < 3:
+            return None
+        try:
+            return [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
+        except (TypeError, ValueError):
+            return None
+
+    def _write_debug_path_dump(
+        self,
+        *,
+        original_paths: list[list[list[float]]],
+        pre_smoothed_paths: list[list[list[float]]],
+        linear_paths: list[list[list[float]]],
+        preview_paths: list[list[list[float]]],
+        execution_paths: list[list[list[float]]],
+    ) -> None:
+        if not self._debug_dump_dir:
+            return
+
+        try:
+            os.makedirs(self._debug_dump_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = os.path.join(self._debug_dump_dir, f"trajectory_points_{timestamp}.txt")
+            sections = [
+                ("ORIGINAL", original_paths),
+                ("PRE_SMOOTHED", pre_smoothed_paths),
+                ("LINEAR", linear_paths),
+                ("SPLINE", preview_paths),
+                ("EXECUTION", execution_paths),
+            ]
+            with open(filepath, "w", encoding="utf-8") as handle:
+                handle.write(f"# Trajectory point dump\n# timestamp={timestamp}\n# rz_mode={self._rz_mode}\n")
+                for section_name, paths in sections:
+                    handle.write(f"\n[{section_name}]\n")
+                    for path_index, path in enumerate(paths, start=1):
+                        handle.write(f"path {path_index} count={len(path)}\n")
+                        for point_index, point in enumerate(path):
+                            coords = ", ".join(f"{float(value):.6f}" for value in point)
+                            handle.write(f"  {point_index:04d}: [{coords}]\n")
+            _logger.info("[EXECUTE] Wrote trajectory debug dump to %s", filepath)
+        except Exception:
+            _logger.debug("[EXECUTE] Failed to write trajectory debug dump", exc_info=True)
 
     def _build_preview_contours(self, spline_points: list[list[float]]) -> list[np.ndarray]:
         if self._transformer is None or not self._transformer.is_available():
             return []
 
+        sampled_points = spline_points
+        if len(sampled_points) > _MAX_PREVIEW_CONTOUR_POINTS:
+            sample_idx = np.linspace(0, len(sampled_points) - 1, _MAX_PREVIEW_CONTOUR_POINTS, dtype=int)
+            sampled_points = [sampled_points[int(i)] for i in sample_idx]
+
+        robot_xy = np.asarray([[float(pt[0]), float(pt[1])] for pt in sampled_points], dtype=np.float32)
+        fast_preview_xy = _fast_inverse_preview_points(self._transformer, robot_xy)
+
         preview_xy: list[list[float]] = []
-        for pt in spline_points:
-            try:
-                px, py = self._transformer.inverse_transform(float(pt[0]), float(pt[1]))
-            except Exception:
-                continue
-            preview_xy.append([float(px), float(py)])
+        if fast_preview_xy is not None and len(fast_preview_xy) == len(sampled_points):
+            preview_xy = [[float(px), float(py)] for px, py in fast_preview_xy]
+        else:
+            for pt in sampled_points:
+                try:
+                    px, py = self._transformer.inverse_transform(float(pt[0]), float(pt[1]))
+                except Exception:
+                    continue
+                preview_xy.append([float(px), float(py)])
 
         if len(preview_xy) < 2:
             return []

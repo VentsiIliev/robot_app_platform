@@ -190,6 +190,9 @@ def _build_workpiece_editor_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_config = robot_system._robot_config
+    camera_point_name = (
+        getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
+    )
     tool_point_name = (
         getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
     )
@@ -224,7 +227,7 @@ def _build_workpiece_editor_application(robot_system):
         resolver=resolver,
         z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
-        target_point_name=tool_point_name,
+        target_point_name=camera_point_name,
     )
 
     class _PendingLoader:

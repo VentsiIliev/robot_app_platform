@@ -70,6 +70,7 @@ class IRobot(ABC):
         vel: float = 0.1,
         acc: float = 0.1,
         blocking: bool = False,
+        orientation_mode: str = "constant",
     ) -> None:
         ...
 

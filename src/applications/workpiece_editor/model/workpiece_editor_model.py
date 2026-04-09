@@ -41,8 +41,14 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_execution_preview_paths(self) -> list:
         return self._service.get_last_execution_preview_paths()
 
-    def execute_last_preview_paths(self) -> tuple[bool, str]:
-        return self._service.execute_last_preview_paths()
+    def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
+        return self._service.get_last_pivot_preview_paths()
+
+    def get_last_pivot_motion_preview(self):
+        return self._service.get_last_pivot_motion_preview()
+
+    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
+        return self._service.execute_last_preview_paths(mode=mode)
 
     def set_editing(self, storage_id) -> None:
         self._service.set_editing(storage_id)

@@ -114,7 +114,18 @@ class FairinoRos2Client:
             logger.error("move_liner error: %s", e, exc_info=True)
             return -1
 
-    def execute_path(self, path, rx=None, ry=None, rz=None, vel=0.6, acc=0.4, blocking=False, trajectory_optimizer="TOTG"):
+    def execute_path(
+        self,
+        path,
+        rx=None,
+        ry=None,
+        rz=None,
+        vel=0.6,
+        acc=0.4,
+        blocking=False,
+        trajectory_optimizer="TOTG",
+        orientation_mode="constant",
+    ):
         sanitized_path = [self._to_float_list(p) for p in path] if path else path
         payload = {
             "path": sanitized_path,
@@ -125,14 +136,16 @@ class FairinoRos2Client:
             "acc": acc,
             "blocking": blocking,
             "trajectory_optimizer": trajectory_optimizer,
+            "orientation_mode": orientation_mode,
         }
         logger.debug(
-            "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s",
+            "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s orientation_mode=%s",
             len(path) if path else 0,
             blocking,
             vel,
             acc,
             trajectory_optimizer,
+            orientation_mode,
         )
         try:
             response = requests.post(f"{self.server_url}/execute/path", json=payload, timeout=120)
