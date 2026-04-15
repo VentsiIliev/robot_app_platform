@@ -96,6 +96,25 @@ class RobotService(IRobotService):
     def get_last_trajectory_command_info(self):
         return self._robot.get_last_trajectory_command_info()
 
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> bool:
+        try:
+            result = self._robot.unwind_joint6(
+                blocking=blocking,
+                queue_if_busy=queue_if_busy,
+                vel=vel,
+                acc=acc,
+            )
+        except Exception:
+            self._logger.exception("unwind_joint6 failed")
+            return False
+        return result >= 0
+
     def enable_safety_walls(self) -> bool:
         return bool(self._robot.enable_safety_walls())
 

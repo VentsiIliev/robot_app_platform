@@ -5,10 +5,10 @@
   "Skip frames": 30,
   "Capture position offset": 0.0,
   "Contour detection": true,
-  "Draw contours": true,
+  "Draw contours": false,
   "Threshold": 100,
   "Threshold pickup area": 150,
-  "Epsilon": 0.004,
+  "Epsilon": 0.002,
   "Min contour area": 1000.0,
   "Max contour area": 10000000.0,
   "Preprocessing": {

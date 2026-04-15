@@ -18,8 +18,8 @@ class FairinoRos2Robot(IRobot):
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
-        # Calling move_liner here is intentional !!!
-        ret = self._client.move_liner(position, tool, user, vel, acc, blocking=blocking) or 0
+        # ret = self._client.move_ptp(position, tool, user, vel, acc, blocking=blocking) or 0
+        ret = self._client.move_liner(position, tool, user, vel, acc, blendR=0.0, blocking=blocking) or 0
         logger.debug("move_ptp ← raw_ret=%s normalised=%s accepted=%s", ret, ret, ret >= 0)
         return ret
 
@@ -67,6 +67,29 @@ class FairinoRos2Robot(IRobot):
 
     def get_last_trajectory_command_info(self):
         return self._client.get_last_execute_path_response()
+
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> int:
+        logger.debug(
+            "unwind_joint6 → blocking=%s queue_if_busy=%s vel=%s acc=%s",
+            blocking,
+            queue_if_busy,
+            vel,
+            acc,
+        )
+        ret = self._client.unwind_joint6(
+            blocking=blocking,
+            queue_if_busy=queue_if_busy,
+            vel=vel,
+            acc=acc,
+        ) or 0
+        logger.debug("unwind_joint6 ← raw_ret=%s success=%s", ret, ret >= 0)
+        return ret
 
     def get_connection_state(self) -> str:
         return self._client.get_connection_state()

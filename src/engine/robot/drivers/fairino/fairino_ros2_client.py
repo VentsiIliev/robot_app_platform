@@ -114,6 +114,32 @@ class FairinoRos2Client:
             logger.error("move_liner error: %s", e, exc_info=True)
             return -1
 
+    def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        payload = {
+            "position": self._to_float_list(position),
+            "tool": tool,
+            "user": user,
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        logger.debug("move_ptp → POST /move/ptp payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/move/ptp", json=payload, timeout=30)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            logger.debug(
+                "move_ptp ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("move_ptp error: %s", e, exc_info=True)
+            return -1
+
     def execute_path(
         self,
         path,
@@ -172,6 +198,31 @@ class FairinoRos2Client:
 
     def get_last_execute_path_response(self):
         return self._last_execute_path_response
+
+    def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
+        payload = {
+            "blocking": bool(blocking),
+            "queue_if_busy": bool(queue_if_busy),
+        }
+        if vel is not None:
+            payload["vel"] = float(vel)
+        if acc is not None:
+            payload["acc"] = float(acc)
+        logger.debug("unwind_joint6 → POST /unwind/joint6 payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/unwind/joint6", json=payload, timeout=60)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            logger.debug(
+                "unwind_joint6 ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("unwind_joint6 error: %s", e, exc_info=True)
+            return -1
 
     def start_jog(self, axis, direction, step, vel, acc):
         axis_val = axis.value if hasattr(axis, 'value') else axis

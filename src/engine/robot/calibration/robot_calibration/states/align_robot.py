@@ -24,6 +24,46 @@ _logger = logging.getLogger(__name__)
 wait_to_reach_position = True  # TODO set to False only for testing!
 
 
+def _move_to_initial_align_target(context, target_position, marker_id):
+    current_pose = context.calibration_robot_controller.get_current_position()
+    current_x, current_y, _current_z, _current_rx, _current_ry, _current_rz = current_pose
+    target_x, target_y, target_z, target_rx, target_ry, target_rz = target_position
+    approach_z = float(
+        getattr(context.calibration_robot_controller.adaptive_movement_config, "initial_align_approach_z", target_z)
+    )
+    staged_z = max(approach_z, float(target_z))
+
+    staged_z_position = [current_x, current_y, staged_z, target_rx, target_ry, target_rz]
+    staged_xy_position = [target_x, target_y, staged_z, target_rx, target_ry, target_rz]
+    final_position = [target_x, target_y, target_z, target_rx, target_ry, target_rz]
+
+    _logger.info(
+        "Initial align staged approach for marker %s: z_stage=%s xy_stage=%s final_stage=%s",
+        marker_id,
+        [round(float(v), 3) for v in staged_z_position],
+        [round(float(v), 3) for v in staged_xy_position],
+        [round(float(v), 3) for v in final_position],
+    )
+
+    z_result = context.calibration_robot_controller.move_to_position(
+        staged_z_position, blocking=wait_to_reach_position
+    )
+    if not z_result:
+        _logger.info("Initial align Z-stage failed for marker %s", marker_id)
+        return False
+
+    xy_result = context.calibration_robot_controller.move_to_position(
+        staged_xy_position, blocking=wait_to_reach_position
+    )
+    if not xy_result:
+        _logger.info("Initial align XY-stage failed for marker %s", marker_id)
+        return False
+
+    return context.calibration_robot_controller.move_to_position(
+        final_position, blocking=wait_to_reach_position
+    )
+
+
 def handle_align_robot_state(context) -> RobotCalibrationStates:
     if context.stop_event.is_set():
         return RobotCalibrationStates.CANCELLED
@@ -67,7 +107,20 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
     z_new = progress.z_target
     new_position = [x_new, y_new, z_new, rx, ry, rz]
 
-    result = context.calibration_robot_controller.move_to_position(new_position, blocking=wait_to_reach_position)
+    _logger.info(
+        "Align target debug for marker %s: calib_pose=%s current_pose=%s raw_marker_offset_mm=%s "
+        "mapped_marker_offset_mm=%s calib_to_current_mm=%s current_to_marker_mm=%s target_pose=%s",
+        marker_id,
+        [round(float(v), 3) for v in calib_pose],
+        [round(float(v), 3) for v in current_pose],
+        tuple(round(float(v), 3) for v in get_marker_offset_mm(context, marker_id)),
+        tuple(round(float(v), 3) for v in calib_to_marker),
+        tuple(round(float(v), 3) for v in calib_to_current),
+        tuple(round(float(v), 3) for v in current_to_marker),
+        [round(float(v), 3) for v in new_position],
+    )
+
+    result = _move_to_initial_align_target(context, new_position, marker_id)
 
     if not result:
         retry_attempted = True
@@ -76,7 +129,7 @@ def handle_align_robot_state(context) -> RobotCalibrationStates:
             context.calibration_robot_controller.move_to_position(
                 context.robot_positions_for_calibration[recovery_marker_id], blocking=wait_to_reach_position
             )
-        result = context.calibration_robot_controller.move_to_position(new_position, blocking=wait_to_reach_position)
+        result = _move_to_initial_align_target(context, new_position, marker_id)
 
         if not result:
             _logger.info("Robot movement failed for marker %s after retry attempt. ", marker_id)

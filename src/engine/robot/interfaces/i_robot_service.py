@@ -40,6 +40,15 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def get_last_trajectory_command_info(self):
         return None
 
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> bool:
+        return False
+
     @abstractmethod
     def enable_safety_walls(self) -> bool: ...
 

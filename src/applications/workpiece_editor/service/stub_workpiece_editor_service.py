@@ -40,5 +40,17 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
     def get_last_pivot_motion_preview(self):
         return [], None
 
+    def get_available_execution_modes(self) -> tuple[str, ...]:
+        return ("continuous",)
+
+    def can_execute_pickup_to_pivot(self) -> bool:
+        return False
+
+    def execute_pickup_to_pivot(self) -> tuple[bool, str]:
+        return False, "Pickup-to-pivot is not supported"
+
+    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]:
+        return False, "Pickup-and-pivot-paint is not supported"
+
     def set_editing(self, storage_id) -> None:
         _logger.info("Stub: set_editing storage_id=%s", storage_id)

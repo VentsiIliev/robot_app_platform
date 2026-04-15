@@ -8,7 +8,7 @@
   "Draw contours": true,
   "Threshold": 100,
   "Threshold pickup area": 100,
-  "Epsilon": 0.002,
+  "Epsilon": 0.001,
   "Min contour area": 1000.0,
   "Max contour area": 10000000.0,
   "Preprocessing": {

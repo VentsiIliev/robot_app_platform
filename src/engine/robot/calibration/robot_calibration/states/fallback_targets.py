@@ -31,6 +31,16 @@ def record_known_unreachable_marker(context, marker_id: int, reason: str) -> Non
         if calibration_settings is None:
             return
 
+        auto_skip_enabled = bool(
+            getattr(calibration_settings, "auto_skip_known_unreachable_markers", True)
+        )
+        if not auto_skip_enabled:
+            _logger.info(
+                "Skipping persistence of unreachable calibration marker %s because auto-skip is disabled",
+                int(marker_id),
+            )
+            return
+
         counts = {
             int(saved_marker_id): int(count)
             for saved_marker_id, count in (
@@ -78,6 +88,22 @@ def record_known_unreachable_marker(context, marker_id: int, reason: str) -> Non
 
 
 def try_activate_fallback_target(context, failed_marker_id: int, reason: str) -> bool:
+    settings_service = context.settings_service
+    calibration_key = context.calibration_settings_key
+    if settings_service is not None and calibration_key is not None:
+        try:
+            calibration_settings = settings_service.get(calibration_key)
+            if calibration_settings is not None and not bool(
+                getattr(calibration_settings, "auto_skip_known_unreachable_markers", True)
+            ):
+                _logger.info(
+                    "Auto-skip disabled; not replacing failed calibration target %s",
+                    int(failed_marker_id),
+                )
+                return False
+        except Exception:
+            pass
+
     target_ids = get_target_marker_ids(context)
     progress = context.progress
     artifacts = context.artifacts

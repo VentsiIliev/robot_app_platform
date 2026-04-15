@@ -12,6 +12,7 @@ from src.applications.workpiece_editor.editor_core.handlers.SaveWorkpieceHandler
 from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 if TYPE_CHECKING:
@@ -153,20 +154,6 @@ def _compute_path_aligned_rz_degrees(
     return rz_values[:len(robot_xy_points)]
 
 
-def _rotate_xy_about(point_xy: tuple[float, float], angle_degrees: float, pivot_xy: tuple[float, float]) -> tuple[float, float]:
-    angle_rad = float(np.radians(angle_degrees))
-    cos_a = float(np.cos(angle_rad))
-    sin_a = float(np.sin(angle_rad))
-    px, py = float(point_xy[0]), float(point_xy[1])
-    ox, oy = float(pivot_xy[0]), float(pivot_xy[1])
-    dx = px - ox
-    dy = py - oy
-    return (
-        ox + cos_a * dx - sin_a * dy,
-        oy + sin_a * dx + cos_a * dy,
-    )
-
-
 def _unwrap_degrees(previous: float, current: float) -> float:
     value = float(current)
     prev = float(previous)
@@ -175,111 +162,6 @@ def _unwrap_degrees(previous: float, current: float) -> float:
     while value - prev < -180.0:
         value += 360.0
     return value
-
-
-def _build_pivot_projected_path(
-    path: list[list[float]],
-    pivot_pose: list[float],
-) -> list[list[float]]:
-    center_path, _ = _simulate_pivot_projected_motion(path, pivot_pose)
-    return center_path
-
-
-def _simulate_pivot_projected_motion(
-    path: list[list[float]],
-    pivot_pose: list[float],
-) -> tuple[list[list[float]], list[np.ndarray]]:
-    """Build a rigid-body center-grasp paint path around a fixed pivot.
-
-    Model:
-    - the robot holds the workpiece at its center (centroid),
-    - the paint position stays fixed at ``pivot_pose[:2]``,
-    - the whole contour is rotated/transformed as one rigid body,
-    - the first segment is aligned to the fixed paint axis,
-    - after each segment alignment the rigid body is translated along that
-      fixed axis by the segment length so the next contour point reaches the
-      pivot.
-    """
-    if not path:
-        return [], []
-    if len(path) == 1:
-        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)]
-
-    pivot_x = float(pivot_pose[0])
-    pivot_y = float(pivot_pose[1])
-    pivot_z = float(pivot_pose[2]) if len(pivot_pose) >= 3 else float(path[0][2])
-    rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
-    ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
-    base_rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
-    # Keep the active painting edge below the pivot; local -Y is the paint axis.
-    paint_axis_heading = base_rz - 90.0
-
-    points = np.array([[float(point[0]), float(point[1])] for point in path], dtype=float)
-    if len(points) < 2:
-        return (
-            [[float(points[0][0]), float(points[0][1]), pivot_z, rx, ry, base_rz]],
-            [points.copy()],
-        )
-
-    def _centroid_xy(current_points: np.ndarray) -> tuple[float, float]:
-        return (float(np.mean(current_points[:, 0])), float(np.mean(current_points[:, 1])))
-
-    def _rotate_shape(current_points: np.ndarray, angle_deg: float, pivot_xy: tuple[float, float]) -> np.ndarray:
-        return np.array(
-            [_rotate_xy_about((float(point[0]), float(point[1])), angle_deg, pivot_xy) for point in current_points],
-            dtype=float,
-        )
-
-    def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
-        dx = float(point_b[0] - point_a[0])
-        dy = float(point_b[1] - point_a[1])
-        return float(np.degrees(np.arctan2(dy, dx)))
-
-    pivot_xy = (pivot_x, pivot_y)
-
-    initial_heading = _segment_heading_deg(points[0], points[1])
-    initial_rotation = _unwrap_degrees(0.0, paint_axis_heading - initial_heading)
-    points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
-    translate_to_pivot = np.array([pivot_x - float(points[0][0]), pivot_y - float(points[0][1])], dtype=float)
-    points = points + translate_to_pivot
-
-    current_rz = _unwrap_degrees(base_rz, base_rz + initial_rotation)
-    result: list[list[float]] = []
-    snapshots: list[np.ndarray] = []
-    center_xy = _centroid_xy(points)
-    result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-    snapshots.append(points.copy())
-
-    axis_vector = np.array(
-        [
-            float(np.cos(np.radians(paint_axis_heading))),
-            float(np.sin(np.radians(paint_axis_heading))),
-        ],
-        dtype=float,
-    )
-
-    for index in range(len(points) - 1):
-        current_point = points[index]
-        next_point = points[index + 1]
-        segment_length = float(np.linalg.norm(next_point - current_point))
-        if segment_length <= 1e-9:
-            center_xy = _centroid_xy(points)
-            result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-            snapshots.append(points.copy())
-            continue
-
-        segment_heading = _segment_heading_deg(current_point, next_point)
-        rotation_delta = _unwrap_degrees(0.0, paint_axis_heading - segment_heading)
-        if abs(rotation_delta) > 1e-9:
-            points = _rotate_shape(points, rotation_delta, pivot_xy)
-            current_rz = _unwrap_degrees(current_rz, current_rz + rotation_delta)
-
-        points = points - axis_vector * segment_length
-        center_xy = _centroid_xy(points)
-        result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-        snapshots.append(points.copy())
-
-    return result[:len(path)], snapshots[:len(path)]
 
 
 class WorkpieceEditorService(IWorkpieceEditorService):
@@ -295,11 +177,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  transformer:    Optional[ICoordinateTransformer] = None,
                  resolver:       Optional["VisionTargetResolver"] = None,
                  z_min:          float = 0.0,
-                 base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
                  rz_mode:        str = "constant",
-                 post_execute_callback: Optional[Callable[[], bool]] = None,
                  debug_dump_dir: Optional[str] = None,
                  robot_service=None,
+                 path_executor: Optional[IWorkpiecePathExecutor] = None,
                  target_point_name: str = ""):
         self._vision             = vision_service
         self._capture_snapshot_service = capture_snapshot_service
@@ -311,11 +192,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._transformer        = transformer
         self._resolver           = resolver
         self._z_min              = z_min
-        self._base_position_provider = base_position_provider
         self._rz_mode            = str(rz_mode or "constant").strip().lower()
-        self._post_execute_callback = post_execute_callback
         self._debug_dump_dir     = debug_dump_dir
         self._robot_service      = robot_service
+        self._path_executor      = path_executor
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
         self._last_interpolation_preview_contours: list[np.ndarray] = []
@@ -537,30 +417,38 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         ]
 
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
-        pivot_pose = self._resolve_base_position()
-        if pivot_pose is None or len(pivot_pose) < 3:
-            return [], pivot_pose
-        paths = []
-        for job in self._last_execution_preview_jobs:
-            source_path = job.get("execution_path") or job.get("path") or []
-            if not source_path:
-                continue
-            center_path, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
-            paths.append(center_path)
-        return paths, list(pivot_pose)
+        if self._path_executor is None:
+            return [], None
+        return self._path_executor.get_pivot_preview_paths(self._last_execution_preview_jobs)
 
     def get_last_pivot_motion_preview(self):
-        pivot_pose = self._resolve_base_position()
-        if pivot_pose is None or len(pivot_pose) < 3:
-            return [], pivot_pose
-        motion = []
-        for job in self._last_execution_preview_jobs:
-            source_path = job.get("execution_path") or job.get("path") or []
-            if not source_path:
-                continue
-            _, snapshots = _simulate_pivot_projected_motion(source_path, pivot_pose)
-            motion.append(snapshots)
-        return motion, list(pivot_pose)
+        if self._path_executor is None:
+            return [], None
+        return self._path_executor.get_pivot_motion_preview(self._last_execution_preview_jobs)
+
+    def get_available_execution_modes(self) -> tuple[str, ...]:
+        if self._path_executor is not None:
+            return tuple(self._path_executor.get_supported_execution_modes())
+        return ("continuous", "pose_path", "segmented")
+
+    def can_execute_pickup_to_pivot(self) -> bool:
+        if self._path_executor is None:
+            return False
+        return bool(self._path_executor.supports_pickup_to_pivot())
+
+    def execute_pickup_to_pivot(self) -> tuple[bool, str]:
+        if not self._last_execution_preview_jobs:
+            return False, "No previewed paths available"
+        if self._path_executor is None or not self._path_executor.supports_pickup_to_pivot():
+            return False, "Pickup-to-pivot is not supported"
+        return self._path_executor.execute_pickup_to_pivot(self._last_execution_preview_jobs)
+
+    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]:
+        if not self._last_execution_preview_jobs:
+            return False, "No previewed paths available"
+        if self._path_executor is None or not self._path_executor.supports_pickup_to_pivot():
+            return False, "Pickup-and-pivot-paint is not supported"
+        return self._path_executor.execute_pickup_and_pivot_paint(self._last_execution_preview_jobs)
 
     def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
         if not self._last_execution_preview_jobs:
@@ -568,8 +456,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         if self._robot_service is None:
             return False, "Robot service is not available"
 
+        if self._path_executor is not None:
+            return self._path_executor.execute_preview_paths(
+                self._last_execution_preview_jobs,
+                mode=mode,
+            )
+
         mode = str(mode or "continuous").strip().lower()
-        if mode not in {"continuous", "pose_path", "pivot_path", "segmented"}:
+        if mode not in {"continuous", "pose_path", "segmented"}:
             return False, f"Unsupported execution mode: {mode}"
 
         total_waypoints = 0
@@ -596,20 +490,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 )
                 if result not in (0, True, None):
                     return False, f"{pattern_type} pose-path execution failed with code {result}"
-            elif mode == "pivot_path":
-                pivot_pose = self._resolve_base_position()
-                if pivot_pose is None or len(pivot_pose) < 3:
-                    return False, "Pivot-path execution requires a valid base/pivot position"
-                pivot_path = _build_pivot_projected_path(spline, pivot_pose)
-                result = self._robot_service.execute_trajectory(
-                    pivot_path,
-                    vel=vel,
-                    acc=acc,
-                    blocking=True,
-                    orientation_mode="per_waypoint",
-                )
-                if result not in (0, True, None):
-                    return False, f"{pattern_type} pivot-path execution failed with code {result}"
             else:
                 result = self._execute_segmented_preview_path(spline, vel=vel, acc=acc)
                 if not result:
@@ -619,16 +499,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
                 len(spline), mode, vel, acc,
             )
-
-        if self._post_execute_callback is not None:
-            try:
-                moved = bool(self._post_execute_callback())
-            except Exception:
-                _logger.exception("[EXECUTE] Post-execute callback failed")
-                return False, "Execution finished, but return-to-calibration failed"
-            if not moved:
-                return False, "Execution finished, but return-to-calibration failed"
-            _logger.info("[EXECUTE] Returned to post-execution position")
 
         return True, (
             f"Executed {len(self._last_execution_preview_jobs)} path(s), "
@@ -677,7 +547,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
             rz_offset = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
         except (ValueError, TypeError):
-            base_z, rz_offset = 0.0, 0.0
+            raise ValueError("Invalid segment settings: spraying_height and rz_angle must be numbers")
         rx, ry = 180.0, 0.0
         robot_xy_points: list[tuple[float, float]] = []
 
@@ -747,20 +617,16 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         return result
 
     def _resolve_base_position(self) -> Optional[list[float]]:
-        provider = self._base_position_provider
-        if provider is None:
-            return None
-        try:
-            position = provider()
-        except Exception:
-            _logger.debug("WorkpieceEditorService: base position provider failed", exc_info=True)
-            return None
-        if not position or len(position) < 3:
-            return None
-        try:
-            return [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
-        except (TypeError, ValueError):
-            return None
+        executor = self._path_executor
+        if executor is not None and hasattr(executor, "_resolve_base_position"):
+            try:
+                position = executor._resolve_base_position()
+            except Exception:
+                _logger.debug("WorkpieceEditorService: path executor base position lookup failed", exc_info=True)
+                position = None
+            if position is not None:
+                return list(position)
+        return None
 
     def _write_debug_path_dump(
         self,

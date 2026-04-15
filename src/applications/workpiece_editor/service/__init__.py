@@ -1,1 +1,2 @@
 from src.applications.workpiece_editor.service.i_workpiece_editor_service import IWorkpieceEditorService
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor

@@ -14,6 +14,7 @@ class AdaptiveMovementConfig:
     derivative_scaling: float = 0.5
     fast_iteration_wait: float = 1.0
     initial_align_y_scale: float = 1.0
+    initial_align_approach_z: float | None = None
     post_align_settle_s: float = 0.3
 
     @classmethod
@@ -27,6 +28,7 @@ class AdaptiveMovementConfig:
             derivative_scaling=data.get("derivative_scaling", 0.5),
             fast_iteration_wait=data.get("fast_iteration_wait", 1.0),
             initial_align_y_scale=data.get("initial_align_y_scale", 1.0),
+            initial_align_approach_z=data.get("initial_align_approach_z"),
             post_align_settle_s=float(data.get("post_align_settle_s", 0.3)),
         )
 
@@ -40,6 +42,7 @@ class AdaptiveMovementConfig:
             "derivative_scaling": self.derivative_scaling,
             "fast_iteration_wait": self.fast_iteration_wait,
             "initial_align_y_scale": self.initial_align_y_scale,
+            "initial_align_approach_z": self.initial_align_approach_z,
             "post_align_settle_s": self.post_align_settle_s,
         }
 

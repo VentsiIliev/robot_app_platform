@@ -37,6 +37,7 @@ def _build_paint_contour_editor_application(robot_system):
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
     from src.robot_systems.paint.domain.contour_editor_schema import (
         build_paint_contour_form_schema,
         build_paint_segment_settings_schema,
@@ -99,17 +100,22 @@ def _build_paint_contour_editor_application(robot_system):
         transformer=transformer,
         resolver=resolver,
         z_min=z_min,
-        base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
-            if getattr(robot_system, "_navigation", None) is not None else None
-        ),
         rz_mode="path_tangent",
-        post_execute_callback=lambda: (
-            getattr(robot_system, "_navigation", None).move_to_calibration_position()
-            if getattr(robot_system, "_navigation", None) is not None else False
-        ),
         debug_dump_dir=debug_dump_dir,
         robot_service=robot_service,
+        path_executor=PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            base_position_provider=lambda: (
+                getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
+                if getattr(robot_system, "_navigation", None) is not None else None
+            ),
+            post_execute_callback=lambda: (
+                getattr(robot_system, "_navigation", None).move_to_calibration_position()
+                if getattr(robot_system, "_navigation", None) is not None else False
+            ),
+            pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
+            pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
+        ),
         target_point_name=camera_point_name,
     )
 

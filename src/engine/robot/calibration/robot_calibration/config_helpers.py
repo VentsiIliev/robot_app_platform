@@ -12,6 +12,7 @@ class AdaptiveMovementConfig:
         k,
         derivative_scaling,
         initial_align_y_scale: float = 1.0,
+        initial_align_approach_z: float | None = None,
     ):
         self.min_step_mm = min_step_mm  # minimum movement (for very small errors)
         self.max_step_mm = max_step_mm  # maximum movement for very large misalignment's
@@ -20,6 +21,7 @@ class AdaptiveMovementConfig:
         self.k = k  # responsiveness (1.0 = smooth, 2.0 = faster reaction)
         self.derivative_scaling = derivative_scaling  # how strongly derivative term reduces step
         self.initial_align_y_scale = initial_align_y_scale  # feed-forward Y compensation for first marker move
+        self.initial_align_approach_z = initial_align_approach_z
 
     def to_dict(self):
         return {
@@ -30,6 +32,7 @@ class AdaptiveMovementConfig:
             "k": self.k,
             "derivative_scaling": self.derivative_scaling,
             "initial_align_y_scale": self.initial_align_y_scale,
+            "initial_align_approach_z": self.initial_align_approach_z,
         }
 
 

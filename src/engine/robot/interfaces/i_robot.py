@@ -97,6 +97,16 @@ class IRobot(ABC):
         """Optional metadata about the last submitted trajectory command."""
         return None
 
+    def unwind_joint6(
+        self,
+        blocking: bool = True,
+        queue_if_busy: bool = True,
+        vel: float | None = None,
+        acc: float | None = None,
+    ) -> int:
+        """Optional explicit Joint_6 unwind."""
+        return -1
+
     def get_connection_state(self) -> str:
         """Optional lifecycle/availability state for the underlying transport."""
         return "idle"

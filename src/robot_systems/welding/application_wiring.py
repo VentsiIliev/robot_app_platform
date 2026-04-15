@@ -36,6 +36,7 @@ def _build_welding_contour_editor_application(robot_system):
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.welding.workpiece_path_executor import WeldingWorkpiecePathExecutor
     from src.robot_systems.welding.domain.contour_editor_schema import (
         build_welding_contour_form_schema,
         build_welding_segment_settings_schema,
@@ -75,12 +76,12 @@ def _build_welding_contour_editor_application(robot_system):
     def _id_exists_fn(contour_id: str) -> bool:
         return os.path.exists(os.path.join(storage_dir, f"{str(contour_id).strip()}.json"))
 
-    z_min = 0.0
+    z_min = 100.0
     if robot_config is not None:
         try:
             z_min = float(robot_config.safety_limits.z_min)
         except Exception:
-            z_min = 0.0
+            z_min = 100.0
 
     service = WorkpieceEditorService(
         vision_service=vision_service,
@@ -94,6 +95,7 @@ def _build_welding_contour_editor_application(robot_system):
         resolver=None,
         z_min=z_min,
         robot_service=robot_service,
+        path_executor=WeldingWorkpiecePathExecutor(robot_service=robot_service),
         target_point_name="",
     )
 

@@ -251,21 +251,26 @@ class WorkpieceEditorController(IApplicationController):
 
         button_row = QHBoxLayout()
         button_row.addStretch(1)
-        execute_continuous_btn = QPushButton("Execute Continuous")
-        execute_continuous_btn.clicked.connect(
-            lambda: self._on_execute_preview_confirmed("continuous")
-        )
-        button_row.addWidget(execute_continuous_btn)
-        execute_pose_path_btn = QPushButton("Execute Pose Path")
-        execute_pose_path_btn.clicked.connect(
-            lambda: self._on_execute_preview_confirmed("pose_path")
-        )
-        button_row.addWidget(execute_pose_path_btn)
-        execute_pivot_path_btn = QPushButton("Execute Pivot Path")
-        execute_pivot_path_btn.clicked.connect(
-            lambda: self._on_execute_preview_confirmed("pivot_path")
-        )
-        button_row.addWidget(execute_pivot_path_btn)
+        mode_labels = {
+            "continuous": "Execute Continuous",
+            "pose_path": "Execute Pose Path",
+            "pivot_path": "Execute Pivot Path",
+            "segmented": "Execute Segmented",
+        }
+        for mode in self._model.get_available_execution_modes():
+            label = mode_labels.get(mode, f"Execute {str(mode).replace('_', ' ').title()}")
+            button = QPushButton(label)
+            button.clicked.connect(
+                lambda _checked=False, selected_mode=mode: self._on_execute_preview_confirmed(selected_mode)
+            )
+            button_row.addWidget(button)
+        if self._model.can_execute_pickup_to_pivot():
+            pickup_button = QPushButton("Pickup To Pivot")
+            pickup_button.clicked.connect(self._on_execute_pickup_to_pivot)
+            button_row.addWidget(pickup_button)
+            pickup_and_paint_button = QPushButton("Pickup And Pivot Paint")
+            pickup_and_paint_button.clicked.connect(self._on_execute_pickup_and_pivot_paint)
+            button_row.addWidget(pickup_and_paint_button)
         layout.addLayout(button_row)
 
         self._preview_dialog = dialog
@@ -287,6 +292,22 @@ class WorkpieceEditorController(IApplicationController):
             show_info(self._preview_dialog or self._view, "Execution Started", msg)
         else:
             show_critical(self._preview_dialog or self._view, "Execution Failed", msg)
+
+    def _on_execute_pickup_to_pivot(self) -> None:
+        ok, msg = self._model.execute_pickup_to_pivot()
+        self._logger.info("Execute pickup-to-pivot: %s — %s", ok, msg)
+        if ok:
+            show_info(self._preview_dialog or self._view, "Pickup To Pivot", msg)
+        else:
+            show_critical(self._preview_dialog or self._view, "Pickup To Pivot Failed", msg)
+
+    def _on_execute_pickup_and_pivot_paint(self) -> None:
+        ok, msg = self._model.execute_pickup_and_pivot_paint()
+        self._logger.info("Execute pickup-and-pivot-paint: %s — %s", ok, msg)
+        if ok:
+            show_info(self._preview_dialog or self._view, "Pickup And Pivot Paint", msg)
+        else:
+            show_critical(self._preview_dialog or self._view, "Pickup And Pivot Paint Failed", msg)
 
     def _show_pivot_path_plot(
         self,

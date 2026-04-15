@@ -47,6 +47,18 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_pivot_motion_preview(self):
         return self._service.get_last_pivot_motion_preview()
 
+    def get_available_execution_modes(self) -> tuple[str, ...]:
+        return self._service.get_available_execution_modes()
+
+    def can_execute_pickup_to_pivot(self) -> bool:
+        return self._service.can_execute_pickup_to_pivot()
+
+    def execute_pickup_to_pivot(self) -> tuple[bool, str]:
+        return self._service.execute_pickup_to_pivot()
+
+    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]:
+        return self._service.execute_pickup_and_pivot_paint()
+
     def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
         return self._service.execute_last_preview_paths(mode=mode)
 
