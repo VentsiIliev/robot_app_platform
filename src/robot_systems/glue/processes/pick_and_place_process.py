@@ -3,6 +3,7 @@ import threading
 from typing import Callable, Optional
 
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
@@ -31,6 +32,7 @@ class PickAndPlaceProcess(BaseProcess):
         tool_service: Optional[IToolService] = None,
         height_service: Optional[IHeightMeasuringService] = None,
         resolver: Optional[VisionTargetResolver] = None,
+        vacuum_pump: Optional[IVacuumPumpController] = None,
         config: Optional[PickAndPlaceConfig] = None,
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
@@ -49,6 +51,7 @@ class PickAndPlaceProcess(BaseProcess):
         self._tools      = tool_service
         self._height     = height_service
         self._resolver   = resolver
+        self._vacuum     = vacuum_pump
         self._config     = config or PickAndPlaceConfig()
 
         self._simulation  = False
@@ -155,7 +158,7 @@ class PickAndPlaceProcess(BaseProcess):
     # ── Worker ────────────────────────────────────────────────────────
 
     def _run_workflow(self) -> None:
-        if not all([self._matching, self._tools, self._height, self._resolver]):
+        if not all([self._matching, self._tools, self._height, self._resolver, self._vacuum]):
             self._logger.error("Pick-and-place not fully configured")
             self.set_error("Required services not configured")
             return
@@ -215,6 +218,7 @@ class PickAndPlaceProcess(BaseProcess):
                 tools=self._tools,
                 height=self._height,
                 resolver=self._resolver,
+                vacuum_pump=self._vacuum,
                 config=self._config,
                 logger=self._logger,
                 on_workpiece_placed=_on_placed,

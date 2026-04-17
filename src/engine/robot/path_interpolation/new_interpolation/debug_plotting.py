@@ -8,12 +8,23 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
+def _execution_rotation_change_mask(execution_arr: np.ndarray, threshold_deg: float = 1e-6) -> np.ndarray:
+    if execution_arr.ndim != 2 or execution_arr.shape[0] < 2 or execution_arr.shape[1] < 6:
+        return np.zeros(execution_arr.shape[0] if execution_arr.ndim == 2 else 0, dtype=bool)
+
+    rz_values = execution_arr[:, 5].astype(float)
+    rz_delta = np.abs(np.diff(rz_values))
+    mask = np.zeros(len(execution_arr), dtype=bool)
+    mask[1:] = rz_delta > float(threshold_deg)
+    return mask
+
+
 def plot_trajectory_debug(
-    original_paths,
-    linear_paths,
-    spline_paths,
+    raw_paths,
+    curve_paths,
+    sampled_paths,
     execution_paths=None,
-    pre_smoothed_paths=None,
+    prepared_paths=None,
     save_dir="debug_plots",
 ):
 
@@ -22,31 +33,44 @@ def plot_trajectory_debug(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if execution_paths is None:
-            execution_paths = spline_paths
-        if pre_smoothed_paths is None:
-            pre_smoothed_paths = original_paths
+            execution_paths = sampled_paths
+        if prepared_paths is None:
+            prepared_paths = raw_paths
 
         # Create figure with subplots (without 3D for compatibility)
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
 
-        # 2D XY plot with original, pre-smoothed, linear, spline, and actual execution path
+        # 2D XY plot with raw, prepared, curve, sampled, and execution path
         ax1.set_title('XY Trajectory (Top View)')
         ax1.set_xlabel('X (mm)')
         ax1.set_ylabel('Y (mm)')
         ax1.grid(True)
 
-        for i, (orig, pre_smoothed, linear, spline, execution) in enumerate(zip(original_paths, pre_smoothed_paths, linear_paths, spline_paths, execution_paths)):
-            orig_arr = np.array(orig)
-            pre_arr = np.array(pre_smoothed)
-            linear_arr = np.array(linear)
-            spline_arr = np.array(spline)
+        for i, (raw, prepared, curve, sampled, execution) in enumerate(zip(raw_paths, prepared_paths, curve_paths, sampled_paths, execution_paths)):
+            orig_arr = np.array(raw)
+            pre_arr = np.array(prepared)
+            linear_arr = np.array(curve)
+            spline_arr = np.array(sampled)
             execution_arr = np.array(execution)
 
-            ax1.plot(orig_arr[:, 0], orig_arr[:, 1], 'o-', color='red', label=f'Original {i+1}' if i == 0 else '', markersize=8, linewidth=2, zorder=1)
-            ax1.plot(pre_arr[:, 0], pre_arr[:, 1], '^-', color='orange', label=f'PreSmooth {i+1}' if i == 0 else '', markersize=4, linewidth=1.5, alpha=0.8, zorder=2)
-            ax1.plot(linear_arr[:, 0], linear_arr[:, 1], 's', color='blue', label=f'Linear {i+1}' if i == 0 else '', markersize=4, alpha=0.6, zorder=3)
-            ax1.plot(spline_arr[:, 0], spline_arr[:, 1], '.', color='green', label=f'Spline {i+1}' if i == 0 else '', markersize=2, alpha=0.5, zorder=4)
+            ax1.plot(orig_arr[:, 0], orig_arr[:, 1], 'o-', color='red', label=f'Raw {i+1}' if i == 0 else '', markersize=8, linewidth=2, zorder=1)
+            ax1.plot(pre_arr[:, 0], pre_arr[:, 1], '^-', color='orange', label=f'Prepared {i+1}' if i == 0 else '', markersize=4, linewidth=1.5, alpha=0.8, zorder=2)
+            ax1.plot(linear_arr[:, 0], linear_arr[:, 1], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=4, alpha=0.6, zorder=3)
+            ax1.plot(spline_arr[:, 0], spline_arr[:, 1], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=2, alpha=0.5, zorder=4)
             ax1.plot(execution_arr[:, 0], execution_arr[:, 1], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=5, linewidth=1.5, zorder=5)
+            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            if np.any(rotate_mask):
+                rotated_points = execution_arr[rotate_mask]
+                ax1.scatter(
+                    rotated_points[:, 0],
+                    rotated_points[:, 1],
+                    s=48,
+                    color='cyan',
+                    edgecolors='black',
+                    linewidths=0.6,
+                    zorder=6,
+                    label='Execute RZ Change' if i == 0 else '',
+                )
 
         ax1.legend()
         ax1.axis('equal')
@@ -57,18 +81,30 @@ def plot_trajectory_debug(
         ax2.set_ylabel('Z (mm)')
         ax2.grid(True)
 
-        for i, (orig, pre_smoothed, linear, spline, execution) in enumerate(zip(original_paths, pre_smoothed_paths, linear_paths, spline_paths, execution_paths)):
-            orig_arr = np.array(orig)
-            pre_arr = np.array(pre_smoothed)
-            linear_arr = np.array(linear)
-            spline_arr = np.array(spline)
+        for i, (raw, prepared, curve, sampled, execution) in enumerate(zip(raw_paths, prepared_paths, curve_paths, sampled_paths, execution_paths)):
+            orig_arr = np.array(raw)
+            pre_arr = np.array(prepared)
+            linear_arr = np.array(curve)
+            spline_arr = np.array(sampled)
             execution_arr = np.array(execution)
 
-            ax2.plot(orig_arr[:, 0], orig_arr[:, 2], 'o-', color='red', label=f'Original {i+1}' if i == 0 else '', markersize=6, linewidth=2)
-            ax2.plot(pre_arr[:, 0], pre_arr[:, 2], '^-', color='orange', label=f'PreSmooth {i+1}' if i == 0 else '', markersize=3, linewidth=1.2, alpha=0.8)
-            ax2.plot(linear_arr[:, 0], linear_arr[:, 2], 's', color='blue', label=f'Linear {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
-            ax2.plot(spline_arr[:, 0], spline_arr[:, 2], '.', color='green', label=f'Spline {i+1}' if i == 0 else '', markersize=1, alpha=0.5)
+            ax2.plot(orig_arr[:, 0], orig_arr[:, 2], 'o-', color='red', label=f'Raw {i+1}' if i == 0 else '', markersize=6, linewidth=2)
+            ax2.plot(pre_arr[:, 0], pre_arr[:, 2], '^-', color='orange', label=f'Prepared {i+1}' if i == 0 else '', markersize=3, linewidth=1.2, alpha=0.8)
+            ax2.plot(linear_arr[:, 0], linear_arr[:, 2], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
+            ax2.plot(spline_arr[:, 0], spline_arr[:, 2], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=1, alpha=0.5)
             ax2.plot(execution_arr[:, 0], execution_arr[:, 2], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=4, linewidth=1.2)
+            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            if np.any(rotate_mask):
+                rotated_points = execution_arr[rotate_mask]
+                ax2.scatter(
+                    rotated_points[:, 0],
+                    rotated_points[:, 2],
+                    s=32,
+                    color='cyan',
+                    edgecolors='black',
+                    linewidths=0.6,
+                    label='Execute RZ Change' if i == 0 else '',
+                )
 
         ax2.legend()
 
@@ -78,38 +114,50 @@ def plot_trajectory_debug(
         ax3.set_ylabel('Z (mm)')
         ax3.grid(True)
 
-        for i, (orig, pre_smoothed, linear, spline, execution) in enumerate(zip(original_paths, pre_smoothed_paths, linear_paths, spline_paths, execution_paths)):
-            orig_arr = np.array(orig)
-            pre_arr = np.array(pre_smoothed)
-            linear_arr = np.array(linear)
-            spline_arr = np.array(spline)
+        for i, (raw, prepared, curve, sampled, execution) in enumerate(zip(raw_paths, prepared_paths, curve_paths, sampled_paths, execution_paths)):
+            orig_arr = np.array(raw)
+            pre_arr = np.array(prepared)
+            linear_arr = np.array(curve)
+            spline_arr = np.array(sampled)
             execution_arr = np.array(execution)
 
-            ax3.plot(range(len(orig_arr)), orig_arr[:, 2], 'o-', color='red', label=f'Original {i+1}' if i == 0 else '', markersize=6)
-            ax3.plot(np.linspace(0, len(orig_arr)-1, len(pre_arr)), pre_arr[:, 2], '^-', color='orange', label=f'PreSmooth {i+1}' if i == 0 else '', markersize=3, linewidth=1.2, alpha=0.8)
-            ax3.plot(np.linspace(0, len(orig_arr)-1, len(linear_arr)), linear_arr[:, 2], 's', color='blue', label=f'Linear {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
-            ax3.plot(np.linspace(0, len(orig_arr)-1, len(spline_arr)), spline_arr[:, 2], '.', color='green', label=f'Spline {i+1}' if i == 0 else '', markersize=2, alpha=0.5)
+            ax3.plot(range(len(orig_arr)), orig_arr[:, 2], 'o-', color='red', label=f'Raw {i+1}' if i == 0 else '', markersize=6)
+            ax3.plot(np.linspace(0, len(orig_arr)-1, len(pre_arr)), pre_arr[:, 2], '^-', color='orange', label=f'Prepared {i+1}' if i == 0 else '', markersize=3, linewidth=1.2, alpha=0.8)
+            ax3.plot(np.linspace(0, len(orig_arr)-1, len(linear_arr)), linear_arr[:, 2], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
+            ax3.plot(np.linspace(0, len(orig_arr)-1, len(spline_arr)), spline_arr[:, 2], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=2, alpha=0.5)
             ax3.plot(np.linspace(0, len(orig_arr)-1, len(execution_arr)), execution_arr[:, 2], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=4, linewidth=1.2)
+            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            if np.any(rotate_mask):
+                execution_idx = np.linspace(0, len(orig_arr) - 1, len(execution_arr))
+                ax3.scatter(
+                    execution_idx[rotate_mask],
+                    execution_arr[rotate_mask, 2],
+                    s=28,
+                    color='cyan',
+                    edgecolors='black',
+                    linewidths=0.6,
+                    label='Execute RZ Change' if i == 0 else '',
+                )
 
         ax3.legend()
 
         # Point count comparison with three bars
         ax4.set_title('Point Count Comparison')
 
-        path_labels = [f'Path {i+1}' for i in range(len(original_paths))]
-        orig_counts = [len(p) for p in original_paths]
-        pre_counts = [len(p) for p in pre_smoothed_paths]
-        linear_counts = [len(p) for p in linear_paths]
-        spline_counts = [len(p) for p in spline_paths]
+        path_labels = [f'Path {i+1}' for i in range(len(raw_paths))]
+        orig_counts = [len(p) for p in raw_paths]
+        pre_counts = [len(p) for p in prepared_paths]
+        linear_counts = [len(p) for p in curve_paths]
+        spline_counts = [len(p) for p in sampled_paths]
         execution_counts = [len(p) for p in execution_paths]
 
         x = np.arange(len(path_labels))
         width = 0.16
 
-        ax4.bar(x - 2 * width, orig_counts, width, label='Original', color='red', alpha=0.8)
-        ax4.bar(x - width, pre_counts, width, label='PreSmooth', color='orange', alpha=0.8)
-        ax4.bar(x, linear_counts, width, label='Linear', color='blue', alpha=0.8)
-        ax4.bar(x + width, spline_counts, width, label='Spline', color='green', alpha=0.8)
+        ax4.bar(x - 2 * width, orig_counts, width, label='Raw', color='red', alpha=0.8)
+        ax4.bar(x - width, pre_counts, width, label='Prepared', color='orange', alpha=0.8)
+        ax4.bar(x, linear_counts, width, label='Curve', color='blue', alpha=0.8)
+        ax4.bar(x + width, spline_counts, width, label='Sampled', color='green', alpha=0.8)
         ax4.bar(x + 2 * width, execution_counts, width, label='Execute', color='magenta', alpha=0.8)
 
         ax4.set_xlabel('Path')

@@ -38,13 +38,17 @@ def execute_pick_descent_stage(workflow, pickup_positions):
 
 
 def execute_pick_contact_stage(workflow, pickup_positions):
-    return _execute_pick_move(
+    result = _execute_pick_move(
         workflow,
         "pick.pickup",
         "Executing pick contact",
         workflow._motion.execute_pickup_contact,
         pickup_positions,
     )
+    if result is None:
+        workflow._context.vacuum_active = True
+        workflow._publish_diagnostics("Vacuum engaged")
+    return result
 
 
 def execute_pick_lift_stage(workflow, pickup_positions):

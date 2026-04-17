@@ -91,6 +91,13 @@ _SEGMENT_SCHEMA = SegmentSettingsSchema(
         SegmentSettingSpec("pass_height",     "Pass Height (mm)",  "5",    "Process"),
         SegmentSettingSpec("offset",          "Offset (mm)",       "0",    "Process"),
         SegmentSettingSpec("partType",        "Part Type",         "",     "Process", validator="combo"),
+        # Interpolation
+        SegmentSettingSpec("preprocess_min_spacing_mm", "Preprocess Spacing (mm)", "2.5",  "Interpolation"),
+        SegmentSettingSpec("interpolation_spacing_mm",  "Sampled Spacing (mm)",    "10.0", "Interpolation"),
+        SegmentSettingSpec("dense_sampling_factor",     "Dense Factor",            "0.25", "Interpolation"),
+        SegmentSettingSpec("execution_spacing_mm",      "Execution Spacing (mm)",  "7.5",  "Interpolation"),
+        SegmentSettingSpec("path_tangent_lookahead_mm", "Tangent Lookahead (mm)",  "15.0", "Interpolation"),
+        SegmentSettingSpec("path_tangent_deadband_deg", "Tangent Deadband (deg)",  "5.0",  "Interpolation"),
         # Thresholds
         SegmentSettingSpec("start_threshold", "Start Threshold",   "1.0",  "Thresholds"),
         SegmentSettingSpec("end_threshold",   "End Threshold",     "30.0", "Thresholds"),

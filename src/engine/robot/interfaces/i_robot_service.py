@@ -74,3 +74,6 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
         return self.get_state() not in ("error", "disconnected", "fault")
+
+    @abstractmethod
+    def set_digital_output(self, port_id: int, value: bool) -> bool: ...

@@ -3,6 +3,7 @@ import logging
 import threading
 from typing import Callable, Optional
 
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.engine.robot.height_measuring.i_height_measuring_service import IHeightMeasuringService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
@@ -46,6 +47,7 @@ class PickAndPlaceWorkflow:
         tools:                IToolService,
         height:               IHeightMeasuringService,
         resolver:             VisionTargetResolver,
+        vacuum_pump:          IVacuumPumpController,
         config:               PickAndPlaceConfig,
         logger:               logging.Logger,
         on_workpiece_placed:  Optional[Callable] = None,
@@ -61,6 +63,7 @@ class PickAndPlaceWorkflow:
         self._tools              = tools
         self._height             = height
         self._resolver           = resolver
+        self._vacuum             = vacuum_pump
         self._config             = config
         self._logger             = logger
         self._on_workpiece_placed = on_workpiece_placed
@@ -85,6 +88,7 @@ class PickAndPlaceWorkflow:
             logger=logger,
             pick_motion=config.pick_motion,
             place_motion=config.place_motion,
+            vacuum_pump=vacuum_pump,
             simulation=simulation,
         )
         self._stage = PickAndPlaceStage

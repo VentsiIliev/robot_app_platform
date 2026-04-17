@@ -1,4 +1,4 @@
-from src.engine.robot.path_interpolation.spline_interpolation import interpolate_path_spline_with_lambda
+from src.engine.robot.path_interpolation.deprecated.spline_interpolation import interpolate_path_spline_with_lambda
 import warnings
 import numpy as np
 

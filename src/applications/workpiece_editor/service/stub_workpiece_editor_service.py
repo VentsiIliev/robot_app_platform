@@ -34,6 +34,24 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: execute_last_preview_paths mode=%s", mode)
         return True, f"Stub: executed preview paths in {mode} mode"
 
+    def can_import_dxf_test(self) -> bool:
+        return False
+
+    def get_last_sampled_preview_paths(self) -> list:
+        return []
+
+    def get_last_raw_preview_paths(self) -> list:
+        return []
+
+    def get_last_prepared_preview_paths(self) -> list:
+        return []
+
+    def get_last_curve_preview_paths(self) -> list:
+        return []
+
+    def get_last_execution_preview_paths(self) -> list:
+        return []
+
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         return [], None
 

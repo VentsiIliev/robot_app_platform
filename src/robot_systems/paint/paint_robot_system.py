@@ -92,6 +92,10 @@ class PaintRobotSystem(BaseRobotSystem):
             name="camera",
             display_name="camera",
         ),
+        RemoteTcpDefinition(
+            name="tool",
+            display_name="tool",
+        ),
 
     ]
 
@@ -269,7 +273,6 @@ class PaintRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
-
 
 
 

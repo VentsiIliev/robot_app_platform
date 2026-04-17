@@ -1,22 +1,21 @@
 """
-Example usage of path_interpolation.y_pixels
+Example usage of the deprecated two-stage interpolation pipeline.
 
-Demonstrates the two-stage interpolation pipeline (linear densification → spline smoothing)
+Demonstrates the deprecated two-stage interpolation pipeline (linear densification -> spline smoothing)
 on different geometric shapes. Run directly to generate debug plots for each shape.
 
 Usage:
-    python src/modules/utils/points_interpolation_example.y_pixels [shape]
+    python src/engine/robot/path_interpolation/deprecated/points_interpolation_example.py [shape]
 
 Shapes: rectangle, circle, triangle, l_shape, star, all (default: all)
 """
 
-import sys
 import math
 import numpy as np
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../..'))
-from src.engine.robot.path_interpolation import combined_interpolation
-from src.engine.robot.path_interpolation.debug_plotting import plot_trajectory_debug
+from src.engine.robot.path_interpolation.deprecated import combined_interpolation
+from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
 
 # ---------------------------------------------------------------------------
 # Shape generators – each returns a list of [x, y, z, rx_degrees, ry_degrees, rz_degrees] points
@@ -147,9 +146,9 @@ def run_example(shape_name, adaptive_spacing_mm=2.0, smoothing_lambda=10.0):
 
     # Plot original → linear → spline
     plot_trajectory_debug(
-        original_paths=[path],
-        linear_paths=[linear],
-        spline_paths=[smoothed],
+        raw_paths=[path],
+        curve_paths=[linear],
+        sampled_paths=[smoothed],
         save_dir=f"debug_plots/{shape_name}",
     )
 

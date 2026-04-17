@@ -3,7 +3,7 @@ from typing import List, Tuple, Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
@@ -32,6 +32,8 @@ class WorkpieceEditorController(IApplicationController):
         self._camera_active  = True          # ← controls whether feed updates are forwarded
         self._logger         = logging.getLogger(self.__class__.__name__)
         self._preview_dialog = None
+        self._latest_frame_shape = None
+        self._dxf_test_button = None
 
     def load(self) -> None:
         self._active        = True
@@ -40,6 +42,7 @@ class WorkpieceEditorController(IApplicationController):
         self._bridge.load_workpiece_raw.connect(self._on_load_workpiece_raw)
         self._view.set_capture_handler(self._on_capture)   # ← renamed
         self._view.set_save_callback(self._on_form_submit)
+        self._install_optional_actions()
         self._connect_signals()
         self._subscribe()
         self._view.destroyed.connect(self.stop)
@@ -153,6 +156,10 @@ class WorkpieceEditorController(IApplicationController):
         if not self._active or not self._camera_active or frame is None:
             return
         try:
+            self._latest_frame_shape = tuple(frame.shape)
+        except Exception:
+            self._latest_frame_shape = None
+        try:
             import cv2
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         except Exception:
@@ -182,6 +189,80 @@ class WorkpieceEditorController(IApplicationController):
         self._view.save_requested.connect(self._on_save)
         self._view.execute_requested.connect(self._on_execute)
 
+    def _install_optional_actions(self) -> None:
+        if not self._model.can_import_dxf_test():
+            return
+        layout = self._view.layout()
+        if layout is None:
+            return
+        row = QHBoxLayout()
+        row.addStretch(1)
+        button = QPushButton("Load DXF Test")
+        button.clicked.connect(self._on_load_dxf_test)
+        row.addWidget(button)
+        layout.insertLayout(0, row)
+        self._dxf_test_button = button
+
+    def _on_load_dxf_test(self) -> None:
+        dxf_path, _ = QFileDialog.getOpenFileName(
+            self._view,
+            "Load DXF Test",
+            "",
+            "DXF Files (*.dxf)",
+        )
+        if not dxf_path:
+            return
+        try:
+            from src.engine.cad import import_dxf_to_workpiece_data
+
+            raw = import_dxf_to_workpiece_data(dxf_path)
+            centered = self._center_raw_workpiece_in_image(raw)
+            self._on_load_workpiece_raw({"raw": centered, "storage_id": None})
+            show_info(self._view, "DXF Loaded", f"Loaded test DXF:\n{dxf_path}")
+        except Exception as exc:
+            self._logger.exception("Failed to load DXF test file: %s", exc)
+            show_warning(self._view, "DXF Load Failed", str(exc))
+
+    def _center_raw_workpiece_in_image(self, raw: dict) -> dict:
+        import copy
+
+        centered = copy.deepcopy(raw)
+        contour = centered.get("contour") or []
+        points = [point[0] for point in contour if point and point[0]]
+        if not points:
+            return centered
+
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        contour_cx = 0.5 * (min_x + max_x)
+        contour_cy = 0.5 * (min_y + max_y)
+
+        if self._latest_frame_shape is not None and len(self._latest_frame_shape) >= 2:
+            image_h = float(self._latest_frame_shape[0])
+            image_w = float(self._latest_frame_shape[1])
+        else:
+            image_w, image_h = 1280.0, 720.0
+
+        target_cx = image_w * 0.5
+        target_cy = image_h * 0.5
+        dx = target_cx - contour_cx
+        dy = target_cy - contour_cy
+
+        def _shift_contour(contour_array):
+            for point in contour_array or []:
+                if point and point[0]:
+                    point[0][0] = float(point[0][0]) + dx
+                    point[0][1] = float(point[0][1]) + dy
+
+        _shift_contour(centered.get("contour"))
+        spray = centered.get("sprayPattern") or {}
+        for key in ("Contour", "Fill"):
+            for segment in spray.get(key, []):
+                _shift_contour(segment.get("contour"))
+        return centered
+
     def _on_save(self, data: dict) -> None:
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece (fallback): %s — %s", ok, msg)
@@ -199,17 +280,17 @@ class WorkpieceEditorController(IApplicationController):
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
         if ok:
             try:
-                original_paths = self._model.get_last_original_preview_paths()
-                pre_smoothed_paths = self._model.get_last_pre_smoothed_preview_paths()
-                linear_paths = self._model.get_last_linear_preview_paths()
-                preview_paths = self._model.get_last_interpolation_preview_paths()
+                raw_paths = self._model.get_last_raw_preview_paths()
+                prepared_paths = self._model.get_last_prepared_preview_paths()
+                curve_paths = self._model.get_last_curve_preview_paths()
+                sampled_paths = self._model.get_last_sampled_preview_paths()
                 execution_paths = self._model.get_last_execution_preview_paths()
-                if original_paths or preview_paths:
+                if raw_paths or sampled_paths:
                     self._show_interpolation_plot(
-                        original_paths,
-                        pre_smoothed_paths,
-                        linear_paths,
-                        preview_paths,
+                        raw_paths,
+                        prepared_paths,
+                        curve_paths,
+                        sampled_paths,
                         execution_paths,
                     )
             except Exception:
@@ -217,26 +298,26 @@ class WorkpieceEditorController(IApplicationController):
 
     def _show_interpolation_plot(
         self,
-        original_paths: list[list[list[float]]],
-        pre_smoothed_paths: list[list[list[float]]],
-        linear_paths: list[list[list[float]]],
-        preview_paths: list[list[list[float]]],
+        raw_paths: list[list[list[float]]],
+        prepared_paths: list[list[list[float]]],
+        curve_paths: list[list[list[float]]],
+        sampled_paths: list[list[list[float]]],
         execution_paths: list[list[list[float]]],
     ) -> None:
-        from src.engine.robot.path_interpolation.debug_plotting import plot_trajectory_debug
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
 
         image_path = plot_trajectory_debug(
-            original_paths,
-            linear_paths,
-            preview_paths,
+            raw_paths,
+            curve_paths,
+            sampled_paths,
             execution_paths,
-            pre_smoothed_paths=pre_smoothed_paths,
+            prepared_paths=prepared_paths,
         )
         if not image_path:
             return
 
         dialog = QDialog(self._view)
-        dialog.setWindowTitle("Interpolated Path Preview")
+        dialog.setWindowTitle("Interpolation Pipeline Preview")
         dialog.resize(1100, 800)
 
         layout = QVBoxLayout(dialog)
@@ -316,7 +397,7 @@ class WorkpieceEditorController(IApplicationController):
         pivot_pose: list[float] | None,
         motion_snapshots=None,
     ) -> None:
-        from src.engine.robot.path_interpolation.debug_plotting import plot_pivot_path_debug
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug
 
         image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)
         if not image_path:

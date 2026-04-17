@@ -5,7 +5,6 @@ import os
 import sys
 import time
 import traceback
-from typing import Any
 
 import cv2
 import numpy as np
@@ -21,7 +20,7 @@ from PyQt6.QtWidgets import (
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-from interpolation_pipeline import (
+from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import (
     ContourPathPipeline,
     InterpolationConfig,
     PipelineResult,

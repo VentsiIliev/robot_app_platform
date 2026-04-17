@@ -115,8 +115,10 @@ def _build_paint_contour_editor_application(robot_system):
             ),
             pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
             pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
+            debug_dump_dir=debug_dump_dir,
         ),
         target_point_name=camera_point_name,
+        enable_dxf_import_test=True,
     )
 
     jog_service = build_robot_system_jog_service(robot_system)

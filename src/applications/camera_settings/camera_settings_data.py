@@ -26,6 +26,8 @@ class CameraSettingsData:
     gaussian_blur:            bool  = True
     blur_kernel_size:         int   = 3
     threshold_type:           str   = "binary_inv"
+    contour_smoothing_mode:      str = "none"
+    contour_smoothing_strength: float = 5.0
     dilate_enabled:           bool  = True
     dilate_kernel_size:       int   = 3
     dilate_iterations:        int   = 2

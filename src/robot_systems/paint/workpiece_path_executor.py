@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Callable, Optional
+from datetime import datetime
 
 import numpy as np
 
@@ -11,6 +13,7 @@ _logger = logging.getLogger(__name__)
 _PIVOT_SIDE_PERPENDICULAR_DEG = 90.0
 _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM = 1.0
 _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG = 0.2
+_PIVOT_ROTATION_DEADBAND_DEG = 0.5
 _PICKUP_DEFAULT_Z_MM = 300.0
 _PICKUP_DEFAULT_VEL_PERCENT = 20.0
 _PICKUP_DEFAULT_ACC_PERCENT = 20.0
@@ -96,11 +99,11 @@ def _rebase_pivot_path_to_zero_start_rz(path: list[list[float]]) -> list[list[fl
 def _simulate_pivot_projected_motion(
     path: list[list[float]],
     pivot_pose: list[float],
-) -> tuple[list[list[float]], list[np.ndarray]]:
+) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
     if not path:
-        return [], []
+        return [], [], []
     if len(path) == 1:
-        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)]
+        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)], []
 
     pivot_x = float(pivot_pose[0])
     pivot_y = float(pivot_pose[1])
@@ -117,6 +120,7 @@ def _simulate_pivot_projected_motion(
         return (
             [[float(points[0][0]), float(points[0][1]), pivot_z, rx, ry, base_rz]],
             [points.copy()],
+            [],
         )
 
     def _centroid_xy(current_points: np.ndarray) -> tuple[float, float]:
@@ -143,9 +147,20 @@ def _simulate_pivot_projected_motion(
     current_rz = _unwrap_degrees(base_rz, base_rz + initial_rotation)
     result: list[list[float]] = []
     snapshots: list[np.ndarray] = []
+    diagnostics: list[dict[str, float | int]] = []
     center_xy = _centroid_xy(points)
     result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
     snapshots.append(points.copy())
+    diagnostics.append(
+        {
+            "index": 0,
+            "segment_length": 0.0,
+            "segment_heading": initial_heading,
+            "rotation_delta_raw": initial_rotation,
+            "rotation_delta_applied": initial_rotation,
+            "current_rz": current_rz,
+        }
+    )
 
     axis_vector = np.array(
         [
@@ -166,7 +181,10 @@ def _simulate_pivot_projected_motion(
             continue
 
         segment_heading = _segment_heading_deg(current_point, next_point)
-        rotation_delta = _unwrap_degrees(0.0, paint_axis_heading - segment_heading)
+        rotation_delta_raw = _unwrap_degrees(0.0, paint_axis_heading - segment_heading)
+        rotation_delta = rotation_delta_raw
+        if abs(rotation_delta) < _PIVOT_ROTATION_DEADBAND_DEG:
+            rotation_delta = 0.0
         if abs(rotation_delta) > 1e-9:
             points = _rotate_shape(points, rotation_delta, pivot_xy)
             current_rz = _unwrap_degrees(current_rz, current_rz + rotation_delta)
@@ -175,11 +193,21 @@ def _simulate_pivot_projected_motion(
         center_xy = _centroid_xy(points)
         result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
         snapshots.append(points.copy())
+        diagnostics.append(
+            {
+                "index": index + 1,
+                "segment_length": segment_length,
+                "segment_heading": segment_heading,
+                "rotation_delta_raw": rotation_delta_raw,
+                "rotation_delta_applied": rotation_delta,
+                "current_rz": current_rz,
+            }
+        )
 
     result = result[:len(path)]
     snapshots = snapshots[:len(path)]
-    densified_result = _densify_pose_path(result)
-    return densified_result, snapshots
+    diagnostics = diagnostics[:len(path)]
+    return result, snapshots, diagnostics
 
 
 class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
@@ -191,6 +219,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pickup_tool: int = 0,
         pickup_user: int = 0,
         pickup_z_mm: float | None = None,
+        debug_dump_dir: str | None = None,
     ) -> None:
         self._robot_service = robot_service
         self._base_position_provider = base_position_provider
@@ -198,6 +227,62 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._pickup_tool = int(pickup_tool)
         self._pickup_user = int(pickup_user)
         self._pickup_z_mm = None if pickup_z_mm is None else float(pickup_z_mm)
+        self._debug_dump_dir = debug_dump_dir
+
+    def _write_pivot_debug_dump(
+        self,
+        *,
+        source_path: list[list[float]],
+        pivot_path: list[list[float]],
+        diagnostics: list[dict[str, float | int]] | None,
+        pivot_pose: list[float] | None,
+        pattern_type: str,
+        stage: str,
+    ) -> None:
+        if not self._debug_dump_dir:
+            return
+
+        try:
+            os.makedirs(self._debug_dump_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_pattern = str(pattern_type or "path").strip().lower().replace(" ", "_")
+            safe_stage = str(stage or "run").strip().lower().replace(" ", "_")
+            filepath = os.path.join(
+                self._debug_dump_dir,
+                f"pivot_trajectory_{safe_stage}_{safe_pattern}_{timestamp}.txt",
+            )
+            with open(filepath, "w", encoding="utf-8") as handle:
+                handle.write(f"# Pivot trajectory dump\n# timestamp={timestamp}\n# pattern_type={pattern_type}\n# stage={stage}\n")
+                if pivot_pose:
+                    pose_values = ", ".join(f"{float(value):.6f}" for value in pivot_pose)
+                    handle.write(f"# pivot_pose=[{pose_values}]\n")
+
+                for section_name, path in (("SOURCE", source_path), ("PIVOT", pivot_path)):
+                    handle.write(f"\n[{section_name}]\n")
+                    handle.write(f"count={len(path)}\n")
+                    for index, point in enumerate(path):
+                        coords = ", ".join(f"{float(value):.6f}" for value in point)
+                        handle.write(f"  {index:04d}: [{coords}]\n")
+                if diagnostics:
+                    handle.write("\n[ROTATION_DIAGNOSTICS]\n")
+                    for entry in diagnostics:
+                        handle.write(
+                            "  {index:04d}: segment_length={segment_length:.6f}, "
+                            "segment_heading={segment_heading:.6f}, "
+                            "rotation_delta_raw={rotation_delta_raw:.6f}, "
+                            "rotation_delta_applied={rotation_delta_applied:.6f}, "
+                            "current_rz={current_rz:.6f}\n".format(
+                                index=int(entry.get("index", 0)),
+                                segment_length=float(entry.get("segment_length", 0.0)),
+                                segment_heading=float(entry.get("segment_heading", 0.0)),
+                                rotation_delta_raw=float(entry.get("rotation_delta_raw", 0.0)),
+                                rotation_delta_applied=float(entry.get("rotation_delta_applied", 0.0)),
+                                current_rz=float(entry.get("current_rz", 0.0)),
+                            )
+                        )
+            _logger.info("[PIVOT] Wrote pivot trajectory debug dump to %s", filepath)
+        except Exception:
+            _logger.debug("[PIVOT] Failed to write pivot trajectory debug dump", exc_info=True)
 
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         return ("pivot_path",)
@@ -233,7 +318,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            center_path, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            center_path, _, diagnostics = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            self._write_pivot_debug_dump(
+                source_path=source_path,
+                pivot_path=center_path,
+                diagnostics=diagnostics,
+                pivot_pose=list(pivot_pose),
+                pattern_type=str(job.get("pattern_type", "Path")),
+                stage="preview",
+            )
             paths.append(center_path)
         return paths, list(pivot_pose)
 
@@ -249,7 +342,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            _, snapshots = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            _, snapshots, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
             motion.append(snapshots)
         return motion, list(pivot_pose)
 
@@ -268,7 +361,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not source_path:
             return None, None
 
-        pivot_path, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
+        pivot_path, _, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
         if not pivot_path:
             return None, None
 
@@ -318,7 +411,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pivot_pose = self._resolve_base_position()
         if pivot_pose is None or len(pivot_pose) < 3:
             return None
-        pivot_path, _ = _simulate_pivot_projected_motion(spline, pivot_pose)
+        pivot_path, _, _ = _simulate_pivot_projected_motion(spline, pivot_pose)
+        _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:
             pivot_path = _rebase_pivot_path_to_zero_start_rz(pivot_path)
         return pivot_path
@@ -340,15 +434,29 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         total_waypoints = 0
         for job in execution_preview_jobs:
             spline = job.get("execution_path") or job.get("path") or []
+            _logger.debug(f"Execution path before build_pivot_execution_path: {len(spline)}")
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
+
             if not spline:
                 continue
 
-            pivot_path = self._build_pivot_execution_path(spline, align_start_to_zero_rz=False)
+            pivot_pose = self._resolve_base_position()
+            if pivot_pose is None or len(pivot_pose) < 3:
+                return False, "Pivot-path execution requires a valid base/pivot position"
+            pivot_path, _, diagnostics = _simulate_pivot_projected_motion(spline, pivot_pose)
             if not pivot_path:
                 return False, "Pivot-path execution requires a valid base/pivot position"
+            _logger.debug(f"Pivot path after build_pivot_execution_path: {len(pivot_path)}")
+            self._write_pivot_debug_dump(
+                source_path=spline,
+                pivot_path=pivot_path,
+                diagnostics=diagnostics,
+                pivot_pose=pivot_pose,
+                pattern_type=pattern_type,
+                stage="execute",
+            )
             result = self._robot_service.execute_trajectory(
                 pivot_path,
                 vel=vel,
@@ -445,7 +553,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         total_waypoints = 0
         for job in execution_preview_jobs:
             spline = job.get("execution_path") or job.get("path") or []
-            vel = float(job.get("vel", 60.0))
+            vel = float(job.get("vel", 10.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
             if not spline:

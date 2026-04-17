@@ -38,10 +38,14 @@ def execute_place_approach_stage(workflow, drop_off_positions):
 
 
 def execute_place_drop_stage(workflow, drop_off_positions):
-    return _execute_place_move(
+    result = _execute_place_move(
         workflow,
         "place.drop",
         "Executing place drop",
         workflow._motion.execute_place_drop,
         drop_off_positions,
     )
+    if result is None:
+        workflow._context.vacuum_active = False
+        workflow._publish_diagnostics("Vacuum released")
+    return result

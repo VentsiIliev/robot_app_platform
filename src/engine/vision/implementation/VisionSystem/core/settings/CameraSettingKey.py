@@ -21,6 +21,8 @@ class CameraSettingKey(Enum):
     GAUSSIAN_BLUR = "Gaussian blur"
     BLUR_KERNEL_SIZE = "Blur kernel size"
     THRESHOLD_TYPE = "Threshold type"   # e.g., binary, binary_inv
+    CONTOUR_SMOOTHING_MODE = "Contour smoothing mode"
+    CONTOUR_SMOOTHING_STRENGTH = "Contour smoothing strength"
     DILATE_ENABLED = "Dilate enabled"
     DILATE_KERNEL_SIZE = "Dilate kernel size"
     DILATE_ITERATIONS = "Dilate iterations"

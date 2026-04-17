@@ -5,6 +5,7 @@ from typing import Callable, List, Optional, Tuple
 
 from src.engine.vision.implementation.plvision.PLVision import Contouring
 from src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings import CameraSettings
+from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import smooth_points
 
 _logger = logging.getLogger(__name__)
 
@@ -38,7 +39,8 @@ class ContourDetectionService:
 
         raw, gray  = self._find_contours(corrected, threshold)
         approxed   = self._approx_contours(raw)
-        refined    = self._refine_subpixel(approxed, gray)
+        smoothed   = self._smooth_contours(approxed)
+        refined    = self._refine_subpixel(smoothed, gray)
         filtered   = self._filter_by_area(refined)
 
         inside = filtered if spray_area_points is None else [
@@ -97,11 +99,30 @@ class ContourDetectionService:
             for c in contours
         ]
 
+    def _smooth_contours(self, contours: list) -> list:
+        mode = str(self._settings.get_contour_smoothing_mode() or "none").strip().lower()
+        if mode == "none":
+            return contours
+
+        strength = float(self._settings.get_contour_smoothing_strength())
+        if strength <= 0.0:
+            return contours
+
+        smoothed: list = []
+        for contour in contours:
+            pts = contour.reshape(-1, 2).astype(np.float32)
+            filtered = smooth_points(pts.astype(float), mode, strength).astype(np.float32)
+            smoothed.append(filtered.reshape(-1, 1, 2))
+        return smoothed
+
     @staticmethod
     def _refine_subpixel(contours: list, gray: np.ndarray) -> list:
         refined = []
+        h, w = gray.shape[:2]
         for contour in contours:
             pts = contour.reshape(-1, 1, 2).astype(np.float32)
+            pts[:, 0, 0] = np.clip(pts[:, 0, 0], 0.0, max(float(w - 1), 0.0))
+            pts[:, 0, 1] = np.clip(pts[:, 0, 1], 0.0, max(float(h - 1), 0.0))
             pts_refined = cv2.cornerSubPix(gray, pts, (5, 5), (-1, -1), _SUBPIX_CRITERIA)
             refined.append(pts_refined.reshape(-1, 1, 2))
         return refined

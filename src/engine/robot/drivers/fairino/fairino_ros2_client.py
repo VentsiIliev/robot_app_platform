@@ -101,6 +101,20 @@ class FairinoRos2Client:
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
             response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
+            logger.debug("move_liner ← http=%s response_text=%r", response.status_code,
+                         response.text[:500] if response.text else "(empty)")
+
+            if not response.text:
+                logger.error("move_liner: bridge returned empty response (http=%s)", response.status_code)
+                self._mark_unavailable("Bridge returned empty response")
+                return 0
+
+            if response.status_code >= 400:
+                logger.error("move_liner: bridge returned error (http=%s): %s", response.status_code,
+                             response.text[:200])
+                self._mark_unavailable(f"Bridge HTTP {response.status_code}")
+                return 0
+
             raw = response.json()
             self._mark_available()
             result_code = self._parse_result(raw)
@@ -149,7 +163,7 @@ class FairinoRos2Client:
         vel=0.6,
         acc=0.4,
         blocking=False,
-        trajectory_optimizer="TOTG",
+        trajectory_optimizer="RUCKIG",
         orientation_mode="constant",
     ):
         sanitized_path = [self._to_float_list(p) for p in path] if path else path
@@ -441,8 +455,24 @@ class FairinoRos2Client:
 
 
     def setDigitalOutput(self, portId, value):
-        logger.warning("setDigitalOutput: port %s -> %s (not implemented in ROS2)", portId, value)
-        return -1
+        payload = {"port": int(portId), "value": int(value)}
+        logger.debug("setDigitalOutput → POST /io/digital_output payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/io/digital_output", json=payload, timeout=5)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            logger.debug(
+                "setDigitalOutput ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("setDigitalOutput error: %s", e, exc_info=True)
+            return -1
 
 
     def resetAllErrors(self):

@@ -26,6 +26,7 @@ class PickAndPlaceContext:
     last_message: str = ""
     last_error: Optional[PickAndPlaceErrorInfo] = None
     holding_gripper_id: Optional[int] = None
+    vacuum_active: bool = False
     simulation: bool = False
     plane: dict[str, Any] = field(default_factory=dict)
 
@@ -100,6 +101,7 @@ class PickAndPlaceContext:
                 "recoverable": self.last_error.recoverable,
             },
             "holding_gripper_id": self.holding_gripper_id,
+            "vacuum_active": self.vacuum_active,
             "simulation": self.simulation,
             "plane": dict(self.plane),
         }

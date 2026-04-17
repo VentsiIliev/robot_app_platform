@@ -20,21 +20,26 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 _MAX_PREVIEW_CONTOUR_POINTS = 180
-
-
-def _derive_interpolation_from_blend_radius(
-    blend_radius_mm: float,
-) -> tuple[float, float]:
-    """Use blend radius as the primary interpolation control when provided."""
-    if blend_radius_mm <= 0.0:
-        return 10.0, 2.0
-
-    # One-knob mode:
-    # - base spacing scales with radius so larger blends use fewer support points
-    # - blend sampling stays roughly at half-radius resolution
-    effective_adaptive_spacing = max(5.0, blend_radius_mm * 2.0)
-    effective_spline_density = 2.0
-    return effective_adaptive_spacing, effective_spline_density
+_SEGMENT_PREPROCESS_MIN_SPACING_KEY = "preprocess_min_spacing_mm"
+_SEGMENT_INTERPOLATION_SPACING_KEY = "interpolation_spacing_mm"
+_SEGMENT_DENSE_SAMPLING_FACTOR_KEY = "dense_sampling_factor"
+_SEGMENT_EXECUTION_SPACING_KEY = "execution_spacing_mm"
+_SEGMENT_TANGENT_LOOKAHEAD_DISTANCE_KEY = "path_tangent_lookahead_mm"
+_SEGMENT_TANGENT_DEADBAND_KEY = "path_tangent_deadband_deg"
+_EXECUTION_INTERPOLATION_SPACING_MM = 10.0
+_EXECUTION_MIN_PREPROCESS_SPACING_MM = 2.5
+_EXECUTION_DENSE_SAMPLING_FACTOR = 0.25
+_EXECUTION_OUTPUT_SPACING_SCALE = 0.75
+_EXECUTION_MIN_OUTPUT_SPACING_MM = 6.0
+_EXECUTION_DEFAULT_OUTPUT_SPACING_MM = max(
+    _EXECUTION_MIN_OUTPUT_SPACING_MM,
+    _EXECUTION_INTERPOLATION_SPACING_MM * _EXECUTION_OUTPUT_SPACING_SCALE,
+)
+_PATH_TANGENT_HEADING_SMOOTHING_WINDOW = 5
+_PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
+_PATH_TANGENT_HEADING_DEADBAND_DEG = 5.0
+_AUTO_DENSIFY_TRIGGER_RATIO = 2.5
+_AUTO_DENSIFY_TARGET_RATIO = 1.25
 
 
 def _resample_execution_path(
@@ -70,6 +75,95 @@ def _resample_execution_path(
     if any(abs(float(a) - float(b)) > 1e-9 for a, b in zip(resampled[-1], path[-1])):
         resampled.append(list(path[-1]))
     return resampled
+
+
+def _resolve_segment_interpolation_settings(settings: dict) -> tuple[float, float, float, float]:
+    preprocess_spacing_mm = max(
+        0.1,
+        _safe_float(settings.get(_SEGMENT_PREPROCESS_MIN_SPACING_KEY), _EXECUTION_MIN_PREPROCESS_SPACING_MM),
+    )
+    interpolation_spacing_mm = max(
+        0.5,
+        _safe_float(settings.get(_SEGMENT_INTERPOLATION_SPACING_KEY), _EXECUTION_INTERPOLATION_SPACING_MM),
+    )
+    dense_sampling_factor = max(
+        0.05,
+        _safe_float(settings.get(_SEGMENT_DENSE_SAMPLING_FACTOR_KEY), _EXECUTION_DENSE_SAMPLING_FACTOR),
+    )
+    execution_spacing_mm = max(
+        1.0,
+        _safe_float(settings.get(_SEGMENT_EXECUTION_SPACING_KEY), _EXECUTION_DEFAULT_OUTPUT_SPACING_MM),
+    )
+    return (
+        preprocess_spacing_mm,
+        interpolation_spacing_mm,
+        dense_sampling_factor,
+        execution_spacing_mm,
+    )
+
+
+def _resolve_segment_tangent_settings(settings: dict) -> tuple[float, float]:
+    lookahead_distance_mm = max(
+        1.0,
+        _safe_float(settings.get(_SEGMENT_TANGENT_LOOKAHEAD_DISTANCE_KEY), _PATH_TANGENT_LOOKAHEAD_DISTANCE_MM),
+    )
+    heading_deadband_deg = max(
+        0.0,
+        _safe_float(settings.get(_SEGMENT_TANGENT_DEADBAND_KEY), _PATH_TANGENT_HEADING_DEADBAND_DEG),
+    )
+    return lookahead_distance_mm, heading_deadband_deg
+
+
+def _auto_input_densify_spacing(path_pts: list[list[float]], interpolation_spacing_mm: float) -> float:
+    if len(path_pts) < 3:
+        return 0.0
+
+    xy = np.asarray(path_pts, dtype=float)[:, :2]
+    diffs = np.diff(xy, axis=0)
+    seg_lengths = np.linalg.norm(diffs, axis=1)
+    seg_lengths = seg_lengths[seg_lengths > 1e-9]
+    if seg_lengths.size == 0:
+        return 0.0
+
+    max_segment = float(np.max(seg_lengths))
+    trigger_spacing = max(float(interpolation_spacing_mm) * _AUTO_DENSIFY_TRIGGER_RATIO, 1.0)
+    if max_segment <= trigger_spacing:
+        return 0.0
+
+    return max(1.0, float(interpolation_spacing_mm) * _AUTO_DENSIFY_TARGET_RATIO)
+
+
+def _rebuild_pose_path_from_xy(
+    xy_points: np.ndarray,
+    prototype_path: list[list[float]],
+    rz_mode: str,
+    tangent_lookahead_distance_mm: float = _PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
+    tangent_heading_deadband_deg: float = _PATH_TANGENT_HEADING_DEADBAND_DEG,
+) -> list[list[float]]:
+    if len(xy_points) == 0 or not prototype_path:
+        return []
+
+    first_pose = prototype_path[0]
+    base_z = float(first_pose[2]) if len(first_pose) >= 3 else 0.0
+    rx = float(first_pose[3]) if len(first_pose) >= 4 else 180.0
+    ry = float(first_pose[4]) if len(first_pose) >= 5 else 0.0
+    base_rz = float(first_pose[5]) if len(first_pose) >= 6 else 0.0
+
+    robot_xy_points = [(float(point[0]), float(point[1])) for point in xy_points]
+    if str(rz_mode or "constant").strip().lower() == "path_tangent":
+        rz_values = _compute_path_aligned_rz_degrees(
+            robot_xy_points,
+            base_rz_offset_degrees=base_rz,
+            lookahead_distance_mm=tangent_lookahead_distance_mm,
+            heading_deadband_deg=tangent_heading_deadband_deg,
+        )
+    else:
+        rz_values = [base_rz for _ in robot_xy_points]
+
+    return [
+        [float(x), float(y), base_z, rx, ry, float(rz)]
+        for (x, y), rz in zip(robot_xy_points, rz_values)
+    ]
 
 
 def _fast_inverse_preview_points(transformer, robot_xy_points: np.ndarray) -> np.ndarray | None:
@@ -111,13 +205,14 @@ def _has_valid_contour(contour) -> bool:
 def _compute_path_aligned_rz_degrees(
     robot_xy_points: list[tuple[float, float]],
     base_rz_offset_degrees: float = 0.0,
+    lookahead_distance_mm: float = _PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
+    heading_deadband_deg: float = _PATH_TANGENT_HEADING_DEADBAND_DEG,
 ) -> list[float]:
-    """Compute per-waypoint RZ from local turn accumulation.
+    """Compute per-waypoint RZ from a lookahead turn signal.
 
-    The first segment keeps the base orientation. Each subsequent waypoint adds
-    only the turn angle between the previous and next segment. That means the
-    robot does not pre-rotate on segment 0->1; it starts rotating from the next
-    segment onward, which matches "rotate at the corner while continuing".
+    The path heading is smoothed first. Each waypoint then compares the current
+    local heading against a heading a short distance ahead along the path. Only
+    when that accumulated turn exceeds a deadband does the robot start rotating.
     """
     if not robot_xy_points:
         return []
@@ -144,12 +239,53 @@ def _compute_path_aligned_rz_degrees(
                     heading_deg += 360.0
         segment_headings.append(heading_deg)
 
-    rz_values: list[float] = [float(base_rz_offset_degrees), float(base_rz_offset_degrees)]
-    current_rz = float(base_rz_offset_degrees)
-    for index in range(1, len(segment_headings)):
-        turn_delta = float(segment_headings[index] - segment_headings[index - 1])
-        current_rz += turn_delta
-        rz_values.append(current_rz)
+    if len(segment_headings) >= 3:
+        window = min(_PATH_TANGENT_HEADING_SMOOTHING_WINDOW, len(segment_headings))
+        if window % 2 == 0:
+            window -= 1
+        if window >= 3:
+            radius = window // 2
+            padded = np.pad(np.asarray(segment_headings, dtype=float), (radius, radius), mode="edge")
+            smoothed_headings = []
+            for index in range(len(segment_headings)):
+                smoothed_headings.append(float(np.mean(padded[index:index + window])))
+            segment_headings = smoothed_headings
+
+    point_distances = [0.0]
+    for index in range(1, len(robot_xy_points)):
+        current = np.asarray(robot_xy_points[index], dtype=float)
+        previous = np.asarray(robot_xy_points[index - 1], dtype=float)
+        point_distances.append(point_distances[-1] + float(np.linalg.norm(current - previous)))
+
+    lookahead_distance_mm = max(float(lookahead_distance_mm), 1.0)
+    lookahead_headings: list[float] = []
+    for index in range(len(segment_headings)):
+        start_distance = point_distances[index]
+        target_distance = start_distance + lookahead_distance_mm
+        lookahead_index = index
+        while (
+            lookahead_index + 1 < len(segment_headings)
+            and point_distances[lookahead_index + 1] < target_distance
+        ):
+            lookahead_index += 1
+        lookahead_headings.append(float(segment_headings[lookahead_index]))
+
+    rz_values: list[float] = [float(base_rz_offset_degrees)]
+    for index in range(len(robot_xy_points) - 1):
+        if index == 0:
+            rz_values.append(float(base_rz_offset_degrees))
+            continue
+
+        lookahead_turn = float(lookahead_headings[index] - segment_headings[index])
+        while lookahead_turn > 180.0:
+            lookahead_turn -= 360.0
+        while lookahead_turn < -180.0:
+            lookahead_turn += 360.0
+
+        if abs(lookahead_turn) < float(heading_deadband_deg):
+            lookahead_turn = 0.0
+
+        rz_values.append(float(base_rz_offset_degrees) + lookahead_turn)
 
     return rz_values[:len(robot_xy_points)]
 
@@ -181,7 +317,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  debug_dump_dir: Optional[str] = None,
                  robot_service=None,
                  path_executor: Optional[IWorkpiecePathExecutor] = None,
-                 target_point_name: str = ""):
+                 target_point_name: str = "",
+                 enable_dxf_import_test: bool = False):
         self._vision             = vision_service
         self._capture_snapshot_service = capture_snapshot_service
         self._save_fn            = save_fn
@@ -196,13 +333,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._debug_dump_dir     = debug_dump_dir
         self._robot_service      = robot_service
         self._path_executor      = path_executor
+        self._enable_dxf_import_test = bool(enable_dxf_import_test)
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
         self._last_interpolation_preview_contours: list[np.ndarray] = []
-        self._last_interpolation_preview_paths: list[list[list[float]]] = []
-        self._last_original_preview_paths: list[list[list[float]]] = []
-        self._last_pre_smoothed_preview_paths: list[list[list[float]]] = []
-        self._last_linear_preview_paths: list[list[list[float]]] = []
+        self._last_sampled_preview_paths: list[list[list[float]]] = []
+        self._last_raw_preview_paths: list[list[list[float]]] = []
+        self._last_prepared_preview_paths: list[list[list[float]]] = []
+        self._last_curve_preview_paths: list[list[list[float]]] = []
         self._last_execution_preview_jobs: list[dict] = []
 
     def set_editing(self, storage_id) -> None:
@@ -217,6 +355,9 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def get_segment_config(self) -> SegmentEditorConfig:
         return self._segment_config
+
+    def can_import_dxf_test(self) -> bool:
+        return self._enable_dxf_import_test
 
     def get_contours(self) -> list:
         if self._capture_snapshot_service is None and self._vision is None:
@@ -262,13 +403,18 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return False, str(exc)
 
     def execute_workpiece(self, data: dict) -> tuple[bool, str]:
-        from src.engine.robot.path_interpolation.combined_interpolation import interpolate_path_two_stage
+        from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import (
+            ContourPathPipeline,
+            InterpolationConfig,
+            PreprocessConfig,
+            RuckigConfig,
+        )
 
         self._last_interpolation_preview_contours = []
-        self._last_interpolation_preview_paths = []
-        self._last_original_preview_paths = []
-        self._last_pre_smoothed_preview_paths = []
-        self._last_linear_preview_paths = []
+        self._last_sampled_preview_paths = []
+        self._last_raw_preview_paths = []
+        self._last_prepared_preview_paths = []
+        self._last_curve_preview_paths = []
         self._last_execution_preview_jobs = []
         form_data   = data.get("form_data", data)
         editor_data = data.get("editor_data")
@@ -312,68 +458,113 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return False, "No executable paths after transformation"
 
         total_spline_pts = 0
-        preview_paths: list[list[list[float]]] = []
-        original_paths: list[list[list[float]]] = []
-        pre_smoothed_paths: list[list[list[float]]] = []
-        linear_paths: list[list[list[float]]] = []
+        sampled_paths: list[list[list[float]]] = []
+        raw_paths: list[list[list[float]]] = []
+        prepared_paths: list[list[list[float]]] = []
+        curve_paths: list[list[list[float]]] = []
         for path_pts, settings, pattern_type in robot_paths:
-            original_paths.append([list(pt) for pt in path_pts])
-            blend_radius_mm   = _safe_float(settings.get("blend_radius_mm"),        0.0)
-            pre_smooth_max_deviation_mm = _safe_float(settings.get("pre_smooth_max_deviation_mm"), 1.0)
-            adaptive_spacing, spline_multiplier = _derive_interpolation_from_blend_radius(
-                blend_radius_mm,
-            )
+            raw_paths.append([list(pt) for pt in path_pts])
             vel               = _safe_float(settings.get("velocity"),              60.0)
             acc               = _safe_float(settings.get("acceleration"),          30.0)
-
-            pre_smoothed, linear, spline = interpolate_path_two_stage(
+            (
+                preprocess_spacing_mm,
+                interpolation_spacing_mm,
+                dense_sampling_factor,
+                execution_spacing_mm,
+            ) = _resolve_segment_interpolation_settings(settings)
+            tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
+            input_densify_spacing_mm = _auto_input_densify_spacing(
                 path_pts,
-                adaptive_spacing_mm=adaptive_spacing,
-                spline_density_multiplier=spline_multiplier,
-                return_pre_smoothed=True,
-                blend_radius_mm=blend_radius_mm,
-                pre_smooth_max_deviation_mm=pre_smooth_max_deviation_mm,
+                interpolation_spacing_mm,
             )
-            execution_spacing_mm = max(6.0, adaptive_spacing * 0.75)
-            execution_spline = _resample_execution_path(spline, target_spacing_mm=execution_spacing_mm)
+
+            pipeline = ContourPathPipeline(
+                preprocess=PreprocessConfig(
+                    min_spacing=preprocess_spacing_mm,
+                    max_segment_length=input_densify_spacing_mm,
+                    noise_method="none",
+                    noise_strength=0.0,
+                ),
+                interpolation=InterpolationConfig(
+                    method="pchip",
+                    output_spacing=interpolation_spacing_mm,
+                    dense_sampling_factor=dense_sampling_factor,
+                ),
+                ruckig=RuckigConfig(
+                    enabled=False,
+                ),
+            )
+            pipeline_result = pipeline.run(np.asarray(path_pts, dtype=float)[:, :2])
+
+            prepared_path = _rebuild_pose_path_from_xy(
+                pipeline_result.prepared,
+                path_pts,
+                self._rz_mode,
+                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+            )
+            curve_path = _rebuild_pose_path_from_xy(
+                pipeline_result.curve,
+                path_pts,
+                self._rz_mode,
+                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+            )
+            sampled_path = _rebuild_pose_path_from_xy(
+                pipeline_result.sampled,
+                path_pts,
+                self._rz_mode,
+                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+            )
+
+            execution_spline = _resample_execution_path(sampled_path, target_spacing_mm=execution_spacing_mm)
             total_spline_pts += len(execution_spline)
-            pre_smoothed_paths.append([list(pt) for pt in pre_smoothed])
-            linear_paths.append([list(pt) for pt in linear])
-            preview_paths.append([list(pt) for pt in spline])
+            prepared_paths.append([list(pt) for pt in prepared_path])
+            curve_paths.append([list(pt) for pt in curve_path])
+            sampled_paths.append([list(pt) for pt in sampled_path])
 
             _logger.info(
-                "[EXECUTE] %s: %d raw → %d pre-smooth → %d linear → %d blended pts → %d execute pts | "
-                "blend=%.1fmm pre-smooth-dev=%.2fmm spacing=%.1fmm density=%.1fx exec-spacing=%.1fmm vel=%.0f acc=%.0f",
-                pattern_type, len(path_pts), len(pre_smoothed), len(linear), len(spline), len(execution_spline),
-                blend_radius_mm, pre_smooth_max_deviation_mm, adaptive_spacing, spline_multiplier, execution_spacing_mm, vel, acc,
+                "[EXECUTE] %s: %d raw → %d prepared → %d curve → %d sampled pts → %d execute pts | "
+                "pipeline=pchip filter=none ruckig=off preprocess-spacing=%.1fmm auto-input-densify=%.1fmm sampled-spacing=%.1fmm dense-factor=%.2f exec-spacing=%.1fmm vel=%.0f acc=%.0f",
+                pattern_type, len(path_pts), len(prepared_path), len(curve_path), len(sampled_path), len(execution_spline),
+                preprocess_spacing_mm,
+                input_densify_spacing_mm,
+                interpolation_spacing_mm,
+                dense_sampling_factor,
+                execution_spacing_mm,
+                vel,
+                acc,
             )
+
             for j, pt in enumerate(execution_spline[:3]):
                 _logger.debug("[EXECUTE] %s execute[%d]: %s", pattern_type, j, pt)
 
             self._last_execution_preview_jobs.append(
                 {
-                    "path": [list(pt) for pt in spline],
+                    "path": [list(pt) for pt in sampled_path],
                     "execution_path": [list(pt) for pt in execution_spline],
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,
                 }
             )
+
             _logger.info(
                 "[EXECUTE] Prepared %d preview waypoints and %d execution waypoints (vel=%.0f acc=%.0f)",
-                len(spline), len(execution_spline), vel, acc,
+                len(sampled_path), len(execution_spline), vel, acc,
             )
 
         self._last_interpolation_preview_contours = []
-        self._last_interpolation_preview_paths = preview_paths
-        self._last_original_preview_paths = original_paths
-        self._last_pre_smoothed_preview_paths = pre_smoothed_paths
-        self._last_linear_preview_paths = linear_paths
+        self._last_sampled_preview_paths = sampled_paths
+        self._last_raw_preview_paths = raw_paths
+        self._last_prepared_preview_paths = prepared_paths
+        self._last_curve_preview_paths = curve_paths
         self._write_debug_path_dump(
-            original_paths=original_paths,
-            pre_smoothed_paths=pre_smoothed_paths,
-            linear_paths=linear_paths,
-            preview_paths=preview_paths,
+            raw_paths=raw_paths,
+            prepared_paths=prepared_paths,
+            curve_paths=curve_paths,
+            sampled_paths=sampled_paths,
             execution_paths=[
                 [list(pt) for pt in (job.get("execution_path") or job.get("path") or [])]
                 for job in self._last_execution_preview_jobs
@@ -386,28 +577,28 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def get_last_interpolation_preview_contours(self) -> list:
         return list(self._last_interpolation_preview_contours)
 
-    def get_last_interpolation_preview_paths(self) -> list:
+    def get_last_sampled_preview_paths(self) -> list:
         return [
             [list(pt) for pt in path]
-            for path in self._last_interpolation_preview_paths
+            for path in self._last_sampled_preview_paths
         ]
 
-    def get_last_original_preview_paths(self) -> list:
+    def get_last_raw_preview_paths(self) -> list:
         return [
             [list(pt) for pt in path]
-            for path in self._last_original_preview_paths
+            for path in self._last_raw_preview_paths
         ]
 
-    def get_last_pre_smoothed_preview_paths(self) -> list:
+    def get_last_prepared_preview_paths(self) -> list:
         return [
             [list(pt) for pt in path]
-            for path in self._last_pre_smoothed_preview_paths
+            for path in self._last_prepared_preview_paths
         ]
 
-    def get_last_linear_preview_paths(self) -> list:
+    def get_last_curve_preview_paths(self) -> list:
         return [
             [list(pt) for pt in path]
-            for path in self._last_linear_preview_paths
+            for path in self._last_curve_preview_paths
         ]
 
     def get_last_execution_preview_paths(self) -> list:
@@ -631,10 +822,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def _write_debug_path_dump(
         self,
         *,
-        original_paths: list[list[list[float]]],
-        pre_smoothed_paths: list[list[list[float]]],
-        linear_paths: list[list[list[float]]],
-        preview_paths: list[list[list[float]]],
+        raw_paths: list[list[list[float]]],
+        prepared_paths: list[list[list[float]]],
+        curve_paths: list[list[list[float]]],
+        sampled_paths: list[list[list[float]]],
         execution_paths: list[list[list[float]]],
     ) -> None:
         if not self._debug_dump_dir:
@@ -645,10 +836,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filepath = os.path.join(self._debug_dump_dir, f"trajectory_points_{timestamp}.txt")
             sections = [
-                ("ORIGINAL", original_paths),
-                ("PRE_SMOOTHED", pre_smoothed_paths),
-                ("LINEAR", linear_paths),
-                ("SPLINE", preview_paths),
+                ("RAW", raw_paths),
+                ("PREPARED", prepared_paths),
+                ("CURVE", curve_paths),
+                ("SAMPLED", sampled_paths),
                 ("EXECUTION", execution_paths),
             ]
             with open(filepath, "w", encoding="utf-8") as handle:

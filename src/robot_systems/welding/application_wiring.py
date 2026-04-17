@@ -46,7 +46,10 @@ def _build_welding_contour_editor_application(robot_system):
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
-    transformer, _ = robot_system.get_shared_vision_resolver()
+    transformer, resolver = robot_system.get_shared_vision_resolver()
+    camera_point_name = (
+        getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
+    )
     storage_dir = robot_system.storage_path("contours")
 
     os.makedirs(storage_dir, exist_ok=True)
@@ -92,11 +95,13 @@ def _build_welding_contour_editor_application(robot_system):
         segment_config=SegmentEditorConfig(schema=build_welding_segment_settings_schema()),
         id_exists_fn=_id_exists_fn,
         transformer=transformer,
-        resolver=None,
+        resolver=resolver,
         z_min=z_min,
         robot_service=robot_service,
-        path_executor=WeldingWorkpiecePathExecutor(robot_service=robot_service),
-        target_point_name="",
+        path_executor=WeldingWorkpiecePathExecutor(
+            robot_service=robot_service,
+        ),
+        target_point_name=camera_point_name,
     )
 
     jog_service = build_robot_system_jog_service(robot_system)

@@ -25,6 +25,7 @@ ContourSelectionMode = Literal["largest_area", "index"]
 class PreprocessConfig:
     close_tol: float = 5.0
     min_spacing: float = 1.0
+    max_segment_length: float = 0.0
     use_approx_poly_dp: bool = False
     approx_epsilon_factor: float = 0.01
     noise_method: NoiseMethod = "none"
@@ -137,6 +138,25 @@ def simplify_min_spacing(points: np.ndarray, min_spacing: float) -> np.ndarray:
             out.append(point)
     if np.linalg.norm(out[-1] - points[-1]) > 1e-9:
         out.append(points[-1])
+    return np.asarray(out, dtype=float)
+
+
+def densify_max_spacing(points: np.ndarray, max_segment_length: float) -> np.ndarray:
+    """Insert linear support points so no segment exceeds max_segment_length."""
+    if len(points) < 2 or max_segment_length <= 0:
+        return points.copy()
+    out = [points[0]]
+    for i in range(len(points) - 1):
+        start = points[i]
+        end = points[i + 1]
+        segment = end - start
+        seg_len = float(np.linalg.norm(segment))
+        if seg_len <= 1e-9:
+            continue
+        num_subsegments = max(1, int(np.ceil(seg_len / float(max_segment_length))))
+        for step in range(1, num_subsegments + 1):
+            ratio = step / num_subsegments
+            out.append(start + ratio * segment)
     return np.asarray(out, dtype=float)
 
 
@@ -374,6 +394,7 @@ class ContourPathPipeline:
             closed = np.linalg.norm(prepared[0] - prepared[-1]) < 1e-9
             prepared = approx_polyline(prepared, self.preprocess.approx_epsilon_factor, closed)
 
+        prepared = densify_max_spacing(prepared, self.preprocess.max_segment_length)
         prepared = simplify_min_spacing(prepared, self.preprocess.min_spacing)
         prepared = smooth_points(prepared, self.preprocess.noise_method, self.preprocess.noise_strength)
         return raw, prepared

@@ -146,3 +146,7 @@ class IRobot(ABC):
     def prefers_incremental_jog(self) -> bool:
         """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""
         return False
+
+    def set_digital_output(self, port_id: int, value: bool) -> int:
+        """Optional robot-side digital output control."""
+        return -1

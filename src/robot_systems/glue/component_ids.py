@@ -5,6 +5,7 @@ class ServiceID(str, Enum):
     WEIGHT = "weight"
     MOTOR = "motor"
     HEIGHT_MEASURING = "height_measuring"
+    VACUUM_PUMP = "vacuum_pump"
 
 
 class SettingsID(str, Enum):

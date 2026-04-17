@@ -4,6 +4,7 @@ from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.hardware.motor.interfaces.i_motor_service import IMotorService
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.hardware.weight.interfaces.i_weight_cell_service import IWeightCellService
 from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
 from src.engine.robot.configuration import (
@@ -52,8 +53,12 @@ from src.robot_systems.glue.domain.dispense_channels.dispense_channel_service im
     DispenseChannelService,
 )
 from src.robot_systems.glue.height_measuring.provider import GlueRobotSystemHeightMeasuringProvider
-from src.robot_systems.glue.service_builders import build_weight_cell_service, build_motor_service, \
-    _build_generator_service
+from src.robot_systems.glue.service_builders import (
+    _build_generator_service,
+    build_motor_service,
+    build_vacuum_pump_service,
+    build_weight_cell_service,
+)
 from src.robot_systems.glue.settings.cells import GlueCellsConfigSerializer
 from src.robot_systems.glue.settings.device_control import GlueMotorConfigSerializer
 from src.robot_systems.glue.settings.dispense_channels import DispenseChannelSettingsSerializer
@@ -343,6 +348,13 @@ class GlueRobotSystem(BaseRobotSystem):
             builder=build_motor_service,
         ),
         ServiceSpec(
+            name=ServiceID.VACUUM_PUMP,
+            service_type=IVacuumPumpController,
+            required=False,
+            description="Vacuum pump controller",
+            builder=build_vacuum_pump_service,
+        ),
+        ServiceSpec(
             name=CommonServiceID.TOOLS,
             service_type=IToolService,
             required=False,
@@ -383,6 +395,7 @@ class GlueRobotSystem(BaseRobotSystem):
         self.register_managed_resource(self._weight, cleanup=self._stop_weight_service)
         self._vision.start()
         self._motor = self.get_service(ServiceID.MOTOR)
+        self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
         self._motor.open()
         self.register_managed_resource(self._motor)
 
@@ -429,7 +442,11 @@ class GlueRobotSystem(BaseRobotSystem):
             JsonWorkpieceRepository
         from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
         glue_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, ServiceID.MOTOR, CommonServiceID.VISION)
-        pick_and_place_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, CommonServiceID.VISION)
+        pick_and_place_requirements = ProcessRequirements.requires(
+            CommonServiceID.ROBOT,
+            CommonServiceID.VISION,
+            ServiceID.VACUUM_PUMP,
+        )
         clean_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT)
         calibration_requirements = ProcessRequirements.requires(CommonServiceID.ROBOT, CommonServiceID.VISION)
         service_checker = self.health_registry.check
@@ -497,6 +514,7 @@ class GlueRobotSystem(BaseRobotSystem):
                 tool_service=tool_service,
                 height_service=height_service,
                 resolver=glue_resolver,
+                vacuum_pump=self._vacuum_pump,
                 config=PickAndPlaceConfig(
                     camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),
                     camera_to_tcp_y_offset=float(self._robot_config.camera_to_tcp_y_offset),

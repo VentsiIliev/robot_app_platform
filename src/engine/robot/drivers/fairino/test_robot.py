@@ -79,9 +79,12 @@ class TestRobotWrapper(IRobot):
     def SetDO(self, port_id, value):
         pass
 
+    def set_digital_output(self, port_id: int, value: bool) -> int:
+        _logger.debug("TestRobot: set_digital_output called with port_id=%s value=%s", port_id, value)
+        return 0
+
     def execute_path(self, path, rx, ry, rz, vel, acc, blocking):
         pass
 
     def GetSDKVersion(self):
         return "TestRobot SDK v1.0"
-

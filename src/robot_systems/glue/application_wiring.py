@@ -745,7 +745,7 @@ def _build_device_control_application(robot_system):
         motor_service=getattr(robot_system, '_motor', None),
         generator=getattr(robot_system, '_generator', None),
         laser=getattr(robot_system, '_laser_detection_service', None),
-        vacuum_pump=None,
+        vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(

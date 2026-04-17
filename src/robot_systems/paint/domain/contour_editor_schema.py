@@ -50,12 +50,11 @@ def build_paint_segment_settings_schema() -> SegmentSettingsSchema:
             SegmentSettingSpec("velocity", "Velocity", "10", "Robot"),
             SegmentSettingSpec("acceleration", "Acceleration", "10", "Robot"),
             SegmentSettingSpec("rz_angle", "Rz Angle", "0", "Robot"),
-            SegmentSettingSpec("blend_radius_mm", "Blend Radius (mm)", "0.0", "Robot"),
-            SegmentSettingSpec(
-                "pre_smooth_max_deviation_mm",
-                "Pre-Smooth Deviation (mm)",
-                "1.0",
-                "Robot",
-            ),
+            SegmentSettingSpec("preprocess_min_spacing_mm", "Preprocess Spacing (mm)", "2.5", "Interpolation"),
+            SegmentSettingSpec("interpolation_spacing_mm", "Sampled Spacing (mm)", "10.0", "Interpolation"),
+            SegmentSettingSpec("dense_sampling_factor", "Dense Factor", "0.25", "Interpolation"),
+            SegmentSettingSpec("execution_spacing_mm", "Execution Spacing (mm)", "7.5", "Interpolation"),
+            SegmentSettingSpec("path_tangent_lookahead_mm", "Tangent Lookahead (mm)", "15.0", "Interpolation"),
+            SegmentSettingSpec("path_tangent_deadband_deg", "Tangent Deadband (deg)", "5.0", "Interpolation"),
         ],
     )

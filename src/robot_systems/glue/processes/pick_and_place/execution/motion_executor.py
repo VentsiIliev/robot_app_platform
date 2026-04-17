@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.robot.interfaces.i_tool_service import IToolService
 from src.robot_systems.glue.navigation import GlueNavigationService
@@ -56,6 +57,7 @@ class PickAndPlaceMotionExecutor:
         logger: logging.Logger,
         pick_motion: MotionProfile,
         place_motion: MotionProfile,
+        vacuum_pump: Optional[IVacuumPumpController] = None,
         simulation: bool = False,
     ) -> None:
         self._robot = robot
@@ -64,6 +66,7 @@ class PickAndPlaceMotionExecutor:
         self._logger = logger
         self._pick_motion = pick_motion
         self._place_motion = place_motion
+        self._vacuum = vacuum_pump
         self._simulation = simulation
 
     def _move_linear(
@@ -162,12 +165,27 @@ class PickAndPlaceMotionExecutor:
         )
 
     def execute_pickup_contact(self, positions: PickupPositions) -> MotionExecutionResult:
-        return self._move_linear(
+        result = self._move_linear(
             positions.pickup,
             self._pick_motion,
             PickAndPlaceErrorCode.PICK_MOTION_FAILED,
             PickAndPlaceStage.PICK,
             "Pick contact failed",
+        )
+        if not result.success or self._simulation:
+            return result
+        if self._vacuum is None:
+            return MotionExecutionResult.fail(
+                PickAndPlaceErrorCode.VACUUM_ON_FAILED,
+                PickAndPlaceStage.PICK,
+                "Vacuum pump is not configured",
+            )
+        if self._vacuum.turn_on():
+            return result
+        return MotionExecutionResult.fail(
+            PickAndPlaceErrorCode.VACUUM_ON_FAILED,
+            PickAndPlaceStage.PICK,
+            "Failed to enable vacuum pump at pickup",
         )
 
     def execute_pick_lift(self, positions: PickupPositions) -> MotionExecutionResult:
@@ -189,12 +207,27 @@ class PickAndPlaceMotionExecutor:
         )
 
     def execute_place_drop(self, positions: DropOffPositions) -> MotionExecutionResult:
-        return self._move_linear(
+        result = self._move_linear(
             positions.drop,
             self._place_motion,
             PickAndPlaceErrorCode.PLACE_MOTION_FAILED,
             PickAndPlaceStage.PLACE,
             "Place drop failed",
+        )
+        if not result.success or self._simulation:
+            return result
+        if self._vacuum is None:
+            return MotionExecutionResult.fail(
+                PickAndPlaceErrorCode.VACUUM_OFF_FAILED,
+                PickAndPlaceStage.PLACE,
+                "Vacuum pump is not configured",
+            )
+        if self._vacuum.turn_off():
+            return result
+        return MotionExecutionResult.fail(
+            PickAndPlaceErrorCode.VACUUM_OFF_FAILED,
+            PickAndPlaceStage.PLACE,
+            "Failed to disable vacuum pump at placement",
         )
 
     def move_to_calibration_position(self) -> MotionExecutionResult:
@@ -213,6 +246,8 @@ class PickAndPlaceMotionExecutor:
         if self._simulation:
             self._logger.info("[SIM] drop_gripper_if_held skipped")
             return MotionExecutionResult.ok()
+        if self._vacuum is not None:
+            self._vacuum.turn_off()
         if self._tools.current_gripper is None:
             return MotionExecutionResult.ok()
 

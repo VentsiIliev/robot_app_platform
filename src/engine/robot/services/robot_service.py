@@ -142,3 +142,11 @@ class RobotService(IRobotService):
             user=user,
             start_joint_state=start_joint_state,
         )
+
+    def set_digital_output(self, port_id: int, value: bool) -> bool:
+        try:
+            result = self._robot.set_digital_output(port_id, value)
+        except Exception:
+            self._logger.exception("set_digital_output failed: port=%s value=%s", port_id, value)
+            return False
+        return result >= 0

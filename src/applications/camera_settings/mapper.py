@@ -32,6 +32,14 @@ class CameraSettingsMapper:
             gaussian_blur           = pre.get("Gaussian blur",             True),
             blur_kernel_size        = pre.get("Blur kernel size",          3),
             threshold_type          = pre.get("Threshold type",            "binary_inv"),
+            contour_smoothing_mode   = pre.get(
+                "Contour smoothing mode",
+                "moving_average" if pre.get("Contour smoothing enabled", False) else "none",
+            ),
+            contour_smoothing_strength = pre.get(
+                "Contour smoothing strength",
+                pre.get("Contour smoothing window", pre.get("Contour smoothing iterations", 5)),
+            ),
             dilate_enabled          = pre.get("Dilate enabled",            True),
             dilate_kernel_size      = pre.get("Dilate kernel size",        3),
             dilate_iterations       = pre.get("Dilate iterations",         2),
@@ -77,6 +85,8 @@ class CameraSettingsMapper:
                 "Gaussian blur":      data.gaussian_blur,
                 "Blur kernel size":   data.blur_kernel_size,
                 "Threshold type":     data.threshold_type,
+                "Contour smoothing mode": data.contour_smoothing_mode,
+                "Contour smoothing strength": data.contour_smoothing_strength,
                 "Dilate enabled":     data.dilate_enabled,
                 "Dilate kernel size": data.dilate_kernel_size,
                 "Dilate iterations":  data.dilate_iterations,

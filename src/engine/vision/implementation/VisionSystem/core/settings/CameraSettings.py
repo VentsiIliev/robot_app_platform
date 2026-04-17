@@ -30,6 +30,8 @@ class CameraSettings(Settings):
         self.set_value(CameraSettingKey.GAUSSIAN_BLUR.value, True)
         self.set_value(CameraSettingKey.BLUR_KERNEL_SIZE.value, 5)
         self.set_value(CameraSettingKey.THRESHOLD_TYPE.value, "binary_inv")
+        self.set_value(CameraSettingKey.CONTOUR_SMOOTHING_MODE.value, "none")
+        self.set_value(CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value, 5.0)
         self.set_value(CameraSettingKey.DILATE_ENABLED.value, True)
         self.set_value(CameraSettingKey.DILATE_KERNEL_SIZE.value, 3)
         self.set_value(CameraSettingKey.DILATE_ITERATIONS.value, 2)
@@ -141,6 +143,16 @@ class CameraSettings(Settings):
                     self.set_blur_kernel_size(preprocessing[CameraSettingKey.BLUR_KERNEL_SIZE.value])
                 if CameraSettingKey.THRESHOLD_TYPE.value in preprocessing:
                     self.set_threshold_type(preprocessing[CameraSettingKey.THRESHOLD_TYPE.value])
+                if CameraSettingKey.CONTOUR_SMOOTHING_MODE.value in preprocessing:
+                    self.set_contour_smoothing_mode(preprocessing[CameraSettingKey.CONTOUR_SMOOTHING_MODE.value])
+                if CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value in preprocessing:
+                    self.set_contour_smoothing_strength(preprocessing[CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value])
+                if "Contour smoothing enabled" in preprocessing and CameraSettingKey.CONTOUR_SMOOTHING_MODE.value not in preprocessing:
+                    self.set_contour_smoothing_mode("moving_average" if preprocessing["Contour smoothing enabled"] else "none")
+                if "Contour smoothing window" in preprocessing and CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value not in preprocessing:
+                    self.set_contour_smoothing_strength(preprocessing["Contour smoothing window"])
+                if "Contour smoothing iterations" in preprocessing and CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value not in preprocessing:
+                    self.set_contour_smoothing_strength(preprocessing["Contour smoothing iterations"])
                 if CameraSettingKey.DILATE_ENABLED.value in preprocessing:
                     self.set_dilate_enabled(preprocessing[CameraSettingKey.DILATE_ENABLED.value])
                 if CameraSettingKey.DILATE_KERNEL_SIZE.value in preprocessing:
@@ -208,6 +220,10 @@ class CameraSettings(Settings):
                 self.set_blur_kernel_size(settings[CameraSettingKey.BLUR_KERNEL_SIZE.value])
             if CameraSettingKey.THRESHOLD_TYPE.value in settings:
                 self.set_threshold_type(settings[CameraSettingKey.THRESHOLD_TYPE.value])
+            if CameraSettingKey.CONTOUR_SMOOTHING_MODE.value in settings:
+                self.set_contour_smoothing_mode(settings[CameraSettingKey.CONTOUR_SMOOTHING_MODE.value])
+            if CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value in settings:
+                self.set_contour_smoothing_strength(settings[CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value])
             if CameraSettingKey.DILATE_ENABLED.value in settings:
                 self.set_dilate_enabled(settings[CameraSettingKey.DILATE_ENABLED.value])
             if CameraSettingKey.DILATE_KERNEL_SIZE.value in settings:
@@ -313,6 +329,8 @@ class CameraSettings(Settings):
             CameraSettingKey.GAUSSIAN_BLUR.value: self.get_value(CameraSettingKey.GAUSSIAN_BLUR.value),
             CameraSettingKey.BLUR_KERNEL_SIZE.value: self.get_value(CameraSettingKey.BLUR_KERNEL_SIZE.value),
             CameraSettingKey.THRESHOLD_TYPE.value: self.get_value(CameraSettingKey.THRESHOLD_TYPE.value),
+            CameraSettingKey.CONTOUR_SMOOTHING_MODE.value: self.get_value(CameraSettingKey.CONTOUR_SMOOTHING_MODE.value),
+            CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value: self.get_value(CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value),
             CameraSettingKey.DILATE_ENABLED.value: self.get_value(CameraSettingKey.DILATE_ENABLED.value),
             CameraSettingKey.DILATE_KERNEL_SIZE.value: self.get_value(CameraSettingKey.DILATE_KERNEL_SIZE.value),
             CameraSettingKey.DILATE_ITERATIONS.value: self.get_value(CameraSettingKey.DILATE_ITERATIONS.value),
@@ -479,6 +497,18 @@ class CameraSettings(Settings):
     def set_threshold_type(self, threshold_type):
         """Set threshold type."""
         self.set_value(CameraSettingKey.THRESHOLD_TYPE.value, threshold_type)
+
+    def get_contour_smoothing_mode(self):
+        return self.get_value(CameraSettingKey.CONTOUR_SMOOTHING_MODE.value)
+
+    def set_contour_smoothing_mode(self, mode):
+        self.set_value(CameraSettingKey.CONTOUR_SMOOTHING_MODE.value, mode)
+
+    def get_contour_smoothing_strength(self):
+        return self.get_value(CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value)
+
+    def set_contour_smoothing_strength(self, strength):
+        self.set_value(CameraSettingKey.CONTOUR_SMOOTHING_STRENGTH.value, strength)
 
     def get_dilate_enabled(self):
         """Get dilate enabled status."""

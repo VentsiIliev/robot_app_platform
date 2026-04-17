@@ -1,4 +1,5 @@
 # src/robot_systems/glue/service_builders.y_pixels
+from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.glue.component_ids import SettingsID
 
@@ -37,6 +38,15 @@ def build_motor_service(ctx):
         ),
         error_decoder = GlueMotorErrorDecoder(),
     )
+
+
+def build_vacuum_pump_service(ctx):
+    from src.robot_systems.glue.domain.vacuum_pump import VacuumPumpController
+
+    robot_service = ctx.services.get(CommonServiceID.ROBOT)
+    if robot_service is None:
+        return None
+    return VacuumPumpController(robot_service=robot_service)
 
 from src.robot_systems.glue.processes.glue_dispensing.i_glue_type_resolver import IGlueTypeResolver
 

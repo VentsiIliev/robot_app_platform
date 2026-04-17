@@ -1,34 +1,55 @@
-# from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
-#
-# class VacuumPumpController(IVacuumPumpController):
-#     ON_VALUE = 1
-#     OFF_VALUE = 0
-#
-#     def __init__(self):
-#         """
-#                Initializes the VacuumPump with default values.
-#
-#                The digital output pin used to control the pump is set to 3 by default. The offsets for the tooltip
-#                are also initialized (xOffset, yOffset, zOffset) to help place the vacuum pump in the correct position
-#                relative to the robotic arm or tool.
-#
-#                Attributes are initialized as:
-#                    xOffset = 0
-#                    yOffset = 0
-#                    zOffset = 105
-#                    digitalOutput = 3
-#                    vacuumPump = None
-#                """
-#         self.digitalOutput = 1
-#         self.vacuumPump = None
-#
-#     def turn_on(self) -> bool:
-#         result = robot.setDigitalOutput(self.digitalOutput, self.ON_VALUE)  # Open the control box DO
-#
-#     def turn_off(self) -> bool:
-#         result = robot.setDigitalOutput(self.digitalOutput, self.OFF_VALUE)  # Open the control box DO
-#         result = robot.setDigitalOutput(2, 1)
-#         time.sleep(0.3)
-#         result = robot.setDigitalOutput(2, 0)
-#         print("PUMP TURNED OFF")
-#
+from __future__ import annotations
+
+import logging
+import time
+
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.engine.robot.interfaces.i_robot_service import IRobotService
+
+_logger = logging.getLogger(__name__)
+
+
+class VacuumPumpController(IVacuumPumpController):
+    ON_VALUE = True
+    OFF_VALUE = False
+
+    def __init__(
+        self,
+        robot_service: IRobotService,
+        digital_output: int = 1,
+        reset_output: int = 2,
+        reset_pulse_s: float = 0.3,
+    ) -> None:
+        self._robot = robot_service
+        self.digital_output = int(digital_output)
+        self.reset_output = int(reset_output)
+        self.reset_pulse_s = float(reset_pulse_s)
+
+    def turn_on(self) -> bool:
+        ok = self._robot.set_digital_output(self.digital_output, self.ON_VALUE)
+        if ok:
+            _logger.info("Vacuum pump ON (do=%s)", self.digital_output)
+        else:
+            _logger.warning("Vacuum pump ON failed (do=%s)", self.digital_output)
+        return ok
+
+    def turn_off(self) -> bool:
+        ok = self._robot.set_digital_output(self.digital_output, self.OFF_VALUE)
+        if not ok:
+            _logger.warning("Vacuum pump OFF failed (do=%s)", self.digital_output)
+            return False
+
+        reset_high = self._robot.set_digital_output(self.reset_output, True)
+        time.sleep(self.reset_pulse_s)
+        reset_low = self._robot.set_digital_output(self.reset_output, False)
+        success = bool(reset_high and reset_low)
+        if success:
+            _logger.info(
+                "Vacuum pump OFF (do=%s reset_do=%s pulse=%.3fs)",
+                self.digital_output,
+                self.reset_output,
+                self.reset_pulse_s,
+            )
+        else:
+            _logger.warning("Vacuum pump reset pulse failed (reset_do=%s)", self.reset_output)
+        return success

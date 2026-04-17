@@ -26,17 +26,17 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_interpolation_preview_contours(self) -> list:
         return self._service.get_last_interpolation_preview_contours()
 
-    def get_last_interpolation_preview_paths(self) -> list:
-        return self._service.get_last_interpolation_preview_paths()
+    def get_last_sampled_preview_paths(self) -> list:
+        return self._service.get_last_sampled_preview_paths()
 
-    def get_last_original_preview_paths(self) -> list:
-        return self._service.get_last_original_preview_paths()
+    def get_last_raw_preview_paths(self) -> list:
+        return self._service.get_last_raw_preview_paths()
 
-    def get_last_pre_smoothed_preview_paths(self) -> list:
-        return self._service.get_last_pre_smoothed_preview_paths()
+    def get_last_prepared_preview_paths(self) -> list:
+        return self._service.get_last_prepared_preview_paths()
 
-    def get_last_linear_preview_paths(self) -> list:
-        return self._service.get_last_linear_preview_paths()
+    def get_last_curve_preview_paths(self) -> list:
+        return self._service.get_last_curve_preview_paths()
 
     def get_last_execution_preview_paths(self) -> list:
         return self._service.get_last_execution_preview_paths()
@@ -61,6 +61,9 @@ class WorkpieceEditorModel(IApplicationModel):
 
     def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
         return self._service.execute_last_preview_paths(mode=mode)
+
+    def can_import_dxf_test(self) -> bool:
+        return self._service.can_import_dxf_test()
 
     def set_editing(self, storage_id) -> None:
         self._service.set_editing(storage_id)
