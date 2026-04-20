@@ -51,6 +51,10 @@ class WorkpieceEditorBuilder:
             self._default_settings = dict(config.default_settings)  # ← new
         return self
 
+    def with_layer_config(self, layer_config):
+        self._base_builder.with_layer_config(layer_config)
+        return self
+
     def with_form(self, form_factory):
         """Configure workpiece form (optional)"""
         self._base_builder.with_form(form_factory)
@@ -130,6 +134,5 @@ class WorkpieceEditorBuilder:
     def get_workpiece_manager(self) -> Optional[WorkpieceManager]:
         """Get the WorkpieceManager instance (available after build())"""
         return self._workpiece_manager
-
 
 

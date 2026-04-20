@@ -3,6 +3,7 @@ from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema 
     WorkpieceFormFieldSpec,
     WorkpieceFormSchema,
 )
+from contour_editor import ContourEditorLayerConfig, LayerRoleConfig
 from src.applications.workpiece_editor.editor_core.config.segment_settings_schema import (
     SegmentSettingSpec,
     SegmentSettingsSchema,
@@ -12,14 +13,26 @@ from src.applications.workpiece_editor.editor_core.config.segment_settings_schem
 _COLOR = "#FF8C32"
 
 
+def build_paint_layer_config() -> ContourEditorLayerConfig:
+    return ContourEditorLayerConfig(
+        roles={
+            "workpiece": LayerRoleConfig("workpiece", "Workpiece", "#FF8C32", visible=True, enabled=True),
+            "contour": LayerRoleConfig("contour", "Contour", "#00FFFF", visible=False, enabled=False),
+            "fill": LayerRoleConfig("fill", "Fill", "#00FF00", visible=False, enabled=False),
+        },
+        default_segment_role="workpiece",
+    )
+
+
 def build_paint_contour_form_schema() -> WorkpieceFormSchema:
     return WorkpieceFormSchema(
         id_key="workpieceId",
         combo_key="",
+        editor_layer_config=build_paint_layer_config(),
         fields=[
             WorkpieceFormFieldSpec(
                 key="workpieceId",
-                label="Contour ID",
+                label="Workpiece ID",
                 field_type="text",
                 mandatory=True,
                 icon=FieldIcon.from_qta("fa5s.barcode", color=_COLOR),
@@ -37,6 +50,13 @@ def build_paint_contour_form_schema() -> WorkpieceFormSchema:
                 field_type="text",
                 mandatory=False,
                 icon=FieldIcon.from_qta("fa5s.align-left", color=_COLOR),
+            ),
+            WorkpieceFormFieldSpec(
+                key="dxfPath",
+                label="DXF Path",
+                field_type="text",
+                mandatory=False,
+                icon=FieldIcon.from_qta("fa5s.file-code", color=_COLOR),
             ),
         ],
     )

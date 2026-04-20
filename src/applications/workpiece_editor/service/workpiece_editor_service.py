@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Callable, Optional, TYPE_CHECKING
 from datetime import datetime
+import copy
 import cv2
 import numpy as np
 
@@ -318,7 +319,11 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  robot_service=None,
                  path_executor: Optional[IWorkpiecePathExecutor] = None,
                  target_point_name: str = "",
-                 enable_dxf_import_test: bool = False):
+                 enable_dxf_import_test: bool = False,
+                 execute_from_workpiece_layer: bool = False,
+                 list_saved_workpieces_fn: Optional[Callable[[], list[dict]]] = None,
+                 load_saved_workpiece_fn: Optional[Callable[[str], Optional[dict]]] = None,
+                 run_matching_fn: Optional[Callable[[list, list], tuple]] = None):
         self._vision             = vision_service
         self._capture_snapshot_service = capture_snapshot_service
         self._save_fn            = save_fn
@@ -334,6 +339,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._robot_service      = robot_service
         self._path_executor      = path_executor
         self._enable_dxf_import_test = bool(enable_dxf_import_test)
+        self._execute_from_workpiece_layer = bool(execute_from_workpiece_layer)
+        self._list_saved_workpieces_fn = list_saved_workpieces_fn
+        self._load_saved_workpiece_fn = load_saved_workpiece_fn
+        self._run_matching_fn = run_matching_fn
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
         self._last_interpolation_preview_contours: list[np.ndarray] = []
@@ -359,6 +368,116 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def can_import_dxf_test(self) -> bool:
         return self._enable_dxf_import_test
 
+    def can_match_saved_workpieces(self) -> bool:
+        return (
+            callable(self._list_saved_workpieces_fn)
+            and callable(self._load_saved_workpiece_fn)
+            and callable(self._run_matching_fn)
+        )
+
+    def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
+        if not self.can_match_saved_workpieces():
+            return False, None, "Matching is not available in this editor."
+
+        class _MatchableWorkpiece:
+            def __init__(self, raw: dict, storage_id: str | None = None):
+                self._raw = copy.deepcopy(raw or {})
+                self.storage_id = storage_id
+                self.workpieceId = self._raw.get("workpieceId", "")
+                self.name = self._raw.get("name", "")
+                self.contour = copy.deepcopy(self._raw.get("contour", []))
+                self.sprayPattern = copy.deepcopy(self._raw.get("sprayPattern", {"Contour": [], "Fill": []}))
+                self.pickupPoint = self._raw.get("pickupPoint")
+
+            def get_main_contour(self):
+                contour_entry = self.contour
+                if isinstance(contour_entry, dict):
+                    contour_points = contour_entry.get("contour", [])
+                else:
+                    contour_points = contour_entry or []
+                return np.asarray(contour_points, dtype=np.float32)
+
+            def get_spray_pattern_contours(self):
+                return list((self.sprayPattern or {}).get("Contour", []))
+
+            def get_spray_pattern_fills(self):
+                return list((self.sprayPattern or {}).get("Fill", []))
+
+            def to_raw(self) -> dict:
+                raw = copy.deepcopy(self._raw)
+                raw["contour"] = copy.deepcopy(self.contour)
+                raw["sprayPattern"] = copy.deepcopy(self.sprayPattern)
+                if self.pickupPoint is not None:
+                    raw["pickupPoint"] = self.pickupPoint
+                return raw
+
+        try:
+            stored = self._list_saved_workpieces_fn() or []
+            candidates: list[_MatchableWorkpiece] = []
+            for item in stored:
+                storage_id = item.get("id")
+                if not storage_id:
+                    continue
+                raw = self._load_saved_workpiece_fn(storage_id)
+                if not raw or not raw.get("contour"):
+                    continue
+                candidates.append(_MatchableWorkpiece(raw, storage_id=storage_id))
+
+            if not candidates:
+                return False, None, "No saved workpieces available."
+
+            result, no_match_count, matched_contours, unmatched_contours = self._run_matching_fn(
+                candidates,
+                [contour],
+            )
+            workpieces = list((result or {}).get("workpieces", []))
+            confidences = list((result or {}).get("mlConfidences", []))
+            if not workpieces:
+                return False, None, f"No match found. Saved workpieces checked: {len(candidates)}"
+
+            best = workpieces[0]
+            raw = best.to_raw() if hasattr(best, "to_raw") else None
+            if raw is None:
+                return False, None, "Matched workpiece could not be converted."
+            confidence = None
+            if confidences:
+                try:
+                    confidence = float(confidences[0])
+                except Exception:
+                    confidence = None
+            return True, {
+                "raw": raw,
+                "storage_id": getattr(best, "storage_id", None),
+                "workpieceId": getattr(best, "workpieceId", "") or raw.get("workpieceId", ""),
+                "name": getattr(best, "name", "") or raw.get("name", ""),
+                "candidate_count": len(candidates),
+                "no_match_count": int(no_match_count),
+                "confidence": confidence,
+            }, "Matched workpiece."
+        except Exception as exc:
+            _logger.exception("match_saved_workpieces failed")
+            return False, None, str(exc)
+
+    def prepare_dxf_test_raw_for_image(
+        self,
+        raw: dict,
+        image_width: float,
+        image_height: float,
+    ) -> dict:
+        placed = copy.deepcopy(raw)
+        contour = placed.get("contour") or []
+        points = [point[0] for point in contour if point and point[0]]
+        if not points:
+            return placed
+
+        self._map_raw_workpiece_mm_to_image(placed, float(image_width), float(image_height))
+        _logger.info(
+            "Prepared DXF test workpiece for image placement: image=(%.1f, %.1f)",
+            float(image_width),
+            float(image_height),
+        )
+        return placed
+
     def get_contours(self) -> list:
         if self._capture_snapshot_service is None and self._vision is None:
             _logger.warning("get_contours: no vision service")
@@ -370,6 +489,73 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         except Exception as exc:
             _logger.error("get_contours failed: %s", exc)
             return []
+
+    def _estimate_local_image_basis(self, image_width: float, image_height: float) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        transformer = self._transformer
+        if transformer is None or not transformer.is_available():
+            return None
+
+        center_px = np.array([float(image_width) * 0.5, float(image_height) * 0.5], dtype=float)
+        try:
+            center_robot = np.asarray(transformer.transform(float(center_px[0]), float(center_px[1])), dtype=float)
+            pixel_origin = np.asarray(
+                transformer.inverse_transform(float(center_robot[0]), float(center_robot[1])),
+                dtype=float,
+            )
+            pixel_x = np.asarray(
+                transformer.inverse_transform(float(center_robot[0] + 1.0), float(center_robot[1])),
+                dtype=float,
+            )
+            pixel_y = np.asarray(
+                transformer.inverse_transform(float(center_robot[0]), float(center_robot[1] + 1.0)),
+                dtype=float,
+            )
+            basis_x = pixel_x - pixel_origin
+            basis_y = pixel_y - pixel_origin
+            if float(np.linalg.norm(basis_x)) > 1e-6 and float(np.linalg.norm(basis_y)) > 1e-6:
+                return pixel_origin, basis_x, basis_y
+        except Exception:
+            _logger.debug("Failed to estimate local image basis from transformer", exc_info=True)
+        return None
+
+    def _map_raw_workpiece_mm_to_image(self, raw: dict, image_width: float, image_height: float) -> None:
+        contour = raw.get("contour") or []
+        points = [point[0] for point in contour if point and point[0]]
+        if not points:
+            return
+
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
+        contour_center_mm = np.array([0.5 * (min(xs) + max(xs)), 0.5 * (min(ys) + max(ys))], dtype=float)
+
+        image_center = np.array([float(image_width) * 0.5, float(image_height) * 0.5], dtype=float)
+        basis = self._estimate_local_image_basis(float(image_width), float(image_height))
+        if basis is None:
+            pixel_origin = image_center
+            basis_x = np.array([1.0, 0.0], dtype=float)
+            basis_y = np.array([0.0, 1.0], dtype=float)
+        else:
+            pixel_origin, basis_x, basis_y = basis
+
+        def _map_contour(contour_array):
+            for point in contour_array or []:
+                if point and point[0]:
+                    local_mm = np.array(
+                        [
+                            float(point[0][0]) - float(contour_center_mm[0]),
+                            float(point[0][1]) - float(contour_center_mm[1]),
+                        ],
+                        dtype=float,
+                    )
+                    mapped = image_center + local_mm[0] * basis_x + local_mm[1] * basis_y
+                    point[0][0] = float(mapped[0])
+                    point[0][1] = float(mapped[1])
+
+        _map_contour(raw.get("contour"))
+        spray = raw.get("sprayPattern") or {}
+        for key in ("Contour", "Fill"):
+            for segment in spray.get(key, []):
+                _map_contour(segment.get("contour"))
 
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         try:
@@ -421,38 +607,61 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
 
         spray_pattern = merged.get("sprayPattern", {})
+        use_workpiece_layer = False
         if not spray_pattern or not any(spray_pattern.get(k) for k in ("Contour", "Fill")):
-            _logger.warning("[EXECUTE] No spray patterns in workpiece data")
-            return False, "No spray patterns found — draw Contour or Fill paths first"
+            if self._execute_from_workpiece_layer and _has_valid_contour(merged.get("contour")):
+                use_workpiece_layer = True
+                _logger.info("[EXECUTE] No spray patterns found; using workpiece layer for execution")
+            else:
+                _logger.warning("[EXECUTE] No spray patterns in workpiece data")
+                return False, "No spray patterns found — draw Contour or Fill paths first"
 
         robot_paths = []
 
-        for pattern_type in ("Contour", "Fill"):
-            patterns = spray_pattern.get(pattern_type, [])
-            if not patterns:
-                continue
-            _logger.info("[EXECUTE] %d %s pattern(s)", len(patterns), pattern_type)
-
-            for i, pattern in enumerate(patterns):
-                contour_arr = pattern.get("contour", [])
-                settings    = pattern.get("settings", {})
-
-                if not isinstance(contour_arr, np.ndarray):
-                    contour_arr = np.array(contour_arr, dtype=np.float32)
-                if contour_arr.size == 0:
-                    _logger.warning("[EXECUTE] %s[%d]: empty contour, skipping", pattern_type, i)
-                    continue
-
+        if use_workpiece_layer:
+            contour_arr = merged.get("contour", [])
+            settings = {
+                key: value
+                for key, value in merged.items()
+                if key not in {"contour", "sprayPattern"}
+            }
+            if not isinstance(contour_arr, np.ndarray):
+                contour_arr = np.array(contour_arr, dtype=np.float32)
+            if contour_arr.size != 0:
                 pts_px = contour_arr.reshape(-1, 2)
-                _logger.info("[EXECUTE] %s[%d]: %d pixel points | settings=%s",
-                             pattern_type, i, len(pts_px), settings)
-
+                _logger.info("[EXECUTE] Workpiece: %d pixel points | settings=%s", len(pts_px), settings)
                 robot_pts = self._transform_to_robot(pts_px, settings)
-                if not robot_pts:
-                    _logger.warning("[EXECUTE] %s[%d]: no robot points after transform", pattern_type, i)
+                if robot_pts:
+                    robot_paths.append((robot_pts, settings, "Workpiece"))
+                else:
+                    _logger.warning("[EXECUTE] Workpiece: no robot points after transform")
+        else:
+            for pattern_type in ("Contour", "Fill"):
+                patterns = spray_pattern.get(pattern_type, [])
+                if not patterns:
                     continue
+                _logger.info("[EXECUTE] %d %s pattern(s)", len(patterns), pattern_type)
 
-                robot_paths.append((robot_pts, settings, pattern_type))
+                for i, pattern in enumerate(patterns):
+                    contour_arr = pattern.get("contour", [])
+                    settings    = pattern.get("settings", {})
+
+                    if not isinstance(contour_arr, np.ndarray):
+                        contour_arr = np.array(contour_arr, dtype=np.float32)
+                    if contour_arr.size == 0:
+                        _logger.warning("[EXECUTE] %s[%d]: empty contour, skipping", pattern_type, i)
+                        continue
+
+                    pts_px = contour_arr.reshape(-1, 2)
+                    _logger.info("[EXECUTE] %s[%d]: %d pixel points | settings=%s",
+                                 pattern_type, i, len(pts_px), settings)
+
+                    robot_pts = self._transform_to_robot(pts_px, settings)
+                    if not robot_pts:
+                        _logger.warning("[EXECUTE] %s[%d]: no robot points after transform", pattern_type, i)
+                        continue
+
+                    robot_paths.append((robot_pts, settings, pattern_type))
 
         if not robot_paths:
             return False, "No executable paths after transformation"

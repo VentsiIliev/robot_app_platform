@@ -45,6 +45,7 @@ class WorkpieceFormSchema:
     combo_key:         str = ""
     contour_key:       str = "contour"
     spray_pattern_key: str = "sprayPattern"
+    editor_layer_config: Any = None
 
     def get_required_keys(self) -> List[str]:
         return [f.key for f in self.fields if f.mandatory]

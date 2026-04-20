@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 import numpy as np
 
+from contour_editor import LayerConfigRegistry
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from PyQt6.QtCore import QPointF
 
@@ -8,9 +9,21 @@ from contour_editor.models.segment import Layer, Segment
 
 
 class CaptureDataHandler:
-    WORKPIECE_LAYER = "Main"
-    CONTOUR_LAYER = "Contour"
-    FILL_LAYER = "Fill"
+    @classmethod
+    def _layer_config(cls):
+        return LayerConfigRegistry.get_instance().get_config()
+
+    @classmethod
+    def workpiece_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("workpiece")
+
+    @classmethod
+    def contour_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("contour")
+
+    @classmethod
+    def fill_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("fill")
 
     @classmethod
     def handle_capture_data(
@@ -44,7 +57,7 @@ class CaptureDataHandler:
         editor_data = ContourEditorData()
 
         workpiece_layer = Layer(
-            name=cls.WORKPIECE_LAYER,
+            name=cls.workpiece_layer_name(),
             locked=False,
             visible=True
         )
@@ -68,8 +81,11 @@ class CaptureDataHandler:
 
         editor_data.add_layer(workpiece_layer)
 
-        editor_data.add_layer(Layer(name=cls.CONTOUR_LAYER, locked=False, visible=True))
-        editor_data.add_layer(Layer(name=cls.FILL_LAYER, locked=False, visible=True))
+        cfg = cls._layer_config()
+        if cfg.is_enabled("contour"):
+            editor_data.add_layer(Layer(name=cls.contour_layer_name(), locked=False, visible=cfg.role("contour").visible))
+        if cfg.is_enabled("fill"):
+            editor_data.add_layer(Layer(name=cls.fill_layer_name(), locked=False, visible=cfg.role("fill").visible))
 
         return editor_data
 
@@ -105,7 +121,7 @@ class CaptureDataHandler:
         print("\n=== Capture Data Summary ===")
         stats = editor_data.get_statistics()
 
-        for layer_name in [cls.WORKPIECE_LAYER, cls.CONTOUR_LAYER, cls.FILL_LAYER]:
+        for layer_name in cls._layer_config().enabled_layer_names():
             layer = editor_data.get_layer(layer_name)
             if layer:
                 layer_stats = stats["layers"].get(layer_name, {})
@@ -113,4 +129,3 @@ class CaptureDataHandler:
                       f"{layer_stats.get('points', 0)} points")
 
         print("============================\n")
-

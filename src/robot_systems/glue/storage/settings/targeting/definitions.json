@@ -3,20 +3,20 @@
     {
       "name": "camera",
       "display_name": "camera",
-      "x_mm": -78.185,
-      "y_mm": 390.527
+      "x_mm": -82.38,
+      "y_mm": 370.97
     },
     {
       "name": "tool",
       "display_name": "tool",
-      "x_mm": -82.573,
-      "y_mm": 466.438
+      "x_mm": -82.26,
+      "y_mm": 464.966
     },
     {
       "name": "gripper",
       "display_name": "gripper",
-      "x_mm": 16.656,
-      "y_mm": 469.511
+      "x_mm": 17.37,
+      "y_mm": 467.58
     }
   ],
   "FRAMES": [

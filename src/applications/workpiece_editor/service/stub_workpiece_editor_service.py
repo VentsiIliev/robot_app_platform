@@ -1,4 +1,5 @@
 import logging
+import copy
 from src.applications.workpiece_editor.service import IWorkpieceEditorService
 from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
 from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
@@ -36,6 +37,19 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
 
     def can_import_dxf_test(self) -> bool:
         return False
+
+    def prepare_dxf_test_raw_for_image(
+        self,
+        raw: dict,
+        image_width: float,
+        image_height: float,
+    ) -> dict:
+        _logger.info(
+            "Stub: prepare_dxf_test_raw_for_image image_width=%s image_height=%s",
+            image_width,
+            image_height,
+        )
+        return copy.deepcopy(raw)
 
     def get_last_sampled_preview_paths(self) -> list:
         return []

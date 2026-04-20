@@ -29,19 +29,22 @@ def _build_capture_snapshot_service(robot_system):
 
 
 def _build_paint_contour_editor_application(robot_system):
-    import json
     import os
+    from contour_editor import AdditionalFormBehaviorProvider
 
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
+    from src.robot_systems.paint.domain.dxf_path_form_behavior import PaintDxfPathFormBehavior
     from src.robot_systems.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
     from src.robot_systems.paint.domain.contour_editor_schema import (
         build_paint_contour_form_schema,
         build_paint_segment_settings_schema,
     )
+    from src.engine.cad import import_dxf_to_workpiece_data
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
@@ -51,36 +54,19 @@ def _build_paint_contour_editor_application(robot_system):
     camera_point_name = (
         getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
     )
-    storage_dir = robot_system.storage_path("contours")
-    os.makedirs(storage_dir, exist_ok=True)
+    workpiece_service = PaintWorkpieceService(JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path()))
     debug_dump_dir = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "..", "..", "bootstrap", "debug_plots")
     )
 
-    def _save_payload(storage_id: str, data: dict) -> tuple[bool, str]:
-        try:
-            path = os.path.join(storage_dir, f"{storage_id}.json")
-            with open(path, "w", encoding="utf-8") as handle:
-                json.dump(data, handle, indent=2)
-            return True, f"Saved contour '{storage_id}'"
-        except Exception as exc:
-            _logger.exception("Failed to save paint contour %s", storage_id)
-            return False, str(exc)
-
     def _save_fn(data: dict) -> tuple[bool, str]:
-        contour_id = str(data.get("workpieceId", "")).strip()
-        if not contour_id:
-            return False, "Contour ID is required"
-        return _save_payload(contour_id, data)
+        return workpiece_service.save(data)
 
     def _update_fn(storage_id: str, data: dict) -> tuple[bool, str]:
-        contour_id = str(data.get("workpieceId", "")).strip() or str(storage_id).strip()
-        if not contour_id:
-            return False, "Contour ID is required"
-        return _save_payload(contour_id, data)
+        return workpiece_service.update(storage_id, data)
 
     def _id_exists_fn(contour_id: str) -> bool:
-        return os.path.exists(os.path.join(storage_dir, f"{str(contour_id).strip()}.json"))
+        return workpiece_service.workpiece_id_exists(contour_id)
 
     z_min = 0.0
     if robot_config is not None:
@@ -119,6 +105,19 @@ def _build_paint_contour_editor_application(robot_system):
         ),
         target_point_name=camera_point_name,
         enable_dxf_import_test=True,
+        execute_from_workpiece_layer=True,
+        list_saved_workpieces_fn=workpiece_service.list_all,
+        load_saved_workpiece_fn=workpiece_service.load_raw,
+        run_matching_fn=vision_service.run_matching if vision_service is not None else None,
+    )
+
+    AdditionalFormBehaviorProvider.get().set_behaviors(
+        [
+            PaintDxfPathFormBehavior(
+                prepare_dxf_raw_for_image=service.prepare_dxf_test_raw_for_image,
+                dxf_importer=import_dxf_to_workpiece_data,
+            )
+        ]
     )
 
     jog_service = build_robot_system_jog_service(robot_system)
@@ -128,6 +127,27 @@ def _build_paint_contour_editor_application(robot_system):
             messaging=ms,
             jog_service=jog_service,
         )
+    )
+
+
+def _build_workpiece_library_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.workpiece_library.workpiece_library_factory import WorkpieceLibraryFactory
+    from src.robot_systems.paint.domain.workpieces import (
+        JsonPaintWorkpieceRepository,
+        PaintWorkpieceLibraryService,
+        PaintWorkpieceService,
+    )
+
+    service = PaintWorkpieceLibraryService(
+        PaintWorkpieceService(
+            JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path())
+        )
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: WorkpieceLibraryFactory().build(service, ms, jog_service=jog_service)
     )
 
 

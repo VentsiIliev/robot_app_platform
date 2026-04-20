@@ -145,6 +145,8 @@ class PaintRobotSystem(BaseRobotSystem):
         applications=[
             ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
                             factory=application_wiring._build_dashboard_application),
+            ApplicationSpec(name="WorkpieceLibrary", folder_id=4, icon="fa5s.shapes",
+                            factory=application_wiring._build_workpiece_library_application),
             ApplicationSpec(name="WorkpieceEditor", folder_id=4, icon="fa5s.draw-polygon",
                             factory=application_wiring._build_paint_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
@@ -273,6 +275,5 @@ class PaintRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
-
 
 

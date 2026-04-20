@@ -77,6 +77,7 @@ class WorkpieceEditorView(IApplicationView):
                 self._segment_config.settings_config,
                 self._segment_config.settings_provider,
             )
+            .with_layer_config(self._schema.editor_layer_config)
             .with_form(WorkpieceFormFactory(schema=self._schema))
             .with_widgets(VirtualKeyboardWidgetFactory())
             .on_save(self._on_save_cb)
@@ -128,4 +129,3 @@ class WorkpieceEditorView(IApplicationView):
                 editor.set_contours(contours)
         except AttributeError:
             pass
-

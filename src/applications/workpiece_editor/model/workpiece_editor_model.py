@@ -65,5 +65,19 @@ class WorkpieceEditorModel(IApplicationModel):
     def can_import_dxf_test(self) -> bool:
         return self._service.can_import_dxf_test()
 
+    def prepare_dxf_test_raw_for_image(
+        self,
+        raw: dict,
+        image_width: float,
+        image_height: float,
+    ) -> dict:
+        return self._service.prepare_dxf_test_raw_for_image(raw, image_width, image_height)
+
     def set_editing(self, storage_id) -> None:
         self._service.set_editing(storage_id)
+
+    def can_match_saved_workpieces(self) -> bool:
+        return self._service.can_match_saved_workpieces()
+
+    def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
+        return self._service.match_saved_workpieces(contour)

@@ -9,6 +9,7 @@ It supports both:
 """
 from ..handlers.workpiece_loader import load_workpiece
 from ..adapters.workpiece_adapter import WorkpieceAdapter
+from contour_editor import LayerConfigRegistry
 from contour_editor.models.segment import Layer
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
@@ -193,7 +194,7 @@ class WorkpieceManager:
             if hasattr(segment, 'layer') and segment.layer:
                 layer_name = segment.layer.name
             else:
-                layer_name = "Main"
+                layer_name = LayerConfigRegistry.get_instance().get_config().name_for_role("workpiece")
 
             if layer_name not in layers_dict:
                 locked = segment.layer.locked if (

@@ -5,6 +5,7 @@ import cv2
 import math
 import numpy as np
 
+from contour_editor import LayerConfigRegistry
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from contour_editor.models.segment import Segment
 
@@ -15,10 +16,21 @@ _logger = logging.getLogger(__name__)
 
 
 class WorkpieceAdapter:
-    LAYER_MAIN = "Main"  # ← contour_editor's actual name for the boundary layer
-    LAYER_WORKPIECE = "Workpiece"
-    LAYER_CONTOUR   = "Contour"
-    LAYER_FILL      = "Fill"
+    @classmethod
+    def _layer_config(cls):
+        return LayerConfigRegistry.get_instance().get_config()
+
+    @classmethod
+    def workpiece_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("workpiece")
+
+    @classmethod
+    def contour_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("contour")
+
+    @classmethod
+    def fill_layer_name(cls) -> str:
+        return cls._layer_config().name_for_role("fill")
 
     @classmethod
     def _ensure_complete_settings(cls, segment_settings: Optional[Dict[str, Any]],
@@ -35,9 +47,9 @@ class WorkpieceAdapter:
         spray_contours = workpiece.get_spray_pattern_contours()
         spray_fills    = workpiece.get_spray_pattern_fills()
         layer_data = {
-            cls.LAYER_WORKPIECE: [{"contour": main_contour, "settings": main_settings}],
-            cls.LAYER_CONTOUR:   spray_contours,
-            cls.LAYER_FILL:      spray_fills,
+            cls.workpiece_layer_name(): [{"contour": main_contour, "settings": main_settings}],
+            cls.contour_layer_name():   spray_contours,
+            cls.fill_layer_name():      spray_fills,
         }
         return ContourEditorData.from_legacy_format(cls._normalize_layer_data(layer_data))
 
@@ -47,11 +59,12 @@ class WorkpieceAdapter:
         result = {}
 
         workpiece_layer = (
-                editor_data.get_layer(cls.LAYER_WORKPIECE)
-                or editor_data.get_layer(cls.LAYER_MAIN)
+                editor_data.get_layer(cls.workpiece_layer_name())
+                or editor_data.get_layer("Workpiece")
+                or editor_data.get_layer("Main")
         )
-        contour_layer = editor_data.get_layer(cls.LAYER_CONTOUR)
-        fill_layer = editor_data.get_layer(cls.LAYER_FILL)
+        contour_layer = editor_data.get_layer(cls.contour_layer_name()) or editor_data.get_layer("Contour")
+        fill_layer = editor_data.get_layer(cls.fill_layer_name()) or editor_data.get_layer("Fill")
 
         _logger.debug(
             "to_workpiece_data — Workpiece/Main segs=%d  Contour segs=%d  Fill segs=%d",
@@ -198,9 +211,9 @@ class WorkpieceAdapter:
         raw_contour = raw.get("contour", [])
 
         layer_data = {
-            cls.LAYER_MAIN: [{"contour": raw_contour, "settings": {}}],
-            cls.LAYER_CONTOUR: raw.get("sprayPattern", {}).get("Contour", []),
-            cls.LAYER_FILL: raw.get("sprayPattern", {}).get("Fill", []),
+            cls.workpiece_layer_name(): [{"contour": raw_contour, "settings": {}}],
+            cls.contour_layer_name(): raw.get("sprayPattern", {}).get("Contour", []),
+            cls.fill_layer_name(): raw.get("sprayPattern", {}).get("Fill", []),
         }
 
         return ContourEditorData.from_legacy_format(cls._normalize_layer_data(layer_data))
