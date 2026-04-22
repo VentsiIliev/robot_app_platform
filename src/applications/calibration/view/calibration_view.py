@@ -1,11 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QTextCursor
-from PyQt6.QtWidgets import QHBoxLayout
+from PyQt6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QDoubleSpinBox,
+    QSpinBox,
+    QVBoxLayout,
+)
 
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.calibration.view.calibration_controls_panel import CalibrationControlsPanel
@@ -31,6 +41,236 @@ _MAGNIFY_BORDER = (230, 230, 230)
 _MAGNIFY_SOURCE = (0, 200, 255)
 
 
+@dataclass(frozen=True)
+class ZShiftCalibrationDialogResult:
+    marker_id: int
+    samples: int
+    z_step_mm: float
+    settle_time_s: float
+
+
+@dataclass(frozen=True)
+class TcpOffsetCalibrationDialogResult:
+    marker_id: int
+    rotation_step_deg: float
+    iterations: int
+    approach_z: float
+    approach_rx: float
+    approach_ry: float
+    approach_rz: float
+    velocity: int
+    acceleration: int
+    settle_time_s: float
+    recenter_max_iterations: int
+    recenter_stability_wait_s: float
+    recenter_alignment_threshold_mm: float
+
+
+class _ZShiftCalibrationDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        marker_id: int,
+        samples: int,
+        z_step_mm: float,
+        settle_time_s: float,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("XY Shift Calibration")
+        self.setModal(True)
+
+        root = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._marker_id = QSpinBox(self)
+        self._marker_id.setRange(0, 10_000)
+        self._marker_id.setValue(int(marker_id))
+        form.addRow("Reference marker ID:", self._marker_id)
+
+        self._samples = QSpinBox(self)
+        self._samples.setRange(1, 1000)
+        self._samples.setValue(int(samples))
+        form.addRow("Samples:", self._samples)
+
+        self._z_step_mm = QDoubleSpinBox(self)
+        self._z_step_mm.setRange(-100.0, 100.0)
+        self._z_step_mm.setDecimals(3)
+        self._z_step_mm.setSingleStep(0.1)
+        self._z_step_mm.setValue(float(z_step_mm))
+        self._z_step_mm.setSuffix(" mm")
+        form.addRow("Z step per sample:", self._z_step_mm)
+
+        self._settle_time_s = QDoubleSpinBox(self)
+        self._settle_time_s.setRange(0.0, 30.0)
+        self._settle_time_s.setDecimals(2)
+        self._settle_time_s.setSingleStep(0.1)
+        self._settle_time_s.setValue(float(settle_time_s))
+        self._settle_time_s.setSuffix(" s")
+        form.addRow("Settle time:", self._settle_time_s)
+
+        root.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def get_result(self) -> ZShiftCalibrationDialogResult:
+        return ZShiftCalibrationDialogResult(
+            marker_id=int(self._marker_id.value()),
+            samples=int(self._samples.value()),
+            z_step_mm=float(self._z_step_mm.value()),
+            settle_time_s=float(self._settle_time_s.value()),
+        )
+
+
+class _TcpOffsetCalibrationDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        marker_id: int,
+        rotation_step_deg: float,
+        iterations: int,
+        approach_z: float,
+        approach_rx: float,
+        approach_ry: float,
+        approach_rz: float,
+        velocity: int,
+        acceleration: int,
+        settle_time_s: float,
+        recenter_max_iterations: int,
+        recenter_stability_wait_s: float,
+        recenter_alignment_threshold_mm: float,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setWindowTitle("Camera TCP Offset Calibration")
+        self.setModal(True)
+
+        root = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self._marker_id = QSpinBox(self)
+        self._marker_id.setRange(0, 10_000)
+        self._marker_id.setValue(int(marker_id))
+        form.addRow("Reference marker ID:", self._marker_id)
+
+        self._rotation_step_deg = QDoubleSpinBox(self)
+        self._rotation_step_deg.setRange(-180.0, 180.0)
+        self._rotation_step_deg.setDecimals(3)
+        self._rotation_step_deg.setSingleStep(1.0)
+        self._rotation_step_deg.setValue(float(rotation_step_deg))
+        self._rotation_step_deg.setSuffix(" deg")
+        form.addRow("Rotation step:", self._rotation_step_deg)
+
+        self._iterations = QSpinBox(self)
+        self._iterations.setRange(1, 1000)
+        self._iterations.setValue(int(iterations))
+        form.addRow("Iterations:", self._iterations)
+
+        self._approach_z = QDoubleSpinBox(self)
+        self._approach_z.setRange(-10000.0, 10000.0)
+        self._approach_z.setDecimals(3)
+        self._approach_z.setSingleStep(1.0)
+        self._approach_z.setValue(float(approach_z))
+        self._approach_z.setSuffix(" mm")
+        form.addRow("Approach Z:", self._approach_z)
+
+        self._approach_rx = QDoubleSpinBox(self)
+        self._approach_rx.setRange(-360.0, 360.0)
+        self._approach_rx.setDecimals(3)
+        self._approach_rx.setSingleStep(1.0)
+        self._approach_rx.setValue(float(approach_rx))
+        self._approach_rx.setSuffix(" deg")
+        form.addRow("Approach RX:", self._approach_rx)
+
+        self._approach_ry = QDoubleSpinBox(self)
+        self._approach_ry.setRange(-360.0, 360.0)
+        self._approach_ry.setDecimals(3)
+        self._approach_ry.setSingleStep(1.0)
+        self._approach_ry.setValue(float(approach_ry))
+        self._approach_ry.setSuffix(" deg")
+        form.addRow("Approach RY:", self._approach_ry)
+
+        self._approach_rz = QDoubleSpinBox(self)
+        self._approach_rz.setRange(-360.0, 360.0)
+        self._approach_rz.setDecimals(3)
+        self._approach_rz.setSingleStep(1.0)
+        self._approach_rz.setValue(float(approach_rz))
+        self._approach_rz.setSuffix(" deg")
+        form.addRow("Approach RZ:", self._approach_rz)
+
+        self._velocity = QSpinBox(self)
+        self._velocity.setRange(1, 100)
+        self._velocity.setValue(int(velocity))
+        form.addRow("Velocity:", self._velocity)
+
+        self._acceleration = QSpinBox(self)
+        self._acceleration.setRange(1, 100)
+        self._acceleration.setValue(int(acceleration))
+        form.addRow("Acceleration:", self._acceleration)
+
+        self._settle_time_s = QDoubleSpinBox(self)
+        self._settle_time_s.setRange(0.0, 30.0)
+        self._settle_time_s.setDecimals(2)
+        self._settle_time_s.setSingleStep(0.1)
+        self._settle_time_s.setValue(float(settle_time_s))
+        self._settle_time_s.setSuffix(" s")
+        form.addRow("Settle time:", self._settle_time_s)
+
+        self._recenter_max_iterations = QSpinBox(self)
+        self._recenter_max_iterations.setRange(1, 1000)
+        self._recenter_max_iterations.setValue(int(recenter_max_iterations))
+        form.addRow("Recenter iterations:", self._recenter_max_iterations)
+
+        self._recenter_stability_wait_s = QDoubleSpinBox(self)
+        self._recenter_stability_wait_s.setRange(0.0, 30.0)
+        self._recenter_stability_wait_s.setDecimals(2)
+        self._recenter_stability_wait_s.setSingleStep(0.1)
+        self._recenter_stability_wait_s.setValue(float(recenter_stability_wait_s))
+        self._recenter_stability_wait_s.setSuffix(" s")
+        form.addRow("Recenter wait:", self._recenter_stability_wait_s)
+
+        self._recenter_alignment_threshold_mm = QDoubleSpinBox(self)
+        self._recenter_alignment_threshold_mm.setRange(0.01, 100.0)
+        self._recenter_alignment_threshold_mm.setDecimals(3)
+        self._recenter_alignment_threshold_mm.setSingleStep(0.1)
+        self._recenter_alignment_threshold_mm.setValue(float(recenter_alignment_threshold_mm))
+        self._recenter_alignment_threshold_mm.setSuffix(" mm")
+        form.addRow("Recenter threshold:", self._recenter_alignment_threshold_mm)
+
+        root.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def get_result(self) -> TcpOffsetCalibrationDialogResult:
+        return TcpOffsetCalibrationDialogResult(
+            marker_id=int(self._marker_id.value()),
+            rotation_step_deg=float(self._rotation_step_deg.value()),
+            iterations=int(self._iterations.value()),
+            approach_z=float(self._approach_z.value()),
+            approach_rx=float(self._approach_rx.value()),
+            approach_ry=float(self._approach_ry.value()),
+            approach_rz=float(self._approach_rz.value()),
+            velocity=int(self._velocity.value()),
+            acceleration=int(self._acceleration.value()),
+            settle_time_s=float(self._settle_time_s.value()),
+            recenter_max_iterations=int(self._recenter_max_iterations.value()),
+            recenter_stability_wait_s=float(self._recenter_stability_wait_s.value()),
+            recenter_alignment_threshold_mm=float(self._recenter_alignment_threshold_mm.value()),
+        )
+
+
 class CalibrationView(IApplicationView):
     SHOW_JOG_WIDGET = True
     JOG_FRAME_SELECTOR_ENABLED = True
@@ -42,6 +282,7 @@ class CalibrationView(IApplicationView):
     calibrate_robot_requested = pyqtSignal()
     calibrate_sequence_requested = pyqtSignal()
     calibrate_camera_tcp_offset_requested = pyqtSignal()
+    calibrate_camera_z_shift_requested = pyqtSignal()
     calibrate_laser_requested = pyqtSignal()
     detect_laser_requested = pyqtSignal()
     stop_calibration_requested = pyqtSignal()
@@ -106,6 +347,9 @@ class CalibrationView(IApplicationView):
         self._controls_panel.calibrate_camera_tcp_offset_btn.clicked.connect(
             self.calibrate_camera_tcp_offset_requested.emit
         )
+        self._controls_panel.calibrate_camera_z_shift_btn.clicked.connect(
+            self.calibrate_camera_z_shift_requested.emit
+        )
         self._controls_panel.calibrate_laser_btn.clicked.connect(self.calibrate_laser_requested.emit)
         self._controls_panel.detect_laser_btn.clicked.connect(self.detect_laser_requested.emit)
         self._controls_panel.test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
@@ -141,6 +385,65 @@ class CalibrationView(IApplicationView):
 
     def set_camera_tcp_offset_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_camera_tcp_offset_enabled(enabled)
+
+    def set_camera_z_shift_enabled(self, enabled: bool) -> None:
+        self._controls_panel.set_camera_z_shift_enabled(enabled)
+
+    def prompt_z_shift_calibration_config(
+        self,
+        *,
+        marker_id: int = 4,
+        samples: int = 10,
+        z_step_mm: float = -1.0,
+        settle_time_s: float = 0.3,
+    ) -> ZShiftCalibrationDialogResult | None:
+        dialog = _ZShiftCalibrationDialog(
+            marker_id=marker_id,
+            samples=samples,
+            z_step_mm=z_step_mm,
+            settle_time_s=settle_time_s,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.get_result()
+
+    def prompt_tcp_offset_calibration_config(
+        self,
+        *,
+        marker_id: int,
+        rotation_step_deg: float,
+        iterations: int,
+        approach_z: float,
+        approach_rx: float,
+        approach_ry: float,
+        approach_rz: float,
+        velocity: int,
+        acceleration: int,
+        settle_time_s: float,
+        recenter_max_iterations: int,
+        recenter_stability_wait_s: float,
+        recenter_alignment_threshold_mm: float,
+    ) -> TcpOffsetCalibrationDialogResult | None:
+        dialog = _TcpOffsetCalibrationDialog(
+            marker_id=marker_id,
+            rotation_step_deg=rotation_step_deg,
+            iterations=iterations,
+            approach_z=approach_z,
+            approach_rx=approach_rx,
+            approach_ry=approach_ry,
+            approach_rz=approach_rz,
+            velocity=velocity,
+            acceleration=acceleration,
+            settle_time_s=settle_time_s,
+            recenter_max_iterations=recenter_max_iterations,
+            recenter_stability_wait_s=recenter_stability_wait_s,
+            recenter_alignment_threshold_mm=recenter_alignment_threshold_mm,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.get_result()
 
     def set_measure_marker_heights_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_measure_marker_heights_enabled(enabled)

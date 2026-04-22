@@ -67,6 +67,9 @@ class CalibrationControlsPanel(QWidget):
         self.calibrate_camera_tcp_offset_btn = MaterialButton("Calibrate Camera TCP Offset")
         self.calibrate_camera_tcp_offset_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_camera_tcp_offset_btn.setEnabled(False)
+        self.calibrate_camera_z_shift_btn = MaterialButton("Calibrate XY Shift vs Z")
+        self.calibrate_camera_z_shift_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.calibrate_camera_z_shift_btn.setEnabled(False)
         self.calibrate_sequence_btn = MaterialButton("Calibrate Camera → Robot")
         self.calibrate_sequence_btn.setStyleSheet(APP_SEQUENCE_BUTTON_STYLE)
         self.stop_robot_btn = MaterialButton("⏹  Stop Active Task")
@@ -122,6 +125,7 @@ class CalibrationControlsPanel(QWidget):
         tab = RobotCalibrationTab(
             calibrate_robot_btn=self.calibrate_robot_btn,
             calibrate_tcp_btn=self.calibrate_camera_tcp_offset_btn,
+            calibrate_z_shift_btn=self.calibrate_camera_z_shift_btn,
             test_btn=self.test_calibration_btn,
             settings_schemas=[
                 CALIBRATION_ADAPTIVE_GROUP,
@@ -198,6 +202,9 @@ class CalibrationControlsPanel(QWidget):
 
     def set_camera_tcp_offset_enabled(self, enabled: bool) -> None:
         self.calibrate_camera_tcp_offset_btn.setEnabled(enabled)
+
+    def set_camera_z_shift_enabled(self, enabled: bool) -> None:
+        self.calibrate_camera_z_shift_btn.setEnabled(enabled)
 
     def set_measure_marker_heights_enabled(self, enabled: bool) -> None:
         self.measure_marker_heights_btn.setEnabled(enabled)

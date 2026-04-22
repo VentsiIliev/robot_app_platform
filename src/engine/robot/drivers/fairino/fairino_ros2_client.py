@@ -103,17 +103,17 @@ class FairinoRos2Client:
             response = requests.post(f"{self.server_url}/move/linear", json=payload, timeout=30)
             logger.debug("move_liner ← http=%s response_text=%r", response.status_code,
                          response.text[:500] if response.text else "(empty)")
-
-            if not response.text:
-                logger.error("move_liner: bridge returned empty response (http=%s)", response.status_code)
-                self._mark_unavailable("Bridge returned empty response")
-                return 0
-
-            if response.status_code >= 400:
-                logger.error("move_liner: bridge returned error (http=%s): %s", response.status_code,
-                             response.text[:200])
-                self._mark_unavailable(f"Bridge HTTP {response.status_code}")
-                return 0
+            #
+            # if not response.text:
+            #     logger.error("move_liner: bridge returned empty response (http=%s)", response.status_code)
+            #     self._mark_unavailable("Bridge returned empty response")
+            #     return 0
+            #
+            # if response.status_code >= 400:
+            #     logger.error("move_liner: bridge returned error (http=%s): %s", response.status_code,
+            #                  response.text[:200])
+            #     self._mark_unavailable(f"Bridge HTTP {response.status_code}")
+            #     return 0
 
             raw = response.json()
             self._mark_available()

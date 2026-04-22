@@ -11,7 +11,7 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class MotionService(IMotionService):
-    _WAIT_THRESHOLD_MM = 0.5
+    _WAIT_THRESHOLD_MM = 2
     _WAIT_THRESHOLD_DEG = 1.0
     _WAIT_DELAY_S = 0.1
     _WAIT_TIMEOUT_S = 10.0

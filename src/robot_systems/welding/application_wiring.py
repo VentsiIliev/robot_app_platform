@@ -233,6 +233,9 @@ def _build_calibration_application(robot_system):
     from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
         CameraTcpOffsetCalibrationService,
     )
+    from src.engine.robot.calibration.camera_z_shift_calibration_service import (
+        CameraZShiftCalibrationService,
+    )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
@@ -256,6 +259,20 @@ def _build_calibration_application(robot_system):
     )
     camera_tcp_offset_calibrator = (
         CameraTcpOffsetCalibrationService(
+            vision_service=vision_service,
+            robot_service=robot_service,
+            navigation_service=navigation_service,
+            settings_service=robot_system._settings_service,
+            robot_config_key=CommonSettingsID.ROBOT_CONFIG,
+            robot_config=robot_system._robot_config,
+            calibration_settings=robot_system._robot_calibration,
+            robot_tool=robot_system._robot_config.robot_tool,
+            robot_user=robot_system._robot_config.robot_user,
+        )
+        if vision_service is not None and robot_service is not None and robot_config is not None else None
+    )
+    camera_z_shift_calibrator = (
+        CameraZShiftCalibrationService(
             vision_service=vision_service,
             robot_service=robot_service,
             navigation_service=navigation_service,
@@ -310,6 +327,7 @@ def _build_calibration_application(robot_system):
         transformer=transformer,
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
+        camera_z_shift_calibrator=camera_z_shift_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),

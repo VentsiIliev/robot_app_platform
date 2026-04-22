@@ -41,6 +41,22 @@ class StubCalibrationService(ICalibrationService):
         _logger.info("Stub: calibrate_camera_tcp_offset")
         return True, "Stub: camera TCP offset calibrated"
 
+    def calibrate_camera_z_shift(
+        self,
+        marker_id: int,
+        samples: int,
+        z_step_mm: float,
+        settle_time_s: float,
+    ) -> tuple[bool, str]:
+        _logger.info(
+            "Stub: calibrate_camera_z_shift marker_id=%s samples=%s z_step_mm=%s settle_time_s=%s",
+            marker_id, samples, z_step_mm, settle_time_s,
+        )
+        return True, (
+            f"Stub: camera Z shift calibrated for marker {marker_id} "
+            f"(samples={samples}, z_step={z_step_mm}, settle={settle_time_s})"
+        )
+
     def calibrate_laser(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_laser")
         return True, "Stub: laser calibrated"

@@ -3,6 +3,7 @@ from typing import List, Tuple, Callable
 import copy
 
 import numpy as np
+import cv2
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -15,6 +16,8 @@ from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
 from src.applications.base.styled_message_box import show_warning, show_info, show_critical
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
+
+_DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
 
 
 class _Bridge(QObject):
@@ -38,6 +41,7 @@ class WorkpieceEditorController(IApplicationController):
         self._latest_frame_shape = None
         self._dxf_test_button = None
         self._current_dxf_path = ""
+        self._captured_pickup_point = None
 
     def load(self) -> None:
         self._active        = True
@@ -101,6 +105,7 @@ class WorkpieceEditorController(IApplicationController):
         # Stop live camera feed so the captured frame stays visible
         self._camera_active = False
         self._current_dxf_path = ""
+        self._captured_pickup_point = self._compute_contour_centroid(largest)
         self._clear_verification_overlay()
 
         known_raw = self._try_prepare_known_workpiece_capture(largest)
@@ -114,6 +119,7 @@ class WorkpieceEditorController(IApplicationController):
 
         try:
             self._load_capture_contour_into_editor(largest)
+            self._set_pickup_point_overlay()
         except Exception:
             self._logger.exception("Capture: failed to load contour into editor")
 
@@ -192,7 +198,11 @@ class WorkpieceEditorController(IApplicationController):
     def _set_verification_overlay_from_raw(self, raw: dict) -> None:
         try:
             points = self._extract_raw_contour_points(raw)
-            self._view._editor.set_verification_contours([points] if len(points) >= 2 else [])
+            overlays = [points] if len(points) >= 2 else []
+            pickup_point = self._parse_pickup_point((raw or {}).get("pickupPoint"))
+            if pickup_point is not None:
+                overlays.extend(self._build_pickup_point_overlay(pickup_point))
+            self._view._editor.set_verification_contours(overlays)
         except Exception:
             self._logger.debug("Failed to set DXF verification overlay", exc_info=True)
 
@@ -222,6 +232,17 @@ class WorkpieceEditorController(IApplicationController):
             self._view._editor.clear_verification_contours()
         except Exception:
             self._logger.debug("Failed to clear DXF verification overlay", exc_info=True)
+
+    def _set_pickup_point_overlay(self) -> None:
+        try:
+            if self._captured_pickup_point is None:
+                self._view._editor.set_verification_contours([])
+                return
+            self._view._editor.set_verification_contours(
+                self._build_pickup_point_overlay(self._captured_pickup_point)
+            )
+        except Exception:
+            self._logger.debug("Failed to set pickup point overlay", exc_info=True)
 
     def _install_optional_actions(self) -> None:
         if not self._model.can_import_dxf_test():
@@ -343,54 +364,9 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, "Match Workpiece Failed", str(exc))
 
     def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour) -> dict:
-        from src.engine.vision.implementation.VisionSystem.features.contour_matching.utils import calculate_mask_overlap
+        from src.robot_systems.paint.processes.workpiece_alignment import align_raw_workpiece_to_contour
 
-        aligned = copy.deepcopy(raw)
-        source_points = self._extract_raw_contour_points(aligned)
-        target_points = self._normalize_contour_points(captured_contour)
-        if len(source_points) < 3 or len(target_points) < 3:
-            return aligned
-
-        source_resampled = self._resample_closed_path(source_points, 180)
-        target_resampled = self._resample_closed_path(target_points, 180)
-        source_centroid = np.mean(source_resampled, axis=0)
-        target_centroid = np.mean(target_resampled, axis=0)
-        base_theta = self._principal_axis_angle(target_resampled - target_centroid) - self._principal_axis_angle(
-            source_resampled - source_centroid
-        )
-
-        candidate_thetas = [base_theta, base_theta + np.pi]
-        best_theta = min(
-            candidate_thetas,
-            key=lambda theta: self._alignment_error(
-                self._rotate_points(source_resampled, source_centroid, theta) - source_centroid + target_centroid,
-                target_resampled,
-            ),
-        )
-        initial_translation = target_centroid - source_centroid
-        best_theta, best_translation = self._refine_alignment_with_mask_overlap(
-            source_resampled,
-            target_resampled,
-            source_centroid,
-            best_theta,
-            initial_translation,
-            calculate_mask_overlap,
-        )
-
-        def _transform_contour(contour_array):
-            for point in contour_array or []:
-                if point and point[0]:
-                    vec = np.array([float(point[0][0]), float(point[0][1])], dtype=float)
-                    mapped = self._rotate_points(vec[None, :], source_centroid, best_theta)[0] + best_translation
-                    point[0][0] = float(mapped[0])
-                    point[0][1] = float(mapped[1])
-
-        _transform_contour(aligned.get("contour"))
-        spray = aligned.get("sprayPattern") or {}
-        for key in ("Contour", "Fill"):
-            for segment in spray.get(key, []):
-                _transform_contour(segment.get("contour"))
-        return aligned
+        return align_raw_workpiece_to_contour(raw, captured_contour)
 
     @staticmethod
     def _extract_raw_contour_points(raw: dict) -> np.ndarray:
@@ -458,6 +434,36 @@ class WorkpieceEditorController(IApplicationController):
         return (points - center) @ rotation.T + center
 
     @staticmethod
+    def _rotate_and_scale_points(points: np.ndarray, center: np.ndarray, theta: float, scale: float) -> np.ndarray:
+        rotation = np.array(
+            [
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)],
+            ],
+            dtype=np.float64,
+        )
+        return ((points - center) @ rotation.T) * float(scale) + center
+
+    @classmethod
+    def _transform_points(
+        cls,
+        points: np.ndarray,
+        center: np.ndarray,
+        theta: float,
+        scale: float,
+        translation: np.ndarray,
+    ) -> np.ndarray:
+        return cls._rotate_and_scale_points(points, center, theta, scale) + translation
+
+    @staticmethod
+    def _estimate_uniform_scale(source_centered: np.ndarray, target_centered: np.ndarray) -> float:
+        source_norm = float(np.sqrt(np.sum(source_centered * source_centered)))
+        target_norm = float(np.sqrt(np.sum(target_centered * target_centered)))
+        if source_norm <= 1e-9 or target_norm <= 1e-9:
+            return 1.0
+        return max(1e-3, target_norm / source_norm)
+
+    @staticmethod
     def _alignment_error(source_points: np.ndarray, target_points: np.ndarray) -> float:
         if len(source_points) == 0 or len(target_points) == 0:
             return float("inf")
@@ -471,54 +477,62 @@ class WorkpieceEditorController(IApplicationController):
         target_points: np.ndarray,
         source_centroid: np.ndarray,
         initial_theta: float,
+        initial_scale: float,
         initial_translation: np.ndarray,
         overlap_fn,
-    ) -> tuple[float, np.ndarray]:
+    ) -> tuple[float, float, np.ndarray]:
         best_theta = float(initial_theta)
+        best_scale = max(1e-3, float(initial_scale))
         best_translation = np.asarray(initial_translation, dtype=np.float64)
         best_overlap = WorkpieceEditorController._mask_overlap_for_pose(
             source_points,
             target_points,
             source_centroid,
             best_theta,
+            best_scale,
             best_translation,
             overlap_fn,
         )
 
         rotation_steps_deg = [6.0, 2.0, 0.5]
         translation_steps_px = [12.0, 4.0, 1.5]
+        scale_steps = [0.10, 0.03, 0.01]
 
-        for rotation_step_deg, translation_step_px in zip(rotation_steps_deg, translation_steps_px):
+        for rotation_step_deg, translation_step_px, scale_step in zip(rotation_steps_deg, translation_steps_px, scale_steps):
             improved = True
             while improved:
                 improved = False
-                candidates: list[tuple[float, np.ndarray]] = [
-                    (best_theta - np.deg2rad(rotation_step_deg), best_translation),
-                    (best_theta + np.deg2rad(rotation_step_deg), best_translation),
-                    (best_theta, best_translation + np.array([translation_step_px, 0.0], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([-translation_step_px, 0.0], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([0.0, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([0.0, -translation_step_px], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([translation_step_px, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([translation_step_px, -translation_step_px], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([-translation_step_px, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_translation + np.array([-translation_step_px, -translation_step_px], dtype=np.float64)),
+                candidates: list[tuple[float, float, np.ndarray]] = [
+                    (best_theta - np.deg2rad(rotation_step_deg), best_scale, best_translation),
+                    (best_theta + np.deg2rad(rotation_step_deg), best_scale, best_translation),
+                    (best_theta, max(1e-3, best_scale * (1.0 - scale_step)), best_translation),
+                    (best_theta, best_scale * (1.0 + scale_step), best_translation),
+                    (best_theta, best_scale, best_translation + np.array([translation_step_px, 0.0], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, 0.0], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([0.0, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([0.0, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([translation_step_px, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, -translation_step_px], dtype=np.float64)),
                 ]
-                for candidate_theta, candidate_translation in candidates:
+                for candidate_theta, candidate_scale, candidate_translation in candidates:
                     overlap = WorkpieceEditorController._mask_overlap_for_pose(
                         source_points,
                         target_points,
                         source_centroid,
                         float(candidate_theta),
+                        float(candidate_scale),
                         np.asarray(candidate_translation, dtype=np.float64),
                         overlap_fn,
                     )
                     if overlap > best_overlap:
                         best_overlap = overlap
                         best_theta = float(candidate_theta)
+                        best_scale = float(candidate_scale)
                         best_translation = np.asarray(candidate_translation, dtype=np.float64)
                         improved = True
-        return best_theta, best_translation
+        return best_theta, best_scale, best_translation
 
     @staticmethod
     def _mask_overlap_for_pose(
@@ -526,10 +540,17 @@ class WorkpieceEditorController(IApplicationController):
         target_points: np.ndarray,
         source_centroid: np.ndarray,
         theta: float,
+        scale: float,
         translation: np.ndarray,
         overlap_fn,
     ) -> float:
-        transformed = WorkpieceEditorController._rotate_points(source_points, source_centroid, theta) + translation
+        transformed = WorkpieceEditorController._transform_points(
+            source_points,
+            source_centroid,
+            theta,
+            scale,
+            translation,
+        )
         return float(overlap_fn(transformed, target_points))
 
     def _on_save(self, data: dict) -> None:
@@ -540,6 +561,7 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, "Cannot Save", msg)
 
     def _on_execute(self, data: dict) -> None:
+        self._restore_live_feed()
         try:
             inner = self._view._editor.contourEditor.editor_with_rulers.editor
             editor_data = inner.workpiece_manager.export_editor_data()
@@ -628,6 +650,7 @@ class WorkpieceEditorController(IApplicationController):
         dialog.show()
 
     def _on_execute_preview_confirmed(self, mode: str) -> None:
+        self._restore_live_feed()
         if mode == "pivot_path":
             try:
                 source_paths = self._model.get_last_execution_preview_paths()
@@ -645,6 +668,7 @@ class WorkpieceEditorController(IApplicationController):
             show_critical(self._preview_dialog or self._view, "Execution Failed", msg)
 
     def _on_execute_pickup_to_pivot(self) -> None:
+        self._restore_live_feed()
         ok, msg = self._model.execute_pickup_to_pivot()
         self._logger.info("Execute pickup-to-pivot: %s — %s", ok, msg)
         if ok:
@@ -653,6 +677,7 @@ class WorkpieceEditorController(IApplicationController):
             show_critical(self._preview_dialog or self._view, "Pickup To Pivot Failed", msg)
 
     def _on_execute_pickup_and_pivot_paint(self) -> None:
+        self._restore_live_feed()
         ok, msg = self._model.execute_pickup_and_pivot_paint()
         self._logger.info("Execute pickup-and-pivot-paint: %s — %s", ok, msg)
         if ok:
@@ -715,6 +740,9 @@ class WorkpieceEditorController(IApplicationController):
         enriched = dict(form_data or {})
         if self._current_dxf_path and not str(enriched.get("dxfPath", "")).strip():
             enriched["dxfPath"] = self._current_dxf_path
+        if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
+            enriched["pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
+        enriched["height_mm"] = self._safe_float(enriched.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         return enriched
 
     def _load_capture_contour_into_editor(self, contour) -> None:
@@ -736,6 +764,7 @@ class WorkpieceEditorController(IApplicationController):
     def _load_raw_into_editor(self, raw: dict, storage_id=None) -> None:
         from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
 
+        raw = self._normalize_workpiece_raw(raw)
         editor_data = WorkpieceAdapter.from_raw(raw)
         inner = self._view._editor.contourEditor.editor_with_rulers.editor
         inner.workpiece_manager.clear_workpiece()
@@ -743,12 +772,82 @@ class WorkpieceEditorController(IApplicationController):
         self._view._editor.contourEditor.data = raw
         self._model.set_editing(storage_id)
         self._current_dxf_path = str(raw.get("dxfPath", "") or "")
+        if raw.get("pickupPoint"):
+            self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
         self._logger.info("Loaded workpiece into editor (storage_id=%s)", storage_id)
         try:
             self._view._editor.pointManagerWidget.refresh_points()
             inner.update()
         except Exception:
             self._logger.debug("Failed to refresh editor after loading workpiece", exc_info=True)
+        self._set_pickup_point_overlay()
+
+    @staticmethod
+    def _compute_contour_centroid(contour) -> tuple[float, float] | None:
+        try:
+            contour_arr = np.asarray(contour, dtype=np.float32).reshape(-1, 1, 2)
+            if contour_arr.size == 0:
+                return None
+            moments = cv2.moments(contour_arr)
+            if abs(float(moments.get("m00", 0.0))) > 1e-9:
+                return float(moments["m10"] / moments["m00"]), float(moments["m01"] / moments["m00"])
+            flat_pts = contour_arr.reshape(-1, 2)
+            return float(np.mean(flat_pts[:, 0])), float(np.mean(flat_pts[:, 1]))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_pickup_point_overlay(pickup_point: tuple[float, float], size_px: float = 12.0) -> list[np.ndarray]:
+        cx = float(pickup_point[0])
+        cy = float(pickup_point[1])
+        half = float(size_px) * 0.5
+        horizontal = np.array(
+            [[[cx - half, cy]], [[cx + half, cy]]],
+            dtype=np.float32,
+        )
+        vertical = np.array(
+            [[[cx, cy - half]], [[cx, cy + half]]],
+            dtype=np.float32,
+        )
+        return [horizontal, vertical]
+
+    @staticmethod
+    def _parse_pickup_point(value) -> tuple[float, float] | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                x_str, y_str = value.split(",", 1)
+                return float(x_str), float(y_str)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            try:
+                return float(value[0]), float(value[1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, dict):
+            try:
+                return float(value["x"]), float(value["y"])
+            except (KeyError, TypeError, ValueError):
+                return None
+        return None
+
+    @staticmethod
+    def _safe_float(value, default: float) -> float:
+        try:
+            return float(str(value).replace(",", "")) if value is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    @classmethod
+    def _normalize_workpiece_raw(cls, raw: dict) -> dict:
+        normalized = dict(raw or {})
+        normalized["height_mm"] = cls._safe_float(normalized.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        return normalized
+
+    def _restore_live_feed(self) -> None:
+        self._camera_active = True
 
     def _try_prepare_known_workpiece_capture(self, captured_contour) -> dict | None:
         if not self._model.can_match_saved_workpieces():

@@ -90,6 +90,7 @@ class CameraTcpOffsetCalibrationConfig:
     retry_delay_s: float = 0.1
     recenter_max_iterations: int = 20
     recenter_stability_wait_s: float = 0.4
+    recenter_alignment_threshold_mm: float = 0.5
     min_samples: int = 3
     max_acceptance_std_mm: float = 10.0
 
@@ -112,6 +113,7 @@ class CameraTcpOffsetCalibrationConfig:
             retry_delay_s=float(data.get("retry_delay_s", 0.1)),
             recenter_max_iterations=int(data.get("recenter_max_iterations", 20)),
             recenter_stability_wait_s=float(data.get("recenter_stability_wait_s", 0.4)),
+            recenter_alignment_threshold_mm=float(data.get("recenter_alignment_threshold_mm", 0.5)),
             min_samples=int(data.get("min_samples", 3)),
             max_acceptance_std_mm=float(data.get("max_acceptance_std_mm", 10.0)),
         )
@@ -134,6 +136,7 @@ class CameraTcpOffsetCalibrationConfig:
             "retry_delay_s": self.retry_delay_s,
             "recenter_max_iterations": self.recenter_max_iterations,
             "recenter_stability_wait_s": self.recenter_stability_wait_s,
+            "recenter_alignment_threshold_mm": self.recenter_alignment_threshold_mm,
             "min_samples": self.min_samples,
             "max_acceptance_std_mm": self.max_acceptance_std_mm,
         }

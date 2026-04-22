@@ -126,6 +126,18 @@ class _ICameraTcpOffsetCalibrator(Protocol):
     def stop(self) -> None: ...
 
 
+class _ICameraZShiftCalibrator(Protocol):
+    def calibrate(
+        self,
+        marker_id: int,
+        samples: int,
+        z_step_mm: float,
+        settle_time_s: float,
+    ) -> tuple[bool, str]: ...
+
+    def stop(self) -> None: ...
+
+
 class _IMarkerHeightMappingService(Protocol):
     def measure_marker_heights(self) -> tuple[bool, str]: ...
     def generate_area_grid(
@@ -178,6 +190,7 @@ class CalibrationApplicationService(ICalibrationService):
                  transformer: ICoordinateTransformer = None,
                  work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
+                 camera_z_shift_calibrator: Optional[_ICameraZShiftCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
                  calibration_settings_service: Optional[ICalibrationSettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
@@ -196,6 +209,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._transformer         = transformer
         self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
+        self._camera_z_shift_calibrator = camera_z_shift_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
         self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
         self._laser_calibration_service = laser_calibration_service
@@ -846,6 +860,24 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Camera TCP offset calibration is not configured"
         return self._camera_tcp_offset_calibrator.calibrate()
 
+    def calibrate_camera_z_shift(
+        self,
+        marker_id: int,
+        samples: int,
+        z_step_mm: float,
+        settle_time_s: float,
+    ) -> tuple[bool, str]:
+        if not self.is_calibrated():
+            return False, "System not calibrated — run robot calibration first"
+        if self._camera_z_shift_calibrator is None:
+            return False, "Camera Z shift calibration is not configured"
+        return self._camera_z_shift_calibrator.calibrate(
+            marker_id,
+            samples,
+            z_step_mm,
+            settle_time_s,
+        )
+
     def calibrate_laser(self) -> tuple[bool, str]:
         if self._laser_calibration_service is None:
             return False, "Laser calibration is not configured"
@@ -895,6 +927,8 @@ class CalibrationApplicationService(ICalibrationService):
         self._stop_laser_calibration.set()
         if self._camera_tcp_offset_calibrator is not None:
             self._camera_tcp_offset_calibrator.stop()
+        if self._camera_z_shift_calibrator is not None:
+            self._camera_z_shift_calibrator.stop()
         if self._marker_height_mapping_service is not None:
             self._marker_height_mapping_service.stop()
 

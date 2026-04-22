@@ -2,212 +2,57 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Callable, Optional
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Callable, Optional
 
 import numpy as np
 
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor
+from src.engine.robot.targeting.jog_frame_pose_resolver import _rotate_xy
+from src.robot_systems.paint.processes.config import PivotSimulationConfig, _PIVOT_TRANSLATION_AXIS_OFFSETS_DEG, \
+    _PIVOT_SIDE_SIGNS, _PIVOT_TRANSLATION_DIRECTION_SIGNS, _PICKUP_APPROACH_OFFSET_MM, _PICKUP_DEFAULT_VEL_PERCENT, \
+    _PICKUP_DEFAULT_ACC_PERCENT, _PICKUP_CONTACT_OFFSET_MM
+from src.robot_systems.paint.processes.match import _rotate_xy_about, _normalize_degrees, _unwrap_degrees
+from src.robot_systems.paint.processes.simulation import _rebase_pivot_path_to_zero_start_rz, \
+    _simulate_pivot_projected_motion
 
 _logger = logging.getLogger(__name__)
-_PIVOT_SIDE_PERPENDICULAR_DEG = 90.0
-_PIVOT_SMOOTH_MAX_LINEAR_STEP_MM = 1.0
-_PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG = 0.2
-_PIVOT_ROTATION_DEADBAND_DEG = 0.5
-_PICKUP_DEFAULT_Z_MM = 300.0
-_PICKUP_DEFAULT_VEL_PERCENT = 20.0
-_PICKUP_DEFAULT_ACC_PERCENT = 20.0
 
 
-def _rotate_xy_about(point_xy: tuple[float, float], angle_degrees: float, pivot_xy: tuple[float, float]) -> tuple[float, float]:
-    angle_rad = float(np.radians(angle_degrees))
-    cos_a = float(np.cos(angle_rad))
-    sin_a = float(np.sin(angle_rad))
-    px, py = float(point_xy[0]), float(point_xy[1])
-    ox, oy = float(pivot_xy[0]), float(pivot_xy[1])
-    dx = px - ox
-    dy = py - oy
-    return (
-        ox + cos_a * dx - sin_a * dy,
-        oy + sin_a * dx + cos_a * dy,
+# TODO THERE SHOULD BE CLEAR METHODS
+# 1.DECENT
+# 2.PICKUP
+# 3.LIFT
+# 4.MOVE TO PIVOT
+# 5.EXECUTE PIVOT PATH
+# 6.UNWIND
+
+#CURRENTLY THE PICKUP AND PIVOT EXECUTION ARE ALL INTERMINGLED IN A WAY THAT IS NOT IDEAL. THE PICKUP TO PIVOT SHOULD BE A CLEAR SEPARATE PHASE THAT CAN BE REUSED IN OTHER CONTEXTS. THE PIVOT PATH EXECUTION SHOULD ALSO BE SEPARATE AND NOT HAVE ANY PICKUP-SPECIFIC LOGIC IN IT. NEED TO SPLIT THESE OUT INTO CLEAR METHODS AND THEN COMPOSE THEM IN THE HIGH-LEVEL EXECUTE METHODS. THIS WILL ALSO MAKE IT EASIER TO TEST THE INDIVIDUAL PHASES AND REUSE THEM IN OTHER CONTEXTS (E.G. NON-PAINTING APPLICATIONS THAT STILL WANT TO USE THE PICKUP TO PIVOT ALIGNMENT LOGIC)
+# FOR THE PICKUP TOOL IS USED FOR TARGETING WHILE FOR THE MOVE TO PIVOT USES CAMERA EG NOT APPLING CAMERA TO TOOL OFFSET!
+
+def _normalize_pivot_config(
+    *,
+    translation_axis: str = "x",
+    pivot_side: str = "negative",
+    translation_direction: str = "forward",
+    apply_camera_to_tcp_for_pickup: bool = False,
+    camera_to_tcp_x_offset: float = 0.0,
+    camera_to_tcp_y_offset: float = 0.0,
+) -> PivotSimulationConfig:
+    axis_key = str(translation_axis or "x").strip().lower()
+    side_key = str(pivot_side or "negative").strip().lower()
+    direction_key = str(translation_direction or "forward").strip().lower()
+    return PivotSimulationConfig(
+        translation_axis=axis_key if axis_key in _PIVOT_TRANSLATION_AXIS_OFFSETS_DEG else "x",
+        pivot_side=side_key if side_key in _PIVOT_SIDE_SIGNS else "negative",
+        translation_direction=(
+            direction_key if direction_key in _PIVOT_TRANSLATION_DIRECTION_SIGNS else "forward"
+        ),
+        apply_camera_to_tcp_for_pickup=bool(apply_camera_to_tcp_for_pickup),
+        camera_to_tcp_x_offset=float(camera_to_tcp_x_offset),
+        camera_to_tcp_y_offset=float(camera_to_tcp_y_offset),
     )
-
-
-def _unwrap_degrees(previous: float, current: float) -> float:
-    value = float(current)
-    prev = float(previous)
-    while value - prev > 180.0:
-        value -= 360.0
-    while value - prev < -180.0:
-        value += 360.0
-    return value
-
-
-def _densify_pose_path(
-    poses: list[list[float]],
-    max_linear_step_mm: float = _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM,
-    max_angular_step_deg: float = _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG,
-) -> list[list[float]]:
-    if len(poses) < 2:
-        return [list(pose) for pose in poses]
-
-    densified: list[list[float]] = [list(poses[0])]
-    max_linear_step_mm = max(float(max_linear_step_mm), 1e-3)
-    max_angular_step_deg = max(float(max_angular_step_deg), 1e-3)
-
-    for target_pose in poses[1:]:
-        start_pose = densified[-1]
-        end_pose = list(target_pose)
-        dx = float(end_pose[0]) - float(start_pose[0])
-        dy = float(end_pose[1]) - float(start_pose[1])
-        dz = float(end_pose[2]) - float(start_pose[2])
-        linear_distance = float(np.sqrt(dx * dx + dy * dy + dz * dz))
-        angular_delta = abs(_unwrap_degrees(float(start_pose[5]), float(end_pose[5])) - float(start_pose[5]))
-        steps = max(1, int(np.ceil(max(
-            linear_distance / max_linear_step_mm,
-            angular_delta / max_angular_step_deg,
-        ))))
-
-        previous_rz = float(start_pose[5])
-        target_rz = _unwrap_degrees(previous_rz, float(end_pose[5]))
-        for step_index in range(1, steps + 1):
-            ratio = step_index / steps
-            interpolated = [
-                float(start_pose[0]) + dx * ratio,
-                float(start_pose[1]) + dy * ratio,
-                float(start_pose[2]) + dz * ratio,
-                float(start_pose[3]) + (float(end_pose[3]) - float(start_pose[3])) * ratio,
-                float(start_pose[4]) + (float(end_pose[4]) - float(start_pose[4])) * ratio,
-                previous_rz + (target_rz - previous_rz) * ratio,
-            ]
-            densified.append(interpolated)
-
-    return densified
-
-
-def _rebase_pivot_path_to_zero_start_rz(path: list[list[float]]) -> list[list[float]]:
-    if not path:
-        return []
-    rebased = [list(pose) for pose in path]
-    start_rz = float(rebased[0][5]) if len(rebased[0]) >= 6 else 0.0
-    for pose in rebased:
-        if len(pose) >= 6:
-            pose[5] = _unwrap_degrees(0.0, float(pose[5]) - start_rz)
-    return rebased
-
-
-def _simulate_pivot_projected_motion(
-    path: list[list[float]],
-    pivot_pose: list[float],
-) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
-    if not path:
-        return [], [], []
-    if len(path) == 1:
-        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)], []
-
-    pivot_x = float(pivot_pose[0])
-    pivot_y = float(pivot_pose[1])
-    pivot_z = float(pivot_pose[2]) if len(pivot_pose) >= 3 else float(path[0][2])
-    rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
-    ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
-    base_rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
-    # Use the opposite perpendicular branch so the pivot path runs on the
-    # other side of the pivot relative to the previous paint behavior.
-    paint_axis_heading = base_rz + _PIVOT_SIDE_PERPENDICULAR_DEG
-
-    points = np.array([[float(point[0]), float(point[1])] for point in path], dtype=float)
-    if len(points) < 2:
-        return (
-            [[float(points[0][0]), float(points[0][1]), pivot_z, rx, ry, base_rz]],
-            [points.copy()],
-            [],
-        )
-
-    def _centroid_xy(current_points: np.ndarray) -> tuple[float, float]:
-        return (float(np.mean(current_points[:, 0])), float(np.mean(current_points[:, 1])))
-
-    def _rotate_shape(current_points: np.ndarray, angle_deg: float, pivot_xy: tuple[float, float]) -> np.ndarray:
-        return np.array(
-            [_rotate_xy_about((float(point[0]), float(point[1])), angle_deg, pivot_xy) for point in current_points],
-            dtype=float,
-        )
-
-    def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
-        dx = float(point_b[0] - point_a[0])
-        dy = float(point_b[1] - point_a[1])
-        return float(np.degrees(np.arctan2(dy, dx)))
-
-    pivot_xy = (pivot_x, pivot_y)
-    initial_heading = _segment_heading_deg(points[0], points[1])
-    initial_rotation = _unwrap_degrees(0.0, paint_axis_heading - initial_heading)
-    points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
-    translate_to_pivot = np.array([pivot_x - float(points[0][0]), pivot_y - float(points[0][1])], dtype=float)
-    points = points + translate_to_pivot
-
-    current_rz = _unwrap_degrees(base_rz, base_rz + initial_rotation)
-    result: list[list[float]] = []
-    snapshots: list[np.ndarray] = []
-    diagnostics: list[dict[str, float | int]] = []
-    center_xy = _centroid_xy(points)
-    result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-    snapshots.append(points.copy())
-    diagnostics.append(
-        {
-            "index": 0,
-            "segment_length": 0.0,
-            "segment_heading": initial_heading,
-            "rotation_delta_raw": initial_rotation,
-            "rotation_delta_applied": initial_rotation,
-            "current_rz": current_rz,
-        }
-    )
-
-    axis_vector = np.array(
-        [
-            float(np.cos(np.radians(paint_axis_heading))),
-            float(np.sin(np.radians(paint_axis_heading))),
-        ],
-        dtype=float,
-    )
-
-    for index in range(len(points) - 1):
-        current_point = points[index]
-        next_point = points[index + 1]
-        segment_length = float(np.linalg.norm(next_point - current_point))
-        if segment_length <= 1e-9:
-            center_xy = _centroid_xy(points)
-            result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-            snapshots.append(points.copy())
-            continue
-
-        segment_heading = _segment_heading_deg(current_point, next_point)
-        rotation_delta_raw = _unwrap_degrees(0.0, paint_axis_heading - segment_heading)
-        rotation_delta = rotation_delta_raw
-        if abs(rotation_delta) < _PIVOT_ROTATION_DEADBAND_DEG:
-            rotation_delta = 0.0
-        if abs(rotation_delta) > 1e-9:
-            points = _rotate_shape(points, rotation_delta, pivot_xy)
-            current_rz = _unwrap_degrees(current_rz, current_rz + rotation_delta)
-
-        points = points - axis_vector * segment_length
-        center_xy = _centroid_xy(points)
-        result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
-        snapshots.append(points.copy())
-        diagnostics.append(
-            {
-                "index": index + 1,
-                "segment_length": segment_length,
-                "segment_heading": segment_heading,
-                "rotation_delta_raw": rotation_delta_raw,
-                "rotation_delta_applied": rotation_delta,
-                "current_rz": current_rz,
-            }
-        )
-
-    result = result[:len(path)]
-    snapshots = snapshots[:len(path)]
-    diagnostics = diagnostics[:len(path)]
-    return result, snapshots, diagnostics
 
 
 class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
@@ -216,18 +61,62 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         robot_service,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         post_execute_callback: Optional[Callable[[], bool]] = None,
+        robot_config_provider: Optional[Callable[[], object]] = None,
+        vacuum_pump=None,
         pickup_tool: int = 0,
         pickup_user: int = 0,
         pickup_z_mm: float | None = None,
         debug_dump_dir: str | None = None,
+        pivot_translation_axis: str = "x",
+        pivot_side: str = "negative",
+        pivot_translation_direction: str = "forward",
+        apply_camera_to_tcp_for_pickup: bool = False,
+        camera_to_tcp_x_offset: float = 0.0,
+        camera_to_tcp_y_offset: float = 0.0,
     ) -> None:
         self._robot_service = robot_service
         self._base_position_provider = base_position_provider
         self._post_execute_callback = post_execute_callback
+        self._robot_config_provider = robot_config_provider
+        self._vacuum_pump = vacuum_pump
         self._pickup_tool = int(pickup_tool)
         self._pickup_user = int(pickup_user)
         self._pickup_z_mm = None if pickup_z_mm is None else float(pickup_z_mm)
+        self._pickup_safety_z_min_mm = 100.0
         self._debug_dump_dir = debug_dump_dir
+        self._pivot_config = _normalize_pivot_config(
+            translation_axis=pivot_translation_axis,
+            pivot_side=pivot_side,
+            translation_direction=pivot_translation_direction,
+            apply_camera_to_tcp_for_pickup=apply_camera_to_tcp_for_pickup,
+            camera_to_tcp_x_offset=camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=camera_to_tcp_y_offset,
+        )
+
+    def _refresh_runtime_config(self) -> None:
+        if self._robot_config_provider is None:
+            return
+        try:
+            robot_config = self._robot_config_provider()
+        except Exception:
+            _logger.debug("[PICKUP] Failed to refresh robot config", exc_info=True)
+            return
+        if robot_config is None:
+            return
+        self._pickup_tool = int(getattr(robot_config, "robot_tool", self._pickup_tool))
+        self._pickup_user = int(getattr(robot_config, "robot_user", self._pickup_user))
+        try:
+            self._pickup_safety_z_min_mm = float(getattr(getattr(robot_config, "safety_limits", None), "z_min", self._pickup_safety_z_min_mm))
+        except Exception:
+            pass
+        self._pivot_config = _normalize_pivot_config(
+            translation_axis=self._pivot_config.translation_axis,
+            pivot_side=self._pivot_config.pivot_side,
+            translation_direction=self._pivot_config.translation_direction,
+            apply_camera_to_tcp_for_pickup=self._pivot_config.apply_camera_to_tcp_for_pickup,
+            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", self._pivot_config.camera_to_tcp_x_offset)),
+            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", self._pivot_config.camera_to_tcp_y_offset)),
+        )
 
     def _write_pivot_debug_dump(
         self,
@@ -318,7 +207,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            center_path, _, diagnostics = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            center_path, _, diagnostics = _simulate_pivot_projected_motion(
+                source_path,
+                pivot_pose,
+                self._pivot_config,
+            )
             self._write_pivot_debug_dump(
                 source_path=source_path,
                 pivot_path=center_path,
@@ -342,65 +235,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            _, snapshots, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
+            _, snapshots, _ = _simulate_pivot_projected_motion(
+                source_path,
+                pivot_pose,
+                self._pivot_config,
+            )
             motion.append(snapshots)
         return motion, list(pivot_pose)
 
-    def _build_pickup_and_stage_poses(
-        self,
-        execution_preview_jobs: list[dict],
-    ) -> tuple[list[float], list[float]] | tuple[None, None]:
-        if not execution_preview_jobs:
-            return None, None
-
-        pivot_pose = self._resolve_base_position()
-        if pivot_pose is None or len(pivot_pose) < 3:
-            return None, None
-
-        source_path = execution_preview_jobs[0].get("execution_path") or execution_preview_jobs[0].get("path") or []
-        if not source_path:
-            return None, None
-
-        pivot_path, _, _ = _simulate_pivot_projected_motion(source_path, pivot_pose)
-        if not pivot_path:
-            return None, None
-
-        first_pivot_pose = list(pivot_path[0])
-        source_xy = np.array([
-            [float(point[0]), float(point[1])]
-            for point in source_path
-            if len(point) >= 2
-        ], dtype=float)
-        if source_xy.size == 0:
-            return None, None
-        pickup_centroid_x = float(np.mean(source_xy[:, 0]))
-        pickup_centroid_y = float(np.mean(source_xy[:, 1]))
-
-        pickup_z = self._pickup_z_mm
-        if pickup_z is None:
-            pickup_z = float(pivot_pose[2]) if len(pivot_pose) >= 3 else _PICKUP_DEFAULT_Z_MM
-
-        # Pick up at the workpiece centroid with the inverse of the first pivot
-        # orientation so that after the robot returns to RZ=0 the workpiece's
-        # first point is already aligned with the pivot-path start.
-        pickup_rz = _unwrap_degrees(0.0, -float(first_pivot_pose[5]))
-        pickup_pose = [
-            pickup_centroid_x,
-            pickup_centroid_y,
-            float(pickup_z),
-            float(first_pivot_pose[3]),
-            float(first_pivot_pose[4]),
-            pickup_rz,
-        ]
-        staged_pose = [
-            float(first_pivot_pose[0]),
-            float(first_pivot_pose[1]),
-            float(pickup_z),
-            float(first_pivot_pose[3]),
-            float(first_pivot_pose[4]),
-            0.0,
-        ]
-        return pickup_pose, staged_pose
 
     def _build_pivot_execution_path(
         self,
@@ -411,7 +253,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pivot_pose = self._resolve_base_position()
         if pivot_pose is None or len(pivot_pose) < 3:
             return None
-        pivot_path, _, _ = _simulate_pivot_projected_motion(spline, pivot_pose)
+        pivot_path, _, _ = _simulate_pivot_projected_motion(
+            spline,
+            pivot_pose,
+            self._pivot_config,
+        )
         _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:
             pivot_path = _rebase_pivot_path_to_zero_start_rz(pivot_path)
@@ -445,7 +291,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_pose = self._resolve_base_position()
             if pivot_pose is None or len(pivot_pose) < 3:
                 return False, "Pivot-path execution requires a valid base/pivot position"
-            pivot_path, _, diagnostics = _simulate_pivot_projected_motion(spline, pivot_pose)
+            pivot_path, _, diagnostics = _simulate_pivot_projected_motion(
+                spline,
+                pivot_pose,
+                self._pivot_config,
+            )
             if not pivot_path:
                 return False, "Pivot-path execution requires a valid base/pivot position"
             _logger.debug(f"Pivot path after build_pivot_execution_path: {len(pivot_path)}")
@@ -495,6 +345,100 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             f"{total_waypoints} waypoints in {mode} mode"
         )
 
+    def _build_pickup_and_stage_poses(
+            self,
+            execution_preview_jobs: list[dict],
+    ) -> tuple[list[float], list[float], list[float]] | tuple[None, None, None]:
+        self._refresh_runtime_config()
+        if not execution_preview_jobs:
+            return None, None, None
+
+        pivot_pose = self._resolve_base_position()
+        if pivot_pose is None or len(pivot_pose) < 3:
+            return None, None, None
+
+        source_path = execution_preview_jobs[0].get("execution_path") or execution_preview_jobs[0].get("path") or []
+        if not source_path:
+            return None, None, None
+
+        pivot_path, _, _ = _simulate_pivot_projected_motion(
+            source_path,
+            pivot_pose,
+            self._pivot_config,
+        )
+        if not pivot_path:
+            return None, None, None
+
+        first_pivot_pose = list(pivot_path[0])
+        pickup_target_point_name = str(
+            execution_preview_jobs[0].get("pickup_target_point_name", "") or ""
+        ).strip().lower()
+        workpiece_height_mm = float(execution_preview_jobs[0].get("workpiece_height_mm", 0.0) or 0.0)
+        pickup_xy = execution_preview_jobs[0].get("pickup_xy")
+        if pickup_xy is not None and len(pickup_xy) >= 2:
+            pickup_centroid_x = float(pickup_xy[0])
+            pickup_centroid_y = float(pickup_xy[1])
+        else:
+            source_xy = np.array([
+                [float(point[0]), float(point[1])]
+                for point in source_path
+                if len(point) >= 2
+            ], dtype=float)
+            if source_xy.size == 0:
+                return None, None, None
+            pickup_centroid_x = float(np.mean(source_xy[:, 0]))
+            pickup_centroid_y = float(np.mean(source_xy[:, 1]))
+
+        pickup_z = self._pickup_z_mm
+        if pickup_z is None:
+            pickup_z = self._pickup_safety_z_min_mm + workpiece_height_mm + _PICKUP_CONTACT_OFFSET_MM
+
+        pickup_rz = float(execution_preview_jobs[0].get("pickup_rz", 0.0))
+        should_apply_tcp_offset = False
+        pickup_tcp_dx, pickup_tcp_dy = 0.0, 0.0
+        _logger.info(
+            "[PICKUP] pickup_xy=(%.3f, %.3f) pickup_rz=%.3f pickup_target=%s workpiece_height=%.3f pickup_z=%.3f safety_z_min=%.3f apply_tcp_offset=%s configured_tcp_offset=(%.3f, %.3f) rotated_tcp_offset=(%.3f, %.3f)",
+            pickup_centroid_x,
+            pickup_centroid_y,
+            pickup_rz,
+            pickup_target_point_name or "camera",
+            workpiece_height_mm,
+            float(pickup_z),
+            self._pickup_safety_z_min_mm,
+            should_apply_tcp_offset,
+            self._pivot_config.camera_to_tcp_x_offset,
+            self._pivot_config.camera_to_tcp_y_offset,
+            pickup_tcp_dx,
+            pickup_tcp_dy,
+        )
+        pickup_approach_z = float(pickup_z) + _PICKUP_APPROACH_OFFSET_MM
+        pickup_approach_pose = [
+            pickup_centroid_x - pickup_tcp_dx,
+            pickup_centroid_y - pickup_tcp_dy,
+            pickup_approach_z,
+            float(first_pivot_pose[3]),
+            float(first_pivot_pose[4]),
+            pickup_rz,
+        ]
+        pickup_pose = [
+            pickup_centroid_x - pickup_tcp_dx,
+            pickup_centroid_y - pickup_tcp_dy,
+            float(pickup_z),
+            float(first_pivot_pose[3]),
+            float(first_pivot_pose[4]),
+            pickup_rz,
+        ]
+        staged_pose = [
+            float(first_pivot_pose[0]),
+            float(first_pivot_pose[1]),
+            pickup_approach_z,
+            float(first_pivot_pose[3]),
+            float(first_pivot_pose[4]),
+            0.0,
+        ]
+        return pickup_approach_pose, pickup_pose, staged_pose
+
+    # TODO PITOT PATH NEEDS TO USE TOOL. CAM TO TOOL OFFSETS NEED TO BE APPLIED
     def execute_pickup_to_pivot(
         self,
         execution_preview_jobs: list[dict],
@@ -502,16 +446,39 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if self._robot_service is None:
             return False, "Robot service is not available"
 
-        pickup_pose, staged_pose = self._build_pickup_and_stage_poses(execution_preview_jobs)
-        if pickup_pose is None or staged_pose is None:
+        pickup_approach_pose, pickup_pose, staged_pose = self._build_pickup_and_stage_poses(execution_preview_jobs)
+        if pickup_approach_pose is None or pickup_pose is None or staged_pose is None:
             return False, "Could not compute pickup-to-pivot poses"
 
         _logger.info(
-            "[PICKUP] Moving to pickup pose tool=%d user=%d pose=%s",
+            "[PICKUP] Moving to pickup approach pose tool=%d user=%d pose=%s",
+            self._pickup_tool,
+            self._pickup_user,
+            [round(v, 3) for v in pickup_approach_pose],
+        )
+        approach_ok = self._robot_service.move_ptp(
+            position=pickup_approach_pose,
+            tool=self._pickup_tool,
+            user=self._pickup_user,
+            velocity=_PICKUP_DEFAULT_VEL_PERCENT,
+            acceleration=_PICKUP_DEFAULT_ACC_PERCENT,
+            wait_to_reach=True,
+        )
+        if not approach_ok:
+            return False, "Pickup approach move failed"
+
+        if self._vacuum_pump is not None:
+            _logger.info("[PICKUP] Turning vacuum pump ON before pickup")
+            if not self._vacuum_pump.turn_on():
+                return False, "Pickup approach succeeded, but vacuum pump ON failed"
+
+        _logger.info(
+            "[PICKUP] Descending to pickup pose tool=%d user=%d pose=%s",
             self._pickup_tool,
             self._pickup_user,
             [round(v, 3) for v in pickup_pose],
         )
+        # TODO APPLY CAM TO TOOL OFFSET FOR THE MOVE TO PIVOT
         pickup_ok = self._robot_service.move_ptp(
             position=pickup_pose,
             tool=self._pickup_tool,
@@ -521,7 +488,24 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             wait_to_reach=True,
         )
         if not pickup_ok:
-            return False, "Pickup move failed"
+            return False, "Pickup descend move failed"
+
+        _logger.info(
+            "[PICKUP] Lifting from pickup pose tool=%d user=%d pose=%s",
+            self._pickup_tool,
+            self._pickup_user,
+            [round(v, 3) for v in pickup_approach_pose],
+        )
+        lift_ok = self._robot_service.move_ptp(
+            position=pickup_approach_pose,
+            tool=self._pickup_tool,
+            user=self._pickup_user,
+            velocity=_PICKUP_DEFAULT_VEL_PERCENT,
+            acceleration=_PICKUP_DEFAULT_ACC_PERCENT,
+            wait_to_reach=True,
+        )
+        if not lift_ok:
+            return False, "Pickup succeeded, but lift move failed"
 
         _logger.info(
             "[PICKUP] Moving to staged pivot pose tool=%d user=%d pose=%s",
@@ -537,6 +521,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             acceleration=_PICKUP_DEFAULT_ACC_PERCENT,
             wait_to_reach=True,
         )
+        if self._vacuum_pump is not None:
+            _logger.info("[PICKUP] Turning vacuum pump OFF after staged pivot move")
+            if not self._vacuum_pump.turn_off():
+                return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
         if not stage_ok:
             return False, "Pickup succeeded, but move-to-pivot failed"
 

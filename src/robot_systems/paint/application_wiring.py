@@ -28,23 +28,17 @@ def _build_capture_snapshot_service(robot_system):
     )
 
 
-def _build_paint_contour_editor_application(robot_system):
+def _build_paint_workpiece_editor_service(robot_system):
     import os
-    from contour_editor import AdditionalFormBehaviorProvider
 
-    from src.applications.base.widget_application import WidgetApplication
-    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
-    from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
     from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
-    from src.robot_systems.paint.domain.dxf_path_form_behavior import PaintDxfPathFormBehavior
-    from src.robot_systems.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
+    from src.robot_systems.paint.processes.workpiece_path_executor import PaintWorkpiecePathExecutor
     from src.robot_systems.paint.domain.contour_editor_schema import (
         build_paint_contour_form_schema,
         build_paint_segment_settings_schema,
     )
-    from src.engine.cad import import_dxf_to_workpiece_data
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
@@ -53,6 +47,12 @@ def _build_paint_contour_editor_application(robot_system):
     transformer, resolver = robot_system.get_shared_vision_resolver()
     camera_point_name = (
         getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
+    )
+    tool_point_name = (
+        getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
+    )
+    calibration_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
     )
     workpiece_service = PaintWorkpieceService(JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path()))
     debug_dump_dir = os.path.normpath(
@@ -75,7 +75,7 @@ def _build_paint_contour_editor_application(robot_system):
         except Exception:
             z_min = 0.0
 
-    service = WorkpieceEditorService(
+    return WorkpieceEditorService(
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
         save_fn=_save_fn,
@@ -99,17 +99,46 @@ def _build_paint_contour_editor_application(robot_system):
                 getattr(robot_system, "_navigation", None).move_to_calibration_position()
                 if getattr(robot_system, "_navigation", None) is not None else False
             ),
+            robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
+            vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
             pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
             pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
             debug_dump_dir=debug_dump_dir,
+            pivot_translation_axis="x",
+            pivot_side="positive",
+            pivot_translation_direction="reverse",
+            apply_camera_to_tcp_for_pickup=True,
+            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
+            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
         ),
         target_point_name=camera_point_name,
+        pickup_target_point_name=tool_point_name,
+        calibration_frame_name=calibration_frame_name,
         enable_dxf_import_test=True,
         execute_from_workpiece_layer=True,
         list_saved_workpieces_fn=workpiece_service.list_all,
         load_saved_workpiece_fn=workpiece_service.load_raw,
         run_matching_fn=vision_service.run_matching if vision_service is not None else None,
+        pixel_height_compensation_fn=(
+            lambda height_mm: (
+                float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
+                float(getattr(robot_config, "camera_z_shift_y_per_mm_px", 0.0)) * float(height_mm),
+            )
+            if robot_config is not None else (0.0, 0.0)
+        ),
     )
+
+
+def _build_paint_contour_editor_application(robot_system):
+    from contour_editor import AdditionalFormBehaviorProvider
+
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
+    from src.robot_systems.paint.domain.dxf_path_form_behavior import PaintDxfPathFormBehavior
+    from src.engine.cad import import_dxf_to_workpiece_data
+
+    service = _build_paint_workpiece_editor_service(robot_system)
 
     AdditionalFormBehaviorProvider.get().set_behaviors(
         [
@@ -270,6 +299,9 @@ def _build_calibration_application(robot_system):
     from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
         CameraTcpOffsetCalibrationService,
     )
+    from src.engine.robot.calibration.camera_z_shift_calibration_service import (
+        CameraZShiftCalibrationService,
+    )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
@@ -293,6 +325,20 @@ def _build_calibration_application(robot_system):
     )
     camera_tcp_offset_calibrator = (
         CameraTcpOffsetCalibrationService(
+            vision_service=vision_service,
+            robot_service=robot_service,
+            navigation_service=navigation_service,
+            settings_service=robot_system._settings_service,
+            robot_config_key=CommonSettingsID.ROBOT_CONFIG,
+            robot_config=robot_system._robot_config,
+            calibration_settings=robot_system._robot_calibration,
+            robot_tool=robot_system._robot_config.robot_tool,
+            robot_user=robot_system._robot_config.robot_user,
+        )
+        if vision_service is not None and robot_service is not None and robot_config is not None else None
+    )
+    camera_z_shift_calibrator = (
+        CameraZShiftCalibrationService(
             vision_service=vision_service,
             robot_service=robot_service,
             navigation_service=navigation_service,
@@ -347,6 +393,7 @@ def _build_calibration_application(robot_system):
         transformer=transformer,
         work_area_service=work_area_service,
         camera_tcp_offset_calibrator=camera_tcp_offset_calibrator,
+        camera_z_shift_calibrator=camera_z_shift_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
@@ -469,3 +516,45 @@ def _build_hand_eye_calibration_application(robot_system):
         return HandEyeCalibrationFactory().build(service, messaging=ms)
 
     return WidgetApplication(widget_factory=_factory)
+
+
+def _build_pick_target_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.pick_target.pick_target_factory import PickTargetFactory
+    from src.applications.pick_target.service.pick_target_application_service import PickTargetApplicationService
+
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    capture_snapshot_service = _build_capture_snapshot_service(robot_system)
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
+    _, resolver = robot_system.get_shared_vision_resolver()
+    height_service = getattr(robot_system, "_height_measuring_service", None)
+    default_target_name = (
+        robot_system.get_targeting_provider().get_default_target_name()
+        if robot_system.get_targeting_provider() is not None else ""
+    )
+    calibration_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("spray"), "name", "") or ""
+    )
+    pickup_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("pickup"), "name", "") or ""
+    )
+    service = PickTargetApplicationService(
+        vision_service=vision_service,
+        capture_snapshot_service=capture_snapshot_service,
+        robot_service=robot_service,
+        resolver=resolver,
+        robot_config=robot_system._robot_config,
+        navigation=robot_system._navigation,
+        height_measuring=height_service,
+        default_target_name=default_target_name,
+        calibration_frame_name=calibration_frame_name,
+        pickup_frame_name=pickup_frame_name,
+    )
+    jog_service = build_robot_system_jog_service(
+        robot_system,
+        reference_rz_provider=service.get_jog_reference_rz,
+    )
+    return WidgetApplication(
+        widget_factory=lambda ms: PickTargetFactory().build(service, messaging=ms, jog_service=jog_service)
+    )

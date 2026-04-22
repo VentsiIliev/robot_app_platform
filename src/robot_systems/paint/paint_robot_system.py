@@ -1,6 +1,7 @@
 import os
 
 from src.engine.common_service_ids import CommonServiceID
+from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
 from src.engine.robot.configuration import (
@@ -25,6 +26,8 @@ from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
+from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.service_builders import build_vacuum_pump_service
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
     ApplicationSpec,
@@ -167,6 +170,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_intrinsic_capture_application),
             ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
                             factory=application_wiring._build_hand_eye_calibration_application),
+            ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
+                            factory=application_wiring._build_pick_target_application),
         ],
     )
 
@@ -208,6 +213,13 @@ class PaintRobotSystem(BaseRobotSystem):
                     description="Shared work-area storage and active-area context"),
         ServiceSpec(CommonServiceID.VISION, IVisionService, required=False, description="Camera-based alignment",
                     ),
+        ServiceSpec(
+            name=ServiceID.VACUUM_PUMP,
+            service_type=IVacuumPumpController,
+            required=False,
+            description="Vacuum pump controller",
+            builder=build_vacuum_pump_service,
+        ),
 
     ]
 
@@ -217,6 +229,7 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
+        from src.robot_systems.paint.processes.paint_production_service import PaintProductionService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
@@ -233,6 +246,7 @@ class PaintRobotSystem(BaseRobotSystem):
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
+        self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
 
         if self._vision is not None:
             self._vision.start()
@@ -262,7 +276,16 @@ class PaintRobotSystem(BaseRobotSystem):
             messaging=self._messaging_service,
         )
 
+        self._paint_workpiece_editor_service = application_wiring._build_paint_workpiece_editor_service(self)
+        self._paint_capture_snapshot_service = application_wiring._build_capture_snapshot_service(self)
+        self._paint_production_service = PaintProductionService(
+            workpiece_editor_service=self._paint_workpiece_editor_service,
+            capture_snapshot_service=self._paint_capture_snapshot_service,
+            vacuum_pump=self._vacuum_pump,
+        )
         self._main_process = PaintProcess(
+            production_service=self._paint_production_service,
+            vacuum_pump=self._vacuum_pump,
             messaging=self._messaging_service,
             system_manager=self._system_manager,
             service_checker=self.health_registry.check,
@@ -275,5 +298,3 @@ class PaintRobotSystem(BaseRobotSystem):
     def on_stop(self) -> None:
         self._robot.stop_motion()
         self._robot.disable_robot()
-
-

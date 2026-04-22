@@ -1,13 +1,13 @@
 {
   "Calibration": {
-    "Chessboard width": 32,
-    "Chessboard height": 20,
-    "Square size (mm)": 25.0,
-    "Reference board mode": "charuco",
-    "ChArUco board width": 33,
-    "ChArUco board height": 21,
-    "ChArUco square size (mm)": 25.0,
-    "ChArUco marker size (mm)": 18.0,
+    "Chessboard width": 27,
+    "Chessboard height": 18,
+    "Square size (mm)": 15.0,
+    "Reference board mode": "auto",
+    "ChArUco board width": 27,
+    "ChArUco board height": 18,
+    "ChArUco square size (mm)": 15.0,
+    "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30
   }
 }

@@ -27,6 +27,7 @@ def create_workpiece_form_config(schema: WorkpieceFormSchema) -> GenericFormConf
             label         = spec.label,
             icon          = spec.icon,
             placeholder   = spec.placeholder,
+            default_value = spec.default_value,
             mandatory     = spec.mandatory,
             visible       = spec.visible,
             options       = spec.options or [],

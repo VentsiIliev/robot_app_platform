@@ -41,6 +41,7 @@ _PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
 _PATH_TANGENT_HEADING_DEADBAND_DEG = 5.0
 _AUTO_DENSIFY_TRIGGER_RATIO = 2.5
 _AUTO_DENSIFY_TARGET_RATIO = 1.25
+_DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
 
 
 def _resample_execution_path(
@@ -301,6 +302,54 @@ def _unwrap_degrees(previous: float, current: float) -> float:
     return value
 
 
+def _normalize_degrees(angle: float) -> float:
+    value = float(angle)
+    while value > 180.0:
+        value -= 360.0
+    while value <= -180.0:
+        value += 360.0
+    return value
+
+
+def _compute_pickup_rz_from_robot_path(
+    path: list[list[float]],
+    pickup_xy: tuple[float, float],
+) -> float:
+    if len(path) < 2:
+        return 0.0
+
+    points = np.asarray([[float(p[0]), float(p[1])] for p in path if len(p) >= 2], dtype=float)
+    if len(points) < 2:
+        return 0.0
+
+    pickup_vec = np.asarray([float(pickup_xy[0]), float(pickup_xy[1])], dtype=float)
+    closest_index = int(np.argmin(np.linalg.norm(points - pickup_vec, axis=1)))
+
+    candidate_pairs: list[tuple[int, int]] = []
+    if closest_index > 0:
+        candidate_pairs.append((closest_index - 1, closest_index))
+    if closest_index + 1 < len(points):
+        candidate_pairs.append((closest_index, closest_index + 1))
+    if closest_index > 0 and closest_index + 1 < len(points):
+        candidate_pairs.append((closest_index - 1, closest_index + 1))
+
+    dx = dy = 0.0
+    for start_idx, end_idx in candidate_pairs:
+        segment = points[end_idx] - points[start_idx]
+        seg_len = float(np.linalg.norm(segment))
+        if seg_len > 1e-6:
+            dx = float(segment[0])
+            dy = float(segment[1])
+            break
+
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return 0.0
+
+    heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
+    heading_relative_to_y_deg = heading_from_x_deg - 90.0
+    return _normalize_degrees(heading_relative_to_y_deg)
+
+
 class WorkpieceEditorService(IWorkpieceEditorService):
 
     def __init__(self,
@@ -319,11 +368,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                  robot_service=None,
                  path_executor: Optional[IWorkpiecePathExecutor] = None,
                  target_point_name: str = "",
+                 pickup_target_point_name: str = "",
+                 calibration_frame_name: str = "",
                  enable_dxf_import_test: bool = False,
                  execute_from_workpiece_layer: bool = False,
                  list_saved_workpieces_fn: Optional[Callable[[], list[dict]]] = None,
                  load_saved_workpiece_fn: Optional[Callable[[str], Optional[dict]]] = None,
-                 run_matching_fn: Optional[Callable[[list, list], tuple]] = None):
+                 run_matching_fn: Optional[Callable[[list, list], tuple]] = None,
+                 pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None):
         self._vision             = vision_service
         self._capture_snapshot_service = capture_snapshot_service
         self._save_fn            = save_fn
@@ -343,8 +395,13 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._list_saved_workpieces_fn = list_saved_workpieces_fn
         self._load_saved_workpiece_fn = load_saved_workpiece_fn
         self._run_matching_fn = run_matching_fn
+        self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._editing_storage_id = None
         self._target_point_name  = str(target_point_name or "").strip().lower()
+        self._pickup_target_point_name = str(
+            pickup_target_point_name or self._target_point_name or ""
+        ).strip().lower()
+        self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._last_interpolation_preview_contours: list[np.ndarray] = []
         self._last_sampled_preview_paths: list[list[list[float]]] = []
         self._last_raw_preview_paths: list[list[list[float]]] = []
@@ -562,6 +619,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             form_data   = data.get("form_data", {})
             editor_data = data.get("editor_data")
             complete    = self._merge(form_data, editor_data) if editor_data else dict(form_data)
+            complete    = self._normalize_workpiece_metadata(complete)
             required    = self._schema().get_required_keys()
             is_valid, errors = SaveWorkpieceHandler.validate_form_data(complete, required)
             if not is_valid:
@@ -607,6 +665,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
 
         spray_pattern = merged.get("sprayPattern", {})
+        workpiece_height_mm = _safe_float(merged.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         use_workpiece_layer = False
         if not spray_pattern or not any(spray_pattern.get(k) for k in ("Contour", "Fill")):
             if self._execute_from_workpiece_layer and _has_valid_contour(merged.get("contour")):
@@ -617,6 +676,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 return False, "No spray patterns found — draw Contour or Fill paths first"
 
         robot_paths = []
+        pickup_px = self._extract_pickup_pixel(merged)
+        pickup_xy = None
+        pickup_rz = 0.0
+        pickup_camera_xy = None
 
         if use_workpiece_layer:
             contour_arr = merged.get("contour", [])
@@ -625,6 +688,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 for key, value in merged.items()
                 if key not in {"contour", "sprayPattern"}
             }
+            settings["height_mm"] = workpiece_height_mm
             if not isinstance(contour_arr, np.ndarray):
                 contour_arr = np.array(contour_arr, dtype=np.float32)
             if contour_arr.size != 0:
@@ -644,7 +708,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
                 for i, pattern in enumerate(patterns):
                     contour_arr = pattern.get("contour", [])
-                    settings    = pattern.get("settings", {})
+                    settings    = dict(pattern.get("settings", {}) or {})
+                    settings["height_mm"] = workpiece_height_mm
 
                     if not isinstance(contour_arr, np.ndarray):
                         contour_arr = np.array(contour_arr, dtype=np.float32)
@@ -749,6 +814,49 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             for j, pt in enumerate(execution_spline[:3]):
                 _logger.debug("[EXECUTE] %s execute[%d]: %s", pattern_type, j, pt)
 
+            if pickup_px is not None and pickup_xy is None:
+                try:
+                    pickup_camera_xy = self._transform_single_pixel_to_robot(
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        {
+                            "height_mm": workpiece_height_mm,
+                            **merged,
+                        },
+                        target_point_name=self._target_point_name,
+                        frame_name=self._calibration_frame_name,
+                        rz_override=0.0,
+                    )
+                    pickup_rz = _compute_pickup_rz_from_robot_path(
+                        execution_spline,
+                        pickup_camera_xy,
+                    )
+                    pickup_xy = self._transform_single_pixel_to_robot(
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        {
+                            "height_mm": workpiece_height_mm,
+                            **merged,
+                        },
+                        target_point_name=self._pickup_target_point_name,
+                        frame_name=self._calibration_frame_name,
+                        rz_override=pickup_rz,
+                    )
+                    _logger.info(
+                        "[EXECUTE] Resolved pickup target: pixel=(%.3f, %.3f) camera_xy=(%.3f, %.3f) pickup_rz=%.3f pickup_xy=(%.3f, %.3f)",
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        float(pickup_camera_xy[0]),
+                        float(pickup_camera_xy[1]),
+                        float(pickup_rz),
+                        float(pickup_xy[0]),
+                        float(pickup_xy[1]),
+                    )
+                except Exception:
+                    _logger.exception("[EXECUTE] Failed to resolve pickup point to robot XY")
+                    pickup_xy = None
+                    pickup_rz = 0.0
+
             self._last_execution_preview_jobs.append(
                 {
                     "path": [list(pt) for pt in sampled_path],
@@ -756,6 +864,9 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,
+                    "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
+                    "pickup_rz": float(pickup_rz),
+                    "pickup_target_point_name": str(self._pickup_target_point_name or "").strip().lower(),
                 }
             )
 
@@ -946,10 +1057,28 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             base_position = self._resolve_base_position()
             base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
             rz_offset = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
+            workpiece_height_mm = _safe_float(settings.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         except (ValueError, TypeError):
             raise ValueError("Invalid segment settings: spraying_height and rz_angle must be numbers")
         rx, ry = 180.0, 0.0
         robot_xy_points: list[tuple[float, float]] = []
+        compensated_pts_px = np.asarray(pts_px, dtype=np.float64).copy()
+
+        compensation_dx_px = 0.0
+        compensation_dy_px = 0.0
+        if callable(self._pixel_height_compensation_fn) and abs(workpiece_height_mm) > 1e-9:
+            try:
+                compensation_dx_px, compensation_dy_px = self._pixel_height_compensation_fn(workpiece_height_mm)
+                compensated_pts_px[:, 0] = compensated_pts_px[:, 0] - float(compensation_dx_px)
+                compensated_pts_px[:, 1] = compensated_pts_px[:, 1] - float(compensation_dy_px)
+                _logger.info(
+                    "[EXECUTE] Applied pixel height compensation: height_mm=%.3f pixel_delta=(%.6f, %.6f)",
+                    workpiece_height_mm,
+                    float(compensation_dx_px),
+                    float(compensation_dy_px),
+                )
+            except Exception:
+                _logger.exception("[EXECUTE] Failed to apply pixel height compensation")
 
         if self._resolver is not None:
             from src.engine.robot.targeting import VisionPoseRequest
@@ -967,7 +1096,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                     ),
                     target_point,
                 )
-                for px, py in pts_px
+                for px, py in compensated_pts_px
             ]
             robot_xy_points = [
                 (float(result.final_xy[0]), float(result.final_xy[1]))
@@ -976,7 +1105,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         else:
             if self._transformer is None or not self._transformer.is_available():
                 _logger.warning("[EXECUTE] No calibration transformer — using raw pixel coords")
-            for px, py in pts_px:
+            for px, py in compensated_pts_px:
                 if self._transformer is not None and self._transformer.is_available():
                     rx_coord, ry_coord = self._transformer.transform(float(px), float(py))
                 else:
@@ -994,14 +1123,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             # re-run TCP-offset compensation and warp the contour shape.
             result = [
                 [
-                    float(seed.final_xy[0]),
-                    float(seed.final_xy[1]),
+                    float(x),
+                    float(y),
                     float(seed.z),
                     rx,
                     ry,
                     float(rz),
                 ]
-                for seed, rz in zip(seeded_results, rz_values)
+                for seed, (x, y), rz in zip(seeded_results, robot_xy_points, rz_values)
             ]
         else:
             result = [
@@ -1015,6 +1144,103 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 [round(float(point[5]), 3) for point in result[: min(5, len(result))]],
             )
         return result
+
+    def _extract_pickup_pixel(self, merged: dict) -> tuple[float, float] | None:
+        pickup_point = (merged or {}).get("pickupPoint")
+        parsed_pickup = self._parse_pickup_point(pickup_point)
+        if parsed_pickup is not None:
+            return parsed_pickup
+
+        contour_arr = np.asarray((merged or {}).get("contour", []), dtype=np.float32)
+        if contour_arr.size == 0:
+            return None
+        contour_pts = contour_arr.reshape(-1, 1, 2)
+        moments = cv2.moments(contour_pts)
+        if abs(float(moments.get("m00", 0.0))) > 1e-9:
+            cx = float(moments["m10"] / moments["m00"])
+            cy = float(moments["m01"] / moments["m00"])
+            return cx, cy
+
+        flat_pts = contour_pts.reshape(-1, 2)
+        return float(np.mean(flat_pts[:, 0])), float(np.mean(flat_pts[:, 1]))
+
+    @staticmethod
+    def _parse_pickup_point(value) -> tuple[float, float] | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                x_str, y_str = value.split(",", 1)
+                return float(x_str), float(y_str)
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            try:
+                return float(value[0]), float(value[1])
+            except (TypeError, ValueError):
+                return None
+        if isinstance(value, dict):
+            try:
+                return float(value["x"]), float(value["y"])
+            except (KeyError, TypeError, ValueError):
+                return None
+        return None
+
+    def _transform_single_pixel_to_robot(
+        self,
+        px: float,
+        py: float,
+        settings: dict,
+        *,
+        target_point_name: str | None = None,
+        frame_name: str = "",
+        rz_override: float | None = None,
+    ) -> tuple[float, float]:
+        workpiece_height_mm = _safe_float(settings.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        compensated_px = float(px)
+        compensated_py = float(py)
+
+        if callable(self._pixel_height_compensation_fn) and abs(workpiece_height_mm) > 1e-9:
+            dx_px, dy_px = self._pixel_height_compensation_fn(workpiece_height_mm)
+            compensated_px -= float(dx_px)
+            compensated_py -= float(dy_px)
+
+        try:
+            _defaults = self._segment_config.schema.get_defaults()
+            spray_height = float(str(settings.get("spraying_height", _defaults.get("spraying_height", "0"))).replace(",", ""))
+            rz_offset = float(settings.get("rz_angle", _defaults.get("rz_angle", "0")))
+        except (ValueError, TypeError):
+            spray_height = 0.0
+            rz_offset = 0.0
+        if rz_override is not None:
+            rz_offset = float(rz_override)
+
+        base_position = self._resolve_base_position()
+        base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
+
+        if self._resolver is not None:
+            from src.engine.robot.targeting import VisionPoseRequest
+
+            resolved_target_name = str(target_point_name or self._target_point_name or "").strip().lower()
+            target_point = self._resolver.registry.by_name(resolved_target_name)
+            result = self._resolver.resolve(
+                VisionPoseRequest(
+                    compensated_px,
+                    compensated_py,
+                    z_mm=base_z,
+                    rz_degrees=rz_offset,
+                    rx_degrees=180.0,
+                    ry_degrees=0.0,
+                ),
+                target_point,
+                frame=str(frame_name or "").strip().lower(),
+            )
+            return float(result.final_xy[0]), float(result.final_xy[1])
+
+        if self._transformer is None or not self._transformer.is_available():
+            return compensated_px, compensated_py
+        rx_coord, ry_coord = self._transformer.transform(compensated_px, compensated_py)
+        return float(rx_coord), float(ry_coord)
 
     def _resolve_base_position(self) -> Optional[list[float]]:
         executor = self._path_executor
@@ -1095,7 +1321,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
 
     def _merge(self, form_data: dict, editor_data) -> dict:
         if not isinstance(editor_data, ContourEditorData):
-            return dict(form_data)
+            return self._normalize_workpiece_metadata(dict(form_data))
         segment_defaults = self._segment_config.schema.get_defaults()
         merged    = {**WorkpieceAdapter.to_workpiece_data(editor_data, default_settings=segment_defaults), **form_data}
         combo_key = self._schema().combo_key
@@ -1103,7 +1329,16 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             val = form_data.get(combo_key) or form_data.get("glue_type") or form_data.get("glueType")
             if val:
                 merged[combo_key] = val
-        return merged
+        return self._normalize_workpiece_metadata(merged)
+
+    @staticmethod
+    def _normalize_workpiece_metadata(data: dict) -> dict:
+        normalized = dict(data or {})
+        normalized["height_mm"] = _safe_float(
+            normalized.get("height_mm"),
+            _DEFAULT_WORKPIECE_HEIGHT_MM,
+        )
+        return normalized
 
 
 def _safe_float(value, default: float) -> float:

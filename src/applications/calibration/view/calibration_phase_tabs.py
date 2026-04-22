@@ -119,6 +119,7 @@ class RobotCalibrationTab(_BaseCalibrationTab):
         self,
         calibrate_robot_btn: QWidget,
         calibrate_tcp_btn: QWidget,
+        calibrate_z_shift_btn: QWidget,
         test_btn: QWidget,
         settings_schemas: list,
         parent=None,
@@ -130,6 +131,7 @@ class RobotCalibrationTab(_BaseCalibrationTab):
         )
         self.add_widget(calibrate_robot_btn)
         self.add_widget(calibrate_tcp_btn)
+        self.add_widget(calibrate_z_shift_btn)
         self.add_divider()
         self.add_widget(test_btn)
         self.add_settings_groups(settings_schemas)

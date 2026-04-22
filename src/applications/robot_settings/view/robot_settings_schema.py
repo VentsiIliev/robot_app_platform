@@ -6,6 +6,10 @@ ROBOT_INFO_GROUP = SettingGroup("Robot Information", [
     SettingField("robot_user",   "User Number",  "spinbox",        default=0,   min_val=0,     max_val=10,   step=1,   step_options=[1]),
     SettingField("camera_to_tcp_x_offset",  "Camera To TCP X Offset",  "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=3, suffix=" mm", step=0.001, step_options=[0.001, 0.01, 0.1, 1]),
     SettingField("camera_to_tcp_y_offset",  "Camera To TCP Y Offset",  "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=3, suffix=" mm", step=0.001, step_options=[0.001, 0.01, 0.1, 1]),
+    SettingField("camera_z_shift_x_per_mm_px", "Camera Z Shift X / mm", "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=6, suffix=" px/mm", step=0.0001, step_options=[0.0001, 0.001, 0.01, 0.1]),
+    SettingField("camera_z_shift_y_per_mm_px", "Camera Z Shift Y / mm", "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=6, suffix=" px/mm", step=0.0001, step_options=[0.0001, 0.001, 0.01, 0.1]),
+    SettingField("camera_z_shift_x_per_mm", "Camera Z Shift X / mm",   "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=6, suffix=" mm/mm", step=0.0001, step_options=[0.0001, 0.001, 0.01, 0.1]),
+    SettingField("camera_z_shift_y_per_mm", "Camera Z Shift Y / mm",   "double_spinbox", default=0.0, min_val=-1000, max_val=1000, decimals=6, suffix=" mm/mm", step=0.0001, step_options=[0.0001, 0.001, 0.01, 0.1]),
 ])
 
 GLOBAL_MOTION_GROUP = SettingGroup("Global Motion Settings", [

@@ -35,6 +35,7 @@ class WorkpieceFormFieldSpec:
     options:     Optional[List[Any]] = None
     icon:        FieldIcon = field(default_factory=FieldIcon.none)
     placeholder: str = ""
+    default_value: Any = None
     visible:     bool = True
 
 

@@ -52,6 +52,15 @@ def build_paint_contour_form_schema() -> WorkpieceFormSchema:
                 icon=FieldIcon.from_qta("fa5s.align-left", color=_COLOR),
             ),
             WorkpieceFormFieldSpec(
+                key="height_mm",
+                label="Height (mm)",
+                field_type="text",
+                mandatory=False,
+                icon=FieldIcon.from_qta("fa5s.ruler-vertical", color=_COLOR),
+                placeholder="0.0",
+                default_value=0.0,
+            ),
+            WorkpieceFormFieldSpec(
                 key="dxfPath",
                 label="DXF Path",
                 field_type="text",

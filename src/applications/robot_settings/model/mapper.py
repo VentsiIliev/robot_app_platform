@@ -16,6 +16,10 @@ class RobotSettingsMapper:
             "robot_user":          settings.robot_user,
             "camera_to_tcp_x_offset":  settings.camera_to_tcp_x_offset,
             "camera_to_tcp_y_offset":  settings.camera_to_tcp_y_offset,
+            "camera_z_shift_x_per_mm_px": settings.camera_z_shift_x_per_mm_px,
+            "camera_z_shift_y_per_mm_px": settings.camera_z_shift_y_per_mm_px,
+            "camera_z_shift_x_per_mm": settings.camera_z_shift_x_per_mm,
+            "camera_z_shift_y_per_mm": settings.camera_z_shift_y_per_mm,
             "global_velocity":     gm.global_velocity,
             "global_acceleration": gm.global_acceleration,
             "emergency_decel":     gm.emergency_decel,
@@ -54,6 +58,10 @@ class RobotSettingsMapper:
         c.robot_user          = int(flat.get("robot_user",      c.robot_user))
         c.camera_to_tcp_x_offset = float(flat.get("camera_to_tcp_x_offset", c.camera_to_tcp_x_offset))
         c.camera_to_tcp_y_offset = float(flat.get("camera_to_tcp_y_offset", c.camera_to_tcp_y_offset))
+        c.camera_z_shift_x_per_mm_px = float(flat.get("camera_z_shift_x_per_mm_px", c.camera_z_shift_x_per_mm_px))
+        c.camera_z_shift_y_per_mm_px = float(flat.get("camera_z_shift_y_per_mm_px", c.camera_z_shift_y_per_mm_px))
+        c.camera_z_shift_x_per_mm = float(flat.get("camera_z_shift_x_per_mm", c.camera_z_shift_x_per_mm))
+        c.camera_z_shift_y_per_mm = float(flat.get("camera_z_shift_y_per_mm", c.camera_z_shift_y_per_mm))
         c.tcp_x_step_distance = float(flat.get("tcp_x_step_distance", c.tcp_x_step_distance))
         c.tcp_x_step_offset   = float(flat.get("tcp_x_step_offset",   c.tcp_x_step_offset))
         c.tcp_y_step_distance = float(flat.get("tcp_y_step_distance", c.tcp_y_step_distance))

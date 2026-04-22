@@ -43,6 +43,7 @@ class _Bridge(QObject):
     stop_btn_enabled        = pyqtSignal(bool)
     test_btn_enabled        = pyqtSignal(bool)
     camera_tcp_btn_enabled  = pyqtSignal(bool)
+    camera_z_shift_btn_enabled = pyqtSignal(bool)
     marker_height_btn_enabled = pyqtSignal(bool)
     area_grid_btn_enabled   = pyqtSignal(bool)
     test_finished           = pyqtSignal(bool, str)
@@ -81,6 +82,7 @@ class CalibrationController(IApplicationController):
         self._bridge.stop_btn_enabled.connect(self._view.set_stop_calibration_enabled)
         self._bridge.test_btn_enabled.connect(self._view.set_test_calibration_enabled)
         self._bridge.camera_tcp_btn_enabled.connect(self._view.set_camera_tcp_offset_enabled)
+        self._bridge.camera_z_shift_btn_enabled.connect(self._view.set_camera_z_shift_enabled)
         self._bridge.marker_height_btn_enabled.connect(self._view.set_measure_marker_heights_enabled)
         self._bridge.area_grid_btn_enabled.connect(self._view.set_measure_area_grid_enabled)
         self._bridge.test_finished.connect(self._on_test_finished)
@@ -183,6 +185,7 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_robot_requested.connect(self._on_calibrate_robot)
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
+        self._view.calibrate_camera_z_shift_requested.connect(self._on_calibrate_camera_z_shift)
         self._view.calibrate_laser_requested.connect(self._on_calibrate_laser)
         self._view.detect_laser_requested.connect(self._on_detect_laser)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
@@ -240,6 +243,7 @@ class CalibrationController(IApplicationController):
 
         self._view.set_buttons_enabled(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         _, msg = self._model.calibrate_robot()
         self._view.append_log(f"▶ {msg}")
 
@@ -247,9 +251,74 @@ class CalibrationController(IApplicationController):
         self._run_in_thread(self._model.calibrate_camera_and_robot)
 
     def _on_calibrate_camera_tcp_offset(self) -> None:
+        settings = self._model.load_calibration_settings()
+        if settings is None:
+            self._view.append_log("✗ Calibration settings are unavailable")
+            return
+        tcp = settings.robot.camera_tcp_offset
+        config = self._view.prompt_tcp_offset_calibration_config(
+            marker_id=int(getattr(tcp, "marker_id", 4)),
+            rotation_step_deg=float(getattr(tcp, "rotation_step_deg", 15.0)),
+            iterations=int(getattr(tcp, "iterations", 4)),
+            approach_z=float(getattr(tcp, "approach_z", 300.0)),
+            approach_rx=float(getattr(tcp, "approach_rx", 180.0)),
+            approach_ry=float(getattr(tcp, "approach_ry", 0.0)),
+            approach_rz=float(getattr(tcp, "approach_rz", 0.0)),
+            velocity=int(getattr(tcp, "velocity", 20)),
+            acceleration=int(getattr(tcp, "acceleration", 10)),
+            settle_time_s=float(getattr(tcp, "settle_time_s", 0.5)),
+            recenter_max_iterations=int(getattr(tcp, "recenter_max_iterations", 20)),
+            recenter_stability_wait_s=float(getattr(tcp, "recenter_stability_wait_s", 0.4)),
+            recenter_alignment_threshold_mm=float(getattr(tcp, "recenter_alignment_threshold_mm", 0.5)),
+        )
+        if config is None:
+            self._view.append_log("• Camera TCP offset calibration cancelled")
+            return
+        tcp.marker_id = int(config.marker_id)
+        tcp.rotation_step_deg = float(config.rotation_step_deg)
+        tcp.iterations = int(config.iterations)
+        tcp.approach_z = float(config.approach_z)
+        tcp.approach_rx = float(config.approach_rx)
+        tcp.approach_ry = float(config.approach_ry)
+        tcp.approach_rz = float(config.approach_rz)
+        tcp.velocity = int(config.velocity)
+        tcp.acceleration = int(config.acceleration)
+        tcp.settle_time_s = float(config.settle_time_s)
+        tcp.recenter_max_iterations = int(config.recenter_max_iterations)
+        tcp.recenter_stability_wait_s = float(config.recenter_stability_wait_s)
+        tcp.recenter_alignment_threshold_mm = float(config.recenter_alignment_threshold_mm)
+        self._model.save_calibration_settings(settings)
         self._view.set_buttons_enabled(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         self._run_in_thread(self._model.calibrate_camera_tcp_offset, manage_buttons=False)
+
+    def _on_calibrate_camera_z_shift(self) -> None:
+        settings = self._model.load_calibration_settings()
+        default_marker_id = 4
+        if settings is not None:
+            default_marker_id = int(getattr(settings.robot.camera_tcp_offset, "marker_id", 4))
+        config = self._view.prompt_z_shift_calibration_config(
+            marker_id=default_marker_id,
+            samples=10,
+            z_step_mm=-1.0,
+            settle_time_s=0.3,
+        )
+        if config is None:
+            self._view.append_log("• XY shift calibration cancelled")
+            return
+        self._view.set_buttons_enabled(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
+        self._run_in_thread(
+            lambda: self._model.calibrate_camera_z_shift(
+                config.marker_id,
+                config.samples,
+                config.z_step_mm,
+                config.settle_time_s,
+            ),
+            manage_buttons=False,
+        )
 
     def _on_task_done(self, result) -> None:
         if not self._running:
@@ -283,6 +352,7 @@ class CalibrationController(IApplicationController):
             self._bridge.stop_btn_enabled.emit(True)
             self._bridge.test_btn_enabled.emit(False)
             self._bridge.camera_tcp_btn_enabled.emit(False)
+            self._bridge.camera_z_shift_btn_enabled.emit(False)
             self._bridge.marker_height_btn_enabled.emit(False)
             self._bridge.area_grid_btn_enabled.emit(False)
         elif event.state in (ProcessState.STOPPED, ProcessState.ERROR, ProcessState.IDLE):
@@ -313,6 +383,7 @@ class CalibrationController(IApplicationController):
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         self._bridge.marker_height_btn_enabled.emit(False)
         self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
@@ -364,6 +435,7 @@ class CalibrationController(IApplicationController):
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         self._bridge.marker_height_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
         thread = QThread()
@@ -513,6 +585,7 @@ class CalibrationController(IApplicationController):
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         self._bridge.marker_height_btn_enabled.emit(False)
         self._bridge.area_grid_btn_enabled.emit(False)
         thread = QThread()
@@ -555,6 +628,7 @@ class CalibrationController(IApplicationController):
         self._view.set_buttons_enabled(False)
         self._bridge.test_btn_enabled.emit(False)
         self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
         self._bridge.marker_height_btn_enabled.emit(False)
         self._bridge.area_grid_btn_enabled.emit(False)
         self._bridge.stop_btn_enabled.emit(True)
@@ -729,6 +803,7 @@ class CalibrationController(IApplicationController):
         if manage_buttons:
             self._view.set_buttons_enabled(False)
             self._bridge.camera_tcp_btn_enabled.emit(False)
+            self._bridge.camera_z_shift_btn_enabled.emit(False)
         thread = QThread()
         worker = _Worker(fn)
         worker.moveToThread(thread)
@@ -752,6 +827,7 @@ class CalibrationController(IApplicationController):
         calibrated = self._model.is_calibrated()
         self._bridge.test_btn_enabled.emit(calibrated)
         self._bridge.camera_tcp_btn_enabled.emit(calibrated and not self.is_calibrating())
+        self._bridge.camera_z_shift_btn_enabled.emit(calibrated and not self.is_calibrating())
         self._view.set_laser_actions_enabled(not self.is_calibrating())
         can_measure = self._model.can_measure_marker_heights() and not self.is_calibrating()
         self._bridge.marker_height_btn_enabled.emit(can_measure)
