@@ -310,14 +310,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not pivot_path:
                 return False, "Pivot-path execution requires a valid base/pivot position"
             _logger.debug(f"Pivot path after build_pivot_execution_path: {len(pivot_path)}")
-            self._write_pivot_debug_dump(
-                source_path=spline,
-                pivot_path=pivot_path,
-                diagnostics=diagnostics,
-                pivot_pose=pivot_pose,
-                pattern_type=pattern_type,
-                stage="execute",
-            )
+
+            # self._write_pivot_debug_dump(
+            #     source_path=spline,
+            #     pivot_path=pivot_path,
+            #     diagnostics=diagnostics,
+            #     pivot_pose=pivot_pose,
+            #     pattern_type=pattern_type,
+            #     stage="execute",
+            # )
             result = self._robot_service.execute_trajectory(
                 pivot_path,
                 vel=vel,

@@ -500,6 +500,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         if self._transformer is None or not self._transformer.is_available():
             return compensated_px, compensated_py
+
         rx_coord, ry_coord = self._transformer.transform(compensated_px, compensated_py)
         return float(rx_coord), float(ry_coord)
 

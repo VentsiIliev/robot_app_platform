@@ -207,46 +207,46 @@ def _compute_pickup_rz_from_path(
     heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
     heading_relative_to_y_deg = heading_from_x_deg - 90.0
     return normalize_degrees(heading_relative_to_y_deg)
-
-
-def _densify_pose_path(
-    poses: list[list[float]],
-    max_linear_step_mm: float = _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM,
-    max_angular_step_deg: float = _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG,
-) -> list[list[float]]:
-    """Insert intermediate poses so projected pivot motion respects linear and angular step limits."""
-    if len(poses) < 2:
-        return [list(pose) for pose in poses]
-
-    densified: list[list[float]] = [list(poses[0])]
-    max_linear_step_mm = max(float(max_linear_step_mm), 1e-3)
-    max_angular_step_deg = max(float(max_angular_step_deg), 1e-3)
-
-    for target_pose in poses[1:]:
-        start_pose = densified[-1]
-        end_pose = list(target_pose)
-        dx = float(end_pose[0]) - float(start_pose[0])
-        dy = float(end_pose[1]) - float(start_pose[1])
-        dz = float(end_pose[2]) - float(start_pose[2])
-        linear_distance = float(np.sqrt(dx * dx + dy * dy + dz * dz))
-        angular_delta = abs(unwrap_degrees(float(start_pose[5]), float(end_pose[5])) - float(start_pose[5]))
-        steps = max(1, int(np.ceil(max(
-            linear_distance / max_linear_step_mm,
-            angular_delta / max_angular_step_deg,
-        ))))
-
-        previous_rz = float(start_pose[5])
-        target_rz = unwrap_degrees(previous_rz, float(end_pose[5]))
-        for step_index in range(1, steps + 1):
-            ratio = step_index / steps
-            interpolated = [
-                float(start_pose[0]) + dx * ratio,
-                float(start_pose[1]) + dy * ratio,
-                float(start_pose[2]) + dz * ratio,
-                float(start_pose[3]) + (float(end_pose[3]) - float(start_pose[3])) * ratio,
-                float(start_pose[4]) + (float(end_pose[4]) - float(start_pose[4])) * ratio,
-                previous_rz + (target_rz - previous_rz) * ratio,
-            ]
-            densified.append(interpolated)
-
-    return densified
+#
+#
+# def _densify_pose_path(
+#     poses: list[list[float]],
+#     max_linear_step_mm: float = _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM,
+#     max_angular_step_deg: float = _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG,
+# ) -> list[list[float]]:
+#     """Insert intermediate poses so projected pivot motion respects linear and angular step limits."""
+#     if len(poses) < 2:
+#         return [list(pose) for pose in poses]
+#
+#     densified: list[list[float]] = [list(poses[0])]
+#     max_linear_step_mm = max(float(max_linear_step_mm), 1e-3)
+#     max_angular_step_deg = max(float(max_angular_step_deg), 1e-3)
+#
+#     for target_pose in poses[1:]:
+#         start_pose = densified[-1]
+#         end_pose = list(target_pose)
+#         dx = float(end_pose[0]) - float(start_pose[0])
+#         dy = float(end_pose[1]) - float(start_pose[1])
+#         dz = float(end_pose[2]) - float(start_pose[2])
+#         linear_distance = float(np.sqrt(dx * dx + dy * dy + dz * dz))
+#         angular_delta = abs(unwrap_degrees(float(start_pose[5]), float(end_pose[5])) - float(start_pose[5]))
+#         steps = max(1, int(np.ceil(max(
+#             linear_distance / max_linear_step_mm,
+#             angular_delta / max_angular_step_deg,
+#         ))))
+#
+#         previous_rz = float(start_pose[5])
+#         target_rz = unwrap_degrees(previous_rz, float(end_pose[5]))
+#         for step_index in range(1, steps + 1):
+#             ratio = step_index / steps
+#             interpolated = [
+#                 float(start_pose[0]) + dx * ratio,
+#                 float(start_pose[1]) + dy * ratio,
+#                 float(start_pose[2]) + dz * ratio,
+#                 float(start_pose[3]) + (float(end_pose[3]) - float(start_pose[3])) * ratio,
+#                 float(start_pose[4]) + (float(end_pose[4]) - float(start_pose[4])) * ratio,
+#                 previous_rz + (target_rz - previous_rz) * ratio,
+#             ]
+#             densified.append(interpolated)
+#
+#     return densified
