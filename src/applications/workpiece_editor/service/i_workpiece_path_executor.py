@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 
 
 class IWorkpiecePathExecutor(ABC):
@@ -17,21 +21,21 @@ class IWorkpiecePathExecutor(ABC):
     @abstractmethod
     def get_pivot_preview_paths(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         ...
 
     @abstractmethod
     def get_pivot_motion_preview(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[list[list[np.ndarray]], list[float] | None]:
         ...
 
     @abstractmethod
     def execute_preview_paths(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: "WorkpieceExecutionPlan",
         mode: str = "continuous",
     ) -> tuple[bool, str]:
         ...
@@ -39,13 +43,13 @@ class IWorkpiecePathExecutor(ABC):
     @abstractmethod
     def execute_pickup_to_pivot(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[bool, str]:
         ...
 
     @abstractmethod
     def execute_pickup_and_pivot_paint(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[bool, str]:
         ...

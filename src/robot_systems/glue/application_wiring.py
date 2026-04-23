@@ -181,7 +181,13 @@ def _build_workpiece_library_application(robot_system):
 def _build_workpiece_editor_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
-    from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
+    from src.applications.workpiece_editor.service.workpiece_editor_service import (
+        WorkpieceEditorServices,
+        WorkpieceEditorService,
+        WorkpieceEditorStorage,
+    )
+    from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
+    from src.robot_systems.glue.domain.matching.matching_service import MatchingService
     from src.robot_systems.glue.domain.workpieces.repository.json_workpiece_repository import JsonWorkpieceRepository
     from src.robot_systems.glue.domain.workpieces.service.workpiece_service import WorkpieceService
     from src.shared_contracts.events.workpiece_events import WorkpieceTopics
@@ -211,23 +217,42 @@ def _build_workpiece_editor_application(robot_system):
     glue_types = catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path()), tool_provider=_get_tools)
+    matching_service = MatchingService(
+        vision_service=vision_service,
+        workpiece_service=workpiece_service,
+        capture_snapshot_service=capture_snapshot_service,
+    ) if vision_service is not None else None
+    segment_config = SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types()))
+    path_preparation_service = DefaultWorkpiecePathPreparationService(
+        logger=_logger,
+        segment_config=segment_config,
+        transformer=base_transformer,
+        resolver=resolver,
+        z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
+        rz_mode="constant",
+        execute_from_workpiece_layer=False,
+        target_point_name=camera_point_name,
+    )
 
     service = WorkpieceEditorService(
-        vision_service=vision_service,
-        capture_snapshot_service=capture_snapshot_service,
-        save_fn=lambda data: workpiece_service.save(data),
-        update_fn=lambda sid, data: workpiece_service.update(sid, data),
+        storage=WorkpieceEditorStorage(
+            save_fn=lambda data: workpiece_service.save(data),
+            update_fn=lambda sid, data: workpiece_service.update(sid, data),
+            id_exists_fn=workpiece_service.workpiece_id_exists,
+        ),
+        services=WorkpieceEditorServices(
+            vision_service=vision_service,
+            capture_snapshot_service=capture_snapshot_service,
+            robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+            transformer=base_transformer,
+            path_preparation_service=path_preparation_service,
+            matching_service=matching_service,
+        ),
         form_schema=lambda: build_glue_workpiece_form_schema(  # ← lazy callable
             glue_types=_get_glue_types(),
             tools=_get_tools(),
         ),
-        segment_config=SegmentEditorConfig(schema=build_glue_segment_settings_schema(_get_glue_types())),
-        id_exists_fn=workpiece_service.workpiece_id_exists,
-        transformer=base_transformer,
-        resolver=resolver,
-        z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
-        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
-        target_point_name=camera_point_name,
+        segment_config=segment_config,
     )
 
     class _PendingLoader:

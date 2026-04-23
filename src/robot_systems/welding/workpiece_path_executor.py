@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor
+from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 
 _logger = logging.getLogger(__name__)
 
@@ -18,22 +19,23 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     def get_pivot_preview_paths(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         return [], None
 
     def get_pivot_motion_preview(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: WorkpieceExecutionPlan,
     ):
         return [], None
 
     def execute_preview_paths(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: WorkpieceExecutionPlan,
         mode: str = "continuous",
     ) -> tuple[bool, str]:
-        if not execution_preview_jobs:
+        jobs = execution_plan.execution_jobs
+        if not jobs:
             return False, "No previewed paths available to execute"
         if self._robot_service is None:
             return False, "Robot service is not available"
@@ -43,7 +45,7 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, f"Unsupported welding execution mode: {mode}"
 
         total_waypoints = 0
-        for job in execution_preview_jobs:
+        for job in jobs:
             spline = job.get("execution_path") or job.get("path") or []
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
@@ -70,18 +72,18 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
 
         return True, (
-            f"Executed {len(execution_preview_jobs)} path(s), "
+            f"Executed {len(jobs)} path(s), "
             f"{total_waypoints} waypoints in {mode} mode"
         )
 
     def execute_pickup_to_pivot(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
         return False, "Pickup-to-pivot is not supported in welding"
 
     def execute_pickup_and_pivot_paint(
         self,
-        execution_preview_jobs: list[dict],
+        execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
         return False, "Pickup-and-pivot-paint is not supported in welding"

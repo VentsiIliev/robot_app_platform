@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Callable, Optional, Sequence
 
+from src.engine.geometry.planar import rotate_xy
 from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
 from src.engine.robot.targeting.point_registry import PointRegistry
 
@@ -107,10 +108,7 @@ class JogFramePoseResolver:
 
 
 def _rotate_xy(x: float, y: float, rz_deg: float) -> tuple[float, float]:
-    angle_rad = math.radians(rz_deg)
-    cos_a = math.cos(angle_rad)
-    sin_a = math.sin(angle_rad)
-    return x * cos_a - y * sin_a, x * sin_a + y * cos_a
+    return rotate_xy(x, y, rz_deg)
 
 
 def _tool_frame_delta(position: Sequence[float], axis_idx: int, direction_value: float, step: float) -> tuple[float, float, float]:

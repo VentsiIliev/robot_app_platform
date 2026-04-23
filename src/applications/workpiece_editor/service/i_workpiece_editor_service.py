@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-import numpy as np
-
 from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
 from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
 
@@ -25,9 +23,6 @@ class IWorkpieceEditorService(ABC):
     def execute_workpiece(self, data: dict) -> tuple[bool, str]: ...
 
     @abstractmethod
-    def get_last_interpolation_preview_contours(self) -> list: ...
-
-    @abstractmethod
     def get_last_sampled_preview_paths(self) -> list: ...
 
     @abstractmethod
@@ -46,7 +41,7 @@ class IWorkpieceEditorService(ABC):
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]: ...
 
     @abstractmethod
-    def get_last_pivot_motion_preview(self) -> tuple[list[list[np.ndarray]], list[float] | None]: ...
+    def get_last_pivot_motion_preview(self) -> tuple[list, list[float] | None]: ...
 
     @abstractmethod
     def get_available_execution_modes(self) -> tuple[str, ...]: ...

@@ -364,7 +364,7 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, "Match Workpiece Failed", str(exc))
 
     def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour) -> dict:
-        from src.robot_systems.paint.processes.workpiece_alignment import align_raw_workpiece_to_contour
+        from src.robot_systems.paint.processes.paint.workpiece_alignment import align_raw_workpiece_to_contour
 
         return align_raw_workpiece_to_contour(raw, captured_contour)
 

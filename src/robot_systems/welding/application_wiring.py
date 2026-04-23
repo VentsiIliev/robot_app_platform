@@ -34,7 +34,12 @@ def _build_capture_snapshot_service(robot_system):
 def _build_welding_contour_editor_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
-    from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
+    from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
+    from src.applications.workpiece_editor.service.workpiece_editor_service import (
+        WorkpieceEditorServices,
+        WorkpieceEditorService,
+        WorkpieceEditorStorage,
+    )
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
     from src.robot_systems.welding.workpiece_path_executor import WeldingWorkpiecePathExecutor
     from src.robot_systems.welding.domain.contour_editor_schema import (
@@ -85,23 +90,36 @@ def _build_welding_contour_editor_application(robot_system):
             z_min = float(robot_config.safety_limits.z_min)
         except Exception:
             z_min = 100.0
-
-    service = WorkpieceEditorService(
-        vision_service=vision_service,
-        capture_snapshot_service=capture_snapshot_service,
-        save_fn=_save_fn,
-        update_fn=_update_fn,
-        form_schema=build_welding_contour_form_schema(),
-        segment_config=SegmentEditorConfig(schema=build_welding_segment_settings_schema()),
-        id_exists_fn=_id_exists_fn,
+    segment_config = SegmentEditorConfig(schema=build_welding_segment_settings_schema())
+    path_preparation_service = DefaultWorkpiecePathPreparationService(
+        logger=_logger,
+        segment_config=segment_config,
         transformer=transformer,
         resolver=resolver,
         z_min=z_min,
-        robot_service=robot_service,
-        path_executor=WeldingWorkpiecePathExecutor(
-            robot_service=robot_service,
-        ),
+        rz_mode="constant",
+        execute_from_workpiece_layer=False,
         target_point_name=camera_point_name,
+    )
+
+    service = WorkpieceEditorService(
+        storage=WorkpieceEditorStorage(
+            save_fn=_save_fn,
+            update_fn=_update_fn,
+            id_exists_fn=_id_exists_fn,
+        ),
+        services=WorkpieceEditorServices(
+            vision_service=vision_service,
+            capture_snapshot_service=capture_snapshot_service,
+            robot_service=robot_service,
+            transformer=transformer,
+            path_executor=WeldingWorkpiecePathExecutor(
+                robot_service=robot_service,
+            ),
+            path_preparation_service=path_preparation_service,
+        ),
+        form_schema=build_welding_contour_form_schema(),
+        segment_config=segment_config,
     )
 
     jog_service = build_robot_system_jog_service(robot_system)

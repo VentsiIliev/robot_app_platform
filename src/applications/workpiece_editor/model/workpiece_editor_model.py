@@ -23,9 +23,6 @@ class WorkpieceEditorModel(IApplicationModel):
     def execute_workpiece(self, data: dict) -> tuple[bool, str]:
         return self._service.execute_workpiece(data)
 
-    def get_last_interpolation_preview_contours(self) -> list:
-        return self._service.get_last_interpolation_preview_contours()
-
     def get_last_sampled_preview_paths(self) -> list:
         return self._service.get_last_sampled_preview_paths()
 

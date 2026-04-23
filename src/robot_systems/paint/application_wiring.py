@@ -1,10 +1,19 @@
 import logging
 
+from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 
 
 _logger = logging.getLogger(__name__)
+_PAINT_EXECUTION_TARGET_POINT = "tool"
+
+
+def _get_paint_execution_target_point_name(robot_system) -> str:
+    target_key = str(_PAINT_EXECUTION_TARGET_POINT or "camera").strip().lower()
+    if target_key not in {"camera", "tool"}:
+        raise ValueError(f"Unsupported paint execution target point: {target_key}")
+    return getattr(robot_system.get_target_point_definition(target_key), "name", "") or target_key
 
 
 def _build_dashboard_application(robot_system):
@@ -28,13 +37,113 @@ def _build_capture_snapshot_service(robot_system):
     )
 
 
-def _build_paint_workpiece_editor_service(robot_system):
+def _build_paint_workpiece_service(robot_system):
+    from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
+
+    return PaintWorkpieceService(JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path()))
+
+
+def _build_paint_path_debug_dump_dir():
     import os
 
+    return os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "bootstrap", "debug_plots")
+    )
+
+
+def _build_paint_path_executor(robot_system):
+    from src.robot_systems.paint.processes.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
+
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
+    robot_config = getattr(robot_system, "_robot_config", None)
+    debug_dump_dir = _build_paint_path_debug_dump_dir()
+    return PaintWorkpiecePathExecutor(
+        robot_service=robot_service,
+        base_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
+        post_execute_callback=lambda: (
+            getattr(robot_system, "_navigation", None).move_to_calibration_position()
+            if getattr(robot_system, "_navigation", None) is not None else False
+        ),
+        robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
+        vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+        pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
+        pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
+        debug_dump_dir=debug_dump_dir,
+        pivot_translation_axis="x",
+        pivot_side="positive",
+        pivot_translation_direction="reverse",
+        apply_camera_to_tcp_for_pickup=True,
+        camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
+        camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+    )
+
+
+def _build_paint_path_preparation_service(robot_system):
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
-    from src.applications.workpiece_editor.service.workpiece_editor_service import WorkpieceEditorService
-    from src.robot_systems.paint.domain.workpieces import JsonPaintWorkpieceRepository, PaintWorkpieceService
-    from src.robot_systems.paint.processes.workpiece_path_executor import PaintWorkpiecePathExecutor
+    from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
+    from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
+
+    transformer, resolver = robot_system.get_shared_vision_resolver()
+    robot_config = getattr(robot_system, "_robot_config", None)
+    execution_target_point_name = _get_paint_execution_target_point_name(robot_system)
+    calibration_frame_name = (
+        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
+    )
+    z_min = 0.0
+    if robot_config is not None:
+        try:
+            z_min = float(robot_config.safety_limits.z_min)
+        except Exception:
+            z_min = 0.0
+    segment_config = SegmentEditorConfig(schema=build_paint_segment_settings_schema())
+    pixel_height_compensation_fn = (
+        lambda height_mm: (
+            float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
+            float(getattr(robot_config, "camera_z_shift_y_per_mm_px", 0.0)) * float(height_mm),
+        )
+        if robot_config is not None else (0.0, 0.0)
+    )
+    return DefaultWorkpiecePathPreparationService(
+        logger=_logger,
+        segment_config=segment_config,
+        transformer=transformer,
+        resolver=resolver,
+        z_min=z_min,
+        rz_mode="path_tangent",
+        execute_from_workpiece_layer=True,
+        target_point_name=execution_target_point_name,
+        pickup_target_point_name=execution_target_point_name,
+        calibration_frame_name=calibration_frame_name,
+        pixel_height_compensation_fn=pixel_height_compensation_fn,
+        base_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
+    )
+
+
+def _build_paint_matching_service(robot_system, workpiece_service=None, capture_snapshot_service=None):
+    from src.robot_systems.paint.processes.paint.workpiece_matching_service import PaintWorkpieceMatchingService
+
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    return PaintWorkpieceMatchingService(
+        list_saved_workpieces_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).list_all,
+        load_saved_workpiece_fn=(workpiece_service or _build_paint_workpiece_service(robot_system)).load_raw,
+        run_matching_fn=vision_service.run_matching if vision_service is not None else None,
+        capture_snapshot_service=capture_snapshot_service or _build_capture_snapshot_service(robot_system),
+    )
+
+
+def _build_paint_workpiece_editor_service(robot_system):
+    from src.applications.workpiece_editor.service.workpiece_editor_service import (
+        WorkpieceEditorOptions,
+        WorkpieceEditorServices,
+        WorkpieceEditorService,
+        WorkpieceEditorStorage,
+    )
     from src.robot_systems.paint.domain.contour_editor_schema import (
         build_paint_contour_form_schema,
         build_paint_segment_settings_schema,
@@ -43,21 +152,17 @@ def _build_paint_workpiece_editor_service(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    robot_config = getattr(robot_system, "_robot_config", None)
     transformer, resolver = robot_system.get_shared_vision_resolver()
-    camera_point_name = (
-        getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
+    segment_config = build_paint_segment_settings_schema()
+    workpiece_service = _build_paint_workpiece_service(robot_system)
+    matching_service = _build_paint_matching_service(
+        robot_system,
+        workpiece_service=workpiece_service,
+        capture_snapshot_service=capture_snapshot_service,
     )
-    tool_point_name = (
-        getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
-    )
-    calibration_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
-    )
-    workpiece_service = PaintWorkpieceService(JsonPaintWorkpieceRepository(robot_system.workpieces_storage_path()))
-    debug_dump_dir = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "..", "..", "bootstrap", "debug_plots")
-    )
+    path_preparation_service = _build_paint_path_preparation_service(robot_system)
+    path_executor = _build_paint_path_executor(robot_system)
+    debug_dump_dir = _build_paint_path_debug_dump_dir()
 
     def _save_fn(data: dict) -> tuple[bool, str]:
         return workpiece_service.save(data)
@@ -68,63 +173,26 @@ def _build_paint_workpiece_editor_service(robot_system):
     def _id_exists_fn(contour_id: str) -> bool:
         return workpiece_service.workpiece_id_exists(contour_id)
 
-    z_min = 0.0
-    if robot_config is not None:
-        try:
-            z_min = float(robot_config.safety_limits.z_min)
-        except Exception:
-            z_min = 0.0
-
     return WorkpieceEditorService(
-        vision_service=vision_service,
-        capture_snapshot_service=capture_snapshot_service,
-        save_fn=_save_fn,
-        update_fn=_update_fn,
-        form_schema=build_paint_contour_form_schema(),
-        segment_config=SegmentEditorConfig(schema=build_paint_segment_settings_schema()),
-        id_exists_fn=_id_exists_fn,
-        transformer=transformer,
-        resolver=resolver,
-        z_min=z_min,
-        rz_mode="path_tangent",
-        debug_dump_dir=debug_dump_dir,
-        robot_service=robot_service,
-        path_executor=PaintWorkpiecePathExecutor(
-            robot_service=robot_service,
-            base_position_provider=lambda: (
-                getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
-                if getattr(robot_system, "_navigation", None) is not None else None
-            ),
-            post_execute_callback=lambda: (
-                getattr(robot_system, "_navigation", None).move_to_calibration_position()
-                if getattr(robot_system, "_navigation", None) is not None else False
-            ),
-            robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
-            vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
-            pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
-            pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
-            debug_dump_dir=debug_dump_dir,
-            pivot_translation_axis="x",
-            pivot_side="positive",
-            pivot_translation_direction="reverse",
-            apply_camera_to_tcp_for_pickup=True,
-            camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
-            camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+        storage=WorkpieceEditorStorage(
+            save_fn=_save_fn,
+            update_fn=_update_fn,
+            id_exists_fn=_id_exists_fn,
         ),
-        target_point_name=camera_point_name,
-        pickup_target_point_name=tool_point_name,
-        calibration_frame_name=calibration_frame_name,
-        enable_dxf_import_test=True,
-        execute_from_workpiece_layer=True,
-        list_saved_workpieces_fn=workpiece_service.list_all,
-        load_saved_workpiece_fn=workpiece_service.load_raw,
-        run_matching_fn=vision_service.run_matching if vision_service is not None else None,
-        pixel_height_compensation_fn=(
-            lambda height_mm: (
-                float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
-                float(getattr(robot_config, "camera_z_shift_y_per_mm_px", 0.0)) * float(height_mm),
-            )
-            if robot_config is not None else (0.0, 0.0)
+        services=WorkpieceEditorServices(
+            vision_service=vision_service,
+            capture_snapshot_service=capture_snapshot_service,
+            robot_service=robot_service,
+            transformer=transformer,
+            path_executor=path_executor,
+            path_preparation_service=path_preparation_service,
+            matching_service=matching_service,
+        ),
+        form_schema=build_paint_contour_form_schema(),
+        segment_config=SegmentEditorConfig(schema=segment_config),
+        options=WorkpieceEditorOptions(
+            debug_dump_dir=debug_dump_dir,
+            enable_dxf_import_test=True,
         ),
     )
 

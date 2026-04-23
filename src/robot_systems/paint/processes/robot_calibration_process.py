@@ -25,6 +25,7 @@ class RobotCalibrationProcess(BaseProcess):
         requirements:        Optional[ProcessRequirements]   = None,
         service_checker:     Optional[Callable[[str], bool]] = None,
     ):
+        """Store calibration dependencies and initialize the process base class."""
         super().__init__(
             process_id      = ProcessID.ROBOT_CALIBRATION,
             messaging       = messaging,
@@ -38,6 +39,7 @@ class RobotCalibrationProcess(BaseProcess):
         self._stopping                        = False
 
     def _on_start(self) -> None:
+        """Start robot calibration in a background worker thread."""
         self._stopping = False
         self._thread = threading.Thread(
             target=self._run_in_background,
@@ -47,21 +49,26 @@ class RobotCalibrationProcess(BaseProcess):
         self._thread.start()
 
     def _on_stop(self) -> None:
+        """Request calibration stop without blocking on the worker thread."""
         self._stopping = True
         self._calibration_service.stop_calibration()
         # Do NOT join here — _on_stop is called while the lock is held;
         # _run_in_background may be trying to acquire the same lock via stop()/set_error()
 
     def _on_pause(self) -> None:
+        """Ignore pause because robot calibration is treated as an atomic run."""
         pass  # calibration cannot be meaningfully paused
 
     def _on_resume(self) -> None:
+        """Ignore resume because pause is not implemented for calibration."""
         pass
 
     def _on_reset_errors(self) -> None:
+        """Clear the stop flag so calibration can be started again after an error reset."""
         self._stopping = False
 
     def _run_in_background(self) -> None:
+        """Run calibration once and convert its outcome into process state transitions."""
         try:
             success, msg = self._calibration_service.run_calibration()
         except Exception as exc:

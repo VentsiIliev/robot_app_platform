@@ -32,6 +32,67 @@ class MatchingService(IMatchingService):
         self._capture_snapshot_service = capture_snapshot_service
         self._last_snapshot: VisionCaptureSnapshot | None = None
 
+    def can_match_saved_workpieces(self) -> bool:
+        return (
+            self._vision_service is not None
+            and self._workpiece_service is not None
+            and self._capture_snapshot_service is not None
+        )
+
+    def match_saved_workpieces(self, contour) -> Tuple[bool, dict | None, str]:
+        if not self.can_match_saved_workpieces():
+            return False, None, "Matching is not available."
+
+        workpieces = self._load_workpieces()
+        if len(workpieces) == 0:
+            return False, None, "No saved workpieces available."
+
+        try:
+            result, no_match_count, _matched, _unmatched = self._vision_service.run_matching(
+                workpieces,
+                [contour],
+            )
+        except Exception as exc:
+            _logger.exception("match_saved_workpieces failed")
+            return False, None, str(exc)
+
+        matched_workpieces = list((result or {}).get("workpieces", []))
+        confidences = list((result or {}).get("mlConfidences", []))
+        if not matched_workpieces:
+            return False, None, f"No match found. Saved workpieces checked: {len(workpieces)}"
+
+        best = matched_workpieces[0]
+        confidence = None
+        if confidences:
+            try:
+                confidence = float(confidences[0])
+            except Exception:
+                confidence = None
+
+        raw = None
+        serializer = getattr(type(best), "serialize", None)
+        if callable(serializer):
+            try:
+                raw = serializer(best)
+            except Exception:
+                raw = None
+        if raw is None and hasattr(best, "to_dict"):
+            try:
+                raw = best.to_dict()
+            except Exception:
+                raw = None
+
+        payload = {
+            "raw": raw,
+            "storage_id": getattr(best, "storage_id", None),
+            "workpieceId": getattr(best, "workpieceId", ""),
+            "name": getattr(best, "name", ""),
+            "candidate_count": len(workpieces),
+            "no_match_count": int(no_match_count),
+            "confidence": confidence,
+        }
+        return True, payload, "Matched workpiece."
+
     def run_matching(self) -> Tuple[dict, int, List, List]:
         contours   = self._get_contours()
         # if no contours return early because the is nothing to match
@@ -52,6 +113,10 @@ class MatchingService(IMatchingService):
         for meta in self._workpiece_service.list_all():
             wp = self._workpiece_service.load(meta["id"])
             if wp is not None:
+                try:
+                    setattr(wp, "storage_id", meta.get("id"))
+                except Exception:
+                    pass
                 workpieces.append(wp)
         _logger.debug("_load_workpieces: %d loaded", len(workpieces))
         return workpieces

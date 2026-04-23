@@ -5,6 +5,13 @@ from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 
 
 class IMatchingService(ABC):
+    @abstractmethod
+    def can_match_saved_workpieces(self) -> bool:
+        ...
+
+    @abstractmethod
+    def match_saved_workpieces(self, contour) -> Tuple[bool, dict | None, str]:
+        ...
 
     @abstractmethod
     def run_matching(self) -> Tuple[dict, int, List, List]:

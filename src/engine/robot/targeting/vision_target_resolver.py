@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
+from src.engine.geometry.planar import rotate_xy
 from src.engine.robot.plane_pose_mapper import PlanePoseMapper
 from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
 from src.engine.robot.targeting.point_registry import PointRegistry
@@ -126,10 +127,7 @@ def _reference_rz(mapper: Optional[PlanePoseMapper]) -> float:
 
 
 def _rotate_xy(x: float, y: float, rz_deg: float) -> Tuple[float, float]:
-    angle_rad = math.radians(rz_deg)
-    cos_a = math.cos(angle_rad)
-    sin_a = math.sin(angle_rad)
-    return (x * cos_a - y * sin_a, x * sin_a + y * cos_a)
+    return rotate_xy(x, y, rz_deg)
 
 
 def _is_camera_point(point: EndEffectorPoint) -> bool:

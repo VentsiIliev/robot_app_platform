@@ -23,6 +23,7 @@ _PIVOT_TRANSLATION_DIRECTION_SIGNS = {
 
 @dataclass(frozen=True)
 class PivotSimulationConfig:
+    """Normalized settings that control projected pivot motion geometry."""
     translation_axis: str = "x"
     pivot_side: str = "negative"
     translation_direction: str = "forward"
@@ -32,12 +33,15 @@ class PivotSimulationConfig:
 
     @property
     def paint_axis_offset_deg(self) -> float:
+        """Return the heading offset that maps the selected translation axis to world RZ."""
         return _PIVOT_TRANSLATION_AXIS_OFFSETS_DEG[self.translation_axis]
 
     @property
     def side_sign(self) -> float:
+        """Return the signed multiplier for which side of the pivot path to use."""
         return _PIVOT_SIDE_SIGNS[self.pivot_side]
 
     @property
     def direction_sign(self) -> float:
+        """Return the signed multiplier for forward vs reverse projected travel."""
         return _PIVOT_TRANSLATION_DIRECTION_SIGNS[self.translation_direction]

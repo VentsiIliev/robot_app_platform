@@ -12,6 +12,7 @@ from src.robot_systems.paint.component_ids import ProcessID
 
 
 class PaintProcess(BaseProcess):
+    """Run one paint production cycle in the background and report process state changes."""
     def __init__(
         self,
         production_service,
@@ -21,6 +22,7 @@ class PaintProcess(BaseProcess):
         requirements: Optional[ProcessRequirements] = None,
         service_checker: Optional[Callable[[str], bool]] = None,
     ) -> None:
+        """Store the production service and process dependencies for a single-run paint process."""
         super().__init__(
             process_id=ProcessID.MAIN_PROCESS,
             messaging=messaging,
@@ -34,6 +36,7 @@ class PaintProcess(BaseProcess):
         self._stopping = False
 
     def _on_start(self) -> None:
+        """Start the background worker thread that performs one production cycle."""
         self._stopping = False
         self._thread = threading.Thread(
             target=self._run_in_background,
@@ -43,18 +46,23 @@ class PaintProcess(BaseProcess):
         self._thread.start()
 
     def _on_stop(self) -> None:
+        """Signal the background worker to stop at the next safe checkpoint."""
         self._stopping = True
 
     def _on_pause(self) -> None:
+        """Ignore pause because the paint process currently has no resumable checkpoint model."""
         pass
 
     def _on_resume(self) -> None:
+        """Ignore resume because pause is not implemented for this process."""
         pass
 
     def _on_reset_errors(self) -> None:
+        """Clear the internal stop flag so a new run can be started after an error reset."""
         self._stopping = False
 
     def _run_in_background(self) -> None:
+        """Execute one production cycle and translate the result into process state transitions."""
         try:
             success, msg = self._production_service.run_once(lambda: self._stopping)
         except Exception as exc:

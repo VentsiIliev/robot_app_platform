@@ -86,3 +86,9 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
 
     def set_editing(self, storage_id) -> None:
         _logger.info("Stub: set_editing storage_id=%s", storage_id)
+
+    def can_match_saved_workpieces(self) -> bool:
+        return False
+
+    def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
+        return False, None, "Matching is not available"
