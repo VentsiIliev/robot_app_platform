@@ -32,6 +32,7 @@ class _MoveWorker(QObject):
         model: PickTargetModel,
         coords: List[Tuple[float, float, float, float, float, float]],
         delay: float = 0.0,
+        override_z: float | None = None,
         use_base_z: bool = False,
         use_live_height: bool = False,
     ):
@@ -39,6 +40,7 @@ class _MoveWorker(QObject):
         self._model          = model
         self._coords         = coords
         self._delay          = delay
+        self._override_z     = override_z
         self._use_base_z     = use_base_z
         self._use_live_height = use_live_height
         self._stop           = False
@@ -61,14 +63,28 @@ class _MoveWorker(QObject):
                 self.log_message.emit(
                     f"{tag} {i + 1}/{len(self._coords)}: robot=({x:.1f}, {y:.1f}, {z:.1f})"
                 )
+                commanded_z = float(z if self._override_z is None else self._override_z)
+                _logger.info(
+                    "[PICK_TARGET_MOVE] index=%d/%d captured_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) commanded_z=%.3f mode=%s",
+                    i + 1,
+                    len(self._coords),
+                    float(x),
+                    float(y),
+                    float(z),
+                    float(rx),
+                    float(ry),
+                    float(rz),
+                    float(commanded_z),
+                    "live" if self._use_live_height else ("base" if self._use_base_z else "direct"),
+                )
                 if self._use_live_height:
-                    ok = self._model.move_to_with_live_height(x, y, rx, ry, rz)
+                    ok = self._model.move_to_with_live_height(x, y, rx, ry, rz, commanded_z)
                 elif self._use_base_z:
-                    ok = self._model.move_to_base(x, y, rx, ry, rz)
+                    ok = self._model.move_to_base(x, y, rx, ry, rz, commanded_z)
                 else:
-                    ok = self._model.move_to(x, y, z, rx, ry, rz)
+                    ok = self._model.move_to(x, y, commanded_z, rx, ry, rz)
                 status = "[OK]  " if ok else "[FAIL]"
-                self.log_message.emit(f"{status} ({x:.1f}, {y:.1f}, {z:.1f})")
+                self.log_message.emit(f"{status} ({x:.1f}, {y:.1f}, {commanded_z:.1f})")
                 if self._delay > 0 and i < len(self._coords) - 1 and not self._stop:
                     self.log_message.emit(f"[WAIT] {self._delay:.1f}s...")
                     time.sleep(self._delay)
@@ -252,6 +268,21 @@ class PickTargetController(IApplicationController):
             return
 
         self._captured_coords = robot_coords
+        for i, pose in enumerate(robot_coords):
+            try:
+                _logger.info(
+                    "[PICK_TARGET_CAPTURE] index=%d/%d stored_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f)",
+                    i + 1,
+                    len(robot_coords),
+                    float(pose[0]),
+                    float(pose[1]),
+                    float(pose[2]),
+                    float(pose[3]),
+                    float(pose[4]),
+                    float(pose[5]),
+                )
+            except Exception:
+                _logger.exception("Failed to log captured pick-target pose")
 
         # Also capture full contour trajectories (all contour points in robot space)
         try:
@@ -312,25 +343,26 @@ class PickTargetController(IApplicationController):
         self._view.set_busy(True)
         coords = list(self._captured_coords)
         delay = self._view.get_move_delay()
+        override_z = self._view.get_trajectory_z()
         if self._measure_height_mode:
             self._pending_correction_coords = []
             self._view.append_log(
-                f"[LIVE] Moving to {len(coords)} target(s) with live height measurement..."
+                f"[LIVE] Moving to {len(coords)} target(s) with live height measurement at base Z={override_z:.1f}..."
             )
-            worker = _MoveWorker(self._model, coords, delay, use_live_height=True)
+            worker = _MoveWorker(self._model, coords, delay, override_z=override_z, use_live_height=True)
         elif self._two_step_mode:
             self._pending_correction_coords = coords
             self._view.set_correction_available(False)
             self._view.append_log(
-                f"[BASE] Moving to {len(coords)} target(s) at base Z (no correction)..."
+                f"[BASE] Moving to {len(coords)} target(s) at base Z={override_z:.1f} (no correction)..."
             )
-            worker = _MoveWorker(self._model, coords, delay, use_base_z=True)
+            worker = _MoveWorker(self._model, coords, delay, override_z=override_z, use_base_z=True)
         else:
             self._pending_correction_coords = []
             self._view.append_log(
-                f"[MOVE] Starting sequence for {len(coords)} target(s)..."
+                f"[MOVE] Starting sequence for {len(coords)} target(s) at Z={override_z:.1f}..."
             )
-            worker = _MoveWorker(self._model, coords, delay)
+            worker = _MoveWorker(self._model, coords, delay, override_z=override_z)
         self._launch(worker, on_done=self._on_move_done)
 
     def _on_apply_correction(self) -> None:
@@ -344,7 +376,13 @@ class PickTargetController(IApplicationController):
         self._view.append_log(
             f"[CORR] Applying height correction for {len(coords)} target(s)..."
         )
-        worker = _MoveWorker(self._model, coords, self._view.get_move_delay(), use_base_z=False)
+        worker = _MoveWorker(
+            self._model,
+            coords,
+            self._view.get_move_delay(),
+            override_z=self._view.get_trajectory_z(),
+            use_base_z=False,
+        )
         self._launch(worker, on_done=self._on_move_done)
 
     # ── Start position ────────────────────────────────────────────────

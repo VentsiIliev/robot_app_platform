@@ -8,15 +8,16 @@ It supports both:
 2. Loading/exporting domain-agnostic ContourEditorData
 """
 from ..handlers.workpiece_loader import load_workpiece
-from ..adapters.workpiece_adapter import WorkpieceAdapter
+from ..adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from contour_editor import LayerConfigRegistry
 from contour_editor.models.segment import Layer
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 
 class WorkpieceManager:
-    def __init__(self, editor, default_settings: dict = None):
+    def __init__(self, editor, adapter: IWorkpieceDataAdapter, default_settings: dict = None):
         self.editor = editor
+        self._adapter = adapter
         self.current_workpiece = None
         self.contours = None
         self._default_settings = default_settings or {}
@@ -24,7 +25,7 @@ class WorkpieceManager:
 
     def load_workpiece(self, workpiece):
         """Load a workpiece and initialize its contours"""
-        workpiece_result, new_contours_by_layer = load_workpiece(workpiece)
+        workpiece_result, new_contours_by_layer = load_workpiece(workpiece, self._adapter)
         self.current_workpiece = workpiece_result
         
         # Initialize the layers with the workpiece contours
@@ -224,4 +225,4 @@ class WorkpieceManager:
         editor_data = self.export_editor_data()
 
         # Then use an adapter to convert to workpiece format
-        return WorkpieceAdapter.to_workpiece_data(editor_data)
+        return self._adapter.to_workpiece_data(editor_data)

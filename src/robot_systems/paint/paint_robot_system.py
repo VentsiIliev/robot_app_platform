@@ -230,7 +230,6 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
-        from src.robot_systems.paint.processes.paint.workpiece_preparation_service import PaintWorkpiecePreparationService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
@@ -286,11 +285,7 @@ class PaintRobotSystem(BaseRobotSystem):
             workpiece_service=application_wiring._build_paint_workpiece_service(self),
             capture_snapshot_service=self._paint_capture_snapshot_service,
         )
-        self._paint_workpiece_preparation_service = PaintWorkpiecePreparationService(
-            can_match_fn=self._paint_matching_service.can_match_saved_workpieces,
-            match_workpiece_fn=self._paint_matching_service.match_saved_workpieces,
-            transformer=self.get_shared_vision_resolver()[0],
-        )
+        self._paint_workpiece_preparation_service = application_wiring._build_paint_workpiece_preparation_service(self)
         self._paint_production_service = PaintProductionService(
             workpiece_preparation_service=self._paint_workpiece_preparation_service,
             capture_snapshot_service=self._paint_capture_snapshot_service,

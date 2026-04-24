@@ -4,21 +4,30 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from time import perf_counter
 from typing import Callable, Optional
 
 import numpy as np
 
-from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
+    IWorkpiecePathExecutor,
+    WorkpieceProcessAction,
+)
+from src.engine.robot.path_preparation import IWorkpiecePathPreparationService
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PivotSimulationConfig, _PIVOT_TRANSLATION_AXIS_OFFSETS_DEG, \
-    _PIVOT_SIDE_SIGNS, _PIVOT_TRANSLATION_DIRECTION_SIGNS, _PICKUP_APPROACH_OFFSET_MM, _PICKUP_DEFAULT_VEL_PERCENT, \
+from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig, _PAINT_TRANSLATION_AXIS_OFFSETS_DEG, \
+    _PAINT_SIDE_SIGNS, _PAINT_TRANSLATION_DIRECTION_SIGNS, _PICKUP_APPROACH_OFFSET_MM, _PICKUP_DEFAULT_VEL_PERCENT, \
     _PICKUP_DEFAULT_ACC_PERCENT, _PICKUP_CONTACT_OFFSET_MM
 from src.robot_systems.paint.processes.paint.pivot_projection import (
-    project_pivot_motion_geometry,
-    rebase_projected_pivot_path_to_zero_start_rz,
+    project_paint_motion_geometry,
+    rebase_projected_paint_path_to_zero_start_rz,
 )
 
 _logger = logging.getLogger(__name__)
+
+
+def _elapsed_s(start: float) -> float:
+    return perf_counter() - float(start)
 
 
 @dataclass(frozen=True)
@@ -27,6 +36,7 @@ class PickupToPivotPlan:
     pickup_approach_pose: list[float]
     pickup_pose: list[float]
     lift_pose: list[float]
+    align_pose: list[float]
     staged_pose: list[float]
 
 def _normalize_pivot_config(
@@ -37,16 +47,16 @@ def _normalize_pivot_config(
     apply_camera_to_tcp_for_pickup: bool = False,
     camera_to_tcp_x_offset: float = 0.0,
     camera_to_tcp_y_offset: float = 0.0,
-) -> PivotSimulationConfig:
+) -> PaintSimulationConfig:
     """Normalize user-facing pivot settings into a validated simulation config."""
     axis_key = str(translation_axis or "x").strip().lower()
     side_key = str(pivot_side or "negative").strip().lower()
     direction_key = str(translation_direction or "forward").strip().lower()
-    return PivotSimulationConfig(
-        translation_axis=axis_key if axis_key in _PIVOT_TRANSLATION_AXIS_OFFSETS_DEG else "x",
-        pivot_side=side_key if side_key in _PIVOT_SIDE_SIGNS else "negative",
+    return PaintSimulationConfig(
+        translation_axis=axis_key if axis_key in _PAINT_TRANSLATION_AXIS_OFFSETS_DEG else "x",
+        paint_side=side_key if side_key in _PAINT_SIDE_SIGNS else "negative",
         translation_direction=(
-            direction_key if direction_key in _PIVOT_TRANSLATION_DIRECTION_SIGNS else "forward"
+            direction_key if direction_key in _PAINT_TRANSLATION_DIRECTION_SIGNS else "forward"
         ),
         apply_camera_to_tcp_for_pickup=bool(apply_camera_to_tcp_for_pickup),
         camera_to_tcp_x_offset=float(camera_to_tcp_x_offset),
@@ -59,6 +69,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def __init__(
         self,
         robot_service,
+        path_preparation_service: Optional[IWorkpiecePathPreparationService] = None,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         post_execute_callback: Optional[Callable[[], bool]] = None,
         robot_config_provider: Optional[Callable[[], object]] = None,
@@ -76,6 +87,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> None:
         """Store robot dependencies and initialize the pivot/pickup execution configuration."""
         self._robot_service = robot_service
+        self._path_preparation_service = path_preparation_service
         self._base_position_provider = base_position_provider
         self._post_execute_callback = post_execute_callback
         self._robot_config_provider = robot_config_provider
@@ -85,6 +97,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._pickup_z_mm = None if pickup_z_mm is None else float(pickup_z_mm)
         self._pickup_safety_z_min_mm = 100.0
         self._debug_dump_dir = debug_dump_dir
+        self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._pivot_config = _normalize_pivot_config(
             translation_axis=pivot_translation_axis,
             pivot_side=pivot_side,
@@ -93,6 +106,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             camera_to_tcp_x_offset=camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=camera_to_tcp_y_offset,
         )
+        self._last_process_start_rz: float | None = None
+        self._last_process_end_pose: list[float] | None = None
+
+    def prepare_workpiece_preview(self, workpiece: dict) -> WorkpieceExecutionPlan:
+        """Build and cache the execution plan for a paint workpiece."""
+        if self._path_preparation_service is None:
+            raise RuntimeError("Path preparation service is not available")
+        self._last_execution_plan = self._path_preparation_service.build_execution_plan(workpiece)
+        return self._last_execution_plan
+
+    def get_last_execution_plan(self) -> WorkpieceExecutionPlan | None:
+        """Return the last paint preview plan prepared by this executor."""
+        return self._last_execution_plan
 
     def _refresh_runtime_config(self) -> None:
         """Refresh robot-dependent pickup settings from the latest robot configuration."""
@@ -113,7 +139,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pass
         self._pivot_config = _normalize_pivot_config(
             translation_axis=self._pivot_config.translation_axis,
-            pivot_side=self._pivot_config.pivot_side,
+            pivot_side=self._pivot_config.paint_side,
             translation_direction=self._pivot_config.translation_direction,
             apply_camera_to_tcp_for_pickup=self._pivot_config.apply_camera_to_tcp_for_pickup,
             camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", self._pivot_config.camera_to_tcp_x_offset)),
@@ -180,6 +206,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Report the execution modes supported by the paint executor."""
         return ("pivot_path",)
 
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
+        """Expose the paint process as one editor-facing action."""
+        return (
+            WorkpieceProcessAction(
+                action_id="paint_process",
+                label="Approve Paint Process",
+                requires_projected_path_plot=True,
+            ),
+        )
+
+    def execute_process_action(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        action_id: str,
+    ) -> tuple[bool, str]:
+        """Execute the requested paint process action."""
+        action_id = str(action_id or "").strip().lower()
+        if action_id != "paint_process":
+            return False, f"Unsupported paint process action: {action_id}"
+        return self.execute_pickup_and_paint(execution_plan)
+
     def supports_pickup_to_pivot(self) -> bool:
         """Report that this executor supports pickup and staging before paint execution."""
         return True
@@ -214,19 +261,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            center_path, _, diagnostics = project_pivot_motion_geometry(
+            center_path, _, diagnostics = project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
                 self._pivot_config,
             )
-            self._write_pivot_debug_dump(
-                source_path=source_path,
-                pivot_path=center_path,
-                diagnostics=diagnostics,
-                pivot_pose=list(pivot_pose),
-                pattern_type=str(job.get("pattern_type", "Path")),
-                stage="preview",
-            )
+            # self._write_pivot_debug_dump(
+            #     source_path=source_path,
+            #     pivot_path=center_path,
+            #     diagnostics=diagnostics,
+            #     pivot_pose=list(pivot_pose),
+            #     pattern_type=str(job.get("pattern_type", "Path")),
+            #     stage="preview",
+            # )
             paths.append(center_path)
         return paths, list(pivot_pose)
 
@@ -243,7 +290,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
-            _, snapshots, _ = project_pivot_motion_geometry(
+            _, snapshots, _ = project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
                 self._pivot_config,
@@ -259,17 +306,26 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         align_start_to_zero_rz: bool = False,
     ) -> list[list[float]] | None:
         """Project one prepared spline into the real pivot execution trajectory."""
+        started = perf_counter()
         pivot_pose = self._resolve_base_position()
         if pivot_pose is None or len(pivot_pose) < 3:
+            _logger.info("[TIMING] pivot_path_build status=missing_pivot elapsed_s=%.3f", _elapsed_s(started))
             return None
-        pivot_path, _, _ = project_pivot_motion_geometry(
+        pivot_path, _, _ = project_paint_motion_geometry(
             spline,
             pivot_pose,
             self._pivot_config,
         )
         _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:
-            pivot_path = rebase_projected_pivot_path_to_zero_start_rz(pivot_path)
+            pivot_path = rebase_projected_paint_path_to_zero_start_rz(pivot_path)
+        _logger.info(
+            "[TIMING] pivot_path_build input_pts=%d output_pts=%d zero_start_rz=%s elapsed_s=%.3f",
+            len(spline),
+            len(pivot_path) if pivot_path else 0,
+            bool(align_start_to_zero_rz),
+            _elapsed_s(started),
+        )
         return pivot_path
 
     def execute_preview_paths(
@@ -280,7 +336,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Execute a prepared plan by projecting each path into pivot motion and sending it to the robot."""
         jobs = execution_plan.execution_jobs
         if not jobs:
-            return False, "No previewed paths available to execute"
+            return False, "No prepared process paths available to execute"
         if self._robot_service is None:
             return False, "Robot service is not available"
 
@@ -302,7 +358,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_pose = self._resolve_base_position()
             if pivot_pose is None or len(pivot_pose) < 3:
                 return False, "Pivot-path execution requires a valid base/pivot position"
-            pivot_path, _, diagnostics = project_pivot_motion_geometry(
+            pivot_path, _, diagnostics = project_paint_motion_geometry(
                 spline,
                 pivot_pose,
                 self._pivot_config,
@@ -330,7 +386,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 return False, f"{pattern_type} pivot-path execution failed with code {result}"
             total_waypoints += len(spline)
             _logger.info(
-                "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
+                "[EXECUTE] [RUN PROCESS] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
                 len(spline), mode, vel, acc,
             )
 
@@ -375,7 +431,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not source_path:
             return None
 
-        pivot_path, _, _ = project_pivot_motion_geometry(
+        pivot_path, _, _ = project_paint_motion_geometry(
             source_path,
             pivot_pose,
             self._pivot_config,
@@ -389,19 +445,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         ).strip().lower()
         workpiece_height_mm = float(jobs[0].get("workpiece_height_mm", 0.0) or 0.0)
         pickup_xy = jobs[0].get("pickup_xy")
-        if pickup_xy is not None and len(pickup_xy) >= 2:
-            pickup_centroid_x = float(pickup_xy[0])
-            pickup_centroid_y = float(pickup_xy[1])
-        else:
-            source_xy = np.array([
-                [float(point[0]), float(point[1])]
-                for point in source_path
-                if len(point) >= 2
-            ], dtype=float)
-            if source_xy.size == 0:
-                return None
-            pickup_centroid_x = float(np.mean(source_xy[:, 0]))
-            pickup_centroid_y = float(np.mean(source_xy[:, 1]))
+        pickup_centroid_x = float(pickup_xy[0])
+        pickup_centroid_y = float(pickup_xy[1])
+
 
         pickup_z = self._pickup_z_mm
         if pickup_z is None:
@@ -442,23 +488,37 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             float(first_pivot_pose[4]),
             pickup_rz,
         ]
+
+        first_pivot_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else 0.0
+
+        align_pose = [
+            pickup_centroid_x - pickup_tcp_dx,
+            pickup_centroid_y - pickup_tcp_dy,
+            pickup_approach_z,
+            float(first_pivot_pose[3]),
+            float(first_pivot_pose[4]),
+            first_pivot_rz,
+        ]
+
         staged_pose = [
             float(first_pivot_pose[0]),
             float(first_pivot_pose[1]),
             pickup_approach_z,
             float(first_pivot_pose[3]),
             float(first_pivot_pose[4]),
-            0.0,
+            first_pivot_rz,
         ]
         return PickupToPivotPlan(
             pickup_approach_pose=pickup_approach_pose,
             pickup_pose=pickup_pose,
             lift_pose=list(pickup_approach_pose),
+            align_pose = align_pose,
             staged_pose=staged_pose,
         )
 
     def _move_pickup_phase(self, label: str, pose: list[float]) -> bool:
         """Execute one pickup-related robot move with the configured pickup tool and user."""
+        started = perf_counter()
         _logger.info(
             "[PICKUP] %s tool=%d user=%d pose=%s",
             label,
@@ -466,7 +526,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._pickup_user,
             [round(v, 3) for v in pose],
         )
-        return self._robot_service.move_ptp(
+        ok = self._robot_service.move_ptp(
             position=pose,
             tool=self._pickup_tool,
             user=self._pickup_user,
@@ -474,49 +534,85 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             acceleration=_PICKUP_DEFAULT_ACC_PERCENT,
             wait_to_reach=True,
         )
+        _logger.info("[TIMING] pickup_phase label=%s success=%s elapsed_s=%.3f", label, bool(ok), _elapsed_s(started))
+        return ok
 
     def _turn_vacuum_on(self) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
+        started = perf_counter()
         if self._vacuum_pump is None:
+            _logger.info("[TIMING] vacuum_on skipped=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
         _logger.info("[PICKUP] Turning vacuum pump ON before pickup")
         if self._vacuum_pump.turn_on():
+            _logger.info("[TIMING] vacuum_on success=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
+        _logger.info("[TIMING] vacuum_on success=false elapsed_s=%.3f", _elapsed_s(started))
         return False, "Pickup approach succeeded, but vacuum pump ON failed"
 
     def _turn_vacuum_off(self) -> tuple[bool, str]:
         """Disable the vacuum pump after staging if one is configured."""
+        started = perf_counter()
         if self._vacuum_pump is None:
+            _logger.info("[TIMING] vacuum_off skipped=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
         _logger.info("[PICKUP] Turning vacuum pump OFF after staged pivot move")
         if self._vacuum_pump.turn_off():
+            _logger.info("[TIMING] vacuum_off success=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
+        _logger.info("[TIMING] vacuum_off success=false elapsed_s=%.3f", _elapsed_s(started))
         return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
 
     def _run_post_execute_return(self, failure_message: str) -> tuple[bool, str]:
         """Run unwind and post-execution return logic after pivot painting finishes."""
+        started = perf_counter()
         if self._post_execute_callback is None:
+            _logger.info("[TIMING] post_execute_return skipped=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
+        unwind_started = perf_counter()
         if not self._robot_service.unwind_joint6(
             blocking=True,
             queue_if_busy=True,
             vel=100.0,
             acc=100.0,
         ):
+            _logger.info("[TIMING] post_execute_return stage=unwind success=false total_elapsed_s=%.3f", _elapsed_s(started))
             return False, failure_message.format(reason="explicit unwind failed")
         try:
+            return_started = perf_counter()
             moved = bool(self._post_execute_callback())
         except Exception:
             _logger.exception("[EXECUTE] Post-execute callback failed")
+            _logger.info(
+                "[TIMING] post_execute_return stage=return success=false unwind_elapsed_s=%.3f total_elapsed_s=%.3f",
+                _elapsed_s(unwind_started),
+                _elapsed_s(started),
+            )
             return False, failure_message.format(reason="return-to-calibration failed")
         if not moved:
+            _logger.info(
+                "[TIMING] post_execute_return stage=return success=false unwind_elapsed_s=%.3f return_elapsed_s=%.3f total_elapsed_s=%.3f",
+                _elapsed_s(unwind_started),
+                _elapsed_s(return_started),
+                _elapsed_s(started),
+            )
             return False, failure_message.format(reason="return-to-calibration failed")
+        _logger.info(
+            "[TIMING] post_execute_return success=true unwind_elapsed_s=%.3f return_elapsed_s=%.3f total_elapsed_s=%.3f",
+            _elapsed_s(unwind_started),
+            _elapsed_s(return_started),
+            _elapsed_s(started),
+        )
         return True, ""
 
     def _execute_pivot_paths(self, execution_plan: WorkpieceExecutionPlan) -> tuple[bool, str, int]:
         """Execute all projected pivot paint paths in the prepared execution plan."""
+        started = perf_counter()
         total_waypoints = 0
-        for job in execution_plan.execution_jobs:
+        self._last_process_start_rz = None
+        self._last_process_end_pose = None
+        for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
+            job_started = perf_counter()
             spline = job.get("execution_path") or job.get("path") or []
             vel = float(job.get("vel", 10.0))
             acc = float(job.get("acc", 30.0))
@@ -526,8 +622,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
             pivot_path = self._build_pivot_execution_path(spline, align_start_to_zero_rz=True)
             if not pivot_path:
+                _logger.info(
+                    "[TIMING] pivot_job index=%d pattern=%s success=false stage=build total_elapsed_s=%.3f",
+                    job_index,
+                    pattern_type,
+                    _elapsed_s(job_started),
+                )
                 return False, "Pickup succeeded, but pivot-path geometry could not be built", total_waypoints
+            if self._last_process_start_rz is None and pivot_path:
+                self._last_process_start_rz = float(pivot_path[0][5]) if len(pivot_path[0]) >= 6 else 0.0
 
+            execute_started = perf_counter()
             result = self._robot_service.execute_trajectory(
                 pivot_path,
                 vel=vel,
@@ -536,8 +641,33 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 orientation_mode="per_waypoint",
             )
             if result not in (0, True, None):
+                _logger.info(
+                    "[TIMING] pivot_job index=%d pattern=%s success=false input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
+                    job_index,
+                    pattern_type,
+                    len(spline),
+                    len(pivot_path),
+                    _elapsed_s(execute_started),
+                    _elapsed_s(job_started),
+                )
                 return False, f"Pickup succeeded, but {pattern_type} pivot paint failed with code {result}", total_waypoints
             total_waypoints += len(spline)
+            self._last_process_end_pose = list(pivot_path[-1])
+            _logger.info(
+                "[TIMING] pivot_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
+                job_index,
+                pattern_type,
+                len(spline),
+                len(pivot_path),
+                _elapsed_s(execute_started),
+                _elapsed_s(job_started),
+            )
+        _logger.info(
+            "[TIMING] pivot_paths success=true jobs=%d total_waypoints=%d elapsed_s=%.3f",
+            len(execution_plan.execution_jobs),
+            total_waypoints,
+            _elapsed_s(started),
+        )
         return True, "", total_waypoints
 
     def execute_pickup_to_pivot(
@@ -545,53 +675,81 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
         """Run the pickup-only sequence: approach, vacuum on, descend, lift, and stage at the pivot."""
+        started = perf_counter()
         if self._robot_service is None:
             return False, "Robot service is not available"
 
+        plan_started = perf_counter()
         plan = self._build_pickup_and_stage_poses(execution_plan)
         if plan is None:
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Could not compute pickup-to-pivot poses"
-
-        if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
-            return False, "Pickup approach move failed"
+        _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", _elapsed_s(plan_started))
 
         ok, msg = self._turn_vacuum_on()
         if not ok:
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
+        if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pickup approach move failed"
+
         if not self._move_pickup_phase("Descending to pickup pose", plan.pickup_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=descend total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup descend move failed"
 
         if not self._move_pickup_phase("Lifting from pickup pose", plan.lift_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=lift total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but lift move failed"
 
-        if not self._move_pickup_phase("Moving to staged pivot pose", plan.staged_pose):
-            return False, "Pickup succeeded, but move-to-pivot failed"
+        if not self._move_pickup_phase("Aligning rotation at pickup pose", plan.align_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=align total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pickup succeeded, but align move failed"
 
-        ok, msg = self._turn_vacuum_off()
-        if not ok:
-            return False, msg
+        # if not self._move_pickup_phase("Moving to staged pivot pose", plan.staged_pose):
+        #     return False, "Pickup succeeded, but move-to-pivot failed"
+
+        # ok, msg = self._turn_vacuum_off()
+        # if not ok:
+        #     return False, msg
+        _logger.info("[TIMING] pickup_to_pivot success=true total_elapsed_s=%.3f", _elapsed_s(started))
         return True, "Pickup completed and staged at pivot-aligned first point"
 
-    def execute_pickup_and_pivot_paint(
+    def execute_pickup_and_paint(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
         """Run pickup, staging, projected pivot paint execution, and post-run return."""
+        started = perf_counter()
         ok, msg = self.execute_pickup_to_pivot(execution_plan)
         if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pickup total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
         ok, msg, total_waypoints = self._execute_pivot_paths(execution_plan)
         if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
+
+        ok, msg = self._turn_vacuum_off()
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
         ok, msg = self._run_post_execute_return(
             "Pickup and pivot paint finished, but {reason}"
         )
         if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=post_return total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
+        _logger.info(
+            "[TIMING] pickup_and_paint success=true jobs=%d total_waypoints=%d total_elapsed_s=%.3f",
+            len(execution_plan.execution_jobs),
+            total_waypoints,
+            _elapsed_s(started),
+        )
         return True, (
             f"Pickup, alignment, and pivot paint completed "
             f"for {len(execution_plan.execution_jobs)} path(s), {total_waypoints} waypoints"

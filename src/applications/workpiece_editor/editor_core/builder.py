@@ -8,6 +8,7 @@ and managers.
 from typing import Optional, Callable, Any
 from contour_editor import ContourEditorBuilder
 from contour_editor.core.main_frame import MainApplicationFrame
+from .adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from .managers.workpiece_manager import WorkpieceManager
 from .handlers import StartHandler, CaptureHandler
 
@@ -34,6 +35,7 @@ class WorkpieceEditorBuilder:
         self._start_handler: Optional[StartHandler] = None
         self._capture_handler: Optional[CaptureHandler] = None
         self._default_settings: dict = {}
+        self._workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
 
     def with_parent(self, parent):
         """Set parent widget"""
@@ -65,6 +67,10 @@ class WorkpieceEditorBuilder:
         self._base_builder.with_widgets(widget_factory)
         return self
 
+    def with_workpiece_data_adapter(self, adapter: IWorkpieceDataAdapter):
+        self._workpiece_data_adapter = adapter
+        return self
+
     def on_save(self, callback: Callable[[dict], None]):
         """
         Set callback for save events.
@@ -92,9 +98,12 @@ class WorkpieceEditorBuilder:
         """Build and return configured editor instance with workpiece support"""
         # Build the base editor
         self._editor = self._base_builder.build()
+        if self._workpiece_data_adapter is None:
+            raise RuntimeError("Workpiece data adapter must be configured before build()")
         # Inject WorkpieceManager (wraps the editor)
         self._workpiece_manager = WorkpieceManager(
             self._editor.contourEditor.editor_with_rulers.editor,
+            adapter=self._workpiece_data_adapter,
             default_settings=self._default_settings,  # ← new
         )
         self._editor.contourEditor.editor_with_rulers.editor.workpiece_manager = self._workpiece_manager
@@ -103,7 +112,7 @@ class WorkpieceEditorBuilder:
         else:
             print(f"Failed to set workpiece manager OK")
         # Create and connect StartHandler for workpiece-specific start logic
-        self._start_handler = StartHandler(self._editor)
+        self._start_handler = StartHandler(self._editor, self._workpiece_data_adapter)
         self._editor.start_requested.connect(self._start_handler.handle_start)
 
         # Create and connect CaptureHandler for workpiece-specific capture logic
@@ -134,5 +143,4 @@ class WorkpieceEditorBuilder:
     def get_workpiece_manager(self) -> Optional[WorkpieceManager]:
         """Get the WorkpieceManager instance (available after build())"""
         return self._workpiece_manager
-
 

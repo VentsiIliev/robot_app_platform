@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 
-from src.applications.workpiece_editor.service.i_workpiece_path_executor import IWorkpiecePathExecutor
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
+    IWorkpiecePathExecutor,
+    WorkpieceProcessAction,
+)
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 
 _logger = logging.getLogger(__name__)
@@ -13,6 +16,30 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         return ("continuous", "pose_path")
+
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
+        return (
+            WorkpieceProcessAction(
+                action_id="weld_continuous",
+                label="Run Weld Continuous",
+            ),
+            WorkpieceProcessAction(
+                action_id="weld_pose_path",
+                label="Run Weld Pose Path",
+            ),
+        )
+
+    def execute_process_action(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        action_id: str,
+    ) -> tuple[bool, str]:
+        action_id = str(action_id or "").strip().lower()
+        if action_id == "weld_continuous":
+            return self.execute_preview_paths(execution_plan, mode="continuous")
+        if action_id == "weld_pose_path":
+            return self.execute_preview_paths(execution_plan, mode="pose_path")
+        return False, f"Unsupported welding process action: {action_id}"
 
     def supports_pickup_to_pivot(self) -> bool:
         return False
@@ -36,7 +63,7 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         jobs = execution_plan.execution_jobs
         if not jobs:
-            return False, "No previewed paths available to execute"
+            return False, "No prepared process paths available to execute"
         if self._robot_service is None:
             return False, "Robot service is not available"
 
@@ -67,7 +94,7 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
             total_waypoints += len(spline)
             _logger.info(
-                "[EXECUTE] [RUN FROM PREVIEW] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
+                "[EXECUTE] [RUN PROCESS] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
                 len(spline), mode, vel, acc,
             )
 
@@ -82,7 +109,7 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         return False, "Pickup-to-pivot is not supported in welding"
 
-    def execute_pickup_and_pivot_paint(
+    def execute_pickup_and_paint(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:

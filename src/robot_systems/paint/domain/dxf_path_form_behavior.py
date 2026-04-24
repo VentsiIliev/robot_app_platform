@@ -24,9 +24,13 @@ class PaintDxfPathFormBehavior:
         *,
         prepare_dxf_raw_for_image: Callable[[dict, float, float], dict],
         dxf_importer: Callable[[str], dict],
+        dxf_alignment_strategy: str = "rigid",
+        dxf_max_scale_deviation: float = 0.03,
     ) -> None:
         self._prepare_dxf_raw_for_image = prepare_dxf_raw_for_image
         self._dxf_importer = dxf_importer
+        self._dxf_alignment_strategy = str(dxf_alignment_strategy or "rigid").strip().lower()
+        self._dxf_max_scale_deviation = float(dxf_max_scale_deviation)
 
     def apply(self, form, editor_frame) -> None:
         install_line_edit_click_action(
@@ -110,7 +114,12 @@ class PaintDxfPathFormBehavior:
     def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour: np.ndarray) -> dict:
         from src.robot_systems.paint.processes.paint.workpiece_alignment import align_raw_workpiece_to_contour
 
-        return align_raw_workpiece_to_contour(raw, captured_contour)
+        return align_raw_workpiece_to_contour(
+            raw,
+            captured_contour,
+            strategy=self._dxf_alignment_strategy,
+            max_scale_deviation=self._dxf_max_scale_deviation,
+        )
 
     @staticmethod
     def _resample_closed_path(points: np.ndarray, count: int) -> np.ndarray:

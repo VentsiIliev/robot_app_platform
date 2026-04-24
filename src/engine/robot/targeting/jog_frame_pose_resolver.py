@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+import logging
 from typing import Callable, Optional, Sequence
 
-from src.engine.geometry.planar import rotate_xy
 from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
 from src.engine.robot.targeting.point_registry import PointRegistry
+
+_logger = logging.getLogger(__name__)
 
 
 class JogFramePoseResolver:
@@ -46,9 +48,14 @@ class JogFramePoseResolver:
         x, y, z, rx, ry, rz = [float(v) for v in current_pose[:6]]
         axis_name = str(axis).strip().upper()
         sign = 1.0 if str(direction).strip().lower() == "plus" else -1.0
-        ref_rz = self._reference_rz()
-
-        selected_x, selected_y = self._selected_xy_from_command(x, y, rz, point.offset_x, point.offset_y, ref_rz)
+        current_tcp_dx, current_tcp_dy = _project_local_xy_to_world_xy(
+            self._tcp_x, self._tcp_y, rx, ry, rz
+        )
+        current_point_dx, current_point_dy = _project_local_xy_to_world_xy(
+            point.offset_x, point.offset_y, rx, ry, rz
+        )
+        selected_x = x - current_tcp_dx + current_point_dx
+        selected_y = y - current_tcp_dy + current_point_dy
         target_selected_x = selected_x
         target_selected_y = selected_y
         target_z = z
@@ -71,13 +78,27 @@ class JogFramePoseResolver:
         else:
             return None
 
-        command_x, command_y = self._command_xy_from_selected(
-            target_selected_x,
-            target_selected_y,
-            target_rz,
-            point.offset_x,
-            point.offset_y,
-            ref_rz,
+        target_tcp_dx, target_tcp_dy = _project_local_xy_to_world_xy(
+            self._tcp_x, self._tcp_y, target_rx, target_ry, target_rz
+        )
+        target_point_dx, target_point_dy = _project_local_xy_to_world_xy(
+            point.offset_x, point.offset_y, target_rx, target_ry, target_rz
+        )
+        command_x = target_selected_x + target_tcp_dx - target_point_dx
+        command_y = target_selected_y + target_tcp_dy - target_point_dy
+        _logger.info(
+            "[JOG_RESOLVE] frame=%s axis=%s direction=%s step=%s current_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) selected_xy=(%.3f, %.3f) current_tcp=(%.3f, %.3f) current_point=(%.3f, %.3f) target_pose=(%.3f, %.3f, %.3f, %.3f, %.3f, %.3f) target_tcp=(%.3f, %.3f) target_point=(%.3f, %.3f)",
+            getattr(point, "name", ""),
+            axis_name,
+            direction,
+            step,
+            x, y, z, rx, ry, rz,
+            selected_x, selected_y,
+            current_tcp_dx, current_tcp_dy,
+            current_point_dx, current_point_dy,
+            command_x, command_y, target_z, target_rx, target_ry, target_rz,
+            target_tcp_dx, target_tcp_dy,
+            target_point_dx, target_point_dy,
         )
         return [command_x, command_y, target_z, target_rx, target_ry, target_rz]
 
@@ -88,28 +109,6 @@ class JogFramePoseResolver:
             return float(self._reference_rz_provider())
         except Exception:
             return 0.0
-
-    def _selected_xy_from_command(self, command_x: float, command_y: float, rz_degrees: float, point_offset_x: float, point_offset_y: float, reference_rz: float) -> tuple[float, float]:
-        tcp_dx, tcp_dy = self._tcp_delta(rz_degrees, reference_rz)
-        point_dx, point_dy = _rotate_xy(point_offset_x, point_offset_y, rz_degrees)
-        return command_x + tcp_dx - point_dx, command_y + tcp_dy - point_dy
-
-    def _command_xy_from_selected(self, selected_x: float, selected_y: float, rz_degrees: float, point_offset_x: float, point_offset_y: float, reference_rz: float) -> tuple[float, float]:
-        tcp_dx, tcp_dy = self._tcp_delta(rz_degrees, reference_rz)
-        point_dx, point_dy = _rotate_xy(point_offset_x, point_offset_y, rz_degrees)
-        return selected_x - tcp_dx + point_dx, selected_y - tcp_dy + point_dy
-
-    def _tcp_delta(self, current_rz: float, reference_rz: float) -> tuple[float, float]:
-        if self._tcp_x == 0.0 and self._tcp_y == 0.0:
-            return 0.0, 0.0
-        cur_x, cur_y = _rotate_xy(self._tcp_x, self._tcp_y, current_rz)
-        ref_x, ref_y = _rotate_xy(self._tcp_x, self._tcp_y, reference_rz)
-        return cur_x - ref_x, cur_y - ref_y
-
-
-def _rotate_xy(x: float, y: float, rz_deg: float) -> tuple[float, float]:
-    return rotate_xy(x, y, rz_deg)
-
 
 def _tool_frame_delta(position: Sequence[float], axis_idx: int, direction_value: float, step: float) -> tuple[float, float, float]:
     rx_deg = float(position[3])
@@ -126,3 +125,28 @@ def _tool_frame_delta(position: Sequence[float], axis_idx: int, direction_value:
     col = cols[axis_idx]
     scale = direction_value * step
     return col[0] * scale, col[1] * scale, col[2] * scale
+
+
+def _rotation_columns(rx_deg: float, ry_deg: float, rz_deg: float) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    cx, sx = math.cos(math.radians(rx_deg)), math.sin(math.radians(rx_deg))
+    cy, sy = math.cos(math.radians(ry_deg)), math.sin(math.radians(ry_deg))
+    cz, sz = math.cos(math.radians(rz_deg)), math.sin(math.radians(rz_deg))
+    return (
+        (cy * cz, cy * sz, -sy),
+        (cz * sx * sy - cx * sz, cx * cz + sx * sy * sz, cy * sx),
+        (cx * cz * sy + sx * sz, cx * sy * sz - cz * sx, cx * cy),
+    )
+
+
+def _project_local_xy_to_world_xy(
+    local_x: float,
+    local_y: float,
+    rx_deg: float,
+    ry_deg: float,
+    rz_deg: float,
+) -> tuple[float, float]:
+    """Project a local in-plane XY offset into robot-world XY for the given wrist orientation."""
+    col_x, col_y, _ = _rotation_columns(rx_deg, ry_deg, rz_deg)
+    world_x = float(local_x) * col_x[0] + float(local_y) * col_y[0]
+    world_y = float(local_x) * col_x[1] + float(local_y) * col_y[1]
+    return world_x, world_y

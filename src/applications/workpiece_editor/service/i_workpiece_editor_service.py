@@ -1,11 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
 from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
 
 
 class IWorkpieceEditorService(ABC):
+
+    @abstractmethod
+    def get_workpiece_data_adapter(self) -> IWorkpieceDataAdapter: ...
 
     @abstractmethod
     def get_form_schema(self) -> WorkpieceFormSchema: ...
@@ -44,19 +49,10 @@ class IWorkpieceEditorService(ABC):
     def get_last_pivot_motion_preview(self) -> tuple[list, list[float] | None]: ...
 
     @abstractmethod
-    def get_available_execution_modes(self) -> tuple[str, ...]: ...
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]: ...
 
     @abstractmethod
-    def can_execute_pickup_to_pivot(self) -> bool: ...
-
-    @abstractmethod
-    def execute_pickup_to_pivot(self) -> tuple[bool, str]: ...
-
-    @abstractmethod
-    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]: ...
-
-    @abstractmethod
-    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]: ...
+    def execute_process_action(self, action_id: str) -> tuple[bool, str]: ...
 
     @abstractmethod
     def can_import_dxf_test(self) -> bool: ...

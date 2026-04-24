@@ -27,8 +27,9 @@ class WorkpieceEditorFactory(ApplicationFactory):
         self._messaging = messaging
         schema = service.get_form_schema()
         segment_config = service.get_segment_config()
+        adapter = service.get_workpiece_data_adapter()
         model = self._create_model(service)
-        view = WorkpieceEditorView(schema=schema, segment_config=segment_config)
+        view = WorkpieceEditorView(schema=schema, segment_config=segment_config, workpiece_data_adapter=adapter)
         controller = self._create_controller(model, view)
         return self._finalize_build(
             model=model,

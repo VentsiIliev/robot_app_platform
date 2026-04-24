@@ -3,10 +3,16 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
+from src.robot_systems.paint.processes.paint.workpiece_alignment import (
+    DXF_ALIGNMENT_STRATEGY_RIGID,DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
+)
 
 
 _logger = logging.getLogger(__name__)
 _PAINT_EXECUTION_TARGET_POINT = "tool"
+_PAINT_ENABLE_Z_SHIFT_PIXEL_COMPENSATION = False
+_PAINT_DXF_ALIGNMENT_STRATEGY = DXF_ALIGNMENT_STRATEGY_RIGID
+_PAINT_DXF_MAX_SCALE_DEVIATION = 0.03
 
 
 def _get_paint_execution_target_point_name(robot_system) -> str:
@@ -59,6 +65,7 @@ def _build_paint_path_executor(robot_system):
     debug_dump_dir = _build_paint_path_debug_dump_dir()
     return PaintWorkpiecePathExecutor(
         robot_service=robot_service,
+        path_preparation_service=_build_paint_path_preparation_service(robot_system),
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
             if getattr(robot_system, "_navigation", None) is not None else None
@@ -73,8 +80,8 @@ def _build_paint_path_executor(robot_system):
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
         pivot_translation_axis="x",
-        pivot_side="positive",
-        pivot_translation_direction="reverse",
+        pivot_side="negative",
+        pivot_translation_direction="forward",
         apply_camera_to_tcp_for_pickup=True,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
         camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
@@ -99,13 +106,16 @@ def _build_paint_path_preparation_service(robot_system):
         except Exception:
             z_min = 0.0
     segment_config = SegmentEditorConfig(schema=build_paint_segment_settings_schema())
-    pixel_height_compensation_fn = (
-        lambda height_mm: (
-            float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
-            float(getattr(robot_config, "camera_z_shift_y_per_mm_px", 0.0)) * float(height_mm),
+    if _PAINT_ENABLE_Z_SHIFT_PIXEL_COMPENSATION:
+        pixel_height_compensation_fn = (
+            lambda height_mm: (
+                float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
+                float(getattr(robot_config, "camera_z_shift_y_per_mm_px", 0.0)) * float(height_mm),
+            )
+            if robot_config is not None else (0.0, 0.0)
         )
-        if robot_config is not None else (0.0, 0.0)
-    )
+    else:
+        pixel_height_compensation_fn = lambda _height_mm: (0.0, 0.0)
     return DefaultWorkpiecePathPreparationService(
         logger=_logger,
         segment_config=segment_config,
@@ -137,6 +147,18 @@ def _build_paint_matching_service(robot_system, workpiece_service=None, capture_
     )
 
 
+def _build_paint_workpiece_preparation_service(robot_system):
+    from src.robot_systems.paint.processes.paint.workpiece_preparation_service import PaintWorkpiecePreparationService
+
+    return PaintWorkpiecePreparationService(
+        can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
+        match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
+        transformer=robot_system.get_shared_vision_resolver()[0],
+        dxf_alignment_strategy=_PAINT_DXF_ALIGNMENT_STRATEGY,
+        dxf_max_scale_deviation=_PAINT_DXF_MAX_SCALE_DEVIATION,
+    )
+
+
 def _build_paint_workpiece_editor_service(robot_system):
     from src.applications.workpiece_editor.service.workpiece_editor_service import (
         WorkpieceEditorOptions,
@@ -144,6 +166,7 @@ def _build_paint_workpiece_editor_service(robot_system):
         WorkpieceEditorService,
         WorkpieceEditorStorage,
     )
+    from src.robot_systems.paint.domain.paint_workpiece_editor_adapter import PaintWorkpieceEditorAdapter
     from src.robot_systems.paint.domain.contour_editor_schema import (
         build_paint_contour_form_schema,
         build_paint_segment_settings_schema,
@@ -187,6 +210,7 @@ def _build_paint_workpiece_editor_service(robot_system):
             path_executor=path_executor,
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
+            workpiece_data_adapter=PaintWorkpieceEditorAdapter(),
         ),
         form_schema=build_paint_contour_form_schema(),
         segment_config=SegmentEditorConfig(schema=segment_config),
@@ -213,6 +237,8 @@ def _build_paint_contour_editor_application(robot_system):
             PaintDxfPathFormBehavior(
                 prepare_dxf_raw_for_image=service.prepare_dxf_test_raw_for_image,
                 dxf_importer=import_dxf_to_workpiece_data,
+                dxf_alignment_strategy=_PAINT_DXF_ALIGNMENT_STRATEGY,
+                dxf_max_scale_deviation=_PAINT_DXF_MAX_SCALE_DEVIATION,
             )
         ]
     )

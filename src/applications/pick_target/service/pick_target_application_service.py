@@ -142,13 +142,14 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.exception("move_to(%.1f, %.1f, %.1f) failed", x, y, z)
             return False
 
-    def move_to_base(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float) -> bool:
+    def move_to_base(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
         if self._robot is None:
             _logger.warning("Robot service not available — cannot move")
             return False
         try:
+            target_z = float(_Z if z is None else z)
             return self._robot.move_ptp(
-                [robot_x, robot_y, _Z, rx, ry, rz],
+                [robot_x, robot_y, target_z, rx, ry, rz],
                 tool=self._tool(),
                 user=self._user(),
                 velocity=20,
@@ -159,11 +160,12 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.exception("move_to_base(%.1f, %.1f) failed", robot_x, robot_y)
             return False
 
-    def move_to_with_live_height(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float) -> bool:
+    def move_to_with_live_height(self, robot_x: float, robot_y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
         if self._robot is None:
             _logger.warning("Robot service not available — cannot move")
             return False
-        if not self.move_to_base(robot_x, robot_y, rx, ry, rz):
+        target_z = float(_Z if z is None else z)
+        if not self.move_to_base(robot_x, robot_y, rx, ry, rz, target_z):
             return False
         if self._height_measuring is None:
             _logger.warning("Height measuring service not available — staying at base Z")
@@ -178,10 +180,10 @@ class PickTargetApplicationService(IPickTargetService):
         if measured_z is None:
             _logger.warning("Height measurement returned None at (%.1f, %.1f) — staying at base Z", robot_x, robot_y)
             return True
-        adjusted_z = _Z + measured_z
+        adjusted_z = target_z + measured_z
         _logger.debug(
             "Live height correction at (%.1f, %.1f): base=%.1f measured=%.3f adjusted=%.3f",
-            robot_x, robot_y, _Z, measured_z, adjusted_z,
+            robot_x, robot_y, target_z, measured_z, adjusted_z,
         )
         try:
             return self._robot.move_ptp(

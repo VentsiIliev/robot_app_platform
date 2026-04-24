@@ -18,8 +18,8 @@
     "delay_after_move_s": 2.0
   },
   "camera_tcp_offset_config": {
-    "run_during_robot_calibration": true,
-    "max_markers_for_tcp_capture": 14,
+    "run_during_robot_calibration": false,
+    "max_markers_for_tcp_capture": 4,
     "marker_id": 115,
     "rotation_step_deg": 5.0,
     "iterations": 18,
@@ -35,7 +35,7 @@
     "recenter_max_iterations": 50,
     "recenter_stability_wait_s": 1.0,
     "recenter_alignment_threshold_mm": 0.5,
-    "min_samples": 10,
+    "min_samples": 2,
     "max_acceptance_std_mm": 1.0
   },
   "run_height_measurement": false,
@@ -50,6 +50,7 @@
   "auto_skip_known_unreachable_markers": true,
   "unreachable_marker_failure_threshold": 1,
   "known_unreachable_marker_ids": [
+    1,
     125,
     129,
     130,
@@ -181,7 +182,8 @@
     "169": 1,
     "155": 1,
     "142": 1,
-    "129": 1
+    "129": 1,
+    "1": 1
   },
   "velocity": 50,
   "acceleration": 20,

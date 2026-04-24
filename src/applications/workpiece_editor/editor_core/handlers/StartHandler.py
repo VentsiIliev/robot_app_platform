@@ -1,6 +1,8 @@
 import logging
 from PyQt6.QtCore import QObject
 
+from ..adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
+
 _logger = logging.getLogger(__name__)
 
 
@@ -12,13 +14,13 @@ class StartHandler(QObject):
     every segment, but knows nothing about GlueType or any specific type.
     """
 
-    def __init__(self, editor_frame, parent=None):
+    def __init__(self, editor_frame, adapter: IWorkpieceDataAdapter, parent=None):
         super().__init__(parent)
         self.editor_frame = editor_frame
+        self._adapter = adapter
 
     def handle_start(self) -> None:
         try:
-            from ..adapters.workpiece_adapter import WorkpieceAdapter
             from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
             editor = (self.editor_frame.contourEditor
@@ -29,7 +31,7 @@ class StartHandler(QObject):
                 if hasattr(editor, "workpiece_manager") else None
             )
 
-            contour_data = (WorkpieceAdapter.to_workpiece_data(editor_data)
+            contour_data = (self._adapter.to_workpiece_data(editor_data)
                             if editor_data else {})
 
             self.editor_frame.execute_requested.emit(contour_data)

@@ -6,6 +6,12 @@ from src.engine.robot.targeting.remote_tcp_settings import RemoteTcpSettings
 from src.engine.robot.targeting.robot_system_targeting_provider import RobotSystemTargetingProvider
 from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.target_frame_settings import TargetFrameSettings
+from src.engine.robot.targeting.target_point_geometry import (
+    command_xy_from_selected_xy,
+    rotate_offset_xy,
+    selected_xy_from_command_xy,
+    tcp_delta_xy,
+)
 from src.engine.robot.targeting.targeting_settings import TargetingSettings, TargetingSettingsSerializer
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver, TargetTransformResult
 from src.shared_contracts.declarations import RemoteTcpDefinition, TargetFrameDefinition
@@ -21,6 +27,10 @@ __all__ = [
     "TargetFrame",
     "TargetFrameDefinition",
     "TargetFrameSettings",
+    "rotate_offset_xy",
+    "tcp_delta_xy",
+    "selected_xy_from_command_xy",
+    "command_xy_from_selected_xy",
     "TargetingSettings",
     "TargetingSettingsSerializer",
     "VisionTargetResolver",

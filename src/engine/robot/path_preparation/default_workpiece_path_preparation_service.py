@@ -1,20 +1,27 @@
 from __future__ import annotations
 
+import os
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Callable, Optional
+import logging
 
 import cv2
 import numpy as np
 
+_logger = logging.getLogger(__name__)
+
 from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_HEADING_DEADBAND_DEG,
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
+    canonicalize_closed_contour_points,
+    compute_pickup_rz_from_robot_contour,
     compute_pickup_rz_from_robot_path,
+    compute_pickup_rz_from_robot_contour_with_direction,
     has_valid_contour,
     rebuild_pose_path_from_xy,
 )
 from src.engine.robot.path_preparation.i_workpiece_path_preparation_service import IWorkpiecePathPreparationService
-
 _EXECUTION_INTERPOLATION_SPACING_MM = 10.0
 _EXECUTION_MIN_PREPROCESS_SPACING_MM = 2.5
 _EXECUTION_DENSE_SAMPLING_FACTOR = 0.25
@@ -33,6 +40,7 @@ _SEGMENT_DENSE_SAMPLING_FACTOR_KEY = "dense_sampling_factor"
 _SEGMENT_EXECUTION_SPACING_KEY = "execution_spacing_mm"
 _SEGMENT_TANGENT_LOOKAHEAD_DISTANCE_KEY = "path_tangent_lookahead_mm"
 _SEGMENT_TANGENT_DEADBAND_KEY = "path_tangent_deadband_deg"
+_CANONICALIZE_WORKPIECE_LAYER_CONTOUR = True
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,70 @@ def _resolve_segment_tangent_settings(settings: dict) -> tuple[float, float]:
     return lookahead_distance_mm, heading_deadband_deg
 
 
+def _save_contour_reordering_debug_plot(
+    original_points: np.ndarray,
+    reordered_points: np.ndarray,
+    pickup_point: tuple[float, float] | None = None,
+    *,
+    debug_dir: str = "/home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots",
+) -> None:
+    """Save an overlay image showing original vs canonicalized contour ordering."""
+    try:
+        original = np.asarray(original_points, dtype=np.float64)
+        reordered = np.asarray(reordered_points, dtype=np.float64)
+        if original.ndim != 2 or reordered.ndim != 2 or len(original) < 2 or len(reordered) < 2:
+            return
+
+        all_points = np.vstack([original[:, :2], reordered[:, :2]])
+        min_xy = np.min(all_points, axis=0)
+        max_xy = np.max(all_points, axis=0)
+        pad = 30.0
+        span = np.maximum(max_xy - min_xy, np.array([1.0, 1.0], dtype=np.float64))
+        scale = min(900.0 / float(span[0]), 700.0 / float(span[1]))
+
+        def _to_canvas(points: np.ndarray) -> np.ndarray:
+            pts = np.asarray(points[:, :2], dtype=np.float64)
+            pts = (pts - min_xy) * scale + pad
+            pts[:, 1] = (span[1] * scale + 2.0 * pad) - pts[:, 1]
+            return np.rint(pts).astype(np.int32).reshape(-1, 1, 2)
+
+        canvas_w = int(np.ceil(span[0] * scale + 2.0 * pad))
+        canvas_h = int(np.ceil(span[1] * scale + 2.0 * pad))
+        canvas = np.full((max(canvas_h, 100), max(canvas_w, 100), 3), 255, dtype=np.uint8)
+
+        original_canvas = _to_canvas(original)
+        reordered_canvas = _to_canvas(reordered)
+
+        cv2.polylines(canvas, [original_canvas], True, (0, 0, 255), 2)
+        cv2.polylines(canvas, [reordered_canvas], True, (0, 180, 0), 2)
+        cv2.circle(canvas, tuple(original_canvas[0, 0]), 6, (0, 0, 180), -1)
+        cv2.circle(canvas, tuple(reordered_canvas[0, 0]), 6, (0, 180, 0), -1)
+        cv2.putText(canvas, "Original start", tuple(original_canvas[0, 0] + np.array([8, -8])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 180), 1, cv2.LINE_AA)
+        cv2.putText(canvas, "Reordered start", tuple(reordered_canvas[0, 0] + np.array([8, 18])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 120, 0), 1, cv2.LINE_AA)
+        if pickup_point is not None:
+            pickup_canvas = _to_canvas(np.asarray([[float(pickup_point[0]), float(pickup_point[1])]], dtype=np.float64))
+            px, py = tuple(pickup_canvas[0, 0])
+            cv2.drawMarker(canvas, (int(px), int(py)), (200, 0, 200), cv2.MARKER_CROSS, 18, 2)
+            cv2.putText(
+                canvas,
+                f"Pickup centroid ({float(pickup_point[0]):.1f}, {float(pickup_point[1]):.1f})",
+                (int(px) + 8, int(py) - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (140, 0, 140),
+                1,
+                cv2.LINE_AA,
+            )
+
+        os.makedirs(debug_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(debug_dir, f"contour_reorder_debug_{timestamp}.png")
+        cv2.imwrite(path, canvas)
+        _logger.info("[EXECUTE] Saved contour reorder debug plot to: %s", path)
+    except Exception:
+        _logger.debug("[EXECUTE] Failed to save contour reorder debug plot", exc_info=True)
+
+
 def _auto_input_densify_spacing(path_pts: list[list[float]], interpolation_spacing_mm: float) -> float:
     if len(path_pts) < 3:
         return 0.0
@@ -174,6 +246,28 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
 
+    def _resolve_target_point_metadata(self, target_point_name: str, frame_name: str) -> tuple[str, float, float, float]:
+        resolved_name = str(target_point_name or "").strip().lower()
+        offset_x = 0.0
+        offset_y = 0.0
+        reference_rz = 0.0
+        if self._resolver is not None and resolved_name:
+            try:
+                point = self._resolver.registry.by_name(resolved_name)
+                offset_x = float(getattr(point, "offset_x", 0.0))
+                offset_y = float(getattr(point, "offset_y", 0.0))
+            except Exception:
+                offset_x = 0.0
+                offset_y = 0.0
+            try:
+                frame_obj = self._resolver.get_frame(str(frame_name or "").strip().lower())
+                mapper = getattr(frame_obj, "mapper", None) if frame_obj is not None else None
+                target_pose = getattr(mapper, "target_pose", None) if mapper is not None else None
+                reference_rz = float(getattr(target_pose, "rz", 0.0)) if target_pose is not None else 0.0
+            except Exception:
+                reference_rz = 0.0
+        return resolved_name, offset_x, offset_y, reference_rz
+
     def build_execution_plan(self, workpiece: dict) -> WorkpieceExecutionPlan:
         from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import (
             ContourPathPipeline,
@@ -182,36 +276,70 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             RuckigConfig,
         )
 
-        merged = dict(workpiece or {})
+        merged = workpiece
+        original_pickup_source = dict(merged)
+        if has_valid_contour(merged.get("contour")):
+            try:
+                original_pickup_source["contour"] = np.array(merged.get("contour", []), dtype=np.float32).copy()
+            except Exception:
+                original_pickup_source["contour"] = merged.get("contour")
         spray_pattern = merged.get("sprayPattern", {})
         workpiece_height_mm = _safe_float(merged.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        execution_target_name, execution_target_offset_x, execution_target_offset_y, execution_reference_rz = (
+            self._resolve_target_point_metadata(self._target_point_name, self._calibration_frame_name)
+        )
+        pickup_target_name, pickup_target_offset_x, pickup_target_offset_y, pickup_reference_rz = (
+            self._resolve_target_point_metadata(self._pickup_target_point_name, self._calibration_frame_name)
+        )
         use_workpiece_layer = False
-        if not spray_pattern or not any(spray_pattern.get(k) for k in ("Contour", "Fill")):
+        self._logger.debug(f"SPRAY PATTERN: {spray_pattern}")
+        contour = spray_pattern.get("Contour") or None
+        fill = spray_pattern.get("Fill") or None
+
+        if not contour and not fill:
             if self._execute_from_workpiece_layer and has_valid_contour(merged.get("contour")):
                 use_workpiece_layer = True
                 self._logger.info("[EXECUTE] No spray patterns found; using workpiece layer for execution")
             else:
-                raise ValueError("No spray patterns found — draw Contour or Fill paths first")
+                self._logger.warning("No spray patterns found — draw Contour or Fill paths first")
+                self._logger.warning("No workpiece contour found")
+                # raise ValueError("No spray patterns found — draw Contour or Fill paths first")
 
         robot_paths = []
-        pickup_px = self._extract_pickup_pixel(merged)
+        pickup_px = self._extract_pickup_pixel(original_pickup_source)
         pickup_xy = None
         pickup_rz = 0.0
         pickup_camera_xy = None
+        pickup_rz_source_path: list[list[float]] | None = None
+        pickup_rz_source_contour: list[list[float]] | None = None
 
         if use_workpiece_layer:
+            self._logger.debug(f"USING WORKPIECE LAYER")
             contour_arr = merged.get("contour", [])
             settings = {key: value for key, value in merged.items() if key not in {"contour", "sprayPattern"}}
             settings["height_mm"] = workpiece_height_mm
             if not isinstance(contour_arr, np.ndarray):
                 contour_arr = np.array(contour_arr, dtype=np.float32)
             if contour_arr.size != 0:
-                pts_px = contour_arr.reshape(-1, 2)
+                raw_pts_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
+                pts_px = (
+                    canonicalize_closed_contour_points(raw_pts_px)
+                    if _CANONICALIZE_WORKPIECE_LAYER_CONTOUR
+                    else raw_pts_px
+                )
+                if _CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3 and len(pts_px) >= 3:
+                    _save_contour_reordering_debug_plot(raw_pts_px, pts_px, pickup_px)
                 self._logger.info("[EXECUTE] Workpiece: %d pixel points | settings=%s", len(pts_px), settings)
+                if pickup_px is not None:
+                    raw_robot_pts = self._transform_to_robot(raw_pts_px, settings)
+                    if raw_robot_pts:
+                        pickup_rz_source_path = [list(pt) for pt in raw_robot_pts]
+                        pickup_rz_source_contour = [list(pt) for pt in raw_robot_pts]
                 robot_pts = self._transform_to_robot(pts_px, settings)
                 if robot_pts:
                     robot_paths.append((robot_pts, settings, "Workpiece"))
         else:
+            self._logger.debug(f"USING SPRAY PATTERN")
             for pattern_type in ("Contour", "Fill"):
                 for i, pattern in enumerate(spray_pattern.get(pattern_type, [])):
                     contour_arr = pattern.get("contour", [])
@@ -289,7 +417,33 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     frame_name=self._calibration_frame_name,
                     rz_override=0.0,
                 )
-                pickup_rz = compute_pickup_rz_from_robot_path(execution_spline, pickup_camera_xy)
+                if use_workpiece_layer and pickup_rz_source_contour and robot_paths:
+                    pickup_rz = compute_pickup_rz_from_robot_contour_with_direction(
+                        pickup_rz_source_contour,
+                        robot_paths[0][0],
+                    )
+                    self._logger.info(
+                        "[PICKUP_RZ] method=contour_axis_directed pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f contour_pts=%d path_pts=%d",
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        float(pickup_camera_xy[0]),
+                        float(pickup_camera_xy[1]),
+                        float(pickup_rz),
+                        len(pickup_rz_source_contour),
+                        len(robot_paths[0][0]),
+                    )
+                else:
+                    pickup_rz_path = pickup_rz_source_path or execution_spline
+                    pickup_rz = compute_pickup_rz_from_robot_path(pickup_rz_path, pickup_camera_xy)
+                    self._logger.info(
+                        "[PICKUP_RZ] method=path_tangent pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f path_pts=%d",
+                        float(pickup_px[0]),
+                        float(pickup_px[1]),
+                        float(pickup_camera_xy[0]),
+                        float(pickup_camera_xy[1]),
+                        float(pickup_rz),
+                        len(pickup_rz_path),
+                    )
                 pickup_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
@@ -305,10 +459,19 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,
+                    "use_workpiece_layer": bool(use_workpiece_layer),
+                    "source_has_dxf": bool(str(merged.get("dxfPath", "") or "").strip()),
                     "workpiece_height_mm": float(workpiece_height_mm),
                     "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
                     "pickup_rz": float(pickup_rz),
-                    "pickup_target_point_name": str(self._pickup_target_point_name or "").strip().lower(),
+                    "pickup_target_point_name": pickup_target_name,
+                    "pickup_target_offset_x": float(pickup_target_offset_x),
+                    "pickup_target_offset_y": float(pickup_target_offset_y),
+                    "pickup_reference_rz": float(pickup_reference_rz),
+                    "execution_target_point_name": execution_target_name,
+                    "execution_target_offset_x": float(execution_target_offset_x),
+                    "execution_target_offset_y": float(execution_target_offset_y),
+                    "execution_reference_rz": float(execution_reference_rz),
                 }
             )
 

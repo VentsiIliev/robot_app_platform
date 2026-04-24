@@ -1,6 +1,8 @@
 import logging
+import os
 from typing import List, Tuple, Callable
 import copy
+from datetime import datetime
 
 import numpy as np
 import cv2
@@ -11,6 +13,7 @@ from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButt
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
 from src.applications.workpiece_editor.view.workpiece_editor_view import WorkpieceEditorView
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.vision_events import VisionTopics
@@ -21,7 +24,7 @@ _DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
 
 
 class _Bridge(QObject):
-    camera_frame       = pyqtSignal(object)
+    camera_frame = pyqtSignal(object)
     load_workpiece_raw = pyqtSignal(dict)
 
 
@@ -29,26 +32,28 @@ class WorkpieceEditorController(IApplicationController):
 
     def __init__(self, model: WorkpieceEditorModel, view: WorkpieceEditorView,
                  messaging: IMessagingService):
-        self._model          = model
-        self._view           = view
-        self._broker         = messaging
-        self._bridge         = _Bridge()
-        self._subs:          List[Tuple[str, Callable]] = []
-        self._active         = False
-        self._camera_active  = True          # ← controls whether feed updates are forwarded
-        self._logger         = logging.getLogger(self.__class__.__name__)
+        self._model = model
+        self._view = view
+        self._broker = messaging
+        self._bridge = _Bridge()
+        self._subs: List[Tuple[str, Callable]] = []
+        self._active = False
+        self._camera_active = True  # ← controls whether feed updates are forwarded
+        self._logger = logging.getLogger(self.__class__.__name__)
         self._preview_dialog = None
         self._latest_frame_shape = None
+        self._latest_frame_bgr = None
         self._dxf_test_button = None
         self._current_dxf_path = ""
         self._captured_pickup_point = None
+        self._loaded_raw_workpiece = None
 
     def load(self) -> None:
-        self._active        = True
+        self._active = True
         self._camera_active = True
         self._bridge.camera_frame.connect(self._on_camera_frame)
         self._bridge.load_workpiece_raw.connect(self._on_load_workpiece_raw)
-        self._view.set_capture_handler(self._on_capture)   # ← renamed
+        self._view.set_capture_handler(self._on_capture)  # ← renamed
         self._view.set_save_callback(self._on_form_submit)
         self._install_optional_actions()
         self._connect_signals()
@@ -106,6 +111,7 @@ class WorkpieceEditorController(IApplicationController):
         self._camera_active = False
         self._current_dxf_path = ""
         self._captured_pickup_point = self._compute_contour_centroid(largest)
+        self._save_pickup_debug_image(largest, self._captured_pickup_point)
         self._clear_verification_overlay()
 
         known_raw = self._try_prepare_known_workpiece_capture(largest)
@@ -164,6 +170,10 @@ class WorkpieceEditorController(IApplicationController):
             self._latest_frame_shape = tuple(frame.shape)
         except Exception:
             self._latest_frame_shape = None
+        try:
+            self._latest_frame_bgr = frame.copy()
+        except Exception:
+            self._latest_frame_bgr = None
         try:
             import cv2
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -243,6 +253,46 @@ class WorkpieceEditorController(IApplicationController):
             )
         except Exception:
             self._logger.debug("Failed to set pickup point overlay", exc_info=True)
+
+    def _save_pickup_debug_image(self, contour, pickup_point: tuple[float, float] | None) -> None:
+        try:
+            frame = None if self._latest_frame_bgr is None else self._latest_frame_bgr.copy()
+            if frame is None:
+                return
+
+            contour_pts = self._normalize_contour_points(contour)
+            if len(contour_pts) >= 2:
+                contour_draw = np.asarray(contour_pts, dtype=np.int32).reshape(-1, 1, 2)
+                cv2.polylines(frame, [contour_draw], isClosed=True, color=(0, 255, 255), thickness=2)
+
+            if pickup_point is not None:
+                cx = int(round(float(pickup_point[0])))
+                cy = int(round(float(pickup_point[1])))
+                half = 12
+                cv2.line(frame, (cx - half, cy), (cx + half, cy), (0, 0, 255), 2)
+                cv2.line(frame, (cx, cy - half), (cx, cy + half), (0, 0, 255), 2)
+                cv2.circle(frame, (cx, cy), 4, (0, 255, 0), -1)
+                cv2.putText(
+                    frame,
+                    f"pickup=({float(pickup_point[0]):.1f}, {float(pickup_point[1]):.1f})",
+                    (max(10, cx + 10), max(25, cy - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+            debug_dir = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+            )
+            os.makedirs(debug_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.join(debug_dir, f"pickup_centroid_debug_{timestamp}.png")
+            if cv2.imwrite(path, frame):
+                self._logger.info("Saved pickup centroid debug image to: %s", path)
+        except Exception:
+            self._logger.debug("Failed to save pickup centroid debug image", exc_info=True)
 
     def _install_optional_actions(self) -> None:
         if not self._model.can_import_dxf_test():
@@ -368,13 +418,40 @@ class WorkpieceEditorController(IApplicationController):
 
         return align_raw_workpiece_to_contour(raw, captured_contour)
 
+    def _save_workpiece_alignment_debug_plot(self, original_raw: dict, aligned_raw: dict) -> None:
+        try:
+            from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_workpiece_alignment_debug
+
+            original = self._extract_raw_contour_points(original_raw)
+            aligned = self._extract_raw_contour_points(aligned_raw)
+            if len(original) < 2 or len(aligned) < 2:
+                return
+            image_path = plot_workpiece_alignment_debug(original, aligned)
+            if image_path:
+                self._logger.info("Saved workpiece alignment debug plot to: %s", image_path)
+        except Exception:
+            self._logger.debug("Failed to save workpiece alignment debug plot", exc_info=True)
+
     @staticmethod
     def _extract_raw_contour_points(raw: dict) -> np.ndarray:
-        contour = raw.get("contour") or []
-        points = [point[0] for point in contour if point and point[0]]
+        contour = (raw or {}).get("contour")
+        if isinstance(contour, dict):
+            contour = contour.get("contour", [])
+        if contour is None:
+            return np.empty((0, 2), dtype=np.float64)
+
+        points: list[list[float]] = []
+        for point in contour:
+            if point is None:
+                continue
+            arr = np.asarray(point, dtype=np.float64)
+            if arr.size < 2:
+                continue
+            flat = arr.reshape(-1)
+            points.append([float(flat[0]), float(flat[1])])
         if not points:
             return np.empty((0, 2), dtype=np.float64)
-        return np.asarray([[float(point[0]), float(point[1])] for point in points], dtype=np.float64)
+        return np.asarray(points, dtype=np.float64)
 
     @staticmethod
     def _normalize_contour_points(contour) -> np.ndarray:
@@ -446,12 +523,12 @@ class WorkpieceEditorController(IApplicationController):
 
     @classmethod
     def _transform_points(
-        cls,
-        points: np.ndarray,
-        center: np.ndarray,
-        theta: float,
-        scale: float,
-        translation: np.ndarray,
+            cls,
+            points: np.ndarray,
+            center: np.ndarray,
+            theta: float,
+            scale: float,
+            translation: np.ndarray,
     ) -> np.ndarray:
         return cls._rotate_and_scale_points(points, center, theta, scale) + translation
 
@@ -473,13 +550,13 @@ class WorkpieceEditorController(IApplicationController):
 
     @staticmethod
     def _refine_alignment_with_mask_overlap(
-        source_points: np.ndarray,
-        target_points: np.ndarray,
-        source_centroid: np.ndarray,
-        initial_theta: float,
-        initial_scale: float,
-        initial_translation: np.ndarray,
-        overlap_fn,
+            source_points: np.ndarray,
+            target_points: np.ndarray,
+            source_centroid: np.ndarray,
+            initial_theta: float,
+            initial_scale: float,
+            initial_translation: np.ndarray,
+            overlap_fn,
     ) -> tuple[float, float, np.ndarray]:
         best_theta = float(initial_theta)
         best_scale = max(1e-3, float(initial_scale))
@@ -498,7 +575,8 @@ class WorkpieceEditorController(IApplicationController):
         translation_steps_px = [12.0, 4.0, 1.5]
         scale_steps = [0.10, 0.03, 0.01]
 
-        for rotation_step_deg, translation_step_px, scale_step in zip(rotation_steps_deg, translation_steps_px, scale_steps):
+        for rotation_step_deg, translation_step_px, scale_step in zip(rotation_steps_deg, translation_steps_px,
+                                                                      scale_steps):
             improved = True
             while improved:
                 improved = False
@@ -508,13 +586,19 @@ class WorkpieceEditorController(IApplicationController):
                     (best_theta, max(1e-3, best_scale * (1.0 - scale_step)), best_translation),
                     (best_theta, best_scale * (1.0 + scale_step), best_translation),
                     (best_theta, best_scale, best_translation + np.array([translation_step_px, 0.0], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, 0.0], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, 0.0], dtype=np.float64)),
                     (best_theta, best_scale, best_translation + np.array([0.0, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([0.0, -translation_step_px], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([translation_step_px, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([translation_step_px, -translation_step_px], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, translation_step_px], dtype=np.float64)),
-                    (best_theta, best_scale, best_translation + np.array([-translation_step_px, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([0.0, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([translation_step_px, -translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, translation_step_px], dtype=np.float64)),
+                    (best_theta, best_scale,
+                     best_translation + np.array([-translation_step_px, -translation_step_px], dtype=np.float64)),
                 ]
                 for candidate_theta, candidate_scale, candidate_translation in candidates:
                     overlap = WorkpieceEditorController._mask_overlap_for_pose(
@@ -536,13 +620,13 @@ class WorkpieceEditorController(IApplicationController):
 
     @staticmethod
     def _mask_overlap_for_pose(
-        source_points: np.ndarray,
-        target_points: np.ndarray,
-        source_centroid: np.ndarray,
-        theta: float,
-        scale: float,
-        translation: np.ndarray,
-        overlap_fn,
+            source_points: np.ndarray,
+            target_points: np.ndarray,
+            source_centroid: np.ndarray,
+            theta: float,
+            scale: float,
+            translation: np.ndarray,
+            overlap_fn,
     ) -> float:
         transformed = WorkpieceEditorController._transform_points(
             source_points,
@@ -567,7 +651,21 @@ class WorkpieceEditorController(IApplicationController):
             editor_data = inner.workpiece_manager.export_editor_data()
         except Exception:
             editor_data = None
-        payload = {"form_data": data, "editor_data": editor_data}
+        form_data = dict(data or {})
+        if (
+                not form_data
+                and self._loaded_raw_workpiece is not None
+                and editor_data is not None
+        ):
+            try:
+                stats = editor_data.get_statistics()
+                if int(stats.get("total_segments", 0)) == 0 and int(stats.get("total_points", 0)) == 0:
+                    form_data = copy.deepcopy(self._loaded_raw_workpiece)
+                    editor_data = None
+                    self._logger.info("Execute: using loaded raw workpiece payload because editor state is empty")
+            except Exception:
+                self._logger.debug("Failed to inspect editor_data stats during execute", exc_info=True)
+        payload = {"form_data": form_data, "editor_data": editor_data}
         ok, msg = self._model.execute_workpiece(payload)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
         if ok:
@@ -589,12 +687,12 @@ class WorkpieceEditorController(IApplicationController):
                 self._logger.debug("Failed to show interpolation preview", exc_info=True)
 
     def _show_interpolation_plot(
-        self,
-        raw_paths: list[list[list[float]]],
-        prepared_paths: list[list[list[float]]],
-        curve_paths: list[list[list[float]]],
-        sampled_paths: list[list[list[float]]],
-        execution_paths: list[list[list[float]]],
+            self,
+            raw_paths: list[list[list[float]]],
+            prepared_paths: list[list[list[float]]],
+            curve_paths: list[list[list[float]]],
+            sampled_paths: list[list[list[float]]],
+            execution_paths: list[list[list[float]]],
     ) -> None:
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
 
@@ -609,7 +707,7 @@ class WorkpieceEditorController(IApplicationController):
             return
 
         dialog = QDialog(self._view)
-        dialog.setWindowTitle("Interpolation Pipeline Preview")
+        dialog.setWindowTitle("Prepared Process Paths")
         dialog.resize(1100, 800)
 
         layout = QVBoxLayout(dialog)
@@ -623,84 +721,67 @@ class WorkpieceEditorController(IApplicationController):
         layout.addWidget(scroll)
 
         button_row = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+        button_row.addWidget(cancel_button)
         button_row.addStretch(1)
-        mode_labels = {
-            "continuous": "Execute Continuous",
-            "pose_path": "Execute Pose Path",
-            "pivot_path": "Execute Pivot Path",
-            "segmented": "Execute Segmented",
-        }
-        for mode in self._model.get_available_execution_modes():
-            label = mode_labels.get(mode, f"Execute {str(mode).replace('_', ' ').title()}")
-            button = QPushButton(label)
+        for action in self._model.get_process_actions():
+            button = QPushButton(action.label)
             button.clicked.connect(
-                lambda _checked=False, selected_mode=mode: self._on_execute_preview_confirmed(selected_mode)
+                lambda _checked=False, selected_action=action: self._on_execute_process_confirmed(selected_action)
             )
             button_row.addWidget(button)
-        if self._model.can_execute_pickup_to_pivot():
-            pickup_button = QPushButton("Pickup To Pivot")
-            pickup_button.clicked.connect(self._on_execute_pickup_to_pivot)
-            button_row.addWidget(pickup_button)
-            pickup_and_paint_button = QPushButton("Pickup And Pivot Paint")
-            pickup_and_paint_button.clicked.connect(self._on_execute_pickup_and_pivot_paint)
-            button_row.addWidget(pickup_and_paint_button)
         layout.addLayout(button_row)
 
         self._preview_dialog = dialog
         dialog.show()
 
-    def _on_execute_preview_confirmed(self, mode: str) -> None:
+    def _on_execute_process_confirmed(self, action: WorkpieceProcessAction) -> None:
         self._restore_live_feed()
-        if mode == "pivot_path":
+        if action.requires_projected_path_plot:
             try:
                 source_paths = self._model.get_last_execution_preview_paths()
                 pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
                 motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
                 if source_paths and pivot_paths:
-                    self._show_pivot_path_plot(source_paths, pivot_paths, pivot_pose, motion_snapshots)
+                    approved = self._show_pivot_path_plot(
+                        source_paths,
+                        pivot_paths,
+                        pivot_pose,
+                        motion_snapshots,
+                        approve_label=action.label,
+                    )
+                    if not approved:
+                        self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                        return
             except Exception:
-                self._logger.debug("Failed to show pivot path preview", exc_info=True)
-        ok, msg = self._model.execute_last_preview_paths(mode=mode)
-        self._logger.info("Execute preview paths (%s): %s — %s", mode, ok, msg)
+                self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
+                return
+        ok, msg = self._model.execute_process_action(action.action_id)
+        self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:
-            show_info(self._preview_dialog or self._view, "Execution Started", msg)
+            show_info(self._preview_dialog or self._view, "Process Started", msg)
         else:
-            show_critical(self._preview_dialog or self._view, "Execution Failed", msg)
-
-    def _on_execute_pickup_to_pivot(self) -> None:
-        self._restore_live_feed()
-        ok, msg = self._model.execute_pickup_to_pivot()
-        self._logger.info("Execute pickup-to-pivot: %s — %s", ok, msg)
-        if ok:
-            show_info(self._preview_dialog or self._view, "Pickup To Pivot", msg)
-        else:
-            show_critical(self._preview_dialog or self._view, "Pickup To Pivot Failed", msg)
-
-    def _on_execute_pickup_and_pivot_paint(self) -> None:
-        self._restore_live_feed()
-        ok, msg = self._model.execute_pickup_and_pivot_paint()
-        self._logger.info("Execute pickup-and-pivot-paint: %s — %s", ok, msg)
-        if ok:
-            show_info(self._preview_dialog or self._view, "Pickup And Pivot Paint", msg)
-        else:
-            show_critical(self._preview_dialog or self._view, "Pickup And Pivot Paint Failed", msg)
+            show_critical(self._preview_dialog or self._view, "Process Failed", msg)
 
     def _show_pivot_path_plot(
-        self,
-        source_paths: list[list[list[float]]],
-        pivot_paths: list[list[list[float]]],
-        pivot_pose: list[float] | None,
-        motion_snapshots=None,
-    ) -> None:
+            self,
+            source_paths: list[list[list[float]]],
+            pivot_paths: list[list[list[float]]],
+            pivot_pose: list[float] | None,
+            motion_snapshots=None,
+            approve_label: str = "Approve",
+    ) -> bool:
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug
 
         image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)
         if not image_path:
-            return
+            return False
 
         dialog = QDialog(self._view)
-        dialog.setWindowTitle("Pivot Path Preview")
+        dialog.setWindowTitle("Projected Process Path")
         dialog.resize(1000, 700)
+        dialog.setModal(True)
 
         layout = QVBoxLayout(dialog)
         scroll = QScrollArea(dialog)
@@ -712,7 +793,17 @@ class WorkpieceEditorController(IApplicationController):
         scroll.setWidgetResizable(True)
         layout.addWidget(scroll)
 
-        dialog.show()
+        button_row = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+        button_row.addWidget(cancel_button)
+        button_row.addStretch(1)
+        approve_button = QPushButton(approve_label)
+        approve_button.clicked.connect(dialog.accept)
+        button_row.addWidget(approve_button)
+        layout.addLayout(button_row)
+
+        return dialog.exec() == QDialog.DialogCode.Accepted
 
     def _sub(self, topic: str, cb: Callable) -> None:
         self._broker.subscribe(topic, cb)
@@ -741,7 +832,8 @@ class WorkpieceEditorController(IApplicationController):
         if self._current_dxf_path and not str(enriched.get("dxfPath", "")).strip():
             enriched["dxfPath"] = self._current_dxf_path
         if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
-            enriched["pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
+            enriched[
+                "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
         enriched["height_mm"] = self._safe_float(enriched.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         return enriched
 
@@ -762,10 +854,10 @@ class WorkpieceEditorController(IApplicationController):
         inner.update()
 
     def _load_raw_into_editor(self, raw: dict, storage_id=None) -> None:
-        from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
-
         raw = self._normalize_workpiece_raw(raw)
-        editor_data = WorkpieceAdapter.from_raw(raw)
+        self._loaded_raw_workpiece = copy.deepcopy(raw)
+        editor_data = self._model.get_workpiece_data_adapter().from_raw(raw)
+        self._logger.debug(f"Editor data keys: {editor_data.get_statistics()}")
         inner = self._view._editor.contourEditor.editor_with_rulers.editor
         inner.workpiece_manager.clear_workpiece()
         inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
@@ -774,7 +866,9 @@ class WorkpieceEditorController(IApplicationController):
         self._current_dxf_path = str(raw.get("dxfPath", "") or "")
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
+
         self._logger.info("Loaded workpiece into editor (storage_id=%s)", storage_id)
+
         try:
             self._view._editor.pointManagerWidget.refresh_points()
             inner.update()
@@ -802,11 +896,11 @@ class WorkpieceEditorController(IApplicationController):
         cy = float(pickup_point[1])
         half = float(size_px) * 0.5
         horizontal = np.array(
-            [[[cx - half, cy]], [[cx + half, cy]]],
+            [[cx - half, cy], [cx + half, cy]],
             dtype=np.float32,
         )
         vertical = np.array(
-            [[[cx, cy - half]], [[cx, cy + half]]],
+            [[cx, cy - half], [cx, cy + half]],
             dtype=np.float32,
         )
         return [horizontal, vertical]
@@ -860,7 +954,15 @@ class WorkpieceEditorController(IApplicationController):
             matched_raw = copy.deepcopy(payload.get("raw") or {})
             dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
             if not dxf_path:
-                return matched_raw if matched_raw.get("contour") else None
+                if not matched_raw.get("contour"):
+                    return None
+                aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
+                self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
+                self._logger.info(
+                    "Capture: recognized known workpiece %s and loaded aligned saved contour",
+                    payload.get("workpieceId") or "(no id)",
+                )
+                return aligned
 
             from src.engine.cad import import_dxf_to_workpiece_data
 
@@ -868,6 +970,7 @@ class WorkpieceEditorController(IApplicationController):
             dxf_raw = import_dxf_to_workpiece_data(dxf_path)
             placed = self._model.prepare_dxf_test_raw_for_image(dxf_raw, image_w, image_h)
             aligned = self._align_raw_workpiece_to_contour(placed, captured_contour)
+            self._save_workpiece_alignment_debug_plot(placed, aligned)
 
             # Preserve saved metadata while replacing geometry with the aligned DXF.
             for key, value in matched_raw.items():

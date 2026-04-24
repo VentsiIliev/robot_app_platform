@@ -9,6 +9,8 @@ from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
 from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
 from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
+import logging
+
 from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 from src.shared_contracts.declarations import (
     DispenseChannelDefinition,
@@ -223,6 +225,13 @@ class BaseRobotSystem(ABC):
         cached_transformer = getattr(self, "_vision_base_transformer", None)
         cached_resolver = getattr(self, "_vision_target_resolver", None)
         if cached_transformer is not None and cached_resolver is not None:
+            _logger.info(
+                "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
+                cached_transformer.__class__.__name__,
+                bool(getattr(cached_transformer, "is_available", lambda: False)()),
+                str(getattr(cached_transformer, "_matrix_path", "")),
+                str(getattr(cached_transformer, "_artifact_path", "")),
+            )
             return cached_transformer, cached_resolver
         transformer = self._build_shared_base_transformer()
         if transformer is None:
@@ -234,6 +243,14 @@ class BaseRobotSystem(ABC):
             camera_to_tcp_x_offset=tcp_x,
             camera_to_tcp_y_offset=tcp_y,
             frames=provider.build_frames(),
+        )
+        _logger.info(
+            "[CALIB] Built shared vision resolver: transformer=%s available=%s tcp_offset=(%.3f, %.3f) frames=%s",
+            transformer.__class__.__name__,
+            bool(getattr(transformer, "is_available", lambda: False)()),
+            float(tcp_x),
+            float(tcp_y),
+            sorted(list(resolver._frames.keys())) if hasattr(resolver, "_frames") else [],
         )
         self._vision_base_transformer = transformer
         self._vision_target_resolver = resolver
@@ -261,12 +278,21 @@ class BaseRobotSystem(ABC):
             return None
         robot_config = getattr(self, "_robot_config", None)
         if robot_config is None:
-            return HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
-        return HomographyResidualTransformer(
+            transformer = HomographyResidualTransformer(vision_service.camera_to_robot_matrix_path)
+        else:
+            transformer = HomographyResidualTransformer(
             vision_service.camera_to_robot_matrix_path,
             camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)),
             camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)),
         )
+        _logger.info(
+            "[CALIB] Built base transformer: class=%s matrix_path=%s residual_path=%s available=%s",
+            transformer.__class__.__name__,
+            str(getattr(transformer, "_matrix_path", "")),
+            str(getattr(transformer, "_artifact_path", "")),
+            bool(getattr(transformer, "is_available", lambda: False)()),
+        )
+        return transformer
 
     def _get_camera_to_tcp_offsets(self) -> tuple[float, float]:
         robot_config = getattr(self, "_robot_config", None)
@@ -478,3 +504,4 @@ class BaseRobotSystem(ABC):
             raise RuntimeError(
                 f"[{self.metadata.name}] Cannot start — missing required services: {missing}"
             )
+_logger = logging.getLogger(__name__)

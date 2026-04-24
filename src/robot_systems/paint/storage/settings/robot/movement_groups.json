@@ -14,7 +14,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-26.316, -236.476, 379.955, -180, 0, 0]"
+      "position": "[-26.831, -223.014, 359.886, 179.998, 0.015, -0.008]"
     },
     "CAMERA_CALIBRATION": {
       "velocity": 10,
@@ -37,7 +37,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[44.038, -379.484, 229.795, -180, 0, 0]"
+      "position": "[40.337, -449.745, 151.603, 180.000, 0.095, -0.053]"
     }
   }
 }

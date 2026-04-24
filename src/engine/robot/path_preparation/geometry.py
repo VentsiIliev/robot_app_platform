@@ -3,7 +3,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-from src.engine.geometry.planar import normalize_degrees
+from src.engine.geometry.planar import normalize_degrees, unwrap_degrees
 
 PATH_TANGENT_HEADING_SMOOTHING_WINDOW = 5
 PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
@@ -18,6 +18,124 @@ def has_valid_contour(contour) -> bool:
     if isinstance(contour, list):
         return len(contour) >= 3
     return False
+
+
+def canonicalize_closed_contour_points(points: np.ndarray) -> np.ndarray:
+    """
+    Normalize a closed contour to a stable winding and start point.
+
+    This matters for processes that derive orientation or projected motion from
+    the first contour segment. Raw captured contours often have arbitrary
+    winding and arbitrary start index.
+    """
+    contour = np.asarray(points, dtype=np.float64)
+    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 3:
+        return contour
+
+    contour = contour[:, :2].copy()
+    if np.linalg.norm(contour[0] - contour[-1]) <= 1e-6:
+        contour = contour[:-1]
+    if len(contour) < 3:
+        return contour
+
+    original_contour = contour.copy()
+    contour = _reorder_contour_if_discontinuous(contour)
+
+    signed_area = 0.5 * float(
+        np.dot(contour[:, 0], np.roll(contour[:, 1], -1))
+        - np.dot(contour[:, 1], np.roll(contour[:, 0], -1))
+    )
+    # Force a consistent clockwise winding so the first segment meaning does
+    # not flip between captures.
+    if signed_area > 0.0:
+        contour = contour[::-1].copy()
+
+    # Use the top-most / then left-most point as a stable start index.
+    start_index = int(np.lexsort((contour[:, 0], contour[:, 1]))[0])
+    contour = np.roll(contour, -start_index, axis=0)
+    contour = _orient_contour_like_original(contour, original_contour)
+
+    # Return an explicitly closed contour so downstream interpolation does not
+    # depend on a proximity tolerance to recover closure.
+    if len(contour) >= 3 and np.linalg.norm(contour[0] - contour[-1]) > 1e-9:
+        contour = np.vstack([contour, contour[:1]])
+    return contour
+
+
+def _reorder_contour_if_discontinuous(points: np.ndarray) -> np.ndarray:
+    """
+    Repair contours whose stored point order is not a continuous walk around the boundary.
+
+    Some imported/aligned payloads preserve the right points but not the right adjacency.
+    When that happens, point 0 may be correct while point 1 jumps across the workpiece.
+    We detect unusually large jumps and rebuild a local nearest-neighbor loop before
+    applying the usual winding/start-point canonicalization.
+    """
+    contour = np.asarray(points, dtype=np.float64)
+    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 4:
+        return contour
+
+    segment_lengths = np.linalg.norm(np.diff(np.vstack([contour, contour[:1]]), axis=0), axis=1)
+    positive_lengths = segment_lengths[segment_lengths > 1e-9]
+    if positive_lengths.size == 0:
+        return contour
+
+    median_length = float(np.median(positive_lengths))
+    if median_length <= 1e-9:
+        return contour
+
+    # If the current order is already a reasonable boundary walk, leave it alone.
+    if float(np.max(positive_lengths)) <= median_length * 4.0:
+        return contour
+
+    remaining = contour.copy()
+    start_index = int(np.lexsort((remaining[:, 0], remaining[:, 1]))[0])
+    ordered = [remaining[start_index]]
+    remaining = np.delete(remaining, start_index, axis=0)
+
+    while len(remaining) > 0:
+        current = ordered[-1]
+        distances = np.linalg.norm(remaining - current, axis=1)
+        next_index = int(np.argmin(distances))
+        ordered.append(remaining[next_index])
+        remaining = np.delete(remaining, next_index, axis=0)
+
+    return np.asarray(ordered, dtype=np.float64)
+
+
+def _orient_contour_like_original(points: np.ndarray, original_points: np.ndarray) -> np.ndarray:
+    """
+    Preserve the original traversal direction when possible.
+
+    After continuity repair and start-point normalization, the remaining
+    ambiguity is the loop direction. Resolve that by comparing the candidate
+    second point to the original predecessor/successor around the same start.
+    """
+    contour = np.asarray(points, dtype=np.float64)
+    original = np.asarray(original_points, dtype=np.float64)
+    if len(contour) < 3 or len(original) < 3:
+        return contour
+
+    start_point = contour[0]
+    original_start_index = int(np.argmin(np.linalg.norm(original - start_point, axis=1)))
+    original_prev = original[(original_start_index - 1) % len(original)]
+    original_next = original[(original_start_index + 1) % len(original)]
+
+    forward_second = contour[1]
+    reverse = contour[::-1].copy()
+    reverse = np.roll(reverse, -np.argmin(np.linalg.norm(reverse - start_point, axis=1)), axis=0)
+    reverse_second = reverse[1]
+
+    forward_score = min(
+        float(np.linalg.norm(forward_second - original_next)),
+        float(np.linalg.norm(forward_second - original_prev)) * 1.25,
+    )
+    reverse_score = min(
+        float(np.linalg.norm(reverse_second - original_next)),
+        float(np.linalg.norm(reverse_second - original_prev)) * 1.25,
+    )
+
+    return reverse if reverse_score < forward_score else contour
 
 
 def fast_inverse_preview_points(transformer, robot_xy_points: np.ndarray) -> np.ndarray | None:
@@ -146,8 +264,73 @@ def compute_pickup_rz_from_robot_path(
     if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
         return 0.0
     heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
-    heading_relative_to_y_deg = heading_from_x_deg - 90.0
-    return normalize_degrees(heading_relative_to_y_deg)
+    return normalize_degrees(heading_from_x_deg)
+
+
+def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:
+    if len(path) < 2:
+        return None
+    points = np.asarray([[float(p[0]), float(p[1])] for p in path if len(p) >= 2], dtype=float)
+    if len(points) < 2:
+        return None
+    for index in range(len(points) - 1):
+        segment = points[index + 1] - points[index]
+        seg_len = float(np.linalg.norm(segment))
+        if seg_len > 1e-6:
+            dx = float(segment[0])
+            dy = float(segment[1])
+            heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
+            return normalize_degrees(heading_from_x_deg)
+    return None
+
+
+def compute_pickup_rz_from_robot_contour(points: list[list[float]] | np.ndarray) -> float:
+    """
+    Estimate pickup orientation from contour central moments instead of a local tangent.
+
+    This is better for centroid pickup on closed workpiece contours, because the
+    centroid is inside the shape and does not have a meaningful boundary tangent.
+    """
+    contour = np.asarray(points, dtype=float)
+    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 2:
+        return 0.0
+    contour = contour[:, :2]
+    if len(contour) < 3:
+        return 0.0
+
+    moments = cv2.moments(contour.astype(np.float32).reshape(-1, 1, 2))
+    mu20 = float(moments.get("mu20", 0.0))
+    mu11 = float(moments.get("mu11", 0.0))
+    mu02 = float(moments.get("mu02", 0.0))
+
+    if abs(mu20) < 1e-10 and abs(mu11) < 1e-10 and abs(mu02) < 1e-10:
+        return 0.0
+
+    heading_from_x_deg = float(np.degrees(0.5 * np.arctan2(2.0 * mu11, mu20 - mu02)))
+    return normalize_degrees(heading_from_x_deg)
+
+
+def compute_pickup_rz_from_robot_contour_with_direction(
+    contour_points: list[list[float]] | np.ndarray,
+    path_points: list[list[float]] | np.ndarray,
+) -> float:
+    """
+    Estimate pickup orientation from the whole contour, then resolve the 180-degree
+    ambiguity using the directed execution path ordering.
+    """
+    contour_rz = compute_pickup_rz_from_robot_contour(contour_points)
+    path_heading_rz = _first_directed_heading_from_x(
+        [list(p) for p in np.asarray(path_points, dtype=float)]
+    )
+    if path_heading_rz is None:
+        return contour_rz
+
+    alternate_rz = normalize_degrees(contour_rz + 180.0)
+    if abs(unwrap_degrees(path_heading_rz, contour_rz) - path_heading_rz) <= abs(
+        unwrap_degrees(path_heading_rz, alternate_rz) - path_heading_rz
+    ):
+        return contour_rz
+    return alternate_rz
 
 
 def rebuild_pose_path_from_xy(

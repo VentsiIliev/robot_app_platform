@@ -518,6 +518,45 @@ class CalibrationApplicationService(ICalibrationService):
             json.dump(payload, handle, indent=2)
         return report_path
 
+    def _log_test_calibration_report(self, model_name: str, payload: dict, report_path: str | None) -> None:
+        summary = dict(payload.get("summary") or {})
+        center_summary = dict(summary.get("center_offset_px") or {})
+        center_dx_summary = dict(summary.get("center_offset_dx_px") or {})
+        center_dy_summary = dict(summary.get("center_offset_dy_px") or {})
+        _logger.info(
+            "Test calibration report [%s]: status=%s tested=%s successful=%s failed=%s visible=%s "
+            "center_offset_px(mean=%s median=%s max=%s) "
+            "dx_px(mean=%s median=%s max=%s) dy_px(mean=%s median=%s max=%s) report=%s",
+            model_name,
+            summary.get("status"),
+            summary.get("tested_count"),
+            summary.get("successful_count"),
+            summary.get("failed_count"),
+            summary.get("visible_count"),
+            center_summary.get("mean"),
+            center_summary.get("median"),
+            center_summary.get("max"),
+            center_dx_summary.get("mean"),
+            center_dx_summary.get("median"),
+            center_dx_summary.get("max"),
+            center_dy_summary.get("mean"),
+            center_dy_summary.get("median"),
+            center_dy_summary.get("max"),
+            report_path,
+        )
+        for row in payload.get("results", []) or []:
+            _logger.info(
+                "  marker=%s success=%s predicted_xy_mm=%s observed_px=%s center_offset_px=%s center_dist_px=%s robot_xy_mm=%s note=%s",
+                row.get("marker_id"),
+                row.get("success"),
+                row.get("predicted_xy_mm"),
+                row.get("observed_marker_point_px"),
+                row.get("observed_center_offset_px"),
+                row.get("observed_center_distance_px"),
+                row.get("robot_xy_mm"),
+                row.get("note"),
+            )
+
     @staticmethod
     def _summarize_scalar_values(values: list[float]) -> dict:
         if not values:
@@ -527,6 +566,19 @@ class CalibrationApplicationService(ICalibrationService):
             "count": int(array.size),
             "mean": float(np.mean(array)),
             "median": float(np.median(array)),
+            "max": float(np.max(array)),
+        }
+
+    @staticmethod
+    def _summarize_signed_values(values: list[float]) -> dict:
+        if not values:
+            return {"count": 0, "mean": None, "median": None, "min": None, "max": None}
+        array = np.asarray(values, dtype=np.float64)
+        return {
+            "count": int(array.size),
+            "mean": float(np.mean(array)),
+            "median": float(np.median(array)),
+            "min": float(np.min(array)),
             "max": float(np.max(array)),
         }
 
@@ -1021,6 +1073,10 @@ class CalibrationApplicationService(ICalibrationService):
             velocity = self._movement_velocity()
             accel    = self._movement_acceleration()
             z_target = self._calib_config.z_target if self._calib_config else 300
+            image_center_px = (
+                float(self._vision_service.get_camera_width()) / 2.0,
+                float(self._vision_service.get_camera_height()) / 2.0,
+            )
 
             _logger.info(
                 "test_calibration: model=%s tool=%d user=%d vel=%d acc=%d z=%d training_ids=%s excluded_ids=%s",
@@ -1103,6 +1159,16 @@ class CalibrationApplicationService(ICalibrationService):
                     work_area_polygon_px=work_area_polygon_px,
                 )
                 current_robot_pos = self._robot_service.get_current_position()
+                observed_center_offset_px = None
+                observed_center_distance_px = None
+                if observed_point is not None:
+                    observed_center_offset_px = [
+                        float(observed_point[0] - image_center_px[0]),
+                        float(observed_point[1] - image_center_px[1]),
+                    ]
+                    observed_center_distance_px = float(
+                        np.linalg.norm(np.asarray(observed_center_offset_px, dtype=np.float64))
+                    )
                 result = {
                     "marker_id": int(marker_id),
                     "success": True,
@@ -1111,6 +1177,9 @@ class CalibrationApplicationService(ICalibrationService):
                         [float(observed_point[0]), float(observed_point[1])]
                         if observed_point is not None else None
                     ),
+                    "image_center_px": [float(image_center_px[0]), float(image_center_px[1])],
+                    "observed_center_offset_px": observed_center_offset_px,
+                    "observed_center_distance_px": observed_center_distance_px,
                     "robot_xy_mm": (
                         [float(current_robot_pos[0]), float(current_robot_pos[1])]
                         if current_robot_pos and len(current_robot_pos) >= 2 else None
@@ -1123,19 +1192,39 @@ class CalibrationApplicationService(ICalibrationService):
                 }
                 marker_results.append(result)
                 _logger.info(
-                    "Test calibration result: marker=%d success=%s observed_point=%s robot_xy=%s note=%s",
+                    "Test calibration result: marker=%d success=%s observed_point=%s center_offset_px=%s center_dist_px=%s robot_xy=%s note=%s",
                     marker_id,
                     result.get("success"),
                     result.get("observed_marker_point_px"),
+                    result.get("observed_center_offset_px"),
+                    result.get("observed_center_distance_px"),
                     result.get("robot_xy_mm"),
                     result.get("note"),
                 )
 
             successful = [row for row in marker_results if row.get("success")]
+            visible = [row for row in marker_results if row.get("observed_center_distance_px") is not None]
+            center_distances = [
+                float(row["observed_center_distance_px"])
+                for row in visible
+            ]
+            center_dx = [
+                float(row["observed_center_offset_px"][0])
+                for row in visible
+            ]
+            center_dy = [
+                float(row["observed_center_offset_px"][1])
+                for row in visible
+            ]
             summary = {
+                "status": "stopped" if self._stop_test else "completed",
                 "tested_count": len(marker_results),
                 "successful_count": len(successful),
                 "failed_count": len(marker_results) - len(successful),
+                "visible_count": len(visible),
+                "center_offset_px": self._summarize_scalar_values(center_distances),
+                "center_offset_dx_px": self._summarize_signed_values(center_dx),
+                "center_offset_dy_px": self._summarize_signed_values(center_dy),
             }
             report_payload = {
                 "model": model_name,
@@ -1143,14 +1232,16 @@ class CalibrationApplicationService(ICalibrationService):
                 "training_ids": sorted(int(m) for m in training_ids),
                 "excluded_calibration_ids": sorted(int(m) for m in calibration_used_ids),
                 "selection_report": selection_report,
+                "image_center_px": [float(image_center_px[0]), float(image_center_px[1])],
                 "results": marker_results,
                 "summary": summary,
             }
             report_path = self._save_test_calibration_report(model_name, report_payload)
+            self._log_test_calibration_report(model_name, report_payload, report_path)
             if not successful:
                 return False, f"No test markers were reached successfully using {model_name}"
             return True, (
-                f"Test complete using {model_name} on "
+                f"Test {'stopped' if self._stop_test else 'complete'} using {model_name} on "
                 f"{len(successful)}/{len(marker_results)} markers for visual inspection"
                 + (f", report={report_path}" if report_path else "")
             )

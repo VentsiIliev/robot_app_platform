@@ -203,8 +203,33 @@ def plot_pivot_path_debug(
     try:
         os.makedirs(save_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if motion_snapshots is None:
+            motion_snapshots = [None] * len(pivot_paths)
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        ordered_snapshots: list[tuple[int, int, np.ndarray]] = []
+        for path_index, snapshots in enumerate(motion_snapshots):
+            if not snapshots:
+                continue
+            for step_index, shape in enumerate(snapshots):
+                shape_arr = np.array(shape, dtype=float)
+                if len(shape_arr) == 0:
+                    continue
+                ordered_snapshots.append((path_index, step_index, shape_arr))
+
+        detail_cols = 4
+        detail_rows = max(1, int(np.ceil(len(ordered_snapshots) / detail_cols))) if ordered_snapshots else 0
+        total_rows = 1 + detail_rows
+        fig = plt.figure(figsize=(19, 6 + 3.6 * detail_rows))
+        grid = fig.add_gridspec(total_rows, 4)
+
+        ax0 = fig.add_subplot(grid[0, 0])
+        ax1 = fig.add_subplot(grid[0, 1:3])
+        ax2 = fig.add_subplot(grid[0, 3])
+
+        ax0.set_title('Pickup To Pivot Alignment')
+        ax0.set_xlabel('X (mm)')
+        ax0.set_ylabel('Y (mm)')
+        ax0.grid(True)
 
         ax1.set_title('Pivot Path XY')
         ax1.set_xlabel('X (mm)')
@@ -216,13 +241,15 @@ def plot_pivot_path_debug(
         ax2.set_ylabel('RZ (deg)')
         ax2.grid(True)
 
-        if motion_snapshots is None:
-            motion_snapshots = [None] * len(pivot_paths)
-
         for i, (source, pivot, snapshots) in enumerate(zip(source_paths, pivot_paths, motion_snapshots)):
             source_arr = np.array(source, dtype=float)
             pivot_arr = np.array(pivot, dtype=float)
             if len(source_arr):
+                ax0.plot(
+                    source_arr[:, 0], source_arr[:, 1],
+                    'o-', color='blue', alpha=0.75, markersize=3,
+                    label=f'Original {i+1}' if i == 0 else '',
+                )
                 ax1.plot(
                     source_arr[:, 0], source_arr[:, 1],
                     'o-', color='blue', alpha=0.6, markersize=3,
@@ -240,6 +267,26 @@ def plot_pivot_path_debug(
                     label=f'Pivot RZ {i+1}' if i == 0 else '',
                 )
             if snapshots:
+                first_shape = np.array(snapshots[0], dtype=float)
+                if len(first_shape):
+                    ax0.plot(
+                        first_shape[:, 0], first_shape[:, 1],
+                        'o-', color='green', alpha=0.85, markersize=3,
+                        label=f'Aligned To Pivot {i+1}' if i == 0 else '',
+                    )
+                    ax0.plot(
+                        [first_shape[-1, 0], first_shape[0, 0]],
+                        [first_shape[-1, 1], first_shape[0, 1]],
+                        '-', color='green', linewidth=1.2, alpha=0.85,
+                    )
+                    ax0.scatter(
+                        [first_shape[0, 0]], [first_shape[0, 1]],
+                        c='orange', s=90, marker='*',
+                        edgecolors='black', linewidths=0.8,
+                        label='Initial Contact Point' if i == 0 else '',
+                        zorder=8,
+                    )
+
                 sample_count = min(8, len(snapshots))
                 sample_indices = np.linspace(0, len(snapshots) - 1, sample_count, dtype=int)
                 for sample_idx, snapshot_index in enumerate(sample_indices):
@@ -256,18 +303,72 @@ def plot_pivot_path_debug(
                         [shape[-1, 1], shape[0, 1]],
                         '-', color='black', linewidth=1.0, alpha=alpha,
                     )
+                    ax1.scatter(
+                        [shape[0, 0]], [shape[0, 1]],
+                        c='orange', s=24, marker='o', alpha=alpha,
+                        label='Pivot Contact Point' if i == 0 and sample_idx == 0 else '',
+                        zorder=7,
+                    )
 
         if pivot_pose and len(pivot_pose) >= 2:
+            ax0.scatter(
+                [float(pivot_pose[0])], [float(pivot_pose[1])],
+                c='red', s=80, marker='+', linewidths=2,
+                label='Pivot',
+            )
             ax1.scatter(
                 [float(pivot_pose[0])], [float(pivot_pose[1])],
                 c='red', s=80, marker='+', linewidths=2,
                 label='Pivot',
             )
 
+        ax0.legend()
+        ax0.axis('equal')
         ax1.set_title('Pivot Path XY / Motion Snapshots')
         ax1.legend()
         ax1.axis('equal')
         ax2.legend()
+
+        def _plot_closed_shape(ax, shape: np.ndarray, *, title: str, pivot_xy=None) -> None:
+            if len(shape) == 0:
+                ax.set_title(title)
+                ax.grid(True)
+                return
+            ax.plot(shape[:, 0], shape[:, 1], '-', color='black', linewidth=1.1)
+            ax.plot(
+                [shape[-1, 0], shape[0, 0]],
+                [shape[-1, 1], shape[0, 1]],
+                '-', color='black', linewidth=1.1,
+            )
+            ax.scatter(
+                [shape[0, 0]], [shape[0, 1]],
+                c='orange', s=42, marker='o',
+                edgecolors='black', linewidths=0.6, zorder=5,
+            )
+            if pivot_xy is not None:
+                ax.scatter(
+                    [float(pivot_xy[0])], [float(pivot_xy[1])],
+                    c='red', s=55, marker='+', linewidths=1.8, zorder=6,
+                )
+            ax.set_title(title)
+            ax.grid(True)
+            ax.axis('equal')
+
+        if ordered_snapshots:
+            pivot_xy = None
+            if pivot_pose and len(pivot_pose) >= 2:
+                pivot_xy = (float(pivot_pose[0]), float(pivot_pose[1]))
+            for flat_index, (path_index, step_index, shape) in enumerate(ordered_snapshots):
+                row = 1 + flat_index // detail_cols
+                col = flat_index % detail_cols
+                ax = fig.add_subplot(grid[row, col])
+                _plot_closed_shape(
+                    ax,
+                    shape,
+                    title=f"Step {flat_index + 1}  P{path_index + 1}:{step_index}",
+                    pivot_xy=pivot_xy,
+                )
+
         plt.tight_layout()
 
         filename = f"pivot_path_debug_{timestamp}.png"
@@ -278,6 +379,66 @@ def plot_pivot_path_debug(
         return filepath
     except Exception as e:
         print(f"⚠️ Error creating pivot plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def plot_workpiece_alignment_debug(
+    original_contour,
+    aligned_contour,
+    save_dir="debug_plots",
+):
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        original = np.asarray(original_contour, dtype=float)
+        aligned = np.asarray(aligned_contour, dtype=float)
+        if original.ndim == 3 and original.shape[1] == 1:
+            original = original[:, 0, :]
+        if aligned.ndim == 3 and aligned.shape[1] == 1:
+            aligned = aligned[:, 0, :]
+        if original.ndim != 2 or aligned.ndim != 2 or original.shape[1] < 2 or aligned.shape[1] < 2:
+            return None
+
+        original = original[:, :2]
+        aligned = aligned[:, :2]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        fig.suptitle("Workpiece Orientation: Original vs Aligned")
+
+        def _plot(ax, points, title, color):
+            if len(points) == 0:
+                ax.set_title(title)
+                ax.grid(True)
+                return
+            closed = points
+            if np.linalg.norm(points[0] - points[-1]) > 1e-9:
+                closed = np.vstack([points, points[:1]])
+            ax.plot(closed[:, 0], closed[:, 1], 'o-', color=color, markersize=3, linewidth=1.5)
+            ax.scatter([points[0, 0]], [points[0, 1]], c='orange', s=60, marker='*', edgecolors='black', linewidths=0.8, label='Start')
+            centroid = np.mean(points, axis=0)
+            ax.scatter([centroid[0]], [centroid[1]], c='black', s=24, marker='x', label='Centroid')
+            ax.set_title(title)
+            ax.set_xlabel("X (px)")
+            ax.set_ylabel("Y (px)")
+            ax.grid(True)
+            ax.axis('equal')
+            ax.legend()
+
+        _plot(ax1, original, "Original Orientation", "blue")
+        _plot(ax2, aligned, "Aligned Orientation", "magenta")
+
+        plt.tight_layout()
+        filename = f"workpiece_alignment_debug_{timestamp}.png"
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=150, bbox_inches='tight')
+        print(f"✓ Saved workpiece alignment debug plot to: {filepath}")
+        plt.close()
+        return filepath
+    except Exception as e:
+        print(f"⚠️ Error creating workpiece alignment plot: {e}")
         import traceback
         traceback.print_exc()
         return None

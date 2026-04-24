@@ -1,10 +1,27 @@
 import logging
 import copy
+from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from src.applications.workpiece_editor.service import IWorkpieceEditorService
+from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import WorkpieceFormSchema
 from src.applications.workpiece_editor.editor_core.config.segment_editor_config import SegmentEditorConfig
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
 
 _logger = logging.getLogger(__name__)
+
+
+class _StubWorkpieceDataAdapter(IWorkpieceDataAdapter):
+    def from_workpiece(self, workpiece) -> ContourEditorData:
+        return ContourEditorData()
+
+    def to_workpiece_data(self, editor_data: ContourEditorData, default_settings=None) -> dict:
+        return {"contour": [], "sprayPattern": {"Contour": [], "Fill": []}}
+
+    def from_raw(self, raw: dict) -> ContourEditorData:
+        return ContourEditorData()
+
+    def print_summary(self, editor_data: ContourEditorData) -> None:
+        return None
 
 
 class StubWorkpieceEditorService(IWorkpieceEditorService):
@@ -12,6 +29,10 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
     def __init__(self, form_schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig):
         self._form_schema    = form_schema
         self._segment_config = segment_config
+        self._adapter = _StubWorkpieceDataAdapter()
+
+    def get_workpiece_data_adapter(self) -> IWorkpieceDataAdapter:
+        return self._adapter
 
     def get_form_schema(self) -> WorkpieceFormSchema:
         return self._form_schema
@@ -31,9 +52,17 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: execute_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece executed"
 
-    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
-        _logger.info("Stub: execute_last_preview_paths mode=%s", mode)
-        return True, f"Stub: executed preview paths in {mode} mode"
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
+        return (
+            WorkpieceProcessAction(
+                action_id="stub_process",
+                label="Run Stub Process",
+            ),
+        )
+
+    def execute_process_action(self, action_id: str) -> tuple[bool, str]:
+        _logger.info("Stub: execute_process_action action_id=%s", action_id)
+        return True, f"Stub: executed process action {action_id}"
 
     def can_import_dxf_test(self) -> bool:
         return False
@@ -71,18 +100,6 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
 
     def get_last_pivot_motion_preview(self):
         return [], None
-
-    def get_available_execution_modes(self) -> tuple[str, ...]:
-        return ("continuous",)
-
-    def can_execute_pickup_to_pivot(self) -> bool:
-        return False
-
-    def execute_pickup_to_pivot(self) -> tuple[bool, str]:
-        return False, "Pickup-to-pivot is not supported"
-
-    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]:
-        return False, "Pickup-and-pivot-paint is not supported"
 
     def set_editing(self, storage_id) -> None:
         _logger.info("Stub: set_editing storage_id=%s", storage_id)

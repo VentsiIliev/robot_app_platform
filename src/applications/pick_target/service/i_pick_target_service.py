@@ -22,11 +22,11 @@ class IPickTargetService(ABC):
         """Move robot to the given pose. z is the pre-computed height-corrected approach height."""
 
     @abstractmethod
-    def move_to_base(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+    def move_to_base(self, x: float, y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
         """Move robot to (x, y) at base Z with the given orientation — no height correction."""
 
     @abstractmethod
-    def move_to_with_live_height(self, x: float, y: float, rx: float, ry: float, rz: float) -> bool:
+    def move_to_with_live_height(self, x: float, y: float, rx: float, ry: float, rz: float, z: float | None = None) -> bool:
         """Move to (x, y) at base Z, measure surface height live, then adjust Z."""
 
     @abstractmethod

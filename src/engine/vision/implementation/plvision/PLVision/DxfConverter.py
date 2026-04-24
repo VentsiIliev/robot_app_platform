@@ -312,7 +312,7 @@ class ImageProcessor:
 
 
 # Usage
-dxf_file = 'storage/Uplatnenie2mm.dxf'
+dxf_file = '/home/ilv/Desktop/robot_app_platform/scripts/dxf/part2_venci.dxf'
 server_sender = ServerSender(server_ip="192.168.222.74")
 processor = ImageProcessor(dxf_file, server_sender, mode='json')
 result = processor.process()

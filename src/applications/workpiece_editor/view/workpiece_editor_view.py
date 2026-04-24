@@ -7,6 +7,7 @@ from contour_editor import BezierSegmentManager
 from src.applications.workpiece_editor.editor_core.config import (
     WorkpieceFormSchema, WorkpieceFormFactory, SegmentEditorConfig,
 )
+from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from src.applications.workpiece_editor.editor_core import WorkpieceEditorBuilder
 from src.applications.workpiece_editor.editor_core.config.virtual_keyboard_widget_factory import \
     VirtualKeyboardWidgetFactory
@@ -20,9 +21,10 @@ class WorkpieceEditorView(IApplicationView):
     save_requested    = pyqtSignal(dict)
     execute_requested = pyqtSignal(dict)
 
-    def __init__(self, schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig, parent=None):
+    def __init__(self, schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig, workpiece_data_adapter: IWorkpieceDataAdapter, parent=None):
         self._schema          = schema
         self._segment_config  = segment_config
+        self._workpiece_data_adapter = workpiece_data_adapter
         self._editor          = None
         self._capture_handler = None
         super().__init__("WorkpieceEditor", parent)
@@ -80,6 +82,7 @@ class WorkpieceEditorView(IApplicationView):
             .with_layer_config(self._schema.editor_layer_config)
             .with_form(WorkpieceFormFactory(schema=self._schema))
             .with_widgets(VirtualKeyboardWidgetFactory())
+            .with_workpiece_data_adapter(self._workpiece_data_adapter)
             .on_save(self._on_save_cb)
             .on_capture(self._on_capture_cb)
             .on_execute(self._on_execute_cb)

@@ -1,6 +1,9 @@
 import threading
+import logging
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
+
+_logger = logging.getLogger(__name__)
 
 
 class RobotJogService:
@@ -35,6 +38,7 @@ class RobotJogService:
 
     def set_frame(self, frame_name: str) -> None:
         self._frame_name = str(frame_name or "").strip()
+        _logger.info("[JOG] selected_frame=%s", self._frame_name)
 
     def get_available_frames(self) -> list[str]:
         if callable(self._frame_options_getter):
@@ -68,23 +72,23 @@ class RobotJogService:
         try:
             if not self._lock.acquire(blocking=False):
                 return
-            if self._prefers_incremental_jog():
-                try:
-                    self._robot.start_jog(
-                        RobotAxis.get_by_string(axis),
-                        Direction.get_by_string(direction),
-                        step,
-                    )
-                    return
-                finally:
-                    self._lock.release()
-
             resolver = self._current_pose_resolver()
             point = self._current_frame_point(resolver)
             if resolver is not None and point is not None:
                 try:
                     current = self._robot.get_current_position()
                     target = resolver.resolve(current, axis, direction, step, point)
+                    _logger.info(
+                        "[JOG] mode=resolver frame=%s axis=%s direction=%s step=%s current=%s target=%s point_offsets=(%.3f, %.3f)",
+                        getattr(point, "name", ""),
+                        axis,
+                        direction,
+                        step,
+                        current,
+                        target,
+                        float(getattr(point, "offset_x", 0.0)),
+                        float(getattr(point, "offset_y", 0.0)),
+                    )
                     if target is not None:
                         tool = int(self._tool_getter()) if self._tool_getter is not None else 0
                         user = int(self._user_getter()) if self._user_getter is not None else 0
@@ -100,6 +104,22 @@ class RobotJogService:
                 finally:
                     self._lock.release()
                     return
+            if self._prefers_incremental_jog():
+                try:
+                    _logger.info(
+                        "[JOG] mode=incremental axis=%s direction=%s step=%s",
+                        axis,
+                        direction,
+                        step,
+                    )
+                    self._robot.start_jog(
+                        RobotAxis.get_by_string(axis),
+                        Direction.get_by_string(direction),
+                        step,
+                    )
+                    return
+                finally:
+                    self._lock.release()
             self._robot.start_jog(
                 RobotAxis.get_by_string(axis),
                 Direction.get_by_string(direction),

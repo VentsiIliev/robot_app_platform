@@ -215,6 +215,7 @@ def _build_workpiece_editor_application(robot_system):
 
     catalog = settings_service.get(SettingsID.GLUE_CATALOG)
     glue_types = catalog.get_all_names() if hasattr(catalog, "get_all_names") else []
+    from src.robot_systems.glue.domain.glue_workpiece_editor_adapter import GlueWorkpieceEditorAdapter
 
     workpiece_service = WorkpieceService(JsonWorkpieceRepository(robot_system.workpieces_storage_path()), tool_provider=_get_tools)
     matching_service = MatchingService(
@@ -247,6 +248,7 @@ def _build_workpiece_editor_application(robot_system):
             transformer=base_transformer,
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
+            workpiece_data_adapter=GlueWorkpieceEditorAdapter(),
         ),
         form_schema=lambda: build_glue_workpiece_form_schema(  # ← lazy callable
             glue_types=_get_glue_types(),
@@ -286,8 +288,7 @@ def _build_workpiece_editor_application(robot_system):
         raw, storage_id = pending.pop()
         if raw is not None:
             try:
-                from src.applications.workpiece_editor.editor_core.adapters.workpiece_adapter import WorkpieceAdapter
-                editor_data = WorkpieceAdapter.from_raw(raw)
+                editor_data = service.get_workpiece_data_adapter().from_raw(raw)
                 inner = widget._editor.contourEditor.editor_with_rulers.editor
                 inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
                 widget._editor.contourEditor.data = raw

@@ -2,15 +2,15 @@ import numpy as np
 
 from src.engine.geometry.planar import normalize_degrees, rotate_xy_about, unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import (
-    PivotSimulationConfig,
-    _PIVOT_ROTATION_DEADBAND_DEG,
-    _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG,
-    _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM,
+    PaintSimulationConfig,
+    _PAINT_ROTATION_DEADBAND_DEG,
+    _PAINT_SMOOTH_MAX_ANGULAR_STEP_DEG,
+    _PAINT_SMOOTH_MAX_LINEAR_STEP_MM,
 )
 
 
-def rebase_projected_pivot_path_to_zero_start_rz(path: list[list[float]]) -> list[list[float]]:
-    """Shift a projected pivot path so its first pose starts at RZ zero."""
+def rebase_projected_paint_path_to_zero_start_rz(path: list[list[float]]) -> list[list[float]]:
+    """Shift a projected paint path so its first pose starts at RZ zero."""
     if not path:
         return []
     rebased = [list(pose) for pose in path]
@@ -21,10 +21,10 @@ def rebase_projected_pivot_path_to_zero_start_rz(path: list[list[float]]) -> lis
     return rebased
 
 
-def project_pivot_motion_geometry(
+def project_paint_motion_geometry(
     path: list[list[float]],
     pivot_pose: list[float],
-    config: PivotSimulationConfig,
+    config: PaintSimulationConfig,
 ) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
     """Project a source paint path into pickup/pivot motion geometry around the configured base pose."""
     if not path:
@@ -38,7 +38,15 @@ def project_pivot_motion_geometry(
     rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
     ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
     base_rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
-    paint_axis_heading = base_rz + config.paint_axis_offset_deg
+    # Translation axis and pivot side are separate concepts.
+    # The axis heading defines travel along the pivot.
+    # `paint_side` only chooses which normal-side of that axis the workpiece
+    # should occupy after alignment.
+    paint_axis_heading = normalize_degrees(base_rz + config.paint_axis_offset_deg)
+    translation_heading = float(paint_axis_heading)
+    if config.direction_sign < 0:
+        translation_heading = normalize_degrees(translation_heading + 180.0)
+    contact_segment_heading = normalize_degrees(translation_heading + 180.0)
 
     points = np.array([[float(point[0]), float(point[1])] for point in path], dtype=float)
     if len(points) < 2:
@@ -70,11 +78,18 @@ def project_pivot_motion_geometry(
         return float(np.degrees(np.arctan2(dy, dx)))
 
     pivot_xy = (pivot_x, pivot_y)
+    points = _canonicalize_closed_source_path(
+        points,
+        pivot_xy=pivot_xy,
+        translation_heading=translation_heading,
+        contact_segment_heading=contact_segment_heading,
+        side_sign=config.side_sign,
+    )
 
     # First, orient the source shape so its first segment points along the
     # configured paint axis. This defines the starting pickup orientation.
     initial_heading = _segment_heading_deg(points[0], points[1])
-    initial_rotation = unwrap_degrees(0.0, paint_axis_heading - initial_heading)
+    initial_rotation = unwrap_degrees(0.0, contact_segment_heading - initial_heading)
     points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
 
     # Then translate the rotated shape so its first point sits exactly on the
@@ -132,11 +147,11 @@ def project_pivot_motion_geometry(
         # axis. The delta becomes the robot/tool rotation needed before the next
         # projected translation step.
         segment_heading = _segment_heading_deg(current_point, next_point)
-        rotation_delta_raw = unwrap_degrees(0.0, paint_axis_heading - segment_heading)
+        rotation_delta_raw = unwrap_degrees(0.0, contact_segment_heading - segment_heading)
         rotation_delta = rotation_delta_raw
 
         # Ignore tiny heading noise to avoid jittering the projected RZ.
-        if abs(rotation_delta) < _PIVOT_ROTATION_DEADBAND_DEG:
+        if abs(rotation_delta) < _PAINT_ROTATION_DEADBAND_DEG:
             rotation_delta = 0.0
         if abs(rotation_delta) > 1e-9:
             # Rotate the whole shape around the fixed pivot, because the
@@ -148,7 +163,7 @@ def project_pivot_motion_geometry(
         # translation axis by the original segment length. This is the key
         # "projected motion" assumption: source path arc length becomes linear
         # travel of the whole workpiece along the pivot axis.
-        points = points + axis_vector * segment_length * config.side_sign * config.direction_sign
+        points = points + axis_vector * segment_length * config.direction_sign
         center_xy = _centroid_xy(points)
         result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
         snapshots.append(points.copy())
@@ -167,6 +182,91 @@ def project_pivot_motion_geometry(
     snapshots = snapshots[:len(path)]
     diagnostics = diagnostics[:len(path)]
     return result, snapshots, diagnostics
+
+
+def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
+    dx = float(point_b[0] - point_a[0])
+    dy = float(point_b[1] - point_a[1])
+    return float(np.degrees(np.arctan2(dy, dx)))
+
+
+def _angle_error_deg(a: float, b: float) -> float:
+    return abs(unwrap_degrees(float(b), float(a)) - float(b))
+
+
+def _canonicalize_closed_source_path(
+    points: np.ndarray,
+    *,
+    pivot_xy: tuple[float, float],
+    translation_heading: float,
+    contact_segment_heading: float,
+    side_sign: float,
+) -> np.ndarray:
+    """
+    Give closed contours a pivot-aware start point and traversal direction.
+
+    The first point should be the boundary point that is closest to the actual
+    pivot location, then the loop direction should be chosen to match the
+    requested projected travel direction.
+    """
+    contour = np.asarray(points, dtype=float)
+    if len(contour) < 3:
+        return contour
+
+    is_closed = float(np.linalg.norm(contour[0] - contour[-1])) <= 1e-6
+    if is_closed:
+        contour = contour[:-1]
+    if len(contour) < 3:
+        return points
+
+    pivot_vec = np.asarray([float(pivot_xy[0]), float(pivot_xy[1])], dtype=float)
+    start_index = int(np.argmin(np.linalg.norm(contour - pivot_vec, axis=1)))
+
+    desired_heading = float(contact_segment_heading)
+    desired_side_sign = 1.0 if float(side_sign) >= 0.0 else -1.0
+
+    forward = np.roll(contour, -start_index, axis=0)
+    reverse = forward[::-1].copy()
+    reverse = np.roll(reverse, -np.argmin(np.linalg.norm(reverse - forward[0], axis=1)), axis=0)
+    candidates = [forward, reverse]
+
+    def _preview_aligned(candidate: np.ndarray) -> tuple[np.ndarray, float, float]:
+        heading = _segment_heading_deg(candidate[0], candidate[1])
+        rotation = unwrap_degrees(0.0, desired_heading - heading)
+        rotated = np.array(
+            [rotate_xy_about((float(point[0]), float(point[1])), rotation, (float(candidate[0][0]), float(candidate[0][1]))) for point in candidate],
+            dtype=float,
+        )
+        translated = rotated + (pivot_vec - rotated[0])
+        return translated, heading, rotation
+
+    def _side_score(aligned: np.ndarray) -> float:
+        axis_vector = np.asarray(
+            [
+                float(np.cos(np.radians(translation_heading))),
+                float(np.sin(np.radians(translation_heading))),
+            ],
+            dtype=float,
+        )
+        normal = np.asarray([-axis_vector[1], axis_vector[0]], dtype=float)
+        relative = aligned[1:] - pivot_vec if len(aligned) > 1 else aligned - pivot_vec
+        if len(relative) == 0:
+            return 0.0
+        return float(np.mean(relative @ normal))
+
+    best_ordered = forward
+    best_key: tuple[float, float] | None = None
+    for candidate in candidates:
+        aligned_preview, heading, _ = _preview_aligned(candidate)
+        heading_error = _angle_error_deg(heading, desired_heading)
+        side_score = _side_score(aligned_preview)
+        side_penalty = 0.0 if side_score * desired_side_sign >= 0.0 else 1.0
+        key = (side_penalty, heading_error)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_ordered = candidate
+
+    return np.vstack([best_ordered, best_ordered[:1]])
 
 
 def _compute_pickup_rz_from_path(
@@ -211,8 +311,8 @@ def _compute_pickup_rz_from_path(
 #
 # def _densify_pose_path(
 #     poses: list[list[float]],
-#     max_linear_step_mm: float = _PIVOT_SMOOTH_MAX_LINEAR_STEP_MM,
-#     max_angular_step_deg: float = _PIVOT_SMOOTH_MAX_ANGULAR_STEP_DEG,
+#     max_linear_step_mm: float = _PAINT_SMOOTH_MAX_LINEAR_STEP_MM,
+#     max_angular_step_deg: float = _PAINT_SMOOTH_MAX_ANGULAR_STEP_DEG,
 # ) -> list[list[float]]:
 #     """Insert intermediate poses so projected pivot motion respects linear and angular step limits."""
 #     if len(poses) < 2:

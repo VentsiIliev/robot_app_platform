@@ -1,5 +1,7 @@
 from src.applications.base.i_application_model import IApplicationModel
+from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from src.applications.workpiece_editor.service import IWorkpieceEditorService
+from src.applications.workpiece_editor.service.i_workpiece_path_executor import WorkpieceProcessAction
 
 
 class WorkpieceEditorModel(IApplicationModel):
@@ -9,6 +11,9 @@ class WorkpieceEditorModel(IApplicationModel):
 
     def load(self) -> None:
         pass
+
+    def get_workpiece_data_adapter(self) -> IWorkpieceDataAdapter:
+        return self._service.get_workpiece_data_adapter()
 
     def save(self, *args, **kwargs) -> None:
         pass
@@ -44,20 +49,11 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_pivot_motion_preview(self):
         return self._service.get_last_pivot_motion_preview()
 
-    def get_available_execution_modes(self) -> tuple[str, ...]:
-        return self._service.get_available_execution_modes()
+    def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
+        return self._service.get_process_actions()
 
-    def can_execute_pickup_to_pivot(self) -> bool:
-        return self._service.can_execute_pickup_to_pivot()
-
-    def execute_pickup_to_pivot(self) -> tuple[bool, str]:
-        return self._service.execute_pickup_to_pivot()
-
-    def execute_pickup_and_pivot_paint(self) -> tuple[bool, str]:
-        return self._service.execute_pickup_and_pivot_paint()
-
-    def execute_last_preview_paths(self, mode: str = "continuous") -> tuple[bool, str]:
-        return self._service.execute_last_preview_paths(mode=mode)
+    def execute_process_action(self, action_id: str) -> tuple[bool, str]:
+        return self._service.execute_process_action(action_id)
 
     def can_import_dxf_test(self) -> bool:
         return self._service.can_import_dxf_test()

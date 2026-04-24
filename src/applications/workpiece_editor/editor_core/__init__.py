@@ -7,7 +7,8 @@ workpiece-aware handlers.
 
 Public API for workpiece-specific applications:
 - WorkpieceEditorBuilder: Builder that wraps ContourEditorBuilder with workpiece support
-- WorkpieceAdapter: Convert between workpiece objects and ContourEditorData
+- IWorkpieceDataAdapter: adapter contract implemented by each robot system
+- WorkpieceAdapter: legacy compatibility adapter
 - WorkpieceManager: Manage workpiece loading/exporting
 - Handlers: SaveWorkpieceHandler, CaptureDataHandler, load_workpiece
 - Models: BaseWorkpiece, GenericWorkpiece, WorkpieceFactory, WorkpieceField
@@ -17,7 +18,7 @@ Public API for workpiece-specific applications:
 from .builder import WorkpieceEditorBuilder
 
 # Adapters
-from .adapters import WorkpieceAdapter
+from .adapters import IWorkpieceDataAdapter, WorkpieceAdapter
 
 # Managers
 from .managers import WorkpieceManager
@@ -44,6 +45,7 @@ from contour_editor import (
 __all__ = [
     # Workpiece-specific
     'WorkpieceEditorBuilder',
+    'IWorkpieceDataAdapter',
     'WorkpieceAdapter',
     'WorkpieceManager',
     'SaveWorkpieceHandler',
