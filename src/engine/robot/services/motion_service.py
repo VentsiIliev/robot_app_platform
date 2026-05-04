@@ -61,12 +61,13 @@ class MotionService(IMotionService):
         try:
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
                                acceleration)
-            ret = self._robot.move_ptp(
+            ret = self._robot.move_linear(
                 position,
                 tool,
                 user,
                 velocity,
                 acceleration,
+                0,
                 blocking=wait_to_reach,
             )
             success = ret >= 0
@@ -209,10 +210,7 @@ class MotionService(IMotionService):
         if len(a) < 6 or len(b) < 6:
             return False
         pos_dist = math.sqrt(sum((float(a[i]) - float(b[i])) ** 2 for i in range(3)))
-        ang_dist = max(
-            cls._wrapped_angle_delta_deg(float(a[i]), float(b[i]))
-            for i in range(3, 6)
-        )
+        ang_dist = cls._orientation_delta_deg(a, b)
         return pos_dist <= cls._JOG_TARGET_REUSE_POS_MM and ang_dist <= cls._JOG_TARGET_REUSE_ANG_DEG
 
     def _wait_for_position(
@@ -237,10 +235,7 @@ class MotionService(IMotionService):
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))
                 orientation_delta = 0.0
                 if len(target) >= 6 and len(current) >= 6:
-                    orientation_delta = max(
-                        self._wrapped_angle_delta_deg(current[i], target[i])
-                        for i in range(3, 6)
-                    )
+                    orientation_delta = self._orientation_delta_deg(current, target)
                 last_current = list(current)
                 last_dist = dist
                 last_orientation_delta = orientation_delta
@@ -270,3 +265,42 @@ class MotionService(IMotionService):
     @staticmethod
     def _wrapped_angle_delta_deg(current: float, target: float) -> float:
         return abs((current - target + 180.0) % 360.0 - 180.0)
+
+    @classmethod
+    def _orientation_delta_deg(cls, current_pose: List[float], target_pose: List[float]) -> float:
+        if len(current_pose) < 6 or len(target_pose) < 6:
+            return 0.0
+        current_rot = cls._euler_xyz_deg_to_matrix(
+            float(current_pose[3]),
+            float(current_pose[4]),
+            float(current_pose[5]),
+        )
+        target_rot = cls._euler_xyz_deg_to_matrix(
+            float(target_pose[3]),
+            float(target_pose[4]),
+            float(target_pose[5]),
+        )
+        relative = [[0.0] * 3 for _ in range(3)]
+        for row in range(3):
+            for col in range(3):
+                relative[row][col] = sum(
+                    target_rot[row][k] * current_rot[col][k]
+                    for k in range(3)
+                )
+        trace = relative[0][0] + relative[1][1] + relative[2][2]
+        cos_angle = max(-1.0, min(1.0, (trace - 1.0) * 0.5))
+        return math.degrees(math.acos(cos_angle))
+
+    @staticmethod
+    def _euler_xyz_deg_to_matrix(rx_deg: float, ry_deg: float, rz_deg: float):
+        rx = math.radians(rx_deg)
+        ry = math.radians(ry_deg)
+        rz = math.radians(rz_deg)
+        cx, sx = math.cos(rx), math.sin(rx)
+        cy, sy = math.cos(ry), math.sin(ry)
+        cz, sz = math.cos(rz), math.sin(rz)
+        return (
+            (cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx),
+            (sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx),
+            (-sy, cy * sx, cy * cx),
+        )

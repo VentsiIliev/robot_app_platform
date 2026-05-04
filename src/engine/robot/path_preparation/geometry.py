@@ -27,6 +27,11 @@ def canonicalize_closed_contour_points(points: np.ndarray) -> np.ndarray:
     This matters for processes that derive orientation or projected motion from
     the first contour segment. Raw captured contours often have arbitrary
     winding and arbitrary start index.
+
+    Important: canonicalization must not invent new boundary adjacency. If the
+    raw contour order is already a valid closed walk, only cyclic shift and
+    optional reversal are allowed. Rebuilding the loop with nearest-neighbor
+    logic can create broken shapes for otherwise valid captures.
     """
     contour = np.asarray(points, dtype=np.float64)
     if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 3:
@@ -39,7 +44,6 @@ def canonicalize_closed_contour_points(points: np.ndarray) -> np.ndarray:
         return contour
 
     original_contour = contour.copy()
-    contour = _reorder_contour_if_discontinuous(contour)
 
     signed_area = 0.5 * float(
         np.dot(contour[:, 0], np.roll(contour[:, 1], -1))
@@ -50,7 +54,8 @@ def canonicalize_closed_contour_points(points: np.ndarray) -> np.ndarray:
     if signed_area > 0.0:
         contour = contour[::-1].copy()
 
-    # Use the top-most / then left-most point as a stable start index.
+    # Use the top-most / then left-most point as a stable start index while
+    # preserving original adjacency.
     start_index = int(np.lexsort((contour[:, 0], contour[:, 1]))[0])
     contour = np.roll(contour, -start_index, axis=0)
     contour = _orient_contour_like_original(contour, original_contour)
@@ -60,47 +65,6 @@ def canonicalize_closed_contour_points(points: np.ndarray) -> np.ndarray:
     if len(contour) >= 3 and np.linalg.norm(contour[0] - contour[-1]) > 1e-9:
         contour = np.vstack([contour, contour[:1]])
     return contour
-
-
-def _reorder_contour_if_discontinuous(points: np.ndarray) -> np.ndarray:
-    """
-    Repair contours whose stored point order is not a continuous walk around the boundary.
-
-    Some imported/aligned payloads preserve the right points but not the right adjacency.
-    When that happens, point 0 may be correct while point 1 jumps across the workpiece.
-    We detect unusually large jumps and rebuild a local nearest-neighbor loop before
-    applying the usual winding/start-point canonicalization.
-    """
-    contour = np.asarray(points, dtype=np.float64)
-    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 4:
-        return contour
-
-    segment_lengths = np.linalg.norm(np.diff(np.vstack([contour, contour[:1]]), axis=0), axis=1)
-    positive_lengths = segment_lengths[segment_lengths > 1e-9]
-    if positive_lengths.size == 0:
-        return contour
-
-    median_length = float(np.median(positive_lengths))
-    if median_length <= 1e-9:
-        return contour
-
-    # If the current order is already a reasonable boundary walk, leave it alone.
-    if float(np.max(positive_lengths)) <= median_length * 4.0:
-        return contour
-
-    remaining = contour.copy()
-    start_index = int(np.lexsort((remaining[:, 0], remaining[:, 1]))[0])
-    ordered = [remaining[start_index]]
-    remaining = np.delete(remaining, start_index, axis=0)
-
-    while len(remaining) > 0:
-        current = ordered[-1]
-        distances = np.linalg.norm(remaining - current, axis=1)
-        next_index = int(np.argmin(distances))
-        ordered.append(remaining[next_index])
-        remaining = np.delete(remaining, next_index, axis=0)
-
-    return np.asarray(ordered, dtype=np.float64)
 
 
 def _orient_contour_like_original(points: np.ndarray, original_points: np.ndarray) -> np.ndarray:

@@ -9,15 +9,19 @@ from src.robot_systems.paint.processes.paint.config import (
 )
 
 
-def rebase_projected_paint_path_to_zero_start_rz(path: list[list[float]]) -> list[list[float]]:
-    """Shift a projected paint path so its first pose starts at RZ zero."""
+def rebase_projected_paint_path_to_zero_start_rz(
+    path: list[list[float]],
+    config: PaintSimulationConfig,
+) -> list[list[float]]:
+    """Shift a projected paint path so its active rotation component starts at zero."""
     if not path:
         return []
     rebased = [list(pose) for pose in path]
-    start_rz = float(rebased[0][5]) if len(rebased[0]) >= 6 else 0.0
+    rotation_index = config.rotation_index
+    start_rz = float(rebased[0][rotation_index]) if len(rebased[0]) > rotation_index else 0.0
     for pose in rebased:
-        if len(pose) >= 6:
-            pose[5] = unwrap_degrees(0.0, float(pose[5]) - start_rz)
+        if len(pose) > rotation_index:
+            pose[rotation_index] = unwrap_degrees(0.0, float(pose[rotation_index]) - start_rz)
     return rebased
 
 
@@ -29,15 +33,32 @@ def project_paint_motion_geometry(
     """Project a source paint path into pickup/pivot motion geometry around the configured base pose."""
     if not path:
         return [], [], []
+    planar_i, planar_j = config.planar_coordinate_indices
+    source_planar_i, source_planar_j = config.source_planar_coordinate_indices
+    orthogonal_index = config.orthogonal_position_index
+    rotation_index = config.rotation_index
     if len(path) == 1:
-        return [list(path[0])], [np.array([[float(path[0][0]), float(path[0][1])]], dtype=float)], []
+        point = path[0]
+        planar_point = np.array([[float(point[source_planar_i]), float(point[source_planar_j])]], dtype=float)
+        return [list(point)], [planar_point], []
 
-    pivot_x = float(pivot_pose[0])
-    pivot_y = float(pivot_pose[1])
-    pivot_z = float(pivot_pose[2]) if len(pivot_pose) >= 3 else float(path[0][2])
+    pivot_x = float(pivot_pose[planar_i])
+    pivot_y = float(pivot_pose[planar_j])
+    pivot_orthogonal = (
+        float(pivot_pose[orthogonal_index])
+        if len(pivot_pose) > orthogonal_index else float(path[0][orthogonal_index])
+    )
     rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
     ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
-    base_rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
+    rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
+    orientation_overrides = config.orientation_overrides_deg
+    rx = float(orientation_overrides.get("rx", rx))
+    ry = float(orientation_overrides.get("ry", ry))
+    rz = float(orientation_overrides.get("rz", rz))
+    base_rz = (
+        float(pivot_pose[rotation_index])
+        if len(pivot_pose) > rotation_index else float(path[0][rotation_index])
+    )
     # Translation axis and pivot side are separate concepts.
     # The axis heading defines travel along the pivot.
     # `paint_side` only chooses which normal-side of that axis the workpiece
@@ -46,12 +67,32 @@ def project_paint_motion_geometry(
     translation_heading = float(paint_axis_heading)
     if config.direction_sign < 0:
         translation_heading = normalize_degrees(translation_heading + 180.0)
-    contact_segment_heading = normalize_degrees(translation_heading + 180.0)
+    contact_segment_heading = normalize_degrees(
+        translation_heading + config.contact_heading_offset_deg
+    )
 
-    points = np.array([[float(point[0]), float(point[1])] for point in path], dtype=float)
+    points = np.array(
+        [[float(point[source_planar_i]), float(point[source_planar_j])] for point in path],
+        dtype=float,
+    )
     if len(points) < 2:
         return (
-            [[float(points[0][0]), float(points[0][1]), pivot_z, rx, ry, base_rz]],
+            [
+                _compose_pose(
+                    reference_pose=path[0],
+                    planar_i=planar_i,
+                    planar_j=planar_j,
+                    planar_a=float(points[0][0]),
+                    planar_b=float(points[0][1]),
+                    orthogonal_index=orthogonal_index,
+                    orthogonal_value=pivot_orthogonal,
+                    rotation_index=rotation_index,
+                    rotation_value=base_rz,
+                    rx=rx,
+                    ry=ry,
+                    rz=rz,
+                )
+            ],
             [points.copy()],
             [{
                 "index": 0,
@@ -102,7 +143,22 @@ def project_paint_motion_geometry(
     snapshots: list[np.ndarray] = []
     diagnostics: list[dict[str, float | int]] = []
     center_xy = _centroid_xy(points)
-    result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+    result.append(
+        _compose_pose(
+            reference_pose=path[0],
+            planar_i=planar_i,
+            planar_j=planar_j,
+            planar_a=center_xy[0],
+            planar_b=center_xy[1],
+            orthogonal_index=orthogonal_index,
+            orthogonal_value=pivot_orthogonal,
+            rotation_index=rotation_index,
+            rotation_value=current_rz,
+            rx=rx,
+            ry=ry,
+            rz=rz,
+        )
+    )
     snapshots.append(points.copy())
     diagnostics.append(
         {
@@ -129,7 +185,22 @@ def project_paint_motion_geometry(
         segment_length = float(np.linalg.norm(next_point - current_point))
         if segment_length <= 1e-9:
             center_xy = _centroid_xy(points)
-            result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+            result.append(
+                _compose_pose(
+                    reference_pose=path[min(index + 1, len(path) - 1)],
+                    planar_i=planar_i,
+                    planar_j=planar_j,
+                    planar_a=center_xy[0],
+                    planar_b=center_xy[1],
+                    orthogonal_index=orthogonal_index,
+                    orthogonal_value=pivot_orthogonal,
+                    rotation_index=rotation_index,
+                    rotation_value=current_rz,
+                    rx=rx,
+                    ry=ry,
+                    rz=rz,
+                )
+            )
             snapshots.append(points.copy())
             diagnostics.append(
                 {
@@ -165,7 +236,22 @@ def project_paint_motion_geometry(
         # travel of the whole workpiece along the pivot axis.
         points = points + axis_vector * segment_length * config.direction_sign
         center_xy = _centroid_xy(points)
-        result.append([center_xy[0], center_xy[1], pivot_z, rx, ry, current_rz])
+        result.append(
+            _compose_pose(
+                reference_pose=path[min(index + 1, len(path) - 1)],
+                planar_i=planar_i,
+                planar_j=planar_j,
+                planar_a=center_xy[0],
+                planar_b=center_xy[1],
+                orthogonal_index=orthogonal_index,
+                orthogonal_value=pivot_orthogonal,
+                rotation_index=rotation_index,
+                rotation_value=current_rz,
+                rx=rx,
+                ry=ry,
+                rz=rz,
+            )
+        )
         snapshots.append(points.copy())
         diagnostics.append(
             {
@@ -182,6 +268,35 @@ def project_paint_motion_geometry(
     snapshots = snapshots[:len(path)]
     diagnostics = diagnostics[:len(path)]
     return result, snapshots, diagnostics
+
+
+def _compose_pose(
+    *,
+    reference_pose: list[float],
+    planar_i: int,
+    planar_j: int,
+    planar_a: float,
+    planar_b: float,
+    orthogonal_index: int,
+    orthogonal_value: float,
+    rotation_index: int,
+    rotation_value: float,
+    rx: float,
+    ry: float,
+    rz: float,
+) -> list[float]:
+    """Build a full 6D pose from a projected 2D point and the active motion plane."""
+    pose = [float(value) for value in reference_pose[:6]]
+    while len(pose) < 6:
+        pose.append(0.0)
+    pose[3] = float(rx)
+    pose[4] = float(ry)
+    pose[5] = float(rz)
+    pose[planar_i] = float(planar_a)
+    pose[planar_j] = float(planar_b)
+    pose[orthogonal_index] = float(orthogonal_value)
+    pose[rotation_index] = float(rotation_value)
+    return pose
 
 
 def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:

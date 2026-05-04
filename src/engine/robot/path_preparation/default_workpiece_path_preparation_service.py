@@ -372,38 +372,50 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm = _resolve_segment_interpolation_settings(settings)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
             input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
+            source_has_dxf = bool(str(merged.get("dxfPath", "") or "").strip())
 
-            pipeline = ContourPathPipeline(
-                preprocess=PreprocessConfig(
-                    min_spacing=preprocess_spacing_mm,
-                    max_segment_length=input_densify_spacing_mm,
-                    noise_method="none",
-                    noise_strength=0.0,
-                ),
-                interpolation=InterpolationConfig(
-                    method="pchip",
-                    output_spacing=interpolation_spacing_mm,
-                    dense_sampling_factor=dense_sampling_factor,
-                ),
-                ruckig=RuckigConfig(enabled=False),
-            )
-            pipeline_result = pipeline.run(np.asarray(path_pts, dtype=float)[:, :2])
-            prepared_path = rebuild_pose_path_from_xy(
-                pipeline_result.prepared, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
-            curve_path = rebuild_pose_path_from_xy(
-                pipeline_result.curve, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
-            sampled_path = rebuild_pose_path_from_xy(
-                pipeline_result.sampled, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
-            execution_spline = _resample_execution_path(sampled_path, target_spacing_mm=execution_spacing_mm)
+            if source_has_dxf:
+                self._logger.info(
+                    "[EXECUTE] Skipping contour interpolation for DXF-backed path: pattern=%s pts=%d",
+                    pattern_type,
+                    len(path_pts),
+                )
+                prepared_path = [list(pt) for pt in path_pts]
+                curve_path = [list(pt) for pt in path_pts]
+                sampled_path = [list(pt) for pt in path_pts]
+                execution_spline = [list(pt) for pt in path_pts]
+            else:
+                pipeline = ContourPathPipeline(
+                    preprocess=PreprocessConfig(
+                        min_spacing=preprocess_spacing_mm,
+                        max_segment_length=input_densify_spacing_mm,
+                        noise_method="none",
+                        noise_strength=0.0,
+                    ),
+                    interpolation=InterpolationConfig(
+                        method="pchip",
+                        output_spacing=interpolation_spacing_mm,
+                        dense_sampling_factor=dense_sampling_factor,
+                    ),
+                    ruckig=RuckigConfig(enabled=False),
+                )
+                pipeline_result = pipeline.run(np.asarray(path_pts, dtype=float)[:, :2])
+                prepared_path = rebuild_pose_path_from_xy(
+                    pipeline_result.prepared, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
+                curve_path = rebuild_pose_path_from_xy(
+                    pipeline_result.curve, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
+                sampled_path = rebuild_pose_path_from_xy(
+                    pipeline_result.sampled, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
+                execution_spline = _resample_execution_path(sampled_path, target_spacing_mm=execution_spacing_mm)
             total_spline_pts += len(execution_spline)
             prepared_paths.append([list(pt) for pt in prepared_path])
             curve_paths.append([list(pt) for pt in curve_path])
@@ -460,7 +472,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "acc": acc,
                     "pattern_type": pattern_type,
                     "use_workpiece_layer": bool(use_workpiece_layer),
-                    "source_has_dxf": bool(str(merged.get("dxfPath", "") or "").strip()),
+                    "source_has_dxf": source_has_dxf,
                     "workpiece_height_mm": float(workpiece_height_mm),
                     "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
                     "pickup_rz": float(pickup_rz),

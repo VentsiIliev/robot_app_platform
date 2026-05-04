@@ -18,8 +18,7 @@ class FairinoRos2Robot(IRobot):
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
-        # ret = self._client.move_ptp(position, tool, user, vel, acc, blocking=blocking) or 0
-        ret = self._client.move_liner(position, tool, user, vel, acc, blendR=0.0, blocking=blocking) or 0
+        ret = self._client.move_ptp(position, tool, user, vel, acc, blendR=0.0, blocking=blocking) or 0
         logger.debug("move_ptp ← raw_ret=%s normalised=%s accepted=%s", ret, ret, ret >= 0)
         return ret
 
@@ -155,7 +154,7 @@ class FairinoRos2Robot(IRobot):
         logger.debug(
             "execute_trajectory → waypoints=%d rx_degrees=%s ry_degrees=%s rz_degrees=%s vel=%s acc=%s blocking=%s orientation_mode=%s",
             len(path) if path else 0, rx, ry, rz, vel, acc, blocking, orientation_mode)
-        self._client.execute_path(
+        result = self._client.execute_path(
             path,
             rx=rx,
             ry=ry,
@@ -165,7 +164,8 @@ class FairinoRos2Robot(IRobot):
             blocking=blocking,
             orientation_mode=orientation_mode,
         )
-        logger.debug("execute_trajectory ← done")
+        logger.debug("execute_trajectory ← result=%s", result)
+        return result
 
     def reset_all_errors(self) -> int:
         logger.info("reset_all_errors →")

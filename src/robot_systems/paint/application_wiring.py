@@ -13,6 +13,11 @@ _PAINT_EXECUTION_TARGET_POINT = "tool"
 _PAINT_ENABLE_Z_SHIFT_PIXEL_COMPENSATION = False
 _PAINT_DXF_ALIGNMENT_STRATEGY = DXF_ALIGNMENT_STRATEGY_RIGID
 _PAINT_DXF_MAX_SCALE_DEVIATION = 0.03
+# Switch between horizontal XY painting with RZ rotation and vertical XZ painting with RY rotation.
+# _PAINT_PIVOT_MOTION_PLANE = "xy_z_rz"
+_PAINT_PIVOT_MOTION_PLANE = "xz_y_ry"
+_PAINT_PRIMARY_GROUP_ID = "PAINTING"
+_PAINT_SECONDARY_GROUP_ID = "PAINTING_NEW"
 
 
 def _get_paint_execution_target_point_name(robot_system) -> str:
@@ -20,6 +25,22 @@ def _get_paint_execution_target_point_name(robot_system) -> str:
     if target_key not in {"camera", "tool"}:
         raise ValueError(f"Unsupported paint execution target point: {target_key}")
     return getattr(robot_system.get_target_point_definition(target_key), "name", "") or target_key
+
+
+def _get_paint_base_group_id() -> str:
+    if _PAINT_PIVOT_MOTION_PLANE == "xz_y_ry":
+        return _PAINT_SECONDARY_GROUP_ID
+    return _PAINT_PRIMARY_GROUP_ID
+
+
+def _get_pickup_base_group_id() -> str:
+    return _PAINT_PRIMARY_GROUP_ID
+
+
+def _get_paint_pivot_side() -> str:
+    if _PAINT_PIVOT_MOTION_PLANE == "xz_y_ry":
+        return "positive"
+    return "negative"
 
 
 def _build_dashboard_application(robot_system):
@@ -66,8 +87,12 @@ def _build_paint_path_executor(robot_system):
     return PaintWorkpiecePathExecutor(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
+        pickup_base_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
         base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
+            getattr(robot_system, "_navigation", None).get_group_position(_get_paint_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
         post_execute_callback=lambda: (
@@ -79,8 +104,9 @@ def _build_paint_path_executor(robot_system):
         pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
+        pivot_motion_plane=_PAINT_PIVOT_MOTION_PLANE,
         pivot_translation_axis="x",
-        pivot_side="negative",
+        pivot_side=_get_paint_pivot_side(),
         pivot_translation_direction="forward",
         apply_camera_to_tcp_for_pickup=True,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
@@ -129,7 +155,7 @@ def _build_paint_path_preparation_service(robot_system):
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
         base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position("PAINTING")
+            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
     )

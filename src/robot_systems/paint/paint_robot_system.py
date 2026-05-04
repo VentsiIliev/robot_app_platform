@@ -68,12 +68,6 @@ class PaintRobotSystem(BaseRobotSystem):
             has_trajectory_execution=True,
         ),
 
-        MovementGroupDefinition(
-            id="CAMERA_CALIBRATION",
-            label="Camera Calibration",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-        ),
 
         MovementGroupDefinition(
             id="JOG",
@@ -87,6 +81,12 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
          ),
+        MovementGroupDefinition(
+            id="PAINTING_NEW",
+            label="Painting2",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
 
     ]
 

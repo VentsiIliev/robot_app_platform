@@ -86,6 +86,7 @@ def control_relay(output_num, state, host="192.168.222.35", port=5002):
         dict: JSON response from server or error dict
     """
     client = RelayClient(host=host, port=port)
+    client.set_relay(output_num, state)
     return client.set_relay(output_num, state)
 
 
