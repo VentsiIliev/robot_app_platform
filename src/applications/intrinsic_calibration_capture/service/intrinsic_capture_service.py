@@ -413,7 +413,11 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
                 self._publish(f"Acquisition complete: {len(samples)} images. Starting calibration...")
                 self._save_coverage_image(output_dir)
                 self._save_poses_json(samples, output_dir)
-                storage_path = getattr(self._vision, "storage_path", None) or output_dir
+                storage_path = (
+                    getattr(self._vision, "storage_path", None)
+                    or self._canonical_vision_storage_dir()
+                    or output_dir
+                )
                 self._run_calibration(
                     samples, board_type, pattern_size, sq_mm,
                     aruco_dict_id, mk_mm, storage_path,
@@ -439,6 +443,15 @@ class IntrinsicCaptureService(IIntrinsicCaptureService):
         if camera_to_robot_matrix_path:
             return os.path.join(os.path.dirname(camera_to_robot_matrix_path), "intrinsic_capture_output")
         return os.path.join(os.getcwd(), "intrinsic_capture_output")
+
+    def _canonical_vision_storage_dir(self) -> str | None:
+        camera_to_robot_matrix_path = (
+            getattr(self._vision, "camera_to_robot_matrix_path", None)
+            if self._vision is not None else None
+        )
+        if camera_to_robot_matrix_path:
+            return os.path.dirname(str(camera_to_robot_matrix_path))
+        return None
 
     # ── Calibration ───────────────────────────────────────────────────────────
 
