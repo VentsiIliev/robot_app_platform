@@ -283,14 +283,14 @@ class WorkpieceEditorController(IApplicationController):
                     cv2.LINE_AA,
                 )
 
-            debug_dir = os.path.normpath(
-                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
-            )
-            os.makedirs(debug_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            path = os.path.join(debug_dir, f"pickup_centroid_debug_{timestamp}.png")
-            if cv2.imwrite(path, frame):
-                self._logger.info("Saved pickup centroid debug image to: %s", path)
+            # debug_dir = os.path.normpath(
+            #     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+            # )
+            # os.makedirs(debug_dir, exist_ok=True)
+            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # path = os.path.join(debug_dir, f"pickup_centroid_debug_{timestamp}.png")
+            # if cv2.imwrite(path, frame):
+            #     self._logger.info("Saved pickup centroid debug image to: %s", path)
         except Exception:
             self._logger.debug("Failed to save pickup centroid debug image", exc_info=True)
 
@@ -743,17 +743,17 @@ class WorkpieceEditorController(IApplicationController):
                 source_paths = self._model.get_last_execution_preview_paths()
                 pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
                 motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
-                if source_paths and pivot_paths:
-                    approved = self._show_pivot_path_plot(
-                        source_paths,
-                        pivot_paths,
-                        pivot_pose,
-                        motion_snapshots,
-                        approve_label=action.label,
-                    )
-                    if not approved:
-                        self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
-                        return
+                # if source_paths and pivot_paths:
+                #     approved = self._show_pivot_path_plot(
+                #         source_paths,
+                #         pivot_paths,
+                #         pivot_pose,
+                #         motion_snapshots,
+                #         approve_label=action.label,
+                #     )
+                #     if not approved:
+                #         self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                #         return
             except Exception:
                 self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
                 return

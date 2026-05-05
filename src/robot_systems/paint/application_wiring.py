@@ -3,44 +3,33 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.workpiece_alignment import (
-    DXF_ALIGNMENT_STRATEGY_RIGID,DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
+    DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
 )
 
 
 _logger = logging.getLogger(__name__)
-_PAINT_EXECUTION_TARGET_POINT = "tool"
-_PAINT_ENABLE_Z_SHIFT_PIXEL_COMPENSATION = False
-_PAINT_DXF_ALIGNMENT_STRATEGY = DXF_ALIGNMENT_STRATEGY_RIGID
-_PAINT_DXF_MAX_SCALE_DEVIATION = 0.03
-# Switch between horizontal XY painting with RZ rotation and vertical XZ painting with RY rotation.
-# _PAINT_PIVOT_MOTION_PLANE = "xy_z_rz"
-_PAINT_PIVOT_MOTION_PLANE = "xz_y_ry"
-_PAINT_PRIMARY_GROUP_ID = "PAINTING"
-_PAINT_SECONDARY_GROUP_ID = "PAINTING_NEW"
+_PAINT_PROCESS = PAINT_PROCESS_CONFIG
 
 
 def _get_paint_execution_target_point_name(robot_system) -> str:
-    target_key = str(_PAINT_EXECUTION_TARGET_POINT or "camera").strip().lower()
+    target_key = str(_PAINT_PROCESS.execution_target_point or "camera").strip().lower()
     if target_key not in {"camera", "tool"}:
         raise ValueError(f"Unsupported paint execution target point: {target_key}")
     return getattr(robot_system.get_target_point_definition(target_key), "name", "") or target_key
 
 
 def _get_paint_base_group_id() -> str:
-    if _PAINT_PIVOT_MOTION_PLANE == "xz_y_ry":
-        return _PAINT_SECONDARY_GROUP_ID
-    return _PAINT_PRIMARY_GROUP_ID
+    return _PAINT_PROCESS.paint_base_group_id
 
 
 def _get_pickup_base_group_id() -> str:
-    return _PAINT_PRIMARY_GROUP_ID
+    return _PAINT_PROCESS.pickup_base_group_id
 
 
 def _get_paint_pivot_side() -> str:
-    if _PAINT_PIVOT_MOTION_PLANE == "xz_y_ry":
-        return "positive"
-    return "negative"
+    return _PAINT_PROCESS.pivot_side
 
 
 def _build_dashboard_application(robot_system):
@@ -101,14 +90,18 @@ def _build_paint_path_executor(robot_system):
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+        enable_vacuum_pump=_PAINT_PROCESS.enable_vacuum_pump,
         pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
-        pivot_motion_plane=_PAINT_PIVOT_MOTION_PLANE,
-        pivot_translation_axis="x",
+        pivot_motion_plane=_PAINT_PROCESS.pivot_motion_plane,
+        pivot_translation_axis=_PAINT_PROCESS.pivot_translation_axis,
         pivot_side=_get_paint_pivot_side(),
-        pivot_translation_direction="forward",
-        apply_camera_to_tcp_for_pickup=True,
+        pivot_translation_direction=_PAINT_PROCESS.pivot_translation_direction,
+        flip_xz_ry_execution_rotation_direction=_PAINT_PROCESS.flip_xz_ry_execution_rotation_direction,
+        enable_xz_ry_preflight=_PAINT_PROCESS.enable_xz_ry_preflight,
+        xz_ry_preflight_max_checks=_PAINT_PROCESS.xz_ry_preflight_max_checks,
+        apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
         camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
     )
@@ -132,7 +125,7 @@ def _build_paint_path_preparation_service(robot_system):
         except Exception:
             z_min = 0.0
     segment_config = SegmentEditorConfig(schema=build_paint_segment_settings_schema())
-    if _PAINT_ENABLE_Z_SHIFT_PIXEL_COMPENSATION:
+    if _PAINT_PROCESS.enable_z_shift_pixel_compensation:
         pixel_height_compensation_fn = (
             lambda height_mm: (
                 float(getattr(robot_config, "camera_z_shift_x_per_mm_px", 0.0)) * float(height_mm),
@@ -180,8 +173,8 @@ def _build_paint_workpiece_preparation_service(robot_system):
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
         transformer=robot_system.get_shared_vision_resolver()[0],
-        dxf_alignment_strategy=_PAINT_DXF_ALIGNMENT_STRATEGY,
-        dxf_max_scale_deviation=_PAINT_DXF_MAX_SCALE_DEVIATION,
+        dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
+        dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
     )
 
 
@@ -263,8 +256,8 @@ def _build_paint_contour_editor_application(robot_system):
             PaintDxfPathFormBehavior(
                 prepare_dxf_raw_for_image=service.prepare_dxf_test_raw_for_image,
                 dxf_importer=import_dxf_to_workpiece_data,
-                dxf_alignment_strategy=_PAINT_DXF_ALIGNMENT_STRATEGY,
-                dxf_max_scale_deviation=_PAINT_DXF_MAX_SCALE_DEVIATION,
+                dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
+                dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
             )
         ]
     )

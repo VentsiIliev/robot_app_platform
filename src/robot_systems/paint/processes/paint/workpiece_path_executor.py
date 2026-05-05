@@ -9,7 +9,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from src.engine.geometry.planar import unwrap_degrees
+from src.engine.geometry.planar import rotate_xy_about, unwrap_degrees
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
@@ -117,6 +117,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         post_execute_callback: Optional[Callable[[], bool]] = None,
         robot_config_provider: Optional[Callable[[], object]] = None,
         vacuum_pump=None,
+        enable_vacuum_pump: bool = True,
         pickup_tool: int = 0,
         pickup_user: int = 0,
         pickup_z_mm: float | None = None,
@@ -125,6 +126,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pivot_translation_axis: str = "x",
         pivot_side: str = "negative",
         pivot_translation_direction: str = "forward",
+        flip_xz_ry_execution_rotation_direction: bool = False,
+        enable_xz_ry_preflight: bool = True,
+        xz_ry_preflight_max_checks: int = 8,
         apply_camera_to_tcp_for_pickup: bool = False,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
@@ -137,12 +141,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._post_execute_callback = post_execute_callback
         self._robot_config_provider = robot_config_provider
         self._vacuum_pump = vacuum_pump
+        self._enable_vacuum_pump = bool(enable_vacuum_pump)
         self._pickup_tool = int(pickup_tool)
         self._pickup_user = int(pickup_user)
         self._pickup_z_mm = None if pickup_z_mm is None else float(pickup_z_mm)
         self._pickup_safety_z_min_mm = 100.0
         self._debug_dump_dir = debug_dump_dir
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
+        self._last_pickup_plan: PickupToPivotPlan | None = None
+        self._pending_stage_pose: list[float] | None = None
+        self._flip_xz_ry_execution_rotation_direction = bool(flip_xz_ry_execution_rotation_direction)
+        self._enable_xz_ry_preflight = bool(enable_xz_ry_preflight)
+        self._xz_ry_preflight_max_checks = max(1, int(xz_ry_preflight_max_checks))
         self._pivot_config = _normalize_pivot_config(
             motion_plane=pivot_motion_plane,
             translation_axis=pivot_translation_axis,
@@ -175,12 +185,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """
         if not self._uses_xz_ry_pivot_mode():
             return True, ""
+        if not self._enable_xz_ry_preflight:
+            _logger.info("[PIVOT_PATH] xz/ry preflight skipped: disabled by configuration")
+            return True, ""
         if self._robot_service is None or len(pivot_path) < 2:
             return True, ""
 
         # Sample a handful of segments across the full path so we can fail early
         # with a concrete offending segment instead of waiting for execute_path().
-        max_checks = 8
+        max_checks = self._xz_ry_preflight_max_checks
         last_index = len(pivot_path) - 1
         sampled_indices = sorted(
             {
@@ -352,6 +365,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         *,
         source_path: list[list[float]],
         pivot_path: list[list[float]],
+        snapshots: list[np.ndarray] | None,
         diagnostics: list[dict[str, float | int]] | None,
         pivot_pose: list[float] | None,
         pattern_type: str,
@@ -386,6 +400,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 [float(p[rotation_index]) if len(p) > rotation_index else 0.0 for p in pivot_path],
                 dtype=float,
             )
+            snapshot_list = [
+                np.asarray(snapshot, dtype=float)
+                for snapshot in self._build_executed_snapshot_series(
+                    source_path=source_path,
+                    executed_path=pivot_path,
+                    pivot_pose=pivot_pose,
+                ) or (snapshots or [])
+                if len(snapshot) >= 1
+            ]
             waypoint_idx = np.arange(len(pivot_path), dtype=float)
             rotation_delta = np.asarray(
                 [
@@ -402,13 +425,40 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     constant_values=0.0,
                 )
 
-            fig, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
+            if snapshot_list:
+                highlighted_indices = [0]
+                if len(snapshot_list) >= 2:
+                    highlighted_indices.append(1)
+                sample_count = min(8, len(snapshot_list))
+                sample_indices = np.unique(
+                    np.round(np.linspace(0, len(snapshot_list) - 1, sample_count)).astype(int)
+                )
+                sample_indices = np.unique(np.asarray([*highlighted_indices, *sample_indices], dtype=int))
+                snapshot_cols = min(3, max(1, len(sample_indices)))
+                snapshot_rows = int(np.ceil(len(sample_indices) / snapshot_cols))
+                fig = plt.figure(
+                    figsize=(18, 6 + (3.2 * snapshot_rows)),
+                    constrained_layout=True,
+                )
+                grid = fig.add_gridspec(1 + snapshot_rows, 3)
+                ax_source = fig.add_subplot(grid[0, 0])
+                ax_projected = fig.add_subplot(grid[0, 1:])
+                snapshot_axes = [
+                    fig.add_subplot(grid[1 + (idx // 3), idx % 3])
+                    for idx in range(len(sample_indices))
+                ]
+            else:
+                fig, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
+                ax_source = axes[0]
+                ax_projected = axes[1]
+                snapshot_axes = [axes[2]]
+                sample_indices = np.asarray([], dtype=int)
+
             fig.suptitle(
                 f"Pivot Trajectory Debug: {pattern_type} [{self._pivot_config.motion_plane}]",
                 fontsize=12,
             )
 
-            ax_source = axes[0]
             ax_source.plot(source_xy[:, 0], source_xy[:, 1], color="#1f77b4", linewidth=1.5)
             ax_source.scatter(source_xy[0, 0], source_xy[0, 1], color="green", s=40, label="start")
             ax_source.scatter(source_xy[-1, 0], source_xy[-1, 1], color="red", s=40, label="end")
@@ -432,7 +482,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             ax_source.grid(True, alpha=0.25)
             ax_source.legend(loc="best")
 
-            ax_projected = axes[1]
             scatter = ax_projected.scatter(
                 projected_xy[:, 0],
                 projected_xy[:, 1],
@@ -443,6 +492,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             ax_projected.plot(projected_xy[:, 0], projected_xy[:, 1], color="#444444", linewidth=1.0, alpha=0.8)
             ax_projected.scatter(projected_xy[0, 0], projected_xy[0, 1], color="green", s=40, label="start")
             ax_projected.scatter(projected_xy[-1, 0], projected_xy[-1, 1], color="red", s=40, label="end")
+            if len(projected_xy) >= 2:
+                ax_projected.annotate(
+                    "",
+                    xy=(projected_xy[1, 0], projected_xy[1, 1]),
+                    xytext=(projected_xy[0, 0], projected_xy[0, 1]),
+                    arrowprops=dict(arrowstyle="->", color="#d62728", lw=2.0),
+                )
+                ax_projected.text(
+                    projected_xy[0, 0],
+                    projected_xy[0, 1],
+                    " contact",
+                    color="#d62728",
+                    fontsize=8,
+                )
+                ax_projected.text(
+                    projected_xy[1, 0],
+                    projected_xy[1, 1],
+                    " first move",
+                    color="#d62728",
+                    fontsize=8,
+                )
             ax_projected.quiver(
                 projected_xy[:-1:arrow_step, 0],
                 projected_xy[:-1:arrow_step, 1],
@@ -472,24 +542,140 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             ax_projected.legend(loc="best")
             fig.colorbar(scatter, ax=ax_projected, fraction=0.046, pad=0.04, label="waypoint")
 
-            ax_rotation = axes[2]
-            ax_rotation.plot(waypoint_idx, projected_rot, color="#d62728", linewidth=1.5, label="active rotation")
-            ax_rotation.bar(
-                waypoint_idx,
-                rotation_delta[: len(waypoint_idx)],
-                color="#9467bd",
-                alpha=0.35,
-                width=0.8,
-                label="rotation delta",
-            )
-            ax_rotation.axhline(0.0, color="#666666", linewidth=0.8, alpha=0.6)
-            ax_rotation.set_title("Rotation Progression")
-            ax_rotation.set_xlabel("Waypoint")
-            ax_rotation.set_ylabel(
-                "RY (deg)" if rotation_index == 4 else "RZ (deg)"
-            )
-            ax_rotation.grid(True, alpha=0.25)
-            ax_rotation.legend(loc="best")
+            if snapshot_list:
+                snapshot_cmap = plt.get_cmap("viridis")
+                sampled_snapshots = [snapshot_list[int(sample_index)] for sample_index in sample_indices]
+                min_x = min(float(np.min(snapshot[:, 0])) for snapshot in sampled_snapshots)
+                max_x = max(float(np.max(snapshot[:, 0])) for snapshot in sampled_snapshots)
+                min_y = min(float(np.min(snapshot[:, 1])) for snapshot in sampled_snapshots)
+                max_y = max(float(np.max(snapshot[:, 1])) for snapshot in sampled_snapshots)
+                if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
+                    pivot_x = float(pivot_pose[planar_i])
+                    pivot_y = float(pivot_pose[planar_j])
+                    min_x = min(min_x, pivot_x)
+                    max_x = max(max_x, pivot_x)
+                    min_y = min(min_y, pivot_y)
+                    max_y = max(max_y, pivot_y)
+                pad_x = max(10.0, (max_x - min_x) * 0.08)
+                pad_y = max(10.0, (max_y - min_y) * 0.08)
+
+                for draw_order, sample_index in enumerate(sample_indices):
+                    snapshot = snapshot_list[int(sample_index)]
+                    color = snapshot_cmap(
+                        0.0 if len(sample_indices) == 1 else draw_order / (len(sample_indices) - 1)
+                    )
+                    is_contact = int(sample_index) == 0
+                    is_first_move = int(sample_index) == 1
+                    line_width = 2.6 if (is_contact or is_first_move) else 1.2
+                    line_style = "-" if is_contact else ("--" if is_first_move else "-")
+                    ax_snapshot = snapshot_axes[draw_order]
+                    ax_snapshot.plot(
+                        snapshot[:, 0],
+                        snapshot[:, 1],
+                        color=color,
+                        linewidth=line_width,
+                        linestyle=line_style,
+                        alpha=0.95,
+                    )
+                    ax_snapshot.scatter(
+                        snapshot[0, 0],
+                        snapshot[0, 1],
+                        color=color,
+                        s=42 if (is_contact or is_first_move) else 18,
+                        alpha=0.95,
+                    )
+                    if len(snapshot) >= 2:
+                        ax_snapshot.plot(
+                            snapshot[:2, 0],
+                            snapshot[:2, 1],
+                            color="#d62728" if is_contact else "#ff7f0e" if is_first_move else color,
+                            linewidth=3.0 if (is_contact or is_first_move) else line_width,
+                            alpha=0.9,
+                        )
+                    if int(sample_index) < len(projected_xy):
+                        tcp_x = float(projected_xy[int(sample_index), 0])
+                        tcp_y = float(projected_xy[int(sample_index), 1])
+                        ax_snapshot.scatter(
+                            tcp_x,
+                            tcp_y,
+                            color="#d62728",
+                            s=28,
+                            marker="o",
+                            label="executed tcp",
+                            zorder=5,
+                        )
+                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
+                        pivot_xy = np.asarray(
+                            [float(pivot_pose[planar_i]), float(pivot_pose[planar_j])],
+                            dtype=float,
+                        )
+                        nearest_index = int(np.argmin(np.linalg.norm(snapshot - pivot_xy, axis=1)))
+                        nearest_point = snapshot[nearest_index]
+                        ax_snapshot.scatter(
+                            float(nearest_point[0]),
+                            float(nearest_point[1]),
+                            color="#ff7f0e",
+                            s=24,
+                            marker="s",
+                            label="nearest to pivot",
+                            zorder=5,
+                        )
+                    label = f"Step {int(sample_index)}"
+                    if is_contact:
+                        label = "Step 0 - contact"
+                    elif is_first_move:
+                        label = "Step 1 - first move"
+                    ax_snapshot.set_title(label)
+                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
+                        ax_snapshot.scatter(
+                            float(pivot_pose[planar_i]),
+                            float(pivot_pose[planar_j]),
+                            color="orange",
+                            s=55,
+                            marker="x",
+                            label="pivot",
+                        )
+                    ax_snapshot.set_xlim(min_x - pad_x, max_x + pad_x)
+                    ax_snapshot.set_ylim(min_y - pad_y, max_y + pad_y)
+                    ax_snapshot.set_xlabel(_axis_label_from_index(planar_i))
+                    ax_snapshot.set_ylabel(_axis_label_from_index(planar_j))
+                    ax_snapshot.axis("equal")
+                    ax_snapshot.grid(True, alpha=0.25)
+                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
+                        ax_snapshot.legend(loc="best")
+
+                for empty_index in range(len(sample_indices), len(snapshot_axes)):
+                    snapshot_axes[empty_index].axis("off")
+
+                if snapshot_axes:
+                    snapshot_axes[0].text(
+                        0.02,
+                        1.08,
+                        "Executed Workpiece Snapshots (one subplot per sampled step)",
+                        transform=snapshot_axes[0].transAxes,
+                        fontsize=10,
+                        fontweight="bold",
+                        ha="left",
+                    )
+            else:
+                ax_rotation = snapshot_axes[0]
+                ax_rotation.plot(waypoint_idx, projected_rot, color="#d62728", linewidth=1.5, label="active rotation")
+                ax_rotation.bar(
+                    waypoint_idx,
+                    rotation_delta[: len(waypoint_idx)],
+                    color="#9467bd",
+                    alpha=0.35,
+                    width=0.8,
+                    label="rotation delta",
+                )
+                ax_rotation.axhline(0.0, color="#666666", linewidth=0.8, alpha=0.6)
+                ax_rotation.set_title("Rotation Progression")
+                ax_rotation.set_xlabel("Waypoint")
+                ax_rotation.set_ylabel(
+                    "RY (deg)" if rotation_index == 4 else "RZ (deg)"
+                )
+                ax_rotation.grid(True, alpha=0.25)
+                ax_rotation.legend(loc="best")
 
             fig.text(
                 0.5,
@@ -508,6 +694,61 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[PIVOT] Wrote pivot trajectory debug plot to %s", filepath)
         except Exception:
             _logger.debug("[PIVOT] Failed to write pivot trajectory debug plot", exc_info=True)
+
+    def _build_executed_snapshot_series(
+        self,
+        *,
+        source_path: list[list[float]],
+        executed_path: list[list[float]],
+        pivot_pose: list[float] | None,
+    ) -> list[np.ndarray]:
+        """Rebuild contour snapshots from the final executed pose sequence."""
+        if not source_path or not executed_path or pivot_pose is None or len(pivot_pose) < 3:
+            return []
+        try:
+            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
+                source_path,
+                pivot_pose,
+                self._pivot_config,
+            )
+            if not preview_path or not preview_snapshots:
+                return []
+
+            planar_i, planar_j = self._pivot_config.planar_coordinate_indices
+            rotation_index = self._pivot_config.rotation_index
+            pivot_xy = (float(pivot_pose[planar_i]), float(pivot_pose[planar_j]))
+            reference_snapshot = np.asarray(preview_snapshots[0], dtype=float)
+            reference_rotation = (
+                float(preview_path[0][rotation_index]) if len(preview_path[0]) > rotation_index else 0.0
+            )
+            rebuilt_snapshots: list[np.ndarray] = []
+            for pose in executed_path:
+                target_rotation = float(pose[rotation_index]) if len(pose) > rotation_index else reference_rotation
+                rotation_delta = unwrap_degrees(reference_rotation, target_rotation) - reference_rotation
+                rotated_snapshot = np.asarray(
+                    [
+                        rotate_xy_about(
+                            (float(point[0]), float(point[1])),
+                            rotation_delta,
+                            pivot_xy,
+                        )
+                        for point in reference_snapshot
+                    ],
+                    dtype=float,
+                )
+                target_center = np.asarray(
+                    [
+                        float(pose[planar_i]) if len(pose) > planar_i else 0.0,
+                        float(pose[planar_j]) if len(pose) > planar_j else 0.0,
+                    ],
+                    dtype=float,
+                )
+                current_center = np.mean(rotated_snapshot, axis=0)
+                rebuilt_snapshots.append(rotated_snapshot + (target_center - current_center))
+            return rebuilt_snapshots
+        except Exception:
+            _logger.debug("[PIVOT] Failed to rebuild executed snapshots", exc_info=True)
+            return []
 
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         """Report the execution modes supported by the paint executor."""
@@ -820,25 +1061,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_rz,
         ]
 
-        change_plane_pose = [
-            pickup_centroid_x - pickup_tcp_dx,
-            pickup_centroid_y - pickup_tcp_dy,
-            float(pickup_approach_z),
-            float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx,
-            pickup_ry,
-            pickup_rz,
-        ]
-
-        align_rx = float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx
+        align_rx = pickup_rx
         align_ry = pickup_ry
         align_rz = pickup_rz
         if self._uses_xz_ry_pivot_mode():
             target_ry = float(first_pivot_pose[4]) if len(first_pivot_pose) >= 5 else pickup_ry
             reference_ry = float(paint_pivot_pose[4]) if len(paint_pivot_pose) >= 5 else pickup_ry
-            align_ry = unwrap_degrees(reference_ry, target_ry)
-            align_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else (
-                float(paint_pivot_pose[5]) if len(paint_pivot_pose) >= 6 else pickup_rz
-            )
+            align_delta = unwrap_degrees(reference_ry, target_ry) - reference_ry
+            align_rz = unwrap_degrees(pickup_rz, pickup_rz + align_delta)
         else:
             align_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else pickup_rz
 
@@ -848,6 +1078,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_approach_z,
             align_rx,
             align_ry,
+            align_rz,
+        ]
+
+        change_plane_pose = [
+            pickup_centroid_x - pickup_tcp_dx,
+            pickup_centroid_y - pickup_tcp_dy,
+            float(pickup_approach_z),
+            float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx,
+            pickup_ry,
             align_rz,
         ]
 
@@ -887,6 +1126,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def _turn_vacuum_on(self) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
         started = perf_counter()
+        if not self._enable_vacuum_pump:
+            _logger.info("[TIMING] vacuum_on skipped=true reason=disabled_by_configuration elapsed_s=%.3f", _elapsed_s(started))
+            return True, ""
         if self._vacuum_pump is None:
             _logger.info("[TIMING] vacuum_on skipped=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
@@ -900,6 +1142,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def _turn_vacuum_off(self) -> tuple[bool, str]:
         """Disable the vacuum pump after staging if one is configured."""
         started = perf_counter()
+        if not self._enable_vacuum_pump:
+            _logger.info("[TIMING] vacuum_off skipped=true reason=disabled_by_configuration elapsed_s=%.3f", _elapsed_s(started))
+            return True, ""
         if self._vacuum_pump is None:
             _logger.info("[TIMING] vacuum_off skipped=true elapsed_s=%.3f", _elapsed_s(started))
             return True, ""
@@ -909,6 +1154,41 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return True, ""
         _logger.info("[TIMING] vacuum_off success=false elapsed_s=%.3f", _elapsed_s(started))
         return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
+
+    def _run_pre_release_dropoff(self) -> tuple[bool, str]:
+        """Return to the saved pickup-align area before releasing the workpiece."""
+        started = perf_counter()
+        plan = self._last_pickup_plan
+        if plan is None:
+            _logger.info("[TIMING] pre_release_dropoff skipped=true reason=no_pickup_plan elapsed_s=%.3f", _elapsed_s(started))
+            return True, ""
+
+        move_started = perf_counter()
+        if not self._move_pickup_phase("Returning to align pose for release", plan.align_pose):
+            _logger.info(
+                "[TIMING] pre_release_dropoff success=false stage=align elapsed_s=%.3f total_elapsed_s=%.3f",
+                _elapsed_s(move_started),
+                _elapsed_s(started),
+            )
+            return False, "Pivot paint finished, but return-to-align move failed before release"
+
+        rotate_started = perf_counter()
+        if not self._move_pickup_phase("Changing back to original pickup orientation", plan.pickup_approach_pose):
+            _logger.info(
+                "[TIMING] pre_release_dropoff success=false stage=restore_orientation move_elapsed_s=%.3f rotate_elapsed_s=%.3f total_elapsed_s=%.3f",
+                _elapsed_s(move_started),
+                _elapsed_s(rotate_started),
+                _elapsed_s(started),
+            )
+            return False, "Pivot paint finished, but original-orientation restore failed before release"
+
+        _logger.info(
+            "[TIMING] pre_release_dropoff success=true align_elapsed_s=%.3f restore_elapsed_s=%.3f total_elapsed_s=%.3f",
+            _elapsed_s(move_started),
+            _elapsed_s(rotate_started),
+            _elapsed_s(started),
+        )
+        return True, ""
 
     def _run_post_execute_return(self, failure_message: str) -> tuple[bool, str]:
         """Run unwind and post-execution return logic after pivot painting finishes."""
@@ -977,6 +1257,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     _elapsed_s(job_started),
                 )
                 return False, "Pickup succeeded, but pivot-path geometry could not be built", total_waypoints
+            if self._uses_xz_ry_pivot_mode() and self._flip_xz_ry_execution_rotation_direction and pivot_path:
+                reference_ry = float(pivot_path[0][4]) if len(pivot_path[0]) >= 5 else 0.0
+                for pose in pivot_path:
+                    if len(pose) >= 5:
+                        pose[4] = 2.0 * reference_ry - float(pose[4])
+                _logger.info(
+                    "[PIVOT_PATH] Flipped xz/ry execution rotation direction around start RY=%.3f",
+                    reference_ry,
+                )
             if self._last_process_start_rz is None and pivot_path:
                 self._last_process_start_rz = float(pivot_path[0][5]) if len(pivot_path[0]) >= 6 else 0.0
 
@@ -1000,12 +1289,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
             pivot_pose = self._resolve_base_position()
             if pivot_pose is not None and len(pivot_pose) >= 3:
-                _, _, diagnostics = project_paint_motion_geometry(
+                _, snapshots, diagnostics = project_paint_motion_geometry(
                     spline,
                     pivot_pose,
                     self._pivot_config,
                 )
             else:
+                snapshots = None
                 diagnostics = None
             self._write_pivot_debug_dump(
                 source_path=spline,
@@ -1018,6 +1308,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._write_pivot_debug_plot(
                 source_path=spline,
                 pivot_path=pivot_path,
+                snapshots=snapshots,
                 diagnostics=diagnostics,
                 pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
                 pattern_type=pattern_type,
@@ -1088,12 +1379,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Could not compute pickup-to-pivot poses"
+        self._last_pickup_plan = plan
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", _elapsed_s(plan_started))
 
-        # ok, msg = self._turn_vacuum_on()
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
+        ok, msg = self._turn_vacuum_on()
+        if not ok:
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
 
         if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
@@ -1107,13 +1399,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=lift total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but lift move failed"
 
-        if not self._move_pickup_phase("Changing plane", plan.change_plane_pose):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=change_plane total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, "Pickup succeeded, but change-plane move failed"
-
         if not self._move_pickup_phase("Aligning rotation at pickup pose", plan.align_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=align total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but align move failed"
+
+        if not self._move_pickup_phase("Changing plane", plan.change_plane_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=change_plane total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pickup succeeded, but change-plane move failed"
 
         for transition_index, transition_pose in enumerate(plan.stage_transition_poses, start=1):
             if not self._move_pickup_phase(
@@ -1127,13 +1419,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 )
                 return False, f"Pickup succeeded, but stage transition {transition_index} failed"
 
-        if not self._move_pickup_phase("Moving to staged pivot pose", plan.staged_pose):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=stage total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, "Pickup succeeded, but move-to-pivot failed"
-
-
+        if not self._move_pickup_phase("Moving to first pivot contact pose", plan.staged_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=staged_pose total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pickup succeeded, but move to first pivot contact pose failed"
         _logger.info("[TIMING] pickup_to_pivot success=true total_elapsed_s=%.3f", _elapsed_s(started))
-        return True, "Pickup completed and staged at pivot-aligned first point"
+        return True, "Pickup completed and robot is positioned at the first pivot contact pose"
 
     def execute_pickup_and_paint(
         self,
@@ -1151,10 +1441,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
-        # ok, msg = self._turn_vacuum_off()
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
+        ok, msg = self._run_pre_release_dropoff()
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
+
+        ok, msg = self._turn_vacuum_off()
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
 
         ok, msg = self._run_post_execute_return(
             "Pickup and pivot paint finished, but {reason}"

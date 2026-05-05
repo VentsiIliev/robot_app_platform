@@ -6,7 +6,7 @@ class RelayClient:
     """
     Client for the Relay Control Server.
     """
-    def __init__(self, host="127.0.0.1", port=5002):
+    def __init__(self, host="127.0.0.1", port=5000):
         self.base_url = f"http://{host}:{port}"
 
     def turn_on_y0(self):
@@ -45,7 +45,7 @@ class RelayClient:
             return {"success": False, "error": str(e)}
 
 
-def run_command(command, host="192.168.222.35", port=5002):
+def run_command(command, host="192.168.2.146", port=5000):
     """
     Run a simple relay command programmatically.
 
@@ -72,7 +72,7 @@ def run_command(command, host="192.168.222.35", port=5002):
         return {"success": False, "error": f"Unknown command: {command}"}
 
 
-def control_relay(output_num, state, host="192.168.222.35", port=5002):
+def control_relay(output_num, state, host="192.168.2.146", port=5000):
     """
     Control any relay output programmatically.
 
