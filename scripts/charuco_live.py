@@ -33,8 +33,8 @@ from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 
 
 # ── Board config — edit to match your physical board ─────────────────────────
-SQUARES_X     = 27
-SQUARES_Y     = 18
+SQUARES_X     = 19
+SQUARES_Y     = 12
 SQUARE_LENGTH = 0.015          # metres
 MARKER_LENGTH = 0.011          # metres
 DICT_ID       = cv2.aruco.DICT_4X4_1000

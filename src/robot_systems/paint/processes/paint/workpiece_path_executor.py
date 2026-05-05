@@ -796,6 +796,38 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         except (TypeError, ValueError):
             return None
 
+    def _apply_pivot_offset(self, pivot_pose: list[float] | None, offset_mm: float) -> list[float] | None:
+        """Apply the editor-configured pivot offset in the active pivot plane."""
+        if pivot_pose is None:
+            return None
+        try:
+            offset_value = float(offset_mm or 0.0)
+        except (TypeError, ValueError):
+            offset_value = 0.0
+        adjusted_pose = list(pivot_pose)
+        if abs(offset_value) <= 1e-9:
+            return adjusted_pose
+        target_index = 2 if self._uses_xz_ry_pivot_mode() else 1
+        while len(adjusted_pose) <= target_index:
+            adjusted_pose.append(0.0)
+        adjusted_pose[target_index] = float(adjusted_pose[target_index]) + offset_value
+        return adjusted_pose
+
+    @staticmethod
+    def _resolve_pivot_offset_mm(job: dict | None, execution_plan: WorkpieceExecutionPlan | None = None) -> float:
+        """Resolve the persisted pivot-offset setting from job or workpiece data."""
+        if job is not None:
+            try:
+                return float(job.get("pivot_offset_mm", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                pass
+        if execution_plan is not None:
+            try:
+                return float((execution_plan.workpiece or {}).get("offset", 0.0) or 0.0)
+            except (AttributeError, TypeError, ValueError):
+                pass
+        return 0.0
+
     def _resolve_pickup_base_position(self) -> Optional[list[float]]:
         """Resolve the pickup/staging base pose used for XY/RZ pickup alignment."""
         provider = self._pickup_base_position_provider
@@ -818,14 +850,22 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         """Project preview center paths for each prepared execution job around the pivot pose."""
-        pivot_pose = self._resolve_base_position()
-        if pivot_pose is None or len(pivot_pose) < 3:
-            return [], pivot_pose
+        base_pivot_pose = self._resolve_base_position()
+        if base_pivot_pose is None or len(base_pivot_pose) < 3:
+            return [], base_pivot_pose
         paths = []
+        last_pivot_pose = list(base_pivot_pose)
         for job in execution_plan.execution_jobs:
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
+            pivot_pose = self._apply_pivot_offset(
+                base_pivot_pose,
+                self._resolve_pivot_offset_mm(job, execution_plan),
+            )
+            if pivot_pose is None or len(pivot_pose) < 3:
+                continue
+            last_pivot_pose = list(pivot_pose)
             center_path, _, diagnostics = project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
@@ -840,39 +880,48 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             #     stage="preview",
             # )
             paths.append(center_path)
-        return paths, list(pivot_pose)
+        return paths, last_pivot_pose
 
     def get_pivot_motion_preview(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[np.ndarray]], list[float] | None]:
         """Return per-step projected shape snapshots for pivot motion preview/plotting."""
-        pivot_pose = self._resolve_base_position()
-        if pivot_pose is None or len(pivot_pose) < 3:
-            return [], pivot_pose
+        base_pivot_pose = self._resolve_base_position()
+        if base_pivot_pose is None or len(base_pivot_pose) < 3:
+            return [], base_pivot_pose
         motion = []
+        last_pivot_pose = list(base_pivot_pose)
         for job in execution_plan.execution_jobs:
             source_path = job.get("execution_path") or job.get("path") or []
             if not source_path:
                 continue
+            pivot_pose = self._apply_pivot_offset(
+                base_pivot_pose,
+                self._resolve_pivot_offset_mm(job, execution_plan),
+            )
+            if pivot_pose is None or len(pivot_pose) < 3:
+                continue
+            last_pivot_pose = list(pivot_pose)
             _, snapshots, _ = project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
                 self._pivot_config,
             )
             motion.append(snapshots)
-        return motion, list(pivot_pose)
+        return motion, last_pivot_pose
 
 
     def _build_pivot_execution_path(
         self,
         spline: list[list[float]],
         *,
+        pivot_offset_mm: float = 0.0,
         align_start_to_zero_rz: bool = False,
     ) -> list[list[float]] | None:
         """Project one prepared spline into the real pivot execution trajectory."""
         started = perf_counter()
-        pivot_pose = self._resolve_base_position()
+        pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
         if pivot_pose is None or len(pivot_pose) < 3:
             _logger.info("[TIMING] pivot_path_build status=missing_pivot elapsed_s=%.3f", _elapsed_s(started))
             return None
@@ -919,11 +968,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
+            pivot_offset_mm = self._resolve_pivot_offset_mm(job, execution_plan)
 
             if not spline:
                 continue
 
-            pivot_pose = self._resolve_base_position()
+            pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
             if pivot_pose is None or len(pivot_pose) < 3:
                 return False, "Pivot-path execution requires a valid base/pivot position"
             pivot_path, _, diagnostics = project_paint_motion_geometry(
@@ -1000,6 +1050,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         source_path = jobs[0].get("execution_path") or jobs[0].get("path") or []
         if not source_path:
+            return None
+
+        pivot_offset_mm = self._resolve_pivot_offset_mm(jobs[0], execution_plan)
+        paint_pivot_pose = self._apply_pivot_offset(paint_pivot_pose, pivot_offset_mm)
+        if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
         projected_pivot_path, _, _ = project_paint_motion_geometry(
@@ -1245,10 +1300,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             vel = float(job.get("vel", 10.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
+            pivot_offset_mm = self._resolve_pivot_offset_mm(job, execution_plan)
             if not spline:
                 continue
 
-            pivot_path = self._build_pivot_execution_path(spline, align_start_to_zero_rz=False)
+            pivot_path = self._build_pivot_execution_path(
+                spline,
+                pivot_offset_mm=pivot_offset_mm,
+                align_start_to_zero_rz=False,
+            )
             if not pivot_path:
                 _logger.info(
                     "[TIMING] pivot_job index=%d pattern=%s success=false stage=build total_elapsed_s=%.3f",
@@ -1287,7 +1347,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 _path_length_mm(pivot_path),
             )
 
-            pivot_pose = self._resolve_base_position()
+            pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
             if pivot_pose is not None and len(pivot_pose) >= 3:
                 _, snapshots, diagnostics = project_paint_motion_geometry(
                     spline,

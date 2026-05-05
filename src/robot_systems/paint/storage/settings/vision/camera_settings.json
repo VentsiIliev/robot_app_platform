@@ -49,7 +49,7 @@
   },
   "Aruco": {
     "Enable detection": false,
-    "Dictionary": "DICT_4X4_1000",
+    "Dictionary": "DICT_4X4_250",
     "Flip image": false
   },
   "Calibration": {

@@ -76,7 +76,7 @@ class TestCalibrationErrorHandling(unittest.TestCase):
         ctx.target_plan.target_marker_ids = [10, 20, 30]
         ctx.progress.current_marker_id = 1
         ctx.progress.iteration_count = 4
-        ctx.progress.max_iterations = 50
+        ctx.progress.max_iterations = 10
         ctx.artifacts.robot_positions_for_calibration = {
             10: (1, 2, 3, 4, 5, 6),
         }

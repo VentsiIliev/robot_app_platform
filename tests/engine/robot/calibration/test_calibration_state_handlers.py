@@ -51,7 +51,7 @@ def _make_context(**overrides):
     ctx.broadcast_events = False
     ctx.calibration_renderer = NoOpCalibrationRenderer()
     ctx.iteration_count = 0
-    ctx.max_iterations = 50
+    ctx.max_iterations = 10
     ctx.alignment_threshold_mm = 1.0
     ctx.fast_iteration_wait = 0.01   # fast for tests
     ctx.required_ids = {0, 1}
@@ -333,9 +333,27 @@ class TestIterateAlignmentHandler(unittest.TestCase):
 
     def test_returns_error_on_max_iterations_exceeded(self):
         ctx = _make_context()
+        ctx._iter_align_recovery_attempts_by_marker = {0: 4}
         ctx.iteration_count = ctx.max_iterations  # already at max
         result = handle_iterate_alignment_state(ctx)
         self.assertEqual(result, RobotCalibrationStates.ERROR)
+
+    def test_max_iterations_triggers_local_recovery_nudge(self):
+        ctx = _make_context()
+        ctx.iteration_count = ctx.max_iterations
+        ctx.calibration_robot_controller.get_current_position.return_value = [10, 20, 100, 0, 0, 0]
+        ctx.calibration_robot_controller.move_to_position.return_value = True
+
+        result = handle_iterate_alignment_state(ctx)
+
+        self.assertEqual(result, RobotCalibrationStates.ITERATE_ALIGNMENT)
+        self.assertEqual(ctx.iteration_count, 0)
+        self.assertEqual(ctx._iter_align_recovery_attempts_by_marker[0], 1)
+        ctx.calibration_robot_controller.move_to_position.assert_called_once_with(
+            [12.0, 20.0, 100, 0, 0, 0],
+            blocking=True,
+        )
+        ctx.calibration_robot_controller.reset_derivative_state.assert_called_once()
 
     def test_marker_not_found_stays_in_iterate(self):
         ctx = _make_context()

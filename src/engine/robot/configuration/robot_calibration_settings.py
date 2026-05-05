@@ -12,6 +12,10 @@ class AdaptiveMovementConfig:
     max_error_ref: float = 100.0
     k: float = 2.0
     derivative_scaling: float = 0.5
+    iterative_gain: float = 0.7
+    near_target_gain: float = 0.35
+    axis_deadband_mm: float = 0.2
+    axis_flip_scale_min: float = 0.2
     fast_iteration_wait: float = 1.0
     initial_align_y_scale: float = 1.0
     initial_align_approach_z: float | None = None
@@ -26,6 +30,10 @@ class AdaptiveMovementConfig:
             max_error_ref=data.get("max_error_ref", 100.0),
             k=data.get("k", 2.0),
             derivative_scaling=data.get("derivative_scaling", 0.5),
+            iterative_gain=float(data.get("iterative_gain", 0.7)),
+            near_target_gain=float(data.get("near_target_gain", 0.35)),
+            axis_deadband_mm=float(data.get("axis_deadband_mm", 0.2)),
+            axis_flip_scale_min=float(data.get("axis_flip_scale_min", 0.2)),
             fast_iteration_wait=data.get("fast_iteration_wait", 1.0),
             initial_align_y_scale=data.get("initial_align_y_scale", 1.0),
             initial_align_approach_z=data.get("initial_align_approach_z"),
@@ -40,6 +48,10 @@ class AdaptiveMovementConfig:
             "max_error_ref": self.max_error_ref,
             "k": self.k,
             "derivative_scaling": self.derivative_scaling,
+            "iterative_gain": self.iterative_gain,
+            "near_target_gain": self.near_target_gain,
+            "axis_deadband_mm": self.axis_deadband_mm,
+            "axis_flip_scale_min": self.axis_flip_scale_min,
             "fast_iteration_wait": self.fast_iteration_wait,
             "initial_align_y_scale": self.initial_align_y_scale,
             "initial_align_approach_z": self.initial_align_approach_z,

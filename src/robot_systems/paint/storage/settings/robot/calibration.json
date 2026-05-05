@@ -6,13 +6,17 @@
     "max_error_ref": 50.0,
     "k": 2.0,
     "derivative_scaling": 0.5,
+    "iterative_gain": 0.7,
+    "near_target_gain": 0.35,
+    "axis_deadband_mm": 0.2,
+    "axis_flip_scale_min": 0.2,
     "fast_iteration_wait": 1.5,
     "initial_align_y_scale": 1.0,
-    "initial_align_approach_z": 300.0,
+    "initial_align_approach_z": 200.0,
     "post_align_settle_s": 0.3
   },
   "axis_mapping_config": {
-    "marker_id": 115,
+    "marker_id": 43,
     "move_mm": 50.0,
     "max_attempts": 100,
     "delay_after_move_s": 2.0
@@ -39,18 +43,22 @@
     "max_acceptance_std_mm": 1.0
   },
   "run_height_measurement": false,
-  "z_target": 300,
+  "z_target": 200,
   "required_ids": [],
   "candidate_ids": [],
   "min_target_separation_px": 100.0,
   "homography_target_count": 20,
-  "residual_target_count": 60,
+  "residual_target_count": 20,
   "validation_target_count": 20,
   "test_target_count": 20,
   "auto_skip_known_unreachable_markers": true,
   "unreachable_marker_failure_threshold": 1,
-  "known_unreachable_marker_ids": [],
-  "unreachable_marker_failure_counts": {},
+  "known_unreachable_marker_ids": [
+    234
+  ],
+  "unreachable_marker_failure_counts": {
+    "234": 1
+  },
   "velocity": 50,
   "acceleration": 20,
   "travel_velocity": 50,

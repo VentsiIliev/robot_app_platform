@@ -285,6 +285,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 original_pickup_source["contour"] = merged.get("contour")
         spray_pattern = merged.get("sprayPattern", {})
         workpiece_height_mm = _safe_float(merged.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        pivot_offset_mm = _safe_float(merged.get("offset"), 0.0)
         execution_target_name, execution_target_offset_x, execution_target_offset_y, execution_reference_rz = (
             self._resolve_target_point_metadata(self._target_point_name, self._calibration_frame_name)
         )
@@ -474,6 +475,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "use_workpiece_layer": bool(use_workpiece_layer),
                     "source_has_dxf": source_has_dxf,
                     "workpiece_height_mm": float(workpiece_height_mm),
+                    "pivot_offset_mm": float(pivot_offset_mm),
                     "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
                     "pickup_rz": float(pickup_rz),
                     "pickup_target_point_name": pickup_target_name,

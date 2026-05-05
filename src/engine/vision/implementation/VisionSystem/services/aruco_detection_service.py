@@ -50,6 +50,18 @@ class ArucoDetectionService:
             dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict_entry.value)
             params     = cv2.aruco.DetectorParameters()
             params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+            # Small markers on corrected images need a wider threshold sweep and
+            # a lower entry perimeter threshold than OpenCV's defaults.
+            params.cornerRefinementWinSize = 7
+            params.cornerRefinementMaxIterations = 50
+            params.cornerRefinementMinAccuracy = 0.01
+            params.adaptiveThreshWinSizeMin = 5
+            params.adaptiveThreshWinSizeMax = 41
+            params.adaptiveThreshWinSizeStep = 4
+            params.minMarkerPerimeterRate = 0.015
+            params.minOtsuStdDev = 3.0
+            params.detectInvertedMarker = True
+            params.errorCorrectionRate = 0.7
             detector   = cv2.aruco.ArucoDetector(dictionary, params)
 
             corners, ids, _ = detector.detectMarkers(target)

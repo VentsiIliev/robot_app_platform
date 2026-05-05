@@ -34,6 +34,7 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
         "velocity",
         "acceleration",
         "rz_angle",
+        "offset",
         "preprocess_min_spacing_mm",
         "interpolation_spacing_mm",
         "dense_sampling_factor",
