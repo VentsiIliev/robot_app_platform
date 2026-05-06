@@ -1,15 +1,17 @@
 # AGENTS.md
 
+This file provides guidance for AI coding agents (Claude, OpenCode, etc.) when working with code in this repository.
+
 ## Commands
 
 ```bash
-python src/bootstrap/main.y_pixels                          # run full application
-python tests/run_tests.y_pixels                             # run all tests
-python -m unittest tests/path/to/test_file.y_pixels -v     # single test file
-python src/applications/<name>/example_usage.y_pixels      # standalone app dev runner
+python src/bootstrap/main.py                          # run full application
+python tests/run_tests.py                             # run all tests
+python -m unittest tests/path/to/test_file.py -v     # single test file
+python src/applications/<name>/example_usage.py      # standalone app dev runner
 ```
 
-No `pyproject.toml` / `requirements.txt` — deps live in `.venv/`.
+No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are managed via the `.venv` directory.
 
 ---
 
@@ -17,8 +19,8 @@ No `pyproject.toml` / `requirements.txt` — deps live in `.venv/`.
 
 ```
 Platform (src/engine/, src/bootstrap/, pl_gui/)
-  └── RobotSystem (src/robot_systems/)     ← pure declaration, no logic
-        └── Application (src/applications/) ← self-contained MVC screen
+  └── RobotSystem (src/robot_systems/)     ← class-level specs + runtime composition hooks
+        └── Application                    ← self-contained MVC screen
 ```
 
 ### Level 1 — Platform
@@ -33,23 +35,33 @@ Shared, reusable infrastructure. Knows nothing about glue, dispensing, or any sp
 | `src/engine/repositories/` | JSON settings persistence (`SettingsService`, `BaseJsonSettingsRepository`) |
 | `src/engine/process/` | Thread-safe state machine (`BaseProcess`, `ProcessState`, `ProcessTopics`) |
 | `src/bootstrap/` | Startup sequence, `ApplicationLoader`, `SystemBuilder` |
-| `pl_gui/` | Qt shell (`AppShell`, `FolderLauncher`). **External package — will be pip-installable. Treat as read-only. Never modify it.** |
+| `pl_gui/` | Qt shell (`AppShell`, `FolderLauncher`). Vendored locally in this repo. Treat it as shared platform code: only modify it when the task explicitly requires shell/framework changes. |
 
 ### Level 2 — RobotSystem
 
-Pure **declaration** — no logic, only class-level specs. `SystemBuilder` reads these and constructs the live instance.
+Declaration-heavy system definition plus runtime composition hooks. `SystemBuilder` reads the class-level specs, and the concrete robot system typically composes its runtime services in `on_start()`.
 
 ```python
 class GlueRobotSystem(BaseRobotSystem):
-    metadata       = SystemMetadata(name="glue", settings_root="glue")
+    metadata       = SystemMetadata(name="GlueSystem", settings_root="storage/settings")
     settings_specs = [...]   # which JSON files to load + their serializers
     services       = [...]   # required/optional service contracts
-    shell          = ShellSetup(folders=[...], applications=[...])
+    shell          = ShellSetup(
+        folders      = [...],          # navigation folders in the GUI
+        applications = [...],          # ApplicationSpec list — one per screen
+    )
 ```
+
+The actual implementation (e.g. `glue_robot_system.py`, `paint_robot_system.py`, `welding_robot_system.py`) also declares things like `movement_groups`, `target_points`, `work_areas`, `role_policy`, and implements `on_start()` / `on_stop()` lifecycle hooks. Runtime processes, targeting providers, calibration providers, and shared application services are commonly constructed there.
 
 ### Level 3 — Application
 
 Isolated MVC screen. Entry point: `ApplicationSpec.factory(robot_system)` → `WidgetApplication` → `ApplicationFactory.build(service)`.
+
+- Lives either in shared `src/applications/<name>/` or in robot-system-specific packages such as `src/robot_systems/<system>/applications/<name>/`
+- Exposes one public entry point: `IMyService` interface + a factory function
+- Has **no knowledge** of the RobotSystem, other applications, or the platform beyond `IMyService`
+- Is built lazily when the user navigates to its folder
 
 Data flows one way: `User action → View signal → Controller → Model → Service`
 Live data flows: `Broker callback → Controller → View setter`
@@ -58,14 +70,16 @@ Live data flows: `Broker callback → Controller → View setter`
 
 ## Startup Sequence (`src/bootstrap/main.py`)
 
-Six ordered steps — order matters:
+Uses a `BootstrapProvider` pattern (e.g. `GlueBootstrapProvider`, `PaintBootstrapProvider`) to select the active `RobotSystem`. See `_BOOTSTRAP_PROVIDER` in `main.py` — default is currently `PaintBootstrapProvider` (dev flag).
+
+Ordered steps — order matters:
 
 1. `EngineContext.build()` — creates the `MessagingService` singleton
-2. `SystemBuilder().with_robot(...).with_messaging_service(...).build(GlueRobotSystem)` — wires all services and settings
-3. `ShellConfigurator.configure(GlueRobotSystem)` — registers folder metadata with the shell
-4. `QApplication(sys.argv)` — Qt must exist before any widgets
-5. `ApplicationLoader` — iterates `GlueRobotSystem.shell.applications`, calls each `spec.factory(robot_system)`
-6. `AppShell` — creates the main window and starts the Qt event loop
+2. `SystemBuilder().with_robot(_BOOTSTRAP_PROVIDER.build_robot()).with_messaging_service(ctx.messaging_service).build(_BOOTSTRAP_PROVIDER.system_class)` — wires all services and settings
+3. `ShellConfigurator.configure(_BOOTSTRAP_PROVIDER.system_class)` — registers folder metadata with the shell
+4. `QApplication(sys.argv)` + localization service init — Qt must exist before any widgets
+5. `AppShell` — shell is created **before** application loading (with empty placeholder); login gate runs if `_DEV_SKIP_LOGIN` is `False`
+6. `_load_apps_into_shell()` — `ApplicationLoader` iterates visible application specs (filtered by user role), calls `spec.factory(robot_app)`, registers each, then rebuilds the shell's folder page
 
 ---
 
@@ -127,17 +141,22 @@ Non-`IHealthCheckable` hardware that still exposes health information:
 **`ServiceHealthRegistry`** (`src/engine/process/service_health_registry.py`) auto-wires health checks into `BaseProcess`:
 
 ```python
+from src.engine.common_service_ids import CommonServiceID
+from src.robot_systems.glue.component_ids import ServiceID
+
 registry = ServiceHealthRegistry()
-registry.register_service("robot",  robot_service)   # auto-detects IHealthCheckable
-registry.register_service("weight", weight_service)  # auto-detects IHealthCheckable
+registry.register_service(CommonServiceID.ROBOT,  robot_service)   # auto-detects IHealthCheckable
+registry.register_service(ServiceID.WEIGHT,       weight_service)  # auto-detects IHealthCheckable
 
 process = GlueProcess(
     service_checker=registry.check,
-    requirements=ProcessRequirements.requires("robot"),
+    requirements=ProcessRequirements.requires(CommonServiceID.ROBOT),
 )
 ```
 
-`ProcessRequirements.requires("robot")` blocks `RUNNING` transitions until `registry.check("robot")` returns `True`. An unregistered service name → always `False`.
+Service names are **Enum values** (e.g. `CommonServiceID.ROBOT`, `ServiceID.MOTOR`), not strings.
+`ProcessRequirements.requires(CommonServiceID.ROBOT)` blocks `RUNNING` transitions until `registry.check(CommonServiceID.ROBOT)` returns `True`. An unregistered service name → always `False`.
+Non-`IHealthCheckable` services registered via `register_service()` default to `lambda: True` (always healthy).
 
 ---
 
@@ -174,6 +193,7 @@ process = GlueProcess(
   ```
 - `ApplicationFactory.build()` automatically wires `view.clean_up → controller.stop()`.
   `stop()` is therefore guaranteed to run when the shell destroys the widget — never omit it.
+  Subclasses must implement `stop()` even if it currently has nothing to do — subscriptions may be added later.
 
 ### Signal forwarding in views — named methods only
 ```python
@@ -246,10 +266,10 @@ from pl_gui.settings.settings_view.styles import (
     PRIMARY,           # #905BA9 — primary accent colour
     PRIMARY_DARK,      # darker shade for hover/pressed
     GROUP_STYLE,       # QGroupBox stylesheet
-    ACTION_BTN_STYLE,  # filled primary button (44 x_pixels tall, 8 x_pixels radius, 11 pt bold)
+    ACTION_BTN_STYLE,  # filled primary button (44px tall, 8px radius, 11pt bold)
     GHOST_BTN_STYLE,   # outlined primary button — secondary actions
-    SAVE_BUTTON_STYLE, # large save/confirm button (52 x_pixels tall)
-    LABEL_STYLE,       # bold 11 pt label
+    SAVE_BUTTON_STYLE, # large save/confirm button (52px tall)
+    LABEL_STYLE,       # bold 11pt label
 )
 ```
 
@@ -267,7 +287,7 @@ Reference: `ModbusSettingsView` (imports + ACTION/GHOST usage), `DeviceControlVi
 
 ### Localization — initial translation and retranslation
 
-The platform now has an engine-level localization service under `src/engine/localization/`. Use it consistently.
+The platform has an engine-level localization service under `src/engine/localization/`. Use it consistently.
 
 Rules:
 - Catalogs live per robot system under `src/robot_systems/<system>/storage/translations/`
@@ -310,7 +330,11 @@ Notes:
 ### Process state machine (`BaseProcess`)
 - Override `_on_start`, `_on_pause`, `_on_resume`, `_on_stop`
 - Hooks are called **while the lock is held** — must be non-blocking
-- `ProcessRequirements.requires("robot")` gates transitions on service availability
+- `ProcessRequirements.requires(CommonServiceID.ROBOT)` gates transitions on service availability
+
+### Settings
+
+JSON files live under each robot system's `metadata.settings_root`, which is currently `storage/settings` for the active systems in this repo. Each key is declared as a `SettingsSpec` with a `SettingsSerializer` (`get_default()`, `to_dict()`, `from_dict()`). Access at runtime: `settings_service.get("key")`.
 
 ---
 
@@ -327,7 +351,7 @@ Notes:
 9. `MyApplicationFactory(ApplicationFactory)` — implement only `_create_model`, `_create_view`, `_create_controller`
 10. `__init__.py` — expose only `MyApplication` + `IMyService`; nothing else
 11. Settings — declare dataclass + `ISettingsSerializer` subclass if persistence needed
-12. Wire in robot system — add `_build_my_application()` in `application_wiring.py` and `ApplicationSpec` in `glue_robot_system.py`
+12. Wire in the target robot system — add `_build_my_application()` in that system's `application_wiring.py` and add an `ApplicationSpec` in the corresponding robot system class
 13. Verify standalone: `python src/applications/my_application/example_usage.py` using `StubMyService`
 
 Full walkthrough: `src/applications/APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`
@@ -375,18 +399,12 @@ def run_standalone():
 
 ## Adding a New Robot System
 
-Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables. Wire it in `src/bootstrap/main.py` via `SystemBuilder().with_robot(...).build(MyRobotSystem)`.
+Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables, then compose runtime dependencies in `on_start()` / `on_stop()`. Wire it in `src/bootstrap/main.py` through a `BootstrapProvider` and the selected `_BOOTSTRAP_PROVIDER`.
 
 If the robot system supports localization:
 - set `metadata.translations_root`
 - add `en.json` and any other catalogs under `storage/translations/`
 - keep context names stable once published
-
----
-
-## Settings
-
-JSON files under `storage/settings/<system_name>/`. Each key declared as a `SettingsSpec` with a `SettingsSerializer` (`get_default()`, `to_dict()`, `from_dict()`). Access at runtime: `settings_service.get("key")`.
 
 ---
 
@@ -406,15 +424,35 @@ Additional requirements:
 - No business logic in views; no Qt imports in models, services, or controllers
 - Every public method must have a clear, single contract
 
+### Execution Principles
+
+These guidelines complement the architecture rules above. They do **not** override them.
+
+- Prefer the **simplest solution that fully respects the platform architecture**
+- Make **surgical changes** — every changed line should trace directly to the task
+- **State assumptions explicitly** when hardware behavior, threading, process semantics, or ownership is uncertain
+- If there are multiple reasonable interpretations, **surface the tradeoff** instead of silently choosing one
+- Prefer **existing patterns over new abstractions** unless the current structure directly causes the bug
+- Treat "quick fixes" that break layer boundaries as **incorrect**, even if they seem to work
+- When fixing bugs, define a **clear verification path** first:
+  - reproduce the issue, or name the exact failure mode being addressed
+  - implement the smallest defensible change
+  - verify with the smallest meaningful test, runtime check, or targeted manual path
+- Add defensive handling when justified by real robot, hardware, I/O, or threading risk; do **not** add speculative complexity for impossible scenarios
+- If you notice unrelated cleanup opportunities, **mention them separately**; do not fold them into the same change unless asked
+
 ---
 
 ## Key Files
 
 | File | Purpose |
 |---|---|
-| `src/bootstrap/main.py` | 6-step startup sequence |
-| `src/robot_systems/glue/glue_robot_system.py` | Canonical `BaseRobotSystem` subclass |
-| `src/robot_systems/glue/application_wiring.py` | All application factory functions |
+| `src/bootstrap/main.py` | Startup sequence, BootstrapProvider pattern, login gate |
+| `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/my_robot_system.py` | Canonical robot-system template |
+| `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD` | Full robot-system implementation guide |
+| `src/robot_systems/paint/paint_robot_system.py` | Current default bootstrap target in `main.py` |
+| `src/robot_systems/glue/glue_robot_system.py` | Rich example of a mature robot-system implementation |
+| `src/robot_systems/paint/application_wiring.py` and `src/robot_systems/glue/application_wiring.py` | Representative application wiring patterns |
 | `src/applications/APPLICATION_BLUEPRINT/` | Canonical template — copy, don't hand-write |
 | `src/applications/APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD` | Full 13-step implementation walkthrough |
 | `src/shared_contracts/events/` | All topic strings and payloads (`ProcessTopics`, `WeightTopics`, etc.) |
