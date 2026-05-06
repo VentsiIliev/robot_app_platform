@@ -15,6 +15,17 @@ No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are mana
 
 ---
 
+## Git Workflow Rules
+
+- When the user asks for a commit, push, or PR, use the current work branch
+- Do **not** commit directly on `main`
+- Do **not** push directly to `main`
+- Do **not** open a PR from or against ad-hoc changes made directly on `main`; PR work must stay on a dedicated work branch
+- Treat `main` as protected: agents may inspect it, but should not use it as the branch they edit, commit, or push from
+- If the checkout is already on `main` and the task requires commit/push/PR work, stop and create or switch to an explicit work branch before proceeding
+
+---
+
 ## Three-Level Architecture
 
 ```
@@ -254,6 +265,12 @@ class MyController(IApplicationController):
         thread.start()
 ```
 Reference: `ModbusSettingsController`
+
+### MotionService move semantics
+- `MotionService.move_ptp()` currently delegates to `self._robot.move_linear(...)` in [`src/engine/robot/services/motion_service.py`](/home/ilv/Desktop/robot_app_platform/src/engine/robot/services/motion_service.py)
+- This is **intentional current behavior**, not an accidental typo or incomplete refactor
+- Do **not** "fix" `move_ptp()` to call a lower-level PTP primitive unless the task explicitly changes the robot motion contract and verifies downstream behavior
+- When reviewing or editing motion code, preserve the existing service-level semantics first and treat naming mismatch as documentation context, not standalone evidence of a bug
 
 ### View Styling — always use the shared style system
 

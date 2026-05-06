@@ -7,7 +7,11 @@ from src.applications.workpiece_editor.view.workpiece_editor_view import Workpie
 
 
 def _make_view():
-    return WorkpieceEditorView(schema=WorkpieceFormSchema(fields=[]), segment_config=MagicMock())
+    return WorkpieceEditorView(
+        schema=WorkpieceFormSchema(fields=[]),
+        segment_config=MagicMock(),
+        workpiece_data_adapter=MagicMock(),
+    )
 
 
 class TestWorkpieceEditorViewConstruction(unittest.TestCase):
@@ -48,8 +52,8 @@ class TestWorkpieceEditorViewSignals(unittest.TestCase):
         self._view._on_execute_cb({"op": "run"})
         self.assertEqual(received, [{"op": "run"}])
 
-    def test_on_camera_feed_cb_does_not_raise(self):
-        self._view._on_camera_feed_cb()
+    def test_on_camera_feed_cb_returns_none(self):
+        self.assertIsNone(self._view._on_camera_feed_cb())
 
 
 class TestWorkpieceEditorViewCaptureHandler(unittest.TestCase):
@@ -95,10 +99,12 @@ class TestWorkpieceEditorViewPublicApi(unittest.TestCase):
     # ── update_camera_feed ────────────────────────────────────────────
 
     def test_update_camera_feed_none_image_is_noop(self):
-        self._view.update_camera_feed(None)  # no raise
+        result = self._view.update_camera_feed(None)
+        self.assertIsNone(result)
 
     def test_update_camera_feed_no_editor_is_noop(self):
-        self._view.update_camera_feed(MagicMock())  # no raise
+        result = self._view.update_camera_feed(MagicMock())
+        self.assertIsNone(result)
 
     def test_update_camera_feed_calls_set_image_when_editor_present(self):
         mock_editor = MagicMock()
@@ -109,12 +115,14 @@ class TestWorkpieceEditorViewPublicApi(unittest.TestCase):
 
     def test_update_camera_feed_editor_without_set_image_is_noop(self):
         self._view._editor = MagicMock(spec=[])  # no attributes
-        self._view.update_camera_feed(MagicMock())  # no raise
+        result = self._view.update_camera_feed(MagicMock())
+        self.assertIsNone(result)
 
     # ── update_contours ───────────────────────────────────────────────
 
     def test_update_contours_no_editor_is_noop(self):
-        self._view.update_contours([1, 2, 3])  # no raise
+        result = self._view.update_contours([1, 2, 3])
+        self.assertIsNone(result)
 
     def test_update_contours_calls_set_contours_on_inner_editor(self):
         mock_editor = MagicMock()
@@ -155,4 +163,3 @@ class TestWorkpieceEditorViewPublicApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

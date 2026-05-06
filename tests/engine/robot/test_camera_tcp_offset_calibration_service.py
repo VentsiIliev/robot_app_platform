@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -8,6 +9,7 @@ from src.engine.robot.calibration.camera_tcp_offset_calibration_service import (
     CameraTcpOffsetCalibrationService,
 )
 from src.engine.robot.configuration import RobotCalibrationSettings, RobotSettings
+from src.engine.robot.enums.axis import AxisMapping, Direction, ImageAxis, ImageToRobotMapping
 
 
 class _FakeVisionService:
@@ -67,6 +69,10 @@ class _FakeNavigationService:
 class _FakeSettingsService:
     def __init__(self):
         self.saved = []
+        self.values = {}
+
+    def get(self, name):
+        return self.values.get(name)
 
     def save(self, name, settings) -> None:
         self.saved.append((name, settings))
@@ -119,7 +125,7 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
             cfg.velocity = 20
             cfg.acceleration = 10
             cfg.settle_time_s = 0.0
-            cfg.detection_attempts = 1
+            cfg.detection_attempts = 3
             cfg.retry_delay_s = 0.0
 
             service = CameraTcpOffsetCalibrationService(
@@ -134,7 +140,33 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
                 robot_user=0,
             )
 
-            ok, msg = service.calibrate()
+            axis_mapping = ImageToRobotMapping(
+                robot_x=AxisMapping(image_axis=ImageAxis.X, direction=Direction.PLUS),
+                robot_y=AxisMapping(image_axis=ImageAxis.Y, direction=Direction.PLUS),
+            )
+            reference_pose = [target_x, target_y, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, cfg.approach_rz]
+            aligned_poses = [
+                [target_x + sample_1_dx, target_y + sample_1_dy, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, 15.0],
+                [target_x + sample_2_dx, target_y + sample_2_dy, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, 30.0],
+                [target_x + sample_3_dx, target_y + sample_3_dy, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, 45.0],
+            ]
+            with (
+                patch.object(service, "_calibrate_axis_mapping", return_value=axis_mapping),
+                patch.object(
+                    service,
+                    "_detect_marker_center",
+                    side_effect=[
+                        (target_x, target_y),
+                        (target_x + sample_1_dx, target_y + sample_1_dy),
+                        (target_x + sample_2_dx, target_y + sample_2_dy),
+                        (target_x + sample_3_dx, target_y + sample_3_dy),
+                    ],
+                ),
+                patch.object(service, "_recenter_marker_to_center", side_effect=[reference_pose, *aligned_poses]),
+                patch.object(service._transformer, "is_available", return_value=True),
+                patch.object(service._transformer, "transform", side_effect=lambda x, y: (x, y)),
+            ):
+                ok, msg = service.calibrate()
 
             self.assertTrue(ok)
             self.assertIn("Camera-to-TCP offset calibrated", msg)

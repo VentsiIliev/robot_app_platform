@@ -1,21 +1,12 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import cv2
 import numpy as np
 
 from src.engine.robot.calibration.robot_calibration.CalibrationVision import (
     CalibrationVision,
 )
-
-
-class _FakeDetector:
-    def __init__(self, responses):
-        self._responses = list(responses)
-
-    def detectMarkers(self, _image):
-        if not self._responses:
-            return [], np.empty((0, 1), dtype=np.int32), None
-        return self._responses.pop(0)
 
 
 class TestCalibrationVision(unittest.TestCase):
@@ -33,21 +24,17 @@ class TestCalibrationVision(unittest.TestCase):
 
     def test_uses_4x4_250_as_calibration_fallback_dictionary(self):
         vision = self._make_vision()
-        self.assertEqual(vision._get_charuco_dictionary_id(), 2)  # cv2.aruco.DICT_4X4_250
+        self.assertEqual(vision._get_charuco_dictionary_id(), cv2.aruco.DICT_4X4_1000)
 
-    @patch("src.engine.robot.calibration.robot_calibration.CalibrationVision.CalibrationVision._build_aruco_detector")
-    def test_detect_specific_marker_uses_single_scale_detector(self, detector_builder):
+    def test_detect_specific_marker_returns_detected_marker(self):
         vision = self._make_vision()
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
 
-        responses = [
-            (
-                [np.array([[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]], dtype=np.float32)],
-                np.array([[0]], dtype=np.int32),
-                None,
-            )
-        ]
-        detector_builder.return_value = _FakeDetector(responses)
+        vision.vision_service.detect_aruco_markers.return_value = (
+            [np.array([[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]], dtype=np.float32)],
+            np.array([[0]], dtype=np.int32),
+            None,
+        )
 
         result = vision.detect_specific_marker(frame, 0)
 

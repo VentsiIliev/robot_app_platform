@@ -16,11 +16,27 @@ from unittest.mock import MagicMock, patch, call
 
 class TestMainImport(unittest.TestCase):
 
-    def test_main_module_imports_without_error(self):
-        """Importing main.y_pixels (not calling main()) must not raise."""
-        import importlib
+    def test_localization_service_uses_robot_system_storage_paths(self):
         import src.bootstrap.main as m
-        self.assertTrue(callable(m.main))
+
+        robot_app = MagicMock()
+        robot_app.metadata.translations_root = "storage/translations"
+        robot_app.metadata.settings_root = "storage/settings"
+        fake_module = MagicMock()
+        fake_module.__file__ = "/tmp/robot_systems/paint/paint_robot_system.py"
+
+        with (
+            patch.dict("sys.modules", {robot_app.__class__.__module__: fake_module}),
+            patch("src.bootstrap.main.LocalizationService") as localization_cls,
+        ):
+            localization = MagicMock()
+            localization_cls.return_value = localization
+            result = m._build_localization_service(robot_app, messaging_service=MagicMock())
+
+        self.assertIs(result, localization)
+        args = localization_cls.call_args.args
+        self.assertEqual(args[0], "/tmp/robot_systems/paint/storage/translations")
+        self.assertEqual(localization_cls.call_args.kwargs["state_file"], "/tmp/robot_systems/paint/storage/settings/localization.json")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

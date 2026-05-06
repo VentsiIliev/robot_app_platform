@@ -164,16 +164,21 @@ class TestApplicationLoaderLoad(unittest.TestCase):
         result = loader.load(_make_application(), folder_id=1, name="X")
         self.assertIs(result, loader)
 
-    def test_load_application_without_register_does_not_raise(self):
-        loader = ApplicationLoader(_make_ms())
-        application = object()            # no register attribute
-        loader.load(application, folder_id=1, name="NoRegister")   # must not raise
+    def test_load_application_without_register_still_registers_application(self):
+        class _BareApplication:
+            pass
 
-    def test_load_application_register_raises_does_not_propagate(self):
+        loader = ApplicationLoader(_make_ms())
+        application = _BareApplication()
+        loader.load(application, folder_id=1, name="NoRegister")
+        self.assertIs(loader._manager.get_application("NoRegister"), application)
+
+    def test_load_application_register_failure_does_not_register_application(self):
         loader = ApplicationLoader(_make_ms())
         application = _make_application()
         application.register.side_effect = RuntimeError("crash")
-        loader.load(application, folder_id=1, name="Crasher")   # must not raise
+        loader.load(application, folder_id=1, name="Crasher")
+        self.assertIsNone(loader._manager.get_application("Crasher"))
 
     def test_load_multiple_applications(self):
         loader = ApplicationLoader(_make_ms())

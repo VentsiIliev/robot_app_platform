@@ -18,19 +18,19 @@ class TestMotionService(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_move_ptp_success(self):
-        self.robot.move_ptp.return_value = 0
+        self.robot.move_linear.return_value = 0
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertTrue(result)
-        self.robot.move_ptp.assert_called_once()
+        self.robot.move_linear.assert_called_once()
 
     def test_move_ptp_uses_non_blocking_robot_call_when_not_waiting(self):
-        self.robot.move_ptp.return_value = 0
+        self.robot.move_linear.return_value = 0
         self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30, wait_to_reach=False)
-        _, kwargs = self.robot.move_ptp.call_args
+        _, kwargs = self.robot.move_linear.call_args
         self.assertEqual(kwargs.get("blocking"), False)
 
     def test_move_ptp_accepts_queued_result(self):
-        self.robot.move_ptp.return_value = 2
+        self.robot.move_linear.return_value = 2
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertTrue(result)
 
@@ -38,15 +38,15 @@ class TestMotionService(unittest.TestCase):
         self.safety.get_violations.return_value = ["out of bounds"]
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
-        self.robot.move_ptp.assert_not_called()
+        self.robot.move_linear.assert_not_called()
 
     def test_move_ptp_robot_error_code_returns_false(self):
-        self.robot.move_ptp.return_value = -1
+        self.robot.move_linear.return_value = -1
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
 
     def test_move_ptp_exception_returns_false(self):
-        self.robot.move_ptp.side_effect = RuntimeError("connection lost")
+        self.robot.move_linear.side_effect = RuntimeError("connection lost")
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
 

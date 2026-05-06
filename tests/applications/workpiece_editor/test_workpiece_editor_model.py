@@ -15,14 +15,23 @@ def _make_service():
 
 class TestWorkpieceEditorModelNoOps(unittest.TestCase):
 
-    def test_load_does_not_raise(self):
-        WorkpieceEditorModel(_make_service()).load()
+    def test_load_returns_none_and_does_not_touch_service(self):
+        service = _make_service()
+        result = WorkpieceEditorModel(service).load()
+        self.assertIsNone(result)
+        service.assert_not_called()
 
-    def test_save_no_args_does_not_raise(self):
-        WorkpieceEditorModel(_make_service()).save()
+    def test_save_no_args_returns_none_and_does_not_touch_service(self):
+        service = _make_service()
+        result = WorkpieceEditorModel(service).save()
+        self.assertIsNone(result)
+        service.assert_not_called()
 
-    def test_save_with_args_does_not_raise(self):
-        WorkpieceEditorModel(_make_service()).save({"form_data": {}})
+    def test_save_with_args_returns_none_and_does_not_touch_service(self):
+        service = _make_service()
+        result = WorkpieceEditorModel(service).save({"form_data": {}})
+        self.assertIsNone(result)
+        service.assert_not_called()
 
 
 class TestWorkpieceEditorModelDelegation(unittest.TestCase):
@@ -70,4 +79,3 @@ class TestWorkpieceEditorModelDelegation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

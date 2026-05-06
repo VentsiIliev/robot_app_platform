@@ -104,7 +104,7 @@ class TestExecutableStateMachineStop(unittest.TestCase):
         machine.stop_execution()
         self.assertTrue(ctx.stop_event.is_set())
 
-    def test_stop_without_context_does_not_raise(self):
+    def test_stop_without_context_still_clears_running_flag(self):
         registry = StateRegistry()
         registry.register_state(State(S.A, lambda c: S.A))
         machine = ExecutableStateMachine(
@@ -113,12 +113,16 @@ class TestExecutableStateMachineStop(unittest.TestCase):
             registry=registry,
             context=None,
         )
-        machine.stop_execution()   # must not raise
+        machine._running = True
+        machine.stop_execution()
+        self.assertFalse(machine._running)
 
-    def test_stop_without_stop_event_attribute_does_not_raise(self):
+    def test_stop_without_stop_event_attribute_still_clears_running_flag(self):
         ctx = object()   # no stop_event attribute
         machine = _build_simple(context=ctx)
-        machine.stop_execution()   # must not raise
+        machine._running = True
+        machine.stop_execution()
+        self.assertFalse(machine._running)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

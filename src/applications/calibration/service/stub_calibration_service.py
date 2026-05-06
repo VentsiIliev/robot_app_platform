@@ -1,7 +1,11 @@
 import logging
 from typing import Callable, Sequence
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
-from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.applications.calibration.service.i_calibration_service import (
+    ICalibrationService,
+    RobotCalibrationPreview,
+)
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
@@ -11,6 +15,22 @@ _logger = logging.getLogger(__name__)
 
 
 class StubCalibrationService(ICalibrationService):
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        return IntrinsicCaptureConfig()
+
+    def save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        _logger.info("Stub: save_intrinsic_capture_config %s", config)
+
+    def start_intrinsic_auto_capture(self) -> tuple[bool, str]:
+        _logger.info("Stub: start_intrinsic_auto_capture")
+        return True, "Stub: intrinsic auto capture started"
+
+    def stop_intrinsic_auto_capture(self) -> None:
+        _logger.info("Stub: stop_intrinsic_auto_capture")
+
+    def is_intrinsic_auto_capture_running(self) -> bool:
+        return False
+
     def load_calibration_settings(self) -> CalibrationSettingsData | None:
         return CalibrationSettingsData(
             vision=CalibrationVisionSettings(),
@@ -32,6 +52,9 @@ class StubCalibrationService(ICalibrationService):
     def calibrate_robot(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_robot")
         return True, "Stub: robot calibrated"
+
+    def preview_robot_calibration(self) -> RobotCalibrationPreview:
+        return RobotCalibrationPreview(ok=True, message="Stub: robot calibration preview")
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_camera_and_robot")

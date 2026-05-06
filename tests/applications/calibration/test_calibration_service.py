@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
-from src.applications.calibration.service.i_calibration_service import ICalibrationService
 from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
 from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
 from src.engine.robot.configuration import RobotCalibrationSettings
@@ -46,9 +45,6 @@ class TestStubCalibrationService(unittest.TestCase):
     def setUp(self):
         self._stub = StubCalibrationService()
 
-    def test_implements_interface(self):
-        self.assertIsInstance(self._stub, ICalibrationService)
-
     def test_capture_returns_success(self):
         ok, msg = self._stub.capture_calibration_image()
         self.assertTrue(ok)
@@ -77,6 +73,18 @@ class TestStubCalibrationService(unittest.TestCase):
     def test_load_calibration_settings_returns_settings(self):
         settings = self._stub.load_calibration_settings()
         self.assertIsNotNone(settings)
+
+    def test_preview_robot_calibration_returns_successful_preview(self):
+        preview = self._stub.preview_robot_calibration()
+        self.assertTrue(preview.ok)
+        self.assertIn("preview", preview.message.lower())
+
+    def test_intrinsic_capture_config_returns_default_config(self):
+        config = self._stub.get_intrinsic_capture_config()
+        self.assertIsNotNone(config)
+
+    def test_intrinsic_auto_capture_is_not_running_by_default(self):
+        self.assertFalse(self._stub.is_intrinsic_auto_capture_running())
 
 
 class TestCalibrationApplicationServiceDelegation(unittest.TestCase):

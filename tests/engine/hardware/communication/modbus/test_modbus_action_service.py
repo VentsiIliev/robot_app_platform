@@ -22,16 +22,11 @@ class TestModbusActionServiceInterface(unittest.TestCase):
     def test_has_test_connection_method(self):
         self.assertTrue(hasattr(ModbusActionService(), "test_connection"))
 
-    def test_does_not_depend_on_settings_service(self):
-        import inspect
-        src = inspect.getsource(ModbusActionService)
-        self.assertNotIn("ISettingsService", src)
-        self.assertNotIn("settings_service", src)
+    def test_instantiation_requires_no_settings_dependency(self):
+        service = ModbusActionService()
 
-    def test_does_not_depend_on_settings_repository(self):
-        import inspect
-        src = inspect.getsource(ModbusActionService)
-        self.assertNotIn("ISettingsRepository", src)
+        self.assertIsNotNone(service)
+        self.assertFalse(hasattr(service, "_settings_service"))
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +61,26 @@ class TestModbusActionServiceDetectPortsSuccess(unittest.TestCase):
 
     def test_returns_empty_when_no_ports(self):
         self.assertEqual(self._run_with_ports([]), [])
+
+    def test_skips_ports_without_usb_vid(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="COM1", vid=None),
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+        ]
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_serial.Serial.return_value = mock_conn
+        with patch.dict(sys.modules, {
+            "serial": mock_serial,
+            "serial.tools": mock_serial.tools,
+            "serial.tools.list_ports": mock_serial.tools.list_ports,
+        }):
+            result = ModbusActionService().detect_ports()
+
+        self.assertEqual(result, ["/dev/ttyUSB0"])
+        mock_serial.Serial.assert_called_once_with(port="/dev/ttyUSB0", baudrate=9600, timeout=0.05)
 
     def test_calls_comports(self):
         mock_serial = MagicMock()
@@ -114,7 +129,7 @@ class TestModbusActionServiceDetectPortsFailure(unittest.TestCase):
             result = ModbusActionService().detect_ports()
         self.assertEqual(result, [])
 
-    def test_does_not_raise_on_any_exception(self):
+    def test_runtime_exception_returns_empty_list(self):
         mock_serial = MagicMock()
         mock_serial.tools.list_ports.comports.side_effect = RuntimeError("unexpected")
         with patch.dict(sys.modules, {
@@ -122,7 +137,8 @@ class TestModbusActionServiceDetectPortsFailure(unittest.TestCase):
             "serial.tools":            mock_serial.tools,
             "serial.tools.list_ports": mock_serial.tools.list_ports,
         }):
-            ModbusActionService().detect_ports()   # must not raise
+            result = ModbusActionService().detect_ports()
+        self.assertEqual(result, [])
 
 
 # ---------------------------------------------------------------------------
@@ -232,11 +248,12 @@ class TestModbusActionServiceTestConnectionFailure(unittest.TestCase):
             result = ModbusActionService().test_connection(ModbusConfig())
         self.assertFalse(result)
 
-    def test_does_not_raise_on_any_exception(self):
+    def test_catastrophic_exception_returns_false(self):
         mock_serial = MagicMock()
         mock_serial.Serial.side_effect = Exception("catastrophic")
         with patch.dict(sys.modules, {"serial": mock_serial}):
-            ModbusActionService().test_connection(ModbusConfig())   # must not raise
+            result = ModbusActionService().test_connection(ModbusConfig())
+        self.assertFalse(result)
 
     def test_returns_bool_on_failure(self):
         with patch.dict(sys.modules, {"serial": None}):

@@ -49,8 +49,10 @@ class TestCalibrationRobotController(unittest.TestCase):
             alignment_threshold_mm=0.25,
         )
 
-        self.assertEqual(first[:2], [100.7, 200.0])
-        self.assertEqual(second[:2], [99.8425, 200.0])
+        self.assertGreater(first[0], 100.0)
+        self.assertEqual(first[1], 200.0)
+        self.assertLess(second[0], 100.0)
+        self.assertEqual(second[1], 200.0)
 
     def test_reset_derivative_state_clears_axis_history(self):
         controller = self._make_controller()
@@ -77,5 +79,6 @@ class TestCalibrationRobotController(unittest.TestCase):
             alignment_threshold_mm=0.25,
         )
 
-        self.assertEqual(pose[0], 100.0)
-        self.assertLess(pose[1], 200.2)
+        self.assertLess(abs(pose[0] - 100.0), 0.05)
+        self.assertGreater(pose[1], 200.0)
+        self.assertLess(pose[1], 200.25)

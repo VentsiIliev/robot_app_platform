@@ -6,7 +6,6 @@ Covers:
 """
 import unittest
 
-from src.applications.workpiece_library.service.i_workpiece_library_service import IWorkpieceLibraryService
 from src.applications.workpiece_library.service.stub_workpiece_library_service import StubWorkpieceLibraryService
 from src.applications.workpiece_library.domain.workpiece_schema import WorkpieceRecord
 
@@ -15,10 +14,12 @@ from src.applications.workpiece_library.domain.workpiece_schema import Workpiece
 # StubWorkpieceLibraryService — interface
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestStubWorkpieceLibraryServiceInterface(unittest.TestCase):
+class TestStubWorkpieceLibraryServiceSchema(unittest.TestCase):
 
-    def test_implements_interface(self):
-        self.assertIsInstance(StubWorkpieceLibraryService(), IWorkpieceLibraryService)
+    def test_get_schema_exposes_expected_id_and_name_keys(self):
+        schema = StubWorkpieceLibraryService().get_schema()
+        self.assertEqual(schema.id_key, "workpieceId")
+        self.assertEqual(schema.name_key, "name")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

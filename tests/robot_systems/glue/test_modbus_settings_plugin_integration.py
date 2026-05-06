@@ -174,14 +174,6 @@ class TestModbusActionServiceIntegration(unittest.TestCase):
             result = svc.test_connection(ModbusConfig())
         self.assertIsInstance(result, bool)
 
-    def test_action_service_independent_of_settings_service(self):
-        """ModbusActionService must not import or depend on ISettingsService."""
-        from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
-        import inspect
-        src = inspect.getsource(ModbusActionService)
-        self.assertNotIn("ISettingsService", src)
-        self.assertNotIn("settings_service", src)
-
     def test_factory_uses_modbus_action_service(self):
         """_build_modbus_settings_application must wire ModbusActionService — not a mock."""
         from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
@@ -198,6 +190,24 @@ class TestModbusActionServiceIntegration(unittest.TestCase):
             args = mock_build.call_args[0]
             # second positional arg must be an IModbusActionService
             self.assertIsInstance(args[1], IModbusActionService)
+
+    def test_factory_keeps_settings_and_action_services_separate(self):
+        from src.applications.modbus_settings.service.i_modbus_settings_service import IModbusSettingsService
+        from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
+
+        application = _spec().factory(_make_robot_system())
+        application.register(MagicMock())
+        with patch(
+            "src.applications.modbus_settings.modbus_settings_factory.ModbusSettingsFactory.build"
+        ) as mock_build:
+            mock_build.return_value = MagicMock()
+            application.create_widget()
+
+        settings_service, action_service = mock_build.call_args[0][:2]
+        self.assertIsInstance(settings_service, IModbusSettingsService)
+        self.assertIsInstance(action_service, IModbusActionService)
+        self.assertFalse(hasattr(settings_service, "detect_ports"))
+        self.assertFalse(hasattr(settings_service, "test_connection"))
 
 
 # ---------------------------------------------------------------------------

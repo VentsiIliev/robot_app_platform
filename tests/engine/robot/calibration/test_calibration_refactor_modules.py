@@ -120,7 +120,11 @@ class TestCalibrationVisualizationSeams(unittest.TestCase):
         result = show_live_feed(ctx, frame, broadcast_image=True)
 
         self.assertFalse(result)
-        ctx.broker.publish.assert_called_once_with("topic", frame)
+        ctx.broker.publish.assert_called_once()
+        topic, payload = ctx.broker.publish.call_args.args
+        self.assertEqual(topic, "topic")
+        self.assertIs(payload["image"], frame)
+        self.assertIn("overlay", payload)
 
     def test_show_live_feed_returns_without_queueing_when_visualization_disabled(self):
         ctx = RobotCalibrationContext()
