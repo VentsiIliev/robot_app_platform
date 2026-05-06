@@ -195,10 +195,9 @@ class TestUserManagementViewSignals(unittest.TestCase):
         self.assertEqual(self._view._filter_input.text(), "")
         self.assertTrue(any(col == "All" for col, _ in received))
 
-    def test_clean_up_does_not_raise(self):
-        self._view.clean_up()
+    def test_clean_up_returns_none(self):
+        self.assertIsNone(self._view.clean_up())
 
 
 if __name__ == "__main__":
     unittest.main()
-

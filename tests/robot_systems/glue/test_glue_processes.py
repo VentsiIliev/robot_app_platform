@@ -504,9 +504,10 @@ class TestGlueOperationCoordinatorStop(unittest.TestCase):
         runner.stop()
         spray_seq.stop.assert_called_once()
 
-    def test_stop_when_no_active_does_not_raise(self):
+    def test_stop_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
-        runner.stop()   # _active is None
+        runner.stop()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -521,9 +522,10 @@ class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
         runner.pause()
         spray_seq.pause.assert_called_once()
 
-    def test_pause_when_no_active_does_not_raise(self):
+    def test_pause_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
         runner.pause()
+        self.assertIsNone(runner._active)
 
     def test_pause_cancels_pending_spray_only_preparation(self):
         execution_service = MagicMock()
@@ -543,9 +545,10 @@ class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
         runner.resume()
         spray_seq.start.assert_called_once()
 
-    def test_resume_when_no_active_does_not_raise(self):
+    def test_resume_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
         runner.resume()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -590,9 +593,10 @@ class TestGlueOperationCoordinatorResetErrors(unittest.TestCase):
         runner.reset_errors()
         spray_seq.reset_errors.assert_called_once()
 
-    def test_reset_errors_when_no_active_does_not_raise(self):
+    def test_reset_errors_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
-        runner.reset_errors()   # _active is None
+        runner.reset_errors()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -831,10 +835,11 @@ class TestGlueOperationCoordinatorCalibration(unittest.TestCase):
         runner.stop_calibration()
         self.assertIsNone(runner._active_process)
 
-    def test_stop_calibration_when_not_active_does_not_raise(self):
+    def test_stop_calibration_when_not_active_preserves_no_active_process(self):
         runner, calib = self._make_with_calib()
-        runner.stop_calibration()   # never started — must not raise
+        runner.stop_calibration()
         calib.stop.assert_not_called()
+        self.assertIsNone(runner._active_process)
 
 
 if __name__ == "__main__":

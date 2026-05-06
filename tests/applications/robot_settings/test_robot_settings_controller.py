@@ -127,11 +127,13 @@ class TestRobotSettingsControllerSave(unittest.TestCase):
         actual_groups = model.save.call_args[0][1]
         self.assertEqual(actual_groups, groups)
 
-    def test_stop_does_not_raise(self):
+    def test_stop_disconnects_motion_bridge_handlers(self):
         view  = _make_view()
         model = _make_model()
         ctrl  = RobotSettingsController(model, view, _make_messaging())
-        ctrl.stop()   # should be a no-op, must not raise
+        ctrl.stop()
+        self.assertFalse(ctrl._motion_bridge.receivers(ctrl._motion_bridge.done))
+        self.assertFalse(ctrl._motion_bridge.receivers(ctrl._motion_bridge.failed))
 
 class TestRobotSettingsControllerInitSignals(unittest.TestCase):
 

@@ -274,10 +274,21 @@ class TestModbusActionService(unittest.TestCase):
             result = svc.test_connection(ModbusConfig(port="COM3"))
         self.assertTrue(result)
 
-    def test_implements_interface(self):
+    def test_test_connection_passes_serial_config_values(self):
         from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
-        from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
-        self.assertIsInstance(ModbusActionService(), IModbusActionService)
+        import unittest.mock as mock
+        svc = ModbusActionService()
+        serial = mock.MagicMock()
+        serial.Serial.return_value.__enter__ = mock.MagicMock(return_value=mock.MagicMock())
+        serial.Serial.return_value.__exit__  = mock.MagicMock(return_value=False)
+        config = ModbusConfig(port="COM7", baudrate=19200, timeout=0.25)
+        with mock.patch.dict("sys.modules", {"serial": serial}):
+            self.assertTrue(svc.test_connection(config))
+        serial.Serial.assert_called_once()
+        _, kwargs = serial.Serial.call_args
+        self.assertEqual(kwargs["port"], "COM7")
+        self.assertEqual(kwargs["baudrate"], 19200)
+        self.assertEqual(kwargs["timeout"], 0.25)
 
 
 if __name__ == "__main__":

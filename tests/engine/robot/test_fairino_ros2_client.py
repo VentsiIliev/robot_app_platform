@@ -7,7 +7,7 @@ from src.engine.robot.drivers.fairino.fairino_ros2_client import FairinoRos2Clie
 class TestFairinoRos2Client(unittest.TestCase):
 
     @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.get")
-    def test_init_does_not_raise_when_bridge_is_unavailable(self, get_mock):
+    def test_init_sets_disconnected_state_when_bridge_is_unavailable(self, get_mock):
         get_mock.side_effect = ConnectionError("bridge down")
 
         client = FairinoRos2Client(server_url="http://localhost:5000")

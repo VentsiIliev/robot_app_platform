@@ -25,13 +25,19 @@ def run() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _clean_test_artifacts()
 
+    coverage = Coverage(config_file=str(ROOT / ".coveragerc"))
+    coverage.start()
     loader = unittest.TestLoader()
-    suite = loader.discover(start_dir=str(TESTS_DIR), pattern="test_*.py", top_level_dir=str(ROOT))
+    try:
+        suite = loader.discover(start_dir=str(TESTS_DIR), pattern="test_*.py", top_level_dir=str(ROOT))
+    except Exception:
+        coverage.stop()
+        coverage.save()
+        _clean_test_artifacts()
+        raise
 
     stream = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     runner = unittest.TextTestRunner(verbosity=2, stream=stream)
-    coverage = Coverage(config_file=str(ROOT / ".coveragerc"))
-    coverage.start()
     try:
         result = runner.run(suite)
     finally:
