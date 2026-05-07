@@ -188,7 +188,7 @@ class TestPaintDxfPathFormBehavior(unittest.TestCase):
         contour = np.array([[0.0, 0.0], [1.0, 0.0]])
 
         with patch(
-            "src.robot_systems.paint.processes.paint.alignment.align_raw_workpiece_to_contour",
+            "src.robot_systems.paint.processes.paint.align.align_raw_workpiece_to_contour",
             return_value="aligned",
         ) as align:
             result = behavior._align_raw_workpiece_to_contour(raw, contour)

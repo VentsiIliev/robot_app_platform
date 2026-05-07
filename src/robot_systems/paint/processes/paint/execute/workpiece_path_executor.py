@@ -18,14 +18,14 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintSimulationConfig,
 )
-from src.robot_systems.paint.processes.paint.execution_plane import (
+from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
-from src.robot_systems.paint.processes.paint.paint_debug_artifacts import (
+from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     write_pivot_debug_dump,
     write_pivot_debug_plot,
 )
-from src.robot_systems.paint.processes.paint.pivot_projection import (
+from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
     project_paint_motion_geometry,
     rebase_projected_paint_path_to_zero_start_rz,
 )

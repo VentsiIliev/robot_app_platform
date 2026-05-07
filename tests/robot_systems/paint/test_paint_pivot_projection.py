@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.pivot_projection import (
+from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
     project_paint_motion_geometry,
     rebase_projected_paint_path_to_zero_start_rz,
 )

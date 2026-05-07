@@ -112,7 +112,7 @@ class PaintDxfPathFormBehavior:
         return contour[:, :2]
 
     def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour: np.ndarray) -> dict:
-        from src.robot_systems.paint.processes.paint.alignment import align_raw_workpiece_to_contour
+        from src.robot_systems.paint.processes.paint.align import align_raw_workpiece_to_contour
 
         return align_raw_workpiece_to_contour(
             raw,

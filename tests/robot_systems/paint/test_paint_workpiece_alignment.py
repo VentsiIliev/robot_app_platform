@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.alignment import (
+from src.robot_systems.paint.processes.paint.align import (
     DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
     align_raw_workpiece_to_contour,
 )

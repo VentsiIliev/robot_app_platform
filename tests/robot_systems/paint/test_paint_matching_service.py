@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
-from src.robot_systems.paint.processes.paint.workpiece_matching_service import (
+from src.robot_systems.paint.processes.paint.plan.workpiece_matching_service import (
     PaintWorkpieceMatchingService,
     pick_largest_contour,
 )

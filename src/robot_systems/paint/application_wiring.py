@@ -3,7 +3,7 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.processes.paint.alignment import (
+from src.robot_systems.paint.processes.paint.align import (
     DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
 )
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
@@ -68,7 +68,7 @@ def _build_paint_path_debug_dump_dir():
 
 
 def _build_paint_path_executor(robot_system):
-    from src.robot_systems.paint.processes.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
+    from src.robot_systems.paint.processes.paint.execute import PaintWorkpiecePathExecutor
 
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
@@ -155,7 +155,7 @@ def _build_paint_path_preparation_service(robot_system):
 
 
 def _build_paint_matching_service(robot_system, workpiece_service=None, capture_snapshot_service=None):
-    from src.robot_systems.paint.processes.paint.workpiece_matching_service import PaintWorkpieceMatchingService
+    from src.robot_systems.paint.processes.paint.plan import PaintWorkpieceMatchingService
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     return PaintWorkpieceMatchingService(
@@ -167,7 +167,7 @@ def _build_paint_matching_service(robot_system, workpiece_service=None, capture_
 
 
 def _build_paint_workpiece_preparation_service(robot_system):
-    from src.robot_systems.paint.processes.paint.workpiece_preparation_service import PaintWorkpiecePreparationService
+    from src.robot_systems.paint.processes.paint.plan import PaintWorkpiecePreparationService
 
     return PaintWorkpiecePreparationService(
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,

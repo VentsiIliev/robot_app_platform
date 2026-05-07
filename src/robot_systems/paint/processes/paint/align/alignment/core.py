@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from scipy.spatial import cKDTree
 
-from src.robot_systems.paint.processes.paint.alignment.io import (
+from src.robot_systems.paint.processes.paint.align.alignment.io import (
     _extract_raw_contour_points,
     _main_contour_payload,
     _normalize_contour_points,
@@ -13,7 +13,7 @@ from src.robot_systems.paint.processes.paint.alignment.io import (
     _replace_raw_contour_payload,
     _resample_raw_contour_payload,
 )
-from src.robot_systems.paint.processes.paint.alignment.sampling import (
+from src.robot_systems.paint.processes.paint.align.alignment.sampling import (
     _describe_contour,
     _laplacian_smooth_closed_path,
     _path_length,

@@ -7,12 +7,12 @@ from typing import Callable
 import numpy as np
 
 from src.engine.cad import import_dxf_to_workpiece_data
-from src.robot_systems.paint.processes.paint.alignment import (
+from src.robot_systems.paint.processes.paint.align import (
     DXF_ALIGNMENT_STRATEGY_RIGID,
     _normalize_contour_points,
     align_raw_workpiece_to_contour,
 )
-from src.robot_systems.paint.processes.paint.dxf_image_placement import map_raw_workpiece_mm_to_image
+from src.robot_systems.paint.processes.paint.align import map_raw_workpiece_mm_to_image
 
 _logger = logging.getLogger(__name__)
 

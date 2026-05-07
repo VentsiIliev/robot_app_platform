@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.robot_systems.paint.processes.paint.execution_plane import (
+from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
 

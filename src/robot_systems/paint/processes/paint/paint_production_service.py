@@ -4,7 +4,7 @@ import logging
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
-from src.robot_systems.paint.processes.paint.workpiece_matching_service import pick_largest_contour
+from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
 _logger = logging.getLogger(__name__)
 

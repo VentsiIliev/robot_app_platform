@@ -10,11 +10,11 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintProcessConfig,
     PaintSimulationConfig,
 )
-from src.robot_systems.paint.processes.paint.workpiece_path_executor import (
+from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     _camera_to_tcp_delta,
     _normalize_pivot_config,
 )
-from src.robot_systems.paint.processes.paint.dxf_image_placement import (
+from src.robot_systems.paint.processes.paint.align import (
     estimate_local_image_basis,
     map_raw_workpiece_mm_to_image,
 )

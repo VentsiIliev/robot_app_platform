@@ -122,7 +122,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         built_executor = object()
 
         with (
-            patch("src.robot_systems.paint.processes.paint.workpiece_path_executor.PaintWorkpiecePathExecutor", return_value=built_executor) as cls,
+            patch("src.robot_systems.paint.processes.paint.execute.PaintWorkpiecePathExecutor", return_value=built_executor) as cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_path_preparation_service", return_value=path_preparation_service),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_debug_dump_dir", return_value="/tmp/paint_debug"),
         ):
@@ -438,7 +438,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         )
 
         with (
-            patch("src.robot_systems.paint.processes.paint.workpiece_matching_service.PaintWorkpieceMatchingService", return_value="built-matching") as matching_cls,
+            patch("src.robot_systems.paint.processes.paint.plan.PaintWorkpieceMatchingService", return_value="built-matching") as matching_cls,
             patch("src.robot_systems.paint.application_wiring._build_capture_snapshot_service", return_value="snapshot"),
         ):
             built_matching = application_wiring._build_paint_matching_service(
@@ -447,7 +447,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             )
 
         with (
-            patch("src.robot_systems.paint.processes.paint.workpiece_preparation_service.PaintWorkpiecePreparationService", return_value="built-preparation") as prep_cls,
+            patch("src.robot_systems.paint.processes.paint.plan.PaintWorkpiecePreparationService", return_value="built-preparation") as prep_cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_matching_service", return_value=matching_service),
         ):
             built_preparation = application_wiring._build_paint_workpiece_preparation_service(robot_system)

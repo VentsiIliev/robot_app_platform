@@ -23,7 +23,7 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
     WorkpieceProcessAction,
 )
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
-from src.robot_systems.paint.processes.paint.dxf_image_placement import map_raw_workpiece_mm_to_image
+from src.robot_systems.paint.processes.paint.align import map_raw_workpiece_mm_to_image
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)

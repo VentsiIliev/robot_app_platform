@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.workpiece_preparation_service import (
+from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
     PaintWorkpiecePreparationService,
     contour_to_workpiece_raw,
 )
@@ -80,7 +80,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         aligned = {"workpieceId": "saved-1", "name": "Aligned", "sprayPattern": {"Contour": [], "Fill": []}}
 
         with patch(
-            "src.robot_systems.paint.processes.paint.workpiece_preparation_service.align_raw_workpiece_to_contour",
+            "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
             return_value=aligned,
         ) as align:
             raw, description = service.prepare_workpiece(contour, frame=None)
@@ -108,15 +108,15 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
         with (
             patch(
-                "src.robot_systems.paint.processes.paint.workpiece_preparation_service.import_dxf_to_workpiece_data",
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.import_dxf_to_workpiece_data",
                 return_value={"dxf": True},
             ) as import_dxf,
             patch(
-                "src.robot_systems.paint.processes.paint.workpiece_preparation_service.map_raw_workpiece_mm_to_image",
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.map_raw_workpiece_mm_to_image",
                 return_value=placed,
             ) as place,
             patch(
-                "src.robot_systems.paint.processes.paint.workpiece_preparation_service.align_raw_workpiece_to_contour",
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
                 return_value=aligned,
             ) as align,
         ):

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from src.robot_systems.paint.processes.paint.alignment import (
+from src.robot_systems.paint.processes.paint.align import (
     DXF_ALIGNMENT_STRATEGY_RIGID,
 )
 

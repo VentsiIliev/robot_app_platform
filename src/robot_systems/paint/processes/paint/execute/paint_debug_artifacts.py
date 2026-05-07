@@ -8,10 +8,10 @@ import numpy as np
 
 from src.engine.geometry.planar import rotate_xy_about, unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.execution_plane import (
+from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
-from src.robot_systems.paint.processes.paint.pivot_projection import (
+from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
     project_paint_motion_geometry,
 )
 

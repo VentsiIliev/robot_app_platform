@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.alignment.sampling import (
+from src.robot_systems.paint.processes.paint.align.alignment.sampling import (
     _resample_closed_path,
 )
 
