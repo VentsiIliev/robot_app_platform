@@ -2,6 +2,11 @@
 
 This package contains the full paint production workflow used both by the background paint process and by parts of the workpiece editor preview path.
 
+Deep technical references:
+
+- [ALIGNMENT.md](ALIGNMENT.md)
+- [TRAJECTORY_AND_EXECUTION.md](TRAJECTORY_AND_EXECUTION.md)
+
 It is now organized by responsibility:
 
 ```text

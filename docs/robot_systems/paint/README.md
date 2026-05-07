@@ -11,6 +11,8 @@ This document is the entry point for the paint system. Use it together with:
 
 - [applications/README.md](applications/README.md)
 - [processes/README.md](processes/README.md)
+- [processes/paint/ALIGNMENT.md](processes/paint/ALIGNMENT.md)
+- [processes/paint/TRAJECTORY_AND_EXECUTION.md](processes/paint/TRAJECTORY_AND_EXECUTION.md)
 - [../../pivot_painting_reference.md](../../pivot_painting_reference.md)
 
 ---
