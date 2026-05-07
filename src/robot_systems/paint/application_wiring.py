@@ -3,10 +3,10 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
-from src.robot_systems.paint.processes.paint.workpiece_alignment import (
+from src.robot_systems.paint.processes.paint.alignment import (
     DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
 )
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 
 
 _logger = logging.getLogger(__name__)

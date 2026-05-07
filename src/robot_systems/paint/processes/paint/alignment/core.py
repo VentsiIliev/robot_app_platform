@@ -5,6 +5,22 @@ import logging
 import numpy as np
 from scipy.spatial import cKDTree
 
+from src.robot_systems.paint.processes.paint.alignment.io import (
+    _extract_raw_contour_points,
+    _main_contour_payload,
+    _normalize_contour_points,
+    _raw_contour_payload_points,
+    _replace_raw_contour_payload,
+    _resample_raw_contour_payload,
+)
+from src.robot_systems.paint.processes.paint.alignment.sampling import (
+    _describe_contour,
+    _laplacian_smooth_closed_path,
+    _path_length,
+    _polygon_area,
+    _resample_closed_path,
+)
+
 DXF_ALIGNMENT_STRATEGY_RIGID = "rigid"
 DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH = "reference_smooth"
 DEFAULT_MAX_SCALE_DEVIATION = 0.03
@@ -197,101 +213,6 @@ def align_raw_workpiece_to_contour(
     return aligned
 
 
-def _describe_contour(points: np.ndarray) -> str:
-    points = np.asarray(points, dtype=np.float64)
-    if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] < 2:
-        return "count=0"
-    pts = points[:, :2]
-    mins = np.min(pts, axis=0)
-    maxs = np.max(pts, axis=0)
-    centroid = np.mean(pts, axis=0)
-    area = _polygon_area(pts)
-    return (
-        f"count={len(pts)} "
-        f"centroid=({float(centroid[0]):.3f}, {float(centroid[1]):.3f}) "
-        f"bbox=({float(mins[0]):.3f}, {float(mins[1]):.3f})-({float(maxs[0]):.3f}, {float(maxs[1]):.3f}) "
-        f"area={float(area):.3f}"
-    )
-
-
-def _main_contour_payload(raw: dict):
-    """Return the raw main contour list, unwrapping compatibility wrapper payloads."""
-    contour = (raw or {}).get("contour")
-    if isinstance(contour, dict):
-        nested = contour.get("contour")
-        if nested is not None:
-            return nested
-    if contour is None:
-        return []
-    return contour
-
-
-def _extract_raw_contour_points(raw: dict) -> np.ndarray:
-    """Extract the main raw workpiece contour as an Nx2 numpy array."""
-    contour = _main_contour_payload(raw)
-    points: list[list[float]] = []
-    for point in contour:
-        if point is None:
-            continue
-        arr = np.asarray(point, dtype=np.float64)
-        if arr.size < 2:
-            continue
-        flat = arr.reshape(-1)
-        points.append([float(flat[0]), float(flat[1])])
-    if not points:
-        return np.empty((0, 2), dtype=np.float64)
-    return np.asarray(points, dtype=np.float64)
-
-
-def _normalize_contour_points(contour) -> np.ndarray:
-    """Normalize OpenCV-style contour arrays into a simple Nx2 float array."""
-    array = np.asarray(contour, dtype=np.float64)
-    if array.ndim == 3 and array.shape[1] == 1:
-        array = array[:, 0, :]
-    if array.ndim != 2 or array.shape[1] < 2:
-        return np.empty((0, 2), dtype=np.float64)
-    return array[:, :2]
-
-
-
-
-def _resample_closed_path(points: np.ndarray, count: int) -> np.ndarray:
-    """Resample a closed contour to a fixed number of evenly spaced points."""
-    if len(points) < 2:
-        return points
-
-    closed_points = points
-    if np.linalg.norm(points[0] - points[-1]) > 1e-6:
-        closed_points = np.vstack([points, points[0]])
-
-    segment_lengths = np.linalg.norm(np.diff(closed_points, axis=0), axis=1)
-    total_length = float(np.sum(segment_lengths))
-    if total_length <= 1e-9:
-        return closed_points[:-1]
-
-    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
-    samples = np.linspace(0.0, total_length, num=max(int(count), 3), endpoint=False)
-
-    resampled = []
-    seg_index = 0
-    for sample in samples:
-        while seg_index + 1 < len(cumulative) and cumulative[seg_index + 1] < sample:
-            seg_index += 1
-
-        seg_start = closed_points[seg_index]
-        seg_end = closed_points[seg_index + 1]
-        seg_len = segment_lengths[seg_index]
-
-        if seg_len <= 1e-9:
-            resampled.append(seg_start.copy())
-            continue
-
-        ratio = (sample - cumulative[seg_index]) / seg_len
-        resampled.append(seg_start + ratio * (seg_end - seg_start))
-
-    return np.asarray(resampled, dtype=np.float64)
-
-
 def _principal_axis_angle(points: np.ndarray) -> float:
     """Estimate the dominant contour axis angle using PCA on the sampled points."""
     if len(points) < 2:
@@ -337,23 +258,6 @@ def _bounding_box_size(points: np.ndarray) -> np.ndarray:
     mins = np.min(points, axis=0)
     maxs = np.max(points, axis=0)
     return np.asarray(maxs - mins, dtype=np.float64)
-
-
-def _polygon_area(points: np.ndarray) -> float:
-    """Return absolute polygon area for a closed contour sample."""
-    if len(points) < 3:
-        return 0.0
-    x = points[:, 0]
-    y = points[:, 1]
-    return 0.5 * float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
-
-
-def _path_length(points: np.ndarray) -> float:
-    """Return perimeter/closed path length for a contour sample."""
-    if len(points) < 2:
-        return 0.0
-    closed = points if np.linalg.norm(points[0] - points[-1]) <= 1e-6 else np.vstack([points, points[0]])
-    return float(np.sum(np.linalg.norm(np.diff(closed, axis=0), axis=1)))
 
 
 def _robust_reference_scale(source_points: np.ndarray, target_points: np.ndarray) -> float:
@@ -428,42 +332,6 @@ def _transform_contour_in_place(
             contour_array[index] = [[float(mapped[0]), float(mapped[1])]]
 
 
-def _resample_raw_contour_payload(contour_array, count: int) -> np.ndarray:
-    """Convert a raw contour payload into a resampled Nx2 contour for smoothing."""
-    points = []
-    if contour_array is None:
-        return np.empty((0, 2), dtype=np.float64)
-    for point in contour_array:
-        if point is None:
-            continue
-        arr = np.asarray(point, dtype=np.float64)
-        if arr.size < 2:
-            continue
-        flat = arr.reshape(-1)
-        points.append([float(flat[0]), float(flat[1])])
-    if len(points) < 3:
-        return np.empty((0, 2), dtype=np.float64)
-    return _resample_closed_path(np.asarray(points, dtype=np.float64), count)
-
-
-def _raw_contour_payload_points(contour_array) -> np.ndarray:
-    """Convert a raw contour payload into an Nx2 contour without changing ordering."""
-    points = []
-    if contour_array is None:
-        return np.empty((0, 2), dtype=np.float64)
-    for point in contour_array:
-        if point is None:
-            continue
-        arr = np.asarray(point, dtype=np.float64)
-        if arr.size < 2:
-            continue
-        flat = arr.reshape(-1)
-        points.append([float(flat[0]), float(flat[1])])
-    if len(points) < 3:
-        return np.empty((0, 2), dtype=np.float64)
-    return np.asarray(points, dtype=np.float64)
-
-
 def _nearest_points(source_points: np.ndarray, target_points: np.ndarray) -> np.ndarray:
     """Return the nearest target point for each source point."""
     if len(source_points) == 0 or len(target_points) == 0:
@@ -511,29 +379,6 @@ def _bounded_reference_smooth(source_points: np.ndarray, reference_points: np.nd
         )
 
     return corrected
-
-
-def _laplacian_smooth_closed_path(points: np.ndarray, iterations: int = 2, alpha: float = 0.2) -> np.ndarray:
-    """Apply light closed-path Laplacian smoothing without collapsing the contour."""
-    smoothed = np.asarray(points, dtype=np.float64).copy()
-    if len(smoothed) < 3:
-        return smoothed
-
-    alpha = float(np.clip(alpha, 0.0, 1.0))
-    for _ in range(max(int(iterations), 0)):
-        prev_points = np.roll(smoothed, 1, axis=0)
-        next_points = np.roll(smoothed, -1, axis=0)
-        neighbor_mean = 0.5 * (prev_points + next_points)
-        smoothed = (1.0 - alpha) * smoothed + alpha * neighbor_mean
-    return smoothed
-
-
-def _replace_raw_contour_payload(contour_array, points: np.ndarray) -> None:
-    """Rewrite a raw contour payload from an Nx2 point array."""
-    contour_array[:] = [
-        [[float(point[0]), float(point[1])]]
-        for point in np.asarray(points, dtype=np.float64)
-    ]
 
 
 def _apply_reference_smoothed_main_contour(

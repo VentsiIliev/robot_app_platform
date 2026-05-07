@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
-from datetime import datetime
 from time import perf_counter
 from typing import Callable, Optional
 
 import numpy as np
 
-from src.engine.geometry.planar import rotate_xy_about, unwrap_degrees
+from src.engine.geometry.planar import rotate_xy, unwrap_degrees
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
@@ -17,14 +15,15 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
 from src.engine.robot.path_preparation import IWorkpiecePathPreparationService
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROCESS_CONFIG,
     PaintSimulationConfig,
-    _PAINT_MOTION_PLANE_SPECS,
-    _PAINT_SIDE_SIGNS,
-    _PAINT_TRANSLATION_DIRECTION_SIGNS,
-    _PICKUP_APPROACH_OFFSET_MM,
-    _PICKUP_CONTACT_OFFSET_MM,
-    _PICKUP_DEFAULT_ACC_PERCENT,
-    _PICKUP_DEFAULT_VEL_PERCENT,
+)
+from src.robot_systems.paint.processes.paint.execution_plane import (
+    get_execution_plane_strategy,
+)
+from src.robot_systems.paint.processes.paint.paint_debug_artifacts import (
+    write_pivot_debug_dump,
+    write_pivot_debug_plot,
 )
 from src.robot_systems.paint.processes.paint.pivot_projection import (
     project_paint_motion_geometry,
@@ -60,9 +59,16 @@ def _path_length_mm(path: list[list[float]]) -> float:
         total += float(np.linalg.norm(np.asarray(end_pose[:3], dtype=float) - np.asarray(start_pose[:3], dtype=float)))
     return total
 
-
-def _axis_label_from_index(index: int) -> str:
-    return {0: "X", 1: "Y", 2: "Z"}.get(int(index), f"Axis {index}")
+def _camera_to_tcp_delta(
+    x_offset: float,
+    y_offset: float,
+    current_rz: float,
+    reference_rz: float = 0.0,
+) -> tuple[float, float]:
+    """Return the tool-frame TCP sweep delta between the reference and current pickup angles."""
+    cur_x, cur_y = rotate_xy(x_offset, y_offset, current_rz)
+    ref_x, ref_y = rotate_xy(x_offset, y_offset, reference_rz)
+    return cur_x - ref_x, cur_y - ref_y
 
 
 @dataclass(frozen=True)
@@ -87,18 +93,20 @@ def _normalize_pivot_config(
     camera_to_tcp_y_offset: float = 0.0,
 ) -> PaintSimulationConfig:
     """Normalize user-facing pivot settings into a validated simulation config."""
-    plane_key = str(motion_plane or "xy_z_rz").strip().lower()
+    rules = PaintSimulationConfig().rules
+    default_plane = rules.default_motion_plane
+    plane_key = str(motion_plane or default_plane).strip().lower()
     axis_key = str(translation_axis or "x").strip().lower()
-    side_key = str(pivot_side or "negative").strip().lower()
-    direction_key = str(translation_direction or "forward").strip().lower()
-    plane_spec = _PAINT_MOTION_PLANE_SPECS.get(plane_key, _PAINT_MOTION_PLANE_SPECS["xy_z_rz"])
-    valid_axes = tuple(plane_spec["axis_offsets_deg"].keys())
+    side_key = str(pivot_side or rules.default_paint_side).strip().lower()
+    direction_key = str(translation_direction or rules.default_translation_direction).strip().lower()
+    plane_spec = rules.motion_plane_specs.get(plane_key, rules.motion_plane_specs[default_plane])
+    valid_axes = tuple(plane_spec.axis_offsets_deg.keys())
     return PaintSimulationConfig(
-        motion_plane=plane_key if plane_key in _PAINT_MOTION_PLANE_SPECS else "xy_z_rz",
+        motion_plane=plane_key if plane_key in rules.motion_plane_specs else default_plane,
         translation_axis=axis_key if axis_key in valid_axes else valid_axes[0],
-        paint_side=side_key if side_key in _PAINT_SIDE_SIGNS else "negative",
+        paint_side=side_key if side_key in rules.side_signs else rules.default_paint_side,
         translation_direction=(
-            direction_key if direction_key in _PAINT_TRANSLATION_DIRECTION_SIGNS else "forward"
+            direction_key if direction_key in rules.translation_direction_signs else rules.default_translation_direction
         ),
         apply_camera_to_tcp_for_pickup=bool(apply_camera_to_tcp_for_pickup),
         camera_to_tcp_x_offset=float(camera_to_tcp_x_offset),
@@ -171,19 +179,16 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             camera_to_tcp_x_offset=camera_to_tcp_x_offset,
             camera_to_tcp_y_offset=camera_to_tcp_y_offset,
         )
+        self._pivot_strategy = get_execution_plane_strategy(self._pivot_config.motion_plane)
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
-
-    def _uses_xz_ry_pivot_mode(self) -> bool:
-        """Return True only for the pivot mode that shows the reachability issue."""
-        return str(self._pivot_config.motion_plane).strip().lower() == "xz_y_ry"
 
     def _validate_xz_ry_pivot_path(self, pivot_path: list[list[float]]) -> tuple[bool, str]:
         """Preflight sampled pivot-path segments for xz/ry mode only.
 
         This is intentionally narrow so the established xy/rz flow is unchanged.
         """
-        if not self._uses_xz_ry_pivot_mode():
+        if not self._pivot_strategy.requires_reachability_preflight:
             return True, ""
         if not self._enable_xz_ry_preflight:
             _logger.info("[PIVOT_PATH] xz/ry preflight skipped: disabled by configuration")
@@ -286,469 +291,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", self._pickup_pivot_config.camera_to_tcp_x_offset)),
             camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", self._pickup_pivot_config.camera_to_tcp_y_offset)),
         )
-
-    def _write_pivot_debug_dump(
-        self,
-        *,
-        source_path: list[list[float]],
-        pivot_path: list[list[float]],
-        diagnostics: list[dict[str, float | int]] | None,
-        pivot_pose: list[float] | None,
-        pattern_type: str,
-        stage: str,
-    ) -> None:
-        """Write source and projected pivot paths to disk for offline trajectory inspection."""
-        if not self._debug_dump_dir:
-            return
-
-        try:
-            os.makedirs(self._debug_dump_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_pattern = str(pattern_type or "path").strip().lower().replace(" ", "_")
-            safe_stage = str(stage or "run").strip().lower().replace(" ", "_")
-            safe_plane = str(self._pivot_config.motion_plane or "unknown").strip().lower()
-            filepath = os.path.join(
-                self._debug_dump_dir,
-                f"pivot_trajectory_{safe_stage}_{safe_pattern}_{safe_plane}_{timestamp}.txt",
-            )
-            with open(filepath, "w", encoding="utf-8") as handle:
-                handle.write(
-                    f"# Pivot trajectory dump\n"
-                    f"# timestamp={timestamp}\n"
-                    f"# pattern_type={pattern_type}\n"
-                    f"# stage={stage}\n"
-                    f"# motion_plane={self._pivot_config.motion_plane}\n"
-                    f"# translation_axis={self._pivot_config.translation_axis}\n"
-                    f"# paint_side={self._pivot_config.paint_side}\n"
-                    f"# translation_direction={self._pivot_config.translation_direction}\n"
-                    f"# source_count={len(source_path)}\n"
-                    f"# projected_count={len(pivot_path)}\n"
-                    f"# source_xyz_len_mm={_path_length_mm(source_path):.6f}\n"
-                    f"# projected_xyz_len_mm={_path_length_mm(pivot_path):.6f}\n"
-                )
-                if pivot_pose:
-                    pose_values = ", ".join(f"{float(value):.6f}" for value in pivot_pose)
-                    handle.write(f"# pivot_pose=[{pose_values}]\n")
-
-                for section_name, path in (
-                    ("ORIGINAL_PLATFORM_PATH", source_path),
-                    ("PROJECTED_EXECUTION_PATH", pivot_path),
-                ):
-                    handle.write(f"\n[{section_name}]\n")
-                    handle.write(f"count={len(path)}\n")
-                    for index, point in enumerate(path):
-                        coords = ", ".join(f"{float(value):.6f}" for value in point)
-                        handle.write(f"  {index:04d}: [{coords}]\n")
-                if diagnostics:
-                    handle.write("\n[ROTATION_DIAGNOSTICS]\n")
-                    for entry in diagnostics:
-                        handle.write(
-                            "  {index:04d}: segment_length={segment_length:.6f}, "
-                            "segment_heading={segment_heading:.6f}, "
-                            "rotation_delta_raw={rotation_delta_raw:.6f}, "
-                            "rotation_delta_applied={rotation_delta_applied:.6f}, "
-                            "current_rz={current_rz:.6f}\n".format(
-                                index=int(entry.get("index", 0)),
-                                segment_length=float(entry.get("segment_length", 0.0)),
-                                segment_heading=float(entry.get("segment_heading", 0.0)),
-                                rotation_delta_raw=float(entry.get("rotation_delta_raw", 0.0)),
-                                rotation_delta_applied=float(entry.get("rotation_delta_applied", 0.0)),
-                                current_rz=float(entry.get("current_rz", 0.0)),
-                            )
-                        )
-            _logger.info("[PIVOT] Wrote pivot trajectory debug dump to %s", filepath)
-        except Exception:
-            _logger.debug("[PIVOT] Failed to write pivot trajectory debug dump", exc_info=True)
-
-    def _write_pivot_debug_plot(
-        self,
-        *,
-        source_path: list[list[float]],
-        pivot_path: list[list[float]],
-        snapshots: list[np.ndarray] | None,
-        diagnostics: list[dict[str, float | int]] | None,
-        pivot_pose: list[float] | None,
-        pattern_type: str,
-        stage: str,
-    ) -> None:
-        """Write a compact visual debug plot for the source and projected pivot trajectories."""
-        if not self._debug_dump_dir or not source_path or not pivot_path:
-            return
-
-        try:
-            import matplotlib
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-
-            os.makedirs(self._debug_dump_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_pattern = str(pattern_type or "path").strip().lower().replace(" ", "_")
-            safe_stage = str(stage or "run").strip().lower().replace(" ", "_")
-            safe_plane = str(self._pivot_config.motion_plane or "unknown").strip().lower()
-            filepath = os.path.join(
-                self._debug_dump_dir,
-                f"pivot_trajectory_{safe_stage}_{safe_pattern}_{safe_plane}_{timestamp}.png",
-            )
-
-            planar_i, planar_j = self._pivot_config.planar_coordinate_indices
-            source_i, source_j = self._pivot_config.source_planar_coordinate_indices
-            rotation_index = self._pivot_config.rotation_index
-
-            source_xy = np.asarray([[float(p[source_i]), float(p[source_j])] for p in source_path], dtype=float)
-            projected_xy = np.asarray([[float(p[planar_i]), float(p[planar_j])] for p in pivot_path], dtype=float)
-            projected_rot = np.asarray(
-                [float(p[rotation_index]) if len(p) > rotation_index else 0.0 for p in pivot_path],
-                dtype=float,
-            )
-            snapshot_list = [
-                np.asarray(snapshot, dtype=float)
-                for snapshot in self._build_executed_snapshot_series(
-                    source_path=source_path,
-                    executed_path=pivot_path,
-                    pivot_pose=pivot_pose,
-                ) or (snapshots or [])
-                if len(snapshot) >= 1
-            ]
-            waypoint_idx = np.arange(len(pivot_path), dtype=float)
-            rotation_delta = np.asarray(
-                [
-                    float(entry.get("rotation_delta_applied", 0.0))
-                    for entry in (diagnostics or [])
-                ],
-                dtype=float,
-            )
-            if rotation_delta.size < len(pivot_path):
-                rotation_delta = np.pad(
-                    rotation_delta,
-                    (0, len(pivot_path) - rotation_delta.size),
-                    mode="constant",
-                    constant_values=0.0,
-                )
-
-            if snapshot_list:
-                highlighted_indices = [0]
-                if len(snapshot_list) >= 2:
-                    highlighted_indices.append(1)
-                sample_count = min(8, len(snapshot_list))
-                sample_indices = np.unique(
-                    np.round(np.linspace(0, len(snapshot_list) - 1, sample_count)).astype(int)
-                )
-                sample_indices = np.unique(np.asarray([*highlighted_indices, *sample_indices], dtype=int))
-                snapshot_cols = min(3, max(1, len(sample_indices)))
-                snapshot_rows = int(np.ceil(len(sample_indices) / snapshot_cols))
-                fig = plt.figure(
-                    figsize=(18, 6 + (3.2 * snapshot_rows)),
-                    constrained_layout=True,
-                )
-                grid = fig.add_gridspec(1 + snapshot_rows, 3)
-                ax_source = fig.add_subplot(grid[0, 0])
-                ax_projected = fig.add_subplot(grid[0, 1:])
-                snapshot_axes = [
-                    fig.add_subplot(grid[1 + (idx // 3), idx % 3])
-                    for idx in range(len(sample_indices))
-                ]
-            else:
-                fig, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
-                ax_source = axes[0]
-                ax_projected = axes[1]
-                snapshot_axes = [axes[2]]
-                sample_indices = np.asarray([], dtype=int)
-
-            fig.suptitle(
-                f"Pivot Trajectory Debug: {pattern_type} [{self._pivot_config.motion_plane}]",
-                fontsize=12,
-            )
-
-            ax_source.plot(source_xy[:, 0], source_xy[:, 1], color="#1f77b4", linewidth=1.5)
-            ax_source.scatter(source_xy[0, 0], source_xy[0, 1], color="green", s=40, label="start")
-            ax_source.scatter(source_xy[-1, 0], source_xy[-1, 1], color="red", s=40, label="end")
-            arrow_step = max(1, len(source_xy) // 12)
-            ax_source.quiver(
-                source_xy[:-1:arrow_step, 0],
-                source_xy[:-1:arrow_step, 1],
-                source_xy[1::arrow_step, 0] - source_xy[:-1:arrow_step, 0],
-                source_xy[1::arrow_step, 1] - source_xy[:-1:arrow_step, 1],
-                angles="xy",
-                scale_units="xy",
-                scale=1.0,
-                width=0.003,
-                color="#1f77b4",
-                alpha=0.75,
-            )
-            ax_source.set_title("Source Path")
-            ax_source.set_xlabel(f"Source Axis {source_i}")
-            ax_source.set_ylabel(f"Source Axis {source_j}")
-            ax_source.axis("equal")
-            ax_source.grid(True, alpha=0.25)
-            ax_source.legend(loc="best")
-
-            scatter = ax_projected.scatter(
-                projected_xy[:, 0],
-                projected_xy[:, 1],
-                c=waypoint_idx,
-                cmap="viridis",
-                s=18,
-            )
-            ax_projected.plot(projected_xy[:, 0], projected_xy[:, 1], color="#444444", linewidth=1.0, alpha=0.8)
-            ax_projected.scatter(projected_xy[0, 0], projected_xy[0, 1], color="green", s=40, label="start")
-            ax_projected.scatter(projected_xy[-1, 0], projected_xy[-1, 1], color="red", s=40, label="end")
-            if len(projected_xy) >= 2:
-                ax_projected.annotate(
-                    "",
-                    xy=(projected_xy[1, 0], projected_xy[1, 1]),
-                    xytext=(projected_xy[0, 0], projected_xy[0, 1]),
-                    arrowprops=dict(arrowstyle="->", color="#d62728", lw=2.0),
-                )
-                ax_projected.text(
-                    projected_xy[0, 0],
-                    projected_xy[0, 1],
-                    " contact",
-                    color="#d62728",
-                    fontsize=8,
-                )
-                ax_projected.text(
-                    projected_xy[1, 0],
-                    projected_xy[1, 1],
-                    " first move",
-                    color="#d62728",
-                    fontsize=8,
-                )
-            ax_projected.quiver(
-                projected_xy[:-1:arrow_step, 0],
-                projected_xy[:-1:arrow_step, 1],
-                projected_xy[1::arrow_step, 0] - projected_xy[:-1:arrow_step, 0],
-                projected_xy[1::arrow_step, 1] - projected_xy[:-1:arrow_step, 1],
-                angles="xy",
-                scale_units="xy",
-                scale=1.0,
-                width=0.003,
-                color="#444444",
-                alpha=0.65,
-            )
-            if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
-                ax_projected.scatter(
-                    float(pivot_pose[planar_i]),
-                    float(pivot_pose[planar_j]),
-                    color="orange",
-                    s=55,
-                    marker="x",
-                    label="pivot",
-                )
-            ax_projected.set_title("Projected Execution Path")
-            ax_projected.set_xlabel(_axis_label_from_index(planar_i))
-            ax_projected.set_ylabel(_axis_label_from_index(planar_j))
-            ax_projected.axis("equal")
-            ax_projected.grid(True, alpha=0.25)
-            ax_projected.legend(loc="best")
-            fig.colorbar(scatter, ax=ax_projected, fraction=0.046, pad=0.04, label="waypoint")
-
-            if snapshot_list:
-                snapshot_cmap = plt.get_cmap("viridis")
-                sampled_snapshots = [snapshot_list[int(sample_index)] for sample_index in sample_indices]
-                min_x = min(float(np.min(snapshot[:, 0])) for snapshot in sampled_snapshots)
-                max_x = max(float(np.max(snapshot[:, 0])) for snapshot in sampled_snapshots)
-                min_y = min(float(np.min(snapshot[:, 1])) for snapshot in sampled_snapshots)
-                max_y = max(float(np.max(snapshot[:, 1])) for snapshot in sampled_snapshots)
-                if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
-                    pivot_x = float(pivot_pose[planar_i])
-                    pivot_y = float(pivot_pose[planar_j])
-                    min_x = min(min_x, pivot_x)
-                    max_x = max(max_x, pivot_x)
-                    min_y = min(min_y, pivot_y)
-                    max_y = max(max_y, pivot_y)
-                pad_x = max(10.0, (max_x - min_x) * 0.08)
-                pad_y = max(10.0, (max_y - min_y) * 0.08)
-
-                for draw_order, sample_index in enumerate(sample_indices):
-                    snapshot = snapshot_list[int(sample_index)]
-                    color = snapshot_cmap(
-                        0.0 if len(sample_indices) == 1 else draw_order / (len(sample_indices) - 1)
-                    )
-                    is_contact = int(sample_index) == 0
-                    is_first_move = int(sample_index) == 1
-                    line_width = 2.6 if (is_contact or is_first_move) else 1.2
-                    line_style = "-" if is_contact else ("--" if is_first_move else "-")
-                    ax_snapshot = snapshot_axes[draw_order]
-                    ax_snapshot.plot(
-                        snapshot[:, 0],
-                        snapshot[:, 1],
-                        color=color,
-                        linewidth=line_width,
-                        linestyle=line_style,
-                        alpha=0.95,
-                    )
-                    ax_snapshot.scatter(
-                        snapshot[0, 0],
-                        snapshot[0, 1],
-                        color=color,
-                        s=42 if (is_contact or is_first_move) else 18,
-                        alpha=0.95,
-                    )
-                    if len(snapshot) >= 2:
-                        ax_snapshot.plot(
-                            snapshot[:2, 0],
-                            snapshot[:2, 1],
-                            color="#d62728" if is_contact else "#ff7f0e" if is_first_move else color,
-                            linewidth=3.0 if (is_contact or is_first_move) else line_width,
-                            alpha=0.9,
-                        )
-                    if int(sample_index) < len(projected_xy):
-                        tcp_x = float(projected_xy[int(sample_index), 0])
-                        tcp_y = float(projected_xy[int(sample_index), 1])
-                        ax_snapshot.scatter(
-                            tcp_x,
-                            tcp_y,
-                            color="#d62728",
-                            s=28,
-                            marker="o",
-                            label="executed tcp",
-                            zorder=5,
-                        )
-                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
-                        pivot_xy = np.asarray(
-                            [float(pivot_pose[planar_i]), float(pivot_pose[planar_j])],
-                            dtype=float,
-                        )
-                        nearest_index = int(np.argmin(np.linalg.norm(snapshot - pivot_xy, axis=1)))
-                        nearest_point = snapshot[nearest_index]
-                        ax_snapshot.scatter(
-                            float(nearest_point[0]),
-                            float(nearest_point[1]),
-                            color="#ff7f0e",
-                            s=24,
-                            marker="s",
-                            label="nearest to pivot",
-                            zorder=5,
-                        )
-                    label = f"Step {int(sample_index)}"
-                    if is_contact:
-                        label = "Step 0 - contact"
-                    elif is_first_move:
-                        label = "Step 1 - first move"
-                    ax_snapshot.set_title(label)
-                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
-                        ax_snapshot.scatter(
-                            float(pivot_pose[planar_i]),
-                            float(pivot_pose[planar_j]),
-                            color="orange",
-                            s=55,
-                            marker="x",
-                            label="pivot",
-                        )
-                    ax_snapshot.set_xlim(min_x - pad_x, max_x + pad_x)
-                    ax_snapshot.set_ylim(min_y - pad_y, max_y + pad_y)
-                    ax_snapshot.set_xlabel(_axis_label_from_index(planar_i))
-                    ax_snapshot.set_ylabel(_axis_label_from_index(planar_j))
-                    ax_snapshot.axis("equal")
-                    ax_snapshot.grid(True, alpha=0.25)
-                    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
-                        ax_snapshot.legend(loc="best")
-
-                for empty_index in range(len(sample_indices), len(snapshot_axes)):
-                    snapshot_axes[empty_index].axis("off")
-
-                if snapshot_axes:
-                    snapshot_axes[0].text(
-                        0.02,
-                        1.08,
-                        "Executed Workpiece Snapshots (one subplot per sampled step)",
-                        transform=snapshot_axes[0].transAxes,
-                        fontsize=10,
-                        fontweight="bold",
-                        ha="left",
-                    )
-            else:
-                ax_rotation = snapshot_axes[0]
-                ax_rotation.plot(waypoint_idx, projected_rot, color="#d62728", linewidth=1.5, label="active rotation")
-                ax_rotation.bar(
-                    waypoint_idx,
-                    rotation_delta[: len(waypoint_idx)],
-                    color="#9467bd",
-                    alpha=0.35,
-                    width=0.8,
-                    label="rotation delta",
-                )
-                ax_rotation.axhline(0.0, color="#666666", linewidth=0.8, alpha=0.6)
-                ax_rotation.set_title("Rotation Progression")
-                ax_rotation.set_xlabel("Waypoint")
-                ax_rotation.set_ylabel(
-                    "RY (deg)" if rotation_index == 4 else "RZ (deg)"
-                )
-                ax_rotation.grid(True, alpha=0.25)
-                ax_rotation.legend(loc="best")
-
-            fig.text(
-                0.5,
-                0.01,
-                (
-                    f"source_xyz_len={_path_length_mm(source_path):.1f} mm   "
-                    f"projected_xyz_len={_path_length_mm(pivot_path):.1f} mm   "
-                    f"translation_axis={self._pivot_config.translation_axis}   "
-                    f"plane={self._pivot_config.motion_plane}"
-                ),
-                ha="center",
-                fontsize=9,
-            )
-            fig.savefig(filepath, dpi=180)
-            plt.close(fig)
-            _logger.info("[PIVOT] Wrote pivot trajectory debug plot to %s", filepath)
-        except Exception:
-            _logger.debug("[PIVOT] Failed to write pivot trajectory debug plot", exc_info=True)
-
-    def _build_executed_snapshot_series(
-        self,
-        *,
-        source_path: list[list[float]],
-        executed_path: list[list[float]],
-        pivot_pose: list[float] | None,
-    ) -> list[np.ndarray]:
-        """Rebuild contour snapshots from the final executed pose sequence."""
-        if not source_path or not executed_path or pivot_pose is None or len(pivot_pose) < 3:
-            return []
-        try:
-            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
-                source_path,
-                pivot_pose,
-                self._pivot_config,
-            )
-            if not preview_path or not preview_snapshots:
-                return []
-
-            planar_i, planar_j = self._pivot_config.planar_coordinate_indices
-            rotation_index = self._pivot_config.rotation_index
-            pivot_xy = (float(pivot_pose[planar_i]), float(pivot_pose[planar_j]))
-            reference_snapshot = np.asarray(preview_snapshots[0], dtype=float)
-            reference_rotation = (
-                float(preview_path[0][rotation_index]) if len(preview_path[0]) > rotation_index else 0.0
-            )
-            rebuilt_snapshots: list[np.ndarray] = []
-            for pose in executed_path:
-                target_rotation = float(pose[rotation_index]) if len(pose) > rotation_index else reference_rotation
-                rotation_delta = unwrap_degrees(reference_rotation, target_rotation) - reference_rotation
-                rotated_snapshot = np.asarray(
-                    [
-                        rotate_xy_about(
-                            (float(point[0]), float(point[1])),
-                            rotation_delta,
-                            pivot_xy,
-                        )
-                        for point in reference_snapshot
-                    ],
-                    dtype=float,
-                )
-                target_center = np.asarray(
-                    [
-                        float(pose[planar_i]) if len(pose) > planar_i else 0.0,
-                        float(pose[planar_j]) if len(pose) > planar_j else 0.0,
-                    ],
-                    dtype=float,
-                )
-                current_center = np.mean(rotated_snapshot, axis=0)
-                rebuilt_snapshots.append(rotated_snapshot + (target_center - current_center))
-            return rebuilt_snapshots
-        except Exception:
-            _logger.debug("[PIVOT] Failed to rebuild executed snapshots", exc_info=True)
-            return []
+        self._pivot_strategy = get_execution_plane_strategy(self._pivot_config.motion_plane)
 
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         """Report the execution modes supported by the paint executor."""
@@ -807,7 +350,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         adjusted_pose = list(pivot_pose)
         if abs(offset_value) <= 1e-9:
             return adjusted_pose
-        target_index = 2 if self._uses_xz_ry_pivot_mode() else 1
+        target_index = self._pivot_strategy.pivot_offset_position_index
         while len(adjusted_pose) <= target_index:
             adjusted_pose.append(0.0)
         adjusted_pose[target_index] = float(adjusted_pose[target_index]) + offset_value
@@ -1078,7 +621,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         pickup_z = self._pickup_z_mm
         if pickup_z is None:
-            pickup_z = self._pickup_safety_z_min_mm + workpiece_height_mm + _PICKUP_CONTACT_OFFSET_MM
+            pickup_z = self._pickup_safety_z_min_mm + workpiece_height_mm + PAINT_PROCESS_CONFIG.pickup_contact_offset_mm
 
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
         should_apply_tcp_offset = False
@@ -1098,7 +641,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_tcp_dx,
             pickup_tcp_dy,
         )
-        pickup_approach_z = float(pickup_z) + _PICKUP_APPROACH_OFFSET_MM
+        pickup_approach_z = float(pickup_z) + PAINT_PROCESS_CONFIG.pickup_approach_offset_mm
         pickup_approach_pose = [
             pickup_centroid_x - pickup_tcp_dx,
             pickup_centroid_y - pickup_tcp_dy,
@@ -1118,14 +661,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         align_rx = pickup_rx
         align_ry = pickup_ry
-        align_rz = pickup_rz
-        if self._uses_xz_ry_pivot_mode():
-            target_ry = float(first_pivot_pose[4]) if len(first_pivot_pose) >= 5 else pickup_ry
-            reference_ry = float(paint_pivot_pose[4]) if len(paint_pivot_pose) >= 5 else pickup_ry
-            align_delta = unwrap_degrees(reference_ry, target_ry) - reference_ry
-            align_rz = unwrap_degrees(pickup_rz, pickup_rz + align_delta)
-        else:
-            align_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else pickup_rz
+        align_rz = self._pivot_strategy.compute_pickup_align_rotation(
+            pickup_rz=pickup_rz,
+            pickup_ry=pickup_ry,
+            first_pivot_pose=first_pivot_pose,
+            paint_pivot_pose=paint_pivot_pose,
+        )
 
         align_pose = [
             pickup_centroid_x - pickup_tcp_dx,
@@ -1171,8 +712,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             position=pose,
             tool=self._pickup_tool,
             user=self._pickup_user,
-            velocity=_PICKUP_DEFAULT_VEL_PERCENT,
-            acceleration=_PICKUP_DEFAULT_ACC_PERCENT,
+            velocity=PAINT_PROCESS_CONFIG.pickup_default_vel_percent,
+            acceleration=PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
             wait_to_reach=True,
         )
         _logger.info("[TIMING] pickup_phase label=%s success=%s elapsed_s=%.3f", label, bool(ok), _elapsed_s(started))
@@ -1317,15 +858,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     _elapsed_s(job_started),
                 )
                 return False, "Pickup succeeded, but pivot-path geometry could not be built", total_waypoints
-            if self._uses_xz_ry_pivot_mode() and self._flip_xz_ry_execution_rotation_direction and pivot_path:
+            if self._flip_xz_ry_execution_rotation_direction and pivot_path:
                 reference_ry = float(pivot_path[0][4]) if len(pivot_path[0]) >= 5 else 0.0
-                for pose in pivot_path:
-                    if len(pose) >= 5:
-                        pose[4] = 2.0 * reference_ry - float(pose[4])
-                _logger.info(
-                    "[PIVOT_PATH] Flipped xz/ry execution rotation direction around start RY=%.3f",
-                    reference_ry,
+                pivot_path = self._pivot_strategy.maybe_flip_execution_rotation_direction(
+                    pivot_path=pivot_path,
+                    enabled=True,
                 )
+                if self._pivot_strategy.requires_reachability_preflight:
+                    _logger.info(
+                        "[PIVOT_PATH] Flipped xz/ry execution rotation direction around start RY=%.3f",
+                        reference_ry,
+                    )
             if self._last_process_start_rz is None and pivot_path:
                 self._last_process_start_rz = float(pivot_path[0][5]) if len(pivot_path[0]) >= 6 else 0.0
 
@@ -1357,7 +900,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             else:
                 snapshots = None
                 diagnostics = None
-            self._write_pivot_debug_dump(
+            write_pivot_debug_dump(
+                debug_dump_dir=self._debug_dump_dir,
+                pivot_config=self._pivot_config,
                 source_path=spline,
                 pivot_path=pivot_path,
                 diagnostics=diagnostics,
@@ -1365,7 +910,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 pattern_type=pattern_type,
                 stage="execute",
             )
-            self._write_pivot_debug_plot(
+            write_pivot_debug_plot(
+                debug_dump_dir=self._debug_dump_dir,
+                pivot_config=self._pivot_config,
                 source_path=spline,
                 pivot_path=pivot_path,
                 snapshots=snapshots,

@@ -2,10 +2,8 @@ import numpy as np
 
 from src.engine.geometry.planar import normalize_degrees, rotate_xy_about, unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROJECTION_TUNING,
     PaintSimulationConfig,
-    _PAINT_ROTATION_DEADBAND_DEG,
-    _PAINT_SMOOTH_MAX_ANGULAR_STEP_DEG,
-    _PAINT_SMOOTH_MAX_LINEAR_STEP_MM,
 )
 
 
@@ -222,7 +220,7 @@ def project_paint_motion_geometry(
         rotation_delta = rotation_delta_raw
 
         # Ignore tiny heading noise to avoid jittering the projected RZ.
-        if abs(rotation_delta) < _PAINT_ROTATION_DEADBAND_DEG:
+        if abs(rotation_delta) < PAINT_PROJECTION_TUNING.rotation_deadband_deg:
             rotation_delta = 0.0
         if abs(rotation_delta) > 1e-9:
             # Rotate the whole shape around the fixed pivot, because the
