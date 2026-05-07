@@ -7,6 +7,11 @@ For new robot-system development, start from:
 - [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
 - [settings/README.md](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
 
+Concrete system docs in this tree:
+
+- [glue/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/glue/README.md)
+- [paint/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/paint/README.md)
+
 Reusability rule:
 - new shared robot-system features should be proven in [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) first
 - if a feature cannot be demonstrated cleanly in the blueprint demo, it is not yet standardized enough for platform-level reuse

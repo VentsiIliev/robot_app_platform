@@ -31,8 +31,8 @@ def to_editor_dict(
         persisted = point_by_name.get(str(definition.name).strip().lower())
         point_item = definition.to_dict()
         point_item["display_name"] = (
-            str(getattr(persisted, "display_name", "")).strip()
-            or str(definition.display_name or definition.name)
+                str(getattr(persisted, "display_name", "")).strip()
+                or str(definition.display_name or definition.name)
         )
         point_item["x_mm"] = float(getattr(persisted, "x_mm", 0.0))
         point_item["y_mm"] = float(getattr(persisted, "y_mm", 0.0))
@@ -54,12 +54,12 @@ def to_editor_dict(
         persisted = frame_by_name.get(str(definition.name).strip().lower())
         frame_item = definition.to_dict()
         frame_item["source_navigation_group"] = (
-            str(getattr(persisted, "source_navigation_group", "")).strip()
-            or str(definition.source_navigation_group).strip()
+                str(getattr(persisted, "source_navigation_group", "")).strip()
+                or str(definition.source_navigation_group).strip()
         )
         frame_item["target_navigation_group"] = (
-            str(getattr(persisted, "target_navigation_group", "")).strip()
-            or str(definition.target_navigation_group).strip()
+                str(getattr(persisted, "target_navigation_group", "")).strip()
+                or str(definition.target_navigation_group).strip()
         )
         frame_item["use_height_correction"] = bool(
             getattr(persisted, "use_height_correction", definition.use_height_correction)
