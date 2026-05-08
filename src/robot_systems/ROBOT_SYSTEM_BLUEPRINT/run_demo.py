@@ -82,8 +82,7 @@ def _load_apps_into_shell(shell, session, robot_system, ctx, provider) -> None:
     for spec in visible_specs:
         if spec.factory is None:
             continue
-        application = spec.factory(robot_system)
-        loader.load(application, folder_id=spec.folder_id, icon=spec.icon, name=spec.name)
+        loader.register_spec(spec, builder=lambda spec=spec: spec.factory(robot_system))
 
     descriptors, widget_factory = loader.build_registry()
     shell._app_descriptors = descriptors

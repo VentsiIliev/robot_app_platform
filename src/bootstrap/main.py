@@ -177,10 +177,9 @@ def _load_apps_into_shell(shell, session, robot_app, ctx):
             _LOGGER.warning("ApplicationSpec '%s' has no factory — skipping", spec.name)
             continue
         try:
-            application = spec.factory(robot_app)
-            loader.load(application, folder_id=spec.folder_id, icon=spec.icon, name=spec.name)
+            loader.register_spec(spec, builder=lambda spec=spec: spec.factory(robot_app))
         except Exception:
-            _LOGGER.exception("Failed to build application '%s'", spec.name)
+            _LOGGER.exception("Failed to register application '%s'", spec.name)
 
     descriptors, widget_factory = loader.build_registry()
     shell._app_descriptors = descriptors
