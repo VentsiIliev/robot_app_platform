@@ -6,7 +6,7 @@ Rule: pure Qt only — no services, no model, no business logic.
       Exposes pyqtSignals for every user action.
       Exposes setter methods for every piece of data the controller pushes.
 """
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout
 
 from pl_gui.shell.base_app_widget.AppWidget import AppWidget
@@ -38,12 +38,8 @@ class MyView(AppWidget):
     def set_value(self, value: str) -> None:
         self._label.setText(f"Value: {value}")
 
-    # --- AppWidget hooks --------------------------------------------------
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
+    def retranslateUi(self) -> None:
+        self._label.setText(self.tr("Value: —"))
 
     def clean_up(self) -> None:
         """Called by shell when the app is closed. Stop timers, threads etc."""

@@ -1,5 +1,6 @@
 import logging
 import requests
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
@@ -492,3 +493,250 @@ class FairinoRos2Client:
     @staticmethod
     def _to_float_list(position):
         return [float(v) for v in position]
+
+
+class FakeRos2Client:
+    _STOP_STATE_STOPPED = "STOPPED"
+    _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
+    _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
+    _STOP_STATE_ERROR = "ERROR"
+
+    def __init__(self, server_url="fake://fairino", ip=None):
+        self.server_url = server_url.rstrip("/")
+        self.ip = ip or "fake_ros2_bridge"
+        self._available = True
+        self._last_error = None
+        self._last_execute_path_response = None
+        self._last_stop_response = None
+        self._current_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._motion_active = False
+        self._queue_size = 0
+        self._task_counter = 0
+        self._safety_walls_enabled = True
+        self._digital_outputs = {}
+        self._workobject = None
+        logger.info("Using fake Fairino ROS2 client at %s", self.server_url)
+
+    def _next_task_id(self) -> int:
+        self._task_counter += 1
+        return self._task_counter
+
+    def _accept_motion(self, position, *, blocking):
+        self._current_position = self._to_float_list(position)
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._motion_active = not bool(blocking)
+        self._queue_size = 1 if self._motion_active else 0
+        return 0
+
+    def _set_path_result(self, path, *, blocking):
+        task_id = self._next_task_id()
+        last_position = path[-1] if path else self._current_position
+        self._accept_motion(last_position, blocking=blocking)
+        self._last_execute_path_response = {
+            "http_status": 200,
+            "result_code": 0,
+            "task_id": task_id,
+            "queued": not bool(blocking),
+            "queue_position": 0 if blocking else 1,
+            "raw": {
+                "success": True,
+                "result": 0,
+                "task_id": task_id,
+                "queued": not bool(blocking),
+                "queue_position": 0 if blocking else 1,
+            },
+        }
+        return 0
+
+    def health_check(self):
+        return {"status": "ok", "message": "Running fake ROS2 client"}
+
+    def get_connection_state(self):
+        return "idle" if self._available else "disconnected"
+
+    def get_connection_details(self):
+        return {
+            "server_url": self.server_url,
+            "state": self.get_connection_state(),
+            "last_error": self._last_error,
+            "mode": "fake",
+        }
+
+    def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        logger.debug("FakeRos2Client.move_cartesian position=%s", position)
+        return self._accept_motion(position, blocking=True)
+
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        logger.debug("FakeRos2Client.move_liner position=%s blocking=%s", position, blocking)
+        return self._accept_motion(position, blocking=blocking)
+
+    def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        logger.debug("FakeRos2Client.move_ptp position=%s blocking=%s", position, blocking)
+        return self._accept_motion(position, blocking=blocking)
+
+    def execute_path(
+        self,
+        path,
+        rx=None,
+        ry=None,
+        rz=None,
+        vel=0.6,
+        acc=0.4,
+        blocking=False,
+        trajectory_optimizer="RUCKIG",
+        orientation_mode="constant",
+    ):
+        logger.debug(
+            "FakeRos2Client.execute_path waypoints=%s blocking=%s optimizer=%s orientation_mode=%s",
+            len(path) if path else 0,
+            blocking,
+            trajectory_optimizer,
+            orientation_mode,
+        )
+        sanitized_path = [self._to_float_list(p) for p in path] if path else []
+        return self._set_path_result(sanitized_path, blocking=blocking)
+
+    def get_last_execute_path_response(self):
+        return deepcopy(self._last_execute_path_response)
+
+    def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
+        logger.debug("FakeRos2Client.unwind_joint6 blocking=%s queue_if_busy=%s", blocking, queue_if_busy)
+        task_id = self._next_task_id()
+        self._motion_active = not bool(blocking)
+        self._queue_size = 1 if self._motion_active else 0
+        self._last_execute_path_response = {
+            "http_status": 200,
+            "result_code": 0,
+            "task_id": task_id,
+            "queued": not bool(blocking),
+            "queue_position": 0 if blocking else 1,
+            "raw": {"success": True, "result": 0, "task_id": task_id, "queued": not bool(blocking)},
+        }
+        return 0
+
+    def start_jog(self, axis, direction, step, vel, acc):
+        logger.debug(
+            "FakeRos2Client.start_jog axis=%s direction=%s step=%s vel=%s acc=%s",
+            axis,
+            direction,
+            step,
+            vel,
+            acc,
+        )
+        self._motion_active = True
+        self._queue_size = 1
+        return 0
+
+    def stop_motion(self):
+        logger.debug("FakeRos2Client.stop_motion")
+        stop_state = self._STOP_STATE_STOPPED if self._motion_active else self._STOP_STATE_NO_ACTIVE_MOTION
+        self._motion_active = False
+        self._queue_size = 0
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._last_stop_response = {
+            "success": True,
+            "result": 0,
+            "stop_state": stop_state,
+            "stopped": True,
+        }
+        return 0
+
+    def get_last_stop_response(self):
+        return deepcopy(self._last_stop_response)
+
+    def get_current_position(self):
+        return list(self._current_position)
+
+    def GetActualTCPPose(self):
+        return (0, self.get_current_position())
+
+    def get_status(self):
+        return {
+            "success": True,
+            "mode": "fake",
+            "is_executing": self._motion_active,
+            "queue_size": self._queue_size,
+            "current_position": self.get_current_position(),
+        }
+
+    def get_safety_walls_status(self):
+        return {
+            "supported": True,
+            "enabled": self._safety_walls_enabled,
+            "success": True,
+            "mode": "fake",
+        }
+
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool=0,
+        user=0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        return {
+            "success": True,
+            "supported": True,
+            "reachable": True,
+            "start_position": self._to_float_list(start_position),
+            "target_position": self._to_float_list(target_position),
+            "mode": "fake",
+        }
+
+    def are_safety_walls_enabled(self):
+        return self._safety_walls_enabled
+
+    def enable_safety_walls(self) -> bool:
+        self._safety_walls_enabled = True
+        return True
+
+    def disable_safety_walls(self) -> bool:
+        self._safety_walls_enabled = False
+        return True
+
+    def get_current_velocity(self):
+        return (0, list(self._current_velocity_components))
+
+    def enable(self):
+        logger.info("FakeRos2Client.enable")
+        return 0
+
+    def RobotEnable(self, state):
+        return self.enable() if state == 1 else self.disable()
+
+    def disable(self):
+        logger.info("FakeRos2Client.disable")
+        return 0
+
+    def setDigitalOutput(self, portId, value):
+        self._digital_outputs[int(portId)] = int(value)
+        return 0
+
+    def resetAllErrors(self):
+        return 0
+
+    def ResetAllError(self):
+        return self.resetAllErrors()
+
+    def set_workobject(self, origin, user_id=0):
+        self._workobject = {"origin": self._to_float_list(origin), "user_id": int(user_id)}
+        return 0
+
+    @staticmethod
+    def _to_float_list(position):
+        return [float(v) for v in position]
+
+
+def should_use_fake_ros2_client(server_url: str | None) -> bool:
+    normalized = str(server_url or "").strip().lower()
+    return normalized in {"fake", "mock", "test", "sim"} or normalized.startswith(
+        ("fake://", "mock://", "test://", "sim://")
+    )
+
+
+def build_fairino_ros2_client(server_url="http://localhost:5000", ip=None):
+    if should_use_fake_ros2_client(server_url):
+        return FakeRos2Client(server_url=server_url, ip=ip)
+    return FairinoRos2Client(server_url=server_url, ip=ip)

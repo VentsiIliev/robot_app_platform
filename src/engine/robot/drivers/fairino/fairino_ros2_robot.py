@@ -4,7 +4,7 @@ from typing import List
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
-from .fairino_ros2_client import FairinoRos2Client
+from .fairino_ros2_client import build_fairino_ros2_client
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class FairinoRos2Robot(IRobot):
 
     def __init__(self, server_url: str):
         logger.info("FairinoRos2Robot init — server_url=%s", server_url)
-        self._client = FairinoRos2Client(server_url=server_url)
+        self._client = build_fairino_ros2_client(server_url=server_url)
         logger.info("FairinoRos2Robot ready")
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:

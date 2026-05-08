@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout
 
 from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
@@ -72,11 +72,6 @@ class GlueSettingsView(IApplicationView):
         return self._settings_view.get_values()
 
     # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

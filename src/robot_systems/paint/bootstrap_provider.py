@@ -21,7 +21,9 @@ class PaintBootstrapProvider(RobotSystemBootstrapProvider):
 
     def build_robot(self):
         # TODO: Move concrete robot driver selection into persisted startup config.
-        return FairinoRos2Robot(server_url="http://localhost:5000")
+        # return FairinoRos2Robot(server_url="http://localhost:5000")
+        # TODO: CHANGE THIS TO RUN ON REAL HARDWARE ON USE FAKE FOR TESTING
+        return FairinoRos2Robot(server_url="fake://local")
 
     def build_login_view(self, robot_system, messaging_service):
         role_policy = robot_system.__class__.role_policy

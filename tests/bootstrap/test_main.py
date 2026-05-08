@@ -35,7 +35,13 @@ class TestMainImport(unittest.TestCase):
 
         self.assertIs(result, localization)
         args = localization_cls.call_args.args
-        self.assertEqual(args[0], "/tmp/robot_systems/paint/storage/translations")
+        self.assertEqual(
+            args[0],
+            [
+                "/home/ilv/Desktop/robot_app_platform/src/applications/localization",
+                "/tmp/robot_systems/paint/storage/translations",
+            ],
+        )
         self.assertEqual(localization_cls.call_args.kwargs["state_file"], "/tmp/robot_systems/paint/storage/settings/localization.json")
 
 

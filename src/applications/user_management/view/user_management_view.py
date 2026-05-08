@@ -1,5 +1,5 @@
 from typing import List, Optional
-from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QCoreApplication
+from PyQt6.QtCore import pyqtSignal, Qt, QCoreApplication
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QTableWidget, QTableWidgetItem, QHeaderView,
@@ -101,7 +101,7 @@ class UserManagementView(IApplicationView):
         translated = QCoreApplication.translate("UserManagement", text)
         return translated or text
 
-    def retranslateUi(self, *_) -> None:
+    def retranslateUi(self) -> None:
         self._tabs.setTabText(0, self._t("Users"))
         if hasattr(self, "_perm_tab_idx"):
             self._tabs.setTabText(self._perm_tab_idx, self._t("App Permissions"))
@@ -119,11 +119,6 @@ class UserManagementView(IApplicationView):
         self._table.setHorizontalHeaderLabels(
             [self._t(h) for h in self._schema.get_table_headers()]
         )
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.retranslateUi()
-        super().changeEvent(event)
 
     # ── Builders ─────────────────────────────────────────────────────
 

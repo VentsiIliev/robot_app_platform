@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 from PyQt6.QtCore import QCoreApplication
 
@@ -19,15 +19,20 @@ class LocalizationService(ILocalizationService):
 
     def __init__(
         self,
-        translations_dir: str,
+        translations_dir: str | Iterable[str],
         messaging_service: IMessagingService | None = None,
         default_language: str = "en",
         state_file: str | None = None,
     ) -> None:
-        self._translations_dir = Path(translations_dir)
+        if isinstance(translations_dir, (str, Path)):
+            raw_dirs = [translations_dir]
+        else:
+            raw_dirs = list(translations_dir)
+        self._translations_dirs = [Path(p) for p in raw_dirs]
         self._messaging = messaging_service
         self._default_language = default_language
-        self._state_file = Path(state_file) if state_file is not None else self._translations_dir / ".language_state.json"
+        state_root = self._translations_dirs[-1] if self._translations_dirs else Path(".")
+        self._state_file = Path(state_file) if state_file is not None else state_root / ".language_state.json"
         self._current_language = self._load_persisted_language()
         self._current_translator: DictTranslator | None = None
         self._languages = self._discover_languages()
@@ -90,9 +95,11 @@ class LocalizationService(ILocalizationService):
             self._current_translator = None
 
     def _discover_languages(self) -> List[Tuple[str, str]]:
-        discovered: List[Tuple[str, str]] = []
-        if self._translations_dir.exists():
-            for file_path in sorted(self._translations_dir.glob("*.json")):
+        discovered_by_code: Dict[str, str] = {}
+        for translations_dir in self._translations_dirs:
+            if not translations_dir.exists():
+                continue
+            for file_path in sorted(translations_dir.glob("*.json")):
                 code = file_path.stem
                 if not self._LANGUAGE_CODE_RE.fullmatch(code):
                     continue
@@ -101,7 +108,8 @@ class LocalizationService(ILocalizationService):
                     continue
                 meta = payload.get("__meta__", {})
                 display_name = meta.get("display_name") if isinstance(meta, dict) else None
-                discovered.append((code, display_name or code))
+                discovered_by_code.setdefault(code, str(display_name or code))
+        discovered = list(discovered_by_code.items())
         if not discovered:
             return [(self._default_language, "English")]
         by_code = {code: display for code, display in discovered}
@@ -112,23 +120,27 @@ class LocalizationService(ILocalizationService):
         return ordered
 
     def _load_catalog(self, code: str) -> Dict[str, Dict[str, str]] | None:
-        file_path = self._translations_dir / f"{code}.json"
-        payload = self._read_json(file_path)
-        if payload is None:
-            return None
-
         catalog: Dict[str, Dict[str, str]] = {}
-        for context, entries in payload.items():
-            if context == "__meta__":
+        found = False
+        for translations_dir in self._translations_dirs:
+            file_path = translations_dir / f"{code}.json"
+            payload = self._read_json(file_path)
+            if payload is None:
                 continue
-            if not isinstance(entries, dict):
-                self._logger.warning("Ignoring invalid translation context '%s' in %s", context, file_path)
-                continue
-            catalog[context] = {
-                str(source): str(text)
-                for source, text in entries.items()
-            }
-        return catalog
+            found = True
+            for context, entries in payload.items():
+                if context == "__meta__":
+                    continue
+                if not isinstance(entries, dict):
+                    self._logger.warning("Ignoring invalid translation context '%s' in %s", context, file_path)
+                    continue
+                catalog.setdefault(context, {}).update(
+                    {
+                        str(source): str(text)
+                        for source, text in entries.items()
+                    }
+                )
+        return catalog if found else None
 
     @staticmethod
     def _merge_catalogs(

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QHBoxLayout, QVBoxLayout,
     QLabel, QLineEdit, QComboBox, QPushButton,
@@ -22,30 +22,20 @@ def _t(text: str) -> str:
     return translated or text
 
 
-class _Bridge(QObject):
-    retranslate = pyqtSignal()
-
-
 class UserManagementController(IApplicationController):
 
     def __init__(self, model: UserManagementModel, view: UserManagementView, messaging=None):
         self._model     = model
         self._view      = view
         self._messaging = messaging
-        self._bridge    = _Bridge()
-        self._bridge.retranslate.connect(self._retranslate)
 
     def load(self) -> None:
         self._connect_signals()
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.subscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
+        self._view.language_changed.connect(self._retranslate)
         self._refresh()
 
     def stop(self) -> None:
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.unsubscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
+        self._view.language_changed.disconnect(self._retranslate)
 
     def _connect_signals(self) -> None:
         self._view.add_requested.connect(self._on_add)
@@ -54,9 +44,6 @@ class UserManagementController(IApplicationController):
         self._view.qr_requested.connect(self._on_qr)
         self._view.refresh_requested.connect(self._refresh)
         self._view.filter_changed.connect(self._on_filter)
-
-    def _on_language_changed_raw(self, _payload) -> None:
-        self._bridge.retranslate.emit()
 
     def _retranslate(self) -> None:
         self._view.retranslateUi()

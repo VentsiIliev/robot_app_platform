@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, QEvent, Qt
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
@@ -251,11 +251,6 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setText("Working…")
 
     # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

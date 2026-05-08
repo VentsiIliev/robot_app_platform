@@ -262,12 +262,8 @@ class MyView(IApplicationView):
     def set_value(self, value: str) -> None:
         self._label.setText(f"Value: {value}")
 
-    # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
+    def retranslateUi(self) -> None:
+        self._label.setText(self.tr("Value: —"))
 
     def clean_up(self) -> None:
         pass  # stop timers / threads here
@@ -278,6 +274,7 @@ class MyView(IApplicationView):
 - Every data push = one setter in
 - The view never calls the model
 - Never use `lambda` or `.emit` references as connection targets
+- For localized text, implement `retranslateUi()`; `IApplicationView` handles `LanguageChange` by default
 
 ---
 

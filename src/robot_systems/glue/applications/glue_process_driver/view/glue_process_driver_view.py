@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from PyQt6.QtCore import QEvent, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QGroupBox,
@@ -199,11 +199,6 @@ class GlueProcessDriverView(IApplicationView):
         self._manual_mode.blockSignals(True)
         self._manual_mode.setChecked(enabled)
         self._manual_mode.blockSignals(False)
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         controller = getattr(self, "_controller", None)

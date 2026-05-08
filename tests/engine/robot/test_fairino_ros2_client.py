@@ -1,7 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.engine.robot.drivers.fairino.fairino_ros2_client import FairinoRos2Client
+from src.engine.robot.drivers.fairino.fairino_ros2_client import (
+    FairinoRos2Client,
+    FakeRos2Client,
+    build_fairino_ros2_client,
+)
 
 
 class TestFairinoRos2Client(unittest.TestCase):
@@ -66,3 +70,22 @@ class TestFairinoRos2Client(unittest.TestCase):
 
         self.assertEqual(client.stop_motion(), -2)
         self.assertEqual(client.get_last_stop_response()["stop_state"], "STOP_REQUESTED_BUT_UNCONFIRMED")
+
+    def test_fake_client_factory_selects_fake_backend(self):
+        client = build_fairino_ros2_client(server_url="fake://local")
+
+        self.assertIsInstance(client, FakeRos2Client)
+        self.assertEqual(client.get_connection_state(), "idle")
+
+    def test_fake_client_updates_position_and_reports_execution_info(self):
+        client = build_fairino_ros2_client(server_url="fake://local")
+
+        self.assertEqual(client.move_liner([1, 2, 3, 4, 5, 6], blocking=True), 0)
+        self.assertEqual(client.get_current_position(), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+        self.assertEqual(client.execute_path([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], blocking=False), 0)
+        self.assertEqual(client.get_last_execute_path_response()["task_id"], 1)
+        self.assertTrue(client.get_status()["is_executing"])
+
+        self.assertEqual(client.stop_motion(), 0)
+        self.assertFalse(client.get_status()["is_executing"])

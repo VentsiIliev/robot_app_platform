@@ -36,7 +36,7 @@ LocalizationService
         ↓
 Qt widgets
         ├─ self.tr("...")
-        └─ changeEvent(LanguageChange) → retranslateUi() / on_language_changed()
+        └─ IApplicationView.on_language_changed() → retranslateUi() + language_changed
 ```
 
 ---
@@ -107,6 +107,15 @@ self._save_btn.setText(self.tr("Save"))
 
 This keeps translation native to Qt and works with `LanguageChange` events.
 
+For standard shell applications that inherit `IApplicationView`, the default localization flow is now:
+
+- Qt posts `QEvent.LanguageChange`
+- `AppWidget.changeEvent(...)` calls `on_language_changed()`
+- `IApplicationView.on_language_changed()` calls `retranslateUi()`
+- `IApplicationView` emits `language_changed` for controllers that own dynamic text
+
+That removes the need for most per-view `changeEvent(...)` boilerplate.
+
 ### 6. Controllers can use `QCoreApplication.translate(...)`
 
 For dynamic controller text, use a stable context:
@@ -116,6 +125,14 @@ QCoreApplication.translate("GlueDashboard", "Reset Errors")
 ```
 
 That is how the dashboard controller currently re-translates action labels and pause/resume text.
+
+For `IApplicationView`-based applications, prefer connecting controller retranslation to the base view signal:
+
+```python
+self._view.language_changed.connect(self._retranslate)
+```
+
+Use the broker `LocalizationTopics.LANGUAGE_CHANGED` event only when a non-Qt consumer needs to react.
 
 ### 7. Initial render and runtime retranslation are separate concerns
 

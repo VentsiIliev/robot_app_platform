@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout
 
 from src.applications.base.i_application_view import IApplicationView
@@ -100,11 +100,6 @@ class RobotSettingsView(IApplicationView):
 
     def get_targeting_definitions(self) -> dict:
         return self._targeting_tab.get_values()
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def add_movement_group(self, name: str, defn, group) -> None:
         self._movement_tab.add_group(name, defn, group)

@@ -2,7 +2,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import pyqtSignal, Qt, QEvent
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QFrame,
@@ -306,11 +306,6 @@ class ContourMatchingTesterView(IApplicationView):
     def _on_workpiece_row_changed(self, row: int) -> None:
         if row >= 0:
             self.workpiece_selected.emit(row)
-
-    def changeEvent(self, event: QEvent) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

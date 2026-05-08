@@ -2,6 +2,7 @@ from typing import List
 import logging
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
+from .fairino_ros2_client import FakeRos2Client
 
 _logger = logging.getLogger(__name__)
 
