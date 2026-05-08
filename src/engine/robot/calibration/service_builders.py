@@ -113,6 +113,7 @@ def build_robot_system_calibration_service(robot_system) -> RobotCalibrationServ
         run_height_measurement=calib_settings.run_height_measurement,
         settings_service=settings_service,
         calibration_settings_key=CommonSettingsID.ROBOT_CALIBRATION,
+        vision_calibration_settings_key=CommonSettingsID.CALIBRATION_VISION_SETTINGS,
         robot_config=robot_settings,
         robot_config_key=CommonSettingsID.ROBOT_CONFIG,
         camera_tcp_offset_config=calib_settings.camera_tcp_offset,

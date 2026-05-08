@@ -5,12 +5,18 @@ from src.applications.calibration_settings.service.i_calibration_settings_servic
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.vision.camera_settings_serializer import CameraSettings
+from src.engine.vision.i_vision_service import IVisionService
 
 
 class CalibrationSettingsApplicationService(ICalibrationSettingsService):
 
-    def __init__(self, settings_service: ISettingsService):
+    def __init__(
+        self,
+        settings_service: ISettingsService,
+        vision_service: IVisionService | None = None,
+    ):
         self._settings_service = settings_service
+        self._vision_service = vision_service
 
     def load_settings(self) -> CalibrationSettingsData:
         vision = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
@@ -29,5 +35,7 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
                 merged = dict(camera_settings.data)
                 merged.update(settings.vision.to_dict())
                 self._settings_service.save(CommonSettingsID.VISION_CAMERA_SETTINGS, CameraSettings(data=merged))
+                if self._vision_service is not None:
+                    self._vision_service.update_settings(merged)
         except Exception:
             pass

@@ -376,7 +376,10 @@ def _build_calibration_settings_application(robot_system):
         CalibrationSettingsFactory,
     )
 
-    service = CalibrationSettingsApplicationService(robot_system._settings_service)
+    service = CalibrationSettingsApplicationService(
+        robot_system._settings_service,
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+    )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationSettingsFactory().build(
