@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 
-from PyQt6.QtWidgets import QComboBox, QApplication
+from PyQt6.QtWidgets import QComboBox, QApplication, QWidget
 from PyQt6.QtCore import pyqtSignal, QEvent
 
 _DEFAULT_LANGUAGES: List[Tuple[str, str]] = [("en", "English"), ("bg", "Bulgarian")]
@@ -49,13 +49,19 @@ class LanguageSelectorWidget(QComboBox):
         self._post_language_change_events()
 
     def _post_language_change_events(self):
-        """Post LanguageChange event to all top-level widgets in the application"""
+        """Post LanguageChange event to top-level widgets and their descendants."""
         app = QApplication.instance()
         if app and isinstance(app, QApplication):
+            posted = 0
             for widget in app.topLevelWidgets():
-                event = QEvent(QEvent.Type.LanguageChange)
-                app.postEvent(widget, event)
-            print(f"[LanguageSelector] Posted LanguageChange events to {len(app.topLevelWidgets())} top-level widgets")
+                if not isinstance(widget, QWidget):
+                    continue
+                app.postEvent(widget, QEvent(QEvent.Type.LanguageChange))
+                posted += 1
+                for child in widget.findChildren(QWidget):
+                    app.postEvent(child, QEvent(QEvent.Type.LanguageChange))
+                    posted += 1
+            print(f"[LanguageSelector] Posted LanguageChange events to {posted} widgets")
 
     def updateSelectedLang(self):
         """Update the selected language in the dropdown"""
@@ -64,5 +70,4 @@ class LanguageSelectorWidget(QComboBox):
             if code == self.current_language:
                 self.setCurrentIndex(self.findText(display))
                 return
-
 

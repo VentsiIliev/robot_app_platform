@@ -1,11 +1,18 @@
+import tempfile
 import sys
 import unittest
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from src.applications.user_management.domain.default_schema import DEFAULT_USER_SCHEMA
 from src.applications.user_management.domain.user_schema import UserRecord
+from src.applications.user_management.service.stub_user_management_service import StubUserManagementService
+from src.applications.user_management.user_management_factory import UserManagementFactory
 from src.applications.user_management.view.user_management_view import UserManagementView
+from src.engine.localization.localization_service import LocalizationService
+from pl_gui.shell.ui.LanguageSelectorWidget import LanguageSelectorWidget
 
 
 def _record(uid, first="Alice", last="Test", role="Admin", email="a@b.com"):
@@ -201,3 +208,53 @@ class TestUserManagementViewSignals(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUserManagementLocalizationRegression(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls._app = QApplication.instance() or QApplication(sys.argv)
+        cls._shared_translations_dir = (
+            Path(__file__).resolve().parents[3]
+            / "src"
+            / "applications"
+            / "localization"
+        )
+
+    def setUp(self):
+        self._temp_dir = tempfile.TemporaryDirectory()
+        self._service = LocalizationService(
+            str(self._shared_translations_dir),
+            state_file=str(Path(self._temp_dir.name) / "localization.json"),
+        )
+        self._service.set_language("en")
+
+        self._selector = LanguageSelectorWidget(languages=self._service.available_languages())
+        self._service.sync_selector(self._selector)
+        self._selector.languageChanged.connect(self._service.set_language)
+
+        self._view = UserManagementFactory().build(StubUserManagementService())
+        self._window = QWidget()
+        layout = QVBoxLayout(self._window)
+        layout.addWidget(self._selector)
+        layout.addWidget(self._view)
+        self._window.show()
+        self._app.processEvents()
+
+    def tearDown(self):
+        self._window.close()
+        self._view.clean_up()
+        self._temp_dir.cleanup()
+        self._app.processEvents()
+
+    def test_selector_retranslates_embedded_user_management_view(self):
+        self.assertEqual(self._view._title_label.text(), "User Management")
+        self.assertEqual(self._view._status.text(), "2 users loaded")
+
+        self._selector.setCurrentIndex(self._selector.findText("Български"))
+        self._app.processEvents()
+
+        self.assertEqual(self._view._title_label.text(), "Управление на потребители")
+        self.assertEqual(self._view._btn_refresh.text(), "Обнови")
+        self.assertEqual(self._view._status.text(), "Заредени 2 потребителя")
