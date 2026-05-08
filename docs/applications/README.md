@@ -1,6 +1,6 @@
 # `src/applications/` — Application System
 
-The `applications` package contains all pluggable GUI features of the platform. Each application is a self-contained MVC unit wired into the shell at startup via `ApplicationSpec` entries on the robot system. Applications are the only place in the codebase where the GUI and platform services meet.
+The `applications` package contains all pluggable GUI features of the platform. Each application is a self-contained MVC unit exposed to the shell via `ApplicationSpec` entries on the robot system. Applications are the only place in the codebase where the GUI and platform services meet.
 
 ---
 
@@ -8,10 +8,14 @@ The `applications` package contains all pluggable GUI features of the platform. 
 
 ```
 Bootstrap
+  └─ visible ApplicationSpec metadata
+       └─ shell descriptors only             ← folders/icons available at login
+
+First app open
   └─ ApplicationSpec.factory(robot_system)
        └─ IApplication
-            ├─ register(messaging_service)    ← receive broker reference at startup
-            └─ create_widget()                ← lazy: called when user opens folder
+            ├─ register(messaging_service)    ← receive broker reference on first open
+            └─ create_widget()                ← builds widget for the shell
                     └─ ApplicationFactory.build(service)
                          ├─ IApplicationModel      ← state + I/O, no Qt
                          ├─ IApplicationView       ← pure Qt, no logic
@@ -58,12 +62,13 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 
 ```
 Bootstrap startup:
-  for each ApplicationSpec in robot_system.shell.applications:
-    application = spec.factory(robot_system)          ← returns IApplication instance
-    application.register(messaging_service)        ← broker reference stored
-    shell.register(application)                    ← stored for lazy widget creation
+  for each visible ApplicationSpec in robot_system.shell.applications:
+    application_loader stores shell descriptor metadata
+    application_loader stores deferred builder only
 
 User opens folder:
+  application = spec.factory(robot_system)            ← first-open only
+  application.register(messaging_service)
   application.create_widget()                      ← instantiates view + controller
     └─ ApplicationFactory.build(service)
          ├─ _create_model(service)
@@ -104,7 +109,8 @@ class YourRobotApp(BaseRobotSystem):
 
 ## Design Notes
 
-- **Lazy widget creation**: `create_widget()` is only called when the user first navigates to that folder. Applications are initialized at startup but widgets are not created until needed.
+- **Lazy application creation**: visible apps contribute only shell metadata at startup. `spec.factory(robot_system)`, `register(...)`, and `create_widget()` all happen on first open.
+- **Shell stays UI-only**: the shell receives descriptors plus a `widget_factory(app_name)` callback; it does not know about `robot_system`, `ApplicationSpec`, or application lifecycle.
 - **GC safety**: `ApplicationFactory.build()` assigns `view._controller = controller`, keeping the controller alive as long as the view exists. Never write this line yourself.
 - **Layer separation**: Each layer has strict import rules — see `APPLICATION_BLUEPRINT/APPLICATION_GUIDE.MD`.
 - **Cross-thread safety**: When broker callbacks arrive from background threads (e.g., weight readings), controllers use a `_Bridge(QObject)` with `pyqtSignal` attributes to marshal data back to the Qt main thread safely. See `glue_cell_settings/controller/`.

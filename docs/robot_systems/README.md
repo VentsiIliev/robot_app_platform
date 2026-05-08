@@ -105,7 +105,7 @@ The intended split is:
 | `ServiceSpec` | `name`, `service_type`, `required`, `description`, `builder` | Declares one service contract; optional `builder` overrides the default registry builder |
 | `ShellSetup` | `folders: List[FolderSpec]`, `applications: List[ApplicationSpec]` | GUI shell structure |
 | `FolderSpec` | `folder_id`, `name`, `display_name`, `translation_key` | One navigation folder in the shell |
-| `ApplicationSpec` | `name`, `folder_id`, `icon`, `factory` | One application registered to a folder; `factory(robot_system) → IApplication` |
+| `ApplicationSpec` | `name`, `folder_id`, `icon`, `factory` | One application registered to a folder; its metadata feeds the shell at login and `factory(robot_system) → IApplication` is invoked on first open |
 | `RemoteTcpDefinition` | `name`, `display_name` | Declares a named remote TCP that the system exposes |
 | `DispenseChannelDefinition` | `id`, `label`, `weight_cell_id`, `pump_motor_address`, `default_glue_type` | Declares one logical dispense lane composed of one scale and one pump |
 | `ToolDefinition` | `id`, `name` | Declares one tool/gripper identity exposed by the system |

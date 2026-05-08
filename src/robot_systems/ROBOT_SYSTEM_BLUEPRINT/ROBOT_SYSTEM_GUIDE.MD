@@ -141,7 +141,7 @@ File: `my_robot_system.py`
 
 Goal:
 - `SystemBuilder` can instantiate the robot system class
-- the shell can discover the initial application list
+- the shell can discover the initial application list and show folder/icon metadata before any app is instantiated
 
 ### 1a. Define startup composition
 File: `bootstrap_provider.py`

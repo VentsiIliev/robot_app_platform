@@ -43,8 +43,8 @@ class IApplication(ABC):
 ```
 
 Called by the bootstrap in two phases:
-1. `register(messaging_service)` — called at startup; store the broker reference here
-2. `create_widget()` — called lazily when the user opens the application's folder; must return the root widget
+1. `register(messaging_service)` — called when the application is first resolved for opening; store the broker reference here
+2. `create_widget()` — called when the user opens the application's folder; must return the root widget
 
 ---
 
@@ -59,7 +59,7 @@ class WidgetApplication(IApplication):
     def create_widget(self) -> AppWidget: ...
 ```
 
-Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messaging_service` in `create_widget()`. The `messaging_service` is captured in `register()`.
+Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messaging_service` in `create_widget()`. The `messaging_service` is captured in `register()`. In the current bootstrap flow, both happen lazily on first open rather than during shell startup.
 
 ```python
 # Application does not need broker:

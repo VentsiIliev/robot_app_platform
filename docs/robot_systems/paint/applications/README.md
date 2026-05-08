@@ -7,6 +7,8 @@ The shell registration happens in:
 - `src/robot_systems/paint/paint_robot_system.py`
 - `src/robot_systems/paint/application_wiring.py`
 
+At startup the paint shell receives only app metadata from those declarations. The builder functions in `application_wiring.py` are invoked lazily when the user first opens the app.
+
 ---
 
 ## Folder Layout

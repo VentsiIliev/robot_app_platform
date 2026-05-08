@@ -629,8 +629,9 @@ class YourRobotSystem(BaseRobotSystem):
 ```
 
 Bootstrap automatically:
-- calls `spec.factory(robot_system)` → gets the `WidgetApplication` instance
-- calls `application.register(messaging_service)`
+- registers `ApplicationSpec` metadata so the shell can show the icon and folder entry immediately
+- calls `spec.factory(robot_system)` on first open → gets the `WidgetApplication` instance
+- calls `application.register(messaging_service)` on first open
 - calls `application.create_widget()` when the user opens that folder
 
 ---
