@@ -281,7 +281,10 @@ class TestPaintApplicationWiring(unittest.TestCase):
 
         camera_service_cls.assert_called_once_with(settings_service="settings", vision_service="vision")
         camera_factory.build.assert_called_once_with("camera-service", messaging, jog_service="jog")
-        calibration_service_cls.assert_called_once_with("settings")
+        calibration_service_cls.assert_called_once_with(
+            "settings",
+            vision_service="vision",
+        )
         calibration_factory.build.assert_called_once_with("calibration-service", messaging=messaging, jog_service="jog")
         work_area_service_cls.assert_called_once_with(work_area_service="work_areas", vision_service="vision")
         work_area_factory_cls.assert_called_once_with(work_area_definitions=["area"])

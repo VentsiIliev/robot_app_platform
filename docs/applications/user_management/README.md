@@ -147,12 +147,18 @@ They are translated inline inside `set_permissions()`:
 self._table.setHorizontalHeaderLabels([self._t(r) for r in role_values])
 ```
 
-Because `PermissionsController._refresh()` calls `set_permissions()` on every language-change event (via broker subscription), no additional `changeEvent` hook is needed in `PermissionsView`.
+Because `PermissionsController._refresh()` repopulates the table, the role-value headers update whenever the table is refreshed. `PermissionsView` also has its own `changeEvent` retranslation hook for widget-owned static text.
 
 ### Translation catalog keys (context `"UserManagement"`)
 
-Field labels and role values must exist as keys in every catalog under
-`src/robot_systems/<system>/storage/translations/`. The glue system catalogs (`en.json`, `bg.json`) include:
+Field labels and role values must exist as keys in the active catalog set. Shared keys can now live in:
+
+- `src/applications/localization/*.json`
+- optionally overridden by `src/robot_systems/<system>/storage/translations/*.json`
+
+`UserManagement` is currently shared through `src/applications/localization/en.json` and `bg.json`. The glue system may still override or extend those entries in its own catalogs.
+
+Current shared keys include:
 
 ```
 "ID", "First Name", "Last Name", "Password", "Role", "Email"
@@ -164,7 +170,8 @@ Field labels and role values must exist as keys in every catalog under
 ## Design Notes
 
 - **No robot/vision dependency**: `UserManagement` is wired without calling `get_service()` or `get_optional_service()`. It is purely settings + persistence.
-- **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes. The same field `label` is used as both the table column header and the translation key — keep them consistent.
+- **Schema injection**: the view builds its form dynamically from `UserSchema.fields`, so adding a new field requires only a schema change — no view code changes. The same field `label` is used as both the table column header and the translation key, so keep labels stable once translated.
+- **Regression coverage exists for runtime language changes**: the test suite now covers the real selector-to-embedded-view path, so a future break in `LanguageChange` propagation or shared catalog coverage should fail tests.
 - **CSV persistence**: straightforward for operator-level access management; not intended for high-security production use.
 - **Auth is now a thin adapter**: login/authentication no longer depends directly on `IUserRepository`. Instead, `AuthUserRepositoryAdapter` exposes only the minimal auth-facing data needed by the shared engine `AuthenticationService`.
 - **Roles are robot-system-defined**: the permissions tab and first-admin creation no longer rely on a fixed shared `Role` enum. The robot system supplies the available role values, the default permission role values, and any protected app-role invariants.

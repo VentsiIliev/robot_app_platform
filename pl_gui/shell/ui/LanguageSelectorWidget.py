@@ -3,6 +3,8 @@ from typing import List, Optional, Tuple
 from PyQt6.QtWidgets import QComboBox, QApplication, QWidget
 from PyQt6.QtCore import pyqtSignal, QEvent
 
+from pl_gui.shell.ui.styles import BORDER, PRIMARY, PRIMARY_DARK, TEXT_PRIMARY
+
 _DEFAULT_LANGUAGES: List[Tuple[str, str]] = [("en", "English"), ("bg", "Bulgarian")]
 
 
@@ -28,6 +30,7 @@ class LanguageSelectorWidget(QComboBox):
 
         # Populate dropdown with display names
         self.addItems([display for _code, display in self.languages])
+        self._apply_styles()
 
         # Set current language
         self.updateSelectedLang()
@@ -71,3 +74,51 @@ class LanguageSelectorWidget(QComboBox):
                 self.setCurrentIndex(self.findText(display))
                 return
 
+    def _apply_styles(self) -> None:
+        """Keep the shell language selector readable across hover and popup states."""
+        self.setStyleSheet(
+            f"""
+            QComboBox {{
+                background-color: white;
+                color: {TEXT_PRIMARY};
+                border: 1px solid {BORDER};
+                border-radius: 6px;
+                padding: 6px 10px;
+                min-height: 28px;
+            }}
+            QComboBox:hover,
+            QComboBox:focus,
+            QComboBox:on {{
+                color: {TEXT_PRIMARY};
+                border: 1px solid {PRIMARY};
+                background-color: #F7F1FB;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                padding-right: 8px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: white;
+                color: {TEXT_PRIMARY};
+                border: 1px solid {BORDER};
+                outline: none;
+                selection-background-color: #EDE7F6;
+                selection-color: {TEXT_PRIMARY};
+            }}
+            QComboBox QAbstractItemView::item {{
+                min-height: 28px;
+                padding: 6px 10px;
+                color: {TEXT_PRIMARY};
+                background: white;
+            }}
+            QComboBox QAbstractItemView::item:hover,
+            QComboBox QAbstractItemView::item:selected {{
+                color: {TEXT_PRIMARY};
+                background: #EDE7F6;
+            }}
+            QComboBox QAbstractItemView::item:selected:active {{
+                color: white;
+                background: {PRIMARY_DARK};
+            }}
+            """
+        )

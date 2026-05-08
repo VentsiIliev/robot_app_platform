@@ -29,22 +29,23 @@ This is already a defensible architecture and does not need a rewrite.
 
 Current state:
 
-- `LocalizationService` accepts a single `translations_dir`
-- shared applications depend on robot-system-specific catalog copies
+- `LocalizationService` already accepts multiple catalog roots
+- bootstrap already loads shared application catalogs first and robot-system catalogs second
+- shared applications no longer need robot-system-specific copies for every common string
 
 Target state:
 
-- `LocalizationService` should accept multiple catalog roots in priority order
+- keep multiple catalog roots in priority order
 - merge order should be:
   1. shared platform or application catalogs
   2. robot-system catalogs
   3. selected language overlay on top of default language
 
-Recommended API direction:
+Current API:
 
 ```python
 LocalizationService(
-    catalog_roots=[
+    translations_dir=[
         ".../src/applications",
         ".../src/robot_systems/glue/storage/translations",
     ],
@@ -75,10 +76,14 @@ src/applications/localization/en.json
 src/applications/localization/bg.json
 ```
 
-Preferred option:
+Current implementation choice:
 
-- per-application catalogs for shared apps
+- one shared catalog root under `src/applications/localization`
 - per-robot-system override catalogs for system-specific wording
+
+Possible future refinement:
+
+- split the shared root into per-application catalogs if ownership becomes too coarse
 
 Reason:
 
@@ -88,22 +93,21 @@ Reason:
 
 ### 3. Standardize the view contract
 
-Current problem:
+Current state:
 
-- many views override `changeEvent()` only to call `on_language_changed()`
-- `on_language_changed()` is often inherited from `AppWidget` and does nothing useful
+- `IApplicationView` already provides a no-op `retranslateUi()`
+- `IApplicationView.on_language_changed()` already calls `retranslateUi()` and emits `language_changed`
+- many duplicate `changeEvent()` forwarding overrides have already been removed
 
 Target state:
 
 - every view has a real `retranslateUi()` method
 - base classes call it consistently
 
-Recommended changes:
+Remaining changes:
 
-1. Add a default no-op `retranslateUi()` to `IApplicationView`.
-2. Let `IApplicationView` or `AppWidget` own the `LanguageChange` behavior once.
-3. Remove duplicate `changeEvent()` overrides from views that only forward to `on_language_changed()`.
-4. Use `retranslateUi()` as the required extension point for view text refresh.
+1. Continue removing duplicate `changeEvent()` overrides from views that only forward to `on_language_changed()`.
+2. Use `retranslateUi()` as the required extension point for view text refresh.
 
 Result:
 
@@ -113,12 +117,11 @@ Result:
 
 ### 4. Standardize controller participation
 
-Current problem:
+Current state:
 
-- controller retranslation is ad hoc
-- some controllers subscribe to `LocalizationTopics.LANGUAGE_CHANGED`
-- some rely on custom view signals
-- some do nothing
+- `IApplicationView.language_changed` already exists
+- `UserManagementController` already uses `view.language_changed`
+- controller retranslation is still inconsistent across the rest of the codebase
 
 Target state:
 
@@ -126,9 +129,8 @@ Target state:
 
 Recommended base pattern:
 
-- add an optional `on_language_changed()` method to `IApplicationController` or a reusable controller mixin
-- expose a generic `language_changed = pyqtSignal()` from `IApplicationView`
-- have the base view emit it during `LanguageChange`
+- keep `IApplicationView.language_changed`
+- optionally add a reusable controller mixin if repeated controller patterns start to accumulate
 
 Then a controller can do:
 
@@ -201,11 +203,11 @@ This should become the standard verification step for localization work.
 
 ### Phase 1: Foundation
 
-1. Add multi-root catalog support to `LocalizationService`.
-2. Add `retranslateUi()` to `IApplicationView`.
-3. Add a base `language_changed` signal for views.
-4. Add optional controller retranslation pattern.
-5. Add localization audit script.
+1. Keep multi-root catalog support in `LocalizationService`.
+2. Keep `retranslateUi()` on `IApplicationView`.
+3. Keep the base `language_changed` signal for views.
+4. Expand the controller retranslation pattern to the remaining applications that need it.
+5. Add a localization audit script.
 
 Expected outcome:
 
@@ -267,8 +269,8 @@ This should happen after the shared infrastructure work, so those dashboards can
 
 | Application | Current State | Target | Work Plan |
 |---|---|---|---|
-| `login` | actual in `glue` only | foundation reference app | Move shared strings into app-owned catalogs; keep controller `_t()` pattern |
-| `user_management` | actual in `glue` only | foundation reference app | Move shared strings into app-owned catalogs; keep dynamic refresh; localize schema-driven labels through stable keys |
+| `login` | actual in `glue` only | foundation reference app | Move shared strings into shared catalogs or app-owned shared catalogs; keep controller `_t()` pattern |
+| `user_management` | actual in `glue` and `paint` | foundation reference app | Keep shared catalog ownership; preserve dynamic refresh path and selector regression coverage |
 | `modbus_settings` | partial | actual | Add `retranslateUi()`, localize tab names, labels, action buttons, status messages |
 | `device_control` | partial | actual | Localize title, device labels, ON/OFF buttons if desired, availability text, dynamic motor row labels where applicable |
 | `glue_cell_settings` | partial | actual | Localize tab titles, cell labels, child tab widgets, save/tare actions, state labels |
@@ -307,7 +309,7 @@ This should happen after the shared infrastructure work, so those dashboards can
 
 Recommended changes:
 
-1. Change `LocalizationService` to accept multiple catalog roots.
+1. Preserve current multiple catalog root support.
 2. Preserve current fallback merge semantics.
 3. Add helper methods for:
    - listing loaded roots

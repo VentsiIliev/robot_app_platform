@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.targeting import TargetFrameDefinition
+from src.shared_contracts.declarations import WorkAreaDefinition
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.navigation import PaintNavigationService
 from src.robot_systems.paint.targeting.frames import build_paint_target_frames
@@ -128,10 +129,32 @@ class TestPaintNavigationService(unittest.TestCase):
 
 
 class TestPaintCalibrationProvider(unittest.TestCase):
-    def test_build_calibration_navigation_sets_spray_area_before_move(self):
+    def test_build_calibration_navigation_rejects_undefined_paint_area(self):
         work_area_service = MagicMock()
         navigation = MagicMock()
         robot_system = MagicMock()
+        robot_system.get_work_area_definitions.return_value = [
+            WorkAreaDefinition(id="paint", label="Paint", color="#FF8C32")
+        ]
+        robot_system.get_service.side_effect = lambda service_id: {
+            CommonServiceID.WORK_AREAS: work_area_service,
+            CommonServiceID.NAVIGATION: navigation,
+        }[service_id]
+        provider = PaintRobotSystemCalibrationProvider(robot_system)
+
+        with self.assertRaisesRegex(ValueError, "Calibration area 'spray' is not declared"):
+            provider.build_calibration_navigation()
+
+        work_area_service.set_active_area_id.assert_not_called()
+        navigation.move_to_group.assert_not_called()
+
+    def test_build_calibration_navigation_sets_area_when_declared(self):
+        work_area_service = MagicMock()
+        navigation = MagicMock()
+        robot_system = MagicMock()
+        robot_system.get_work_area_definitions.return_value = [
+            WorkAreaDefinition(id="spray", label="Spray", color="#FF8C32")
+        ]
         robot_system.get_service.side_effect = lambda service_id: {
             CommonServiceID.WORK_AREAS: work_area_service,
             CommonServiceID.NAVIGATION: navigation,

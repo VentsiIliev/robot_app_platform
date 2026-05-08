@@ -19,29 +19,39 @@ It distinguishes between:
 
 ## Runtime Summary
 
-Localization is always bootstrapped in `src/bootstrap/main.py`, but catalogs are loaded from the active robot system's `metadata.translations_root`.
+Localization is always bootstrapped in `src/bootstrap/main.py`. Catalogs are now loaded from:
+
+- shared application catalogs under `src/applications/localization/`
+- the active robot system's `metadata.translations_root`
 
 Current bootstrap:
 
 - `PaintBootstrapProvider` is active in `src/bootstrap/main.py`
 
-Catalog inventory in the repository:
+Catalog inventory relevant to runtime today:
 
+- `src/applications/localization/en.json`
+- `src/applications/localization/bg.json`
 - `src/robot_systems/glue/storage/translations/en.json`
 - `src/robot_systems/glue/storage/translations/bg.json`
 - `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/storage/translations/en.json`
 
 Important consequence:
 
-- with the current `paint` bootstrap, the application starts with a localization service, but there are no `paint` catalogs to provide translated strings
-- today, no application is effectively translated at runtime when launching the default app configuration
-- the only robot system with real multi-language catalog coverage is `glue`
+- with the current `paint` bootstrap, shared shell and shared application strings can now be translated through `src/applications/localization/`
+- `paint` still has no robot-specific translation catalog, so robot-system-specific screens remain untranslated unless they use only shared contexts
+- `glue` remains the only robot system with broader robot-specific catalog coverage
 
 ## Main Findings
 
-### 1. Only three application areas are actually localized today
+### 1. Shared and glue-specific localized areas exist today
 
-When the `glue` robot system is active, these have real code-level localization plus matching catalog entries:
+When the `paint` robot system is active:
+
+- shared shell folder labels are localized through the shared `Shell` context
+- `UserManagement` is localized through the shared `UserManagement` context
+
+When the `glue` robot system is active, these also have real code-level localization plus matching catalog entries:
 
 - `Login`
 - `UserManagement` including `PermissionsView`
@@ -70,9 +80,9 @@ def changeEvent(self, event) -> None:
 
 In many views, `on_language_changed()` is inherited from `AppWidget` and only prints a debug line. That means the hook exists, but does not retranslate anything.
 
-### 4. Shared applications depend on per-robot-system catalogs
+### 4. Shared applications no longer have to depend on per-robot-system catalogs
 
-The current catalog model lives entirely under `src/robot_systems/<system>/storage/translations/`. This makes shared application adoption more expensive because every system must copy the same shared application strings into its own catalog files.
+The runtime now supports a shared catalog root. Shared application strings can live once under `src/applications/localization/`, while robot systems keep only their system-specific overrides.
 
 ### 5. Shell folder names are partially ready, app names are not
 
@@ -86,8 +96,8 @@ The current catalog model lives entirely under `src/robot_systems/<system>/stora
 
 | Application | Status | Evidence | Catalog Coverage | Notes |
 |---|---|---|---|---|
-| `login` | `actual` in `glue`, `none` in current `paint` runtime | `LoginView.retranslateUi()`, `LoginController._t()` | `glue/en.json`, `glue/bg.json` | Properly wired, but only works with `glue` catalogs |
-| `user_management` | `actual` in `glue`, `none` in current `paint` runtime | `UserManagementView.retranslateUi()`, `PermissionsView.retranslateUi()`, controllers refresh on language change | `glue/en.json`, `glue/bg.json` | Best example among shared apps |
+| `login` | `actual` in `glue`, `none` in current `paint` runtime | `LoginView.retranslateUi()`, `LoginController._t()` | `glue/en.json`, `glue/bg.json` | Still catalog-backed only in `glue` |
+| `user_management` | `actual` in `glue` and current `paint` runtime | `UserManagementView.retranslateUi()`, `PermissionsView.retranslateUi()`, controllers refresh on language change | `src/applications/localization/*.json`, `glue/en.json`, `glue/bg.json` | Shared reference app; covered by selector regression test |
 | `modbus_settings` | `partial` | `changeEvent(LanguageChange)` only | none | No real retranslation implementation |
 | `device_control` | `partial` | `changeEvent(LanguageChange)` only | none | Static labels/buttons still hard-coded |
 | `glue_cell_settings` | `partial` | `changeEvent(LanguageChange)` only | none | Tab titles and child labels are not catalog-backed |
@@ -141,9 +151,8 @@ Strengths:
 
 Weak points:
 
-- only one catalog root is supported
-- shared applications cannot ship their own base catalogs
-- translation coverage is hard to audit automatically
+- coverage is still hard to audit automatically
+- shared catalogs are currently centralized in one file rather than app-owned files
 - the service does not help application authors with context naming or missing key discovery
 
 ### Current Application Usage Pattern
@@ -168,7 +177,7 @@ The current system should be improved, not replaced.
 Recommended approach:
 
 1. Keep the JSON + `QTranslator` architecture.
-2. Add layered catalog roots so shared applications can ship base translations and robot systems can override them.
+2. Keep layered catalog roots so shared applications can ship base translations and robot systems can override them.
 3. Standardize view retranslation through a real `retranslateUi()` contract on `IApplicationView`.
 4. Add a base controller pattern for optional language-change handling.
 5. Localize shell folders and application names using explicit translation keys.
