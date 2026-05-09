@@ -44,6 +44,9 @@ class WorkpieceEditorController(IApplicationController):
         self._latest_frame_shape = None
         self._latest_frame_bgr = None
         self._dxf_test_button = None
+        self._manual_align_button = None
+        self._manual_align_dialog = None
+        self._manual_align_snapshot = None
         self._current_dxf_path = ""
         self._captured_pickup_point = None
         self._loaded_raw_workpiece = None
@@ -308,11 +311,15 @@ class WorkpieceEditorController(IApplicationController):
         align_button = QPushButton("Capture + Align DXF Test")
         align_button.clicked.connect(self._on_capture_align_dxf_test)
         row.addWidget(align_button)
+        manual_align_button = QPushButton("Adjust DXF Align")
+        manual_align_button.clicked.connect(self._on_adjust_dxf_alignment)
+        row.addWidget(manual_align_button)
         match_button = QPushButton("Match Workpiece Test")
         match_button.clicked.connect(self._on_match_workpiece_test)
         row.addWidget(match_button)
         layout.insertLayout(0, row)
         self._dxf_test_button = load_button
+        self._manual_align_button = manual_align_button
 
     def _on_load_dxf_test(self) -> None:
         dxf_path, _ = QFileDialog.getOpenFileName(
@@ -413,10 +420,173 @@ class WorkpieceEditorController(IApplicationController):
             self._logger.exception("Failed to match saved workpieces: %s", exc)
             show_warning(self._view, "Match Workpiece Failed", str(exc))
 
-    def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour) -> dict:
+    def _on_adjust_dxf_alignment(self) -> None:
+        if self._manual_align_dialog is not None:
+            try:
+                self._manual_align_dialog.raise_()
+                self._manual_align_dialog.activateWindow()
+            except Exception:
+                pass
+            return
+
+        dxf_path = self._resolve_current_dxf_path()
+        if not dxf_path:
+            show_warning(self._view, "Adjust DXF Alignment", "No DXF path is selected.")
+            return
+
+        target_contour = self._get_current_editor_workpiece_contour()
+        if len(target_contour) < 3:
+            show_warning(
+                self._view,
+                "Adjust DXF Alignment",
+                "No captured workpiece contour is available for alignment.",
+            )
+            return
+
+        try:
+            from src.engine.cad import import_dxf_to_workpiece_data
+            from src.robot_systems.paint.domain.manual_dxf_alignment_dialog import (
+                ManualDxfAlignmentDialog,
+            )
+
+            raw = import_dxf_to_workpiece_data(dxf_path)
+            image_w, image_h = self._resolve_image_size()
+            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
+            aligned = self._align_raw_workpiece_to_contour(
+                placed,
+                target_contour,
+                max_scale_deviation=0.0,
+                reference_scale_override=1.0,
+            )
+            aligned["dxfPath"] = str(dxf_path)
+
+            self._manual_align_snapshot = self._capture_editor_snapshot()
+            dialog = ManualDxfAlignmentDialog(
+                base_raw=aligned,
+                preview_callback=self._preview_manual_dxf_alignment,
+                parent=self._view,
+            )
+            dialog.accepted.connect(self._apply_manual_dxf_alignment)
+            dialog.rejected.connect(self._cancel_manual_dxf_alignment)
+            dialog.destroyed.connect(self._on_manual_dxf_alignment_closed)
+            self._manual_align_dialog = dialog
+            dialog.show()
+            dialog.raise_()
+            dialog.activateWindow()
+        except Exception as exc:
+            self._logger.exception("Failed to adjust DXF alignment: %s", exc)
+            self._manual_align_snapshot = None
+            show_warning(self._view, "Adjust DXF Alignment Failed", str(exc))
+
+    def _align_raw_workpiece_to_contour(
+        self,
+        raw: dict,
+        captured_contour,
+        **kwargs,
+    ) -> dict:
         from src.robot_systems.paint.processes.paint.align import align_raw_workpiece_to_contour
 
-        return align_raw_workpiece_to_contour(raw, captured_contour)
+        return align_raw_workpiece_to_contour(raw, captured_contour, **kwargs)
+
+    def _get_current_editor_workpiece_contour(self) -> np.ndarray:
+        try:
+            workpiece_manager = self._view._editor.contourEditor.editor_with_rulers.editor.workpiece_manager
+            contours_by_layer = workpiece_manager.get_contours() or {}
+        except Exception:
+            return np.empty((0, 2), dtype=np.float64)
+
+        main_layer = contours_by_layer.get("Main") or contours_by_layer.get("Workpiece") or []
+        if isinstance(main_layer, dict):
+            main_layer = main_layer.get("contours") or []
+        if not main_layer:
+            return np.empty((0, 2), dtype=np.float64)
+        return self._normalize_contour_points(main_layer[0])
+
+    def _resolve_current_dxf_path(self) -> str:
+        if self._current_dxf_path:
+            return str(self._current_dxf_path)
+        try:
+            form = getattr(self._view._editor, "additional_data_form", None)
+            if form is not None and hasattr(form, "get_data"):
+                return str(form.get_data().get("dxfPath", "") or "").strip()
+        except Exception:
+            self._logger.debug("Failed to resolve dxfPath from active form", exc_info=True)
+        return ""
+
+    def _preview_manual_dxf_alignment(self, raw: dict) -> None:
+        try:
+            self._load_raw_into_editor(dict(raw or {}), storage_id=None)
+        except Exception:
+            self._logger.debug("Failed to preview manual DXF alignment", exc_info=True)
+
+    def _apply_manual_dxf_alignment(self) -> None:
+        dialog = self._manual_align_dialog
+        if dialog is None:
+            return
+        try:
+            adjusted = dialog.result_raw()
+            adjusted["dxfPath"] = self._resolve_current_dxf_path() or str(adjusted.get("dxfPath", "") or "")
+            self._load_raw_into_editor(adjusted, storage_id=None)
+            show_info(self._view, "DXF Alignment", "Manual DXF alignment applied.")
+        except Exception as exc:
+            self._logger.exception("Failed to apply manual DXF alignment: %s", exc)
+            show_warning(self._view, "DXF Alignment", str(exc))
+            self._cancel_manual_dxf_alignment()
+            return
+        self._manual_align_snapshot = None
+        try:
+            dialog.close()
+        except Exception:
+            pass
+
+    def _cancel_manual_dxf_alignment(self) -> None:
+        snapshot = self._manual_align_snapshot
+        self._manual_align_snapshot = None
+        if not snapshot:
+            return
+        try:
+            self._restore_editor_snapshot(snapshot)
+        except Exception:
+            self._logger.debug("Failed to restore editor state after manual DXF alignment cancel", exc_info=True)
+
+    def _on_manual_dxf_alignment_closed(self, *_args) -> None:
+        self._manual_align_dialog = None
+
+    def _capture_editor_snapshot(self) -> dict | None:
+        try:
+            form = getattr(self._view._editor, "additional_data_form", None)
+            form_data = copy.deepcopy(form.get_data()) if form is not None and hasattr(form, "get_data") else {}
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = copy.deepcopy(inner.workpiece_manager.export_editor_data())
+            return {
+                "form_data": form_data,
+                "editor_data": editor_data,
+                "current_dxf_path": str(self._current_dxf_path or ""),
+                "loaded_raw_workpiece": copy.deepcopy(self._loaded_raw_workpiece),
+            }
+        except Exception:
+            self._logger.debug("Failed to capture editor snapshot", exc_info=True)
+            return None
+
+    def _restore_editor_snapshot(self, snapshot: dict) -> None:
+        inner = self._view._editor.contourEditor.editor_with_rulers.editor
+        editor_data = snapshot.get("editor_data")
+        if editor_data is not None:
+            inner.workpiece_manager.clear_workpiece()
+            inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
+        form = getattr(self._view._editor, "additional_data_form", None)
+        form_data = snapshot.get("form_data") or {}
+        if form is not None:
+            for key, value in form_data.items():
+                if hasattr(form, "set_field_value"):
+                    form.set_field_value(key, value)
+        self._current_dxf_path = str(snapshot.get("current_dxf_path", "") or "")
+        self._loaded_raw_workpiece = copy.deepcopy(snapshot.get("loaded_raw_workpiece"))
+        try:
+            self._view._editor.pointManagerWidget.refresh_points()
+            inner.update()
+        except Exception:
+            self._logger.debug("Failed to refresh editor after restoring snapshot", exc_info=True)
 
     def _save_workpiece_alignment_debug_plot(self, original_raw: dict, aligned_raw: dict) -> None:
         try:

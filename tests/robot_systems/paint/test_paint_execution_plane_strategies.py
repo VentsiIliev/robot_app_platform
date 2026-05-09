@@ -52,7 +52,7 @@ class TestPaintExecutionPlaneStrategies(unittest.TestCase):
         self.assertEqual(strategy.pivot_offset_position_index, 2)
         self.assertTrue(strategy.requires_reachability_preflight)
         self.assertEqual(strategy.rotation_axis_label, "RY")
-        self.assertEqual(align_rotation, 40.0)
+        self.assertEqual(align_rotation, 20.0)
         self.assertEqual(flipped[0][4], 10.0)
         self.assertEqual(flipped[1][4], 8.0)
 

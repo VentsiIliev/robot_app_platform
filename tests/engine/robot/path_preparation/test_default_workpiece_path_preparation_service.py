@@ -95,6 +95,30 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertTrue(job["source_has_dxf"])
         pickup_rz.assert_called_once()
 
+    def test_build_execution_plan_paint_job_prefers_segment_offset_over_workpiece_offset(self):
+        service = _make_service()
+        workpiece = {
+            "offset": 8.0,
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[0, 0], [10, 0], [10, 10]],
+                        "settings": {"offset": "12.5"},
+                    }
+                ]
+            },
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[[100, 200, 300, 180, 0, 10], [110, 210, 300, 180, 0, 20]],
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        job = plan.execution_jobs[0]
+        self.assertEqual(12.5, job["pivot_offset_mm"])
+
     def test_build_execution_plan_workpiece_layer_uses_contour_directed_pickup_rz(self):
         service = _make_service(
             execute_from_workpiece_layer=True,

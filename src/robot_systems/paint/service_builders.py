@@ -12,7 +12,7 @@ def build_vacuum_pump_service(ctx):
     )
     return RelayVacuumPumpController(
         relay_client_path=relay_client_path,
-        host="192.168.2.146",
-        port=5000,
+        host="localhost",
+        port=5003,
         output_num=0,
     )

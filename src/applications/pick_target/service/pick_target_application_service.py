@@ -1,5 +1,9 @@
 import logging
+import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
+from datetime import datetime
+
+import cv2
 
 if TYPE_CHECKING:
     from src.engine.robot.height_measuring.i_height_correction_service import IHeightCorrectionService
@@ -17,6 +21,9 @@ from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
 _logger = logging.getLogger(__name__)
 
 _Z = 300.0
+_DEBUG_CAPTURE_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+)
 
 
 class PickTargetApplicationService(IPickTargetService):
@@ -104,6 +111,7 @@ class PickTargetApplicationService(IPickTargetService):
 
         snapshot = self._capture_snapshot_service.capture_snapshot(source="pick_target.capture")
         frame = snapshot.frame
+        self._save_debug_capture(frame)
         raw_contours = snapshot.contours
 
         from src.applications.pick_target.service.i_pick_target_service import RobotPose
@@ -124,6 +132,18 @@ class PickTargetApplicationService(IPickTargetService):
                 _logger.exception("Failed to process contour centroid")
 
         return frame, pixel_centroids, robot_targets
+
+    def _save_debug_capture(self, frame: Optional[np.ndarray]) -> None:
+        if frame is None:
+            return
+        try:
+            os.makedirs(_DEBUG_CAPTURE_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            path = os.path.join(_DEBUG_CAPTURE_DIR, f"debug_{timestamp}.png")
+            if cv2.imwrite(path, frame):
+                _logger.info("Saved pick-target debug capture to %s", path)
+        except Exception:
+            _logger.exception("Failed to save pick-target debug capture")
 
     def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
         if self._robot is None:
