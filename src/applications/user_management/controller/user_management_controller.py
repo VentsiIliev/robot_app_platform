@@ -13,6 +13,7 @@ from src.applications.user_management.domain.user_schema import UserRecord, User
 from src.applications.user_management.model.user_management_model import UserManagementModel
 from src.applications.user_management.view.user_management_view import UserManagementView
 from src.applications.base.styled_message_box import show_warning, show_info, ask_yes_no
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 
 _logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class _UserDialog(QDialog):
             w = QComboBox()
             w.addItems(fd.options)
             return w
-        w = QLineEdit()
+        w = KeyboardLineEdit()
         if fd.widget == "password":
             w.setEchoMode(QLineEdit.EchoMode.Password)
         if fd.widget == "email":

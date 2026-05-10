@@ -27,6 +27,7 @@ from src.applications.base.app_styles import (
     section_hint,
     section_label,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 _GRID_POINT_COLOR = QColor("#FF7043")
@@ -180,7 +181,7 @@ class CalibrationAreaGridPanel(QWidget):
         rows_col = QVBoxLayout()
         rows_col.setSpacing(4)
         rows_col.addWidget(QLabel("Rows:"))
-        self.grid_rows_spin = QSpinBox()
+        self.grid_rows_spin = KeyboardSpinBox()
         self.grid_rows_spin.setRange(2, 50)
         self.grid_rows_spin.setValue(5)
         self.grid_rows_spin.setMinimumHeight(40)
@@ -190,7 +191,7 @@ class CalibrationAreaGridPanel(QWidget):
         cols_col = QVBoxLayout()
         cols_col.setSpacing(4)
         cols_col.addWidget(QLabel("Cols:"))
-        self.grid_cols_spin = QSpinBox()
+        self.grid_cols_spin = KeyboardSpinBox()
         self.grid_cols_spin.setRange(2, 50)
         self.grid_cols_spin.setValue(4)
         self.grid_cols_spin.setMinimumHeight(40)

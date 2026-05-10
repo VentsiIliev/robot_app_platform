@@ -18,6 +18,10 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardSpinBox,
+)
 from src.applications.calibration.view.calibration_controls_panel import CalibrationControlsPanel
 from src.applications.calibration.view.calibration_preview_panel import (
     CalibrationAreaGridPanel,
@@ -83,17 +87,17 @@ class _ZShiftCalibrationDialog(QDialog):
         root = QVBoxLayout(self)
         form = QFormLayout()
 
-        self._marker_id = QSpinBox(self)
+        self._marker_id = KeyboardSpinBox(self)
         self._marker_id.setRange(0, 10_000)
         self._marker_id.setValue(int(marker_id))
         form.addRow("Reference marker ID:", self._marker_id)
 
-        self._samples = QSpinBox(self)
+        self._samples = KeyboardSpinBox(self)
         self._samples.setRange(1, 1000)
         self._samples.setValue(int(samples))
         form.addRow("Samples:", self._samples)
 
-        self._z_step_mm = QDoubleSpinBox(self)
+        self._z_step_mm = KeyboardDoubleSpinBox(self)
         self._z_step_mm.setRange(-100.0, 100.0)
         self._z_step_mm.setDecimals(3)
         self._z_step_mm.setSingleStep(0.1)
@@ -101,7 +105,7 @@ class _ZShiftCalibrationDialog(QDialog):
         self._z_step_mm.setSuffix(" mm")
         form.addRow("Z step per sample:", self._z_step_mm)
 
-        self._settle_time_s = QDoubleSpinBox(self)
+        self._settle_time_s = KeyboardDoubleSpinBox(self)
         self._settle_time_s.setRange(0.0, 30.0)
         self._settle_time_s.setDecimals(2)
         self._settle_time_s.setSingleStep(0.1)
@@ -154,12 +158,12 @@ class _TcpOffsetCalibrationDialog(QDialog):
         root = QVBoxLayout(self)
         form = QFormLayout()
 
-        self._marker_id = QSpinBox(self)
+        self._marker_id = KeyboardSpinBox(self)
         self._marker_id.setRange(0, 10_000)
         self._marker_id.setValue(int(marker_id))
         form.addRow("Reference marker ID:", self._marker_id)
 
-        self._rotation_step_deg = QDoubleSpinBox(self)
+        self._rotation_step_deg = KeyboardDoubleSpinBox(self)
         self._rotation_step_deg.setRange(-180.0, 180.0)
         self._rotation_step_deg.setDecimals(3)
         self._rotation_step_deg.setSingleStep(1.0)
@@ -167,12 +171,12 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._rotation_step_deg.setSuffix(" deg")
         form.addRow("Rotation step:", self._rotation_step_deg)
 
-        self._iterations = QSpinBox(self)
+        self._iterations = KeyboardSpinBox(self)
         self._iterations.setRange(1, 1000)
         self._iterations.setValue(int(iterations))
         form.addRow("Iterations:", self._iterations)
 
-        self._approach_z = QDoubleSpinBox(self)
+        self._approach_z = KeyboardDoubleSpinBox(self)
         self._approach_z.setRange(-10000.0, 10000.0)
         self._approach_z.setDecimals(3)
         self._approach_z.setSingleStep(1.0)
@@ -180,7 +184,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_z.setSuffix(" mm")
         form.addRow("Approach Z:", self._approach_z)
 
-        self._approach_rx = QDoubleSpinBox(self)
+        self._approach_rx = KeyboardDoubleSpinBox(self)
         self._approach_rx.setRange(-360.0, 360.0)
         self._approach_rx.setDecimals(3)
         self._approach_rx.setSingleStep(1.0)
@@ -188,7 +192,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_rx.setSuffix(" deg")
         form.addRow("Approach RX:", self._approach_rx)
 
-        self._approach_ry = QDoubleSpinBox(self)
+        self._approach_ry = KeyboardDoubleSpinBox(self)
         self._approach_ry.setRange(-360.0, 360.0)
         self._approach_ry.setDecimals(3)
         self._approach_ry.setSingleStep(1.0)
@@ -196,7 +200,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_ry.setSuffix(" deg")
         form.addRow("Approach RY:", self._approach_ry)
 
-        self._approach_rz = QDoubleSpinBox(self)
+        self._approach_rz = KeyboardDoubleSpinBox(self)
         self._approach_rz.setRange(-360.0, 360.0)
         self._approach_rz.setDecimals(3)
         self._approach_rz.setSingleStep(1.0)
@@ -204,17 +208,17 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._approach_rz.setSuffix(" deg")
         form.addRow("Approach RZ:", self._approach_rz)
 
-        self._velocity = QSpinBox(self)
+        self._velocity = KeyboardSpinBox(self)
         self._velocity.setRange(1, 100)
         self._velocity.setValue(int(velocity))
         form.addRow("Velocity:", self._velocity)
 
-        self._acceleration = QSpinBox(self)
+        self._acceleration = KeyboardSpinBox(self)
         self._acceleration.setRange(1, 100)
         self._acceleration.setValue(int(acceleration))
         form.addRow("Acceleration:", self._acceleration)
 
-        self._settle_time_s = QDoubleSpinBox(self)
+        self._settle_time_s = KeyboardDoubleSpinBox(self)
         self._settle_time_s.setRange(0.0, 30.0)
         self._settle_time_s.setDecimals(2)
         self._settle_time_s.setSingleStep(0.1)
@@ -222,12 +226,12 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._settle_time_s.setSuffix(" s")
         form.addRow("Settle time:", self._settle_time_s)
 
-        self._recenter_max_iterations = QSpinBox(self)
+        self._recenter_max_iterations = KeyboardSpinBox(self)
         self._recenter_max_iterations.setRange(1, 1000)
         self._recenter_max_iterations.setValue(int(recenter_max_iterations))
         form.addRow("Recenter iterations:", self._recenter_max_iterations)
 
-        self._recenter_stability_wait_s = QDoubleSpinBox(self)
+        self._recenter_stability_wait_s = KeyboardDoubleSpinBox(self)
         self._recenter_stability_wait_s.setRange(0.0, 30.0)
         self._recenter_stability_wait_s.setDecimals(2)
         self._recenter_stability_wait_s.setSingleStep(0.1)
@@ -235,7 +239,7 @@ class _TcpOffsetCalibrationDialog(QDialog):
         self._recenter_stability_wait_s.setSuffix(" s")
         form.addRow("Recenter wait:", self._recenter_stability_wait_s)
 
-        self._recenter_alignment_threshold_mm = QDoubleSpinBox(self)
+        self._recenter_alignment_threshold_mm = KeyboardDoubleSpinBox(self)
         self._recenter_alignment_threshold_mm.setRange(0.01, 100.0)
         self._recenter_alignment_threshold_mm.setDecimals(3)
         self._recenter_alignment_threshold_mm.setSingleStep(0.1)

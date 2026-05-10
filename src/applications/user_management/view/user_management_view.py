@@ -9,6 +9,7 @@ from PyQt6.QtGui import QFont
 
 from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 from src.applications.user_management.domain.user_schema import UserRecord, UserSchema
 
 
@@ -133,7 +134,7 @@ class UserManagementView(IApplicationView):
         self._filter_col.addItems(self._schema.get_filterable_labels())
         layout.addWidget(self._filter_col)
 
-        self._filter_input = QLineEdit()
+        self._filter_input = KeyboardLineEdit()
         layout.addWidget(self._filter_input)
 
         self._btn_filter = QPushButton()

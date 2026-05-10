@@ -7,10 +7,11 @@ from contour_editor import BezierSegmentManager
 from src.applications.workpiece_editor.editor_core.config import (
     WorkpieceFormSchema, WorkpieceFormFactory, SegmentEditorConfig,
 )
+from src.applications.base.widgets.virtual_keyboard_widget_factory import (
+    VirtualKeyboardWidgetFactory,
+)
 from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
 from src.applications.workpiece_editor.editor_core import WorkpieceEditorBuilder
-from src.applications.workpiece_editor.editor_core.config.virtual_keyboard_widget_factory import \
-    VirtualKeyboardWidgetFactory
 from src.applications.base.i_application_view import IApplicationView
 
 _logger = logging.getLogger(__name__)
