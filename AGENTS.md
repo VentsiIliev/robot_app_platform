@@ -302,6 +302,52 @@ from pl_gui.settings.settings_view.styles import (
 
 Reference: `ModbusSettingsView` (imports + ACTION/GHOST usage), `DeviceControlView` (semantic ON/OFF pattern).
 
+### Virtual Keyboard — use the shared reusable component
+
+The repo has a shared virtual keyboard implementation for touch-oriented forms. Do **not** build a one-off keyboard inside an application.
+
+Shared entry points:
+- Global enable/disable flag: `src/applications/base/config/virtual_keyboard_config.py`
+- Reusable widgets: `KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox` in `src/applications/base/widgets/custom_virtual_keyboard.py`
+- Reusable widget factory: `VirtualKeyboardWidgetFactory` in `src/applications/base/widgets/virtual_keyboard_widget_factory.py`
+
+Rules:
+- If an application owns its form widgets directly, instantiate the shared keyboard widgets explicitly instead of plain `QLineEdit` / `QSpinBox` / `QDoubleSpinBox`
+- If an application already has a widget-provider or widget-factory seam, inject `VirtualKeyboardWidgetFactory()` there instead of patching every field manually
+- Keep the single-flag behavior intact; do not add app-local keyboard enable flags unless the task explicitly requires a second level of control
+- When wiring spin boxes, prefer the shared keyboard widgets directly; they already handle focus, popup placement, and embedded line-edit event filtering
+- When updating a form that already uses a shared settings/group framework, verify whether the real runtime path is that framework or a legacy dialog before patching
+
+Typical direct usage:
+```python
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardLineEdit,
+    KeyboardSpinBox,
+)
+
+self._name = KeyboardLineEdit()
+self._count = KeyboardSpinBox()
+self._offset = KeyboardDoubleSpinBox()
+```
+
+Typical factory usage:
+```python
+from src.applications.base.widgets.virtual_keyboard_widget_factory import (
+    VirtualKeyboardWidgetFactory,
+)
+
+builder = (
+    SomeEditorBuilder()
+    .with_widgets(VirtualKeyboardWidgetFactory())
+)
+```
+
+Verification:
+- compile the touched UI modules with `python3 -m py_compile`
+- test one field near the top of the screen and one near the bottom
+- for spin boxes, verify typing, left/right cursor movement, and popup placement above the field when there is not enough room below
+
 ### Localization — initial translation and retranslation
 
 The platform has an engine-level localization service under `src/engine/localization/`. Use it consistently.

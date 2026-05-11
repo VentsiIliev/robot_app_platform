@@ -134,7 +134,7 @@ class TestPaintCalibrationProvider(unittest.TestCase):
         navigation = MagicMock()
         robot_system = MagicMock()
         robot_system.get_work_area_definitions.return_value = [
-            WorkAreaDefinition(id="paint", label="Paint", color="#FF8C32")
+            WorkAreaDefinition(id="spray", label="Spray", color="#FF8C32")
         ]
         robot_system.get_service.side_effect = lambda service_id: {
             CommonServiceID.WORK_AREAS: work_area_service,
@@ -142,7 +142,7 @@ class TestPaintCalibrationProvider(unittest.TestCase):
         }[service_id]
         provider = PaintRobotSystemCalibrationProvider(robot_system)
 
-        with self.assertRaisesRegex(ValueError, "Calibration area 'spray' is not declared"):
+        with self.assertRaisesRegex(ValueError, "Calibration area 'paint' is not declared"):
             provider.build_calibration_navigation()
 
         work_area_service.set_active_area_id.assert_not_called()
@@ -153,7 +153,7 @@ class TestPaintCalibrationProvider(unittest.TestCase):
         navigation = MagicMock()
         robot_system = MagicMock()
         robot_system.get_work_area_definitions.return_value = [
-            WorkAreaDefinition(id="spray", label="Spray", color="#FF8C32")
+            WorkAreaDefinition(id="paint", label="Paint", color="#FF8C32")
         ]
         robot_system.get_service.side_effect = lambda service_id: {
             CommonServiceID.WORK_AREAS: work_area_service,
@@ -164,7 +164,7 @@ class TestPaintCalibrationProvider(unittest.TestCase):
         calibration_navigation = provider.build_calibration_navigation()
         calibration_navigation.move_to_calibration_position()
 
-        work_area_service.set_active_area_id.assert_called_once_with("spray")
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
 
 
 class TestPaintTargetFrames(unittest.TestCase):

@@ -34,6 +34,7 @@ class PickTargetApplicationService(IPickTargetService):
         capture_snapshot_service: Optional[ICaptureSnapshotService],
         robot_service:   Optional[IRobotService],
         resolver:        Optional[VisionTargetResolver],
+        resolver_getter=None,
         robot_config=None,
         navigation=None,
         height_measuring: Optional[IHeightMeasuringService] = None,
@@ -45,6 +46,7 @@ class PickTargetApplicationService(IPickTargetService):
         self._capture_snapshot_service = capture_snapshot_service
         self._robot         = robot_service
         self._resolver      = resolver
+        self._resolver_getter = resolver_getter
         self._robot_config  = robot_config
         self._navigation    = navigation
         self._height_measuring  = height_measuring
@@ -54,17 +56,34 @@ class PickTargetApplicationService(IPickTargetService):
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pickup_frame_name = str(pickup_frame_name or "").strip().lower()
 
-        self._registry = resolver.registry if resolver is not None else None
-        self._target_point = (
-            self._registry.by_name(self._default_target_name)
-            if self._registry is not None and self._default_target_name
-            else None
-        )
-        pickup_frame = resolver.get_frame(self._pickup_frame_name) if resolver is not None and self._pickup_frame_name else None
-        self._pickup_mapper = pickup_frame.mapper if pickup_frame is not None else None
+        self._registry = None
+        self._target_point = self._resolve_target_point(self._default_target_name)
+
+    def _current_resolver(self) -> Optional[VisionTargetResolver]:
+        if self._resolver_getter is not None:
+            return self._resolver_getter()
+        return self._resolver
+
+    def _current_registry(self):
+        resolver = self._current_resolver()
+        return resolver.registry if resolver is not None else None
+
+    def _resolve_target_point(self, target_name: str):
+        registry = self._current_registry()
+        self._registry = registry
+        if registry is None or not target_name:
+            return None
+        return registry.by_name(target_name)
+
+    def _current_pickup_mapper(self):
+        resolver = self._current_resolver()
+        if resolver is None or not self._pickup_frame_name:
+            return None
+        pickup_frame = resolver.get_frame(self._pickup_frame_name)
+        return pickup_frame.mapper if pickup_frame is not None else None
 
     def set_target(self, target: str) -> None:
-        self._target_point = self._registry.by_name(target)
+        self._target_point = self._resolve_target_point(target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled
@@ -83,8 +102,9 @@ class PickTargetApplicationService(IPickTargetService):
         return self._pickup_frame_name if self._use_pickup_plane else self._calibration_frame_name
 
     def get_jog_reference_rz(self) -> float:
-        if self._active_frame == self._pickup_frame_name and self._pickup_mapper is not None:
-            return float(self._pickup_mapper.target_pose.rz)
+        pickup_mapper = self._current_pickup_mapper()
+        if self._active_frame == self._pickup_frame_name and pickup_mapper is not None:
+            return float(pickup_mapper.target_pose.rz)
         return 0.0
 
     def _pose_target(self, px: float, py: float, z_mm: float = 0.0) -> VisionPoseRequest:
@@ -98,9 +118,10 @@ class PickTargetApplicationService(IPickTargetService):
         )
 
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
-        if self._resolver is None:
+        resolver = self._current_resolver()
+        if resolver is None:
             raise RuntimeError("Coordinate transformer is not available")
-        return self._resolver.resolve(
+        return resolver.resolve(
             self._pose_target(px, py), self._target_point, frame=self._active_frame
         ).final_xy
 
@@ -123,8 +144,9 @@ class PickTargetApplicationService(IPickTargetService):
                 cnt = Contour(raw)
                 px, py = cnt.getCentroid()
                 pixel_centroids.append((px, py))
-                if self._resolver is not None:
-                    result = self._resolver.resolve(
+                resolver = self._current_resolver()
+                if resolver is not None:
+                    result = resolver.resolve(
                         self._pose_target(px, py, z_mm=_Z), self._target_point, frame=self._active_frame,
                     )
                     robot_targets.append(result.robot_pose())

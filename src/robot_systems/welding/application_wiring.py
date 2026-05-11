@@ -51,7 +51,7 @@ def _build_welding_contour_editor_application(robot_system):
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
-    transformer, resolver = robot_system.get_shared_vision_resolver()
+    transformer, _ = robot_system.get_shared_vision_resolver()
     camera_point_name = (
         getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
     )
@@ -95,7 +95,8 @@ def _build_welding_contour_editor_application(robot_system):
         logger=_logger,
         segment_config=segment_config,
         transformer=transformer,
-        resolver=resolver,
+        resolver=None,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
         rz_mode="constant",
         execute_from_workpiece_layer=False,

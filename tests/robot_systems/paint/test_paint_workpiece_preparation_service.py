@@ -135,6 +135,36 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
             max_scale_deviation=service._dxf_max_scale_deviation,
         )
 
+    def test_prepare_workpiece_uses_live_transformer_getter_for_dxf_branch(self):
+        payload = _matched_payload()
+        payload["raw"]["dxfPath"] = "/tmp/workpiece.dxf"
+        transformer = object()
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda contour: (True, payload, "matched"),
+            transformer=None,
+            transformer_getter=lambda: transformer,
+        )
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        with (
+            patch(
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.import_dxf_to_workpiece_data",
+                return_value={"dxf": True},
+            ),
+            patch(
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.map_raw_workpiece_mm_to_image",
+                return_value={"contour": {"contour": [[0.0, 0.0]]}, "sprayPattern": {"Contour": [], "Fill": []}},
+            ) as place,
+            patch(
+                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
+                return_value={"workpieceId": "aligned", "sprayPattern": {"Contour": [], "Fill": []}},
+            ),
+        ):
+            service.prepare_workpiece(_square(4.0), frame=frame)
+
+        place.assert_called_once_with({"dxf": True}, 640.0, 480.0, transformer)
+
     def test_prepare_workpiece_returns_captured_contour_when_matched_raw_empty(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: True,

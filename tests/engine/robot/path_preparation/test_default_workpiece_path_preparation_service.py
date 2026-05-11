@@ -26,6 +26,8 @@ def _make_service(**kwargs):
         "segment_config": _SegmentConfig(),
         "transformer": None,
         "resolver": None,
+        "transformer_getter": None,
+        "resolver_getter": None,
         "base_position_provider": lambda: [0, 0, 100, 0, 0, 0],
     }
     params.update(kwargs)
@@ -223,6 +225,24 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertEqual((101.0, 202.0), result)
         transformer.transform.assert_called_once_with(10.0, 20.0)
 
+    def test_transform_single_pixel_to_robot_uses_live_transformer_getter(self):
+        transformer = MagicMock()
+        transformer.is_available.return_value = True
+        transformer.transform.return_value = (123.0, 456.0)
+        service = _make_service(
+            transformer=None,
+            transformer_getter=lambda: transformer,
+        )
+
+        result = service._transform_single_pixel_to_robot(
+            10.0,
+            20.0,
+            {"spraying_height": "5", "rz_angle": "7"},
+        )
+
+        self.assertEqual((123.0, 456.0), result)
+        transformer.transform.assert_called_once_with(10.0, 20.0)
+
     def test_transform_single_pixel_to_robot_uses_resolver_and_compensation(self):
         registry = MagicMock()
         registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
@@ -254,6 +274,31 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertEqual(target_point, registry.by_name.return_value)
         self.assertEqual("paint_frame", resolver.resolve.call_args.kwargs["frame"])
         registry.by_name.assert_called_once_with("pickup")
+
+    def test_transform_single_pixel_to_robot_uses_live_resolver_getter(self):
+        registry = MagicMock()
+        registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
+        resolver = MagicMock()
+        resolver.registry = registry
+        resolver.resolve.return_value = SimpleNamespace(final_xy=(401.0, 402.0))
+        service = _make_service(
+            resolver=None,
+            resolver_getter=lambda: resolver,
+            target_point_name="tool",
+        )
+
+        result = service._transform_single_pixel_to_robot(
+            10.0,
+            20.0,
+            {"height_mm": 12.0, "spraying_height": "5", "rz_angle": "7"},
+            target_point_name="pickup",
+            frame_name="paint_frame",
+            rz_override=33.0,
+        )
+
+        self.assertEqual((401.0, 402.0), result)
+        registry.by_name.assert_called_once_with("pickup")
+        self.assertEqual("paint_frame", resolver.resolve.call_args.kwargs["frame"])
 
     def test_transform_single_pixel_to_robot_falls_back_to_raw_pixels_without_transformer(self):
         service = _make_service(transformer=None)

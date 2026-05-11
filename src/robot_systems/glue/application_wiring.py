@@ -99,7 +99,7 @@ def _build_glue_process_driver_application(robot_system):
         z_min = float(robot_config.safety_limits.z_min) if robot_config is not None else 0.0
     except Exception:
         z_min = 0.0
-    base_transformer, resolver = robot_system.get_shared_vision_resolver()
+    base_transformer, _ = robot_system.get_shared_vision_resolver()
     matching_service = MatchingService(
         vision_service=vision_service,
         workpiece_service=workpiece_service,
@@ -109,7 +109,8 @@ def _build_glue_process_driver_application(robot_system):
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
             transformer=base_transformer,
-            resolver=resolver,
+            resolver=None,
+            resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
             z_min=z_min,
             target_point_name=tool_point_name,
         ),
@@ -123,7 +124,8 @@ def _build_glue_process_driver_application(robot_system):
         matching_service=matching_service,
         job_builder=GlueJobBuilderService(
             transformer=base_transformer,
-            resolver=resolver,
+            resolver=None,
+            resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
             z_min=z_min,
             target_point_name=tool_point_name,
         ),
@@ -203,7 +205,7 @@ def _build_workpiece_editor_application(robot_system):
         getattr(robot_system.get_target_point_definition("tool"), "name", "") or ""
     )
 
-    base_transformer, resolver = robot_system.get_shared_vision_resolver()
+    base_transformer, _ = robot_system.get_shared_vision_resolver()
 
     def _get_glue_types():
         catalog = settings_service.get(SettingsID.GLUE_CATALOG)
@@ -228,7 +230,8 @@ def _build_workpiece_editor_application(robot_system):
         logger=_logger,
         segment_config=segment_config,
         transformer=base_transformer,
-        resolver=resolver,
+        resolver=None,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=float(robot_config.safety_limits.z_min) if robot_config is not None else float(SafetyLimits().z_min),
         rz_mode="constant",
         execute_from_workpiece_layer=False,
@@ -561,7 +564,7 @@ def _build_dashboard_application(system):
     except Exception:
         z_min = 0.0
 
-    base_transformer, resolver = system.get_shared_vision_resolver()
+    base_transformer, _ = system.get_shared_vision_resolver()
     tool_point_name = (
         getattr(system.get_target_point_definition("tool"), "name", "") or ""
     )
@@ -574,7 +577,8 @@ def _build_dashboard_application(system):
                 ),
             job_builder=GlueJobBuilderService(
                 transformer=base_transformer,
-                resolver=resolver,
+                resolver=None,
+                resolver_getter=lambda: system.get_shared_vision_resolver()[1],
                 z_min=z_min,
                 target_point_name=tool_point_name,
             ),
@@ -745,7 +749,6 @@ def _build_pick_target_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    _, resolver = robot_system.get_shared_vision_resolver()
     height_service = getattr(robot_system, "_height_measuring_service", None)
     default_target_name = (
         robot_system.get_targeting_provider().get_default_target_name()
@@ -761,7 +764,8 @@ def _build_pick_target_application(robot_system):
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
         robot_service=robot_service,
-        resolver=resolver,
+        resolver=None,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         robot_config=robot_system._robot_config,
         navigation=robot_system._navigation,
         height_measuring=height_service,

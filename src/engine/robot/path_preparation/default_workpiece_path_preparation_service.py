@@ -224,6 +224,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         segment_config,
         transformer=None,
         resolver=None,
+        transformer_getter: Optional[Callable[[], object]] = None,
+        resolver_getter: Optional[Callable[[], object]] = None,
         z_min: float = 0.0,
         rz_mode: str = "constant",
         execute_from_workpiece_layer: bool = False,
@@ -237,6 +239,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._segment_config = segment_config
         self._transformer = transformer
         self._resolver = resolver
+        self._transformer_getter = transformer_getter
+        self._resolver_getter = resolver_getter
         self._z_min = float(z_min)
         self._rz_mode = str(rz_mode or "constant").strip().lower()
         self._execute_from_workpiece_layer = bool(execute_from_workpiece_layer)
@@ -246,21 +250,38 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
 
+    def _current_transformer(self):
+        if self._transformer_getter is not None:
+            try:
+                return self._transformer_getter()
+            except Exception:
+                self._logger.debug("Path preparation transformer lookup failed", exc_info=True)
+        return self._transformer
+
+    def _current_resolver(self):
+        if self._resolver_getter is not None:
+            try:
+                return self._resolver_getter()
+            except Exception:
+                self._logger.debug("Path preparation resolver lookup failed", exc_info=True)
+        return self._resolver
+
     def _resolve_target_point_metadata(self, target_point_name: str, frame_name: str) -> tuple[str, float, float, float]:
         resolved_name = str(target_point_name or "").strip().lower()
         offset_x = 0.0
         offset_y = 0.0
         reference_rz = 0.0
-        if self._resolver is not None and resolved_name:
+        resolver = self._current_resolver()
+        if resolver is not None and resolved_name:
             try:
-                point = self._resolver.registry.by_name(resolved_name)
+                point = resolver.registry.by_name(resolved_name)
                 offset_x = float(getattr(point, "offset_x", 0.0))
                 offset_y = float(getattr(point, "offset_y", 0.0))
             except Exception:
                 offset_x = 0.0
                 offset_y = 0.0
             try:
-                frame_obj = self._resolver.get_frame(str(frame_name or "").strip().lower())
+                frame_obj = resolver.get_frame(str(frame_name or "").strip().lower())
                 mapper = getattr(frame_obj, "mapper", None) if frame_obj is not None else None
                 target_pose = getattr(mapper, "target_pose", None) if mapper is not None else None
                 reference_rz = float(getattr(target_pose, "rz", 0.0)) if target_pose is not None else 0.0
@@ -532,12 +553,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             except Exception:
                 self._logger.exception("[EXECUTE] Failed to apply pixel height compensation")
 
-        if self._resolver is not None:
+        resolver = self._current_resolver()
+        transformer = self._current_transformer()
+
+        if resolver is not None:
             from src.engine.robot.targeting import VisionPoseRequest
 
-            target_point = self._resolver.registry.by_name(self._target_point_name)
+            target_point = resolver.registry.by_name(self._target_point_name)
             seeded_results = [
-                self._resolver.resolve(
+                resolver.resolve(
                     VisionPoseRequest(
                         float(px),
                         float(py),
@@ -556,11 +580,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             ]
         else:
             seeded_results = None
-            if self._transformer is None or not self._transformer.is_available():
+            if transformer is None or not transformer.is_available():
                 self._logger.warning("[EXECUTE] No calibration transformer — using raw pixel coords")
             for px, py in compensated_pts_px:
-                if self._transformer is not None and self._transformer.is_available():
-                    rx_coord, ry_coord = self._transformer.transform(float(px), float(py))
+                if transformer is not None and transformer.is_available():
+                    rx_coord, ry_coord = transformer.transform(float(px), float(py))
                 else:
                     rx_coord, ry_coord = float(px), float(py)
                 robot_xy_points.append((float(rx_coord), float(ry_coord)))
@@ -661,12 +685,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         base_position = self._resolve_base_position()
         base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
 
-        if self._resolver is not None:
+        resolver = self._current_resolver()
+        transformer = self._current_transformer()
+
+        if resolver is not None:
             from src.engine.robot.targeting import VisionPoseRequest
 
             resolved_target_name = str(target_point_name or self._target_point_name or "").strip().lower()
-            target_point = self._resolver.registry.by_name(resolved_target_name)
-            result = self._resolver.resolve(
+            target_point = resolver.registry.by_name(resolved_target_name)
+            result = resolver.resolve(
                 VisionPoseRequest(
                     compensated_px,
                     compensated_py,
@@ -680,10 +707,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             )
             return float(result.final_xy[0]), float(result.final_xy[1])
 
-        if self._transformer is None or not self._transformer.is_available():
+        if transformer is None or not transformer.is_available():
             return compensated_px, compensated_py
 
-        rx_coord, ry_coord = self._transformer.transform(compensated_px, compensated_py)
+        rx_coord, ry_coord = transformer.transform(compensated_px, compensated_py)
         return float(rx_coord), float(ry_coord)
 
     def _resolve_base_position(self) -> Optional[list[float]]:

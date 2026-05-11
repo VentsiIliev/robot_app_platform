@@ -55,8 +55,10 @@ class TestPaintApplicationWiring(unittest.TestCase):
 
         self.assertIs(result, built_service)
         kwargs = cls.call_args.kwargs
-        self.assertIs(kwargs["transformer"], transformer)
-        self.assertIs(kwargs["resolver"], resolver)
+        self.assertIsNone(kwargs["transformer"])
+        self.assertIsNone(kwargs["resolver"])
+        self.assertIs(kwargs["transformer_getter"](), transformer)
+        self.assertIs(kwargs["resolver_getter"](), resolver)
         self.assertEqual(123.0, kwargs["z_min"])
         self.assertEqual("path_tangent", kwargs["rz_mode"])
         self.assertTrue(kwargs["execute_from_workpiece_layer"])
@@ -378,7 +380,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
             vision_service="vision",
             capture_snapshot_service="capture-snapshot",
             robot_service="robot",
-            resolver="resolver",
+            resolver=None,
+            resolver_getter=unittest.mock.ANY,
             robot_config="robot-config",
             navigation="navigation",
             height_measuring="height",
@@ -386,6 +389,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             calibration_frame_name="spray-frame",
             pickup_frame_name="pickup-frame",
         )
+        self.assertIs(pick_service_cls.call_args.kwargs["resolver_getter"](), "resolver")
         pick_target_factory.build.assert_called_once_with(pick_service, messaging=messaging, jog_service="jog")
 
     def test_build_capture_snapshot_and_workpiece_services_wire_dependencies(self):
@@ -466,10 +470,12 @@ class TestPaintApplicationWiring(unittest.TestCase):
         prep_cls.assert_called_once_with(
             can_match_fn=matching_service.can_match_saved_workpieces,
             match_workpiece_fn=matching_service.match_saved_workpieces,
-            transformer="transformer",
+            transformer=None,
+            transformer_getter=unittest.mock.ANY,
             dxf_alignment_strategy=application_wiring._PAINT_PROCESS.dxf_alignment_strategy,
             dxf_max_scale_deviation=application_wiring._PAINT_PROCESS.dxf_max_scale_deviation,
         )
+        self.assertIs(prep_cls.call_args.kwargs["transformer_getter"](), "transformer")
 
     def test_build_workpiece_editor_service_wires_storage_services_and_options(self):
         workpiece_service = MagicMock()

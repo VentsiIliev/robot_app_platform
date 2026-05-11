@@ -112,7 +112,6 @@ def _build_paint_path_preparation_service(robot_system):
     from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
 
-    transformer, resolver = robot_system.get_shared_vision_resolver()
     robot_config = getattr(robot_system, "_robot_config", None)
     execution_target_point_name = _get_paint_execution_target_point_name(robot_system)
     calibration_frame_name = (
@@ -138,8 +137,10 @@ def _build_paint_path_preparation_service(robot_system):
     return DefaultWorkpiecePathPreparationService(
         logger=_logger,
         segment_config=segment_config,
-        transformer=transformer,
-        resolver=resolver,
+        transformer=None,
+        resolver=None,
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
         rz_mode="path_tangent",
         execute_from_workpiece_layer=True,
@@ -172,7 +173,8 @@ def _build_paint_workpiece_preparation_service(robot_system):
     return PaintWorkpiecePreparationService(
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
-        transformer=robot_system.get_shared_vision_resolver()[0],
+        transformer=None,
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
         dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
         dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
     )
@@ -643,7 +645,6 @@ def _build_pick_target_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    _, resolver = robot_system.get_shared_vision_resolver()
     height_service = getattr(robot_system, "_height_measuring_service", None)
     default_target_name = (
         robot_system.get_targeting_provider().get_default_target_name()
@@ -659,7 +660,8 @@ def _build_pick_target_application(robot_system):
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
         robot_service=robot_service,
-        resolver=resolver,
+        resolver=None,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         robot_config=robot_system._robot_config,
         navigation=robot_system._navigation,
         height_measuring=height_service,

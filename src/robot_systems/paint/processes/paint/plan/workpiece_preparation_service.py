@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -44,6 +44,7 @@ class PaintWorkpiecePreparationService:
         can_match_fn: Callable[[], bool],
         match_workpiece_fn: Callable,
         transformer=None,
+        transformer_getter: Optional[Callable[[], object]] = None,
         dxf_alignment_strategy: str = DXF_ALIGNMENT_STRATEGY_RIGID,
         dxf_max_scale_deviation: float = 0.03,
     ) -> None:
@@ -51,8 +52,14 @@ class PaintWorkpiecePreparationService:
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
         self._transformer = transformer
+        self._transformer_getter = transformer_getter
         self._dxf_alignment_strategy = str(dxf_alignment_strategy or DXF_ALIGNMENT_STRATEGY_RIGID).strip().lower()
         self._dxf_max_scale_deviation = float(dxf_max_scale_deviation)
+
+    def _current_transformer(self):
+        if self._transformer_getter is not None:
+            return self._transformer_getter()
+        return self._transformer
 
     def prepare_workpiece(self, captured_contour, frame) -> tuple[dict, str]:
         """Choose between a matched saved workpiece and a raw captured-contour fallback."""
@@ -104,7 +111,7 @@ class PaintWorkpiecePreparationService:
                 dxf_raw,
                 image_w,
                 image_h,
-                self._transformer,
+                self._current_transformer(),
             )
             _logger.info(
                 "[PREP] dxf placed main=%s",

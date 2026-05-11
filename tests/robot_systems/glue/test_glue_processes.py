@@ -19,6 +19,7 @@ PICK_AND_SPRAY mode) is implemented inside ProcessSequence and is tested
 separately in tests/engine/process/test_process_sequence.y_pixels.
 """
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src.engine.process.process_requirements import ProcessRequirements
@@ -240,6 +241,40 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "must be running"):
             p.step_once()
+
+    def test_run_workflow_uses_live_resolver_getter(self):
+        messaging = _ms()
+        matching = MagicMock()
+        tools = MagicMock()
+        height = MagicMock()
+        vacuum = MagicMock()
+        robot = _robot()
+        navigation = _navigation_service()
+        resolver = MagicMock()
+
+        p = PickAndPlaceProcess(
+            robot_service=robot,
+            messaging=messaging,
+            navigation_service=navigation,
+            matching_service=matching,
+            tool_service=tools,
+            height_service=height,
+            resolver=None,
+            resolver_getter=lambda: resolver,
+            vacuum_pump=vacuum,
+        )
+
+        workflow = MagicMock()
+        workflow.run.return_value = SimpleNamespace(state=ProcessState.STOPPED, message="done")
+
+        with patch(
+            "src.robot_systems.glue.processes.pick_and_place_process.PickAndPlaceWorkflow",
+            return_value=workflow,
+        ) as workflow_cls, patch.object(p, "stop") as stop_mock:
+            p._run_workflow()
+
+        self.assertIs(workflow_cls.call_args.kwargs["resolver"], resolver)
+        stop_mock.assert_called_once_with()
 
 
 

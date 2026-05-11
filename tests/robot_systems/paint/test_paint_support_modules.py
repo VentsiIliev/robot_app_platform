@@ -66,7 +66,7 @@ class TestPaintBootstrapProvider(unittest.TestCase):
         ) as robot_cls:
             self.assertEqual(provider.build_robot(), "robot")
 
-        robot_cls.assert_called_once_with(server_url="http://localhost:5000")
+        robot_cls.assert_called_once_with(server_url="fake://local")
 
     def test_build_login_view_wires_auth_and_login_service(self) -> None:
         provider = PaintBootstrapProvider()
@@ -178,8 +178,8 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
         self.assertEqual(result, "vacuum")
         kwargs = controller_cls.call_args.kwargs
         self.assertTrue(kwargs["relay_client_path"].endswith("domain/vacuum_pump/relay_client.py"))
-        self.assertEqual(kwargs["host"], "192.168.2.146")
-        self.assertEqual(kwargs["port"], 5000)
+        self.assertEqual(kwargs["host"], "localhost")
+        self.assertEqual(kwargs["port"], 5003)
         self.assertEqual(kwargs["output_num"], 0)
 
     def test_height_measuring_provider_builds_mock_laser(self) -> None:
