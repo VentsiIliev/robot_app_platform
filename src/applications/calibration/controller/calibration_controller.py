@@ -70,6 +70,7 @@ class CalibrationController(IApplicationController):
         self._running               = False
         self._active                = False
         self._robot_process_running = False   # ← tracks robot calibration process state
+        self._current_calibration_type = None  # ← tracks which calibration is running
         self._logger   = logging.getLogger(self.__class__.__name__)
         self._area_grid_verify_statuses: dict[str, str] = {}
 
@@ -255,6 +256,7 @@ class CalibrationController(IApplicationController):
         if settings is None:
             self._view.append_log("✗ Calibration settings are unavailable")
             return
+        self._current_calibration_type = 'camera_tcp_offset'
         tcp = settings.robot.camera_tcp_offset
         config = self._view.prompt_tcp_offset_calibration_config(
             marker_id=int(getattr(tcp, "marker_id", 4)),
@@ -327,6 +329,10 @@ class CalibrationController(IApplicationController):
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
         self._view.set_buttons_enabled(True)
         self._refresh_calibration_dependent_actions()
+        if ok and hasattr(self, '_current_calibration_type') and self._current_calibration_type == 'camera_tcp_offset':
+            self._broker.publish(RobotCalibrationTopics.CAMERA_TCP_OFFSET_COMPLETED, {})
+            self._logger.info("Published camera TCP offset calibration completed event")
+        self._current_calibration_type = None
 
     def _on_task_failed(self, error: str) -> None:
         if not self._running:

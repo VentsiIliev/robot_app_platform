@@ -27,6 +27,7 @@ from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
 from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.processes.paint.config import PaintMarkerSettingsSerializer
 from src.robot_systems.paint.service_builders import build_vacuum_pump_service
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
@@ -84,6 +85,12 @@ class PaintRobotSystem(BaseRobotSystem):
         MovementGroupDefinition(
             id="PAINTING_NEW",
             label="Painting2",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+        MovementGroupDefinition(
+            id="PRE_PAINTING",
+            label="Pre-Painting",
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
@@ -189,6 +196,7 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(CommonSettingsID.ROBOT_CALIBRATION, RobotCalibrationSettingsSerializer(),
                      "robot/calibration.json"),
         SettingsSpec(CommonSettingsID.TARGETING, TargetingSettingsSerializer(), "targeting/definitions.json"),
+        SettingsSpec(CommonSettingsID.PAINT_MARKER_SETTINGS, PaintMarkerSettingsSerializer(), "paint/marker_settings.json"),
 
         SettingsSpec(
             CommonSettingsID.CALIBRATION_VISION_SETTINGS,
@@ -238,6 +246,7 @@ class PaintRobotSystem(BaseRobotSystem):
         self._navigation = PaintNavigationService(_nav_engine, vision=self._vision,
                                                  work_area_service=self._work_area_service,
                                                  robot_service=self._robot,
+                                                 motion_service=self._robot,
                                                  observed_area_by_group={
                                                      binding.movement_group_id: binding.area_id
                                                      for binding in self.get_work_area_observer_bindings()
@@ -301,7 +310,14 @@ class PaintRobotSystem(BaseRobotSystem):
             service_checker=self.health_registry.check,
         )
         self.register_managed_resource(self._main_process)
-        self._dashboard_service = PaintDashboardService(self._main_process)
+        self._dashboard_service = PaintDashboardService(
+            process=self._main_process,
+            robot_service=self._robot,
+            navigation_service=self._navigation,
+            path_executor=getattr(self, "_paint_path_executor", None),
+            production_service=self._paint_production_service,
+            settings_service=self._settings_service,
+        )
 
         self._robot.enable_robot()
 

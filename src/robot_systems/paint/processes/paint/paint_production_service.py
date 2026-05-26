@@ -27,6 +27,66 @@ class PaintProductionService:
         self._path_executor = path_executor
         self._vacuum_pump = vacuum_pump
 
+    def test_pickup(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
+        """Capture scene, build execution plan, and execute test pickup using it."""
+        should_stop = stop_requested or (lambda: False)
+
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_process")
+        if should_stop():
+            return False, "Test pickup cancelled"
+
+        contour = pick_largest_contour(snapshot.contours)
+        if contour is None:
+            return False, "No usable contour detected"
+
+        raw_workpiece, description = self._workpiece_preparation.prepare_workpiece(contour, snapshot.frame)
+        if should_stop():
+            return False, "Test pickup cancelled"
+
+        try:
+            execution_plan = self._path_preparation_service.build_execution_plan(raw_workpiece)
+        except Exception as exc:
+            _logger.exception("Test pickup plan generation failed")
+            return False, f"Plan generation failed: {exc}"
+
+        self._path_executor.set_execution_plan(execution_plan)
+        return self._path_executor.test_pickup()
+
+    def pickup_to_paint_position(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
+        """Capture scene, pick up the detected workpiece, and stage it at the paint start pose."""
+        should_stop = stop_requested or (lambda: False)
+
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_process")
+        if should_stop():
+            return False, "Pickup to paint position cancelled"
+
+        contour = pick_largest_contour(snapshot.contours)
+        if contour is None:
+            return False, "No usable contour detected"
+
+        raw_workpiece, description = self._workpiece_preparation.prepare_workpiece(contour, snapshot.frame)
+        if should_stop():
+            return False, "Pickup to paint position cancelled"
+
+        try:
+            execution_plan = self._path_preparation_service.build_execution_plan(raw_workpiece)
+        except Exception as exc:
+            _logger.exception("Pickup to paint position plan generation failed")
+            return False, f"Plan generation failed: {exc}"
+
+        if should_stop():
+            return False, "Pickup to paint position cancelled"
+
+        self._path_executor.set_execution_plan(execution_plan)
+        ok, msg = self._path_executor.execute_pickup_to_pivot(execution_plan)
+        if not ok:
+            return False, f"{description}: {msg}"
+        return True, f"{description}: {msg}"
+
+    def test_pre_paint_marker_position(self) -> tuple[bool, str]:
+        """Test pre-paint marker detection and move to the computed offset pose."""
+        return self._path_executor.test_pre_paint_marker_position()
+
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
         """Capture the scene, prepare a workpiece, build a plan, and execute pickup plus paint."""
         should_stop = stop_requested or (lambda: False)

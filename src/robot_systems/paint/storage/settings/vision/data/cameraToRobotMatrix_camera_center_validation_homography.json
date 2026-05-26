@@ -1,0 +1,3079 @@
+{
+  "model": "homography",
+  "selected_test_ids": [
+    17,
+    18,
+    21,
+    23,
+    24,
+    30,
+    33,
+    34,
+    36,
+    37,
+    42,
+    44,
+    45,
+    46,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    56,
+    57,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    69,
+    73,
+    74,
+    75,
+    76,
+    78,
+    79,
+    80,
+    84,
+    85,
+    87,
+    90,
+    91,
+    93,
+    98,
+    102,
+    104,
+    105,
+    107,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    130,
+    131,
+    132,
+    134,
+    138,
+    139,
+    141,
+    142,
+    144,
+    145,
+    146,
+    147,
+    152,
+    153,
+    155,
+    156,
+    158,
+    159,
+    161,
+    165,
+    166,
+    168,
+    169,
+    174,
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    186,
+    188,
+    192,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200,
+    201
+  ],
+  "training_ids": [
+    1,
+    3,
+    10,
+    13,
+    14,
+    77,
+    111,
+    120,
+    122,
+    129,
+    167,
+    172,
+    189,
+    216,
+    229,
+    233,
+    237,
+    241,
+    242
+  ],
+  "excluded_calibration_ids": [
+    1,
+    3,
+    6,
+    10,
+    13,
+    14,
+    15,
+    16,
+    19,
+    20,
+    22,
+    25,
+    26,
+    28,
+    29,
+    32,
+    35,
+    38,
+    40,
+    41,
+    68,
+    70,
+    77,
+    82,
+    86,
+    89,
+    92,
+    94,
+    96,
+    99,
+    103,
+    106,
+    111,
+    120,
+    121,
+    122,
+    129,
+    140,
+    148,
+    149,
+    151,
+    154,
+    157,
+    160,
+    164,
+    167,
+    171,
+    172,
+    173,
+    175,
+    176,
+    178,
+    185,
+    189,
+    204,
+    205,
+    216,
+    217,
+    218,
+    229,
+    233,
+    237,
+    241,
+    242
+  ],
+  "selection_report": {
+    "available_ids": [
+      17,
+      18,
+      21,
+      23,
+      24,
+      30,
+      33,
+      34,
+      36,
+      37,
+      42,
+      44,
+      45,
+      46,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      56,
+      57,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      69,
+      73,
+      74,
+      75,
+      76,
+      78,
+      79,
+      80,
+      84,
+      85,
+      87,
+      90,
+      91,
+      93,
+      98,
+      102,
+      104,
+      105,
+      107,
+      110,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      130,
+      131,
+      132,
+      134,
+      138,
+      139,
+      141,
+      142,
+      144,
+      145,
+      146,
+      147,
+      152,
+      153,
+      155,
+      156,
+      158,
+      159,
+      161,
+      165,
+      166,
+      168,
+      169,
+      174,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      186,
+      188,
+      192,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200,
+      201
+    ],
+    "known_unreachable_ids": [
+      234
+    ],
+    "selected_ids": [
+      17,
+      18,
+      21,
+      23,
+      24,
+      30,
+      33,
+      34,
+      36,
+      37,
+      42,
+      44,
+      45,
+      46,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      56,
+      57,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      69,
+      73,
+      74,
+      75,
+      76,
+      78,
+      79,
+      80,
+      84,
+      85,
+      87,
+      90,
+      91,
+      93,
+      98,
+      102,
+      104,
+      105,
+      107,
+      110,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      123,
+      124,
+      125,
+      126,
+      127,
+      128,
+      130,
+      131,
+      132,
+      134,
+      138,
+      139,
+      141,
+      142,
+      144,
+      145,
+      146,
+      147,
+      152,
+      153,
+      155,
+      156,
+      158,
+      159,
+      161,
+      165,
+      166,
+      168,
+      169,
+      174,
+      179,
+      180,
+      181,
+      182,
+      183,
+      184,
+      186,
+      188,
+      192,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200,
+      201
+    ],
+    "selection_strategy": "all_ascending"
+  },
+  "image_center_px": [
+    640.0,
+    360.0
+  ],
+  "results": [
+    {
+      "marker_id": 17,
+      "success": true,
+      "predicted_xy_mm": [
+        101.29515237008539,
+        -417.2759051750211
+      ],
+      "observed_marker_point_px": [
+        797.877197265625,
+        417.7048034667969
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.877197265625,
+        57.704803466796875
+      ],
+      "observed_center_distance_px": 168.09239649547126,
+      "robot_xy_mm": [
+        101.30093066488456,
+        -417.28016913880214
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 18,
+      "success": true,
+      "predicted_xy_mm": [
+        64.38040656156792,
+        -417.49773419525036
+      ],
+      "observed_marker_point_px": [
+        768.7503051757812,
+        417.91973876953125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        128.75030517578125,
+        57.91973876953125
+      ],
+      "observed_center_distance_px": 141.1783879423035,
+      "robot_xy_mm": [
+        64.36634486668221,
+        -417.50254072324435
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 21,
+      "success": true,
+      "predicted_xy_mm": [
+        -47.92734036443618,
+        -417.3390801024446
+      ],
+      "observed_marker_point_px": [
+        680.2786865234375,
+        418.919921875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        40.2786865234375,
+        58.919921875
+      ],
+      "observed_center_distance_px": 71.37177160341089,
+      "robot_xy_mm": [
+        -47.943000832349824,
+        -417.341219701406
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 23,
+      "success": true,
+      "predicted_xy_mm": [
+        -122.81292892193639,
+        -416.18867961801743
+      ],
+      "observed_marker_point_px": [
+        621.4639282226562,
+        419.0703125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -18.53607177734375,
+        59.0703125
+      ],
+      "observed_center_distance_px": 61.9103204303006,
+      "robot_xy_mm": [
+        -122.82192530978575,
+        -416.18691093739415
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 24,
+      "success": true,
+      "predicted_xy_mm": [
+        -160.1939139808471,
+        -415.13069104295715
+      ],
+      "observed_marker_point_px": [
+        591.5376586914062,
+        418.46429443359375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -48.46234130859375,
+        58.46429443359375
+      ],
+      "observed_center_distance_px": 75.93860841975295,
+      "robot_xy_mm": [
+        -160.20142521134815,
+        -415.13152264743053
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 30,
+      "success": true,
+      "predicted_xy_mm": [
+        120.43835559815435,
+        -399.2284350174313
+      ],
+      "observed_marker_point_px": [
+        812.6218872070312,
+        402.8172912597656
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        172.62188720703125,
+        42.817291259765625
+      ],
+      "observed_center_distance_px": 177.85285033909528,
+      "robot_xy_mm": [
+        120.43401574697256,
+        -399.23493600371927
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 33,
+      "success": true,
+      "predicted_xy_mm": [
+        8.809809392330488,
+        -399.8336095438038
+      ],
+      "observed_marker_point_px": [
+        724.7617797851562,
+        404.08526611328125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        84.76177978515625,
+        44.08526611328125
+      ],
+      "observed_center_distance_px": 95.54093363907508,
+      "robot_xy_mm": [
+        8.794414402482902,
+        -399.8343017969071
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 34,
+      "success": true,
+      "predicted_xy_mm": [
+        -28.731486383390212,
+        -399.72400391931075
+      ],
+      "observed_marker_point_px": [
+        695.1883544921875,
+        404.51483154296875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        55.1883544921875,
+        44.51483154296875
+      ],
+      "observed_center_distance_px": 70.90362965923704,
+      "robot_xy_mm": [
+        -28.74188222673513,
+        -399.7313605331316
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 36,
+      "success": true,
+      "predicted_xy_mm": [
+        -103.87504527447814,
+        -398.7455715773637
+      ],
+      "observed_marker_point_px": [
+        635.89208984375,
+        404.9296569824219
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -4.10791015625,
+        44.929656982421875
+      ],
+      "observed_center_distance_px": 45.11705888474904,
+      "robot_xy_mm": [
+        -103.88923932058457,
+        -398.74873222534796
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 37,
+      "success": true,
+      "predicted_xy_mm": [
+        -141.3413079034156,
+        -397.9657077007503
+      ],
+      "observed_marker_point_px": [
+        607.0191040039062,
+        405.0533447265625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -32.98089599609375,
+        45.0533447265625
+      ],
+      "observed_center_distance_px": 55.834965494353355,
+      "robot_xy_mm": [
+        -141.35648203903187,
+        -397.9620642412348
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 42,
+      "success": true,
+      "predicted_xy_mm": [
+        176.01885735759643,
+        -381.00991013743976
+      ],
+      "observed_marker_point_px": [
+        854.95849609375,
+        388.7525634765625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        214.95849609375,
+        28.7525634765625
+      ],
+      "observed_center_distance_px": 216.87292350443494,
+      "robot_xy_mm": [
+        176.0185306743684,
+        -381.01498253076693
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 44,
+      "success": true,
+      "predicted_xy_mm": [
+        102.4625271756712,
+        -381.597530489047
+      ],
+      "observed_marker_point_px": [
+        797.2276000976562,
+        388.41693115234375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.22760009765625,
+        28.41693115234375
+      ],
+      "observed_center_distance_px": 159.77496740286182,
+      "robot_xy_mm": [
+        102.44042757276462,
+        -381.6025678294826
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 45,
+      "success": true,
+      "predicted_xy_mm": [
+        65.14564968234319,
+        -381.87083898048405
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        65.1265586868588,
+        -381.87664181560814
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 46,
+      "success": true,
+      "predicted_xy_mm": [
+        27.89655976271107,
+        -381.9359665956084
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        27.88121298404134,
+        -381.9401767312727
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 48,
+      "success": true,
+      "predicted_xy_mm": [
+        -47.465517706038604,
+        -381.78581373196795
+      ],
+      "observed_marker_point_px": [
+        679.72021484375,
+        390.3040466308594
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        39.72021484375,
+        30.304046630859375
+      ],
+      "observed_center_distance_px": 49.960291326602146,
+      "robot_xy_mm": [
+        -47.488895157744416,
+        -381.7894089592865
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 49,
+      "success": true,
+      "predicted_xy_mm": [
+        -85.05068700749663,
+        -381.3540434492671
+      ],
+      "observed_marker_point_px": [
+        650.3151245117188,
+        390.7546691894531
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        10.31512451171875,
+        30.754669189453125
+      ],
+      "observed_center_distance_px": 32.4384258348792,
+      "robot_xy_mm": [
+        -85.06294471924092,
+        -381.3566135857535
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 50,
+      "success": true,
+      "predicted_xy_mm": [
+        -122.55752673885353,
+        -380.5510841327891
+      ],
+      "observed_marker_point_px": [
+        620.7009887695312,
+        389.50433349609375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -19.29901123046875,
+        29.50433349609375
+      ],
+      "observed_center_distance_px": 35.255602810368714,
+      "robot_xy_mm": [
+        -122.56610934004482,
+        -380.55420507579424
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 51,
+      "success": true,
+      "predicted_xy_mm": [
+        -160.11360975764035,
+        -379.55155661333765
+      ],
+      "observed_marker_point_px": [
+        591.6820068359375,
+        389.29974365234375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -48.3179931640625,
+        29.29974365234375
+      ],
+      "observed_center_distance_px": 56.50755207488153,
+      "robot_xy_mm": [
+        -160.1250031777018,
+        -379.5499648109799
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 52,
+      "success": true,
+      "predicted_xy_mm": [
+        -197.04232787252033,
+        -378.4897530864213
+      ],
+      "observed_marker_point_px": [
+        563.787353515625,
+        388.95477294921875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -76.212646484375,
+        28.95477294921875
+      ],
+      "observed_center_distance_px": 81.52758036819888,
+      "robot_xy_mm": [
+        -197.04722984270626,
+        -378.49077931502234
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 53,
+      "success": true,
+      "predicted_xy_mm": [
+        -234.212825378471,
+        -377.5341964810059
+      ],
+      "observed_marker_point_px": [
+        534.4194946289062,
+        389.84185791015625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -105.58050537109375,
+        29.84185791015625
+      ],
+      "observed_center_distance_px": 109.7168154748647,
+      "robot_xy_mm": [
+        -234.2212280169523,
+        -377.53203766360764
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 56,
+      "success": true,
+      "predicted_xy_mm": [
+        158.1114728885587,
+        -362.99285423976886
+      ],
+      "observed_marker_point_px": [
+        839.2230834960938,
+        373.8269348144531
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        199.22308349609375,
+        13.826934814453125
+      ],
+      "observed_center_distance_px": 199.7023312934896,
+      "robot_xy_mm": [
+        158.10378811818185,
+        -362.99424674752385
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 57,
+      "success": true,
+      "predicted_xy_mm": [
+        121.44734081358253,
+        -363.3022050526127
+      ],
+      "observed_marker_point_px": [
+        811.8673706054688,
+        373.7489013671875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        171.86737060546875,
+        13.7489013671875
+      ],
+      "observed_center_distance_px": 172.41643009772065,
+      "robot_xy_mm": [
+        121.43599864616546,
+        -363.3104811623243
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 60,
+      "success": true,
+      "predicted_xy_mm": [
+        9.470446420623386,
+        -364.09967497200256
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        9.456097877946815,
+        -364.10268386809526
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 61,
+      "success": true,
+      "predicted_xy_mm": [
+        -28.25248960661216,
+        -363.91817430531654
+      ],
+      "observed_marker_point_px": [
+        694.5406494140625,
+        375.455078125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        54.5406494140625,
+        15.455078125
+      ],
+      "observed_center_distance_px": 56.68811055554357,
+      "robot_xy_mm": [
+        -28.2705537667918,
+        -363.9247479714517
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 62,
+      "success": true,
+      "predicted_xy_mm": [
+        -65.8828855596507,
+        -363.6693897123177
+      ],
+      "observed_marker_point_px": [
+        665.7529907226562,
+        376.3221740722656
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        25.75299072265625,
+        16.322174072265625
+      ],
+      "observed_center_distance_px": 30.489832692334655,
+      "robot_xy_mm": [
+        -65.89644466522077,
+        -363.6764230775034
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 63,
+      "success": true,
+      "predicted_xy_mm": [
+        -103.72901434817231,
+        -363.27030186908473
+      ],
+      "observed_marker_point_px": [
+        634.9766845703125,
+        375.98614501953125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -5.0233154296875,
+        15.98614501953125
+      ],
+      "observed_center_distance_px": 16.756805497815517,
+      "robot_xy_mm": [
+        -103.74121736074846,
+        -363.27191723137094
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 64,
+      "success": true,
+      "predicted_xy_mm": [
+        -141.09426552329475,
+        -362.2859353077509
+      ],
+      "observed_marker_point_px": [
+        606.635498046875,
+        375.5314636230469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -33.364501953125,
+        15.531463623046875
+      ],
+      "observed_center_distance_px": 36.802396020559726,
+      "robot_xy_mm": [
+        -141.10131835387708,
+        -362.2879104424083
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 65,
+      "success": true,
+      "predicted_xy_mm": [
+        -178.55489381976304,
+        -361.2067655822379
+      ],
+      "observed_marker_point_px": [
+        577.2086791992188,
+        375.3738098144531
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -62.79132080078125,
+        15.373809814453125
+      ],
+      "observed_center_distance_px": 64.64598979146038,
+      "robot_xy_mm": [
+        -178.56315468180685,
+        -361.20784920441633
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 66,
+      "success": true,
+      "predicted_xy_mm": [
+        -215.53660764056212,
+        -360.04779680120726
+      ],
+      "observed_marker_point_px": [
+        550.0031127929688,
+        374.056640625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -89.99688720703125,
+        14.056640625
+      ],
+      "observed_center_distance_px": 91.08802804219391,
+      "robot_xy_mm": [
+        -215.5463651072286,
+        -360.0512575062374
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 69,
+      "success": true,
+      "predicted_xy_mm": [
+        177.3784072656967,
+        -344.61659693774726
+      ],
+      "observed_marker_point_px": [
+        855.12744140625,
+        358.1669921875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        215.12744140625,
+        -1.8330078125
+      ],
+      "observed_center_distance_px": 215.13525039760503,
+      "robot_xy_mm": [
+        177.3797547610631,
+        -344.6212852036174
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 73,
+      "success": true,
+      "predicted_xy_mm": [
+        28.57720373996886,
+        -346.0707561461231
+      ],
+      "observed_marker_point_px": [
+        739.009033203125,
+        360.83636474609375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        99.009033203125,
+        0.83636474609375
+      ],
+      "observed_center_distance_px": 99.01256567631211,
+      "robot_xy_mm": [
+        28.55660886291351,
+        -346.0736935527362
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 74,
+      "success": true,
+      "predicted_xy_mm": [
+        -8.834090672632945,
+        -346.1213281627137
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        -8.84173531166272,
+        -346.129138797221
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 75,
+      "success": true,
+      "predicted_xy_mm": [
+        -46.731401814229514,
+        -345.9158887379011
+      ],
+      "observed_marker_point_px": [
+        680.8342895507812,
+        360.8607177734375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        40.83428955078125,
+        0.8607177734375
+      ],
+      "observed_center_distance_px": 40.84335978102872,
+      "robot_xy_mm": [
+        -46.74860618741909,
+        -345.9208755545627
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 76,
+      "success": true,
+      "predicted_xy_mm": [
+        -84.47011251499265,
+        -345.7548759492528
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        -84.47621164273352,
+        -345.7572153412017
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 78,
+      "success": true,
+      "predicted_xy_mm": [
+        -159.9132150064088,
+        -343.85699981370396
+      ],
+      "observed_marker_point_px": [
+        591.47900390625,
+        360.4491882324219
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -48.52099609375,
+        0.449188232421875
+      ],
+      "observed_center_distance_px": 48.5230752528923,
+      "robot_xy_mm": [
+        -159.92656749246058,
+        -343.8575084191309
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 79,
+      "success": true,
+      "predicted_xy_mm": [
+        -197.07566922498546,
+        -342.72756501946986
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        -197.08566995704095,
+        -342.7266419052606
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 80,
+      "success": true,
+      "predicted_xy_mm": [
+        -234.17662292801225,
+        -341.67324362453934
+      ],
+      "observed_marker_point_px": [
+        535.2615966796875,
+        360.07421875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -104.7384033203125,
+        0.07421875
+      ],
+      "observed_center_distance_px": 104.73842961640823,
+      "robot_xy_mm": [
+        -234.18677589379595,
+        -341.67000305012436
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 84,
+      "success": true,
+      "predicted_xy_mm": [
+        122.47709040702999,
+        -327.1522550666148
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        122.473209232155,
+        -327.15723014077855
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 85,
+      "success": true,
+      "predicted_xy_mm": [
+        85.37451602934078,
+        -327.3768364902264
+      ],
+      "observed_marker_point_px": [
+        782.4505004882812,
+        343.67999267578125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        142.45050048828125,
+        -16.32000732421875
+      ],
+      "observed_center_distance_px": 143.3823131645754,
+      "robot_xy_mm": [
+        85.35899585212911,
+        -327.3833400713829
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 87,
+      "success": true,
+      "predicted_xy_mm": [
+        10.172470404361635,
+        -328.03655107572826
+      ],
+      "observed_marker_point_px": [
+        723.4671630859375,
+        345.52978515625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        83.4671630859375,
+        -14.47021484375
+      ],
+      "observed_center_distance_px": 84.71218584854702,
+      "robot_xy_mm": [
+        10.15517138014536,
+        -328.03713600291206
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 90,
+      "success": true,
+      "predicted_xy_mm": [
+        -103.40210995394803,
+        -327.33238354376084
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        -103.40846619009307,
+        -327.33175705735204
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 91,
+      "success": true,
+      "predicted_xy_mm": [
+        -141.19679788563877,
+        -326.64036980073286
+      ],
+      "observed_marker_point_px": [
+        605.7188110351562,
+        347.5194091796875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -34.28118896484375,
+        -12.4805908203125
+      ],
+      "observed_center_distance_px": 36.48239389167593,
+      "robot_xy_mm": [
+        -141.21042726632018,
+        -326.638962917871
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 93,
+      "success": true,
+      "predicted_xy_mm": [
+        -215.73110277706843,
+        -324.21148463778866
+      ],
+      "observed_marker_point_px": [
+        548.7432250976562,
+        345.5610046386719
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -91.25677490234375,
+        -14.438995361328125
+      ],
+      "observed_center_distance_px": 92.39201022069761,
+      "robot_xy_mm": [
+        -215.74048479126753,
+        -324.2128772164293
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 98,
+      "success": true,
+      "predicted_xy_mm": [
+        104.44006515796723,
+        -309.1851766516842
+      ],
+      "observed_marker_point_px": [
+        797.0777587890625,
+        330.08538818359375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.0777587890625,
+        -29.91461181640625
+      ],
+      "observed_center_distance_px": 159.9009265336545,
+      "robot_xy_mm": [
+        104.43443847425664,
+        -309.19017780055543
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 102,
+      "success": true,
+      "predicted_xy_mm": [
+        -45.954413001245015,
+        -309.9502199173181
+      ],
+      "observed_marker_point_px": [
+        680.4564819335938,
+        331.48101806640625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        40.45648193359375,
+        -28.51898193359375
+      ],
+      "observed_center_distance_px": 49.49807330565346,
+      "robot_xy_mm": [
+        -45.969006894680554,
+        -309.9586396791008
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 104,
+      "success": true,
+      "predicted_xy_mm": [
+        -121.9042138508246,
+        -309.074690178017
+      ],
+      "observed_marker_point_px": [
+        621.3775024414062,
+        332.4222412109375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -18.62249755859375,
+        -27.5777587890625
+      ],
+      "observed_center_distance_px": 33.276571264893626,
+      "robot_xy_mm": [
+        -121.90920473945465,
+        -309.075847008512
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 105,
+      "success": true,
+      "predicted_xy_mm": [
+        -159.78077417127716,
+        -308.0476765750377
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        -159.78783035012387,
+        -308.0454930911041
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 107,
+      "success": true,
+      "predicted_xy_mm": [
+        -234.34367823232657,
+        -305.87124551411574
+      ],
+      "observed_marker_point_px": [
+        535.6205444335938,
+        331.92578125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -104.37945556640625,
+        -28.07421875
+      ],
+      "observed_center_distance_px": 108.08900269112593,
+      "robot_xy_mm": [
+        -234.35066288399693,
+        -305.8683042474295
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 110,
+      "success": true,
+      "predicted_xy_mm": [
+        160.79197543597076,
+        -290.1493979177078
+      ],
+      "observed_marker_point_px": [
+        841.1246337890625,
+        315.0343933105469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        201.1246337890625,
+        -44.965606689453125
+      ],
+      "observed_center_distance_px": 206.0898447321825,
+      "robot_xy_mm": [
+        160.7878710342821,
+        -290.15597252353587
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 112,
+      "success": true,
+      "predicted_xy_mm": [
+        86.32544587080456,
+        -291.193156207294
+      ],
+      "observed_marker_point_px": [
+        783.0269775390625,
+        315.76202392578125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        143.0269775390625,
+        -44.23797607421875
+      ],
+      "observed_center_distance_px": 149.7121064947743,
+      "robot_xy_mm": [
+        86.31278598103944,
+        -291.1985612094519
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 113,
+      "success": true,
+      "predicted_xy_mm": [
+        48.90939222394753,
+        -291.45714889365195
+      ],
+      "observed_marker_point_px": [
+        754.63916015625,
+        315.53143310546875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        114.63916015625,
+        -44.46856689453125
+      ],
+      "observed_center_distance_px": 122.96174398154793,
+      "robot_xy_mm": [
+        48.89682686183474,
+        -291.4602964471852
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 114,
+      "success": true,
+      "predicted_xy_mm": [
+        11.239096220525255,
+        -291.6407442218904
+      ],
+      "observed_marker_point_px": [
+        724.9345092773438,
+        315.867431640625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        84.93450927734375,
+        -44.132568359375
+      ],
+      "observed_center_distance_px": 95.71600940374655,
+      "robot_xy_mm": [
+        11.231911501575674,
+        -291.6414456048199
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 115,
+      "success": true,
+      "predicted_xy_mm": [
+        -26.80469242885183,
+        -291.660145975478
+      ],
+      "observed_marker_point_px": [
+        695.5164184570312,
+        315.79931640625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        55.51641845703125,
+        -44.20068359375
+      ],
+      "observed_center_distance_px": 70.96318163985462,
+      "robot_xy_mm": [
+        -26.81685105628602,
+        -291.6694773883
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 116,
+      "success": true,
+      "predicted_xy_mm": [
+        -64.70485743680157,
+        -291.87078690137076
+      ],
+      "observed_marker_point_px": [
+        665.7662353515625,
+        317.51220703125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        25.7662353515625,
+        -42.48779296875
+      ],
+      "observed_center_distance_px": 49.69015431197081,
+      "robot_xy_mm": [
+        -64.71833843848783,
+        -291.8770941480541
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 117,
+      "success": true,
+      "predicted_xy_mm": [
+        -102.71228601206462,
+        -291.29907352920003
+      ],
+      "observed_marker_point_px": [
+        637.0214233398438,
+        317.78216552734375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -2.97857666015625,
+        -42.21783447265625
+      ],
+      "observed_center_distance_px": 42.32277715936219,
+      "robot_xy_mm": [
+        -102.72450220593032,
+        -291.3035180945666
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 118,
+      "success": true,
+      "predicted_xy_mm": [
+        -140.84005706395732,
+        -290.71403658745254
+      ],
+      "observed_marker_point_px": [
+        606.0712890625,
+        318.47100830078125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -33.9287109375,
+        -41.52899169921875
+      ],
+      "observed_center_distance_px": 53.626621909590874,
+      "robot_xy_mm": [
+        -140.85255322653313,
+        -290.7154525781665
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 119,
+      "success": true,
+      "predicted_xy_mm": [
+        -178.43179121390543,
+        -289.5560312457928
+      ],
+      "observed_marker_point_px": [
+        578.1541137695312,
+        317.92205810546875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -61.84588623046875,
+        -42.07794189453125
+      ],
+      "observed_center_distance_px": 74.80285313884512,
+      "robot_xy_mm": [
+        -178.44268256305367,
+        -289.5563859495795
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 123,
+      "success": true,
+      "predicted_xy_mm": [
+        179.55144508009312,
+        -271.5818483783853
+      ],
+      "observed_marker_point_px": [
+        854.7406005859375,
+        300.88427734375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        214.7406005859375,
+        -59.11572265625
+      ],
+      "observed_center_distance_px": 222.72897028716272,
+      "robot_xy_mm": [
+        179.55171287143284,
+        -271.58475146974206
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 124,
+      "success": true,
+      "predicted_xy_mm": [
+        142.80530934767717,
+        -271.9745784326198
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        142.79665884520514,
+        -271.98305931975216
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 125,
+      "success": true,
+      "predicted_xy_mm": [
+        105.62104629333982,
+        -272.51768270602514
+      ],
+      "observed_marker_point_px": [
+        797.8836059570312,
+        301.3472900390625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.88360595703125,
+        -58.6527099609375
+      ],
+      "observed_center_distance_px": 168.42616606619345,
+      "robot_xy_mm": [
+        105.60634270338198,
+        -272.5297446092827
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 126,
+      "success": true,
+      "predicted_xy_mm": [
+        68.3722844571616,
+        -273.0358447510319
+      ],
+      "observed_marker_point_px": [
+        769.5218505859375,
+        301.252197265625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        129.5218505859375,
+        -58.747802734375
+      ],
+      "observed_center_distance_px": 142.22241070001223,
+      "robot_xy_mm": [
+        68.3567393648912,
+        -273.0408261388963
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 127,
+      "success": true,
+      "predicted_xy_mm": [
+        30.631043913002408,
+        -273.1982473876262
+      ],
+      "observed_marker_point_px": [
+        739.974853515625,
+        300.763427734375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        99.974853515625,
+        -59.236572265625
+      ],
+      "observed_center_distance_px": 116.20646638312039,
+      "robot_xy_mm": [
+        30.60895821368384,
+        -273.19666717107884
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 128,
+      "success": true,
+      "predicted_xy_mm": [
+        -7.007135368779641,
+        -273.6335709048281
+      ],
+      "observed_marker_point_px": [
+        712.0449829101562,
+        301.8037414550781
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        72.04498291015625,
+        -58.196258544921875
+      ],
+      "observed_center_distance_px": 92.6136278911052,
+      "robot_xy_mm": [
+        -7.0159391407620815,
+        -273.6412388602714
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 130,
+      "success": true,
+      "predicted_xy_mm": [
+        -83.68066433124265,
+        -273.39054502303503
+      ],
+      "observed_marker_point_px": [
+        650.4431762695312,
+        302.5245361328125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        10.44317626953125,
+        -57.4754638671875
+      ],
+      "observed_center_distance_px": 58.416512026522746,
+      "robot_xy_mm": [
+        -83.69024358050453,
+        -273.39303962430387
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 131,
+      "success": true,
+      "predicted_xy_mm": [
+        -121.64371637418047,
+        -272.7280949408041
+      ],
+      "observed_marker_point_px": [
+        620.9933471679688,
+        302.01104736328125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -19.00665283203125,
+        -57.98895263671875
+      ],
+      "observed_center_distance_px": 61.02435153101565,
+      "robot_xy_mm": [
+        -121.65300594637358,
+        -272.72261504491485
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 132,
+      "success": true,
+      "predicted_xy_mm": [
+        -159.77974332468727,
+        -271.86104233177235
+      ],
+      "observed_marker_point_px": [
+        591.9421997070312,
+        302.66802978515625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -48.05780029296875,
+        -57.33197021484375
+      ],
+      "observed_center_distance_px": 74.80980535808523,
+      "robot_xy_mm": [
+        -159.78932633645616,
+        -271.8593861815535
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 134,
+      "success": true,
+      "predicted_xy_mm": [
+        -234.90883793351537,
+        -269.7863434891141
+      ],
+      "observed_marker_point_px": [
+        533.1970825195312,
+        303.82257080078125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -106.80291748046875,
+        -56.17742919921875
+      ],
+      "observed_center_distance_px": 120.67628902884383,
+      "robot_xy_mm": [
+        -234.91608689805912,
+        -269.7848433610966
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 138,
+      "success": true,
+      "predicted_xy_mm": [
+        124.86688234334551,
+        -253.6500230711787
+      ],
+      "observed_marker_point_px": [
+        812.7156372070312,
+        285.5145263671875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        172.71563720703125,
+        -74.4854736328125
+      ],
+      "observed_center_distance_px": 188.09246959443976,
+      "robot_xy_mm": [
+        124.86463535627023,
+        -253.65642864617283
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 139,
+      "success": true,
+      "predicted_xy_mm": [
+        87.59333125735662,
+        -254.3631891546472
+      ],
+      "observed_marker_point_px": [
+        783.755859375,
+        286.5825500488281
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        143.755859375,
+        -73.41744995117188
+      ],
+      "observed_center_distance_px": 161.41830460631658,
+      "robot_xy_mm": [
+        87.58273961503481,
+        -254.37085597904553
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 141,
+      "success": true,
+      "predicted_xy_mm": [
+        12.148791517972533,
+        -254.97880211039416
+      ],
+      "observed_marker_point_px": [
+        725.379150390625,
+        285.6906433105469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        85.379150390625,
+        -74.30935668945312
+      ],
+      "observed_center_distance_px": 113.18780770482894,
+      "robot_xy_mm": [
+        12.135673718642648,
+        -254.9776387215536
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 142,
+      "success": true,
+      "predicted_xy_mm": [
+        -25.919996692142632,
+        -255.2327844726021
+      ],
+      "observed_marker_point_px": [
+        696.134033203125,
+        285.8143310546875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        56.134033203125,
+        -74.1856689453125
+      ],
+      "observed_center_distance_px": 93.02979716474202,
+      "robot_xy_mm": [
+        -25.9320848646366,
+        -255.2432041727659
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 144,
+      "success": true,
+      "predicted_xy_mm": [
+        -102.49941563164954,
+        -254.97997680805173
+      ],
+      "observed_marker_point_px": [
+        637.0394287109375,
+        288.37738037109375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -2.9605712890625,
+        -71.62261962890625
+      ],
+      "observed_center_distance_px": 71.68378216071336,
+      "robot_xy_mm": [
+        -102.5098031361063,
+        -254.9835223598464
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 145,
+      "success": true,
+      "predicted_xy_mm": [
+        -140.6440781401849,
+        -254.06701472575546
+      ],
+      "observed_marker_point_px": [
+        606.4400024414062,
+        286.7149658203125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -33.55999755859375,
+        -73.2850341796875
+      ],
+      "observed_center_distance_px": 80.60378198850711,
+      "robot_xy_mm": [
+        -140.65035296836936,
+        -254.07185521503567
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 146,
+      "success": true,
+      "predicted_xy_mm": [
+        -178.6239463089975,
+        -253.26598880189567
+      ],
+      "observed_marker_point_px": [
+        577.358642578125,
+        288.29766845703125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -62.641357421875,
+        -71.70233154296875
+      ],
+      "observed_center_distance_px": 95.2111548525324,
+      "robot_xy_mm": [
+        -178.63193346355334,
+        -253.26602238240008
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 147,
+      "success": true,
+      "predicted_xy_mm": [
+        -216.04407755481085,
+        -252.14336024173747
+      ],
+      "observed_marker_point_px": [
+        548.9147338867188,
+        288.7171325683594
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -91.08526611328125,
+        -71.28286743164062
+      ],
+      "observed_center_distance_px": 115.66232269933072,
+      "robot_xy_mm": [
+        -216.0515598519583,
+        -252.14460920873466
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 152,
+      "success": true,
+      "predicted_xy_mm": [
+        106.67145006054969,
+        -235.351428410432
+      ],
+      "observed_marker_point_px": [
+        797.4607543945312,
+        270.1995544433594
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.46075439453125,
+        -89.80044555664062
+      ],
+      "observed_center_distance_px": 181.26778311841866,
+      "robot_xy_mm": [
+        106.6723553898802,
+        -235.36220999422332
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 153,
+      "success": true,
+      "predicted_xy_mm": [
+        69.32731822527327,
+        -235.7975898229117
+      ],
+      "observed_marker_point_px": [
+        768.8762817382812,
+        271.08135986328125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        128.87628173828125,
+        -88.91864013671875
+      ],
+      "observed_center_distance_px": 156.57464851772184,
+      "robot_xy_mm": [
+        69.31398437266986,
+        -235.80163539802
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 155,
+      "success": true,
+      "predicted_xy_mm": [
+        -6.612270007154159,
+        -236.6618832440733
+      ],
+      "observed_marker_point_px": [
+        709.472900390625,
+        270.47930908203125
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        69.472900390625,
+        -89.52069091796875
+      ],
+      "observed_center_distance_px": 113.31565642538632,
+      "robot_xy_mm": [
+        -6.6247702468913205,
+        -236.66844895089267
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 156,
+      "success": true,
+      "predicted_xy_mm": [
+        -44.75891790320493,
+        -236.7176257039274
+      ],
+      "observed_marker_point_px": [
+        681.4718017578125,
+        270.6701354980469
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        41.4718017578125,
+        -89.32986450195312
+      ],
+      "observed_center_distance_px": 98.48723284251926,
+      "robot_xy_mm": [
+        -44.7668903474218,
+        -236.72447173337912
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 158,
+      "success": true,
+      "predicted_xy_mm": [
+        -121.53172974106124,
+        -236.23313183238207
+      ],
+      "observed_marker_point_px": [
+        621.490966796875,
+        272.46380615234375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -18.509033203125,
+        -87.53619384765625
+      ],
+      "observed_center_distance_px": 89.47161305938792,
+      "robot_xy_mm": [
+        -121.54127776527594,
+        -236.24130369841177
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 159,
+      "success": true,
+      "predicted_xy_mm": [
+        -159.64327004427872,
+        -235.1528193724946
+      ],
+      "observed_marker_point_px": [
+        592.1306762695312,
+        271.50799560546875
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -47.86932373046875,
+        -88.49200439453125
+      ],
+      "observed_center_distance_px": 100.60967645397811,
+      "robot_xy_mm": [
+        -159.65463443809313,
+        -235.15164093035315
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 161,
+      "success": true,
+      "predicted_xy_mm": [
+        -235.1115145098525,
+        -233.14471392077783
+      ],
+      "observed_marker_point_px": [
+        533.1627197265625,
+        273.05816650390625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -106.8372802734375,
+        -86.94183349609375
+      ],
+      "observed_center_distance_px": 137.7428287348838,
+      "robot_xy_mm": [
+        -235.122964333296,
+        -233.14608082760537
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 165,
+      "success": true,
+      "predicted_xy_mm": [
+        125.66028417219232,
+        -216.43224490980555
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        125.65690884759678,
+        -216.43964954865405
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 166,
+      "success": true,
+      "predicted_xy_mm": [
+        88.53492098621919,
+        -216.7526448715085
+      ],
+      "observed_marker_point_px": [
+        783.998779296875,
+        254.75503540039062
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        143.998779296875,
+        -105.24496459960938
+      ],
+      "observed_center_distance_px": 178.35961149476398,
+      "robot_xy_mm": [
+        88.51970148802262,
+        -216.75565304797027
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 168,
+      "success": true,
+      "predicted_xy_mm": [
+        12.555724611802955,
+        -217.6444832002567
+      ],
+      "observed_marker_point_px": null,
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": null,
+      "observed_center_distance_px": null,
+      "robot_xy_mm": [
+        12.545010478540053,
+        -217.64857493367225
+      ],
+      "note": "marker not visible after move"
+    },
+    {
+      "marker_id": 169,
+      "success": true,
+      "predicted_xy_mm": [
+        -25.494949784791793,
+        -218.02667005981687
+      ],
+      "observed_marker_point_px": [
+        695.1512451171875,
+        254.55368041992188
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        55.1512451171875,
+        -105.44631958007812
+      ],
+      "observed_center_distance_px": 118.99826112578312,
+      "robot_xy_mm": [
+        -25.501386645078572,
+        -218.03639503261257
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 174,
+      "success": true,
+      "predicted_xy_mm": [
+        -216.2862869902358,
+        -215.4969567026468
+      ],
+      "observed_marker_point_px": [
+        548.3276977539062,
+        258.3169250488281
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -91.67230224609375,
+        -101.68307495117188
+      ],
+      "observed_center_distance_px": 136.90602152799855,
+      "robot_xy_mm": [
+        -216.290634562344,
+        -215.49276250376093
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 179,
+      "success": true,
+      "predicted_xy_mm": [
+        107.56324911716699,
+        -197.92233900220688
+      ],
+      "observed_marker_point_px": [
+        797.739501953125,
+        241.5875701904297
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        157.739501953125,
+        -118.41242980957031
+      ],
+      "observed_center_distance_px": 197.23907830302377,
+      "robot_xy_mm": [
+        107.55980560388674,
+        -197.9329971222382
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 180,
+      "success": true,
+      "predicted_xy_mm": [
+        70.0457539309164,
+        -198.21406629530355
+      ],
+      "observed_marker_point_px": [
+        768.946044921875,
+        239.9726104736328
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        128.946044921875,
+        -120.02738952636719
+      ],
+      "observed_center_distance_px": 176.16372140003313,
+      "robot_xy_mm": [
+        70.03738536955085,
+        -198.22039559677003
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 181,
+      "success": true,
+      "predicted_xy_mm": [
+        32.088431188273844,
+        -198.516494125658
+      ],
+      "observed_marker_point_px": [
+        739.3438720703125,
+        238.98959350585938
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        99.3438720703125,
+        -121.01040649414062
+      ],
+      "observed_center_distance_px": 156.56539655300517,
+      "robot_xy_mm": [
+        32.07676677855821,
+        -198.51563389757192
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 182,
+      "success": true,
+      "predicted_xy_mm": [
+        -5.978836462310362,
+        -199.19912930601848
+      ],
+      "observed_marker_point_px": [
+        709.9834594726562,
+        239.95855712890625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        69.98345947265625,
+        -120.04144287109375
+      ],
+      "observed_center_distance_px": 138.95190753039336,
+      "robot_xy_mm": [
+        -5.986972718742404,
+        -199.20625864864652
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 183,
+      "success": true,
+      "predicted_xy_mm": [
+        -44.24387053441863,
+        -199.33512081911778
+      ],
+      "observed_marker_point_px": [
+        680.9026489257812,
+        239.29547119140625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        40.90264892578125,
+        -120.70452880859375
+      ],
+      "observed_center_distance_px": 127.44649843777722,
+      "robot_xy_mm": [
+        -44.25256328484224,
+        -199.3487091233524
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 184,
+      "success": true,
+      "predicted_xy_mm": [
+        -82.87236227631844,
+        -199.2034605209234
+      ],
+      "observed_marker_point_px": [
+        650.5317993164062,
+        238.51507568359375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        10.53179931640625,
+        -121.48492431640625
+      ],
+      "observed_center_distance_px": 121.94058238750547,
+      "robot_xy_mm": [
+        -82.88027354015038,
+        -199.21206034501344
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 186,
+      "success": true,
+      "predicted_xy_mm": [
+        -159.49225416869004,
+        -198.13664590794824
+      ],
+      "observed_marker_point_px": [
+        592.3998413085938,
+        240.16702270507812
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -47.60015869140625,
+        -119.83297729492188
+      ],
+      "observed_center_distance_px": 128.94075211046476,
+      "robot_xy_mm": [
+        -159.5020387738879,
+        -198.14121056264753
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 188,
+      "success": true,
+      "predicted_xy_mm": [
+        -235.3709158073625,
+        -196.53063244889674
+      ],
+      "observed_marker_point_px": [
+        533.319091796875,
+        244.3843994140625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -106.680908203125,
+        -115.6156005859375
+      ],
+      "observed_center_distance_px": 157.31428184971196,
+      "robot_xy_mm": [
+        -235.37842324614246,
+        -196.52782707190264
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 192,
+      "success": true,
+      "predicted_xy_mm": [
+        126.76287503323933,
+        -178.61903069830544
+      ],
+      "observed_marker_point_px": [
+        813.935302734375,
+        225.69140625
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        173.935302734375,
+        -134.30859375
+      ],
+      "observed_center_distance_px": 219.75506340560443,
+      "robot_xy_mm": [
+        126.76797692389574,
+        -178.62683594841002
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 194,
+      "success": true,
+      "predicted_xy_mm": [
+        51.47267928283331,
+        -179.70739724451624
+      ],
+      "observed_marker_point_px": [
+        755.5877075195312,
+        225.1630859375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        115.58770751953125,
+        -134.8369140625
+      ],
+      "observed_center_distance_px": 177.59930045897903,
+      "robot_xy_mm": [
+        51.46014678267524,
+        -179.71314210969186
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 195,
+      "success": true,
+      "predicted_xy_mm": [
+        13.275309668036373,
+        -180.0135081330369
+      ],
+      "observed_marker_point_px": [
+        725.4713745117188,
+        224.41847229003906
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        85.47137451171875,
+        -135.58152770996094
+      ],
+      "observed_center_distance_px": 160.27384851275454,
+      "robot_xy_mm": [
+        13.25598005634297,
+        -180.00828189564572
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 196,
+      "success": true,
+      "predicted_xy_mm": [
+        -25.046334056319928,
+        -180.48098951124138
+      ],
+      "observed_marker_point_px": [
+        694.7359619140625,
+        223.91062927246094
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        54.7359619140625,
+        -136.08937072753906
+      ],
+      "observed_center_distance_px": 146.68449935720975,
+      "robot_xy_mm": [
+        -25.049795111465862,
+        -180.49491287495093
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 197,
+      "success": true,
+      "predicted_xy_mm": [
+        -63.62633312797876,
+        -180.4080828694807
+      ],
+      "observed_marker_point_px": [
+        663.8359375,
+        222.2913818359375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        23.8359375,
+        -137.7086181640625
+      ],
+      "observed_center_distance_px": 139.75627153426592,
+      "robot_xy_mm": [
+        -63.63591716766166,
+        -180.42241036599805
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 198,
+      "success": true,
+      "predicted_xy_mm": [
+        -101.79239107594438,
+        -180.4347136362828
+      ],
+      "observed_marker_point_px": [
+        635.7195434570312,
+        222.90623474121094
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -4.28045654296875,
+        -137.09376525878906
+      ],
+      "observed_center_distance_px": 137.16057298308505,
+      "robot_xy_mm": [
+        -101.79826314191595,
+        -180.44197594710343
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 199,
+      "success": true,
+      "predicted_xy_mm": [
+        -140.05492981606128,
+        -179.7953487919835
+      ],
+      "observed_marker_point_px": [
+        608.4622802734375,
+        222.4349365234375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -31.5377197265625,
+        -137.5650634765625
+      ],
+      "observed_center_distance_px": 141.133888399852,
+      "robot_xy_mm": [
+        -140.06353210728057,
+        -179.8028460083336
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 200,
+      "success": true,
+      "predicted_xy_mm": [
+        -178.35779007025704,
+        -179.18956649992978
+      ],
+      "observed_marker_point_px": [
+        578.3109741210938,
+        224.95208740234375
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -61.68902587890625,
+        -135.04791259765625
+      ],
+      "observed_center_distance_px": 148.47045029524415,
+      "robot_xy_mm": [
+        -178.36827841883172,
+        -179.1898681981975
+      ],
+      "note": "visual inspection target reached"
+    },
+    {
+      "marker_id": 201,
+      "success": true,
+      "predicted_xy_mm": [
+        -216.49709474452422,
+        -178.42809050566254
+      ],
+      "observed_marker_point_px": [
+        548.3675537109375,
+        227.24427795410156
+      ],
+      "image_center_px": [
+        640.0,
+        360.0
+      ],
+      "observed_center_offset_px": [
+        -91.6324462890625,
+        -132.75572204589844
+      ],
+      "observed_center_distance_px": 161.30897975266527,
+      "robot_xy_mm": [
+        -216.5018516985636,
+        -178.42661432706353
+      ],
+      "note": "visual inspection target reached"
+    }
+  ],
+  "summary": {
+    "status": "completed",
+    "tested_count": 104,
+    "successful_count": 104,
+    "failed_count": 0,
+    "visible_count": 92,
+    "center_offset_px": {
+      "count": 92,
+      "mean": 112.83379242096512,
+      "median": 111.45231158984683,
+      "max": 222.72897028716272
+    },
+    "center_offset_dx_px": {
+      "count": 92,
+      "mean": 39.11852562945822,
+      "median": 40.367584228515625,
+      "min": -106.8372802734375,
+      "max": 215.12744140625
+    },
+    "center_offset_dy_px": {
+      "count": 92,
+      "mean": -42.50392648448115,
+      "median": -44.353271484375,
+      "min": -137.7086181640625,
+      "max": 59.0703125
+    }
+  }
+}

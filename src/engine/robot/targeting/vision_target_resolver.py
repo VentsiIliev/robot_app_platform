@@ -67,17 +67,25 @@ class VisionTargetResolver:
         active_mapper = mapper if mapper is not None else (frame_obj.mapper if frame_obj else None)
         current_rz = target.rz_degrees
 
+        is_available = getattr(self._base, "is_available", lambda: False)()
         _logger.info(
             "[CALIB] Resolve using transformer=%s available=%s frame=%s point=%s tcp_offset=(%.3f, %.3f)",
             self._base.__class__.__name__,
-            bool(getattr(self._base, "is_available", lambda: False)()),
+            bool(is_available),
             str(frame or ""),
             str(point.name),
             float(self._tcp_x),
             float(self._tcp_y),
         )
 
-        calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
+        if not is_available:
+            _logger.warning(
+                "[CALIB] Transformer not available — using raw pixel coordinates for point %s",
+                point.name,
+            )
+            calibration_xy = (target.x_pixels, target.y_pixels)
+        else:
+            calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
         plane_xy = _map_plane(calibration_xy, active_mapper)
         # Always apply the TCP-rotation delta so that the camera center lands on
         # the target regardless of the robot's current rz.  The calibration matrix

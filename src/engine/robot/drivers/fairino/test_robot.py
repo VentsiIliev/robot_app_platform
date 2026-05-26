@@ -37,6 +37,10 @@ class TestRobotWrapper(IRobot):
         _logger.debug("TestRobot: stop_motion called")
         return 0
 
+    def move_joints(self, joints, vel=30, acc=30, blocking=True) -> int:
+        _logger.debug("TestRobot: move_joints called with joints=%s, vel=%s, acc=%s, blocking=%s", joints, vel, acc, blocking)
+        return 0
+
     # --- State queries ---
     def get_current_position(self) -> List[float]:
         return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

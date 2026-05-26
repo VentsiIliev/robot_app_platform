@@ -18,6 +18,7 @@ from src.engine.robot.path_preparation.geometry import (
     compute_pickup_rz_from_robot_contour,
     compute_pickup_rz_from_robot_path,
     compute_pickup_rz_from_robot_contour_with_direction,
+    compute_centroid_robust,
     has_valid_contour,
     rebuild_pose_path_from_xy,
 )
@@ -308,6 +309,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         robot_paths = []
         pickup_px = self._extract_pickup_pixel(original_pickup_source)
+        if pickup_px is not None:
+            self._logger.info("[PICKUP] Extracted pickup_px: (%.3f, %.3f)", float(pickup_px[0]), float(pickup_px[1]))
         pickup_xy = None
         pickup_rz = 0.0
         pickup_camera_xy = None
@@ -368,8 +371,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         for path_pts, settings, pattern_type in robot_paths:
             raw_paths.append([list(pt) for pt in path_pts])
-            vel = _safe_float(settings.get("velocity"), 60.0)
-            acc = _safe_float(settings.get("acceleration"), 30.0)
+            vel = _safe_float(settings.get("velocity"), 20.0)
+            acc = _safe_float(settings.get("acceleration"), 20.0)
             preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm = _resolve_segment_interpolation_settings(settings)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
             input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
@@ -423,6 +426,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             sampled_paths.append([list(pt) for pt in sampled_path])
 
             if pickup_px is not None and pickup_xy is None:
+                # First, get the base position with RZ=0 (no rotation applied)
                 pickup_camera_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
@@ -430,17 +434,23 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     frame_name=self._calibration_frame_name,
                     rz_override=0.0,
                 )
+                
+                # Use the base position as the pickup position - this avoids
+                # the issue where applying RZ rotation to the transformation
+                # gives incorrect results for rotated contours
+                pickup_xy = pickup_camera_xy
+                
                 if use_workpiece_layer and pickup_rz_source_contour and robot_paths:
                     pickup_rz = compute_pickup_rz_from_robot_contour_with_direction(
                         pickup_rz_source_contour,
                         robot_paths[0][0],
                     )
                     self._logger.info(
-                        "[PICKUP_RZ] method=contour_axis_directed pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f contour_pts=%d path_pts=%d",
+                        "[PICKUP_RZ] method=contour_axis_directed pickup_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f contour_pts=%d path_pts=%d",
                         float(pickup_px[0]),
                         float(pickup_px[1]),
-                        float(pickup_camera_xy[0]),
-                        float(pickup_camera_xy[1]),
+                        float(pickup_xy[0]),
+                        float(pickup_xy[1]),
                         float(pickup_rz),
                         len(pickup_rz_source_contour),
                         len(robot_paths[0][0]),
@@ -449,21 +459,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     pickup_rz_path = pickup_rz_source_path or execution_spline
                     pickup_rz = compute_pickup_rz_from_robot_path(pickup_rz_path, pickup_camera_xy)
                     self._logger.info(
-                        "[PICKUP_RZ] method=path_tangent pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f path_pts=%d",
+                        "[PICKUP_RZ] method=path_tangent pickup_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f path_pts=%d robot_paths_len=%d",
                         float(pickup_px[0]),
                         float(pickup_px[1]),
-                        float(pickup_camera_xy[0]),
-                        float(pickup_camera_xy[1]),
+                        float(pickup_xy[0]),
+                        float(pickup_xy[1]),
                         float(pickup_rz),
                         len(pickup_rz_path),
+                        len(robot_paths),
                     )
-                pickup_xy = self._transform_single_pixel_to_robot(
-                    float(pickup_px[0]), float(pickup_px[1]),
-                    {"height_mm": workpiece_height_mm, **merged},
-                    target_point_name=self._pickup_target_point_name,
-                    frame_name=self._calibration_frame_name,
-                    rz_override=pickup_rz,
-                )
 
             execution_jobs.append(
                 {
@@ -593,12 +597,16 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         contour_arr = np.asarray((merged or {}).get("contour", []), dtype=np.float32)
         if contour_arr.size == 0:
             return None
-        contour_pts = contour_arr.reshape(-1, 1, 2)
-        moments = cv2.moments(contour_pts)
-        if abs(float(moments.get("m00", 0.0))) > 1e-9:
-            cx = float(moments["m10"] / moments["m00"])
-            cy = float(moments["m01"] / moments["m00"])
-            return cx, cy
+        
+        # Use robust centroid calculation that handles rotated complex shapes
+        # This fixes issues with miscalculated centroid for smooth edges, 
+        # non-standard shapes, and contours rotated 90 degrees
+        contour_pts = contour_arr.reshape(-1, 2)
+        centroid = compute_centroid_robust(contour_pts)
+        if centroid is not None:
+            return centroid
+        
+        # Fallback to mean of points if robust method fails
         flat_pts = contour_pts.reshape(-1, 2)
         return float(np.mean(flat_pts[:, 0])), float(np.mean(flat_pts[:, 1]))
 

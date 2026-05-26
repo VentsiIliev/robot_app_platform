@@ -175,6 +175,54 @@ class MotionService(IMotionService):
     def get_current_position(self) -> List[float]:
         return self._robot.get_current_position()
 
+    def move_joints(
+            self,
+            joints,
+            tool,
+            user,
+            velocity,
+            acceleration,
+            wait_to_reach=False,
+            wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        self._last_jog_target = []
+        try:
+            self._logger.debug("move_joints → joints=%s vel=%s acc=%s", joints, velocity, acceleration)
+            ret = self._robot.move_joints(
+                joints,
+                velocity,
+                acceleration,
+                blocking=wait_to_reach,
+            )
+            success = ret >= 0
+            if wait_to_reach and success:
+                success = self._wait_for_joints(joints, cancelled=wait_cancelled)
+            self._logger.debug("move_joints ← success=%s", success)
+            return success
+        except Exception:
+            self._logger.exception("move_joints failed")
+            return False
+
+    def _wait_for_joints(
+            self,
+            target: List[float],
+            threshold: float = 0.5,
+            delay: float = 0.1,
+            timeout: float = 60.0,
+            cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if cancelled is not None and cancelled():
+                return False
+            current = self._robot.get_current_position()
+            if current and len(current) >= 6:
+                dist = max(abs(a - b) for a, b in zip(current[:6], target[:6]))
+                if dist <= threshold:
+                    return True
+            time.sleep(delay)
+        return False
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

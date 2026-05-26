@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Robot App Platform
+Comment=Vision-guided industrial robot operator platform
+Exec=robot-app-platform
+Icon=robot-app-platform
+Terminal=false
+Categories=Science;Engineering;
+StartupNotify=true

@@ -1,7 +1,6 @@
 import logging
 import cv2
 # from matplotlib import pyplot as plt
-from pyzbar.pyzbar import decode
 
 _logger = logging.getLogger(__name__)
 
@@ -14,6 +13,12 @@ def detect_and_decode_barcode(image):
 
               "\n Check camera connection, camera index or image capture.")
         return None
+    try:
+        from pyzbar.pyzbar import decode
+    except Exception as exc:
+        _logger.warning("QR/barcode detection unavailable: %s", exc)
+        return None
+
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Detect barcodes in the grayscale image
@@ -41,4 +46,3 @@ def detect_and_decode_barcode(image):
     _logger.info("Returning None")
 
     return None
-

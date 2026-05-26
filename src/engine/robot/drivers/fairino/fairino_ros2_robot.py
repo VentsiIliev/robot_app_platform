@@ -61,6 +61,12 @@ class FairinoRos2Robot(IRobot):
     def get_current_acceleration(self) -> float:
         return 0.0
 
+    def move_joints(self, joints, vel=30, acc=30, blocking=True) -> int:
+        logger.debug("move_joints → joints=%s vel=%s acc=%s", joints, vel, acc)
+        ret = self._client.move_joints(joints, vel, acc, blocking=blocking) or 0
+        logger.debug("move_joints ← raw_ret=%s success=%s", ret, ret >= 0)
+        return ret
+
     def get_execution_status(self):
         return self._client.get_status()
 

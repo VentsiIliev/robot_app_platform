@@ -61,6 +61,123 @@ class Contour:
         angle = 0.5 * np.arctan2(2 * M["mu11"], M["mu20"] - M["mu02"])
         return np.degrees(angle)
 
+    def getOrientationMinAreaRect(self) -> float:
+        """Calculate orientation using minimum area bounding rectangle.
+        
+        This method is more stable than moments-based orientation, especially for:
+        - Elongated shapes
+        - Complex contours with smooth edges
+        - Contours rotated 90 degrees or at arbitrary angles
+        
+        Returns orientation in degrees [0, 180).
+        """
+        rect = cv2.minAreaRect(self.as_cv())
+        if rect == (0, 0, 0):
+            return 0.0
+        
+        center, size, angle = rect
+        if size[0] < 1 or size[1] < 1:
+            return 0.0
+        
+        # minAreaRect returns angle in [-90, 0)
+        # Convert to [0, 180) range
+        # The angle is the rotation of the shorter side relative to horizontal
+        angle = float(angle)
+        if angle < 0:
+            angle += 90.0
+        else:
+            angle = 90.0 + angle
+        
+        return angle % 180.0
+
+    def getOrientationPCA(self) -> float:
+        """Calculate orientation using Principal Component Analysis.
+        
+        This is the most robust method for complex shapes, using the
+        eigenvector corresponding to the largest eigenvalue of the
+        covariance matrix.
+        
+        Returns orientation in degrees [0, 180).
+        """
+        if len(self.contour_points) < 3:
+            return 0.0
+        
+        # Compute centroid
+        centroid = np.mean(self.contour_points, axis=0)
+        
+        # Center the points
+        centered = self.contour_points - centroid
+        
+        # Compute covariance matrix
+        cov = np.cov(centered.T)
+        
+        if cov.shape != (2, 2):
+            return 0.0
+        
+        # Compute eigenvalues and eigenvectors
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        
+        # Get the eigenvector corresponding to the largest eigenvalue
+        largest_idx = np.argmax(eigenvalues)
+        principal_axis = eigenvectors[:, largest_idx]
+        
+        # Compute angle from x-axis
+        angle = np.degrees(np.arctan2(principal_axis[1], principal_axis[0]))
+        
+        # Normalize to [0, 180)
+        return angle % 180.0
+
+    def getOrientationRobust(self) -> float:
+        """Get orientation using the most robust method available.
+        
+        Uses PCA as primary method, falls back to minAreaRect if PCA fails,
+        and finally falls back to moments-based if both fail.
+        
+        Returns orientation in degrees [0, 180).
+        """
+        # Try PCA first - most robust for complex shapes
+        pca_angle = self.getOrientationPCA()
+        if pca_angle != 0.0:
+            return pca_angle
+        
+        # Fall back to minAreaRect
+        min_area_angle = self.getOrientationMinAreaRect()
+        if min_area_angle != 0.0:
+            return min_area_angle
+        
+        # Final fallback to moments
+        return self.getOrientation()
+
+    def getCentroidRobust(self) -> tuple[float, float]:
+        """Calculate centroid using the most reliable method.
+        
+        Uses moments-based calculation with improved fallback handling
+        for edge cases (degenerate contours, single points, etc.)
+        """
+        M = self.getMoments()
+        m00 = float(M.get("m00", 0.0))
+        
+        if abs(m00) > 1e-10:
+            # Standard moments calculation
+            cx = float(M.get("m10", 0.0)) / m00
+            cy = float(M.get("m01", 0.0)) / m00
+            return (cx, cy)
+        
+        # Fallback 1: Use bounding box center
+        x, y, w, h = self.getBbox()
+        if w > 0 and h > 0:
+            return (float(x + w / 2.0), float(y + h / 2.0))
+        
+        # Fallback 2: Use mean of all points
+        if len(self.contour_points) > 0:
+            return tuple(np.mean(self.contour_points, axis=0).tolist())
+        
+        # Fallback 3: Use first point
+        if len(self.contour_points) > 0:
+            return tuple(self.contour_points[0].tolist())
+        
+        return (0.0, 0.0)
+
     # --- Comparison ---
     def match(self, other):
         if isinstance(other, Contour):

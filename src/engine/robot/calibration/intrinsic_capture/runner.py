@@ -25,10 +25,18 @@ from src.engine.robot.calibration.intrinsic_capture.vision_helpers import (
 _logger = logging.getLogger(__name__)
 
 
+def _validate_pose(pose: List[float], label: str = "pose") -> None:
+    if len(pose) < 6:
+        raise RuntimeError(
+            f"Robot returned an invalid {label}: got {len(pose)} elements {pose}. "
+            "Check that the robot is connected and powered on."
+        )
+
+
 def _detect_with_retry(
-    grab_frame_fn: Callable[[], np.ndarray],
-    detect_fn: Callable[[np.ndarray], BoardDetection],
-    max_retries: int = 1,
+        grab_frame_fn: Callable[[], np.ndarray],
+        detect_fn: Callable[[np.ndarray], BoardDetection],
+        max_retries: int = 1,
 ) -> Tuple[np.ndarray, BoardDetection]:
     frame = grab_frame_fn()
     det = detect_fn(frame)
@@ -43,20 +51,21 @@ def _detect_with_retry(
 
 
 def estimate_local_xy_jacobian(
-    get_pose_fn: Callable[[], List[float]],
-    move_relative_fn: Callable[..., bool],
-    move_absolute_fn: Callable[[List[float]], bool],
-    grab_frame_fn: Callable[[], np.ndarray],
-    detect_fn: Callable[[np.ndarray], BoardDetection],
-    probe_dx_mm: float = 20.0,
-    probe_dy_mm: float = 20.0,
-    probe_drx_deg: float = 3.0,
-    probe_dry_deg: float = 3.0,
-    probe_drz_deg: float = 0.0,
-    max_detection_retries: int = 1,
-    move_absolute_fast_fn: Optional[Callable[[List[float]], bool]] = None,
+        get_pose_fn: Callable[[], List[float]],
+        move_relative_fn: Callable[..., bool],
+        move_absolute_fn: Callable[[List[float]], bool],
+        grab_frame_fn: Callable[[], np.ndarray],
+        detect_fn: Callable[[np.ndarray], BoardDetection],
+        probe_dx_mm: float = 20.0,
+        probe_dy_mm: float = 20.0,
+        probe_drx_deg: float = 3.0,
+        probe_dry_deg: float = 3.0,
+        probe_drz_deg: float = 0.0,
+        max_detection_retries: int = 1,
+        move_absolute_fast_fn: Optional[Callable[[List[float]], bool]] = None,
 ) -> LocalJacobian2D:
     base_pose = get_pose_fn()
+    _validate_pose(base_pose, "base pose (estimate_local_xy_jacobian)")
     reposition = move_absolute_fast_fn if move_absolute_fast_fn is not None else move_absolute_fn
     _, det0 = _detect_with_retry(grab_frame_fn, detect_fn, max_detection_retries)
     if not det0.found or det0.center_px is None:
@@ -118,14 +127,14 @@ def _inside_target_region(det: BoardDetection, region: TargetRegion) -> bool:
 
 
 def move_board_center_near_region(
-    grab_frame_fn: Callable[[], np.ndarray],
-    move_relative_fn: Callable[..., bool],
-    detect_fn: Callable[[np.ndarray], BoardDetection],
-    region: TargetRegion,
-    jacobian: LocalJacobian2D,
-    max_refines: int = 2,
-    gain: float = 0.9,
-    max_detection_retries: int = 1,
+        grab_frame_fn: Callable[[], np.ndarray],
+        move_relative_fn: Callable[..., bool],
+        detect_fn: Callable[[np.ndarray], BoardDetection],
+        region: TargetRegion,
+        jacobian: LocalJacobian2D,
+        max_refines: int = 2,
+        gain: float = 0.9,
+        max_detection_retries: int = 1,
 ) -> bool:
     _, det = _detect_with_retry(grab_frame_fn, detect_fn, max_detection_retries)
     if not det.found or det.center_px is None:
@@ -147,12 +156,12 @@ def move_board_center_near_region(
 
 
 def _predict_tilt_sign(
-    board_center: Tuple[float, float],
-    image_info: ImageInfo,
-    tilt_axis: TiltAxis,
-    tilt_deg: float,
-    jacobian: LocalJacobian2D,
-    margin_px: float = 40.0,
+        board_center: Tuple[float, float],
+        image_info: ImageInfo,
+        tilt_axis: TiltAxis,
+        tilt_deg: float,
+        jacobian: LocalJacobian2D,
+        margin_px: float = 40.0,
 ) -> float:
     if jacobian.tilt_sensitivity is None:
         return 1.0
@@ -177,33 +186,34 @@ def _predict_tilt_sign(
 
 
 def capture_charuco_sweep_dataset(
-    get_pose_fn: Callable[[], List[float]],
-    move_absolute_fn: Callable[[List[float]], bool],
-    grab_frame_fn: Callable[[], np.ndarray],
-    save_frame_fn: Callable[[np.ndarray, str], Optional[str]],
-    pattern_size: Tuple[int, int],
-    square_size_mm: float,
-    marker_size_mm: float,
-    aruco_dict_id: int,
-    grid_rows: int,
-    grid_cols: int,
-    sweep_x_mm: float,
-    sweep_y_mm: float,
-    tilt_deg: float,
-    z_delta_mm: float,
-    min_corners: int,
-    stabilization_delay_s: float,
-    stop_event: threading.Event,
-    progress_cb: Callable[[str], None],
-    initial_detection_attempts: int = 5,
-    initial_detection_delay_s: float = 1.0,
-    max_detection_retries: int = 1,
-    detection_callback: Optional[Callable] = None,
-    rz_deg: float = 0.0,
+        get_pose_fn: Callable[[], List[float]],
+        move_absolute_fn: Callable[[List[float]], bool],
+        grab_frame_fn: Callable[[], np.ndarray],
+        save_frame_fn: Callable[[np.ndarray, str], Optional[str]],
+        pattern_size: Tuple[int, int],
+        square_size_mm: float,
+        marker_size_mm: float,
+        aruco_dict_id: int,
+        grid_rows: int,
+        grid_cols: int,
+        sweep_x_mm: float,
+        sweep_y_mm: float,
+        tilt_deg: float,
+        z_delta_mm: float,
+        min_corners: int,
+        stabilization_delay_s: float,
+        stop_event: threading.Event,
+        progress_cb: Callable[[str], None],
+        initial_detection_attempts: int = 5,
+        initial_detection_delay_s: float = 1.0,
+        max_detection_retries: int = 1,
+        detection_callback: Optional[Callable] = None,
+        rz_deg: float = 0.0,
 ) -> List[CaptureSample]:
     from src.engine.vision.implementation.VisionSystem.features.calibration.charuco import AutoCharucoBoardDetector
 
     home_pose = get_pose_fn()
+    _validate_pose(home_pose, "home pose (capture_charuco_sweep_dataset)")
     detector = AutoCharucoBoardDetector(
         squares_x=pattern_size[0],
         squares_y=pattern_size[1],
@@ -237,7 +247,8 @@ def capture_charuco_sweep_dataset(
             break
         remaining = initial_detection_attempts - attempt - 1
         if remaining > 0:
-            progress_cb(f"  Not enough corners at home ({home_n}, need >={min_corners}), retrying in {initial_detection_delay_s:.1f}s...")
+            progress_cb(
+                f"  Not enough corners at home ({home_n}, need >={min_corners}), retrying in {initial_detection_delay_s:.1f}s...")
             time.sleep(initial_detection_delay_s)
     if home_n < min_corners:
         raise RuntimeError(f"ChArUco board not detected at home pose ({home_n} corners, need >={min_corners}).")
@@ -253,7 +264,8 @@ def capture_charuco_sweep_dataset(
         n = 0 if result.charuco_ids is None else len(result.charuco_ids)
         if result.charuco_corners is not None and n > 0:
             corners = result.charuco_corners.reshape(-1, 2)
-            bbox = (float(np.min(corners[:, 0])), float(np.min(corners[:, 1])), float(np.max(corners[:, 0])), float(np.max(corners[:, 1])))
+            bbox = (float(np.min(corners[:, 0])), float(np.min(corners[:, 1])), float(np.max(corners[:, 0])),
+                    float(np.max(corners[:, 1])))
             center = np.array([float(np.mean(corners[:, 0])), float(np.mean(corners[:, 1]))])
         else:
             bbox, center = None, None
@@ -276,7 +288,8 @@ def capture_charuco_sweep_dataset(
     for ri, dy in enumerate(ys):
         for ci, dx in enumerate(xs):
             prefix = f"r{ri}_c{ci}"
-            base = [home_pose[0] + float(dx), home_pose[1] + float(dy), home_pose[2], home_pose[3], home_pose[4], home_pose[5]]
+            base = [home_pose[0] + float(dx), home_pose[1] + float(dy), home_pose[2], home_pose[3], home_pose[4],
+                    home_pose[5]]
             candidates.append((f"{prefix}_neutral", base))
             if tilt_deg > 0:
                 for axis_index, axis_prefix in ((3, "rx"), (4, "ry")):
@@ -379,38 +392,38 @@ def capture_charuco_sweep_dataset(
 
 
 def capture_intrinsic_dataset(
-    get_pose_fn: Callable[[], List[float]],
-    move_relative_fn: Callable[..., bool],
-    move_absolute_fn: Callable[[List[float]], bool],
-    grab_frame_fn: Callable[[], np.ndarray],
-    save_frame_fn: Callable[[np.ndarray, str], Optional[str]],
-    image_info: ImageInfo,
-    pattern_size: Tuple[int, int],
-    board_type: BoardType,
-    square_size_mm: float,
-    marker_size_mm: float,
-    aruco_dict_id: int,
-    grid_rows: int,
-    grid_cols: int,
-    margin_px: float,
-    tilt_deg: float,
-    z_delta_mm: float,
-    probe_dx_mm: float,
-    probe_dy_mm: float,
-    probe_drx_deg: float,
-    probe_dry_deg: float,
-    probe_drz_deg: float,
-    stabilization_delay_s: float,
-    stop_event: threading.Event,
-    progress_cb: Callable[[str], None],
-    max_detection_retries: int = 1,
-    initial_detection_attempts: int = 5,
-    initial_detection_delay_s: float = 1.0,
-    charuco_sweep_x_mm: float = 100.0,
-    charuco_sweep_y_mm: float = 100.0,
-    charuco_min_corners: int = 6,
-    charuco_rz_deg: float = 0.0,
-    detection_callback: Optional[Callable] = None,
+        get_pose_fn: Callable[[], List[float]],
+        move_relative_fn: Callable[..., bool],
+        move_absolute_fn: Callable[[List[float]], bool],
+        grab_frame_fn: Callable[[], np.ndarray],
+        save_frame_fn: Callable[[np.ndarray, str], Optional[str]],
+        image_info: ImageInfo,
+        pattern_size: Tuple[int, int],
+        board_type: BoardType,
+        square_size_mm: float,
+        marker_size_mm: float,
+        aruco_dict_id: int,
+        grid_rows: int,
+        grid_cols: int,
+        margin_px: float,
+        tilt_deg: float,
+        z_delta_mm: float,
+        probe_dx_mm: float,
+        probe_dy_mm: float,
+        probe_drx_deg: float,
+        probe_dry_deg: float,
+        probe_drz_deg: float,
+        stabilization_delay_s: float,
+        stop_event: threading.Event,
+        progress_cb: Callable[[str], None],
+        max_detection_retries: int = 1,
+        initial_detection_attempts: int = 5,
+        initial_detection_delay_s: float = 1.0,
+        charuco_sweep_x_mm: float = 100.0,
+        charuco_sweep_y_mm: float = 100.0,
+        charuco_min_corners: int = 6,
+        charuco_rz_deg: float = 0.0,
+        detection_callback: Optional[Callable] = None,
 ) -> List[CaptureSample]:
     if board_type == BoardType.CHARUCO:
         return capture_charuco_sweep_dataset(
@@ -491,6 +504,7 @@ def capture_intrinsic_dataset(
         move_absolute_fast_fn=move_absolute_fn,
     )
     origin_pose = get_pose_fn()
+    _validate_pose(origin_pose, "origin pose (capture_intrinsic_dataset)")
     origin_uv = np.array(det0.center_px, dtype=float)
     adapt_data: List[Tuple[np.ndarray, np.ndarray]] = []
 

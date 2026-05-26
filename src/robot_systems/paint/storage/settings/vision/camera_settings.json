@@ -5,10 +5,10 @@
   "Skip frames": 30,
   "Capture position offset": -5.0,
   "Contour detection": true,
-  "Draw contours": false,
-  "Threshold": 95,
+  "Draw contours": true,
+  "Threshold": 60,
   "Threshold pickup area": 150,
-  "Epsilon": 0.001,
+  "Epsilon": 0.002,
   "Min contour area": 1000.0,
   "Max contour area": 10000000.0,
   "Preprocessing": {
@@ -16,20 +16,20 @@
     "Blur kernel size": 5,
     "Threshold type": "binary_inv",
     "Contour smoothing mode": "none",
-    "Contour smoothing strength": 5.0,
+    "Contour smoothing strength": 1.0,
     "Dilate enabled": true,
-    "Dilate kernel size": 3,
-    "Dilate iterations": 2,
+    "Dilate kernel size": 5,
+    "Dilate iterations": 5,
     "Erode enabled": true,
-    "Erode kernel size": 3,
-    "Erode iterations": 2
+    "Erode kernel size": 5,
+    "Erode iterations": 5
   },
   "Brightness Control": {
     "Enable auto adjust": true,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
-    "Target brightness": 190.0,
+    "Target brightness": 175.0,
     "Brightness area point 1": [
       940,
       612
@@ -49,12 +49,12 @@
   },
   "Aruco": {
     "Enable detection": false,
-    "Dictionary": "DICT_4X4_250",
+    "Dictionary": "DICT_4X4_1000",
     "Flip image": false
   },
   "Calibration": {
-    "Chessboard width": 27,
-    "Chessboard height": 18,
+    "Chessboard width": 26,
+    "Chessboard height": 17,
     "Square size (mm)": 15.0,
     "Reference board mode": "auto",
     "ChArUco board width": 27,

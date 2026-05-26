@@ -56,3 +56,17 @@ class IMotionService(ABC):
     @abstractmethod
     def get_current_position(self) -> List[float]:
         ...
+
+    @abstractmethod
+    def move_joints(
+        self,
+        joints: List[float],
+        tool: int,
+        user: int,
+        velocity: float,
+        acceleration: float,
+        wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        """Move to joint positions using OMPL planner (no linear/cartesian path)."""
+        ...

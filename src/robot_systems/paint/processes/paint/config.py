@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from typing import Any, Dict
+
+from src.engine.repositories.interfaces.settings_serializer import ISettingsSerializer
 
 from src.robot_systems.paint.processes.paint.workpiece_alignment import (
     DXF_ALIGNMENT_STRATEGY_RIGID,
@@ -62,6 +65,13 @@ class PaintProcessConfig:
     pivot_motion_plane: str = "xz_y_ry"
     primary_group_id: str = "PAINTING"
     secondary_group_id: str = "PAINTING_NEW"
+    pre_paint_group_id: str = "PRE_PAINTING"
+    enable_aruco_paint_base: bool = True
+    paint_base_marker_id: int = 1
+    paint_base_marker_dictionary: str = "DICT_4X4_1000"
+    paint_base_marker_offset_x_mm: float = 0.0
+    paint_base_marker_offset_y_mm: float = 0.0
+    paint_base_marker_offset_z_mm: float = 0.0
     pivot_translation_axis: str = "x"
     pivot_translation_direction: str = "forward"
     flip_xz_ry_execution_rotation_direction: bool = True
@@ -96,6 +106,62 @@ class PaintProcessConfig:
 
 
 PAINT_PROCESS_CONFIG = PaintProcessConfig()
+
+
+@dataclass
+class PaintMarkerSettings:
+    """Runtime-editable settings for ArUco-based paint-base positioning."""
+    enabled: bool = PAINT_PROCESS_CONFIG.enable_aruco_paint_base
+    marker_id: int = PAINT_PROCESS_CONFIG.paint_base_marker_id
+    dictionary: str = PAINT_PROCESS_CONFIG.paint_base_marker_dictionary
+    pre_paint_group_id: str = PAINT_PROCESS_CONFIG.pre_paint_group_id
+    offset_x_mm: float = PAINT_PROCESS_CONFIG.paint_base_marker_offset_x_mm
+    offset_y_mm: float = PAINT_PROCESS_CONFIG.paint_base_marker_offset_y_mm
+    offset_z_mm: float = PAINT_PROCESS_CONFIG.paint_base_marker_offset_z_mm
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PaintMarkerSettings":
+        return cls(
+            enabled=bool(data.get("enabled", PAINT_PROCESS_CONFIG.enable_aruco_paint_base)),
+            marker_id=int(data.get("marker_id", PAINT_PROCESS_CONFIG.paint_base_marker_id)),
+            dictionary=str(
+                data.get("dictionary", PAINT_PROCESS_CONFIG.paint_base_marker_dictionary)
+                or PAINT_PROCESS_CONFIG.paint_base_marker_dictionary
+            ),
+            pre_paint_group_id=str(
+                data.get("pre_paint_group_id", PAINT_PROCESS_CONFIG.pre_paint_group_id)
+                or PAINT_PROCESS_CONFIG.pre_paint_group_id
+            ),
+            offset_x_mm=float(data.get("offset_x_mm", PAINT_PROCESS_CONFIG.paint_base_marker_offset_x_mm) or 0.0),
+            offset_y_mm=float(data.get("offset_y_mm", PAINT_PROCESS_CONFIG.paint_base_marker_offset_y_mm) or 0.0),
+            offset_z_mm=float(data.get("offset_z_mm", PAINT_PROCESS_CONFIG.paint_base_marker_offset_z_mm) or 0.0),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "enabled": bool(self.enabled),
+            "marker_id": int(self.marker_id),
+            "dictionary": str(self.dictionary),
+            "pre_paint_group_id": str(self.pre_paint_group_id),
+            "offset_x_mm": float(self.offset_x_mm),
+            "offset_y_mm": float(self.offset_y_mm),
+            "offset_z_mm": float(self.offset_z_mm),
+        }
+
+
+class PaintMarkerSettingsSerializer(ISettingsSerializer[PaintMarkerSettings]):
+    @property
+    def settings_type(self) -> str:
+        return "paint_marker_settings"
+
+    def get_default(self) -> PaintMarkerSettings:
+        return PaintMarkerSettings()
+
+    def to_dict(self, settings: PaintMarkerSettings) -> Dict[str, Any]:
+        return settings.to_dict()
+
+    def from_dict(self, data: Dict[str, Any]) -> PaintMarkerSettings:
+        return PaintMarkerSettings.from_dict(data)
 
 @dataclass(frozen=True)
 class PaintSimulationConfig:

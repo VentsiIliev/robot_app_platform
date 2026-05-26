@@ -37,3 +37,26 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def test_pickup(self) -> None:
+        self._service.test_pickup()
+
+    def go_to_calibration(self) -> None:
+        self._service.go_to_calibration()
+
+    def move_to_calibration_ptp(self) -> None:
+        self._service.move_to_calibration_ptp()
+
+    def move_to_home_zeros(self) -> None:
+        self._service.move_to_home_zeros()
+
+    def pickup_to_paint_position(self) -> None:
+        self._service.pickup_to_paint_position()
+
+    def test_pre_paint_marker_position(self) -> tuple[bool, str]:
+        return self._service.test_pre_paint_marker_position()
+
+    def get_paint_marker_settings(self) -> dict:
+        return self._service.get_paint_marker_settings()
+
+    def save_paint_marker_settings(self, settings: dict) -> tuple[bool, str]:
+        return self._service.save_paint_marker_settings(settings)

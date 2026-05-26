@@ -3,7 +3,6 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from pyzbar.pyzbar import decode
 
 _logger = logging.getLogger(__name__)
 
@@ -13,6 +12,12 @@ class QrDetectionService:
     def detect(self, image: Optional[np.ndarray]) -> Optional[str]:
         if image is None:
             _logger.warning("No image provided for QR/barcode detection")
+            return None
+
+        try:
+            from pyzbar.pyzbar import decode
+        except Exception as exc:
+            _logger.warning("QR/barcode detection unavailable: %s", exc)
             return None
 
         gray     = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

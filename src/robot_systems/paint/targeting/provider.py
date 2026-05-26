@@ -128,3 +128,11 @@ class PaintRobotSystemTargetingProvider(RobotSystemTargetingProvider):
         if points:
             return str(points[0]["name"])
         return ""
+
+    def get_target_point(self, name: str):
+        """Get a target point by name. Returns dict with x_mm, y_mm or None if not found."""
+        target_name = str(name).strip().lower()
+        for point in self._point_definitions():
+            if str(point.get("name", "")).strip().lower() == target_name:
+                return point
+        return None

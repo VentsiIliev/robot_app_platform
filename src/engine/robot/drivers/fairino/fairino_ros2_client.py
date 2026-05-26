@@ -143,6 +143,30 @@ class FairinoRos2Client:
             logger.error("move_ptp error: %s", e, exc_info=True)
             return -1
 
+    def move_joints(self, joints, vel=30, acc=30, blocking=True, trajectory_optimizer="OMPL"):
+        payload = {
+            "joints": self._to_float_list(joints),
+            "vel": vel,
+            "acc": acc,
+            "blocking": blocking,
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        logger.debug("move_joints → POST /move/joints payload=%s", payload)
+        try:
+            response = requests.post(f"{self.server_url}/move/joints", json=payload, timeout=60)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            logger.debug(
+                "move_joints ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("move_joints error: %s", e, exc_info=True)
+            return -1
+
     def execute_path(
         self,
         path,

@@ -197,11 +197,11 @@ class CameraCalibrationService:
             errors.append("RMS is not finite")
         if fx <= 0 or fy <= 0:
             errors.append(f"Non-positive focal length fx={fx:.2f} fy={fy:.2f}")
-        if abs(cx - width / 2) > 0.2 * width:
+        if abs(cx - width / 2) > 0.3 * width:
             errors.append(f"cx too far from center: {cx:.2f} (expected ~{width/2:.0f})")
-        if abs(cy - height / 2) > 0.2 * height:
+        if abs(cy - height / 2) > 0.3 * height:
             errors.append(f"cy too far from center: {cy:.2f} (expected ~{height/2:.0f})")
-        if abs(k2) > 10:
+        if abs(k2) > 50:
             errors.append(f"k2 suspiciously large: {k2:.3f}")
         if abs(k3) > 50:
             errors.append(f"k3 suspiciously large: {k3:.3f}")

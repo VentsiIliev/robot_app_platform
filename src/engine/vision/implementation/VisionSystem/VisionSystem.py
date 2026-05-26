@@ -120,6 +120,7 @@ class VisionSystem:
         self.service.loadPerspectiveMatrix()
         self.service.loadCameraCalibrationData()
         self.service.loadCameraToRobotMatrix()
+        self.service.loadWorkAreaPoints()
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ class VisionSystem:
             self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
                 self.cameraMatrix, self.cameraDist,
                 (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-                0.5,
+                1.0,
                 (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
             )
         image = ImageProcessing.undistortImage(
@@ -287,7 +288,7 @@ class VisionSystem:
 
     def saveWorkAreaPoints(self, data):
         if self._work_area_service is None:
-            return False, "Work area service unavailable"
+            return self.service.data_manager.saveWorkAreaPoints(data)
         if not isinstance(data, dict):
             return False, "Invalid work area payload"
         area_type = str(data.get("area_type", "")).strip()
@@ -363,13 +364,16 @@ class VisionSystem:
             self.run()
 
     def _get_area_points_by_region(self, area: str):
-        if self._work_area_service is None or not area:
-            return None
-        return self._work_area_service.get_detection_roi_pixels(
-            area,
-            self.camera_settings.get_camera_width(),
-            self.camera_settings.get_camera_height(),
-        )
+        if self._work_area_service is not None:
+            return self._work_area_service.get_detection_roi_pixels(
+                area,
+                self.camera_settings.get_camera_width(),
+                self.camera_settings.get_camera_height(),
+            )
+        if not area:
+            area = "detection"
+        pts = self.service.data_manager.get_named_area_points(area)
+        return pts if pts is not None and len(pts) > 0 else None
 
     def _get_active_brightness_area_points(self):
         active_area = self._get_active_area_id()
