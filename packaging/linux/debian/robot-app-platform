@@ -7,6 +7,8 @@ PYTHON="${ROBOT_APP_PLATFORM_PYTHON:-$PREFIX/runtime/bin/python}"
 DATA_ROOT="${ROBOT_APP_PLATFORM_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/robot-app-platform}"
 CACHE_ROOT="${ROBOT_APP_PLATFORM_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/robot-app-platform}"
 APP_HOME="$DATA_ROOT/app"
+LOG_ROOT="${ROBOT_APP_PLATFORM_LOG_HOME:-$DATA_ROOT/logs}"
+LOG_FILE="$LOG_ROOT/launcher.log"
 
 if [[ ! -d "$SEED_APP/src" ]]; then
     printf 'Robot App Platform installation is incomplete: %s\n' "$SEED_APP" >&2
@@ -19,16 +21,19 @@ fi
 
 mkdir -p "$APP_HOME"
 mkdir -p "$CACHE_ROOT/matplotlib"
+mkdir -p "$LOG_ROOT"
 export MPLCONFIGDIR="$CACHE_ROOT/matplotlib"
+exec > >(tee -a "$LOG_FILE") 2>&1
+printf '\n[%s] Starting Robot App Platform\n' "$(date -Is)"
 
 # Refresh packaged application code, but retain operator-owned runtime data.
-rsync -a --delete \
+rsync -a --no-owner --no-group --delete \
     --exclude '/src/robot_systems/*/storage/' \
     --exclude '/src/bootstrap/debug_plots/' \
     --exclude '/src/engine/vision/implementation/VisionSystem/features/contour_matching/alignment/debug/' \
     --exclude '/src/engine/vision/implementation/VisionSystem/features/contour_matching/storage/' \
     "$SEED_APP/" "$APP_HOME/"
-rsync -a --ignore-existing "$SEED_APP/src/robot_systems/" "$APP_HOME/src/robot_systems/"
+rsync -a --no-owner --no-group --ignore-existing "$SEED_APP/src/robot_systems/" "$APP_HOME/src/robot_systems/"
 
 if [[ "${1:-}" == "--prepare-only" ]]; then
     printf '%s\n' "$APP_HOME"
@@ -36,4 +41,4 @@ if [[ "${1:-}" == "--prepare-only" ]]; then
 fi
 
 cd "$APP_HOME"
-exec "$PYTHON" "$APP_HOME/src/bootstrap/main.py" "$@"
+exec "$PYTHON" -m src.bootstrap.main "$@"

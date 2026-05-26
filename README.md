@@ -238,7 +238,7 @@ bundled prepared Python runtime.
 Install a published package downloaded from the GitHub release page:
 
 ```bash
-sudo apt install ./robot-app-platform_0.1.0_amd64.deb
+sudo apt install ./robot-app-platform_0.1.1_amd64.deb
 robot-app-platform
 ```
 
@@ -246,11 +246,13 @@ The launcher keeps mutable robot settings, workpieces, user data, and runtime
 outputs in a per-user application mirror under
 `$XDG_DATA_HOME/robot-app-platform` (or `~/.local/share/robot-app-platform`).
 The installed program under `/opt` remains immutable.
+Desktop-menu startup output is retained in
+`~/.local/share/robot-app-platform/logs/launcher.log`.
 
 Build the `.deb` from a prepared Ubuntu checkout:
 
 ```bash
-packaging/linux/debian/build_deb.sh 0.1.0
+packaging/linux/debian/build_deb.sh 0.1.1
 ```
 
 See [`packaging/linux/debian/README.md`](packaging/linux/debian/README.md) for
