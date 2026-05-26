@@ -114,6 +114,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         path_preparation_service: Optional[IWorkpiecePathPreparationService] = None,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         pickup_base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
+        pre_paint_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
+        pre_paint_move_callback: Optional[Callable[[], bool]] = None,
+        paint_base_marker_provider: Optional[Callable[[], Optional[tuple[float, float]]]] = None,
+        paint_marker_settings_provider: Optional[Callable[[], object]] = None,
+        paint_base_marker_offset_x_mm: float = 0.0,
+        paint_base_marker_offset_y_mm: float = 0.0,
+        paint_base_marker_offset_z_mm: float = 0.0,
+        enable_marker_paint_base: bool = False,
         post_execute_callback: Optional[Callable[[], bool]] = None,
         robot_config_provider: Optional[Callable[[], object]] = None,
         vacuum_pump=None,
@@ -127,19 +135,29 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pivot_side: str = "negative",
         pivot_translation_direction: str = "forward",
         flip_xz_ry_execution_rotation_direction: bool = False,
-        enable_xz_ry_preflight: bool = True,
+        enable_xz_ry_preflight: bool = False,
         xz_ry_preflight_max_checks: int = 8,
         apply_camera_to_tcp_for_pickup: bool = False,
         camera_to_tcp_x_offset: float = 0.0,
         camera_to_tcp_y_offset: float = 0.0,
+        target_point_provider: Optional[object] = None,
     ) -> None:
         """Store robot dependencies and initialize the pivot/pickup execution configuration."""
         self._robot_service = robot_service
         self._path_preparation_service = path_preparation_service
         self._base_position_provider = base_position_provider
         self._pickup_base_position_provider = pickup_base_position_provider or base_position_provider
+        self._pre_paint_position_provider = pre_paint_position_provider
+        self._pre_paint_move_callback = pre_paint_move_callback
+        self._paint_base_marker_provider = paint_base_marker_provider
+        self._paint_marker_settings_provider = paint_marker_settings_provider
+        self._paint_base_marker_offset_x_mm = float(paint_base_marker_offset_x_mm)
+        self._paint_base_marker_offset_y_mm = float(paint_base_marker_offset_y_mm)
+        self._paint_base_marker_offset_z_mm = float(paint_base_marker_offset_z_mm)
+        self._enable_marker_paint_base = bool(enable_marker_paint_base)
         self._post_execute_callback = post_execute_callback
         self._robot_config_provider = robot_config_provider
+        self._target_point_provider = target_point_provider
         self._vacuum_pump = vacuum_pump
         self._enable_vacuum_pump = bool(enable_vacuum_pump)
         self._pickup_tool = int(pickup_tool)
@@ -173,6 +191,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
+        self._active_paint_base_position: list[float] | None = None
 
     def _uses_xz_ry_pivot_mode(self) -> bool:
         """Return True only for the pivot mode that shows the reachability issue."""
@@ -246,6 +265,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             raise RuntimeError("Path preparation service is not available")
         self._last_execution_plan = self._path_preparation_service.build_execution_plan(workpiece)
         return self._last_execution_plan
+
+    def set_execution_plan(self, execution_plan: WorkpieceExecutionPlan) -> None:
+        """Directly set the execution plan (e.g., from an already-built plan)."""
+        self._last_execution_plan = execution_plan
 
     def get_last_execution_plan(self) -> WorkpieceExecutionPlan | None:
         """Return the last paint preview plan prepared by this executor."""
@@ -779,7 +802,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Report that this executor supports pickup and staging before paint execution."""
         return True
 
-    def _resolve_base_position(self) -> Optional[list[float]]:
+    def _resolve_configured_base_position(self) -> Optional[list[float]]:
         """Resolve the configured pivot/base pose used to project paint motion."""
         provider = self._base_position_provider
         if provider is None:
@@ -788,6 +811,119 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             position = provider()
         except Exception:
             _logger.debug("PaintWorkpiecePathExecutor: base position provider failed", exc_info=True)
+            return None
+        if not position or len(position) < 3:
+            return None
+        try:
+            return [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_base_position(self) -> Optional[list[float]]:
+        """Resolve the active pivot/base pose used to project paint motion."""
+        if self._active_paint_base_position is not None:
+            return list(self._active_paint_base_position)
+        return self._resolve_configured_base_position()
+
+    def _prepare_marker_paint_base_position(self) -> tuple[bool, str]:
+        """Measure the paint base from the configured ArUco marker for this run."""
+        self._active_paint_base_position = None
+        marker_settings = self._resolve_paint_marker_settings()
+        marker_enabled = (
+            bool(getattr(marker_settings, "enabled", self._enable_marker_paint_base))
+            if marker_settings is not None else self._enable_marker_paint_base
+        )
+        offset_x = (
+            float(getattr(marker_settings, "offset_x_mm", self._paint_base_marker_offset_x_mm))
+            if marker_settings is not None else self._paint_base_marker_offset_x_mm
+        )
+        offset_y = (
+            float(getattr(marker_settings, "offset_y_mm", self._paint_base_marker_offset_y_mm))
+            if marker_settings is not None else self._paint_base_marker_offset_y_mm
+        )
+        offset_z = (
+            float(getattr(marker_settings, "offset_z_mm", self._paint_base_marker_offset_z_mm))
+            if marker_settings is not None else self._paint_base_marker_offset_z_mm
+        )
+        if not marker_enabled:
+            return True, ""
+        configured_pose = self._resolve_configured_base_position()
+        if configured_pose is None or len(configured_pose) < 3:
+            return False, "Paint marker positioning requires a valid configured paint base pose"
+        template_pose = self._resolve_pre_paint_position() or configured_pose
+        if len(template_pose) < 3:
+            return False, "Paint marker positioning requires a valid pre-paint pose"
+        if self._pre_paint_move_callback is None:
+            return False, "Paint marker positioning requires a pre-paint move callback"
+        if self._paint_base_marker_provider is None:
+            return False, "Paint marker positioning requires an ArUco marker provider"
+
+        _logger.info("[PAINT_BASE_MARKER] Moving to pre-painting position before marker detection")
+        if not self._pre_paint_move_callback():
+            return False, "Failed to move to pre-painting position before marker detection"
+
+        try:
+            marker_xy = self._paint_base_marker_provider()
+        except Exception:
+            _logger.exception("[PAINT_BASE_MARKER] Marker provider failed")
+            return False, "ArUco marker detection failed"
+        if marker_xy is None or len(marker_xy) < 2:
+            return False, "ArUco paint-base marker was not detected at the pre-painting position"
+
+        measured_pose = self._build_marker_offset_pose(
+            template_pose=template_pose,
+            offset_x=offset_x,
+            offset_y=offset_y,
+            offset_z=offset_z,
+        )
+        self._active_paint_base_position = measured_pose
+        _logger.info(
+            "[PAINT_BASE_MARKER] measured_marker=(%.3f, %.3f) template_pose=%s offsets_xyz=(%.3f, %.3f, %.3f) active_base=%s",
+            float(marker_xy[0]),
+            float(marker_xy[1]),
+            [round(float(value), 3) for value in template_pose[:6]],
+            offset_x,
+            offset_y,
+            offset_z,
+            [round(float(value), 3) for value in measured_pose[:6]],
+        )
+        return True, ""
+
+    def _build_marker_offset_pose(
+        self,
+        *,
+        template_pose: list[float],
+        offset_x: float,
+        offset_y: float,
+        offset_z: float,
+    ) -> list[float]:
+        """Apply marker offsets in robot XYZ axes."""
+        pose = list(template_pose)
+        while len(pose) < 6:
+            pose.append(0.0)
+        pose[0] = float(template_pose[0]) + float(offset_x)
+        pose[1] = float(template_pose[1]) + float(offset_y)
+        pose[2] = float(template_pose[2]) + float(offset_z)
+        return pose
+
+    def _resolve_paint_marker_settings(self) -> object | None:
+        provider = self._paint_marker_settings_provider
+        if provider is None:
+            return None
+        try:
+            return provider()
+        except Exception:
+            _logger.debug("PaintWorkpiecePathExecutor: marker settings provider failed", exc_info=True)
+            return None
+
+    def _resolve_pre_paint_position(self) -> Optional[list[float]]:
+        provider = self._pre_paint_position_provider
+        if provider is None:
+            return None
+        try:
+            position = provider()
+        except Exception:
+            _logger.debug("PaintWorkpiecePathExecutor: pre-paint position provider failed", exc_info=True)
             return None
         if not position or len(position) < 3:
             return None
@@ -930,6 +1066,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_pose,
             self._pivot_config,
         )
+        pivot_path = self._apply_horizontal_rotation_direction_compensation(pivot_path)
+        pivot_path = self._anchor_horizontal_pivot_path_start(pivot_path, pivot_pose)
         _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:
             pivot_path = rebase_projected_paint_path_to_zero_start_rz(
@@ -1062,6 +1200,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             paint_pivot_pose,
             self._pivot_config,
         )
+        projected_pivot_path = self._apply_horizontal_rotation_direction_compensation(projected_pivot_path)
+        projected_pivot_path = self._anchor_horizontal_pivot_path_start(
+            projected_pivot_path,
+            paint_pivot_pose,
+        )
         if not projected_pivot_path:
             return None
 
@@ -1124,8 +1267,24 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             reference_ry = float(paint_pivot_pose[4]) if len(paint_pivot_pose) >= 5 else pickup_ry
             align_delta = unwrap_degrees(reference_ry, target_ry) - reference_ry
             align_rz = unwrap_degrees(pickup_rz, pickup_rz + align_delta)
+            _logger.info(
+                "[PICKUP_ALIGN] mode=xz_y_ry pickup_rz=%.3f pickup_ry=%.3f "
+                "paint_reference_ry=%.3f first_pivot_ry=%.3f align_delta=%.3f align_rz=%.3f",
+                pickup_rz,
+                pickup_ry,
+                reference_ry,
+                target_ry,
+                align_delta,
+                align_rz,
+            )
         else:
             align_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else pickup_rz
+            _logger.info(
+                "[PICKUP_ALIGN] mode=xy_z_rz pickup_rz=%.3f first_pivot_rz=%.3f align_rz=%.3f",
+                pickup_rz,
+                float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else pickup_rz,
+                align_rz,
+            )
 
         align_pose = [
             pickup_centroid_x - pickup_tcp_dx,
@@ -1136,14 +1295,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             align_rz,
         ]
 
-        change_plane_pose = [
-            pickup_centroid_x - pickup_tcp_dx,
-            pickup_centroid_y - pickup_tcp_dy,
-            float(pickup_approach_z),
-            float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx,
-            pickup_ry,
-            align_rz,
-        ]
+        if self._uses_xz_ry_pivot_mode():
+            align_pose = list(pickup_approach_pose)
+            change_plane_pose = list(paint_pivot_pose)
+            while len(change_plane_pose) < 6:
+                change_plane_pose.append(0.0)
+            first_pivot_pose = list(change_plane_pose)
+            _logger.info(
+                "[PICKUP_STAGE] mode=xz_y_ry skipping vertical pickup-site align; "
+                "marker_offset_pose=%s staged_pose=%s",
+                [round(float(value), 3) for value in change_plane_pose[:6]],
+                [round(float(value), 3) for value in first_pivot_pose[:6]],
+            )
+        else:
+            change_plane_pose = [
+                pickup_centroid_x - pickup_tcp_dx,
+                pickup_centroid_y - pickup_tcp_dy,
+                float(pickup_approach_z),
+                float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx,
+                pickup_ry,
+                align_rz,
+            ]
 
         staged_pose = list(first_pivot_pose)
         stage_transition_poses: list[list[float]] = []
@@ -1156,6 +1328,103 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             stage_transition_poses=stage_transition_poses,
             staged_pose=staged_pose,
         )
+
+    def _anchor_horizontal_pivot_path_start(
+        self,
+        pivot_path: list[list[float]],
+        pivot_pose: list[float] | None,
+    ) -> list[list[float]]:
+        """Shift horizontal projected paths so waypoint 1 starts at the marker/base pose."""
+        if not self._uses_xz_ry_pivot_mode() or not pivot_path or pivot_pose is None or len(pivot_pose) < 3:
+            return pivot_path
+        first_pose = pivot_path[0]
+        if len(first_pose) < 3:
+            return pivot_path
+        delta_xyz = [
+            float(pivot_pose[index]) - float(first_pose[index])
+            for index in range(3)
+        ]
+        if all(abs(delta) <= 1e-9 for delta in delta_xyz):
+            return pivot_path
+        rotation_index = self._pivot_config.rotation_index
+        rotation_delta = 0.0
+        if len(pivot_pose) > rotation_index and len(first_pose) > rotation_index:
+            rotation_delta = unwrap_degrees(
+                float(first_pose[rotation_index]),
+                float(pivot_pose[rotation_index]),
+            ) - float(first_pose[rotation_index])
+        anchored: list[list[float]] = []
+        for pose in pivot_path:
+            shifted = list(pose)
+            while len(shifted) < 3:
+                shifted.append(0.0)
+            for index, delta in enumerate(delta_xyz):
+                shifted[index] = float(shifted[index]) + delta
+            if len(shifted) > rotation_index:
+                shifted[rotation_index] = float(shifted[rotation_index]) + rotation_delta
+            anchored.append(shifted)
+        if len(pivot_pose) >= 6 and len(anchored[0]) >= 6:
+            anchored[0][3] = float(pivot_pose[3])
+            anchored[0][5] = float(pivot_pose[5])
+        _logger.info(
+            "[PIVOT_PATH] Anchored horizontal path start to marker/base pose delta_xyz=%s rotation_delta=%.3f first_before=%s first_after=%s",
+            [round(delta, 3) for delta in delta_xyz],
+            rotation_delta,
+            [round(float(value), 3) for value in first_pose[:6]],
+            [round(float(value), 3) for value in anchored[0][:6]],
+        )
+        return anchored
+
+    def _apply_horizontal_rotation_direction_compensation(
+        self,
+        pivot_path: list[list[float]],
+    ) -> list[list[float]]:
+        """Apply xz/ry direction compensation before marker/base anchoring."""
+        if (
+            not self._uses_xz_ry_pivot_mode()
+            or not self._flip_xz_ry_execution_rotation_direction
+            or not pivot_path
+        ):
+            return pivot_path
+        rotation_index = self._pivot_config.rotation_index
+        if not pivot_path[0] or len(pivot_path[0]) <= rotation_index:
+            return pivot_path
+        reference_rotation = float(pivot_path[0][rotation_index])
+        first_before = reference_rotation
+        last_before = (
+            float(pivot_path[-1][rotation_index])
+            if len(pivot_path[-1]) > rotation_index
+            else first_before
+        )
+        compensated: list[list[float]] = []
+        previous_rotation = reference_rotation
+        for pose in pivot_path:
+            shifted = list(pose)
+            if len(shifted) > rotation_index:
+                flipped = 2.0 * reference_rotation - float(shifted[rotation_index])
+                shifted[rotation_index] = unwrap_degrees(previous_rotation, flipped)
+                previous_rotation = float(shifted[rotation_index])
+            compensated.append(shifted)
+        first_after = (
+            float(compensated[0][rotation_index])
+            if len(compensated[0]) > rotation_index
+            else first_before
+        )
+        last_after = (
+            float(compensated[-1][rotation_index])
+            if len(compensated[-1]) > rotation_index
+            else first_after
+        )
+        _logger.info(
+            "[PIVOT_PATH] Applied xz/ry rotation direction compensation before anchoring: "
+            "ref=%.2f before: first=%.2f last=%.2f after: first=%.2f last=%.2f",
+            reference_rotation,
+            first_before,
+            last_before,
+            first_after,
+            last_after,
+        )
+        return compensated
 
     def _move_pickup_phase(self, label: str, pose: list[float]) -> bool:
         """Execute one pickup-related robot move with the configured pickup tool and user."""
@@ -1317,15 +1586,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     _elapsed_s(job_started),
                 )
                 return False, "Pickup succeeded, but pivot-path geometry could not be built", total_waypoints
-            if self._uses_xz_ry_pivot_mode() and self._flip_xz_ry_execution_rotation_direction and pivot_path:
-                reference_ry = float(pivot_path[0][4]) if len(pivot_path[0]) >= 5 else 0.0
-                for pose in pivot_path:
-                    if len(pose) >= 5:
-                        pose[4] = 2.0 * reference_ry - float(pose[4])
-                _logger.info(
-                    "[PIVOT_PATH] Flipped xz/ry execution rotation direction around start RY=%.3f",
-                    reference_ry,
-                )
             if self._last_process_start_rz is None and pivot_path:
                 self._last_process_start_rz = float(pivot_path[0][5]) if len(pivot_path[0]) >= 6 else 0.0
 
@@ -1428,11 +1688,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def execute_pickup_to_pivot(
         self,
         execution_plan: WorkpieceExecutionPlan,
+        *,
+        stage_at_pivot: bool = True,
     ) -> tuple[bool, str]:
         """Run the pickup-only sequence: approach, vacuum on, descend, lift, and stage at the pivot."""
         started = perf_counter()
         if self._robot_service is None:
             return False, "Robot service is not available"
+
+        ok, msg = self._prepare_marker_paint_base_position()
+        if not ok:
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=marker_base total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
 
         plan_started = perf_counter()
         plan = self._build_pickup_and_stage_poses(execution_plan)
@@ -1463,6 +1730,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=align total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but align move failed"
 
+        if not stage_at_pivot:
+            planning_pose = self._resolve_pre_paint_position()
+            if planning_pose is not None and len(planning_pose) >= 6:
+                if not self._move_pickup_phase("Moving to pre-paint planning pose", planning_pose):
+                    _logger.info("[TIMING] pickup_to_pivot success=false stage=planning_pose total_elapsed_s=%.3f", _elapsed_s(started))
+                    return False, "Pickup succeeded, but pre-paint planning move failed"
+                _logger.info("[TIMING] pickup_to_pivot success=true staged=false planning_pose=pre_paint total_elapsed_s=%.3f", _elapsed_s(started))
+                return True, "Pickup completed and robot is parked at the pre-paint planning pose"
+            _logger.info("[TIMING] pickup_to_pivot success=true staged=false planning_pose=align total_elapsed_s=%.3f", _elapsed_s(started))
+            return True, "Pickup completed and robot is parked at the pickup align pose"
+
         if not self._move_pickup_phase("Changing plane", plan.change_plane_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=change_plane total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but change-plane move failed"
@@ -1491,40 +1769,154 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         """Run pickup, staging, projected pivot paint execution, and post-run return."""
         started = perf_counter()
-        ok, msg = self.execute_pickup_to_pivot(execution_plan)
-        if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=pickup total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, msg
+        try:
+            stage_at_pivot = not self._uses_xz_ry_pivot_mode()
+            ok, msg = self.execute_pickup_to_pivot(
+                execution_plan,
+                stage_at_pivot=stage_at_pivot,
+            )
+            if not ok:
+                _logger.info("[TIMING] pickup_and_paint success=false stage=pickup total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, msg
 
-        ok, msg, total_waypoints = self._execute_pivot_paths(execution_plan)
-        if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, msg
+            ok, msg, total_waypoints = self._execute_pivot_paths(execution_plan)
+            if not ok:
+                _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, msg
 
-        ok, msg = self._run_pre_release_dropoff()
-        if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, msg
+            ok, msg = self._run_pre_release_dropoff()
+            if not ok:
+                _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, msg
 
-        ok, msg = self._turn_vacuum_off()
-        if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, msg
+            ok, msg = self._turn_vacuum_off()
+            if not ok:
+                _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, msg
 
-        ok, msg = self._run_post_execute_return(
-            "Pickup and pivot paint finished, but {reason}"
-        )
-        if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=post_return total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, msg
+            ok, msg = self._run_post_execute_return(
+                "Pickup and pivot paint finished, but {reason}"
+            )
+            if not ok:
+                _logger.info("[TIMING] pickup_and_paint success=false stage=post_return total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, msg
 
+            _logger.info(
+                "[TIMING] pickup_and_paint success=true jobs=%d total_waypoints=%d total_elapsed_s=%.3f",
+                len(execution_plan.execution_jobs),
+                total_waypoints,
+                _elapsed_s(started),
+            )
+            return True, (
+                f"Pickup, alignment, and pivot paint completed "
+                f"for {len(execution_plan.execution_jobs)} path(s), {total_waypoints} waypoints"
+            )
+        finally:
+            self._active_paint_base_position = None
+
+    def test_pre_paint_marker_position(self) -> tuple[bool, str]:
+        """Move to pre-paint, detect the paint marker, then move to the computed offset pose."""
+        started = perf_counter()
+        if self._robot_service is None:
+            return False, "Robot service is not available"
+        ok, msg = self._prepare_marker_paint_base_position()
+        if not ok:
+            _logger.info("[TIMING] test_pre_paint_marker success=false stage=marker_base elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
+        target_pose = list(self._active_paint_base_position or [])
+        if len(target_pose) < 6:
+            _logger.info("[TIMING] test_pre_paint_marker success=false stage=no_active_base elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pre-paint marker positioning is disabled or did not produce an offset pose"
+        try:
+            if not self._move_pickup_phase("Moving to pre-paint marker offset pose", target_pose):
+                _logger.info("[TIMING] test_pre_paint_marker success=false stage=move_offset elapsed_s=%.3f", _elapsed_s(started))
+                return (
+                    False,
+                    "Marker detected, but move to offset pose failed "
+                    f"(target_pose={[round(float(value), 3) for value in target_pose[:6]]})",
+                )
+            _logger.info(
+                "[TIMING] test_pre_paint_marker success=true offset_pose=%s elapsed_s=%.3f",
+                [round(float(value), 3) for value in target_pose[:6]],
+                _elapsed_s(started),
+            )
+            return True, f"Moved to pre-paint marker offset pose: {[round(float(value), 3) for value in target_pose[:6]]}"
+        finally:
+            self._active_paint_base_position = None
+
+    def test_pickup(self, target_point_name: str = "tool") -> tuple[bool, str]:
+        """Execute a test pickup - move to target point, drop down to pickup Z, and stay there.
+
+        target_point_name: "camera" applies camera-to-TCP offset to reach the tool tip,
+                           "tool" goes directly to the tool target point.
+        """
+        _logger.info("[TEST_PICKUP] Starting test pickup for target: %s", target_point_name)
+        self._refresh_runtime_config()
+        pickup_x = 0.0
+        pickup_y = 0.0
+        pickup_rz = 0.0
+        workpiece_height_mm = 0.0
+        pickup_source = "none"
+
+        if self._last_execution_plan is not None and self._last_execution_plan.execution_jobs:
+            jobs = self._last_execution_plan.execution_jobs
+            pickup_xy = jobs[0].get("pickup_xy")
+            if pickup_xy is not None:
+                pickup_x = float(pickup_xy[0])
+                pickup_y = float(pickup_xy[1])
+                workpiece_height_mm = float(jobs[0].get("workpiece_height_mm", 0.0))
+                pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
+                pickup_source = "execution_plan"
+                _logger.info("[TEST_PICKUP] Using pickup position from execution plan: (%.3f, %.3f) rz=%.3f", pickup_x, pickup_y, pickup_rz)
+
+        if pickup_x == 0.0 and pickup_y == 0.0:
+            if hasattr(self, '_target_point_provider') and self._target_point_provider is not None:
+                try:
+                    point = self._target_point_provider.get_target_point(target_point_name)
+                    if point:
+                        pickup_x = float(point.get('x_mm', 0.0))
+                        pickup_y = float(point.get('y_mm', 0.0))
+                        _logger.info("[TEST_PICKUP] Using target point '%s' position: (%.3f, %.3f)", target_point_name, pickup_x, pickup_y)
+                except Exception as e:
+                    _logger.warning("[TEST_PICKUP] Failed to get target point: %s", e)
+            if pickup_x == 0.0 and pickup_y == 0.0:
+                _logger.warning("[TEST_PICKUP] No pickup position available - no execution plan and no target point provider")
+                return False, "No pickup position available"
+        pickup_z = self._pickup_z_mm
+        if pickup_z is None:
+            pickup_z = self._pickup_safety_z_min_mm + workpiece_height_mm + _PICKUP_CONTACT_OFFSET_MM
+        approach_z = float(pickup_z) + _PICKUP_APPROACH_OFFSET_MM
+        approach_pose = [pickup_x, pickup_y, approach_z, 180.0, 0.0, pickup_rz]
+        pickup_pose = [pickup_x, pickup_y, float(pickup_z), 180.0, 0.0, pickup_rz]
         _logger.info(
-            "[TIMING] pickup_and_paint success=true jobs=%d total_waypoints=%d total_elapsed_s=%.3f",
-            len(execution_plan.execution_jobs),
-            total_waypoints,
-            _elapsed_s(started),
+            "[TEST_PICKUP] Moving to approach: x=%.3f y=%.3f z=%.3f rz=%.3f",
+            pickup_x, pickup_y, approach_z, pickup_rz
         )
-        return True, (
-            f"Pickup, alignment, and pivot paint completed "
-            f"for {len(execution_plan.execution_jobs)} path(s), {total_waypoints} waypoints"
+        ok = self._robot_service.move_linear(
+            position=approach_pose,
+            tool=self._pickup_tool,
+            user=self._pickup_user,
+            velocity=20.0,
+            acceleration=20.0,
+            wait_to_reach=True,
         )
+        if not ok:
+            _logger.error("[TEST_PICKUP] Failed to move to approach position")
+            return False, "Failed to move to approach position"
+        _logger.info(
+            "[TEST_PICKUP] Moving to pickup: x=%.3f y=%.3f z=%.3f rz=%.3f",
+            pickup_x, pickup_y, float(pickup_z), pickup_rz
+        )
+        ok = self._robot_service.move_linear(
+            position=pickup_pose,
+            tool=self._pickup_tool,
+            user=self._pickup_user,
+            velocity=10.0,
+            acceleration=10.0,
+            wait_to_reach=True,
+        )
+        if not ok:
+            _logger.error("[TEST_PICKUP] Failed to move to pickup position")
+            return False, "Failed to move to pickup position"
+        _logger.info("[TEST_PICKUP] Test pickup completed - robot at pickup position")
+        return True, "Test pickup completed"

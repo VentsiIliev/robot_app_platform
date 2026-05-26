@@ -9,6 +9,7 @@ class CommonSettingsID(str, Enum):
     MODBUS_CONFIG = "modbus_config"
     VISION_CAMERA_SETTINGS = "vision_camera_settings"
     TARGETING = "targeting"
+    PAINT_MARKER_SETTINGS = "paint_marker_settings"
     WORK_AREA_SETTINGS = "work_area_settings"
     TOOL_CHANGER_CONFIG = "tool_changer_config"
     HEIGHT_MEASURING_SETTINGS = "height_measuring_settings"

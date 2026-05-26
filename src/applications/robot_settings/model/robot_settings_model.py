@@ -15,12 +15,13 @@ from src.applications.robot_settings.service.i_robot_settings_service import IRo
 
 class RobotSettingsModel(IApplicationModel):
 
-    def __init__(self, service: IRobotSettingsService):
+    def __init__(self, service: IRobotSettingsService, robot_app=None):
         self._service     = service
         self._config:      Optional[RobotSettings]            = None
         self._calibration: Optional[RobotCalibrationSettings] = None
         self._movement_groups: Optional[MovementGroupSettings] = None
         self._targeting_definitions: Optional[dict]           = None
+        self._robot_app   = robot_app
         self._logger       = logging.getLogger(self.__class__.__name__)
 
     def load(self) -> tuple[RobotSettings, RobotCalibrationSettings, dict | None]:
@@ -36,6 +37,10 @@ class RobotSettingsModel(IApplicationModel):
         self._service.save_config(updated)
         self._config = updated
         self._logger.debug("Robot config saved")
+
+        if self._robot_app is not None:
+            self._robot_app.invalidate_shared_vision_resolver()
+            self._logger.debug("Invalidated shared vision resolver after config change")
 
         self._service.save_movement_groups(movement_groups)
         self._movement_groups = MovementGroupSettings(movement_groups=dict(movement_groups))

@@ -14,3 +14,4 @@ class RobotCalibrationTopics:
     ROBOT_CALIBRATION_STOP = "robot/calibration/stop"
     ROBOT_CALIBRATION_IMAGE = "robot/calibration/image"
     ROBOT_STATE = "robot/state"  # example message -> {"state": self.robotState,"position": self.position, "speed": self.velocity, "accel": self.acceleration}
+    CAMERA_TCP_OFFSET_COMPLETED = "robot/calibration/camera_tcp_offset_completed"

@@ -61,6 +61,19 @@ class IRobot(ABC):
         ...
 
     @abstractmethod
+    def move_joints(
+        self,
+        joints: List[float],
+        vel: float,
+        acc: float,
+        blocking: bool = True,
+    ) -> int:
+        """Move to joint positions using joint-space planner (OMPL)."""
+        ...
+
+    @abstractmethod
+
+    @abstractmethod
     def execute_trajectory(
         self,
         path,

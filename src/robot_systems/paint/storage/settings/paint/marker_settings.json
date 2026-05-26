@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "marker_id": 1,
+  "dictionary": "DICT_4X4_1000",
+  "pre_paint_group_id": "PRE_PAINTING",
+  "offset_x_mm": 53.0,
+  "offset_y_mm": 15.0,
+  "offset_z_mm": 100.99999999999989
+}

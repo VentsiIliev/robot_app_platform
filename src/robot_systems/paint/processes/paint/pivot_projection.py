@@ -1,4 +1,5 @@
 import numpy as np
+import logging
 
 from src.engine.geometry.planar import normalize_degrees, rotate_xy_about, unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import (
@@ -7,6 +8,8 @@ from src.robot_systems.paint.processes.paint.config import (
     _PAINT_SMOOTH_MAX_ANGULAR_STEP_DEG,
     _PAINT_SMOOTH_MAX_LINEAR_STEP_MM,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 def rebase_projected_paint_path_to_zero_start_rz(
@@ -37,6 +40,7 @@ def project_paint_motion_geometry(
     source_planar_i, source_planar_j = config.source_planar_coordinate_indices
     orthogonal_index = config.orthogonal_position_index
     rotation_index = config.rotation_index
+
     if len(path) == 1:
         point = path[0]
         planar_point = np.array([[float(point[source_planar_i]), float(point[source_planar_j])]], dtype=float)
@@ -131,6 +135,18 @@ def project_paint_motion_geometry(
     # configured paint axis. This defines the starting pickup orientation.
     initial_heading = _segment_heading_deg(points[0], points[1])
     initial_rotation = unwrap_degrees(0.0, contact_segment_heading - initial_heading)
+    _logger.info(
+        "[PIVOT_PROJECT] mode=%s base_rotation=%.3f paint_axis_heading=%.3f "
+        "translation_heading=%.3f contact_heading=%.3f initial_heading=%.3f initial_rotation=%.3f",
+        config.motion_plane,
+        base_rz,
+        paint_axis_heading,
+        translation_heading,
+        contact_segment_heading,
+        initial_heading,
+        initial_rotation,
+    )
+
     points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
 
     # Then translate the rotated shape so its first point sits exactly on the
@@ -320,9 +336,12 @@ def _canonicalize_closed_source_path(
     """
     Give closed contours a pivot-aware start point and traversal direction.
 
-    The first point should be the boundary point that is closest to the actual
-    pivot location, then the loop direction should be chosen to match the
-    requested projected travel direction.
+    The first point should be the contour's top-center point so the same
+    physical upper reference is placed at the paint base regardless of where the
+    base is measured. Starting at a centered straight top edge avoids forcing
+    complex contours to begin with a corner/arc transition.
+    The loop direction is then chosen to match the requested projected travel
+    direction.
     """
     contour = np.asarray(points, dtype=float)
     if len(contour) < 3:
@@ -335,7 +354,7 @@ def _canonicalize_closed_source_path(
         return points
 
     pivot_vec = np.asarray([float(pivot_xy[0]), float(pivot_xy[1])], dtype=float)
-    start_index = int(np.argmin(np.linalg.norm(contour - pivot_vec, axis=1)))
+    contour, start_index = _top_center_contour_start(contour)
 
     desired_heading = float(contact_segment_heading)
     desired_side_sign = 1.0 if float(side_sign) >= 0.0 else -1.0
@@ -382,6 +401,66 @@ def _canonicalize_closed_source_path(
             best_ordered = candidate
 
     return np.vstack([best_ordered, best_ordered[:1]])
+
+
+def _top_center_contour_start(contour: np.ndarray) -> tuple[np.ndarray, int]:
+    """Return a contour and deterministic top-center boundary start index."""
+    points = np.asarray(contour, dtype=float)
+    if len(points) == 0:
+        return points, 0
+
+    x_range = float(np.ptp(points[:, 0]))
+    y_range = float(np.ptp(points[:, 1]))
+    x_tolerance = max(1e-6, x_range * 1e-6)
+    y_tolerance = max(1e-6, y_range * 1e-6)
+    point_tolerance = max(x_tolerance, y_tolerance)
+    center_x = float((np.min(points[:, 0]) + np.max(points[:, 0])) * 0.5)
+
+    best_candidate: tuple[float, int, np.ndarray] | None = None
+    for index in range(len(points)):
+        next_index = (index + 1) % len(points)
+        start = points[index]
+        end = points[next_index]
+
+        start_x = float(start[0])
+        end_x = float(end[0])
+        min_x = min(start_x, end_x)
+        max_x = max(start_x, end_x)
+        if center_x < min_x - x_tolerance or center_x > max_x + x_tolerance:
+            continue
+
+        if abs(end_x - start_x) <= x_tolerance:
+            if abs(start_x - center_x) > x_tolerance:
+                continue
+            intersection = np.asarray([center_x, min(float(start[1]), float(end[1]))], dtype=float)
+        else:
+            t = (center_x - start_x) / (end_x - start_x)
+            if t < -x_tolerance or t > 1.0 + x_tolerance:
+                continue
+            t = min(1.0, max(0.0, float(t)))
+            intersection = start + (end - start) * t
+            intersection = np.asarray([center_x, float(intersection[1])], dtype=float)
+
+        key = (float(intersection[1]), next_index, intersection)
+        if best_candidate is None or (key[0], key[1]) < (best_candidate[0], best_candidate[1]):
+            best_candidate = key
+
+    if best_candidate is not None:
+        _, insert_index, start_point = best_candidate
+        previous_index = (insert_index - 1) % len(points)
+        if np.linalg.norm(points[previous_index] - start_point) <= point_tolerance:
+            return points, previous_index
+        if np.linalg.norm(points[insert_index % len(points)] - start_point) <= point_tolerance:
+            return points, insert_index % len(points)
+        inserted = np.insert(points, insert_index, start_point, axis=0)
+        return inserted, insert_index
+
+    min_y = float(np.min(points[:, 1]))
+    top_indices = np.where(np.abs(points[:, 1] - min_y) <= y_tolerance)[0]
+    if len(top_indices) == 0:
+        return points, int(np.lexsort((np.abs(points[:, 0] - center_x), points[:, 1]))[0])
+    top_points = points[top_indices]
+    return points, int(top_indices[int(np.argmin(np.abs(top_points[:, 0] - center_x)))])
 
 
 def _compute_pickup_rz_from_path(

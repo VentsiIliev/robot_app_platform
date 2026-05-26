@@ -24,6 +24,10 @@ def _get_paint_base_group_id() -> str:
     return _PAINT_PROCESS.paint_base_group_id
 
 
+def _get_pre_paint_group_id() -> str:
+    return _PAINT_PROCESS.pre_paint_group_id
+
+
 def _get_pickup_base_group_id() -> str:
     return _PAINT_PROCESS.pickup_base_group_id
 
@@ -69,10 +73,52 @@ def _build_paint_path_debug_dump_dir():
 
 def _build_paint_path_executor(robot_system):
     from src.robot_systems.paint.processes.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
+    from src.engine.vision.aruco_marker_detector import detect_aruco_marker_center
 
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    transformer, _ = robot_system.get_shared_vision_resolver()
     debug_dump_dir = _build_paint_path_debug_dump_dir()
+
+    def _get_paint_marker_settings():
+        settings_service = getattr(robot_system, "_settings_service", None)
+        if settings_service is None:
+            return None
+        return settings_service.get(CommonSettingsID.PAINT_MARKER_SETTINGS)
+
+    def _detect_paint_marker_position() -> tuple[float, float] | None:
+        if vision_service is None or transformer is None:
+            return None
+        if hasattr(transformer, "reload"):
+            transformer.reload()
+        if hasattr(transformer, "is_available") and not transformer.is_available():
+            return None
+        frame = vision_service.get_latest_frame()
+        marker_settings = _get_paint_marker_settings()
+        marker_center = detect_aruco_marker_center(
+            frame,
+            marker_id=int(getattr(marker_settings, "marker_id", _PAINT_PROCESS.paint_base_marker_id)),
+            dictionary_name=str(
+                getattr(marker_settings, "dictionary", _PAINT_PROCESS.paint_base_marker_dictionary)
+                or _PAINT_PROCESS.paint_base_marker_dictionary
+            ),
+        )
+        if marker_center is None:
+            return None
+        return transformer.transform(marker_center.x_px, marker_center.y_px)
+
+    def _move_to_pre_paint_group() -> bool:
+        navigation = getattr(robot_system, "_navigation", None)
+        if navigation is None:
+            return False
+        marker_settings = _get_paint_marker_settings()
+        group_id = str(
+            getattr(marker_settings, "pre_paint_group_id", _get_pre_paint_group_id())
+            or _get_pre_paint_group_id()
+        )
+        return navigation.move_to_group(group_id)
+
     return PaintWorkpiecePathExecutor(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
@@ -84,6 +130,22 @@ def _build_paint_path_executor(robot_system):
             getattr(robot_system, "_navigation", None).get_group_position(_get_paint_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
+        pre_paint_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position(
+                str(
+                    getattr(_get_paint_marker_settings(), "pre_paint_group_id", _get_pre_paint_group_id())
+                    or _get_pre_paint_group_id()
+                )
+            )
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
+        pre_paint_move_callback=_move_to_pre_paint_group,
+        paint_base_marker_provider=_detect_paint_marker_position,
+        paint_marker_settings_provider=_get_paint_marker_settings,
+        paint_base_marker_offset_x_mm=_PAINT_PROCESS.paint_base_marker_offset_x_mm,
+        paint_base_marker_offset_y_mm=_PAINT_PROCESS.paint_base_marker_offset_y_mm,
+        paint_base_marker_offset_z_mm=_PAINT_PROCESS.paint_base_marker_offset_z_mm,
+        enable_marker_paint_base=_PAINT_PROCESS.enable_aruco_paint_base,
         post_execute_callback=lambda: (
             getattr(robot_system, "_navigation", None).move_to_calibration_position()
             if getattr(robot_system, "_navigation", None) is not None else False
@@ -104,6 +166,7 @@ def _build_paint_path_executor(robot_system):
         apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
         camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+        target_point_provider=getattr(robot_system, "_targeting_provider", None),
     )
 
 
@@ -581,7 +644,8 @@ def _build_robot_settings_application(robot_app):
     jog_service = build_robot_system_jog_service(robot_app)
     return WidgetApplication(
         widget_factory=lambda ms: RobotSettingsFactory(
-            movement_group_definitions=robot_app.get_movement_group_definitions()
+            movement_group_definitions=robot_app.get_movement_group_definitions(),
+            robot_app=robot_app,
         ).build(service, messaging=ms, jog_service=jog_service)
     )
 

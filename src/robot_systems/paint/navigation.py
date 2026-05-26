@@ -1,6 +1,8 @@
 from typing import Callable, Optional
+
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.robot.interfaces.i_motion_service import IMotionService
 from src.engine.vision import IVisionService
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
@@ -16,12 +18,14 @@ class PaintNavigationService:
         vision: Optional[IVisionService] = None,
         robot_service: Optional[IRobotService] = None,
         work_area_service: Optional[IWorkAreaService] = None,
+        motion_service: Optional[IMotionService] = None,
         observed_area_by_group: Optional[dict[str, str]] = None,
     ):
         self._nav = navigation
         self._vision = vision
         self._robot = robot_service
         self._work_area_service = work_area_service
+        self._motion = motion_service
         self._observed_area_by_group = {
             str(group_id).strip(): str(area_id).strip()
             for group_id, area_id in (observed_area_by_group or {}).items()
@@ -52,6 +56,20 @@ class PaintNavigationService:
         if ok:
             self._set_observed_area_for_group(self._GROUP_CALIBRATION)
         return ok
+
+    def move_to_calibration_ptp(self) -> bool:
+        return self._nav.move_to_group(self._GROUP_CALIBRATION)
+
+    def move_to_home_all_zeros(self) -> bool:
+        if self._motion is not None:
+            return self._motion.move_joints(
+                joints=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                tool=0,
+                user=0,
+                velocity=30.0,
+                acceleration=30.0,
+            )
+        return self._nav.move_to_group(self._GROUP_HOME)
 
     def move_to(
         self,

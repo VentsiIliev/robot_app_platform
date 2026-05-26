@@ -70,6 +70,9 @@ class FairinoRobot(IRobot):
     def get_current_acceleration(self) -> float:
         return 0.0
 
+    def move_joints(self, joints, vel=30, acc=30, blocking=True) -> int:
+        return self.robot.MoveJ(joints, [0.0]*6, 0, 0, vel=vel, acc=acc) or 0
+
     def get_execution_status(self):
         try:
             result = self.robot.GetMotionQueueLength()

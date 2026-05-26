@@ -1,0 +1,147 @@
+{
+  "marker_id": 115,
+  "reference_pose": [
+    -45.68120436823129,
+    -287.85786415609977,
+    250.0,
+    179.85506247367854,
+    -0.007142938341639844,
+    -0.014615434814499055
+  ],
+  "baseline_px": [
+    639.8054606119791,
+    362.0570882161458
+  ],
+  "local_scale_mm_per_px": [
+    -0.43732762169226547,
+    0.41976348146698683
+  ],
+  "fit": {
+    "x_shift_per_mm_z_px": 0.04518477534834553,
+    "y_shift_per_mm_z_px": 0.2694945496398111,
+    "x_shift_per_mm_z_mm": -0.019760550339791256,
+    "y_shift_per_mm_z_mm": 0.1131239703931848
+  },
+  "samples": [
+    {
+      "sample_index": 1,
+      "reference_z": 250.0,
+      "sample_z": 249.0,
+      "z_delta_mm": -1.0,
+      "marker_x_px": 639.8371378580729,
+      "marker_y_px": 361.98443603515625,
+      "image_dx_px": 0.03167724609375,
+      "image_dy_px": -0.07265218098956439,
+      "local_dx_mm": -0.013853334695940293,
+      "local_dy_mm": -0.030496732428349185
+    },
+    {
+      "sample_index": 2,
+      "reference_z": 250.0,
+      "sample_z": 248.0,
+      "z_delta_mm": -2.0,
+      "marker_x_px": 639.7391764322916,
+      "marker_y_px": 361.89996337890625,
+      "image_dx_px": -0.0662841796875,
+      "image_dy_px": -0.15712483723956439,
+      "local_dx_mm": 0.028987902658557146,
+      "local_dy_mm": -0.06595526870461321
+    },
+    {
+      "sample_index": 3,
+      "reference_z": 250.0,
+      "sample_z": 247.0,
+      "z_delta_mm": -3.0,
+      "marker_x_px": 639.5995483398438,
+      "marker_y_px": 361.52646891276044,
+      "image_dx_px": -0.20591227213537877,
+      "image_dy_px": -0.5306193033853788,
+      "local_dx_mm": 0.09005112425021575,
+      "local_dy_mm": -0.2227346061226339
+    },
+    {
+      "sample_index": 4,
+      "reference_z": 250.0,
+      "sample_z": 246.0,
+      "z_delta_mm": -4.0,
+      "marker_x_px": 639.6267496744791,
+      "marker_y_px": 361.1094156901042,
+      "image_dx_px": -0.1787109375,
+      "image_dy_px": -0.9476725260416288,
+      "local_dx_mm": 0.0781552292672701,
+      "local_dy_mm": -0.39779831882184785
+    },
+    {
+      "sample_index": 5,
+      "reference_z": 250.0,
+      "sample_z": 245.0,
+      "z_delta_mm": -5.0,
+      "marker_x_px": 639.5295817057291,
+      "marker_y_px": 360.7836100260417,
+      "image_dx_px": -0.27587890625,
+      "image_dy_px": -1.2734781901041288,
+      "local_dx_mm": 0.12064946594537597,
+      "local_dy_mm": -0.5345596386503864
+    },
+    {
+      "sample_index": 6,
+      "reference_z": 250.0,
+      "sample_z": 244.0,
+      "z_delta_mm": -6.0,
+      "marker_x_px": 639.5415242513021,
+      "marker_y_px": 360.5437520345052,
+      "image_dx_px": -0.26393636067700754,
+      "image_dy_px": -1.513336181640625,
+      "local_dx_mm": 0.11542666089298768,
+      "local_dy_mm": -0.6352432642354251
+    },
+    {
+      "sample_index": 7,
+      "reference_z": 250.0,
+      "sample_z": 243.0,
+      "z_delta_mm": -7.0,
+      "marker_x_px": 639.4583536783854,
+      "marker_y_px": 360.29430135091144,
+      "image_dx_px": -0.34710693359375,
+      "image_dy_px": -1.762786865234375,
+      "local_dx_mm": 0.15179944974144982,
+      "local_dy_mm": -0.7399535516350574
+    },
+    {
+      "sample_index": 8,
+      "reference_z": 250.0,
+      "sample_z": 242.0,
+      "z_delta_mm": -8.0,
+      "marker_x_px": 639.4232177734375,
+      "marker_y_px": 359.7482198079427,
+      "image_dx_px": -0.38224283854162877,
+      "image_dy_px": -2.308868408203125,
+      "local_dx_mm": 0.16716535148831113,
+      "local_dy_mm": -0.9691786412764839
+    },
+    {
+      "sample_index": 9,
+      "reference_z": 250.0,
+      "sample_z": 241.0,
+      "z_delta_mm": -9.0,
+      "marker_x_px": 639.3972981770834,
+      "marker_y_px": 359.45005289713544,
+      "image_dx_px": -0.40816243489575754,
+      "image_dy_px": -2.6070353190103788,
+      "local_dx_mm": 0.17850070691708578,
+      "local_dy_mm": -1.0943382218151931
+    },
+    {
+      "sample_index": 10,
+      "reference_z": 250.0,
+      "sample_z": 240.0,
+      "z_delta_mm": -10.0,
+      "marker_x_px": 639.4216105143229,
+      "marker_y_px": 359.23061116536456,
+      "image_dx_px": -0.38385009765625,
+      "image_dy_px": -2.82647705078125,
+      "local_dx_mm": 0.16786825029435165,
+      "local_dy_mm": -1.1864518471224788
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+Traceback (most recent call last):
+  File "pyimod03_ctypes.py", line 53, in __init__
+  File "ctypes\__init__.py", line 376, in __init__
+FileNotFoundError: Could not find module 'C:\Program Files\PL DXF Vision\_internal\libzbar-64.dll' (or one of its dependencies). Try using the full path with constructor syntax.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "pyzbar\zbar_library.py", line 58, in load
+  File "pyzbar\zbar_library.py", line 54, in load_objects
+  File "ctypes\__init__.py", line 454, in LoadLibrary
+  File "pyimod03_ctypes.py", line 55, in __init__
+pyimod03_ctypes.install.<locals>.PyInstallerImportError: Failed to load dynlib/dll 'C:\\Program Files\\PL DXF Vision\\_internal\\libzbar-64.dll'. Most likely this dynlib/dll was not found when the application was frozen.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "pyimod03_ctypes.py", line 53, in __init__
+  File "ctypes\__init__.py", line 376, in __init__
+FileNotFoundError: Could not find module 'C:\Program Files\PL DXF Vision\_internal\pyzbar\libzbar-64.dll' (or one of its dependencies). Try using the full path with constructor syntax.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "run.py", line 14, in <module>
+  File "src\tools\vision_dxf_exporter\app.py", line 662, in main
+  File "src\tools\vision_dxf_exporter\app.py", line 615, in build_vision_service
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "src\engine\vision\implementation\VisionSystem\VisionSystem.py", line 18, in <module>
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "src\engine\vision\implementation\VisionSystem\services\__init__.py", line 5, in <module>
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "src\engine\vision\implementation\VisionSystem\services\qr_detection_service.py", line 6, in <module>
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "pyzbar\pyzbar.py", line 7, in <module>
+  File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
+  File "pyimod02_importers.py", line 457, in exec_module
+  File "pyzbar\wrapper.py", line 151, in <module>
+  File "pyzbar\wrapper.py", line 148, in zbar_function
+  File "pyzbar\wrapper.py", line 127, in load_libzbar
+  File "pyzbar\zbar_library.py", line 60, in load
+  File "pyzbar\zbar_library.py", line 54, in load_objects
+  File "ctypes\__init__.py", line 454, in LoadLibrary
+  File "pyimod03_ctypes.py", line 55, in __init__
+pyimod03_ctypes.install.<locals>.PyInstallerImportError: Failed to load dynlib/dll 'C:\\Program Files\\PL DXF Vision\\_internal\\pyzbar\\libzbar-64.dll'. Most likely this dynlib/dll was not found when the application was frozen.

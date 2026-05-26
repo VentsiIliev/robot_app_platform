@@ -31,6 +31,13 @@ class PaintDashboardController(
         self._view.stop_requested.connect(self._on_stop)
         self._view.pause_requested.connect(self._on_pause)
         self._view.reset_requested.connect(self._on_reset)
+        self._view.test_pickup_requested.connect(self._on_test_pickup)
+        self._view.go_to_calibration_requested.connect(self._on_go_to_calibration)
+        self._view.move_to_calibration_ptp_requested.connect(self._on_move_to_calibration_ptp)
+        self._view.move_to_home_zeros_requested.connect(self._on_move_to_home_zeros)
+        self._view.pickup_to_paint_position_requested.connect(self._on_pickup_to_paint_position)
+        self._view.test_pre_paint_marker_requested.connect(self._on_test_pre_paint_marker)
+        self._view.paint_marker_settings_requested.connect(self._on_paint_marker_settings)
 
     def load(self) -> None:
         self._active = True
@@ -55,6 +62,39 @@ class PaintDashboardController(
     def _on_reset(self) -> None:
         self._view.apply_dashboard_state(self._model.reset_errors())
 
+    def _on_test_pickup(self) -> None:
+        self._model.test_pickup()
+
+    def _on_go_to_calibration(self) -> None:
+        self._model.go_to_calibration()
+
+    def _on_move_to_calibration_ptp(self) -> None:
+        self._model.move_to_calibration_ptp()
+
+    def _on_move_to_home_zeros(self) -> None:
+        self._model.move_to_home_zeros()
+
+    def _on_pickup_to_paint_position(self) -> None:
+        self._model.pickup_to_paint_position()
+
+    def _on_test_pre_paint_marker(self) -> None:
+        ok, message = self._model.test_pre_paint_marker_position()
+        if ok:
+            self._view.show_message("Pre-Paint Marker Test", message)
+        else:
+            self._view.show_error("Pre-Paint Marker Test", message)
+
+    def _on_paint_marker_settings(self) -> None:
+        settings = self._model.get_paint_marker_settings()
+        updated = self._view.open_paint_marker_settings_dialog(settings)
+        if updated is None:
+            return
+        ok, message = self._model.save_paint_marker_settings(updated)
+        if ok:
+            self._view.show_message("Pre-Painting Marker Settings", message)
+        else:
+            self._view.show_error("Pre-Painting Marker Settings", message)
+
     def _view_ok(self) -> bool:
         if not self._active:
             return False
@@ -63,4 +103,3 @@ class PaintDashboardController(
             return True
         except RuntimeError:
             return False
-

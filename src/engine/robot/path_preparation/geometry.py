@@ -250,10 +250,11 @@ def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:
 
 def compute_pickup_rz_from_robot_contour(points: list[list[float]] | np.ndarray) -> float:
     """
-    Estimate pickup orientation from contour central moments instead of a local tangent.
+    Estimate pickup orientation from the contour's dominant bounding axis.
 
-    This is better for centroid pickup on closed workpiece contours, because the
-    centroid is inside the shape and does not have a meaningful boundary tangent.
+    Minimum-area rectangle orientation is preferred because PCA can be biased by
+    asymmetric details and leave a small residual angle at placement time.
+    PCA and moments remain fallbacks for unusual contours.
     """
     contour = np.asarray(points, dtype=float)
     if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 2:
@@ -262,6 +263,19 @@ def compute_pickup_rz_from_robot_contour(points: list[list[float]] | np.ndarray)
     if len(contour) < 3:
         return 0.0
 
+    # Prefer the long side of the minimum-area rectangle. PCA can be biased by
+    # asymmetric details on the contour and leave a small residual placement
+    # angle even when the bounding shaft/edge should be exactly square.
+    min_area_angle = _compute_min_area_rect_orientation(contour)
+    if min_area_angle is not None:
+        return normalize_degrees(min_area_angle)
+
+    # Fallback to PCA for contours where OpenCV cannot produce a stable box.
+    pca_angle = _compute_pca_orientation(contour)
+    if pca_angle is not None:
+        return normalize_degrees(pca_angle)
+    
+    # Final fallback to moments (original method)
     moments = cv2.moments(contour.astype(np.float32).reshape(-1, 1, 2))
     mu20 = float(moments.get("mu20", 0.0))
     mu11 = float(moments.get("mu11", 0.0))
@@ -272,6 +286,120 @@ def compute_pickup_rz_from_robot_contour(points: list[list[float]] | np.ndarray)
 
     heading_from_x_deg = float(np.degrees(0.5 * np.arctan2(2.0 * mu11, mu20 - mu02)))
     return normalize_degrees(heading_from_x_deg)
+
+
+def _compute_pca_orientation(contour: np.ndarray) -> float | None:
+    """Compute orientation using Principal Component Analysis.
+    
+    This is the most robust method for complex shapes with smooth edges
+    and arbitrary rotation angles.
+    """
+    if contour is None or len(contour) < 3:
+        return None
+    
+    try:
+        # Compute centroid
+        centroid = np.mean(contour, axis=0)
+        
+        # Center the points
+        centered = contour - centroid
+        
+        # Compute covariance matrix
+        cov = np.cov(centered.T)
+        
+        if cov.shape != (2, 2):
+            return None
+            
+        # Compute eigenvalues and eigenvectors
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        
+        # Check for valid eigenvalues
+        if eigenvalues[0] < 0 or eigenvalues[1] < 0:
+            return None
+            
+        # Get the eigenvector corresponding to the largest eigenvalue
+        largest_idx = np.argmax(eigenvalues)
+        principal_axis = eigenvectors[:, largest_idx]
+        
+        # Compute angle from x-axis
+        angle = float(np.degrees(np.arctan2(principal_axis[1], principal_axis[0])))
+        
+        return angle
+        
+    except Exception:
+        return None
+
+
+def _compute_min_area_rect_orientation(contour: np.ndarray) -> float | None:
+    """Compute orientation using minimum area bounding rectangle.
+    
+    This method is more stable than moments for elongated shapes.
+    Returns orientation in degrees [0, 180).
+    """
+    if contour is None or len(contour) < 3:
+        return None
+    
+    try:
+        contour_cv = contour.astype(np.float32).reshape(-1, 1, 2)
+        rect = cv2.minAreaRect(contour_cv)
+        
+        if rect == (0, 0, 0):
+            return None
+            
+        _center, size, angle = rect
+        
+        if size[0] < 1 or size[1] < 1:
+            return None
+        
+        width = float(size[0])
+        height = float(size[1])
+        angle = float(angle)
+        long_axis_angle = angle + 90.0 if width < height else angle
+
+        return long_axis_angle % 180.0
+        
+    except Exception:
+        return None
+
+
+def compute_centroid_robust(contour: np.ndarray) -> tuple[float, float]:
+    """Compute centroid using the most reliable method.
+    
+    Uses moments with improved fallback handling for edge cases.
+    """
+    if contour is None or len(contour) < 1:
+        return (0.0, 0.0)
+    
+    contour = np.asarray(contour, dtype=float)
+    if contour.ndim != 2 or contour.shape[1] < 2:
+        return (0.0, 0.0)
+    
+    contour = contour[:, :2]
+    
+    try:
+        moments = cv2.moments(contour.astype(np.float32).reshape(-1, 1, 2))
+        m00 = float(moments.get("m00", 0.0))
+        
+        if abs(m00) > 1e-10:
+            cx = float(moments.get("m10", 0.0)) / m00
+            cy = float(moments.get("m01", 0.0)) / m00
+            return (cx, cy)
+    except Exception:
+        pass
+    
+    # Fallback: use bounding box center
+    try:
+        min_vals = np.min(contour, axis=0)
+        max_vals = np.max(contour, axis=0)
+        return (float((min_vals[0] + max_vals[0]) / 2), float((min_vals[1] + max_vals[1]) / 2))
+    except Exception:
+        pass
+    
+    # Fallback: use mean of points
+    if len(contour) > 0:
+        return tuple(np.mean(contour, axis=0).tolist())
+    
+    return (0.0, 0.0)
 
 
 def compute_pickup_rz_from_robot_contour_with_direction(

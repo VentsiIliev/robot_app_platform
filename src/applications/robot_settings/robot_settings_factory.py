@@ -12,12 +12,13 @@ from src.shared_contracts.declarations import MovementGroupDefinition
 
 
 class RobotSettingsFactory(ApplicationFactory):
-    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None):
+    def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None, robot_app=None):
         self._messaging = None
         self._movement_group_definitions = list(movement_group_definitions or [])
+        self._robot_app = robot_app
 
     def _create_model(self, service: IRobotSettingsService) -> IApplicationModel:
-        return RobotSettingsModel(service)
+        return RobotSettingsModel(service, robot_app=self._robot_app)
 
     def _create_view(self) -> IApplicationView:
         return RobotSettingsView(movement_group_definitions=self._movement_group_definitions)

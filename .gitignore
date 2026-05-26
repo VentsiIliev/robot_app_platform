@@ -12,6 +12,10 @@ __pycache__/
 .pytest_cache/
 htmlcov/
 
+# Generated packaging output
+build/
+dist/
+
 # IDE files
 .idea/
 *.iml

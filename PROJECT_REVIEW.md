@@ -209,18 +209,18 @@ except:  # Catches KeyboardInterrupt, SystemExit, hides bugs
 **Impact:** Masks bugs, makes debugging difficult. Should catch specific exceptions.
 
 #### 4. Hardcoded IP Addresses and Ports (15+ Instances)
-| File | Line | Value |
-|------|------|-------|
-| `src/engine/robot/drivers/fairino/Robot.py` | 187, 200 | `ip_address = "192.168.58.2"` |
-| `src/engine/robot/configuration/robot_settings.py` | 145, 170 | `"192.168.58.2"` |
+| File | Line | Value                                |
+|------|------|--------------------------------------|
+| `src/engine/robot/drivers/fairino/Robot.py` | 187, 200 | `ip_address = "192.168.58.2"`        |
+| `src/engine/robot/configuration/robot_settings.py` | 145, 170 | `"192.168.58.2"`                     |
 | `src/robot_systems/glue/settings/cells.py` | 38 | `http://192.168.222.143/weight{...}` |
-| `src/robot_systems/paint/service_builders.py` | 15 | `host="192.168.2.146"` |
-| `src/robot_systems/paint/domain/vacuum_pump/relay_client.py` | 48, 75 | `"192.168.2.146"`, `port=5000` |
-| `src/robot_systems/paint/domain/vacuum_pump/relay_vacuum_pump_controller.py` | 19 | `"192.168.222.35"` |
-| `src/engine/vision/implementation/plvision/PLVision/DxfConverter.py` | 31 | `"192.168.222.74"`, `port_png=8888` |
-| `src/engine/vision/implementation/VisionSystem/features/calibration/stereo_calibration/get_images.py` | 13-14 | `"192.168.222.225:5000"` |
-| `src/robot_systems/glue/applications/dispense_channel_settings/view/dispense_channel_schema.py` | 15 | `"http://192.168.1.100"` |
-| `src/cam_server.py` | 191 | `host="0.0.0.0", port=5000` |
+| `src/robot_systems/paint/service_builders.py` | 15 | `host="192.168.2.146"`               |
+| `src/robot_systems/paint/domain/vacuum_pump/relay_client.py` | 48, 75 | `"192.168.2.146"`, `port=5002`       |
+| `src/robot_systems/paint/domain/vacuum_pump/relay_vacuum_pump_controller.py` | 19 | `"192.168.222.35"`                   |
+| `src/engine/vision/implementation/plvision/PLVision/DxfConverter.py` | 31 | `"192.168.222.74"`, `port_png=8888`  |
+| `src/engine/vision/implementation/VisionSystem/features/calibration/stereo_calibration/get_images.py` | 13-14 | `"192.168.222.225:5000"`             |
+| `src/robot_systems/glue/applications/dispense_channel_settings/view/dispense_channel_schema.py` | 15 | `"http://192.168.1.100"`             |
+| `src/cam_server.py` | 191 | `host="0.0.0.0", port=5000`          |
 
 **Impact:** Not configurable, breaks deployment to different environments. Should use settings files.
 

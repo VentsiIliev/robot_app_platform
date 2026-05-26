@@ -224,7 +224,17 @@ class BaseRobotSystem(ABC):
             return None, None
         cached_transformer = getattr(self, "_vision_base_transformer", None)
         cached_resolver = getattr(self, "_vision_target_resolver", None)
-        if cached_transformer is not None and cached_resolver is not None:
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        cached_tcp_x = getattr(self, "_cached_tcp_x", None)
+        cached_tcp_y = getattr(self, "_cached_tcp_y", None)
+        if (
+            cached_transformer is not None
+            and cached_resolver is not None
+            and cached_tcp_x is not None
+            and cached_tcp_y is not None
+            and abs(float(cached_tcp_x) - float(tcp_x)) < 1e-9
+            and abs(float(cached_tcp_y) - float(tcp_y)) < 1e-9
+        ):
             _logger.info(
                 "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
                 cached_transformer.__class__.__name__,
@@ -236,7 +246,6 @@ class BaseRobotSystem(ABC):
         transformer = self._build_shared_base_transformer()
         if transformer is None:
             return None, None
-        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
         resolver = VisionTargetResolver(
             base_transformer=transformer,
             registry=provider.build_point_registry(),
@@ -254,6 +263,8 @@ class BaseRobotSystem(ABC):
         )
         self._vision_base_transformer = transformer
         self._vision_target_resolver = resolver
+        self._cached_tcp_x = tcp_x
+        self._cached_tcp_y = tcp_y
         return transformer, resolver
 
     def invalidate_shared_vision_resolver(self) -> None:
@@ -400,13 +411,30 @@ class BaseRobotSystem(ABC):
         self._validate_and_inject(services)
         self._health_registry   = self._build_health_registry()
         self._running = True
+        self._subscribe_to_calibration_events()
         self.on_start()
         self._logger.info("%s started", self.metadata.name)
+
+    def _subscribe_to_calibration_events(self) -> None:
+        """Subscribe to calibration completion events to invalidate vision resolver."""
+        if self._messaging_service is None:
+            return
+        from src.shared_contracts.events.robot_events import RobotCalibrationTopics
+        self._messaging_service.subscribe(
+            RobotCalibrationTopics.CAMERA_TCP_OFFSET_COMPLETED,
+            self._on_camera_tcp_offset_calibration_completed,
+        )
+
+    def _on_camera_tcp_offset_calibration_completed(self, payload: dict) -> None:
+        """Handler for camera TCP offset calibration completion."""
+        self._logger.info("Camera TCP offset calibration completed, invalidating vision resolver")
+        self.invalidate_shared_vision_resolver()
 
     def stop(self) -> None:
         if not self._running:
             return
         self._logger.info("Stopping %s", self.metadata.name)
+        self._unsubscribe_from_calibration_events()
         try:
             self.on_stop()
         finally:
@@ -415,6 +443,16 @@ class BaseRobotSystem(ABC):
             finally:
                 self._running = False
                 self._logger.info("%s stopped", self.metadata.name)
+
+    def _unsubscribe_from_calibration_events(self) -> None:
+        """Unsubscribe from calibration completion events."""
+        if self._messaging_service is None:
+            return
+        from src.shared_contracts.events.robot_events import RobotCalibrationTopics
+        self._messaging_service.unsubscribe(
+            RobotCalibrationTopics.CAMERA_TCP_OFFSET_COMPLETED,
+            self._on_camera_tcp_offset_calibration_completed,
+        )
 
     @property
     def is_running(self) -> bool:

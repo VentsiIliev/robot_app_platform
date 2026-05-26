@@ -45,6 +45,9 @@ class RobotService(IRobotService):
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
 
+    def move_joints(self, joints, tool, user, velocity, acceleration, wait_to_reach=False, wait_cancelled=None) -> bool:
+        return self._motion.move_joints(joints, tool, user, velocity, acceleration, wait_to_reach, wait_cancelled)
+
     # --- IRobotLifecycle ---
 
     def enable_robot(self) -> None:
