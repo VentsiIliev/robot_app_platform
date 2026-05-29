@@ -13,6 +13,15 @@ from src.applications.base.app_styles import (
     section_label,
 )
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+
+
+def _keyboard_collapsible_group(schema) -> CollapsibleGroup:
+    group_holder: list[CollapsibleGroup] = []
+    build_with_keyboard_setting_handlers(
+        lambda: group_holder.append(CollapsibleGroup(schema))
+    )
+    return group_holder[0]
 
 
 class _BaseCalibrationTab(QWidget):
@@ -49,7 +58,7 @@ class _BaseCalibrationTab(QWidget):
         for schema in schemas:
             single_column_schema = deepcopy(schema)
             single_column_schema.columns = 1
-            group = CollapsibleGroup(single_column_schema)
+            group = _keyboard_collapsible_group(single_column_schema)
             self._settings_groups.append(group)
             self._card_layout.addWidget(group)
 
