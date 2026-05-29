@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import QEvent, QPoint, QRect, Qt
+from PyQt6.QtCore import QEvent, QMargins, QPoint, QRect, Qt, QTimer
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import (
+    QAbstractScrollArea,
     QAbstractSpinBox,
     QDialog,
     QDoubleSpinBox,
     QHBoxLayout,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -29,6 +31,9 @@ _KEYBOARD_KEY = "#F7F3FA"
 _KEYBOARD_KEY_HOVER = "#EFE7F5"
 _KEYBOARD_ACTION = "#905BA9"
 _KEYBOARD_ACTION_HOVER = "#7E4C96"
+_DOCK_MARGIN = 8
+_FIELD_MARGIN = 12
+_ACTIVE_KEYBOARD_OWNER: Optional["_KeyboardMixin"] = None
 
 
 class _PopupKeyboardDialog(QDialog):
@@ -82,6 +87,73 @@ class _PopupKeyboardDialog(QDialog):
             """
         )
         self._build_ui()
+
+    def closeEvent(self, event) -> None:
+        self._restore_target_scroll_space()
+        super().closeEvent(event)
+
+    def hideEvent(self, event) -> None:
+        self._restore_target_scroll_space()
+        super().hideEvent(event)
+
+    def _restore_target_scroll_space(self) -> None:
+        widget: Optional[QWidget] = self._target
+        while widget is not None:
+            notify = getattr(widget, "_on_virtual_keyboard_hidden", None)
+            if callable(notify):
+                notify()
+                break
+            widget = widget.parentWidget()
+
+        restore = getattr(self._target, "_restore_keyboard_adjustments", None)
+        if not callable(restore):
+            restore = getattr(self._target, "_restore_keyboard_scroll_space", None)
+        if callable(restore):
+            restore()
+
+    def dock_to_target_window(self) -> None:
+        window = self._dock_window()
+        if window is None:
+            return
+
+        window_top_left = window.mapToGlobal(QPoint(0, 0))
+        keyboard_height = self.sizeHint().height()
+        keyboard_width = max(320, window.width() - (_DOCK_MARGIN * 2))
+        keyboard_x = window_top_left.x() + _DOCK_MARGIN
+        keyboard_y = window_top_left.y() + window.height() - keyboard_height - _DOCK_MARGIN
+
+        self.setFixedWidth(keyboard_width)
+        self.move(QPoint(keyboard_x, keyboard_y))
+
+    def keyboard_rect_global(self) -> QRect:
+        return QRect(self.pos(), self.size())
+
+    def _dock_window(self) -> Optional[QWidget]:
+        widget: Optional[QWidget] = self._target
+        while widget is not None:
+            explicit_window = getattr(widget, "_virtual_keyboard_dock_window", None)
+            if isinstance(explicit_window, QWidget):
+                return explicit_window
+            widget = widget.parentWidget()
+
+        window = self._target.window()
+        while window is not None:
+            explicit_window = getattr(window, "_virtual_keyboard_dock_window", None)
+            if isinstance(explicit_window, QWidget):
+                return explicit_window
+
+            parent = window.parentWidget()
+            if parent is None and isinstance(window.parent(), QWidget):
+                parent = window.parent()
+            if parent is None:
+                return window
+
+            parent_window = parent.window()
+            if parent_window is None or parent_window is window:
+                return window
+
+            window = parent_window
+        return None
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -191,6 +263,9 @@ class _KeyboardMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._keyboard_dialog: Optional[_PopupKeyboardDialog] = None
+        self._keyboard_scroll_area: Optional[QAbstractScrollArea] = None
+        self._keyboard_content_layout = None
+        self._keyboard_content_margins: Optional[QMargins] = None
         self._install_trigger_hooks()
 
     def _keyboard_enabled(self) -> bool:
@@ -206,6 +281,7 @@ class _KeyboardMixin:
         if not self._keyboard_enabled():
             return
 
+        self._restore_other_keyboard_owner()
         parent = self.window() if hasattr(self, "window") else None
         if self._keyboard_dialog is None:
             self._keyboard_dialog = _PopupKeyboardDialog(
@@ -215,39 +291,135 @@ class _KeyboardMixin:
             )
 
         self._keyboard_dialog.adjustSize()
-        self._keyboard_dialog.move(self._keyboard_position())
+        self._keyboard_dialog.dock_to_target_window()
         self._keyboard_dialog.show()
         self._keyboard_dialog.raise_()
+        self._mark_active_keyboard_owner()
+        self._notify_keyboard_shown()
+        QTimer.singleShot(0, self._position_content_for_keyboard)
 
-    def _keyboard_position(self) -> QPoint:
+    def _notify_keyboard_shown(self) -> None:
         if self._keyboard_dialog is None:
-            return self.mapToGlobal(QPoint(0, self.height() + 6))
+            return
 
-        margin = 6
-        keyboard_size = self._keyboard_dialog.sizeHint()
-        field_top_left = self.mapToGlobal(QPoint(0, 0))
-        field_bottom_left = self.mapToGlobal(QPoint(0, self.height()))
-        desired_x = field_top_left.x()
-        desired_y = field_bottom_left.y() + margin
+        widget: Optional[QWidget] = self
+        while widget is not None:
+            notify = getattr(widget, "_on_virtual_keyboard_shown", None)
+            if callable(notify):
+                notify(self._keyboard_dialog.keyboard_rect_global())
+                break
+            widget = widget.parentWidget()
 
-        screen = self.screen() or (self.window().windowHandle().screen() if self.window().windowHandle() else None)
-        available: QRect | None = screen.availableGeometry() if screen is not None else None
-        if available is None:
-            return QPoint(desired_x, desired_y)
+    def _mark_active_keyboard_owner(self) -> None:
+        global _ACTIVE_KEYBOARD_OWNER
+        _ACTIVE_KEYBOARD_OWNER = self
 
-        below_bottom = desired_y + keyboard_size.height()
-        above_y = field_top_left.y() - keyboard_size.height() - margin
-        if below_bottom > available.bottom() and above_y >= available.top():
-            desired_y = above_y
+    def _restore_other_keyboard_owner(self) -> None:
+        global _ACTIVE_KEYBOARD_OWNER
+        if _ACTIVE_KEYBOARD_OWNER is not None and _ACTIVE_KEYBOARD_OWNER is not self:
+            _ACTIVE_KEYBOARD_OWNER._restore_keyboard_adjustments()
+            if _ACTIVE_KEYBOARD_OWNER._keyboard_dialog is not None:
+                _ACTIVE_KEYBOARD_OWNER._keyboard_dialog.hide()
+            _ACTIVE_KEYBOARD_OWNER = None
 
-        min_x = available.left() + margin
-        max_x = available.right() - keyboard_size.width() - margin
-        min_y = available.top() + margin
-        max_y = available.bottom() - keyboard_size.height() - margin
+    def _position_content_for_keyboard(self) -> None:
+        self._reserve_keyboard_scroll_space()
+        QTimer.singleShot(0, self._scroll_field_above_keyboard)
 
-        clamped_x = max(min_x, min(desired_x, max_x))
-        clamped_y = max(min_y, min(desired_y, max_y))
-        return QPoint(clamped_x, clamped_y)
+    def _nearest_scroll_area(self) -> Optional[QAbstractScrollArea]:
+        field_window = self.window()
+        explicit_scroll = getattr(field_window, "_keyboard_scroll_area", None)
+        if isinstance(explicit_scroll, QAbstractScrollArea):
+            return explicit_scroll
+
+        parent = self.parentWidget()
+        while parent is not None:
+            if isinstance(parent, QAbstractScrollArea):
+                return parent
+            parent = parent.parentWidget()
+        return None
+
+    def _reserve_keyboard_scroll_space(self) -> None:
+        self._restore_keyboard_scroll_space()
+        if self._keyboard_dialog is None:
+            return
+        if self._has_keyboard_layout_handler():
+            return
+
+        scroll_area = self._nearest_scroll_area()
+        if scroll_area is None:
+            return
+
+        dock_window = self._keyboard_dialog._dock_window()
+        if dock_window is not None and self.window() is not dock_window:
+            return
+
+        viewport = scroll_area.viewport()
+        viewport_bottom = viewport.mapToGlobal(QPoint(0, viewport.height())).y()
+        keyboard_top = self._keyboard_dialog.keyboard_rect_global().top()
+        overlap = viewport_bottom - keyboard_top
+        if overlap <= 0:
+            return
+
+        content = scroll_area.widget()
+        layout = content.layout() if content is not None else None
+        if layout is None:
+            return
+
+        self._keyboard_content_layout = layout
+        self._keyboard_content_margins = layout.contentsMargins()
+        layout.setContentsMargins(
+            self._keyboard_content_margins.left(),
+            self._keyboard_content_margins.top(),
+            self._keyboard_content_margins.right(),
+            self._keyboard_content_margins.bottom() + overlap + _FIELD_MARGIN,
+        )
+        layout.invalidate()
+        layout.activate()
+        content.updateGeometry()
+        self._keyboard_scroll_area = scroll_area
+
+    def _has_keyboard_layout_handler(self) -> bool:
+        widget = self.parentWidget()
+        while widget is not None:
+            if callable(getattr(widget, "_on_virtual_keyboard_shown", None)):
+                return True
+            widget = widget.parentWidget()
+        return False
+
+    def _restore_keyboard_scroll_space(self) -> None:
+        self._keyboard_scroll_area = None
+        if self._keyboard_content_layout is not None and self._keyboard_content_margins is not None:
+            self._keyboard_content_layout.setContentsMargins(self._keyboard_content_margins)
+        self._keyboard_content_layout = None
+        self._keyboard_content_margins = None
+
+    def _restore_keyboard_adjustments(self) -> None:
+        global _ACTIVE_KEYBOARD_OWNER
+        self._restore_keyboard_scroll_space()
+        if _ACTIVE_KEYBOARD_OWNER is self:
+            _ACTIVE_KEYBOARD_OWNER = None
+
+    def _scroll_field_above_keyboard(self) -> None:
+        if self._keyboard_dialog is None or not self._keyboard_dialog.isVisible():
+            return
+
+        scroll_area = self._nearest_scroll_area()
+        if scroll_area is None:
+            return
+
+        if isinstance(scroll_area, QScrollArea):
+            scroll_area.ensureWidgetVisible(self, _FIELD_MARGIN, _FIELD_MARGIN)
+            QTimer.singleShot(
+                50,
+                lambda: scroll_area.ensureWidgetVisible(self, _FIELD_MARGIN, _FIELD_MARGIN),
+            )
+
+        keyboard_top = self._keyboard_dialog.keyboard_rect_global().top()
+        field_bottom = self.mapToGlobal(QPoint(0, self.height())).y()
+        if field_bottom >= keyboard_top:
+            bar = scroll_area.verticalScrollBar()
+            bar.setValue(bar.value() + field_bottom - keyboard_top + _FIELD_MARGIN)
 
     def _handle_keyboard_mouse_press(self, event: QMouseEvent) -> None:
         self._show_keyboard()

@@ -1,10 +1,11 @@
 import logging
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication, QRect, QSize, QTimer
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QHBoxLayout, QVBoxLayout,
     QLabel, QLineEdit, QComboBox, QPushButton,
+    QScrollArea, QWidget,
 )
 from PyQt6.QtGui import QPixmap
 
@@ -126,24 +127,82 @@ class _UserDialog(QDialog):
         self._schema  = schema
         self._record  = record
         self._widgets = {}
+        self._keyboard_scroll_area = None
+        self._keyboard_scroll_max_height: Optional[int] = None
+        self._keyboard_dialog_max_height: Optional[int] = None
+        self._keyboard_dialog_size: Optional[QSize] = None
+        self._keyboard_bottom_spacer = None
         self.setWindowTitle(_t("Edit User") if record else _t("Add User"))
         self.setModal(True)
         self.setMinimumWidth(420)
+        self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
         self._build_ui()
         if record:
             self._populate(record)
 
     def _build_ui(self) -> None:
-        layout = QFormLayout(self)
+        root = QVBoxLayout(self)
+        form_host = QWidget(self)
+        layout = QFormLayout(form_host)
         for fd in self._schema.fields:
             widget = self._make_widget(fd)
             self._widgets[fd.key] = widget
             layout.addRow(f"{fd.label}:", widget)
+
+        self._keyboard_bottom_spacer = QWidget(form_host)
+        self._keyboard_bottom_spacer.setFixedHeight(0)
+        layout.addRow("", self._keyboard_bottom_spacer)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumHeight(80)
+        scroll.setWidget(form_host)
+        self._keyboard_scroll_area = scroll
+        root.addWidget(scroll)
+
         btns       = QHBoxLayout()
         btn_save   = QPushButton(_t("Save"));   btn_save.clicked.connect(self.accept)
         btn_cancel = QPushButton(_t("Cancel")); btn_cancel.clicked.connect(self.reject)
         btns.addWidget(btn_save); btns.addWidget(btn_cancel)
-        layout.addRow(btns)
+        root.addLayout(btns)
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect: QRect) -> None:
+        if self._keyboard_scroll_area is None:
+            return
+
+        if self._keyboard_scroll_max_height is None:
+            self._keyboard_scroll_max_height = self._keyboard_scroll_area.maximumHeight()
+            self._keyboard_dialog_max_height = self.maximumHeight()
+            self._keyboard_dialog_size = self.size()
+
+        viewport = self._keyboard_scroll_area.viewport()
+        overlap = viewport.mapToGlobal(viewport.rect().bottomLeft()).y() - keyboard_rect.top() + 24
+        bottom_reserve = max(0, overlap)
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(bottom_reserve)
+
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(
+                0,
+                lambda: self._keyboard_scroll_area.ensureWidgetVisible(focused, 12, 12),
+            )
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        if self._keyboard_scroll_area is not None and self._keyboard_scroll_max_height is not None:
+            self._keyboard_scroll_area.setMaximumHeight(self._keyboard_scroll_max_height)
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(0)
+        if self._keyboard_dialog_max_height is not None:
+            self.setMaximumHeight(self._keyboard_dialog_max_height)
+        if self._keyboard_dialog_size is not None:
+            self.resize(self._keyboard_dialog_size)
+
+        self._keyboard_scroll_max_height = None
+        self._keyboard_dialog_max_height = None
+        self._keyboard_dialog_size = None
 
     @staticmethod
     def _make_widget(fd: FieldDescriptor):
