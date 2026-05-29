@@ -3,8 +3,8 @@ from PyQt6.QtWidgets import QVBoxLayout
 
 from src.applications.base.i_application_view import IApplicationView
 from src.shared_contracts.declarations import MovementGroupDefinition
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
-from src.applications.robot_settings.view.collapsible_settings_view import CollapsibleSettingsView
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
 
@@ -42,7 +42,7 @@ class RobotSettingsView(IApplicationView):
 
         self._movement_tab  = MovementGroupsTab()
         self._targeting_tab = TargetingDefinitionsTab()
-        self._settings_view = CollapsibleSettingsView(
+        self._settings_view = KeyboardSettingsView(
             component_name="RobotSettings",
             mapper=RobotSettingsMapper.to_flat_dict,
         )
