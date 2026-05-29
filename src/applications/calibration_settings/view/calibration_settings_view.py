@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QVBoxLayout
 
-from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.calibration_settings.view.calibration_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP,
@@ -25,7 +25,7 @@ class CalibrationSettingsView(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self.settings_view = CollapsibleSettingsView(component_name="CalibrationSettings")
+        self.settings_view = KeyboardSettingsView(component_name="CalibrationSettings")
         self.settings_view.add_tab("Camera", [VISION_CALIBRATION_GROUP])
         self.settings_view.add_tab(
             "Robot",

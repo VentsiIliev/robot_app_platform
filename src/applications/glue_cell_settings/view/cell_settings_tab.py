@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel
 
-from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from pl_gui.settings.settings_view.styles import (
     BG_COLOR, ACTION_BTN_STYLE, LABEL_STYLE, BORDER, PRIMARY,
 )
@@ -44,6 +44,7 @@ class CellSettingsTab(QWidget):
         tare_btn = QPushButton("⊘  Tare")
         tare_btn.setFixedWidth(100)
         tare_btn.setStyleSheet(ACTION_BTN_STYLE)
+        tare_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         tare_btn.clicked.connect(self.tare_requested.emit)
         monitor_row.addWidget(tare_btn)
 
@@ -56,7 +57,7 @@ class CellSettingsTab(QWidget):
         root.addWidget(monitor_bar)
 
         # ── Settings form ────────────────────────────────────────────
-        self._settings_view = CollapsibleSettingsView(
+        self._settings_view = KeyboardSettingsView(
             component_name=f"CellSettings_{self._cell_id}",
             mapper=lambda cfg: cfg,
         )
