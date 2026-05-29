@@ -266,6 +266,7 @@ class _KeyboardMixin:
         self._keyboard_scroll_area: Optional[QAbstractScrollArea] = None
         self._keyboard_content_layout = None
         self._keyboard_content_margins: Optional[QMargins] = None
+        self._keyboard_scroll_value: Optional[int] = None
         self._install_trigger_hooks()
 
     def _keyboard_enabled(self) -> bool:
@@ -323,8 +324,16 @@ class _KeyboardMixin:
             _ACTIVE_KEYBOARD_OWNER = None
 
     def _position_content_for_keyboard(self) -> None:
+        self._capture_keyboard_scroll_position()
         self._reserve_keyboard_scroll_space()
         QTimer.singleShot(0, self._scroll_field_above_keyboard)
+
+    def _capture_keyboard_scroll_position(self) -> None:
+        if self._keyboard_scroll_value is not None:
+            return
+        scroll_area = self._nearest_scroll_area()
+        if scroll_area is not None:
+            self._keyboard_scroll_value = scroll_area.verticalScrollBar().value()
 
     def _nearest_scroll_area(self) -> Optional[QAbstractScrollArea]:
         field_window = self.window()
@@ -388,11 +397,18 @@ class _KeyboardMixin:
         return False
 
     def _restore_keyboard_scroll_space(self) -> None:
+        scroll_area = self._keyboard_scroll_area or self._nearest_scroll_area()
+        scroll_value = self._keyboard_scroll_value
         self._keyboard_scroll_area = None
         if self._keyboard_content_layout is not None and self._keyboard_content_margins is not None:
             self._keyboard_content_layout.setContentsMargins(self._keyboard_content_margins)
         self._keyboard_content_layout = None
         self._keyboard_content_margins = None
+        self._keyboard_scroll_value = None
+        if scroll_area is not None and scroll_value is not None:
+            bar = scroll_area.verticalScrollBar()
+            bar.setValue(scroll_value)
+            QTimer.singleShot(0, lambda: bar.setValue(scroll_value))
 
     def _restore_keyboard_adjustments(self) -> None:
         global _ACTIVE_KEYBOARD_OWNER
