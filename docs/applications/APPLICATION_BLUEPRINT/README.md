@@ -55,6 +55,25 @@ APPLICATION_BLUEPRINT/
 
 ---
 
+## Virtual Keyboard Checklist
+
+Touch-oriented apps must use the shared keyboard infrastructure from `src/applications/base/`.
+
+- **Direct fields**: use `KeyboardLineEdit`, `KeyboardSpinBox`, and `KeyboardDoubleSpinBox`
+  instead of plain `QLineEdit`, `QSpinBox`, and `QDoubleSpinBox`.
+- **Schema settings**: use `KeyboardSettingsView` instead of `CollapsibleSettingsView`.
+- **Raw schema groups**: if building `CollapsibleGroup` or `GenericSettingGroup` directly,
+  create the group inside `build_with_keyboard_setting_handlers(...)`.
+- **Builder seams**: inject `VirtualKeyboardWidgetFactory()` when an editor/builder supports
+  a widget-factory dependency.
+- **Dialogs**: wrap editable forms in a `QScrollArea` for tall dialogs, pass the real parent
+  window, and implement symmetrical `_on_virtual_keyboard_shown(...)` /
+  `_on_virtual_keyboard_hidden()` callbacks when custom spacing is needed.
+- **Validation**: compile touched UI modules and manually test one top field, one bottom field,
+  keyboard close/restore, and a dialog field near the bottom.
+
+---
+
 ## Standalone Runner
 
 ```python

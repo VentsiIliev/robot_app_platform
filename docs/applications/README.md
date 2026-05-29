@@ -35,7 +35,7 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 
 | Package | Description |
 |---------|-------------|
-| `base/` | Abstract base classes plus shared UI infrastructure such as `CollapsibleSettingsView`, dialogs, and `app_styles.py` |
+| `base/` | Abstract base classes plus shared UI infrastructure such as `KeyboardSettingsView`, `CollapsibleSettingsView`, virtual keyboard widgets, dialogs, and `app_styles.py` |
 | `APPLICATION_BLUEPRINT/` | Copy-paste template with full guide in `APPLICATION_GUIDE.MD` |
 | `modbus_settings/` | Modbus serial port configuration — port detection + connection test |
 | `glue_cell_settings/` | Weight cell configuration + live readings per cell |
@@ -117,3 +117,4 @@ class YourRobotApp(BaseRobotSystem):
 - **Blocking service calls**: When a service call may block the GUI (e.g., serial port detection), controllers dispatch a `QThread + _Worker` pair and track them in `_active: List[Tuple[QThread, _Worker]]`. See `modbus_settings/controller/`.
 - **Localization**: Views should prefer `self.tr(...)` for static strings and implement `retranslateUi()` when they own localizable widget text. `IApplicationView` now handles `LanguageChange` by default and emits `language_changed` for controllers that need to refresh dynamic text via `QCoreApplication.translate(...)`.
 - **Shared view styling**: Reusable application card/button/section styles should come from `src/applications/base/app_styles.py`. Avoid creating new per-application style modules for common patterns.
+- **Virtual keyboard**: Editable touch fields should use shared keyboard widgets (`KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox`), `KeyboardSettingsView` for schema tabs, or `VirtualKeyboardWidgetFactory()` for builder-style forms. Dialogs with editable fields should be scrollable and restore keyboard spacing on hide.

@@ -276,6 +276,111 @@ class MyView(IApplicationView):
 - Never use `lambda` or `.emit` references as connection targets
 - For localized text, implement `retranslateUi()`; `IApplicationView` handles `LanguageChange` by default
 
+### Touch forms and the shared virtual keyboard
+
+Applications must use the shared virtual keyboard widgets for operator-editable text
+and numeric fields. Do not create app-local keyboards.
+
+Directly owned form fields:
+
+```python
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardLineEdit,
+    KeyboardSpinBox,
+)
+
+self._name = KeyboardLineEdit()
+self._count = KeyboardSpinBox()
+self._offset_mm = KeyboardDoubleSpinBox()
+```
+
+Schema-driven settings screens:
+
+```python
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
+
+self._settings_view = KeyboardSettingsView(component_name="MySettings")
+self._settings_view.add_tab("General", [GENERAL_GROUP])
+```
+
+If a view builds a raw `CollapsibleGroup` or `GenericSettingGroup` outside
+`KeyboardSettingsView.add_tab()`, build it under the temporary keyboard handlers:
+
+```python
+from src.applications.base.collapsible_settings_view import CollapsibleGroup
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+
+holder = []
+build_with_keyboard_setting_handlers(lambda: holder.append(CollapsibleGroup(MY_GROUP)))
+group = holder[0]
+```
+
+Builder-style forms should inject `VirtualKeyboardWidgetFactory()` instead of
+patching every field manually:
+
+```python
+from src.applications.base.widgets.virtual_keyboard_widget_factory import (
+    VirtualKeyboardWidgetFactory,
+)
+
+builder.with_widgets(VirtualKeyboardWidgetFactory())
+```
+
+### Dialogs with editable fields
+
+Dialogs must avoid letting the keyboard cover the active field. For short dialogs,
+the shared keyboard can usually adjust the nearest `QScrollArea` automatically. For
+tall dialogs or dialogs with many fields, wrap the fields in a `QScrollArea` and add
+dialog-level callbacks so the dialog owns the keyboard spacing:
+
+```python
+from PyQt6.QtCore import QPoint, QRect, QTimer
+from PyQt6.QtWidgets import QDialog, QScrollArea, QVBoxLayout, QWidget
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+
+class MyEditDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        if parent is not None:
+            self._virtual_keyboard_dock_window = parent.window()
+
+        root = QVBoxLayout(self)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        root.addWidget(self._scroll)
+
+        content = QWidget()
+        self._content_layout = QVBoxLayout(content)
+        self._name = KeyboardLineEdit()
+        self._content_layout.addWidget(self._name)
+        self._keyboard_spacer = QWidget()
+        self._keyboard_spacer.setFixedHeight(0)
+        self._content_layout.addWidget(self._keyboard_spacer)
+        self._scroll.setWidget(content)
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect: QRect) -> None:
+        viewport_bottom = self._scroll.viewport().mapToGlobal(
+            QPoint(0, self._scroll.viewport().height())
+        ).y()
+        overlap = max(0, viewport_bottom - keyboard_rect.top())
+        self._keyboard_spacer.setFixedHeight(overlap + 12)
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(0, lambda: self._scroll.ensureWidgetVisible(focused, 12, 12))
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        self._keyboard_spacer.setFixedHeight(0)
+```
+
+Dialog rules:
+- pass the real parent widget when constructing dialogs so the keyboard can dock to
+  the main application window when appropriate
+- use `KeyboardLineEdit`, `KeyboardSpinBox`, and `KeyboardDoubleSpinBox` inside dialogs
+- prefer one scrollable form area over manually moving widgets
+- keep `_on_virtual_keyboard_hidden()` symmetrical with `_on_virtual_keyboard_shown()`
+  so hidden keyboards restore the original layout
+
 ---
 
 ## Step 7 — Build the controller
@@ -689,6 +794,7 @@ if __name__ == "__main__":
 | Use named methods for signal forwarding, never `lambda` or `.emit` | PyQt6 weak-refs lambdas — connections silently die |
 | `view._controller = controller` is in `ApplicationFactory.build()` — never write it yourself | Prevents duplicating the ownership transfer in every factory |
 | Use `IMessagingService`, never `MessageBroker` directly | Keeps the broker swappable; `MessageBroker` is an implementation detail |
+| Use shared virtual keyboard widgets for editable touch fields | Keeps keyboard docking, scroll, and restore behavior consistent across apps |
 
 ---
 
@@ -711,6 +817,7 @@ if __name__ == "__main__":
 - [ ] Step 4  — `MyApplicationService` adapts platform services to `IMyService`
 - [ ] Step 5  — `MyModel` inherits `IApplicationModel`, zero Qt
 - [ ] Step 6  — `MyView` inherits `IApplicationView`, named forwarders, zero logic
+- [ ] Step 6a — Editable fields use shared keyboard widgets / `KeyboardSettingsView`; dialogs restore keyboard spacing on hide
 - [ ] Step 7  — `MyController` inherits `IApplicationController`, `stop()` cleans up broker
 - [ ] Step 8  — `MyApplicationFactory` inherits `ApplicationFactory`, implements 3 factory methods
 - [ ] Step 9  — `MyApplication` calls `MyApplicationFactory().build(service)` in `create_widget()`
