@@ -8,10 +8,13 @@ from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING
 from src.engine.repositories.interfaces import ISettingsRepository, ISettingsService
 from src.engine.robot.targeting.jog_frame_pose_resolver import JogFramePoseResolver
+from src.engine.robot.targeting.point_registry import PointRegistry
+from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver
 import logging
 
 from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
+from src.engine.robot.calibration.robot_calibration.metrics import derive_calibration_artifact_paths
 from src.shared_contracts.declarations import (
     DispenseChannelDefinition,
     MovementGroupDefinition,
@@ -222,9 +225,17 @@ class BaseRobotSystem(ABC):
         provider = self.get_targeting_provider()
         if provider is None:
             return None, None
+        point_registry = provider.build_point_registry()
+        frames = provider.build_frames()
+        cache_signature = self._shared_vision_resolver_signature(point_registry, frames)
         cached_transformer = getattr(self, "_vision_base_transformer", None)
         cached_resolver = getattr(self, "_vision_target_resolver", None)
-        if cached_transformer is not None and cached_resolver is not None:
+        cached_signature = getattr(self, "_vision_target_resolver_signature", None)
+        if (
+            cached_transformer is not None
+            and cached_resolver is not None
+            and cached_signature == cache_signature
+        ):
             _logger.info(
                 "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
                 cached_transformer.__class__.__name__,
@@ -233,16 +244,18 @@ class BaseRobotSystem(ABC):
                 str(getattr(cached_transformer, "_artifact_path", "")),
             )
             return cached_transformer, cached_resolver
+        if cached_transformer is not None or cached_resolver is not None:
+            _logger.info("[CALIB] Shared vision resolver cache changed; rebuilding resolver")
         transformer = self._build_shared_base_transformer()
         if transformer is None:
             return None, None
         tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
         resolver = VisionTargetResolver(
             base_transformer=transformer,
-            registry=provider.build_point_registry(),
+            registry=point_registry,
             camera_to_tcp_x_offset=tcp_x,
             camera_to_tcp_y_offset=tcp_y,
-            frames=provider.build_frames(),
+            frames=frames,
         )
         _logger.info(
             "[CALIB] Built shared vision resolver: transformer=%s available=%s tcp_offset=(%.3f, %.3f) frames=%s",
@@ -254,11 +267,81 @@ class BaseRobotSystem(ABC):
         )
         self._vision_base_transformer = transformer
         self._vision_target_resolver = resolver
+        self._vision_target_resolver_signature = cache_signature
         return transformer, resolver
 
     def invalidate_shared_vision_resolver(self) -> None:
         self._vision_base_transformer = None
         self._vision_target_resolver = None
+        self._vision_target_resolver_signature = None
+
+    def _shared_vision_resolver_signature(
+        self,
+        point_registry: PointRegistry,
+        frames: Dict[str, TargetFrame],
+    ) -> tuple:
+        tcp_x, tcp_y = self._get_camera_to_tcp_offsets()
+        vision_service = getattr(self, "_vision", None)
+        matrix_path = str(getattr(vision_service, "camera_to_robot_matrix_path", "") or "")
+        residual_path = ""
+        if matrix_path:
+            try:
+                residual_path = str(derive_calibration_artifact_paths(matrix_path)["homography_residual_path"])
+            except Exception:
+                residual_path = ""
+        return (
+            ("tcp", float(tcp_x), float(tcp_y)),
+            ("matrix", self._file_signature(matrix_path)),
+            ("residual", self._file_signature(residual_path)),
+            ("points", self._point_registry_signature(point_registry)),
+            ("frames", self._target_frames_signature(frames)),
+        )
+
+    @staticmethod
+    def _file_signature(path: str) -> tuple:
+        normalized = os.path.abspath(str(path or "")) if path else ""
+        if not normalized:
+            return ("", None, None)
+        try:
+            stat = os.stat(normalized)
+        except OSError:
+            return (normalized, None, None)
+        return (normalized, int(stat.st_mtime_ns), int(stat.st_size))
+
+    @staticmethod
+    def _point_registry_signature(point_registry: PointRegistry) -> tuple:
+        points = []
+        for name in sorted(point_registry.names()):
+            point = point_registry.by_name(name)
+            points.append((str(point.name).strip().lower(), float(point.offset_x), float(point.offset_y)))
+        return tuple(points)
+
+    @staticmethod
+    def _target_frames_signature(frames: Dict[str, TargetFrame]) -> tuple:
+        frame_items = []
+        for name, frame in sorted(frames.items(), key=lambda item: str(item[0]).strip().lower()):
+            mapper = getattr(frame, "mapper", None)
+            mapper_signature = None
+            if mapper is not None:
+                source = mapper.source_pose
+                target = mapper.target_pose
+                mapper_signature = (
+                    float(source.x),
+                    float(source.y),
+                    float(source.rz),
+                    float(target.x),
+                    float(target.y),
+                    float(target.rz),
+                )
+            frame_items.append(
+                (
+                    str(name).strip().lower(),
+                    str(getattr(frame, "work_area_id", "") or "").strip(),
+                    mapper_signature,
+                    bool(getattr(frame, "height_correction", None) is not None),
+                )
+            )
+        return tuple(frame_items)
 
     def build_robot_system_jog_pose_resolver(self, reference_rz_provider=None):
         provider = self.get_targeting_provider()

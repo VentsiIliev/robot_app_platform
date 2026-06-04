@@ -51,7 +51,6 @@ def _build_welding_contour_editor_application(robot_system):
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
-    transformer, _ = robot_system.get_shared_vision_resolver()
     camera_point_name = (
         getattr(robot_system.get_target_point_definition("camera"), "name", "") or ""
     )
@@ -94,8 +93,9 @@ def _build_welding_contour_editor_application(robot_system):
     path_preparation_service = DefaultWorkpiecePathPreparationService(
         logger=_logger,
         segment_config=segment_config,
-        transformer=transformer,
+        transformer=None,
         resolver=None,
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
         resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
         rz_mode="constant",
@@ -113,7 +113,8 @@ def _build_welding_contour_editor_application(robot_system):
             vision_service=vision_service,
             capture_snapshot_service=capture_snapshot_service,
             robot_service=robot_service,
-            transformer=transformer,
+            transformer=None,
+            transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
             path_executor=WeldingWorkpiecePathExecutor(
                 robot_service=robot_service,
             ),
@@ -290,6 +291,7 @@ def _build_calibration_application(robot_system):
             calibration_settings=robot_system._robot_calibration,
             robot_tool=robot_system._robot_config.robot_tool,
             robot_user=robot_system._robot_config.robot_user,
+            on_offsets_saved=robot_system.invalidate_shared_vision_resolver,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )

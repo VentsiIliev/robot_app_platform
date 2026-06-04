@@ -91,6 +91,7 @@ class CameraTcpOffsetCalibrationConfig:
     marker_id: int = 4
     rotation_step_deg: float = 15.0
     iterations: int = 4
+    max_sample_rotation_deg: float = 0.0
     approach_z: float = 300.0
     approach_rx: float = 180.0
     approach_ry: float = 0.0
@@ -116,6 +117,7 @@ class CameraTcpOffsetCalibrationConfig:
             marker_id=int(data.get("marker_id", 4)),
             rotation_step_deg=float(data.get("rotation_step_deg", 15.0)),
             iterations=int(data.get("iterations", 6)),
+            max_sample_rotation_deg=float(data.get("max_sample_rotation_deg", 0.0)),
             approach_z=float(data.get("approach_z", 300.0)),
             approach_rx=float(data.get("approach_rx", 180.0)),
             approach_ry=float(data.get("approach_ry", 0.0)),
@@ -141,6 +143,7 @@ class CameraTcpOffsetCalibrationConfig:
             "marker_id": self.marker_id,
             "rotation_step_deg": self.rotation_step_deg,
             "iterations": self.iterations,
+            "max_sample_rotation_deg": self.max_sample_rotation_deg,
             "approach_z": self.approach_z,
             "approach_rx": self.approach_rx,
             "approach_ry": self.approach_ry,

@@ -3,14 +3,14 @@
     {
       "name": "camera",
       "display_name": "camera",
-      "x_mm": 18.81,
-      "y_mm": -301.62
+      "x_mm": 256.98,
+      "y_mm": 10.0
     },
     {
       "name": "tool",
       "display_name": "tool",
-      "x_mm": 17.72,
-      "y_mm": -378.77
+      "x_mm": 303.75,
+      "y_mm": 10.1
     }
   ],
   "FRAMES": [

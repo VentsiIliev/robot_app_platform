@@ -54,19 +54,20 @@
   ],
   "workpieceeditor": [
     "Admin",
-    "Developer"
+    "Developer",
+    "Operator"
   ],
   "brokerdebug": [
     "Developer",
     "Admin"
   ],
   "usermanagement": [
-    "Admin",
-    "Developer"
+    "Admin"
   ],
   "workpiecelibrary": [
     "Admin",
-    "Developer"
+    "Developer",
+    "Operator"
   ],
   "toolsettings": [
     "Admin",

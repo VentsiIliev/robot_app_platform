@@ -196,7 +196,6 @@ def _build_paint_workpiece_editor_service(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    transformer, resolver = robot_system.get_shared_vision_resolver()
     segment_config = build_paint_segment_settings_schema()
     workpiece_service = _build_paint_workpiece_service(robot_system)
     matching_service = _build_paint_matching_service(
@@ -227,7 +226,8 @@ def _build_paint_workpiece_editor_service(robot_system):
             vision_service=vision_service,
             capture_snapshot_service=capture_snapshot_service,
             robot_service=robot_service,
-            transformer=transformer,
+            transformer=None,
+            transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
             path_executor=path_executor,
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
@@ -452,6 +452,7 @@ def _build_calibration_application(robot_system):
             calibration_settings=robot_system._robot_calibration,
             robot_tool=robot_system._robot_config.robot_tool,
             robot_user=robot_system._robot_config.robot_user,
+            on_offsets_saved=robot_system.invalidate_shared_vision_resolver,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )

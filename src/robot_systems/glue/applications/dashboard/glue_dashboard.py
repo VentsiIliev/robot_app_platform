@@ -30,6 +30,7 @@ class GlueDashboard:
         execution_service: GlueJobExecutionService | None = None,
         robot_service = None,
         preview_transformer = None,
+        preview_transformer_getter = None,
     ) -> QWidget:
 
         service = GlueDashboardService(
@@ -40,6 +41,7 @@ class GlueDashboard:
             messaging_service= messaging_service,
             robot_service    = robot_service,
             preview_transformer=preview_transformer,
+            preview_transformer_getter=preview_transformer_getter,
         )
 
         cells_count = service.get_cells_count()

@@ -227,7 +227,7 @@ class GlueRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
-            FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
+            # FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
         ],
         applications=[
             ApplicationSpec(name="GlueDashboard", folder_id=1, icon="fa5s.tachometer-alt",
@@ -458,7 +458,6 @@ class GlueRobotSystem(BaseRobotSystem):
             vision_service=vision_service,
             robot_service=self._robot,
         )
-        transformer, _ = self.get_shared_vision_resolver()
         matching_service = MatchingService(
             vision_service=vision_service,
             workpiece_service=WorkpieceService(JsonWorkpieceRepository(self.workpieces_storage_path())),
@@ -490,7 +489,7 @@ class GlueRobotSystem(BaseRobotSystem):
             GlueJobExecutionService(
                 matching_service=matching_service,
                 job_builder=GlueJobBuilderService(
-                    transformer=transformer,
+                    transformer=None,
                     resolver=None,
                     resolver_getter=lambda: self.get_shared_vision_resolver()[1],
                     z_min=float(self._robot_config.safety_limits.z_min),

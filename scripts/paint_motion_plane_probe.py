@@ -40,6 +40,7 @@ from pl_gui.settings.settings_view.styles import (
 )
 from src.applications.base.robot_jog_widget import RobotJogWidget
 from src.applications.base.drawer_toggle import DrawerToggle
+from src.applications.base.styled_message_box import ask_yes_no
 from pl_gui.utils.utils_widgets.wizards import ConfigurableWizard
 
 
@@ -241,10 +242,22 @@ class PlaneInference:
     def as_config(self) -> dict:
         return {
             "pivot_motion_plane": self.suggested_plane_key,
+            "pivot_motion_plane_config": self.as_plane_object(),
             "pivot_translation_axis": self.translation_axis,
             "pivot_translation_direction": self.translation_direction,
             "axis_offsets_deg": self.axis_offsets_deg,
             "orientation_overrides_deg": {},
+        }
+
+    def as_plane_object(self) -> dict:
+        return {
+            "label": self.suggested_plane_key,
+            "planar_axes": list(self.planar_axes),
+            "fixed_axis": self.fixed_axis,
+            "rotation_axis": self.rotation_axis,
+            "translation_axis": self.translation_axis,
+            "translation_direction": self.translation_direction,
+            "axis_offsets_deg": self.axis_offsets_deg,
         }
 
 
@@ -267,6 +280,7 @@ def infer_plane(
     translation_pose: Pose6D,
     rotation_pose: Pose6D,
     *,
+    fixed_axis_override: str | None = None,
     min_translation_mm: float = 1.0,
     min_rotation_deg: float = 1.0,
 ) -> PlaneInference:
@@ -286,9 +300,22 @@ def infer_plane(
 
     translation_axis, translation_delta = translation
     rotation_axis, _rotation_delta = rotation
-    planar_axes, fixed_axis = ROTATION_PLANES[rotation_axis]
     direction = "forward" if translation_delta >= 0.0 else "reverse"
     warnings: list[str] = []
+    if fixed_axis_override:
+        fixed_axis = str(fixed_axis_override).strip().lower()
+        if fixed_axis not in AXES:
+            raise ValueError(f"Unsupported fixed axis: {fixed_axis_override}")
+        planar_axes = tuple(axis for axis in AXES if axis != fixed_axis)
+        expected_rotation_axis = f"r{fixed_axis}"
+        if rotation_axis != expected_rotation_axis:
+            warnings.append(
+                f"Measured rotation axis '{rotation_axis.upper()}' does not match the selected fixed axis "
+                f"'{fixed_axis.upper()}'. A {fixed_axis.upper()}-fixed plane normally rotates around "
+                f"{expected_rotation_axis.upper()}."
+            )
+    else:
+        planar_axes, fixed_axis = ROTATION_PLANES[rotation_axis]
 
     if translation_axis not in planar_axes:
         warnings.append(
@@ -514,12 +541,15 @@ class GuideIllustration(QWidget):
 @dataclass
 class ProbeState:
     current_pose: Pose6D = field(default_factory=lambda: Pose6D(100, -300, 300, 180, 0, 0))
+    paint_pose: Pose6D = field(default_factory=lambda: Pose6D(100, -300, 300, 180, 0, 0))
     reference_pose: Pose6D = field(default_factory=lambda: Pose6D(100, -300, 300, 180, 0, 0))
     translation_pose: Pose6D = field(default_factory=lambda: Pose6D(140, -300, 300, 180, 0, 0))
     rotation_pose: Pose6D = field(default_factory=lambda: Pose6D(100, -300, 300, 180, 10, 0))
+    paint_position_reached: bool = False
     reference_captured: bool = False
     translation_captured: bool = False
     rotation_captured: bool = False
+    fixed_axis: str | None = None
     inference: PlaneInference | None = None
 
 
@@ -595,11 +625,85 @@ class ProbeWizardPage(QWizardPage):
         ) is not None
 
 
+class MoveToPaintPositionPage(ProbeWizardPage):
+    def __init__(self, state: ProbeState) -> None:
+        super().__init__(
+            state,
+            "Step 1: Move to Paint Position",
+            "Start from the real paint movement-group pose. The reference, translation, and rotation captures must be made from this paint orientation so the inferred axes match the actual painting setup.",
+        )
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        self._add_step_header(layout)
+        layout.addWidget(_pose_group("Guide", GuideIllustration("reference")))
+
+        self._current = PoseReadout("", state.current_pose.as_list())
+        self._paint = PoseReadout("", state.paint_pose.as_list())
+        layout.addWidget(_pose_group("Current Pose", self._current))
+        layout.addWidget(_pose_group("Paint Position", self._paint))
+
+        actions = QHBoxLayout()
+        move = _action_button("Move Current to Paint Position")
+        move.clicked.connect(self._move_to_paint_position)
+        actions.addWidget(move)
+        actions.addStretch()
+        layout.addLayout(actions)
+        layout.addStretch()
+
+    def initializePage(self) -> None:
+        self._current.set_pose(self._state.current_pose)
+        self._paint.set_pose(self._state.paint_pose)
+
+    def isComplete(self) -> bool:
+        return self._state.paint_position_reached
+
+    def validatePage(self) -> bool:
+        return self.isComplete()
+
+    def _move_to_paint_position(self) -> None:
+        if not self._confirm_move_to_paint_position():
+            return
+        self._state.current_pose = self._state.paint_pose
+        self._state.reference_pose = self._state.paint_pose
+        self._state.paint_position_reached = True
+        self._state.reference_captured = False
+        self._state.translation_captured = False
+        self._state.rotation_captured = False
+        self._state.fixed_axis = None
+        self._state.inference = None
+        self.initializePage()
+        self._notify_pose_changed()
+        self.completeChanged.emit()
+
+    def _confirm_move_to_paint_position(self) -> bool:
+        pose = self._state.paint_pose
+        message = (
+            "The robot will move to:\n\n"
+            f"X: {pose.x:.3f} mm\n"
+            f"Y: {pose.y:.3f} mm\n"
+            f"Z: {pose.z:.3f} mm\n"
+            f"RX: {pose.rx:.3f} deg\n"
+            f"RY: {pose.ry:.3f} deg\n"
+            f"RZ: {pose.rz:.3f} deg"
+        )
+        return ask_yes_no(self, "Confirm Paint Position Move", message, default_no=True)
+
+    def _mark_current_pose_changed(self) -> None:
+        self._state.paint_position_reached = False
+        self._state.reference_captured = False
+        self._state.translation_captured = False
+        self._state.rotation_captured = False
+        self._state.fixed_axis = None
+        self._state.inference = None
+        self.initializePage()
+        self.completeChanged.emit()
+
+
 class ReferencePage(ProbeWizardPage):
     def __init__(self, state: ProbeState) -> None:
         super().__init__(
             state,
-            "Step 1: Reference Pose",
+            "Step 2: Capture Reference Pose",
             "Use the jog drawer to move the robot into the paint reference pose, then capture the current pose as reference.",
         )
         layout = QVBoxLayout(self)
@@ -641,6 +745,7 @@ class ReferencePage(ProbeWizardPage):
         self._state.reference_captured = True
         self._state.translation_captured = False
         self._state.rotation_captured = False
+        self._state.fixed_axis = None
         self._state.inference = None
         self._reference.set_pose(self._state.reference_pose)
         self._notify_pose_changed()
@@ -648,24 +753,30 @@ class ReferencePage(ProbeWizardPage):
 
     def _load_xz_ry_example(self) -> None:
         self._state.current_pose = Pose6D(100, -300, 300, 0, 0, 0)
+        self._state.paint_pose = Pose6D(100, -300, 300, 0, 0, 0)
         self._state.reference_pose = Pose6D(100, -300, 300, 0, 0, 0)
         self._state.translation_pose = Pose6D(140, -300, 300, 0, 0, 0)
         self._state.rotation_pose = Pose6D(100, -300, 300, 0, 10, 0)
+        self._state.paint_position_reached = True
         self._state.reference_captured = True
         self._state.translation_captured = True
         self._state.rotation_captured = True
+        self._state.fixed_axis = "y"
         self.initializePage()
         self._notify_pose_changed()
         self.completeChanged.emit()
 
     def _load_yz_rx_example(self) -> None:
         self._state.current_pose = Pose6D(100, -300, 300, 0, 0, 0)
+        self._state.paint_pose = Pose6D(100, -300, 300, 0, 0, 0)
         self._state.reference_pose = Pose6D(100, -300, 300, 0, 0, 0)
         self._state.translation_pose = Pose6D(100, -260, 300, 0, 0, 0)
         self._state.rotation_pose = Pose6D(100, -300, 300, 10, 0, 0)
+        self._state.paint_position_reached = True
         self._state.reference_captured = True
         self._state.translation_captured = True
         self._state.rotation_captured = True
+        self._state.fixed_axis = "x"
         self.initializePage()
         self._notify_pose_changed()
         self.completeChanged.emit()
@@ -675,7 +786,7 @@ class JogTranslationPage(ProbeWizardPage):
     def __init__(self, state: ProbeState) -> None:
         super().__init__(
             state,
-            "Step 2: Move and Capture Translation",
+            "Step 3: Move and Capture Translation",
             "Use the jog drawer to move along the preferred paint translation axis. If the move was wrong, return to reference and jog again. Capture the current pose when the translation is correct.",
         )
         layout = QVBoxLayout(self)
@@ -730,6 +841,7 @@ class JogTranslationPage(ProbeWizardPage):
         self._state.translation_pose = self._state.current_pose
         self._state.translation_captured = True
         self._state.rotation_captured = False
+        self._state.fixed_axis = None
         self._state.inference = None
         self._translation.set_pose(self._state.translation_pose)
         self._sync_guide()
@@ -739,6 +851,7 @@ class JogTranslationPage(ProbeWizardPage):
         self._state.current_pose = self._state.reference_pose
         self._state.translation_captured = False
         self._state.rotation_captured = False
+        self._state.fixed_axis = None
         self._state.inference = None
         self.initializePage()
         self._notify_pose_changed()
@@ -763,7 +876,7 @@ class JogRotationPage(ProbeWizardPage):
     def __init__(self, state: ProbeState) -> None:
         super().__init__(
             state,
-            "Step 3: Move and Capture Rotation",
+            "Step 4: Move and Capture Rotation",
             "Use the jog drawer to rotate around the intended pivot axis. If the rotation was wrong, return to reference and rotate again. Capture the current pose when the rotation is correct.",
         )
         layout = QVBoxLayout(self)
@@ -815,6 +928,7 @@ class JogRotationPage(ProbeWizardPage):
             return
         self._state.rotation_pose = self._state.current_pose
         self._state.rotation_captured = True
+        self._state.fixed_axis = None
         self._state.inference = None
         self._rotation.set_pose(self._state.rotation_pose)
         self._sync_guide()
@@ -823,6 +937,7 @@ class JogRotationPage(ProbeWizardPage):
     def _back_to_reference(self) -> None:
         self._state.current_pose = self._state.reference_pose
         self._state.rotation_captured = False
+        self._state.fixed_axis = None
         self._state.inference = None
         self.initializePage()
         self._notify_pose_changed()
@@ -843,11 +958,67 @@ class JogRotationPage(ProbeWizardPage):
         self._guide.set_selected_axis(axis, delta)
 
 
+class FixedAxisPage(ProbeWizardPage):
+    def __init__(self, state: ProbeState) -> None:
+        super().__init__(
+            state,
+            "Step 5: Constant Axis",
+            "Choose the robot position axis that should remain constant during the generated paint motion. This defines the plane normal and prevents relying only on the detected rotation axis.",
+        )
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        self._add_step_header(layout)
+
+        self._summary = QLabel("")
+        self._summary.setStyleSheet(_SUMMARY_STYLE)
+        self._summary.setMinimumHeight(44)
+        layout.addWidget(self._summary)
+
+        actions = QHBoxLayout()
+        self._axis_buttons: dict[str, QPushButton] = {}
+        for axis in AXES:
+            button = _ghost_button(f"Keep {axis.upper()} Constant")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _checked=False, a=axis: self._select_axis(a))
+            self._axis_buttons[axis] = button
+            actions.addWidget(button)
+        actions.addStretch()
+        layout.addLayout(actions)
+        layout.addStretch()
+
+    def initializePage(self) -> None:
+        self._sync_buttons()
+
+    def isComplete(self) -> bool:
+        return self._state.fixed_axis in AXES
+
+    def validatePage(self) -> bool:
+        return self.isComplete()
+
+    def _select_axis(self, axis: str) -> None:
+        self._state.fixed_axis = axis
+        self._state.inference = None
+        self._sync_buttons()
+        self.completeChanged.emit()
+
+    def _sync_buttons(self) -> None:
+        selected = self._state.fixed_axis
+        for axis, button in self._axis_buttons.items():
+            button.setChecked(axis == selected)
+        if selected:
+            planar_axes = ", ".join(axis.upper() for axis in AXES if axis != selected)
+            self._summary.setText(
+                f"Selected fixed axis: {selected.upper()} | Generated plane: {planar_axes}"
+            )
+        else:
+            self._summary.setText("Select which position axis should stay constant.")
+
+
 class InferencePage(ProbeWizardPage):
     def __init__(self, state: ProbeState) -> None:
         super().__init__(
             state,
-            "Step 4: Inference",
+            "Step 6: Inference",
             "Review the inferred motion plane and the suggested runtime configuration fragment.",
         )
         layout = QVBoxLayout(self)
@@ -903,6 +1074,7 @@ class InferencePage(ProbeWizardPage):
                 self._state.reference_pose,
                 self._state.translation_pose,
                 self._state.rotation_pose,
+                fixed_axis_override=self._state.fixed_axis,
             )
         except ValueError as exc:
             self._state.inference = None
@@ -923,6 +1095,7 @@ class InferencePage(ProbeWizardPage):
                 "planar_axes": list(result.planar_axes),
                 "fixed_axis": result.fixed_axis,
                 "suggested_plane_key": result.suggested_plane_key,
+                "plane_object": result.as_plane_object(),
                 "warnings": list(result.warnings),
             },
             "suggested_runtime_config": result.as_config(),
@@ -956,9 +1129,11 @@ class InferencePage(ProbeWizardPage):
 def create_probe_wizard(state: ProbeState | None = None) -> ConfigurableWizard:
     probe_state = state or ProbeState()
     pages = [
+        MoveToPaintPositionPage(probe_state),
         ReferencePage(probe_state),
         JogTranslationPage(probe_state),
         JogRotationPage(probe_state),
+        FixedAxisPage(probe_state),
         InferencePage(probe_state),
     ]
     wizard = ConfigurableWizard(
@@ -1023,7 +1198,12 @@ def _install_probe_jog_drawer(
         if timer is not None:
             timer.stop()
         delta = float(step) if direction == "Plus" else -float(step)
-        if isinstance(page, ReferencePage) and axis_name in (*AXES, *ROT_AXES):
+        if isinstance(page, MoveToPaintPositionPage) and axis_name in (*AXES, *ROT_AXES):
+            data = ProbeWizardPage._pose_data(state.current_pose)
+            data[axis_name] += delta
+            state.current_pose = Pose6D(**data)
+            page._mark_current_pose_changed()
+        elif isinstance(page, ReferencePage) and axis_name in (*AXES, *ROT_AXES):
             data = ProbeWizardPage._pose_data(state.current_pose)
             data[axis_name] += delta
             state.current_pose = Pose6D(**data)

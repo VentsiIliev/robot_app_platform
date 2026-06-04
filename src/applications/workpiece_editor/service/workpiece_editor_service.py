@@ -43,6 +43,7 @@ class WorkpieceEditorServices:
     capture_snapshot_service: Optional[ICaptureSnapshotService] = None
     robot_service: object = None
     transformer: Optional[ICoordinateTransformer] = None
+    transformer_getter: Optional[Callable[[], Optional[ICoordinateTransformer]]] = None
     path_executor: Optional[IWorkpiecePathExecutor] = None
     path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
     matching_service: Optional[IMatchingService] = None
@@ -75,6 +76,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._form_schema = form_schema
         self._segment_config = segment_config
         self._transformer = services.transformer
+        self._transformer_getter = services.transformer_getter
         self._debug_dump_dir = options.debug_dump_dir
         self._path_executor = services.path_executor
         self._path_preparation_service = services.path_preparation_service
@@ -122,6 +124,14 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def can_match_saved_workpieces(self) -> bool:
         return bool(self._matching_service is not None and self._matching_service.can_match_saved_workpieces())
 
+    def _current_transformer(self) -> Optional[ICoordinateTransformer]:
+        if self._transformer_getter is not None:
+            try:
+                return self._transformer_getter()
+            except Exception:
+                _logger.debug("Workpiece editor transformer lookup failed", exc_info=True)
+        return self._transformer
+
     def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
         if self._matching_service is None:
             return False, None, "Matching is not available in this editor."
@@ -137,7 +147,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             raw,
             float(image_width),
             float(image_height),
-            self._transformer,
+            self._current_transformer(),
         )
         _logger.info(
             "Prepared DXF test workpiece for image placement: image=(%.1f, %.1f)",
