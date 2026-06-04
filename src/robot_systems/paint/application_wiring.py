@@ -651,10 +651,7 @@ def _build_pick_target_application(robot_system):
         if robot_system.get_targeting_provider() is not None else ""
     )
     calibration_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("spray"), "name", "") or ""
-    )
-    pickup_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("pickup"), "name", "") or ""
+        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
     )
     service = PickTargetApplicationService(
         vision_service=vision_service,
@@ -667,7 +664,7 @@ def _build_pick_target_application(robot_system):
         height_measuring=height_service,
         default_target_name=default_target_name,
         calibration_frame_name=calibration_frame_name,
-        pickup_frame_name=pickup_frame_name,
+        pickup_frame_name="",
     )
     jog_service = build_robot_system_jog_service(
         robot_system,

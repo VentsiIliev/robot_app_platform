@@ -107,14 +107,36 @@ class PickTargetApplicationService(IPickTargetService):
             return float(pickup_mapper.target_pose.rz)
         return 0.0
 
-    def _pose_target(self, px: float, py: float, z_mm: float = 0.0) -> VisionPoseRequest:
+    def _current_capture_orientation(self) -> Tuple[float, float]:
+        if self._robot is None:
+            return 180.0, 0.0
+        try:
+            current_pose = self._robot.get_current_position()
+        except Exception:
+            _logger.exception("Failed to read robot pose for pick-target capture orientation")
+            return 180.0, 0.0
+        if current_pose is None or len(current_pose) < 5:
+            _logger.warning(
+                "Robot pose unavailable for pick-target capture orientation; using default rx/ry"
+            )
+            return 180.0, 0.0
+        return float(current_pose[3]), float(current_pose[4])
+
+    def _pose_target(
+        self,
+        px: float,
+        py: float,
+        z_mm: float = 0.0,
+        rx_degrees: float = 180.0,
+        ry_degrees: float = 0.0,
+    ) -> VisionPoseRequest:
         return VisionPoseRequest(
             x_pixels=px,
             y_pixels=py,
             z_mm=z_mm,
             rz_degrees=self._pickup_plane_rz,
-            rx_degrees=180.0,
-            ry_degrees=0.0,
+            rx_degrees=rx_degrees,
+            ry_degrees=ry_degrees,
         )
 
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
@@ -130,6 +152,12 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.warning("Capture snapshot service not available")
             return None, [], []
 
+        capture_rx, capture_ry = self._current_capture_orientation()
+        _logger.info(
+            "[PICK_TARGET_CAPTURE_ORIENTATION] rx=%.3f ry=%.3f",
+            float(capture_rx),
+            float(capture_ry),
+        )
         snapshot = self._capture_snapshot_service.capture_snapshot(source="pick_target.capture")
         frame = snapshot.frame
         self._save_debug_capture(frame)
@@ -147,7 +175,15 @@ class PickTargetApplicationService(IPickTargetService):
                 resolver = self._current_resolver()
                 if resolver is not None:
                     result = resolver.resolve(
-                        self._pose_target(px, py, z_mm=_Z), self._target_point, frame=self._active_frame,
+                        self._pose_target(
+                            px,
+                            py,
+                            z_mm=_Z,
+                            rx_degrees=capture_rx,
+                            ry_degrees=capture_ry,
+                        ),
+                        self._target_point,
+                        frame=self._active_frame,
                     )
                     robot_targets.append(result.robot_pose())
             except Exception:
@@ -289,7 +325,8 @@ class PickTargetApplicationService(IPickTargetService):
         if not contour_robot_pts:
             return False, "No contour waypoints to execute"
         try:
-            rx, ry, rz = 180.0, 0.0, self._pickup_plane_rz
+            rx, ry = self._current_capture_orientation()
+            rz = self._pickup_plane_rz
             total_pts = 0
             for pts in contour_robot_pts:
                 path = [[float(x), float(y), float(z)] for x, y in pts]

@@ -6,7 +6,7 @@
   "Capture position offset": -5.0,
   "Contour detection": true,
   "Draw contours": false,
-  "Threshold": 95,
+  "Threshold": 100,
   "Threshold pickup area": 150,
   "Epsilon": 0.001,
   "Min contour area": 1000.0,
@@ -29,7 +29,7 @@
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
-    "Target brightness": 190.0,
+    "Target brightness": 200.0,
     "Brightness area point 1": [
       940,
       612
@@ -53,12 +53,12 @@
     "Flip image": false
   },
   "Calibration": {
-    "Chessboard width": 27,
-    "Chessboard height": 18,
+    "Chessboard width": 19,
+    "Chessboard height": 12,
     "Square size (mm)": 15.0,
     "Reference board mode": "auto",
-    "ChArUco board width": 27,
-    "ChArUco board height": 18,
+    "ChArUco board width": 19,
+    "ChArUco board height": 12,
     "ChArUco square size (mm)": 15.0,
     "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30

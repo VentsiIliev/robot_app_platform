@@ -6,8 +6,13 @@
     "max_error_ref": 50.0,
     "k": 2.0,
     "derivative_scaling": 0.5,
+    "iterative_gain": 0.7,
+    "near_target_gain": 0.35,
+    "axis_deadband_mm": 0.2,
+    "axis_flip_scale_min": 0.2,
     "fast_iteration_wait": 0.5,
     "initial_align_y_scale": 1.0,
+    "initial_align_approach_z": null,
     "post_align_settle_s": 0.3
   },
   "axis_mapping_config": {
@@ -33,6 +38,7 @@
     "retry_delay_s": 0.1,
     "recenter_max_iterations": 50,
     "recenter_stability_wait_s": 0.4,
+    "recenter_alignment_threshold_mm": 0.5,
     "min_samples": 3,
     "max_acceptance_std_mm": 1.0
   },

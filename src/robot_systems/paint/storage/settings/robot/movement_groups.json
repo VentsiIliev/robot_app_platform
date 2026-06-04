@@ -6,15 +6,15 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[142.929, 280.025, 316.323, -0.081, -0.223, -11.314]"
+      "position": "[238.064, 28.158, 366.199, -178.345, -0.049, 0.101]"
     },
     "CALIBRATION": {
-      "velocity": 50,
+      "velocity": 10,
       "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-26.864, -283.033, 359.907, 179.995, 0.022, -0.012]"
+      "position": "[238.062, 28.152, 366.202, -178.346, -0.049, 0.099]"
     },
     "JOG": {
       "velocity": 0,

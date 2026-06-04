@@ -535,7 +535,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             workpiece_height_mm = _safe_float(settings.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
         except (ValueError, TypeError):
             raise ValueError("Invalid segment settings: spraying_height and rz_angle must be numbers")
-        rx, ry = 180.0, 0.0
+        rx, ry = _base_orientation_xy(base_position)
         robot_xy_points: list[tuple[float, float]] = []
         compensated_pts_px = np.asarray(pts_px, dtype=np.float64).copy()
 
@@ -684,6 +684,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         base_position = self._resolve_base_position()
         base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
+        rx, ry = _base_orientation_xy(base_position)
 
         resolver = self._current_resolver()
         transformer = self._current_transformer()
@@ -699,8 +700,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     compensated_py,
                     z_mm=base_z,
                     rz_degrees=rz_offset,
-                    rx_degrees=180.0,
-                    ry_degrees=0.0,
+                    rx_degrees=rx,
+                    ry_degrees=ry,
                 ),
                 target_point,
                 frame=str(frame_name or "").strip().lower(),
@@ -728,3 +729,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             return [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
         except (TypeError, ValueError):
             return None
+
+
+def _base_orientation_xy(base_position: Optional[list[float]]) -> tuple[float, float]:
+    if base_position is not None and len(base_position) >= 5:
+        return float(base_position[3]), float(base_position[4])
+    return 180.0, 0.0
