@@ -16,8 +16,8 @@ class RelayVacuumPumpController(IVacuumPumpController):
         self,
         relay_client_path: str,
         *,
-        host: str = "192.168.222.35",
-        port: int = 5002,
+        host: str = "127.0.0.1",
+        port: int = 5003,
         output_num: int = 0,
     ) -> None:
         self._relay_client_path = str(relay_client_path)
@@ -91,4 +91,3 @@ class RelayVacuumPumpController(IVacuumPumpController):
             return None
         self._module = module
         return module
-

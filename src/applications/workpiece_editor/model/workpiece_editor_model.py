@@ -43,6 +43,9 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_execution_preview_paths(self) -> list:
         return self._service.get_last_execution_preview_paths()
 
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        return self._service.get_last_camera_preview_paths()
+
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         return self._service.get_last_pivot_preview_paths()
 

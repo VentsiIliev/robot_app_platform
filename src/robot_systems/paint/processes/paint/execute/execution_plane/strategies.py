@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.engine.geometry.planar import unwrap_degrees
+from src.engine.geometry.planar import nearest_axis_equivalent_degrees
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,7 @@ class ExecutionPlaneStrategy:
         pickup_ry: float,
         first_pivot_pose: list[float],
         paint_pivot_pose: list[float],
+        mirrored_handoff: bool = False,
     ) -> float:
         raise NotImplementedError
 
@@ -49,8 +50,10 @@ class XyZRzExecutionPlaneStrategy(ExecutionPlaneStrategy):
         pickup_ry: float,
         first_pivot_pose: list[float],
         paint_pivot_pose: list[float],
+        mirrored_handoff: bool = False,
     ) -> float:
-        return float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else float(pickup_rz)
+        target_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else float(pickup_rz)
+        return nearest_axis_equivalent_degrees(float(pickup_rz), target_rz)
 
 
 @dataclass(frozen=True)
@@ -70,14 +73,10 @@ class XzYRyExecutionPlaneStrategy(ExecutionPlaneStrategy):
         pickup_ry: float,
         first_pivot_pose: list[float],
         paint_pivot_pose: list[float],
+        mirrored_handoff: bool = False,
     ) -> float:
-        target_ry = float(first_pivot_pose[4]) if len(first_pivot_pose) >= 5 else float(pickup_ry)
-        reference_ry = float(paint_pivot_pose[4]) if len(paint_pivot_pose) >= 5 else float(pickup_ry)
-        align_delta = unwrap_degrees(reference_ry, target_ry) - reference_ry
-        # Pickup alignment happens in the XY/RZ plane, but the staged paint path
-        # executes in XZ/RY. The orientation handoff is mirrored, so the pickup
-        # pre-rotation must cancel the future pivot-plane delta rather than add it.
-        return unwrap_degrees(float(pickup_rz), float(pickup_rz) - align_delta)
+        target_rz = float(paint_pivot_pose[5]) if len(paint_pivot_pose) >= 6 else float(pickup_rz)
+        return nearest_axis_equivalent_degrees(float(pickup_rz), target_rz)
 
     def maybe_flip_execution_rotation_direction(
         self,

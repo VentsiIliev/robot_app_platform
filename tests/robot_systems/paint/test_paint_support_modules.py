@@ -178,7 +178,7 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
         self.assertEqual(result, "vacuum")
         kwargs = controller_cls.call_args.kwargs
         self.assertTrue(kwargs["relay_client_path"].endswith("domain/vacuum_pump/relay_client.py"))
-        self.assertEqual(kwargs["host"], "localhost")
+        self.assertEqual(kwargs["host"], "127.0.0.1")
         self.assertEqual(kwargs["port"], 5003)
         self.assertEqual(kwargs["output_num"], 0)
 

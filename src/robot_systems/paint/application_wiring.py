@@ -99,6 +99,7 @@ def _build_paint_path_executor(robot_system):
         pivot_side=_get_paint_pivot_side(),
         pivot_translation_direction=_PAINT_PROCESS.pivot_translation_direction,
         flip_xz_ry_execution_rotation_direction=_PAINT_PROCESS.flip_xz_ry_execution_rotation_direction,
+        mirror_xz_ry_pickup_handoff=_PAINT_PROCESS.mirror_xz_ry_pickup_handoff,
         enable_xz_ry_preflight=_PAINT_PROCESS.enable_xz_ry_preflight,
         xz_ry_preflight_max_checks=_PAINT_PROCESS.xz_ry_preflight_max_checks,
         apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,
@@ -148,6 +149,9 @@ def _build_paint_path_preparation_service(robot_system):
         pickup_target_point_name=execution_target_point_name,
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
+        pickup_axis_alignment_sign=(
+            -1.0 if _PAINT_PROCESS.flip_pickup_axis_alignment_direction else 1.0
+        ),
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
@@ -292,6 +296,29 @@ def _build_workpiece_library_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: WorkpieceLibraryFactory().build(service, ms, jog_service=jog_service)
+    )
+
+
+def _build_paint_motion_plane_setup_application(robot_system):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_motion_plane_setup import PaintMotionPlaneSetupFactory
+    from src.robot_systems.paint.applications.paint_motion_plane_setup.service.paint_motion_plane_setup_service import (
+        PaintMotionPlaneSetupService,
+    )
+
+    service = PaintMotionPlaneSetupService(
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        navigation_service=getattr(robot_system, "_navigation", None),
+        paint_group_id=_get_paint_base_group_id(),
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: PaintMotionPlaneSetupFactory().build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
     )
 
 

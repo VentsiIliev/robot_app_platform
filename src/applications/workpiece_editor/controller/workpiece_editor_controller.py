@@ -845,6 +845,7 @@ class WorkpieceEditorController(IApplicationController):
                 curve_paths = self._model.get_last_curve_preview_paths()
                 sampled_paths = self._model.get_last_sampled_preview_paths()
                 execution_paths = self._model.get_last_execution_preview_paths()
+                camera_preview_paths = self._model.get_last_camera_preview_paths()
                 if raw_paths or sampled_paths:
                     self._show_interpolation_plot(
                         raw_paths,
@@ -852,6 +853,7 @@ class WorkpieceEditorController(IApplicationController):
                         curve_paths,
                         sampled_paths,
                         execution_paths,
+                        camera_preview_paths,
                     )
             except Exception:
                 self._logger.debug("Failed to show interpolation preview", exc_info=True)
@@ -863,6 +865,7 @@ class WorkpieceEditorController(IApplicationController):
             curve_paths: list[list[list[float]]],
             sampled_paths: list[list[list[float]]],
             execution_paths: list[list[list[float]]],
+            camera_preview_paths: dict[str, list] | None = None,
     ) -> None:
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
 
@@ -872,6 +875,7 @@ class WorkpieceEditorController(IApplicationController):
             sampled_paths,
             execution_paths,
             prepared_paths=prepared_paths,
+            camera_preview_paths=camera_preview_paths,
         )
         if not image_path:
             return
@@ -913,17 +917,17 @@ class WorkpieceEditorController(IApplicationController):
                 source_paths = self._model.get_last_execution_preview_paths()
                 pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
                 motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
-                # if source_paths and pivot_paths:
-                #     approved = self._show_pivot_path_plot(
-                #         source_paths,
-                #         pivot_paths,
-                #         pivot_pose,
-                #         motion_snapshots,
-                #         approve_label=action.label,
-                #     )
-                #     if not approved:
-                #         self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
-                #         return
+                if source_paths and pivot_paths:
+                    approved = self._show_pivot_path_plot(
+                        source_paths,
+                        pivot_paths,
+                        pivot_pose,
+                        motion_snapshots,
+                        approve_label=action.label,
+                    )
+                    if not approved:
+                        self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                        return
             except Exception:
                 self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
                 return

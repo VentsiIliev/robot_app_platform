@@ -30,14 +30,14 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(default_config.pickup_base_group_id, "PAINTING")
         self.assertEqual(default_config.pivot_side, "positive")
         self.assertEqual(xy_config.paint_base_group_id, "PAINTING")
-        self.assertEqual(xy_config.pivot_side, "negative")
+        self.assertEqual(xy_config.pivot_side, "positive")
 
     def test_process_config_exposes_pickup_defaults_used_by_executor(self) -> None:
         default_config = PaintProcessConfig()
 
         self.assertEqual(default_config.pickup_default_z_mm, 300.0)
-        self.assertEqual(default_config.pickup_default_vel_percent, 30.0)
-        self.assertEqual(default_config.pickup_default_acc_percent, 100.0)
+        self.assertEqual(default_config.pickup_default_vel_percent, 10.0)
+        self.assertEqual(default_config.pickup_default_acc_percent, 10.0)
         self.assertEqual(default_config.pickup_approach_offset_mm, 100.0)
         self.assertEqual(default_config.pickup_contact_offset_mm, 2.0)
 
@@ -70,7 +70,8 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(xz.planar_coordinate_indices, (0, 2))
         self.assertEqual(xz.orthogonal_position_index, 1)
         self.assertEqual(xz.rotation_index, 4)
-        self.assertEqual(xz.orientation_overrides_deg, {"rx": 90.0})
+        self.assertEqual(xz.orientation_overrides_deg, {})
+        self.assertEqual(xz.contact_heading_offset_deg, 180.0)
         self.assertEqual(xz.paint_axis_offset_deg, 90.0)
         self.assertEqual(xz.side_sign, -1.0)
         self.assertEqual(xz.direction_sign, -1.0)

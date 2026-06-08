@@ -11,6 +11,7 @@ import numpy as np
 
 _logger = logging.getLogger(__name__)
 
+from src.engine.geometry.planar import nearest_axis_equivalent_degrees, unwrap_degrees
 from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_HEADING_DEADBAND_DEG,
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
@@ -41,6 +42,7 @@ _SEGMENT_EXECUTION_SPACING_KEY = "execution_spacing_mm"
 _SEGMENT_TANGENT_LOOKAHEAD_DISTANCE_KEY = "path_tangent_lookahead_mm"
 _SEGMENT_TANGENT_DEADBAND_KEY = "path_tangent_deadband_deg"
 _CANONICALIZE_WORKPIECE_LAYER_CONTOUR = True
+_TEMPORARILY_SKIP_CONTOUR_INTERPOLATION = False
 
 
 @dataclass(frozen=True)
@@ -216,6 +218,17 @@ def _auto_input_densify_spacing(path_pts: list[list[float]], interpolation_spaci
     return max(1.0, float(interpolation_spacing_mm) * _AUTO_DENSIFY_TARGET_RATIO)
 
 
+def _is_explicitly_closed_path(path_pts: list[list[float]]) -> bool:
+    if len(path_pts) < 3:
+        return False
+    try:
+        start = np.asarray(path_pts[0][:2], dtype=float)
+        end = np.asarray(path_pts[-1][:2], dtype=float)
+    except Exception:
+        return False
+    return float(np.linalg.norm(start - end)) <= 1e-6
+
+
 class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
     def __init__(
         self,
@@ -234,6 +247,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         calibration_frame_name: str = "",
         pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
+        pickup_axis_alignment_sign: float = 1.0,
     ) -> None:
         self._logger = logger
         self._segment_config = segment_config
@@ -249,6 +263,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
+        try:
+            pickup_alignment_sign = float(pickup_axis_alignment_sign)
+        except (TypeError, ValueError):
+            pickup_alignment_sign = 1.0
+        self._pickup_axis_alignment_sign = 1.0 if pickup_alignment_sign >= 0.0 else -1.0
 
     def _current_transformer(self):
         if self._transformer_getter is not None:
@@ -395,10 +414,19 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
             input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
             source_has_dxf = bool(str(merged.get("dxfPath", "") or "").strip())
-
-            if source_has_dxf:
+            interpolation_method = "linear" if _is_explicitly_closed_path(path_pts) else "pchip"
+            if interpolation_method == "linear":
                 self._logger.info(
-                    "[EXECUTE] Skipping contour interpolation for DXF-backed path: pattern=%s pts=%d",
+                    "[EXECUTE] Preserving closed contour geometry with linear resampling: pattern=%s pts=%d",
+                    pattern_type,
+                    len(path_pts),
+                )
+
+            if source_has_dxf or _TEMPORARILY_SKIP_CONTOUR_INTERPOLATION:
+                reason = "DXF-backed path" if source_has_dxf else "temporary debug bypass"
+                self._logger.info(
+                    "[EXECUTE] Skipping contour interpolation for %s: pattern=%s pts=%d",
+                    reason,
                     pattern_type,
                     len(path_pts),
                 )
@@ -415,7 +443,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         noise_strength=0.0,
                     ),
                     interpolation=InterpolationConfig(
-                        method="pchip",
+                        method=interpolation_method,
                         output_spacing=interpolation_spacing_mm,
                         dense_sampling_factor=dense_sampling_factor,
                     ),
@@ -477,6 +505,18 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         float(pickup_camera_xy[1]),
                         float(pickup_rz),
                         len(pickup_rz_path),
+                    )
+                raw_pickup_rz = float(pickup_rz)
+                measured_delta = unwrap_degrees(pickup_reference_rz, raw_pickup_rz) - pickup_reference_rz
+                signed_pickup_axis = pickup_reference_rz + self._pickup_axis_alignment_sign * measured_delta
+                pickup_rz = nearest_axis_equivalent_degrees(pickup_reference_rz, signed_pickup_axis)
+                if abs(pickup_rz - raw_pickup_rz) > 1e-9:
+                    self._logger.info(
+                        "[PICKUP_RZ] axis_equivalent_normalized raw=%.3f reference=%.3f sign=%.0f selected=%.3f",
+                        raw_pickup_rz,
+                        float(pickup_reference_rz),
+                        self._pickup_axis_alignment_sign,
+                        float(pickup_rz),
                     )
                 pickup_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),

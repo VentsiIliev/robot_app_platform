@@ -272,6 +272,38 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return []
         return execution_plan.execution_paths()
 
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        execution_plan = self._active_process_plan()
+        transformer = self._current_transformer()
+        if execution_plan is None or transformer is None or not hasattr(transformer, "inverse_transform"):
+            return {}
+
+        return {
+            "raw": self._inverse_transform_paths(execution_plan.raw_paths, transformer),
+            "prepared": self._inverse_transform_paths(execution_plan.prepared_paths, transformer),
+            "curve": self._inverse_transform_paths(execution_plan.curve_paths, transformer),
+            "sampled": self._inverse_transform_paths(execution_plan.sampled_paths, transformer),
+            "execution": self._inverse_transform_paths(execution_plan.execution_paths(), transformer),
+        }
+
+    @staticmethod
+    def _inverse_transform_paths(paths: list[list[list[float]]], transformer) -> list[list[list[float]]]:
+        inverse_paths: list[list[list[float]]] = []
+        for path in paths:
+            inverse_path: list[list[float]] = []
+            for point in path:
+                if len(point) < 2:
+                    continue
+                try:
+                    px, py = transformer.inverse_transform(float(point[0]), float(point[1]))
+                except Exception:
+                    continue
+                inverse_point = [float(px), float(py)]
+                inverse_point.extend(float(value) for value in point[2:])
+                inverse_path.append(inverse_point)
+            inverse_paths.append(inverse_path)
+        return inverse_paths
+
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         if self._path_executor is None:
             return [], None

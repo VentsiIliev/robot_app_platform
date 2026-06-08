@@ -37,16 +37,28 @@ def build_executed_snapshot_series(
     executed_path: list[list[float]],
     pivot_pose: list[float] | None,
     pivot_config: PaintSimulationConfig,
+    anchor_xy: tuple[float, float] | None = None,
+    source_rotation_deg: float = 0.0,
 ) -> list[np.ndarray]:
     """Rebuild contour snapshots from the final executed pose sequence."""
     if not source_path or not executed_path or pivot_pose is None or len(pivot_pose) < 3:
         return []
     try:
-        preview_path, preview_snapshots, _ = project_paint_motion_geometry(
-            source_path,
-            pivot_pose,
-            pivot_config,
-        )
+        if anchor_xy is None:
+            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
+                source_path,
+                pivot_pose,
+                pivot_config,
+                source_rotation_deg=source_rotation_deg,
+            )
+        else:
+            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
+                source_path,
+                pivot_pose,
+                pivot_config,
+                anchor_xy=anchor_xy,
+                source_rotation_deg=source_rotation_deg,
+            )
         if not preview_path or not preview_snapshots:
             return []
 
@@ -54,6 +66,13 @@ def build_executed_snapshot_series(
         rotation_index = pivot_config.rotation_index
         pivot_xy = (float(pivot_pose[planar_i]), float(pivot_pose[planar_j]))
         reference_snapshot = np.asarray(preview_snapshots[0], dtype=float)
+        reference_anchor = np.asarray(
+            [
+                float(preview_path[0][planar_i]) if len(preview_path[0]) > planar_i else 0.0,
+                float(preview_path[0][planar_j]) if len(preview_path[0]) > planar_j else 0.0,
+            ],
+            dtype=float,
+        )
         reference_rotation = (
             float(preview_path[0][rotation_index]) if len(preview_path[0]) > rotation_index else 0.0
         )
@@ -72,15 +91,22 @@ def build_executed_snapshot_series(
                 ],
                 dtype=float,
             )
-            target_center = np.asarray(
+            rotated_anchor = np.asarray(
+                rotate_xy_about(
+                    (float(reference_anchor[0]), float(reference_anchor[1])),
+                    rotation_delta,
+                    pivot_xy,
+                ),
+                dtype=float,
+            )
+            target_anchor = np.asarray(
                 [
                     float(pose[planar_i]) if len(pose) > planar_i else 0.0,
                     float(pose[planar_j]) if len(pose) > planar_j else 0.0,
                 ],
                 dtype=float,
             )
-            current_center = np.mean(rotated_snapshot, axis=0)
-            rebuilt_snapshots.append(rotated_snapshot + (target_center - current_center))
+            rebuilt_snapshots.append(rotated_snapshot + (target_anchor - rotated_anchor))
         return rebuilt_snapshots
     except Exception:
         _logger.debug("[PIVOT] Failed to rebuild executed snapshots", exc_info=True)
@@ -97,6 +123,8 @@ def write_pivot_debug_dump(
     pivot_pose: list[float] | None,
     pattern_type: str,
     stage: str,
+    anchor_xy: tuple[float, float] | None = None,
+    source_rotation_deg: float = 0.0,
 ) -> None:
     """Write source and projected pivot paths to disk for offline trajectory inspection."""
     if not debug_dump_dir:
@@ -130,6 +158,10 @@ def write_pivot_debug_dump(
             if pivot_pose:
                 pose_values = ", ".join(f"{float(value):.6f}" for value in pivot_pose)
                 handle.write(f"# pivot_pose=[{pose_values}]\n")
+            if anchor_xy is not None:
+                handle.write(f"# tcp_anchor_xy=[{float(anchor_xy[0]):.6f}, {float(anchor_xy[1]):.6f}]\n")
+            if abs(float(source_rotation_deg or 0.0)) > 1e-9:
+                handle.write(f"# source_rotation_deg={float(source_rotation_deg):.6f}\n")
 
             for section_name, path in (
                 ("ORIGINAL_PLATFORM_PATH", source_path),
@@ -171,6 +203,8 @@ def write_pivot_debug_plot(
     snapshots: list[np.ndarray] | None,
     diagnostics: list[dict[str, float | int]] | None,
     pivot_pose: list[float] | None,
+    anchor_xy: tuple[float, float] | None = None,
+    source_rotation_deg: float = 0.0,
     pattern_type: str,
     stage: str,
 ) -> None:
@@ -210,6 +244,8 @@ def write_pivot_debug_plot(
                 executed_path=pivot_path,
                 pivot_pose=pivot_pose,
                 pivot_config=pivot_config,
+                anchor_xy=anchor_xy,
+                source_rotation_deg=source_rotation_deg,
             ) or (snapshots or [])
             if len(snapshot) >= 1
         ]

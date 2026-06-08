@@ -97,6 +97,147 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertTrue(job["source_has_dxf"])
         pickup_rz.assert_called_once()
 
+    def test_build_execution_plan_resolves_pickup_xy_with_normalized_axis_rz(self):
+        registry = MagicMock()
+        registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
+        resolver = MagicMock()
+        resolver.registry = registry
+        resolver.get_frame.return_value = SimpleNamespace(
+            mapper=SimpleNamespace(target_pose=SimpleNamespace(rz=0.0))
+        )
+        service = _make_service(
+            resolver=resolver,
+            target_point_name="tool",
+            pickup_target_point_name="tool",
+            calibration_frame_name="paint_frame",
+        )
+        workpiece = {
+            "pickupPoint": [15, 25],
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[0, 0], [10, 0], [10, 10]],
+                        "settings": {},
+                    }
+                ]
+            },
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[[100, 200, 300, 180, 0, 10], [110, 210, 300, 180, 0, 20]],
+        ), patch.object(
+            service,
+            "_transform_single_pixel_to_robot",
+            side_effect=[(500.0, 600.0), (700.0, 800.0)],
+        ) as transform_pickup, patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_robot_path",
+            return_value=174.0,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        job = plan.execution_jobs[0]
+        self.assertEqual([700.0, 800.0], job["pickup_xy"])
+        self.assertAlmostEqual(-6.0, job["pickup_rz"], places=6)
+        self.assertEqual(0.0, transform_pickup.call_args_list[0].kwargs["rz_override"])
+        self.assertAlmostEqual(-6.0, transform_pickup.call_args_list[1].kwargs["rz_override"], places=6)
+
+    def test_build_execution_plan_applies_pickup_axis_alignment_sign_before_resolving_xy(self):
+        registry = MagicMock()
+        registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
+        resolver = MagicMock()
+        resolver.registry = registry
+        resolver.get_frame.return_value = SimpleNamespace(
+            mapper=SimpleNamespace(target_pose=SimpleNamespace(rz=0.0))
+        )
+        service = _make_service(
+            resolver=resolver,
+            target_point_name="tool",
+            pickup_target_point_name="tool",
+            calibration_frame_name="paint_frame",
+            pickup_axis_alignment_sign=-1.0,
+        )
+        workpiece = {
+            "pickupPoint": [15, 25],
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[0, 0], [10, 0], [10, 10]],
+                        "settings": {},
+                    }
+                ]
+            },
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[[100, 200, 300, 180, 0, 10], [110, 210, 300, 180, 0, 20]],
+        ), patch.object(
+            service,
+            "_transform_single_pixel_to_robot",
+            side_effect=[(500.0, 600.0), (700.0, 800.0)],
+        ) as transform_pickup, patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_robot_path",
+            return_value=174.0,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        job = plan.execution_jobs[0]
+        self.assertEqual([700.0, 800.0], job["pickup_xy"])
+        self.assertAlmostEqual(6.0, job["pickup_rz"], places=6)
+        self.assertAlmostEqual(6.0, transform_pickup.call_args_list[1].kwargs["rz_override"], places=6)
+
+    def test_build_execution_plan_uses_linear_interpolation_for_closed_contours(self):
+        service = _make_service()
+        workpiece = {
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[0, 0], [10, 0], [10, 10], [0, 0]],
+                        "settings": {},
+                    }
+                ]
+            },
+        }
+        robot_path = [
+            [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0, 180.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0, 180.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+        ]
+        methods: list[str] = []
+
+        class FakePipeline:
+            def __init__(self, *, preprocess, interpolation, ruckig):
+                methods.append(interpolation.method)
+
+            def run(self, points):
+                return SimpleNamespace(prepared=points, curve=points, sampled=points)
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=robot_path,
+        ), patch(
+            "src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline.ContourPathPipeline",
+            FakePipeline,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        self.assertEqual(["linear"], methods)
+        for point in plan.execution_jobs[0]["execution_path"]:
+            x, y = float(point[0]), float(point[1])
+            on_boundary = (
+                abs(x - 0.0) <= 1e-6
+                or abs(x - 10.0) <= 1e-6
+                or abs(y - 0.0) <= 1e-6
+                or abs(y - 10.0) <= 1e-6
+            )
+            self.assertTrue(on_boundary, point)
+
     def test_build_execution_plan_paint_job_prefers_segment_offset_over_workpiece_offset(self):
         service = _make_service()
         workpiece = {
@@ -332,8 +473,8 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
 
         self.assertEqual(
             [
-                [100.0, 200.0, 105.0, 180.0, 0.0, 45.0],
-                [110.0, 210.0, 105.0, 180.0, 0.0, 50.0],
+                [100.0, 200.0, 105.0, 0.0, 0.0, 45.0],
+                [110.0, 210.0, 105.0, 0.0, 0.0, 50.0],
             ],
             result,
         )
@@ -365,8 +506,8 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
 
         self.assertEqual(
             [
-                [1.0, 2.0, 301.0, 180.0, 0.0, 7.0],
-                [3.0, 4.0, 302.0, 180.0, 0.0, 7.0],
+                [1.0, 2.0, 301.0, 0.0, 0.0, 7.0],
+                [3.0, 4.0, 302.0, 0.0, 0.0, 7.0],
             ],
             result,
         )

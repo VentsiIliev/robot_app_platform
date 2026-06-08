@@ -27,6 +27,8 @@ def project_paint_motion_geometry(
     path: list[list[float]],
     pivot_pose: list[float],
     config: PaintSimulationConfig,
+    anchor_xy: tuple[float, float] | None = None,
+    source_rotation_deg: float = 0.0,
 ) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
     """Project a source paint path into pickup/pivot motion geometry around the configured base pose."""
     if not path:
@@ -35,10 +37,21 @@ def project_paint_motion_geometry(
     source_planar_i, source_planar_j = config.source_planar_coordinate_indices
     orthogonal_index = config.orthogonal_position_index
     rotation_index = config.rotation_index
+    source_anchor = (
+        np.asarray([float(anchor_xy[0]), float(anchor_xy[1])], dtype=float)
+        if anchor_xy is not None else None
+    )
     if len(path) == 1:
         point = path[0]
         planar_point = np.array([[float(point[source_planar_i]), float(point[source_planar_j])]], dtype=float)
-        return [list(point)], [planar_point], []
+        if source_anchor is None:
+            return [list(point)], [planar_point], []
+        projected_pose = list(point)
+        while len(projected_pose) < 6:
+            projected_pose.append(0.0)
+        projected_pose[planar_i] = float(source_anchor[0])
+        projected_pose[planar_j] = float(source_anchor[1])
+        return [projected_pose], [planar_point], []
 
     pivot_x = float(pivot_pose[planar_i])
     pivot_y = float(pivot_pose[planar_j])
@@ -73,15 +86,18 @@ def project_paint_motion_geometry(
         [[float(point[source_planar_i]), float(point[source_planar_j])] for point in path],
         dtype=float,
     )
+    tcp_anchor = source_anchor.copy() if source_anchor is not None else None
+    source_rotation = float(source_rotation_deg or 0.0)
     if len(points) < 2:
+        anchor_point = tcp_anchor if tcp_anchor is not None else points[0]
         return (
             [
                 _compose_pose(
                     reference_pose=path[0],
                     planar_i=planar_i,
                     planar_j=planar_j,
-                    planar_a=float(points[0][0]),
-                    planar_b=float(points[0][1]),
+                    planar_a=float(anchor_point[0]),
+                    planar_b=float(anchor_point[1]),
                     orthogonal_index=orthogonal_index,
                     orthogonal_value=pivot_orthogonal,
                     rotation_index=rotation_index,
@@ -111,6 +127,24 @@ def project_paint_motion_geometry(
             dtype=float,
         )
 
+    def _rotate_point(point: np.ndarray, angle_deg: float, pivot_xy: tuple[float, float]) -> np.ndarray:
+        return np.asarray(
+            rotate_xy_about((float(point[0]), float(point[1])), angle_deg, pivot_xy),
+            dtype=float,
+        )
+
+    if abs(source_rotation) > 1e-9:
+        rotation_anchor = (
+            tcp_anchor
+            if tcp_anchor is not None
+            else np.asarray([float(np.mean(points[:, 0])), float(np.mean(points[:, 1]))], dtype=float)
+        )
+        points = _rotate_shape(
+            points,
+            source_rotation,
+            (float(rotation_anchor[0]), float(rotation_anchor[1])),
+        )
+
     def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
         dx = float(point_b[0] - point_a[0])
         dy = float(point_b[1] - point_a[1])
@@ -129,25 +163,31 @@ def project_paint_motion_geometry(
     # configured paint axis. This defines the starting pickup orientation.
     initial_heading = _segment_heading_deg(points[0], points[1])
     initial_rotation = unwrap_degrees(0.0, contact_segment_heading - initial_heading)
+    first_point = (float(points[0][0]), float(points[0][1]))
     points = _rotate_shape(points, initial_rotation, (float(points[0][0]), float(points[0][1])))
+    if tcp_anchor is not None:
+        tcp_anchor = _rotate_point(tcp_anchor, initial_rotation, first_point)
 
     # Then translate the rotated shape so its first point sits exactly on the
     # physical pivot/base position used by the robot.
     translate_to_pivot = np.array([pivot_x - float(points[0][0]), pivot_y - float(points[0][1])], dtype=float)
     points = points + translate_to_pivot
+    if tcp_anchor is None:
+        tcp_anchor = np.asarray(_centroid_xy(points), dtype=float)
+    else:
+        tcp_anchor = tcp_anchor + translate_to_pivot
 
     current_rz = unwrap_degrees(base_rz, base_rz + initial_rotation)
     result: list[list[float]] = []
     snapshots: list[np.ndarray] = []
     diagnostics: list[dict[str, float | int]] = []
-    center_xy = _centroid_xy(points)
     result.append(
         _compose_pose(
             reference_pose=path[0],
             planar_i=planar_i,
             planar_j=planar_j,
-            planar_a=center_xy[0],
-            planar_b=center_xy[1],
+            planar_a=float(tcp_anchor[0]),
+            planar_b=float(tcp_anchor[1]),
             orthogonal_index=orthogonal_index,
             orthogonal_value=pivot_orthogonal,
             rotation_index=rotation_index,
@@ -182,14 +222,13 @@ def project_paint_motion_geometry(
         next_point = points[index + 1]
         segment_length = float(np.linalg.norm(next_point - current_point))
         if segment_length <= 1e-9:
-            center_xy = _centroid_xy(points)
             result.append(
                 _compose_pose(
                     reference_pose=path[min(index + 1, len(path) - 1)],
                     planar_i=planar_i,
                     planar_j=planar_j,
-                    planar_a=center_xy[0],
-                    planar_b=center_xy[1],
+                    planar_a=float(tcp_anchor[0]),
+                    planar_b=float(tcp_anchor[1]),
                     orthogonal_index=orthogonal_index,
                     orthogonal_value=pivot_orthogonal,
                     rotation_index=rotation_index,
@@ -226,6 +265,7 @@ def project_paint_motion_geometry(
             # Rotate the whole shape around the fixed pivot, because the
             # workpiece is assumed to swing around that base point.
             points = _rotate_shape(points, rotation_delta, pivot_xy)
+            tcp_anchor = _rotate_point(tcp_anchor, rotation_delta, pivot_xy)
             current_rz = unwrap_degrees(current_rz, current_rz + rotation_delta)
 
         # After any rotation, advance the entire shape along the configured
@@ -233,14 +273,14 @@ def project_paint_motion_geometry(
         # "projected motion" assumption: source path arc length becomes linear
         # travel of the whole workpiece along the pivot axis.
         points = points + axis_vector * segment_length * config.direction_sign
-        center_xy = _centroid_xy(points)
+        tcp_anchor = tcp_anchor + axis_vector * segment_length * config.direction_sign
         result.append(
             _compose_pose(
                 reference_pose=path[min(index + 1, len(path) - 1)],
                 planar_i=planar_i,
                 planar_j=planar_j,
-                planar_a=center_xy[0],
-                planar_b=center_xy[1],
+                planar_a=float(tcp_anchor[0]),
+                planar_b=float(tcp_anchor[1]),
                 orthogonal_index=orthogonal_index,
                 orthogonal_value=pivot_orthogonal,
                 rotation_index=rotation_index,

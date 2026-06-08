@@ -9,8 +9,8 @@ from src.robot_systems.paint.processes.paint.align import (
 class PickupMotionConfig:
     """Pickup-specific motion defaults shared by paint execution flows."""
     default_z_mm: float = 300.0
-    default_vel_percent: float = 30.0
-    default_acc_percent: float = 100.0
+    default_vel_percent: float = 10.0
+    default_acc_percent: float = 10.0
     approach_offset_mm: float = 100.0
     contact_offset_mm: float = 2.0
 
@@ -54,7 +54,6 @@ class PaintProjectionRules:
             planar_coordinate_indices=(0, 2),
             orthogonal_position_index=1,
             rotation_index=4,
-            orientation_overrides_deg={"rx": 90.0},
             axis_offsets_deg={"x": 0.0, "z": 90.0},
         ),
     })
@@ -97,6 +96,8 @@ class PaintProcessConfig:
     pivot_translation_axis: str = "x"
     pivot_translation_direction: str = "forward"
     flip_xz_ry_execution_rotation_direction: bool = True
+    mirror_xz_ry_pickup_handoff: bool = True
+    flip_pickup_axis_alignment_direction: bool = False
     enable_xz_ry_preflight: bool = False
     xz_ry_preflight_max_checks: int = 8
     enable_vacuum_pump: bool = True
@@ -120,7 +121,7 @@ class PaintProcessConfig:
         """Return the default contour side used for the active paint plane."""
         if self.pivot_motion_plane == "xz_y_ry":
             return "positive"
-        return "negative"
+        return "positive"
 
     @property
     def pickup_default_z_mm(self) -> float:

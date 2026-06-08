@@ -10,11 +10,11 @@
     },
     "CALIBRATION": {
       "velocity": 10,
-      "acceleration": 20,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[238.062, 28.152, 366.202, -178.346, -0.049, 0.099]"
+      "position": "[-13.417, 238.515, 363.963, -178.839, -0.011, 0.006]"
     },
     "JOG": {
       "velocity": 0,
@@ -29,15 +29,15 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[40.337, -449.745, 151.603, 180.000, 0.095, -0.053]"
+      "position": "[-13.172, 342.686, 140.358, -178.885, -0.002, 0.003]"
     },
     "PAINTING_NEW": {
       "velocity": 10,
-      "acceleration": 50,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-29.247, -388.072, 325.775, 90.449, 0.089, -0.167]"
+      "position": "[-80.492, 316.814, 335.306, -91.478, -0.047, -0.050]"
     }
   }
 }

@@ -65,6 +65,12 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual("paint_frame", kwargs["calibration_frame_name"])
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["target_point_name"])
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["pickup_target_point_name"])
+        expected_pickup_sign = (
+            -1.0
+            if application_wiring._PAINT_PROCESS.flip_pickup_axis_alignment_direction
+            else 1.0
+        )
+        self.assertEqual(expected_pickup_sign, kwargs["pickup_axis_alignment_sign"])
         expected_compensation = (
             (15.0, -20.0)
             if application_wiring._PAINT_PROCESS.enable_z_shift_pixel_compensation

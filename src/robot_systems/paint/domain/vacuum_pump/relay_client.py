@@ -45,7 +45,7 @@ class RelayClient:
             return {"success": False, "error": str(e)}
 
 
-def run_command(command, host="localhost", port=5003):
+def run_command(command, host="127.0.0.1", port=5003):
     """
     Run a simple relay command programmatically.
 
@@ -72,7 +72,7 @@ def run_command(command, host="localhost", port=5003):
         return {"success": False, "error": f"Unknown command: {command}"}
 
 
-def control_relay(output_num, state, host="localhost", port=5003):
+def control_relay(output_num, state, host="127.0.0.1", port=5003):
     """
     Control any relay output programmatically.
 
@@ -86,7 +86,6 @@ def control_relay(output_num, state, host="localhost", port=5003):
         dict: JSON response from server or error dict
     """
     client = RelayClient(host=host, port=port)
-    client.set_relay(output_num, state)
     return client.set_relay(output_num, state)
 
 

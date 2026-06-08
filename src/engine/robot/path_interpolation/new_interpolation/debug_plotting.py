@@ -1,11 +1,17 @@
 import os
 from datetime import datetime
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/robot_app_platform_matplotlib")
+os.makedirs(os.environ["MPLCONFIGDIR"], exist_ok=True)
+
 import matplotlib
 matplotlib.use("Agg")  # force non-GUI backend before pyplot import
 
 import numpy as np
 from matplotlib import pyplot as plt
+
+_PIVOT_DETAIL_SNAPSHOT_LIMIT = 8
+_PIVOT_PLOT_DPI = 110
 
 
 def _execution_rotation_change_mask(execution_arr: np.ndarray, threshold_deg: float = 1e-6) -> np.ndarray:
@@ -25,6 +31,7 @@ def plot_trajectory_debug(
     sampled_paths,
     execution_paths=None,
     prepared_paths=None,
+    camera_preview_paths=None,
     save_dir="debug_plots",
 ):
 
@@ -37,8 +44,19 @@ def plot_trajectory_debug(
         if prepared_paths is None:
             prepared_paths = raw_paths
 
-        # Create figure with subplots (without 3D for compatibility)
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+        has_camera_preview = bool(camera_preview_paths)
+        if has_camera_preview:
+            fig = plt.figure(figsize=(19, 10))
+            grid = fig.add_gridspec(2, 3)
+            ax1 = fig.add_subplot(grid[0, 0])
+            ax2 = fig.add_subplot(grid[0, 1])
+            ax3 = fig.add_subplot(grid[1, 0])
+            ax4 = fig.add_subplot(grid[1, 1])
+            ax5 = fig.add_subplot(grid[:, 2])
+        else:
+            # Create figure with subplots (without 3D for compatibility)
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+            ax5 = None
 
         # 2D XY plot with raw, prepared, curve, sampled, and execution path
         ax1.set_title('XY Trajectory (Top View)')
@@ -74,6 +92,42 @@ def plot_trajectory_debug(
 
         ax1.legend()
         ax1.axis('equal')
+
+        if ax5 is not None:
+            ax5.set_title('Camera-Space Inverse Preview')
+            ax5.set_xlabel('Image X (px)')
+            ax5.set_ylabel('Image Y (px)')
+            ax5.grid(True)
+            camera_raw = camera_preview_paths.get("raw", [])
+            camera_prepared = camera_preview_paths.get("prepared", [])
+            camera_curve = camera_preview_paths.get("curve", [])
+            camera_sampled = camera_preview_paths.get("sampled", [])
+            camera_execution = camera_preview_paths.get("execution", [])
+            for i, (raw, prepared, curve, sampled, execution) in enumerate(zip(
+                camera_raw,
+                camera_prepared,
+                camera_curve,
+                camera_sampled,
+                camera_execution,
+            )):
+                orig_arr = np.array(raw)
+                pre_arr = np.array(prepared)
+                linear_arr = np.array(curve)
+                spline_arr = np.array(sampled)
+                execution_arr = np.array(execution)
+                if len(orig_arr):
+                    ax5.plot(orig_arr[:, 0], orig_arr[:, 1], 'o-', color='red', label=f'Raw {i+1}' if i == 0 else '', markersize=5, linewidth=1.5, zorder=1)
+                if len(pre_arr):
+                    ax5.plot(pre_arr[:, 0], pre_arr[:, 1], '^-', color='orange', label=f'Prepared {i+1}' if i == 0 else '', markersize=3, linewidth=1.2, alpha=0.8, zorder=2)
+                if len(linear_arr):
+                    ax5.plot(linear_arr[:, 0], linear_arr[:, 1], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=3, alpha=0.6, zorder=3)
+                if len(spline_arr):
+                    ax5.plot(spline_arr[:, 0], spline_arr[:, 1], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=2, alpha=0.5, zorder=4)
+                if len(execution_arr):
+                    ax5.plot(execution_arr[:, 0], execution_arr[:, 1], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=4, linewidth=1.2, zorder=5)
+            ax5.legend()
+            ax5.axis('equal')
+            ax5.invert_yaxis()
 
         # XZ side view with different colors
         ax2.set_title('XZ Trajectory (Side View)')
@@ -206,15 +260,41 @@ def plot_pivot_path_debug(
         if motion_snapshots is None:
             motion_snapshots = [None] * len(pivot_paths)
 
+        def _infer_projected_plane_indices(paths) -> tuple[int, int]:
+            """Infer whether projected pivot motion is in XY or XZ."""
+            for path in paths or []:
+                arr = np.array(path, dtype=float)
+                if arr.ndim != 2 or arr.shape[1] < 3 or len(arr) < 2:
+                    continue
+                y_span = float(np.ptp(arr[:, 1]))
+                z_span = float(np.ptp(arr[:, 2]))
+                if z_span > max(1e-6, y_span * 5.0):
+                    return 0, 2
+            return 0, 1
+
+        planar_i, planar_j = _infer_projected_plane_indices(pivot_paths)
+        rotation_i = 4 if (planar_i, planar_j) == (0, 2) else 5
+        planar_label = "XZ" if (planar_i, planar_j) == (0, 2) else "XY"
+        rotation_label = "RY" if rotation_i == 4 else "RZ"
+
         ordered_snapshots: list[tuple[int, int, np.ndarray]] = []
         for path_index, snapshots in enumerate(motion_snapshots):
             if not snapshots:
                 continue
-            for step_index, shape in enumerate(snapshots):
+            snapshot_count = len(snapshots)
+            if snapshot_count <= _PIVOT_DETAIL_SNAPSHOT_LIMIT:
+                detail_indices = list(range(snapshot_count))
+            else:
+                sampled = np.linspace(0, snapshot_count - 1, _PIVOT_DETAIL_SNAPSHOT_LIMIT, dtype=int)
+                detail_indices = sorted({0, 1, *[int(index) for index in sampled]})
+                if len(detail_indices) > _PIVOT_DETAIL_SNAPSHOT_LIMIT:
+                    detail_indices = detail_indices[:2] + detail_indices[-(_PIVOT_DETAIL_SNAPSHOT_LIMIT - 2):]
+            for step_index in detail_indices:
+                shape = snapshots[int(step_index)]
                 shape_arr = np.array(shape, dtype=float)
                 if len(shape_arr) == 0:
                     continue
-                ordered_snapshots.append((path_index, step_index, shape_arr))
+                ordered_snapshots.append((path_index, int(step_index), shape_arr))
 
         detail_cols = 4
         detail_rows = max(1, int(np.ceil(len(ordered_snapshots) / detail_cols))) if ordered_snapshots else 0
@@ -228,17 +308,17 @@ def plot_pivot_path_debug(
 
         ax0.set_title('Pickup To Pivot Alignment')
         ax0.set_xlabel('X (mm)')
-        ax0.set_ylabel('Y (mm)')
+        ax0.set_ylabel(f"{'Z' if planar_j == 2 else 'Y'} (mm)")
         ax0.grid(True)
 
-        ax1.set_title('Pivot Path XY')
+        ax1.set_title(f'Pivot Path {planar_label}')
         ax1.set_xlabel('X (mm)')
-        ax1.set_ylabel('Y (mm)')
+        ax1.set_ylabel(f"{'Z' if planar_j == 2 else 'Y'} (mm)")
         ax1.grid(True)
 
-        ax2.set_title('Pivot Path RZ')
+        ax2.set_title(f'Pivot Path {rotation_label}')
         ax2.set_xlabel('Point Index')
-        ax2.set_ylabel('RZ (deg)')
+        ax2.set_ylabel(f'{rotation_label} (deg)')
         ax2.grid(True)
 
         for i, (source, pivot, snapshots) in enumerate(zip(source_paths, pivot_paths, motion_snapshots)):
@@ -257,14 +337,14 @@ def plot_pivot_path_debug(
                 )
             if len(pivot_arr):
                 ax1.plot(
-                    pivot_arr[:, 0], pivot_arr[:, 1],
+                    pivot_arr[:, planar_i], pivot_arr[:, planar_j],
                     'x-', color='magenta', linewidth=1.5, markersize=4,
                     label=f'Pivot {i+1}' if i == 0 else '',
                 )
                 ax2.plot(
-                    np.arange(len(pivot_arr)), pivot_arr[:, 5],
+                    np.arange(len(pivot_arr)), pivot_arr[:, rotation_i],
                     'x-', color='magenta', linewidth=1.5, markersize=4,
-                    label=f'Pivot RZ {i+1}' if i == 0 else '',
+                    label=f'Pivot {rotation_label} {i+1}' if i == 0 else '',
                 )
             if snapshots:
                 first_shape = np.array(snapshots[0], dtype=float)
@@ -311,20 +391,27 @@ def plot_pivot_path_debug(
                     )
 
         if pivot_pose and len(pivot_pose) >= 2:
+            pivot_plot_xy = None
+            if len(pivot_pose) > max(planar_i, planar_j):
+                pivot_plot_xy = (float(pivot_pose[planar_i]), float(pivot_pose[planar_j]))
+        else:
+            pivot_plot_xy = None
+
+        if pivot_plot_xy is not None:
             ax0.scatter(
-                [float(pivot_pose[0])], [float(pivot_pose[1])],
+                [pivot_plot_xy[0]], [pivot_plot_xy[1]],
                 c='red', s=80, marker='+', linewidths=2,
                 label='Pivot',
             )
             ax1.scatter(
-                [float(pivot_pose[0])], [float(pivot_pose[1])],
+                [pivot_plot_xy[0]], [pivot_plot_xy[1]],
                 c='red', s=80, marker='+', linewidths=2,
                 label='Pivot',
             )
 
         ax0.legend()
         ax0.axis('equal')
-        ax1.set_title('Pivot Path XY / Motion Snapshots')
+        ax1.set_title(f'Pivot Path {planar_label} / Motion Snapshots')
         ax1.legend()
         ax1.axis('equal')
         ax2.legend()
@@ -355,9 +442,6 @@ def plot_pivot_path_debug(
             ax.axis('equal')
 
         if ordered_snapshots:
-            pivot_xy = None
-            if pivot_pose and len(pivot_pose) >= 2:
-                pivot_xy = (float(pivot_pose[0]), float(pivot_pose[1]))
             for flat_index, (path_index, step_index, shape) in enumerate(ordered_snapshots):
                 row = 1 + flat_index // detail_cols
                 col = flat_index % detail_cols
@@ -366,14 +450,14 @@ def plot_pivot_path_debug(
                     ax,
                     shape,
                     title=f"Step {flat_index + 1}  P{path_index + 1}:{step_index}",
-                    pivot_xy=pivot_xy,
+                    pivot_xy=pivot_plot_xy,
                 )
 
         plt.tight_layout()
 
         filename = f"pivot_path_debug_{timestamp}.png"
         filepath = os.path.join(save_dir, filename)
-        plt.savefig(filepath, dpi=150, bbox_inches='tight')
+        plt.savefig(filepath, dpi=_PIVOT_PLOT_DPI, bbox_inches='tight')
         print(f"✓ Saved pivot path debug plot to: {filepath}")
         plt.close()
         return filepath

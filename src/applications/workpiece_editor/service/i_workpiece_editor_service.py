@@ -43,6 +43,9 @@ class IWorkpieceEditorService(ABC):
     def get_last_execution_preview_paths(self) -> list: ...
 
     @abstractmethod
+    def get_last_camera_preview_paths(self) -> dict[str, list]: ...
+
+    @abstractmethod
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]: ...
 
     @abstractmethod

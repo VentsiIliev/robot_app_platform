@@ -1,8 +1,12 @@
+import logging
 from typing import Callable, Optional
 from src.engine.robot.features.navigation_service import NavigationService
 from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision import IVisionService
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
+
+_logger = logging.getLogger(__name__)
+
 
 class PaintNavigationService:
 
@@ -48,6 +52,8 @@ class PaintNavigationService:
         z_offset: float = 0.0,
         wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
+        if not self._unwind_joint6_before_calibration_return():
+            return False
         ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset, wait_cancelled=wait_cancelled)
         if ok:
             self._set_observed_area_for_group(self._GROUP_CALIBRATION)
@@ -139,3 +145,13 @@ class PaintNavigationService:
         area_id = self._observed_area_by_group.get(str(group_name or "").strip())
         if area_id:
             self._set_area(area_id)
+
+    def _unwind_joint6_before_calibration_return(self) -> bool:
+        if self._robot is None:
+            _logger.warning("[NAV] Calibration return blocked: robot service unavailable for Joint 6 unwind")
+            return False
+        if not self._robot.unwind_joint6(blocking=True, queue_if_busy=True, vel=100.0, acc=100.0):
+            _logger.warning("[NAV] Calibration return blocked: Joint 6 unwind failed")
+            return False
+        _logger.info("[NAV] Joint 6 unwind completed before calibration return")
+        return True

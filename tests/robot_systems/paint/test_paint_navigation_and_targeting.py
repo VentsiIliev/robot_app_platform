@@ -57,6 +57,49 @@ class TestPaintNavigationService(unittest.TestCase):
         self.assertFalse(service.move_to_group("CALIBRATION"))
         work_area_service.set_active_area_id.assert_not_called()
 
+    def test_move_to_calibration_position_unwinds_joint6_before_navigation(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        work_area_service = MagicMock()
+        robot.unwind_joint6.return_value = True
+        navigation.move_to_group.return_value = True
+        service = PaintNavigationService(
+            navigation,
+            robot_service=robot,
+            work_area_service=work_area_service,
+            observed_area_by_group={"CALIBRATION": "paint"},
+        )
+
+        self.assertTrue(service.move_to_calibration_position())
+
+        robot.unwind_joint6.assert_called_once_with(
+            blocking=True,
+            queue_if_busy=True,
+            vel=100.0,
+            acc=100.0,
+        )
+        navigation.move_to_group.assert_called_once_with("CALIBRATION", wait_cancelled=None)
+        work_area_service.set_active_area_id.assert_called_once_with("paint")
+
+    def test_move_to_calibration_position_blocks_when_joint6_unwind_fails(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        robot.unwind_joint6.return_value = False
+        service = PaintNavigationService(navigation, robot_service=robot)
+
+        self.assertFalse(service.move_to_calibration_position())
+
+        robot.unwind_joint6.assert_called_once()
+        navigation.move_to_group.assert_not_called()
+
+    def test_move_to_calibration_position_blocks_without_robot_service(self):
+        navigation = MagicMock()
+        service = PaintNavigationService(navigation)
+
+        self.assertFalse(service.move_to_calibration_position())
+
+        navigation.move_to_group.assert_not_called()
+
     def test_get_group_position_returns_none_on_lookup_or_parse_failure(self):
         navigation = MagicMock()
         service = PaintNavigationService(navigation)

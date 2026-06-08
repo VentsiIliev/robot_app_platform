@@ -1,5 +1,6 @@
 import sys
 import os
+from threading import Lock
 
 from src.robot_systems.paint.domain.vacuum_pump.ModbusController import ModbusController
 
@@ -10,6 +11,8 @@ from flask import Flask, jsonify, request
 import json
 
 app = Flask(__name__)
+_OUTPUT_STATES = [False] * 8
+_OUTPUT_STATE_LOCK = Lock()
 
 # Default Modbus settings (will be overridden by robot_config.json if possible)
 MODBUS_SETTINGS = {
@@ -54,54 +57,76 @@ def load_settings():
 load_settings()
 ModbusController.initialize(MODBUS_SETTINGS)
 
+
+def _set_output_state(output_num, value):
+    with _OUTPUT_STATE_LOCK:
+        _OUTPUT_STATES[output_num] = bool(value)
+
+
+def _get_output_state(output_num):
+    with _OUTPUT_STATE_LOCK:
+        return bool(_OUTPUT_STATES[output_num])
+
+
+def _get_all_output_states():
+    with _OUTPUT_STATE_LOCK:
+        return list(_OUTPUT_STATES)
+
+
+def _status_payload(output_num):
+    status = _get_output_state(output_num)
+    return {"success": True, "status": "ON" if status else "OFF", "value": status}
+
+
+def _relay_or_error():
+    relay = ModbusController.get_relay_controller()
+    if relay:
+        return relay, None
+    return None, "Relay controller not initialized; check Modbus port, permissions, and settings"
+
 @app.route('/relay/y0/on', methods=['GET', 'POST'])
 def turn_on_y0():
-    relay = ModbusController.get_relay_controller()
-    if not relay:
-        return jsonify({"success": False, "error": "Relay controller not initialized"}), 500
-    
-    success = relay.write_output(0, True)
-    if success:
+    relay, error = _relay_or_error()
+    if relay is None:
+        return jsonify({"success": False, "error": error}), 500
+
+    if relay.write_output(0, True):
+        _set_output_state(0, True)
         return jsonify({"success": True, "message": "Y0 turned ON"})
     else:
         return jsonify({"success": False, "error": "Failed to turn ON Y0"}), 500
 
 @app.route('/relay/y0/off', methods=['GET', 'POST'])
 def turn_off_y0():
-    relay = ModbusController.get_relay_controller()
-    if not relay:
-        return jsonify({"success": False, "error": "Relay controller not initialized"}), 500
-    
-    success = relay.write_output(0, False)
-    if success:
+    relay, error = _relay_or_error()
+    if relay is None:
+        return jsonify({"success": False, "error": error}), 500
+
+    if relay.write_output(0, False):
+        _set_output_state(0, False)
         return jsonify({"success": True, "message": "Y0 turned OFF"})
     else:
         return jsonify({"success": False, "error": "Failed to turn OFF Y0"}), 500
 
 @app.route('/relay/y0/status', methods=['GET'])
 def get_y0_status():
-    relay = ModbusController.get_relay_controller()
-    if not relay:
-        return jsonify({"success": False, "error": "Relay controller not initialized"}), 500
-    
-    try:
-        status = relay.read_output(0)
-        return jsonify({"success": True, "status": "ON" if status else "OFF", "value": status})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    relay, error = _relay_or_error()
+    if relay is None:
+        return jsonify({"success": False, "error": error}), 500
+
+    return jsonify(_status_payload(0))
 
 @app.route('/relay/status', methods=['GET'])
 def get_all_status():
-    relay = ModbusController.get_relay_controller()
-    if not relay:
-        return jsonify({"success": False, "error": "Relay controller not initialized"}), 500
-    
+    relay, error = _relay_or_error()
+    if relay is None:
+        return jsonify({"success": False, "error": error}), 500
+
     try:
-        outputs = relay.read_all_outputs()
         inputs = relay.read_all_inputs()
         return jsonify({
             "success": True, 
-            "outputs": outputs,
+            "outputs": _get_all_output_states(),
             "inputs": inputs
         })
     except Exception as e:
@@ -109,17 +134,17 @@ def get_all_status():
 
 @app.route('/relay/<int:output_num>/<string:state>', methods=['GET', 'POST'])
 def set_relay_state(output_num, state):
-    relay = ModbusController.get_relay_controller()
-    if not relay:
-        return jsonify({"success": False, "error": "Relay controller not initialized"}), 500
-    
+    relay, error = _relay_or_error()
+    if relay is None:
+        return jsonify({"success": False, "error": error}), 500
+
     if output_num < 0 or output_num > 7:
         return jsonify({"success": False, "error": "Invalid output number (0-7)"}), 400
     
     value = state.lower() in ['on', 'true', '1']
-    success = relay.write_output(output_num, value)
-    
-    if success:
+
+    if relay.write_output(output_num, value):
+        _set_output_state(output_num, value)
         return jsonify({"success": True, "message": f"Y{output_num} turned {'ON' if value else 'OFF'}"})
     else:
         return jsonify({"success": False, "error": f"Failed to set Y{output_num} state"}), 500
@@ -138,5 +163,5 @@ def index():
 
 if __name__ == '__main__':
     # Using port 5003
-    print(f"Starting Relay Control Server on port 5000...")
+    print(f"Starting Relay Control Server on port 5003...")
     app.run(host='0.0.0.0', port=5003, threaded=True)

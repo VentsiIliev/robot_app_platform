@@ -41,3 +41,18 @@ def normalize_degrees(angle: float) -> float:
         value += 360.0
     return value
 
+
+def nearest_axis_equivalent_degrees(reference: float, axis_angle: float) -> float:
+    """Return the 180-degree-equivalent axis angle nearest to reference."""
+    ref = float(reference)
+    candidates = (float(axis_angle), float(axis_angle) + 180.0, float(axis_angle) - 180.0)
+    return min(
+        (unwrap_degrees(ref, candidate) for candidate in candidates),
+        key=lambda candidate: abs(candidate - ref),
+    )
+
+
+def axis_equivalent_shift_degrees(reference: float, current: float) -> float:
+    """Return the constant 180-degree shift that puts current nearest reference."""
+    selected = nearest_axis_equivalent_degrees(float(reference), float(current))
+    return selected - float(current)

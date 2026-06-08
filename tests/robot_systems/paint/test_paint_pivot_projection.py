@@ -50,6 +50,83 @@ class TestPaintPivotProjection(unittest.TestCase):
         self.assertEqual(diagnostics[0]["rotation_delta_applied"], 180.0)
         self.assertEqual(diagnostics[1]["rotation_delta_applied"], 0.0)
 
+    def test_project_paint_motion_geometry_uses_explicit_tcp_anchor_for_pose_xy(self) -> None:
+        config = PaintSimulationConfig(
+            motion_plane="xy_z_rz",
+            translation_axis="x",
+            paint_side="negative",
+            translation_direction="forward",
+        )
+        path = [
+            [0.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+            [10.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+        ]
+        pivot_pose = [100.0, 200.0, 300.0, 10.0, 20.0, 0.0]
+
+        projected, snapshots, _ = project_paint_motion_geometry(
+            path,
+            pivot_pose,
+            config,
+            anchor_xy=(2.0, 0.0),
+        )
+
+        np.testing.assert_allclose(projected[0][:2], [98.0, 200.0], atol=1e-6)
+        np.testing.assert_allclose(projected[1][:2], [108.0, 200.0], atol=1e-6)
+        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 200.0], [90.0, 200.0]]), atol=1e-6)
+
+    def test_project_paint_motion_geometry_applies_source_rotation_about_tcp_anchor(self) -> None:
+        config = PaintSimulationConfig(
+            motion_plane="xz_y_ry",
+            translation_axis="x",
+            paint_side="positive",
+            translation_direction="forward",
+        )
+        path = [
+            [-20.0, 34.0, 5.0, 1.0, 2.0, 3.0],
+            [-65.0, 29.0, 5.0, 1.0, 2.0, 3.0],
+            [-60.0, -5.0, 5.0, 1.0, 2.0, 3.0],
+            [25.0, -12.0, 5.0, 1.0, 2.0, 3.0],
+            [30.0, 30.0, 5.0, 1.0, 2.0, 3.0],
+            [-20.0, 34.0, 5.0, 1.0, 2.0, 3.0],
+        ]
+        pivot_pose = [-80.0, 200.0, 335.0, -91.0, 0.0, -0.05]
+
+        unrotated, _, _ = project_paint_motion_geometry(
+            path,
+            pivot_pose,
+            config,
+            anchor_xy=(-10.0, 31.0),
+        )
+        rotated, snapshots, _ = project_paint_motion_geometry(
+            path,
+            pivot_pose,
+            config,
+            anchor_xy=(-10.0, 31.0),
+            source_rotation_deg=-12.0,
+        )
+
+        self.assertNotAlmostEqual(unrotated[0][4], rotated[0][4], places=3)
+        np.testing.assert_allclose(snapshots[0][0], np.array([-80.0, 335.0]), atol=1e-6)
+
+    def test_project_paint_motion_geometry_xz_plane_uses_opposed_contact_heading(self) -> None:
+        config = PaintSimulationConfig(
+            motion_plane="xz_y_ry",
+            translation_axis="x",
+            paint_side="positive",
+            translation_direction="forward",
+        )
+        path = [
+            [0.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+            [10.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+        ]
+        pivot_pose = [100.0, 200.0, 300.0, -91.0, 0.0, -0.05]
+
+        projected, snapshots, diagnostics = project_paint_motion_geometry(path, pivot_pose, config)
+
+        np.testing.assert_allclose(projected[0], [95.0, 200.0, 300.0, -91.0, 180.0, -0.05], atol=1e-6)
+        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 300.0], [90.0, 300.0]]), atol=1e-6)
+        self.assertEqual(diagnostics[0]["rotation_delta_applied"], 180.0)
+
     def test_project_paint_motion_geometry_for_single_point_returns_snapshot_without_diagnostics(self) -> None:
         config = PaintSimulationConfig(motion_plane="xz_y_ry")
         path = [[7.0, 9.0, 11.0, 1.0, 2.0, 3.0]]
