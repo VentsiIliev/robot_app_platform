@@ -15,6 +15,7 @@ from src.robot_systems.paint.processes.paint.align import (
 from src.robot_systems.paint.processes.paint.align import map_raw_workpiece_mm_to_image
 
 _logger = logging.getLogger(__name__)
+_TEMPORARILY_DISABLE_DXF_MATCH_BRANCH_FOR_CONTOUR_DEBUG = True
 
 def contour_to_workpiece_raw(
     contour: np.ndarray,
@@ -94,7 +95,7 @@ class PaintWorkpiecePreparationService:
             return None
 
         dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
-        if dxf_path:
+        if dxf_path and not _TEMPORARILY_DISABLE_DXF_MATCH_BRANCH_FOR_CONTOUR_DEBUG:
             image_h, image_w = self._resolve_frame_size(frame)
             _logger.info(
                 "[PREP] branch=dxf workpiece_id=%s dxf_path=%s frame_size=(%.1f, %.1f) strategy=%s max_scale_deviation=%.6f raw=%s",
@@ -130,6 +131,10 @@ class PaintWorkpiecePreparationService:
             aligned["dxfPath"] = dxf_path
             aligned.setdefault("sprayPattern", {"Contour": [], "Fill": []})
             return aligned
+        if dxf_path:
+            _logger.info(
+                "[PREP] branch=dxf disabled for temporary camera-contour debug; using saved contour or captured fallback"
+            )
 
         if matched_raw.get("contour"):
             _logger.info(

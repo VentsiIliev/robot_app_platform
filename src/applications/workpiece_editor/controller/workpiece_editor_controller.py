@@ -9,7 +9,7 @@ import cv2
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog, QTabWidget
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
@@ -21,6 +21,7 @@ from src.applications.base.styled_message_box import show_warning, show_info, sh
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
 _DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
+_TEMPORARILY_DISABLE_DXF_CAPTURE_BRANCH_FOR_CONTOUR_DEBUG = True
 
 
 class _Bridge(QObject):
@@ -841,6 +842,8 @@ class WorkpieceEditorController(IApplicationController):
         if ok:
             try:
                 raw_paths = self._model.get_last_raw_preview_paths()
+                raw_pixel_paths = self._model.get_last_raw_pixel_preview_paths()
+                raw_homography_paths = self._model.get_last_raw_homography_preview_paths()
                 prepared_paths = self._model.get_last_prepared_preview_paths()
                 curve_paths = self._model.get_last_curve_preview_paths()
                 sampled_paths = self._model.get_last_sampled_preview_paths()
@@ -849,6 +852,8 @@ class WorkpieceEditorController(IApplicationController):
                 if raw_paths or sampled_paths:
                     self._show_interpolation_plot(
                         raw_paths,
+                        raw_pixel_paths,
+                        raw_homography_paths,
                         prepared_paths,
                         curve_paths,
                         sampled_paths,
@@ -861,15 +866,21 @@ class WorkpieceEditorController(IApplicationController):
     def _show_interpolation_plot(
             self,
             raw_paths: list[list[list[float]]],
+            raw_pixel_paths: list[list[list[float]]],
+            raw_homography_paths: list[list[list[float]]],
             prepared_paths: list[list[list[float]]],
             curve_paths: list[list[list[float]]],
             sampled_paths: list[list[list[float]]],
             execution_paths: list[list[list[float]]],
             camera_preview_paths: dict[str, list] | None = None,
     ) -> None:
-        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+            plot_pixel_to_mm_debug,
+            plot_trajectory_debug,
+        )
 
-        image_path = plot_trajectory_debug(
+        raw_mm_image_path = plot_pixel_to_mm_debug(raw_paths, raw_pixel_paths, raw_homography_paths)
+        prepared_image_path = plot_trajectory_debug(
             raw_paths,
             curve_paths,
             sampled_paths,
@@ -877,7 +888,7 @@ class WorkpieceEditorController(IApplicationController):
             prepared_paths=prepared_paths,
             camera_preview_paths=camera_preview_paths,
         )
-        if not image_path:
+        if not raw_mm_image_path and not prepared_image_path:
             return
 
         dialog = QDialog(self._view)
@@ -885,14 +896,23 @@ class WorkpieceEditorController(IApplicationController):
         dialog.resize(1100, 800)
 
         layout = QVBoxLayout(dialog)
-        scroll = QScrollArea(dialog)
-        image_label = QLabel(scroll)
-        pixmap = QPixmap(image_path)
-        image_label.setPixmap(pixmap)
-        image_label.setScaledContents(False)
-        scroll.setWidget(image_label)
-        scroll.setWidgetResizable(True)
-        layout.addWidget(scroll)
+        tabs = QTabWidget(dialog)
+
+        def _add_image_tab(title: str, image_path: str | None) -> None:
+            if not image_path:
+                return
+            scroll = QScrollArea(tabs)
+            image_label = QLabel(scroll)
+            pixmap = QPixmap(image_path)
+            image_label.setPixmap(pixmap)
+            image_label.setScaledContents(False)
+            scroll.setWidget(image_label)
+            scroll.setWidgetResizable(True)
+            tabs.addTab(scroll, title)
+
+        _add_image_tab("Pixel to mm only", raw_mm_image_path)
+        _add_image_tab("Prepared paths", prepared_image_path)
+        layout.addWidget(tabs)
 
         button_row = QHBoxLayout()
         cancel_button = QPushButton("Cancel")
@@ -1127,6 +1147,11 @@ class WorkpieceEditorController(IApplicationController):
 
             matched_raw = copy.deepcopy(payload.get("raw") or {})
             dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
+            if dxf_path and _TEMPORARILY_DISABLE_DXF_CAPTURE_BRANCH_FOR_CONTOUR_DEBUG:
+                self._logger.info(
+                    "Capture: ignoring matched dxfPath for temporary camera-contour debug"
+                )
+                dxf_path = ""
             if not dxf_path:
                 if not matched_raw.get("contour"):
                     return None

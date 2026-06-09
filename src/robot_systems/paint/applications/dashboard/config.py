@@ -17,5 +17,5 @@ PAINT_DASHBOARD_CARDS: list[CardConfig] = [
 
 PAINT_DASHBOARD_ACTIONS: list[ActionButtonConfig] = [
     ActionButtonConfig(action_id="reset_errors", label="Reset Errors", row=1, col=0),
+    ActionButtonConfig(action_id="debug_contour_transform", label="Contour Transform", row=1, col=1),
 ]
-

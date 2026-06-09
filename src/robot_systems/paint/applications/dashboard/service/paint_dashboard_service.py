@@ -1,16 +1,36 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
+import numpy as np
+
 from src.shared_contracts.events.process_events import ProcessState
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
+    ContourTransformDebugResult,
     IPaintDashboardService,
 )
 
 
 class PaintDashboardService(IPaintDashboardService):
 
-    def __init__(self, process) -> None:
+    def __init__(
+        self,
+        process,
+        *,
+        capture_snapshot_service=None,
+        path_preparation_service=None,
+        resolver_getter=None,
+        target_point_name: str = "camera",
+        frame_name: str = "calibration",
+    ) -> None:
         self._process = process
+        self._capture_snapshot_service = capture_snapshot_service
+        self._path_preparation_service = path_preparation_service
+        self._resolver_getter = resolver_getter
+        self._target_point_name = str(target_point_name or "camera").strip().lower()
+        self._frame_name = str(frame_name or "calibration").strip().lower()
 
     def get_process_id(self) -> str:
         return str(self._process.process_id)
@@ -44,6 +64,129 @@ class PaintDashboardService(IPaintDashboardService):
     def reset_errors(self) -> None:
         self._process.reset_errors()
 
+    def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
+        if self._capture_snapshot_service is None:
+            return ContourTransformDebugResult(False, "Capture snapshot service is not available.")
+
+        snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_dashboard")
+        largest = self._pick_largest_contour(snapshot.contours)
+        if largest is None:
+            return ContourTransformDebugResult(False, "No usable contour detected.")
+
+        try:
+            raw_pixel_path, camera_path, homography_path = self._transform_like_pick_target(largest)
+        except Exception as exc:
+            return ContourTransformDebugResult(False, f"Failed to transform latest contour: {exc}")
+
+        try:
+            from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+                plot_pixel_to_mm_debug,
+            )
+
+            image_path = plot_pixel_to_mm_debug(
+                [camera_path],
+                raw_pixel_paths=[raw_pixel_path],
+                homography_paths=[homography_path],
+                save_dir=self._debug_plot_dir(),
+            )
+        except Exception as exc:
+            return ContourTransformDebugResult(False, f"Failed to create contour transform plot: {exc}")
+
+        if not image_path:
+            return ContourTransformDebugResult(False, "Contour transform plot was not created.")
+
+        return ContourTransformDebugResult(
+            True,
+            f"Saved contour transform debug plot to {image_path}",
+            image_path,
+        )
+
+    def _transform_like_pick_target(self, contour: np.ndarray) -> tuple[list[list[float]], list[list[float]], list[list[float]]]:
+        resolver = self._resolver_getter() if callable(self._resolver_getter) else None
+        if resolver is None:
+            raise RuntimeError("Vision target resolver is not available.")
+
+        from src.engine.robot.targeting import VisionPoseRequest
+
+        target_point = resolver.registry.by_name(self._target_point_name)
+        points = np.asarray(contour, dtype=float).reshape(-1, 2)
+        raw_pixel_path: list[list[float]] = []
+        camera_path: list[list[float]] = []
+        homography_path: list[list[float]] = []
+
+        for px, py in points:
+            raw_pixel_path.append([float(px), float(py)])
+            result = resolver.resolve(
+                VisionPoseRequest(
+                    x_pixels=float(px),
+                    y_pixels=float(py),
+                    z_mm=0.0,
+                    rz_degrees=0.0,
+                    rx_degrees=180.0,
+                    ry_degrees=0.0,
+                ),
+                target_point,
+                frame=self._frame_name,
+            )
+            camera_path.append([
+                float(result.final_xy[0]),
+                float(result.final_xy[1]),
+                float(result.z),
+                float(result.rx),
+                float(result.ry),
+                float(result.rz),
+            ])
+
+        homography_xy = self._homography_only_xy(resolver, points)
+        for x, y in homography_xy:
+            homography_path.append([float(x), float(y), 0.0, 180.0, 0.0, 0.0])
+
+        return raw_pixel_path, camera_path, homography_path
+
+    @staticmethod
+    def _homography_only_xy(resolver, points: np.ndarray) -> np.ndarray:
+        base_transformer = getattr(resolver, "_base", None)
+        model = getattr(base_transformer, "_model", None)
+        homography_matrix = getattr(model, "homography_matrix", None)
+        if homography_matrix is None:
+            return np.empty((0, 2), dtype=float)
+
+        import cv2
+
+        pts = np.asarray(points, dtype=np.float32).reshape(-1, 1, 2)
+        return cv2.perspectiveTransform(
+            pts,
+            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
+        ).reshape(-1, 2)
+
+    @staticmethod
+    def _pick_largest_contour(contours) -> np.ndarray | None:
+        best = None
+        best_area = 0.0
+        for contour in contours or []:
+            try:
+                points = np.asarray(contour, dtype=float).reshape(-1, 2)
+            except Exception:
+                continue
+            if len(points) < 3:
+                continue
+            area = abs(PaintDashboardService._polygon_area(points))
+            if area > best_area:
+                best_area = area
+                best = points
+        return best
+
+    @staticmethod
+    def _polygon_area(points: np.ndarray) -> float:
+        x = points[:, 0]
+        y = points[:, 1]
+        return float(0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+    @staticmethod
+    def _debug_plot_dir() -> str:
+        src_root = Path(__file__).resolve().parents[5]
+        return os.path.normpath(str(src_root / "bootstrap" / "debug_plots"))
+
     @staticmethod
     def _active_job_label(process_state: str) -> str:
         if process_state == ProcessState.RUNNING.value:
@@ -61,4 +204,3 @@ class PaintDashboardService(IPaintDashboardService):
         return [
             f"Paint process state: {process_state}",
         ]
-

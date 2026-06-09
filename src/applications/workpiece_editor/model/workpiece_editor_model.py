@@ -34,6 +34,12 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_raw_preview_paths(self) -> list:
         return self._service.get_last_raw_preview_paths()
 
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        return self._service.get_last_raw_pixel_preview_paths()
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        return self._service.get_last_raw_homography_preview_paths()
+
     def get_last_prepared_preview_paths(self) -> list:
         return self._service.get_last_prepared_preview_paths()
 

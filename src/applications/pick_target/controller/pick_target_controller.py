@@ -287,6 +287,9 @@ class PickTargetController(IApplicationController):
         # Also capture full contour trajectories (all contour points in robot space)
         try:
             self._captured_trajectory = self._model.capture_contour_trajectory()
+            debug_plot = self._model.save_contour_transform_debug_plot()
+            if debug_plot:
+                self._view.append_log(f"[PLOT]   Saved contour transform plot: {debug_plot}")
         except Exception as exc:
             self._captured_trajectory = []
             self._view.append_log(f"[WARN] Trajectory capture failed: {exc}")

@@ -86,6 +86,12 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
     def get_last_raw_preview_paths(self) -> list:
         return []
 
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        return []
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        return []
+
     def get_last_prepared_preview_paths(self) -> list:
         return []
 

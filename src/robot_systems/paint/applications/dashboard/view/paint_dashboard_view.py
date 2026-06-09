@@ -1,7 +1,16 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import (
+    QDialog,
+    QLabel,
+    QMessageBox,
+    QScrollArea,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
@@ -102,6 +111,42 @@ class PaintDashboardView(IApplicationView):
     def set_pause_label(self, text: str) -> None:
         self._dashboard.set_pause_text(text)
 
+    def set_action_enabled(self, action_id: str, enabled: bool) -> None:
+        self._dashboard.set_action_button_enabled(action_id, enabled)
+
+    def show_info(self, title: str, message: str) -> None:
+        QMessageBox.information(self, title, message)
+
+    def show_warning(self, title: str, message: str) -> None:
+        QMessageBox.warning(self, title, message)
+
+    def show_debug_plot(self, title: str, image_path: str, message: str = "") -> None:
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
+            self.show_warning(title, f"Could not load plot image:\n{image_path}")
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(1200, 800)
+
+        layout = QVBoxLayout(dialog)
+        if message:
+            message_label = QLabel(message)
+            message_label.setWordWrap(True)
+            layout.addWidget(message_label)
+
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        image_label.setPixmap(pixmap)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(image_label)
+        layout.addWidget(scroll, 1)
+
+        dialog.exec()
+
     def apply_dashboard_state(self, state) -> None:
         self.set_state(state.process_state)
         self.set_mode(state.mode_label)
@@ -114,4 +159,3 @@ class PaintDashboardView(IApplicationView):
 
     def clean_up(self) -> None:
         pass
-

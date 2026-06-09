@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.applications.base.i_application_model import IApplicationModel
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
+    ContourTransformDebugResult,
     IPaintDashboardService,
 )
 
@@ -37,3 +38,5 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
+        return self._service.capture_latest_contour_transform_debug()

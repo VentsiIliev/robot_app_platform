@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 import logging
 
@@ -21,6 +21,7 @@ from src.engine.robot.path_preparation.geometry import (
     compute_pickup_rz_from_robot_contour_with_direction,
     has_valid_contour,
     rebuild_pose_path_from_xy,
+    _orient_contour_like_original,
 )
 from src.engine.robot.path_preparation.i_workpiece_path_preparation_service import IWorkpiecePathPreparationService
 _EXECUTION_INTERPOLATION_SPACING_MM = 10.0
@@ -54,6 +55,8 @@ class WorkpieceExecutionPlan:
     sampled_paths: list[list[list[float]]]
     execution_jobs: list[dict]
     total_spline_pts: int
+    raw_pixel_paths: list[list[list[float]]] = field(default_factory=list)
+    raw_homography_paths: list[list[list[float]]] = field(default_factory=list)
 
     def execution_paths(self) -> list[list[list[float]]]:
         return [
@@ -200,6 +203,123 @@ def _save_contour_reordering_debug_plot(
         _logger.info("[EXECUTE] Saved contour reorder debug plot to: %s", path)
     except Exception:
         _logger.debug("[EXECUTE] Failed to save contour reorder debug plot", exc_info=True)
+
+
+def _save_contour_canonicalization_steps_debug_plot(
+    original_points: np.ndarray,
+    pickup_point: tuple[float, float] | None = None,
+    *,
+    debug_dir: str = "/home/ilv/Desktop/robot_app_platform/src/bootstrap/debug_plots",
+) -> None:
+    """Save each contour canonicalization step used before pixel-to-mm conversion."""
+    try:
+        original = np.asarray(original_points, dtype=np.float64)
+        if original.ndim != 2 or original.shape[1] < 2 or len(original) < 2:
+            return
+
+        stages: list[tuple[str, np.ndarray]] = [("0 raw input", original[:, :2].copy())]
+        contour = original[:, :2].copy()
+
+        removed_close = False
+        if len(contour) >= 2 and np.linalg.norm(contour[0] - contour[-1]) <= 1e-6:
+            contour = contour[:-1]
+            removed_close = True
+        stages.append(("1 remove duplicate close" if removed_close else "1 no duplicate close", contour.copy()))
+
+        if len(contour) < 3:
+            return
+
+        original_open = contour.copy()
+        signed_area = 0.5 * float(
+            np.dot(contour[:, 0], np.roll(contour[:, 1], -1))
+            - np.dot(contour[:, 1], np.roll(contour[:, 0], -1))
+        )
+        reversed_winding = signed_area > 0.0
+        if reversed_winding:
+            contour = contour[::-1].copy()
+        stages.append(("2 reverse winding" if reversed_winding else "2 keep winding", contour.copy()))
+
+        start_index = int(np.lexsort((contour[:, 0], contour[:, 1]))[0])
+        contour = np.roll(contour, -start_index, axis=0)
+        stages.append((f"3 roll start idx {start_index}", contour.copy()))
+
+        oriented = _orient_contour_like_original(contour, original_open)
+        orientation_changed = (
+            len(oriented) == len(contour)
+            and np.linalg.norm(oriented[1] - contour[1]) > 1e-6
+        )
+        contour = oriented
+        stages.append(("4 orient like original" if orientation_changed else "4 keep orientation", contour.copy()))
+
+        closed = False
+        if len(contour) >= 3 and np.linalg.norm(contour[0] - contour[-1]) > 1e-9:
+            contour = np.vstack([contour, contour[:1]])
+            closed = True
+        stages.append(("5 explicit close" if closed else "5 already closed", contour.copy()))
+
+        all_points = np.vstack([stage[:, :2] for _, stage in stages if len(stage)])
+        min_xy = np.min(all_points, axis=0)
+        max_xy = np.max(all_points, axis=0)
+        span = np.maximum(max_xy - min_xy, np.array([1.0, 1.0], dtype=np.float64))
+
+        cols = 3
+        rows = int(np.ceil(len(stages) / cols))
+        cell_w = 420
+        cell_h = 340
+        pad = 34.0
+        canvas = np.full((rows * cell_h, cols * cell_w, 3), 255, dtype=np.uint8)
+
+        def _to_canvas(points: np.ndarray, col: int, row: int) -> np.ndarray:
+            pts = np.asarray(points[:, :2], dtype=np.float64)
+            scale = min((cell_w - 2.0 * pad) / float(span[0]), (cell_h - 2.0 * pad) / float(span[1]))
+            mapped = (pts - min_xy) * scale + pad
+            mapped[:, 1] = (span[1] * scale + 2.0 * pad) - mapped[:, 1]
+            mapped[:, 0] += col * cell_w
+            mapped[:, 1] += row * cell_h
+            return np.rint(mapped).astype(np.int32).reshape(-1, 1, 2)
+
+        colors = [
+            (190, 30, 30),
+            (30, 130, 30),
+            (30, 80, 200),
+            (200, 110, 20),
+            (150, 40, 180),
+            (30, 160, 180),
+        ]
+        for index, (title, points) in enumerate(stages):
+            row = index // cols
+            col = index % cols
+            x0 = col * cell_w
+            y0 = row * cell_h
+            cv2.rectangle(canvas, (x0, y0), (x0 + cell_w - 1, y0 + cell_h - 1), (220, 220, 220), 1)
+            cv2.putText(canvas, title, (x0 + 12, y0 + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (20, 20, 20), 1, cv2.LINE_AA)
+            cv2.putText(
+                canvas,
+                f"pts={len(points)} bbox=({float(np.ptp(points[:, 0])):.1f}, {float(np.ptp(points[:, 1])):.1f})",
+                (x0 + 12, y0 + 48),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.48,
+                (80, 80, 80),
+                1,
+                cv2.LINE_AA,
+            )
+            if len(points) < 2:
+                continue
+            canvas_points = _to_canvas(points, col, row)
+            cv2.polylines(canvas, [canvas_points], False, colors[index % len(colors)], 2)
+            cv2.circle(canvas, tuple(canvas_points[0, 0]), 6, (0, 160, 0), -1)
+            cv2.circle(canvas, tuple(canvas_points[-1, 0]), 6, (0, 0, 220), -1)
+            if pickup_point is not None:
+                pickup_canvas = _to_canvas(np.asarray([[float(pickup_point[0]), float(pickup_point[1])]], dtype=np.float64), col, row)
+                cv2.drawMarker(canvas, tuple(pickup_canvas[0, 0]), (200, 0, 200), cv2.MARKER_CROSS, 15, 2)
+
+        os.makedirs(debug_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(debug_dir, f"contour_canonicalization_steps_{timestamp}.png")
+        cv2.imwrite(path, canvas)
+        _logger.info("[EXECUTE] Saved contour canonicalization step plot to: %s", path)
+    except Exception:
+        _logger.debug("[EXECUTE] Failed to save contour canonicalization step plot", exc_info=True)
 
 
 def _auto_input_densify_spacing(path_pts: list[list[float]], interpolation_spacing_mm: float) -> float:
@@ -363,6 +483,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 contour_arr = np.array(contour_arr, dtype=np.float32)
             if contour_arr.size != 0:
                 raw_pts_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
+                if _CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3:
+                    _save_contour_canonicalization_steps_debug_plot(raw_pts_px, pickup_px)
                 pts_px = (
                     canonicalize_closed_contour_points(raw_pts_px)
                     if _CANONICALIZE_WORKPIECE_LAYER_CONTOUR
@@ -378,7 +500,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         pickup_rz_source_contour = [list(pt) for pt in raw_robot_pts]
                 robot_pts = self._transform_to_robot(pts_px, settings)
                 if robot_pts:
-                    robot_paths.append((robot_pts, settings, "Workpiece"))
+                    robot_paths.append((robot_pts, settings, "Workpiece", pts_px))
         else:
             self._logger.debug(f"USING SPRAY PATTERN")
             for pattern_type in ("Contour", "Fill"):
@@ -394,7 +516,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     self._logger.info("[EXECUTE] %s[%d]: %d pixel points | settings=%s", pattern_type, i, len(pts_px), settings)
                     robot_pts = self._transform_to_robot(pts_px, settings)
                     if robot_pts:
-                        robot_paths.append((robot_pts, settings, pattern_type))
+                        robot_paths.append((robot_pts, settings, pattern_type, pts_px))
 
         if not robot_paths:
             raise ValueError("No executable paths after transformation")
@@ -402,18 +524,24 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         total_spline_pts = 0
         sampled_paths: list[list[list[float]]] = []
         raw_paths: list[list[list[float]]] = []
+        raw_pixel_paths: list[list[list[float]]] = []
+        raw_homography_paths: list[list[list[float]]] = []
         prepared_paths: list[list[list[float]]] = []
         curve_paths: list[list[list[float]]] = []
         execution_jobs: list[dict] = []
 
-        for path_pts, settings, pattern_type in robot_paths:
+        for path_pts, settings, pattern_type, pts_px in robot_paths:
             raw_paths.append([list(pt) for pt in path_pts])
+            raw_pixel_paths.append([
+                [float(point[0]), float(point[1])]
+                for point in np.asarray(pts_px, dtype=float).reshape(-1, 2)
+            ])
+            raw_homography_paths.append(self._transform_to_robot_homography_only(pts_px, settings))
             vel = _safe_float(settings.get("velocity"), 60.0)
             acc = _safe_float(settings.get("acceleration"), 30.0)
             preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm = _resolve_segment_interpolation_settings(settings)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
             input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
-            source_has_dxf = bool(str(merged.get("dxfPath", "") or "").strip())
             interpolation_method = "linear" if _is_explicitly_closed_path(path_pts) else "pchip"
             if interpolation_method == "linear":
                 self._logger.info(
@@ -422,11 +550,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     len(path_pts),
                 )
 
-            if source_has_dxf or _TEMPORARILY_SKIP_CONTOUR_INTERPOLATION:
-                reason = "DXF-backed path" if source_has_dxf else "temporary debug bypass"
+            if _TEMPORARILY_SKIP_CONTOUR_INTERPOLATION:
                 self._logger.info(
-                    "[EXECUTE] Skipping contour interpolation for %s: pattern=%s pts=%d",
-                    reason,
+                    "[EXECUTE] Skipping contour interpolation for temporary debug bypass: pattern=%s pts=%d",
                     pattern_type,
                     len(path_pts),
                 )
@@ -539,7 +665,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "acc": acc,
                     "pattern_type": pattern_type,
                     "use_workpiece_layer": bool(use_workpiece_layer),
-                    "source_has_dxf": source_has_dxf,
                     "workpiece_height_mm": float(workpiece_height_mm),
                     "pivot_offset_mm": float(segment_pivot_offset_mm),
                     "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
@@ -563,7 +688,49 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             sampled_paths=sampled_paths,
             execution_jobs=execution_jobs,
             total_spline_pts=total_spline_pts,
+            raw_pixel_paths=raw_pixel_paths,
+            raw_homography_paths=raw_homography_paths,
         )
+
+    def _transform_to_robot_homography_only(self, pts_px: np.ndarray, settings: dict) -> list:
+        """Return pixel-to-robot points using only the base homography, no residual warp."""
+        try:
+            defaults = self._segment_config.schema.get_defaults()
+            spray_height = float(str(settings.get("spraying_height", defaults.get("spraying_height", "0"))).replace(",", ""))
+            base_position = self._resolve_base_position()
+            base_z = base_position[2] + spray_height if base_position is not None else self._z_min + spray_height
+            rz_offset = float(settings.get("rz_angle", defaults.get("rz_angle", "0")))
+        except (ValueError, TypeError):
+            return []
+
+        transformer = self._current_transformer()
+        resolver = self._current_resolver()
+        base_transformer = getattr(resolver, "_base", None) if resolver is not None else transformer
+        model = getattr(base_transformer, "_model", None)
+        homography_matrix = getattr(model, "homography_matrix", None)
+        if homography_matrix is None:
+            return []
+
+        pts = np.asarray(pts_px, dtype=np.float64).reshape(-1, 2)
+        workpiece_height_mm = _safe_float(settings.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
+        if callable(self._pixel_height_compensation_fn) and abs(workpiece_height_mm) > 1e-9:
+            try:
+                compensation_dx_px, compensation_dy_px = self._pixel_height_compensation_fn(workpiece_height_mm)
+                pts = pts.copy()
+                pts[:, 0] -= float(compensation_dx_px)
+                pts[:, 1] -= float(compensation_dy_px)
+            except Exception:
+                self._logger.debug("[EXECUTE] Failed to apply pixel height compensation for homography-only debug", exc_info=True)
+
+        xy = cv2.perspectiveTransform(
+            pts.astype(np.float32).reshape(-1, 1, 2),
+            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
+        ).reshape(-1, 2)
+        rx, ry = _base_orientation_xy(base_position)
+        return [
+            [float(x), float(y), float(base_z), float(rx), float(ry), float(rz_offset)]
+            for x, y in xy
+        ]
 
     def _transform_to_robot(self, pts_px: np.ndarray, settings: dict) -> list:
         try:

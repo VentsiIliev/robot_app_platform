@@ -254,6 +254,18 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return []
         return self._clone_paths(execution_plan.raw_paths)
 
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_pixel_paths)
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_homography_paths)
+
     def get_last_prepared_preview_paths(self) -> list:
         execution_plan = self._active_process_plan()
         if execution_plan is None:

@@ -303,7 +303,14 @@ class PaintRobotSystem(BaseRobotSystem):
             service_checker=self.health_registry.check,
         )
         self.register_managed_resource(self._main_process)
-        self._dashboard_service = PaintDashboardService(self._main_process)
+        self._dashboard_service = PaintDashboardService(
+            self._main_process,
+            capture_snapshot_service=self._paint_capture_snapshot_service,
+            path_preparation_service=self._paint_path_preparation_service,
+            resolver_getter=lambda: self.get_shared_vision_resolver()[1],
+            target_point_name="camera",
+            frame_name="calibration",
+        )
 
         self._robot.enable_robot()
 

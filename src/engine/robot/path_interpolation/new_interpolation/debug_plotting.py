@@ -14,6 +14,119 @@ _PIVOT_DETAIL_SNAPSHOT_LIMIT = 8
 _PIVOT_PLOT_DPI = 110
 
 
+def plot_pixel_to_mm_debug(
+    raw_paths,
+    raw_pixel_paths=None,
+    homography_paths=None,
+    save_dir="debug_plots",
+):
+    """Plot robot-mm paths immediately after pixel-to-mm conversion."""
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        fig, (ax_px, ax_xy, ax_xz, ax_counts) = plt.subplots(1, 4, figsize=(22, 5.5))
+
+        ax_px.set_title("Input Pixel Contour")
+        ax_px.set_xlabel("Image X (px)")
+        ax_px.set_ylabel("Image Y (px)")
+        ax_px.grid(True)
+
+        ax_xy.set_title("Pixel To MM Only - XY")
+        ax_xy.set_xlabel("X (mm)")
+        ax_xy.set_ylabel("Y (mm)")
+        ax_xy.grid(True)
+
+        ax_xz.set_title("Pixel To MM Only - XZ")
+        ax_xz.set_xlabel("X (mm)")
+        ax_xz.set_ylabel("Z (mm)")
+        ax_xz.grid(True)
+
+        labels = []
+        counts = []
+        raw_pixel_paths = raw_pixel_paths or []
+        homography_paths = homography_paths or []
+        for index, path in enumerate(raw_paths or []):
+            arr = np.asarray(path, dtype=float)
+            if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] < 3:
+                continue
+
+            label = f"Raw mm {index + 1}"
+            labels.append(f"Path {index + 1}")
+            counts.append(len(arr))
+
+            ax_xy.plot(arr[:, 0], arr[:, 1], "o-", markersize=3, linewidth=1.5, label=label)
+            ax_xy.scatter(arr[0, 0], arr[0, 1], s=70, color="green", edgecolors="black", zorder=5, label="start" if index == 0 else "")
+            ax_xy.scatter(arr[-1, 0], arr[-1, 1], s=70, color="red", edgecolors="black", zorder=5, label="end" if index == 0 else "")
+
+            ax_xz.plot(arr[:, 0], arr[:, 2], "o-", markersize=3, linewidth=1.5, label=label)
+            ax_xz.scatter(arr[0, 0], arr[0, 2], s=70, color="green", edgecolors="black", zorder=5, label="start" if index == 0 else "")
+            ax_xz.scatter(arr[-1, 0], arr[-1, 2], s=70, color="red", edgecolors="black", zorder=5, label="end" if index == 0 else "")
+
+            if index < len(homography_paths):
+                hom_arr = np.asarray(homography_paths[index], dtype=float)
+                if hom_arr.ndim == 2 and hom_arr.shape[0] > 0 and hom_arr.shape[1] >= 3:
+                    ax_xy.plot(
+                        hom_arr[:, 0],
+                        hom_arr[:, 1],
+                        "--",
+                        color="black",
+                        linewidth=1.4,
+                        alpha=0.8,
+                        label=f"Homography only {index + 1}",
+                    )
+                    ax_xz.plot(
+                        hom_arr[:, 0],
+                        hom_arr[:, 2],
+                        "--",
+                        color="black",
+                        linewidth=1.4,
+                        alpha=0.8,
+                        label=f"Homography only {index + 1}",
+                    )
+
+            if index < len(raw_pixel_paths):
+                px_arr = np.asarray(raw_pixel_paths[index], dtype=float)
+                if px_arr.ndim == 2 and px_arr.shape[0] > 0 and px_arr.shape[1] >= 2:
+                    ax_px.plot(px_arr[:, 0], px_arr[:, 1], "o-", markersize=3, linewidth=1.5, label=f"Pixels {index + 1}")
+                    ax_px.scatter(px_arr[0, 0], px_arr[0, 1], s=70, color="green", edgecolors="black", zorder=5, label="start" if index == 0 else "")
+                    ax_px.scatter(px_arr[-1, 0], px_arr[-1, 1], s=70, color="red", edgecolors="black", zorder=5, label="end" if index == 0 else "")
+
+        ax_px.axis("equal")
+        ax_px.invert_yaxis()
+        ax_xy.axis("equal")
+        ax_xz.axis("equal")
+        ax_px.legend()
+        ax_xy.legend()
+        ax_xz.legend()
+
+        ax_counts.set_title("Converted Point Count")
+        ax_counts.set_ylabel("Points")
+        ax_counts.grid(True, axis="y")
+        if counts:
+            x = np.arange(len(labels))
+            ax_counts.bar(x, counts, color="tab:blue", alpha=0.8)
+            ax_counts.set_xticks(x)
+            ax_counts.set_xticklabels(labels)
+            for i, count in enumerate(counts):
+                ax_counts.text(i, count, str(count), ha="center", va="bottom", fontsize=9)
+        else:
+            ax_counts.text(0.5, 0.5, "No raw robot-mm paths", ha="center", va="center", transform=ax_counts.transAxes)
+
+        plt.tight_layout()
+        filename = f"pixel_to_mm_debug_{timestamp}.png"
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=150, bbox_inches="tight")
+        print(f"✓ Saved pixel-to-mm debug plot to: {filepath}")
+        plt.close(fig)
+        return filepath
+    except Exception as e:
+        print(f"⚠️ Error creating pixel-to-mm plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def _execution_rotation_change_mask(execution_arr: np.ndarray, threshold_deg: float = 1e-6) -> np.ndarray:
     if execution_arr.ndim != 2 or execution_arr.shape[0] < 2 or execution_arr.shape[1] < 6:
         return np.zeros(execution_arr.shape[0] if execution_arr.ndim == 2 else 0, dtype=bool)

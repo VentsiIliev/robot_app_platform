@@ -10,7 +10,7 @@
   "Threshold pickup area": 150,
   "Epsilon": 0.001,
   "Min contour area": 1000.0,
-  "Max contour area": 10000000.0,
+  "Max contour area": 10010000.0,
   "Preprocessing": {
     "Gaussian blur": true,
     "Blur kernel size": 5,
@@ -19,7 +19,7 @@
     "Contour smoothing strength": 1.0,
     "Dilate enabled": true,
     "Dilate kernel size": 3,
-    "Dilate iterations": 2,
+    "Dilate iterations": 3,
     "Erode enabled": true,
     "Erode kernel size": 3,
     "Erode iterations": 2
