@@ -64,10 +64,6 @@ class StubPickTargetService(IPickTargetService):
         pts = np.array([[-250, 420], [-200, 420], [-200, 370], [-250, 370], [-250, 420]], dtype=np.float32)
         return [pts]
 
-    def save_contour_transform_debug_plot(self) -> Optional[str]:
-        _logger.info("[Stub] save_contour_transform_debug_plot")
-        return None
-
     def execute_contour_trajectory(
         self,
         contour_robot_pts: List[np.ndarray],

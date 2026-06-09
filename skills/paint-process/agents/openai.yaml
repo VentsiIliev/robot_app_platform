@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paint Process"
+  short_description: "Paint process geometry and trajectory debugging"
+  default_prompt: "Use $paint-process to work on src/robot_systems/paint/processes/paint, especially pivot geometry, configuration, and interpolation behavior."

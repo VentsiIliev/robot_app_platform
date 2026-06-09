@@ -1,0 +1,2161 @@
+ТЕХНИЧЕСКО ОПИСАНИЕ НА КАЛИБРАЦИОННИЯ ПРОЦЕС
+Версия: работна чернова
+Обхват на тази версия: пълна калибрационна верига camera -> robot -> TCP -> tool
+
+
+1. Цел на документа
+-------------------
+
+Този документ описва как работи калибрационният поток в платформата от
+оперативна и техническа гледна точка. Текстът не е документация на кода, а
+описание на процесите, зависимостите, очакваните резултати и важните
+особености, които трябва да се знаят при използване, диагностика и бъдещо
+разширяване на системата.
+
+Настоящата версия покрива:
+
+- калибрация на камерата;
+- автоматично събиране на изображения за intrinsic calibration;
+- разликата между chessboard и ChArUco режим;
+- robot calibration;
+- camera-to-robot homography/residual calibration;
+- camera-to-TCP offset calibration;
+- проверка на цялата калибрационна верига чрез физическа точка;
+- какво се записва като резултат;
+- известни рискове, "gotcha" моменти и практически препоръки.
+
+
+2. Общ преглед на калибрационната верига
+----------------------------------------
+
+Пълната калибрационна верига не е само "калибрация на камера". В системата
+има няколко отделни, но зависими една от друга калибрации:
+
+1. Camera intrinsic calibration
+   Определя вътрешните параметри на камерата: фокусни разстояния, оптичен
+   център и коефициенти на дисторзия.
+
+2. Robot calibration / camera-to-robot calibration
+   Свързва координатите в изображението с координатната система на робота.
+   Това е отделна стъпка и не трябва да се смесва с intrinsic calibration.
+
+3. Camera-to-TCP offset calibration
+   Определя отместването между центъра на камерата и реалния TCP/tool point.
+   Това е важно, когато камерата и инструментът не съвпадат физически.
+
+4. Финална проверка с физическа точка
+   Камерата се центрира върху реална точка, записва се координата, след това
+   инструментът/гриперът се подравнява към същата точка и се записва втора
+   координата. Тази проверка валидира практическото съвпадение на веригата.
+
+Тези calibration-и трябва да се разглеждат като последователна верига. Всяка
+следваща стъпка използва резултата от предишната и добавя липсваща част от
+геометрията.
+
+Основно правило за цялата верига:
+
+    Z/RX/RY/RZ, използвани при robot calibration, трябва да се използват и
+    при camera-to-TCP calibration, и при записване на camera-center pose за
+    physical-point tool calibration.
+
+Така всички следващи offset-и се измерват върху същата camera projection
+plane и при същата orientation геометрия, за която е валиден
+camera-to-robot model-ът.
+
+
+3. Camera intrinsic calibration
+-------------------------------
+
+Camera intrinsic calibration изчислява параметрите на камерата чрез снимки на
+известен calibration board. В системата се поддържат два основни типа борд:
+
+- chessboard;
+- ChArUco.
+
+Резултатът от успешна intrinsic calibration включва:
+
+- camera matrix;
+- distortion coefficients;
+- rotation vectors и translation vectors за използваните изображения;
+- reprojection error diagnostics;
+- съвместими файлове за VisionSystem.
+
+Важна концепция:
+
+Intrinsic calibration описва самата камера и оптиката. Тя не казва директно
+къде е роботът, къде е TCP или как pixel coordinate се превръща в robot XY.
+Тези неща се решават в следващите калибрационни стъпки.
+
+
+4. Директна camera calibration
+------------------------------
+
+Директната camera calibration използва вече налични calibration images. Тя не
+управлява сама робота. В приложението обаче трябва да се прави разлика между:
+
+- бутон/действие "Calibrate Camera";
+- автоматичен capture process, който първо движи робота и събира изображения,
+  след което стартира calibration.
+
+В директния режим calibration service:
+
+1. Изтрива стари calibration файлове в storage директорията.
+2. Проверява дали има подадени calibration images.
+3. Опитва да намери calibration pattern във всяко изображение.
+4. За chessboard използва OpenCV chessboard corner detection.
+5. Уточнява corner позициите чрез sub-pixel refinement.
+6. Стартира cv2.calibrateCamera.
+7. Валидира резултата чрез sanity checks.
+8. Записва резултатите в storage.
+
+Минималният праг в текущата реализация допуска calibration и с едно валидно
+изображение, но това не означава, че резултатът е добър. Едно изображение е
+оперативно рисково, защото няма достатъчно разнообразие на пози, дълбочина и
+наклон. За production качество трябва да се предпочита набор от изображения с
+добро покритие.
+
+
+5. Perspective correction при единично изображение
+--------------------------------------------------
+
+Ако calibration се изпълнява с точно едно изображение, системата опитва
+специален път за perspective correction чрез ArUco маркери.
+
+Очаквани marker IDs:
+
+- 30: top-left;
+- 31: top-right;
+- 32: bottom-right;
+- 33: bottom-left.
+
+Ако всички маркери са намерени, се изчислява perspective transform, записва
+се debug изображение `perspective_corrected.png`, и calibration продължава с
+коригираното изображение.
+
+Практическа забележка:
+
+Този път е fallback/специален режим. Не трябва да се приема като равностоен
+заместител на добре събран calibration dataset. Ако маркерите липсват или не
+се разпознават надеждно, системата продължава без perspective correction.
+
+
+6. Валидация на intrinsic резултата
+-----------------------------------
+
+След cv2.calibrateCamera резултатът не се приема автоматично. Системата
+проверява дали резултатът е физически разумен.
+
+Отхвърляне може да се случи при:
+
+- RMS стойност, която не е finite;
+- неположителни focal lengths;
+- optical center cx/cy твърде далеч от центъра на изображението;
+- подозрително големи distortion coefficients;
+- твърде тесен изчислен field of view.
+
+Това е важна защита срещу "успешна" математическа оптимизация, която реално
+е физически безсмислена.
+
+Gotcha:
+
+OpenCV може да върне числен резултат дори при слаб dataset. Затова `success`
+не трябва да се мисли само като "calibrateCamera не хвърли exception", а като
+"calibrateCamera даде резултат, който минава sanity validation".
+
+
+7. Записвани файлове при camera calibration
+-------------------------------------------
+
+При успешна calibration се записват основно два съвместими формата:
+
+1. `calibration_data.npz`
+   Съдържа:
+   - camera_matrix;
+   - dist_coeffs;
+   - rvecs;
+   - tvecs.
+
+2. `camera_calibration.npz`
+   Legacy/VisionSystem съвместим формат:
+   - mtx;
+   - dist.
+
+Възможно е да се запише и:
+
+- `perspectiveTransform.npy`;
+- `calib_result_XXX.png`;
+- reprojection/diagnostic изображения;
+- calibration report в log output.
+
+Важно:
+
+След нова calibration старите calibration файлове се изтриват в началото на
+процеса. Ако calibration се провали след cleanup, може да няма валидни нови
+файлове. Това трябва да се има предвид при процедурата за работа и при
+операторските инструкции.
+
+
+8. Auto-capture за intrinsic calibration
+----------------------------------------
+
+Auto-capture е отделен процес, чиято цел е автоматично да събере dataset от
+изображения при различни позиции, наклони и дълбочини. Този процес движи
+робота.
+
+Това е критичен safety момент:
+
+Camera calibration като математическа стъпка може да не движи робота, но
+auto-capture процедурата за camera calibration движи робота. Затова преди
+стартиране трябва да има ясно оперативно потвърждение, че работната зона е
+свободна, board-ът е стабилен и robot motion е безопасен.
+
+Auto-capture използва:
+
+- robot current position;
+- robot relative/absolute moves;
+- raw camera frames;
+- board detection;
+- stop event;
+- progress messages;
+- brightness locking, ако vision service го поддържа.
+
+
+9. Защо се използват raw frames
+-------------------------------
+
+Intrinsic calibration трябва да използва сурови изображения от сензора, а не
+обработени, annotation или overlay frames.
+
+Причината е, че intrinsic параметрите описват реалната оптика и геометрия на
+камерата. Ако се използват вече обработени изображения, например с overlay,
+undistortion, crop, resize или perspective correction, резултатът може да е
+грешен или да описва обработеното изображение, а не реалната камера.
+
+Системата изисква `get_latest_raw_frame()` за auto-capture. Ако vision service
+не го предоставя, процесът трябва да се счита за невалиден за intrinsic
+capture.
+
+Gotcha:
+
+В preview може да се виждат overlay/annotation кадри, но dataset capture
+трябва да записва raw кадри. Това са различни потоци.
+
+
+10. Brightness / exposure lock
+------------------------------
+
+Преди auto-capture системата опитва да заключи auto-brightness adjustment.
+След края на процеса го възстановява.
+
+Причина:
+
+Ако exposure/brightness се променя между кадрите, detection качеството и
+corner localization могат да станат непостоянни. Това влияе директно на
+reprojection error и стабилността на calibration.
+
+Gotcha:
+
+Ако камерата или vision service не поддържат brightness lock, процесът може
+да продължи, но операторът трябва да следи осветлението да е стабилно.
+
+
+11. Chessboard auto-capture режим
+---------------------------------
+
+При chessboard board type системата:
+
+1. Опитва начално разпознаване на борда.
+2. Изчислява feasible image region, така че бордът да остане в кадър.
+3. Разделя тази зона на grid региони.
+4. Оценява локален XY Jacobian чрез малки probe движения по X и Y.
+5. По желание оценява tilt sensitivity чрез малки RX/RY/RZ probe движения.
+6. За всеки grid регион движи робота така, че центърът на борда да попадне в
+   съответната зона.
+7. Заснема neutral кадър.
+8. Заснема допълнителни tilt кадри и Z+ / Z- кадри.
+9. Връща робота към origin pose.
+
+Основни параметри:
+
+- grid_rows / grid_cols;
+- margin_px;
+- tilt_deg;
+- z_delta_mm;
+- probe_dx_mm / probe_dy_mm;
+- probe_drx_deg / probe_dry_deg / probe_drz_deg;
+- stabilization_delay_s;
+- max_detection_retries;
+- initial_detection_attempts;
+- initial_detection_delay_s;
+- velocity / acceleration.
+
+Gotcha:
+
+Jacobian оценката зависи от правилното разпознаване на борда при probe
+движенията. Ако бордът се загуби при X/Y probe, процесът може да спре с
+грешка. Това обикновено означава, че началната позиция е лоша, бордът е
+твърде близо до ръб на кадъра, движението е твърде голямо, или detection е
+нестабилен.
+
+
+12. ChArUco auto-capture режим
+------------------------------
+
+При ChArUco board type системата използва sweep подход вместо chessboard
+Jacobian/refine подход.
+
+Процесът:
+
+1. Запомня home pose.
+2. Разпознава ChArUco борда в home pose.
+3. Генерира grid от кандидат пози около home pose.
+4. За всяка grid позиция добавя варианти:
+   - neutral;
+   - RX+ / RX-;
+   - RY+ / RY-;
+   - RZ+ / RZ-, ако е конфигурирано;
+   - Z+ / Z-, ако е конфигурирано.
+5. Движи робота към всяка кандидат поза.
+6. Изчаква stabilization delay.
+7. Заснема кадър само ако има достатъчно ChArUco corners.
+8. Записва frame и robot pose.
+9. След sweep-a може да опита допълнителни gap frames за непокрити image
+   клетки.
+10. Връща робота към home pose.
+
+Основни параметри:
+
+- charuco_sweep_x_mm;
+- charuco_sweep_y_mm;
+- charuco_min_corners;
+- charuco_rz_deg;
+- tilt_deg;
+- z_delta_mm;
+- grid_rows / grid_cols;
+- stabilization_delay_s.
+
+Gotcha:
+
+За ChArUco `chessboard_width` и `chessboard_height` означават брой квадратчета
+(squares), а не брой вътрешни ъгли. Ако системата вземе размери от vision
+service, който обикновено пази chessboard inner-corner counts, за ChArUco се
+прави корекция `+1` по двете оси. Ако реалният борд е различен, размерите
+трябва да се зададат ръчно.
+
+
+13. ChArUco convention: normal срещу legacy
+-------------------------------------------
+
+При ChArUco calibration системата първо определя коя convention се разпознава
+по-надеждно:
+
+- normal;
+- legacy.
+
+Тя преброява валидните кадри за двата режима и избира доминиращия. След това
+използва избрания режим за натрупване на calibration data.
+
+Gotcha:
+
+Смесването на normal и legacy interpretation може да доведе до неправилни
+3D/2D съответствия. Затова системата избира един режим за целия calibration
+run.
+
+
+14. Филтриране на лоши ChArUco изображения
+-------------------------------------------
+
+След първоначална ChArUco calibration системата изчислява максималната
+reprojection error за всяко изображение. Изображения с max error над праг
+се отхвърлят и calibration се изпълнява повторно с останалите кадри.
+
+Текущият праг е:
+
+- max pixel error > 1.0 px -> изображението се счита за лошо.
+
+Ако след филтриране останат твърде малко кадри, системата запазва оригиналния
+резултат вместо да провали целия процес.
+
+Gotcha:
+
+Ниският RMS не винаги означава равномерно добър dataset. Пер-image max error
+е важен, защото един или няколко лоши кадъра могат да замърсят calibration.
+
+
+15. Coverage tracking
+---------------------
+
+Auto-capture записва coverage информация за това къде в изображението е бил
+бордът при успешните detection-и.
+
+За chessboard се пазят bounding boxes на засечените бордове.
+За ChArUco coverage map може да се изгради от реално приетите ChArUco corners
+след error filtering.
+
+Записван артефакт:
+
+- `coverage_map.png`.
+
+Практическа стойност:
+
+Coverage map показва дали dataset-ът покрива само центъра на изображението
+или реално покрива различни зони. Добър intrinsic calibration dataset трябва
+да има покритие и близо до периферията, не само в центъра.
+
+
+16. Hand-eye резултат при ChArUco auto-capture
+----------------------------------------------
+
+При ChArUco режим има опция `charuco_compute_hand_eye`.
+
+Ако е включена, след intrinsic calibration системата:
+
+1. Зарежда записаните изображения.
+2. Зарежда `capture_poses.json`.
+3. Зарежда новия `camera_calibration.npz`.
+4. Разпознава ChArUco в кадрите.
+5. Използва solvePnP за board pose спрямо камерата.
+6. Използва robot poses от capture-а.
+7. Стартира cv2.calibrateHandEye.
+8. Записва резултат като `camera_to_robot.npy`.
+
+Gotcha:
+
+Този резултат не трябва автоматично да се бърка с homography calibration за
+работната равнина. Hand-eye резултатът е 3D трансформация и има различна
+роля. В зависимост от конкретния robot system може да не е основният
+използван transformer.
+
+
+17. Progress и stop поведение
+-----------------------------
+
+Auto-capture работи в отделен thread и използва stop event.
+
+Stop заявката:
+
+- задава stop event;
+- процесът спира на следващата проверка;
+- ако роботът вече изпълнява движение, спирането зависи от начина, по който
+  robot service обработва текущото движение.
+
+Progress messages се публикуват към topic:
+
+- `INTRINSIC_CAPTURE_PROGRESS`.
+
+Gotcha:
+
+Stop не е моментално "kill". Той е cooperative stop. Дълго движение или
+blocking robot call може да приключи преди thread-ът реално да спре.
+
+
+18. Какво значи "успешна" camera calibration
+--------------------------------------------
+
+За да се счита camera calibration за успешна, не е достатъчно процесът да
+приключи без exception.
+
+Практически успешен резултат означава:
+
+- има достатъчно валидни изображения;
+- board/corners са намерени надеждно;
+- OpenCV calibration е изпълнена;
+- RMS е finite;
+- intrinsic matrix е физически разумна;
+- optical center е близо до центъра на изображението;
+- distortion coefficients не са подозрително големи;
+- записани са очакваните calibration files;
+- reprojection diagnostics не показват очевидни outliers.
+
+
+19. Операторски "gotcha" моменти
+--------------------------------
+
+1. Auto-capture движи робота.
+   Преди старт трябва да има ясно предупреждение и потвърждение. Работната
+   зона трябва да е свободна.
+
+2. Бордът трябва да е стабилен.
+   Ако board се мести по време на capture, dataset-ът става невалиден.
+
+3. Размерите на борда трябва да са точни.
+   Chessboard използва inner corners. ChArUco използва squares. Това е честа
+   причина за грешни или невъзможни calibration runs.
+
+4. Raw frame е задължителен.
+   Calibration върху обработен кадър може да даде грешни intrinsic параметри.
+
+5. Осветлението трябва да е стабилно.
+   Ако brightness/exposure се променя между кадрите, corner localization може
+   да стане нестабилна.
+
+6. Едно изображение не е достатъчно за надеждна production calibration.
+   Дори кодът да го допуска, това трябва да се третира като fallback или
+   debug режим.
+
+7. Високото покритие е по-важно от голям брой почти еднакви кадри.
+   Много кадри от една и съща позиция не подобряват значително calibration.
+
+8. Малките probe движения могат да провалят процеса, ако бордът е близо до
+   ръба на кадъра.
+
+9. Stop е cooperative.
+   Операторът трябва да знае, че системата може да спре след текущото движение
+   или след следващата вътрешна проверка.
+
+
+20. Последователност на пълната calibration chain
+-------------------------------------------------
+
+Калибрационните стъпки трябва да се изпълняват в правилен ред, защото всяка
+следваща стъпка използва резултата от предишната.
+
+1. Camera intrinsic calibration
+   Първо се калибрира камерата като оптична система. Резултатът е camera
+   matrix и distortion coefficients. Без тази стъпка image geometry може да
+   съдържа lens distortion, която влошава corner/marker localization и
+   последващите трансформации.
+
+2. Robot calibration / camera-to-robot calibration
+   След като камерата е оптично описана, се измерва връзката между image
+   pixels и robot XY. Тази стъпка използва camera center като навигационна
+   референция и изчислява homography/residual model.
+
+3. Camera-to-TCP offset calibration
+   След като вече може да се насочва camera center към image target, се
+   измерва offset-ът между camera center и реалния TCP. Това превръща
+   camera-centered targeting в TCP-centered targeting.
+
+   Тази стъпка трябва да се изпълнява при същите Z/RX/RY/RZ, използвани за
+   robot calibration, освен ако има изрично дефинирана компенсация за друга
+   равнина или orientation.
+
+4. Physical-point tool validation/calibration
+   Накрая се проверява и допълва веригата към конкретните инструменти. Една и
+   съща физическа точка се подравнява последователно с camera center, TCP и
+   real tool center, за да се потвърди, че цялата верига води до една и съща
+   реална позиция.
+
+   Когато се записва camera-center pose за физическата точка, камерата трябва
+   да бъде на calibration Z и calibration RX/RY/RZ. След това TCP/tool
+   позициите могат да се записват според начина, по който инструментът
+   физически достига точката, но camera reference трябва да остане в
+   calibration geometry.
+
+Ако някоя стъпка се пропусне, системата може да изглежда частично коректна,
+но да греши в реалната задача. Например robot calibration може да води
+камерата точно към marker, но без camera-to-TCP offset инструментът няма да
+попада върху същата точка.
+
+
+21. Robot calibration - цел и обща идея
+---------------------------------------
+
+Robot calibration свързва координатите в камерата с координатите на робота.
+След успешен процес системата вече може да приема точка в изображението
+(например ArUco marker, contour centroid или camera center target) и да я
+преобразува към robot XY позиция.
+
+Тази calibration е валидна за геометрията, при която е измерена:
+
+    Z_cal, RX_cal, RY_cal, RZ_cal
+
+Практически това означава, че mapping-ът трябва да се използва при същата
+височина и orientation, или при контролирано еквивалентна работна геометрия.
+Ако роботът работи на друг Z или с различни RX/RY/RZ, камерата вижда
+равнината от друга перспектива и същата pixel-to-robot матрица може да даде
+систематичен offset.
+
+Това не е само теоретичен риск. Дори малка разлика в orientation може да даде
+няколко millimeters грешка върху работната равнина. Реален пример:
+
+    robot calibration е направена при RX = -178.56 deg;
+    друго приложение capture-ва и движи при RX = -180.00 deg;
+    разликата е само 1.44 deg, но резултатът може да бъде около 7 mm shift
+    от target-а.
+
+Причината е, че камерата не гледа равнината със същата геометрия. Pixel-ът е
+същият, но camera ray пресича работната равнина на друго място. Затова
+runtime приложенията, които използват calibration-а, трябва да използват
+същите RX/RY/RZ като calibration pose, или ясно дефинирана и компенсирана
+еквивалентна orientation.
+
+Z стойността е особено важна до момента, в който веригата стигне до правилно
+подравнен camera center. Причината е, че camera projection е зависима от
+равнината, върху която се проектира изображението. Homography, изчислена при:
+
+    Z = Z_cal
+
+описва пресичането на camera ray с тази конкретна работна равнина. Ако
+камерата бъде преместена на друг Z преди да се изчисли/използва правилният
+camera-center target, същият pixel вече отговаря на друга физическа точка
+върху сцената.
+
+Интуитивно:
+
+    camera pixel -> ray in space
+    ray + plane at Z_cal -> physical point A
+    ray + plane at Z_other -> physical point B
+
+Точките A и B не са една и съща физическа точка. Затова camera-to-robot
+mapping-ът е валиден за plane/height, при които е събран robot calibration
+dataset-ът.
+
+Това е различно от ситуацията след като camera center вече е правилно
+подравнен към физическата точка. След този момент имаме robot XY позиция,
+която представлява реална physical point reference. Ако после се променя Z за
+работа с инструмент, например спускане на gripper/nozzle към точката, XY
+координатите на тази physical point не се променят само защото инструментът
+слиза по Z.
+
+С други думи:
+
+    Преди camera-center alignment:
+        промяна в Z променя коя физическа точка вижда даден pixel.
+
+    След camera-center alignment:
+        physical point XY вече е определена; последващо tool Z движение е
+        движение към/от точката, не нова camera projection.
+
+Това е причината calibration chain да трябва първо да реши camera center на
+правилната равнина, след това да приложи camera-to-TCP/tool offsets, и чак
+след това да изпълнява process-specific Z движение за контакт, pickup, paint
+или dispensing.
+
+Същият принцип важи и за дебелината на calibration board-а. Ако robot
+calibration е направена върху горната повърхност на board с дебелина:
+
+    board_thickness = 5 mm
+
+тогава реалната calibration plane е с 5 mm по-висока от работната повърхност
+под board-а. Ако след calibration board-ът се махне, но robot targeting продължи
+да използва същия Z, камерата вече проектира към различна физическа равнина.
+За да остане mapping-ът валиден спрямо новата работна повърхност, robot Z
+трябва да се компенсира с дебелината на board-а:
+
+    Z_runtime_plane = Z_calibration_plane - board_thickness
+
+за стандартна ситуация, в която board-ът е стоял върху работната повърхност и
+се премахва след calibration.
+
+Практически пример:
+
+    calibration е направена при Z = 300 mm;
+    board-ът е дебел 5 mm;
+    след махане на board-а работната равнина е 5 mm по-ниско;
+    runtime camera-plane Z трябва да бъде 295 mm, ако robot Z axis е дефиниран
+    така, че по-малък Z означава движение надолу към повърхността.
+
+Посоката на компенсацията трябва винаги да се проверява спрямо robot coordinate
+system-а, но принципът е постоянен: camera-to-robot calibration трябва да се
+използва върху същата физическа равнина, върху която е измерена. Ако тази
+равнина се премести заради махане или добавяне на fixture/board/material,
+Z reference-ът трябва да се премести със същата физическа дебелина.
+
+Също толкова важно: robot calibration не изчислява camera-to-TCP offset.
+По време на robot calibration камерата се използва като навигационна "tool"
+референция: роботът се мести така, че camera center да се подравни с target
+marker. Затова полученият model описва:
+
+    camera pixel -> robot XY за camera center alignment
+
+а не:
+
+    camera pixel -> robot XY за физическия TCP / gripper / nozzle point
+
+За да може runtime targeting да подравнява реалния инструмент към точката,
+след robot calibration е нужна отделна camera-to-TCP offset calibration.
+
+Важно е да се разбере, че в началото на robot calibration все още няма
+homography. Затова първото придвижване до target marker не може да използва
+готова camera-to-robot матрица. Вместо това системата използва временна
+геометрия, базирана на:
+
+- calibration pose на робота;
+- открития reference board;
+- bottom-left corner на board-а;
+- image center;
+- PPM скала, изчислена от board-а;
+- axis mapping между image offsets и robot XY offsets.
+
+Тази временна геометрия е достатъчна, за да придвижи камерата приблизително
+над избрания marker. След това iterative alignment довежда marker-а точно към
+центъра на камерата. Едва след събиране на достатъчно такива съответствия се
+изчислява homography.
+
+
+22. Lifecycle на robot calibration
+----------------------------------
+
+Основният процес преминава през следните логически етапи:
+
+1. Move to calibration position
+   Роботът се премества до предварително дефинираната calibration position.
+   След това текущата robot pose се записва като референтна calibration pose:
+
+       P_cal = (X_cal, Y_cal, Z_cal, RX_cal, RY_cal, RZ_cal)
+
+2. Axis mapping
+   Системата определя как image X/Y offsets се превеждат към robot X/Y offsets.
+   Това е отделно от homography. Axis mapping казва например дали image X
+   съответства на robot X или robot Y, и дали посоката е plus или minus.
+
+3. Detect reference board
+   Камерата търси classic chessboard или ChArUco reference board. От него се
+   изчисляват:
+
+       B = (u_B, v_B)      bottom-left board corner в pixels
+       PPM                pixels per millimeter
+
+   Тук "bottom-left" е референтен board corner, не target marker.
+
+4. Detect ArUco targets
+   Системата открива наличните ArUco markers, усреднява позициите им през
+   няколко кадъра и избира групи за homography, residual и validation.
+
+5. Compute temporary marker offsets
+   За всеки избран marker се изчислява временен offset спрямо image center,
+   в millimeters, но все още в image/reference-board координатна система.
+
+6. Initial align to target
+   Роботът се придвижва приблизително до target marker без homography, чрез
+   offset-а от стъпка 5 и axis mapping-а.
+
+7. Iterative alignment
+   След грубото придвижване marker-ът трябва да е в кадър. Системата мери live
+   pixel error спрямо image center, превръща го в mm и прави малки robot
+   корекции до достигане на alignment threshold.
+
+8. Accept correspondence
+   При успешна проверка се записва двойка:
+
+       frozen camera point for marker ID  ->  current robot XY pose
+
+9. Следващ target
+   Ако има още targets, процесът преминава към следващ marker. Ако всички са
+   обработени, се изчислява calibration model.
+
+10. Fit homography / residual model
+    Използват се събраните correspondences, за да се изчисли camera-to-robot
+    homography и, ако е конфигурирано, residual correction.
+
+
+23. Reference frame преди homography
+------------------------------------
+
+Преди да съществува homography, системата дефинира временна локална рамка чрез
+reference board-а.
+
+Нека:
+
+    B = (u_B, v_B)
+
+е bottom-left board corner в изображението.
+
+Нека:
+
+    C = (u_C, v_C)
+
+е image center. В кода това е:
+
+    u_C = camera_width  / 2
+    v_C = camera_height / 2
+
+Нека:
+
+    PPM = pixels_per_mm
+
+е скалата, получена от board-а. При classic chessboard тя идва от средната
+pixel дистанция между съседни chessboard corners и реалния square_size_mm. При
+ChArUco тя се изчислява от откритите ChArUco correspondences.
+
+За marker i, открит в изображението като:
+
+    M_i = (u_i, v_i)
+
+се изчислява позицията му в board-mm рамката:
+
+    m_i_x = (u_i - u_B) / PPM
+    m_i_y = (v_i - v_B) / PPM
+
+Image center също се изразява в същата board-mm рамка:
+
+    c_x = (u_C - u_B) / PPM
+    c_y = (v_C - v_B) / PPM
+
+Следователно offset-ът от camera center към marker i е:
+
+    o_i = m_i - c
+
+или:
+
+    o_i_x = ((u_i - u_B) / PPM) - ((u_C - u_B) / PPM)
+          = (u_i - u_C) / PPM
+
+    o_i_y = ((v_i - v_B) / PPM) - ((v_C - v_B) / PPM)
+          = (v_i - v_C) / PPM
+
+В кода формулата се пази чрез bottom-left board corner, защото всички marker
+позиции се водят в една и съща reference-board рамка. Математически offset-ът
+спрямо image center се свежда до разликата marker-center в pixels, разделена
+на PPM.
+
+Критичен детайл:
+
+    За този initial offset се използва raw board PPM, не refined/working PPM.
+
+Причината е, че marker positions и image center са изчислени в board frame.
+Ако тук се смеси scaled/working PPM, първото движение може да стане прекалено
+голямо и marker-ът да излезе от field of view.
+
+
+24. Axis mapping - превод от image mm към robot XY
+-------------------------------------------------
+
+Image frame и robot XY frame не са задължително ориентирани еднакво. Камерата
+може да е обърната, robot X може да съответства на image Y, а посоката може да
+е инвертирана.
+
+Затова robot calibration използва ImageToRobotMapping:
+
+    A(o_x, o_y) = (r_x, r_y)
+
+където:
+
+    (o_x, o_y) са image offsets в mm
+    (r_x, r_y) са robot XY offsets в mm
+
+Axis mapping не е homography. Той е само дискретно mapping правило:
+
+- кой image axis управлява robot X;
+- кой image axis управлява robot Y;
+- дали посоката е plus или minus.
+
+Пример:
+
+    robot_x = image_x, direction=PLUS
+    robot_y = image_y, direction=MINUS
+
+тогава:
+
+    A(o_x, o_y) = (o_x, -o_y)
+
+Това mapping правило позволява initial movement преди да има пълна
+camera-to-robot трансформация.
+
+
+25. Initial movement до първия target без homography
+---------------------------------------------------
+
+След compute offsets за marker i имаме:
+
+    o_i = image offset from camera center to marker, in mm
+
+След axis mapping:
+
+    r_i = A(o_i)
+
+Това е robot XY offset-ът от calibration pose до позицията, в която camera
+center би трябвало да е над marker i.
+
+Нека calibration pose в robot XY бъде:
+
+    P_cal_xy = (X_cal, Y_cal)
+
+Нека текущата pose бъде:
+
+    P_cur_xy = (X_cur, Y_cur)
+
+Първо се смята колко вече сме се отместили от calibration pose:
+
+    d_cur = P_cur_xy - P_cal_xy
+
+После се смята оставащото движение от текущата позиция до target marker:
+
+    delta = r_i - d_cur
+
+Новата robot target позиция е:
+
+    P_target_xy = P_cur_xy + delta
+
+Като заместим delta:
+
+    P_target_xy = P_cur_xy + (r_i - (P_cur_xy - P_cal_xy))
+                = P_cal_xy + r_i
+
+Това е важният резултат: target позицията е calibration pose плюс marker
+offset-а в robot coordinates. Кодът все пак минава през current pose, защото
+това позволява същата формула да работи и когато роботът вече е при предишен
+marker.
+
+За първия marker, ако роботът още е на calibration pose:
+
+    P_cur_xy = P_cal_xy
+    d_cur = (0, 0)
+    delta = r_i
+    P_target_xy = P_cal_xy + r_i
+
+Това обяснява как роботът може да стигне до първия target без homography.
+
+
+26. Движение от първи target към следващ target
+----------------------------------------------
+
+След като marker i бъде успешно центриран, robot pose се записва. После
+процесът увеличава current_marker_id и отново влиза в ALIGN_ROBOT за marker j.
+
+За marker j вече имаме предварително изчислен:
+
+    r_j = A(o_j)
+
+Текущата robot позиция е приблизително:
+
+    P_cur_xy ~= P_cal_xy + r_i
+
+Системата смята:
+
+    d_cur = P_cur_xy - P_cal_xy
+
+и:
+
+    delta = r_j - d_cur
+
+Ако текущата позиция е точно предишният target:
+
+    d_cur ~= r_i
+    delta ~= r_j - r_i
+
+Това означава, че придвижването от marker i към marker j е разликата между
+двата marker target offset-а в calibration-frame robot coordinates.
+
+Отново няма нужда от homography. Всички coarse targets са дефинирани спрямо
+една и съща calibration pose и един и същ board-derived reference frame.
+
+
+27. Staged initial movement
+---------------------------
+
+Initial align movement не се изпълнява като една директна XYZ команда. За
+по-безопасно движение кодът го разделя на три етапа:
+
+1. Z stage
+
+       (current X, current Y, staged Z, target RX, target RY, target RZ)
+
+2. XY stage на staged Z
+
+       (target X, target Y, staged Z, target RX, target RY, target RZ)
+
+3. Final Z
+
+       (target X, target Y, target Z, target RX, target RY, target RZ)
+
+staged Z се избира като:
+
+    staged_z = max(initial_align_approach_z, target_z)
+
+Така роботът първо се качва/остава на безопасна височина, след това мести XY,
+и чак накрая отива на calibration target Z.
+
+Orientation при този initial align идва от текущата pose, която в нормалния
+случай е calibration orientation. При iterative alignment ориентацията се
+връща към original calibration orientation, за да не се натрупват случайни
+orientation отклонения.
+
+
+28. Iterative alignment math
+----------------------------
+
+След initial align marker-ът трябва да е видим в кадъра. Системата вече не
+разчита на предварително изчисления board offset, а мери live грешката спрямо
+image center.
+
+Нека live marker position е:
+
+    M_live = (u_live, v_live)
+
+Live pixel error е:
+
+    e_px = (u_live - u_C, v_live - v_C)
+
+С working PPM:
+
+    e_mm_img = e_px / PPM_working
+
+След axis mapping:
+
+    e_mm_robot = A(e_mm_img)
+
+Това е желаната robot correction в XY. Корекцията обаче не винаги се изпълнява
+цяла. Контролерът прилага adaptive movement:
+
+    normalized_error = min(current_error_mm / max_error_ref, 1.0)
+    step_scale       = tanh(k * normalized_error)
+    max_move_mm      = min_step_mm + step_scale * (max_step_mm - min_step_mm)
+
+Когато грешката е близо до threshold, движението се damp-ва допълнително:
+
+    if current_error_mm < 2 * threshold:
+        max_move_mm *= max((current_error_mm / (2 * threshold))^2, 0.05)
+
+Ако предишната грешка е била по-малка, а текущата се увеличава, има derivative
+damping, за да се намали рискът от overshoot.
+
+Накрая корекцията се ограничава по дължина:
+
+    magnitude = sqrt(e_x^2 + e_y^2)
+
+    if magnitude > max_move_mm:
+        scale = max_move_mm / magnitude
+    else:
+        scale = 1
+
+    move_xy = e_mm_robot * scale
+
+Новата позиция е:
+
+    P_next_xy = P_current_xy + move_xy
+
+Така iterative alignment прави големи стъпки при голяма грешка и малки стъпки
+при приближаване към target threshold.
+
+Gotcha:
+
+    Ако min_step_mm, max_step_mm, threshold или derivative damping са
+    неподходящи, поведението може да стане твърде бавно или да започне да
+    oscillate. Това не е homography проблем; това е проблем в closed-loop
+    movement tuning-а.
+
+
+29. Успешно приемане на calibration sample
+------------------------------------------
+
+Когато current_error_mm падне под threshold, sample-ът не се приема веднага.
+Системата:
+
+1. изчаква кратък settle период;
+2. прави strict post-settle verification;
+3. взима median error от няколко verification кадъра;
+4. приема sample-а само ако verification error също е под threshold.
+
+При успешно приемане се записва:
+
+    robot_positions_for_calibration[marker_id] = current_robot_pose
+
+Camera point-ът за същия marker не е live verification point-ът. Той е
+замразената pre-alignment marker позиция:
+
+    camera_points_for_homography[marker_id] = frozen_marker_pixel
+
+Това е правилно, защото correspondence-ът е:
+
+    "къде беше marker-ът в camera image" -> "къде трябва да бъде robot XY,
+    за да се центрира този marker"
+
+Така calibration model се учи от стабилни marker IDs, а не от произволни
+моментни кадри.
+
+
+30. Target selection и execution order
+--------------------------------------
+
+След откриване на ArUco markers системата не използва всички markers на всяка
+цена. Тя избира targets за:
+
+- homography training;
+- residual training;
+- validation.
+
+Целта е точките да са разпръснати добре в image area, а не всички да са близо
+една до друга. Това подобрява conditioning-а на homography solve-а и прави
+validation-а по-смислен.
+
+Per-group списъците се пазят отделно, защото model fitting трябва да знае кои
+точки са training и кои са validation. Execution списъкът обаче се сортира по
+marker ID. При ChArUco board това обикновено дава приблизителен
+left-to-right/top-to-bottom ред, което намалява излишното връщане на робота
+между далечни области.
+
+Ако marker не може да бъде достигнат или центриран, процесът може да опита
+fallback target от близки налични markers. Така calibration run не се проваля
+веднага заради един проблемен marker, ако има достатъчно алтернативни targets.
+
+
+31. Homography fitting
+----------------------
+
+След като са събрани достатъчно correspondences, системата подготвя две
+матрици:
+
+    src_pts = camera points in pixels
+    dst_pts = robot XY points in mm
+
+За всеки marker ID:
+
+    src_pts[k] = (u_k, v_k)
+    dst_pts[k] = (X_k, Y_k)
+
+След това се решава homography:
+
+    [X']     [h11 h12 h13] [u]
+    [Y']  ~  [h21 h22 h23] [v]
+    [W ]     [h31 h32 h33] [1]
+
+и:
+
+    X = X' / W
+    Y = Y' / W
+
+OpenCV `findHomography` изисква минимум 4 correspondences. В практическа
+production calibration са нужни повече, защото:
+
+- board/camera detection има шум;
+- robot motion има repeatability limits;
+- lens distortion и perspective effects не са идеално линейни;
+- някои markers може да са outliers.
+
+След fit-а системата изчислява error:
+
+    predicted_robot_xy = H(camera_px)
+    error_mm = norm(predicted_robot_xy - measured_robot_xy)
+
+Average error и per-point error се използват за оценка на calibration quality.
+
+Residual model, когато е активен, не заменя homography. Той добавя correction
+върху homography prediction-а:
+
+    robot_xy = H(camera_px) + residual(camera_px)
+
+Това помага при локални систематични грешки, които една projective matrix не
+може да компенсира добре.
+
+
+32. Robot calibration "gotcha" моменти
+-------------------------------------
+
+1. Първото движение не използва homography.
+   То използва board PPM + bottom-left reference + axis mapping. Ако PPM или
+   axis mapping са грешни, първият marker може да не попадне в кадър.
+
+2. Bottom-left reference трябва да е стабилен.
+   Ако board detection е грешен или board-ът се мести, всички coarse target
+   offsets стават грешни.
+
+3. Raw board PPM и working PPM имат различна роля.
+   Raw board PPM се използва за initial marker offsets. Working/refined PPM се
+   използва за local iterative corrections при вече видим marker.
+
+4. Axis mapping е критичен.
+   Грешна ос или грешна посока води до движение в обратна/странична посока,
+   дори camera detection да е перфектен.
+
+5. Small steps near threshold са очаквани.
+   Adaptive controller умишлено намалява стъпката при приближаване към
+   threshold. Ако това е прекалено бавно, tuning-ът трябва да се промени
+   внимателно, без да се премахва damping-а изцяло.
+
+6. Oscillation обикновено е control tuning проблем.
+   Чести причини са твърде голям min/max step, wrong axis sign, твърде нисък
+   threshold, нестабилна detection позиция или недостатъчно settle време.
+
+7. Orientation трябва да е последователна.
+   Calibration pose orientation трябва да съответства на реалната работна
+   геометрия. Ако RX/RY/RZ се различават между calibration, paint pose и
+   runtime resolver, projection може да изглежда математически правилна, но
+   физически да има offset.
+
+8. Robot calibration не е camera-to-TCP calibration.
+   Полученият model води camera center към image target. Той не знае къде е
+   физическият TCP спрямо camera center. За gripper/nozzle/tool alignment е
+   задължителна следваща camera-to-TCP offset calibration.
+
+9. Calibration е валидна за използваните Z/RX/RY/RZ.
+   Ако robot calibration е направена при една височина и orientation, а
+   runtime targeting се изпълнява при друга, camera-to-plane mapping-ът вече
+   не описва същата геометрия.
+
+10. Z промяната преди camera-center alignment променя физическата точка.
+   Един и същ pixel проектира към различни физически точки при различни Z
+   равнини. След като camera center вече е подравнен и XY точката е намерена,
+   последващо tool Z движение не променя XY координатата на тази физическа
+   точка; то само движи инструмента към/от нея.
+
+11. Дебелината на calibration board-а трябва да се компенсира.
+   Ако board с дебелина 5 mm се махне след calibration, работната равнина се
+   измества с 5 mm. Runtime Z трябва да се премести със същата физическа
+   дебелина в правилната robot-axis посока, иначе camera projection вече не е
+   върху равнината, за която е изчислена calibration.
+
+12. Frozen camera point е intentional.
+   Camera point-ът за homography се замразява преди robot alignment. Robot
+   point-ът се записва след alignment. Това изгражда реалното съответствие
+   camera pixel -> robot XY.
+
+13. Validation targets не трябва да се третират като training success.
+   Те са независима проверка дали моделът generalize-ва извън точките, с които
+   е fit-нат.
+
+
+33. Troubleshooting: calibration test е точен, но друго приложение има offset
+----------------------------------------------------------------------------
+
+Често срещан сценарий е:
+
+    calibration test след robot calibration е много точен;
+    но pick/paint/друго приложение показва shift от target-а.
+
+Това обикновено означава, че самият calibration model може да е добър, но
+runtime приложението не използва същата геометрия, при която model-ът е
+измерен.
+
+Препоръчителна диагностика:
+
+1. Сравни RX/RY/RZ
+   Провери calibration pose orientation и runtime capture/move orientation.
+   Дори разлика около 1-2 degrees може да даде millimeter-level shift.
+
+   Пример:
+
+       calibration RX = -178.56 deg
+       application RX = -180.00 deg
+       observed shift ~= 7 mm
+
+2. Сравни Z
+   Провери дали runtime camera-plane Z е същият като calibration Z. Ако
+   calibration board е бил махнат, компенсирай дебелината му. Ако material,
+   fixture или workpiece променят височината на равнината, mapping-ът вече не
+   е върху същата plane.
+
+3. Сравни дали приложението използва camera center или TCP/tool target
+   Robot calibration води camera center. Ако приложението очаква gripper,
+   nozzle или друг tool да попадне върху точката, трябва да е приложена
+   camera-to-TCP/tool compensation.
+
+4. Провери sign convention на camera-to-TCP offset
+   Ако offset-ът е приложен в обратна посока, грешката често изглежда като
+   постоянен shift, въпреки че homography test-ът е точен.
+
+5. Провери дали приложението hardcode-ва orientation
+   Потърси hardcoded RX/RY/RZ, `orientation_overrides_deg`, paint position,
+   movement group pose или друг config, който принуждава runtime pose да е
+   различна от calibration pose.
+
+6. Провери дали resolver-ът използва правилния target point
+   Ако calibration е към camera center, но runtime resolver е конфигуриран за
+   `tool`, трябва да има валиден camera-to-TCP offset. Ако е конфигуриран за
+   `camera`, роботът ще води камерата, не инструмента.
+
+7. Повтори физически тест с една точка
+   Избери реална physical point. Подравни camera center към нея и запиши pose.
+   После подравни tool към същата точка и сравни pose difference. Ако този
+   offset не съвпада с конфигурацията, проблемът е в TCP/tool compensation.
+
+8. Провери дали приложението използва същата calibration matrix/residual file
+   Възможно е calibration test да използва новата matrix, а друго приложение
+   да зарежда стар path, друг robot system profile или cached transformer.
+
+9. Провери дали image point е същият semantic point
+   Calibration може да е тествана с marker center, а приложението да използва
+   contour centroid, top-left corner, bounding box center или друг feature.
+   Ако feature point-ът не е една и съща физическа точка, ще има offset.
+
+Най-бързата проверка при постоянен shift:
+
+    първо сравни Z/RX/RY/RZ между calibration и runtime application.
+
+Ако calibration test е точен, но runtime application е изместено, orientation
+и plane mismatch са първите неща за проверка, преди да се подозира самата
+homography.
+
+
+34. Camera-to-TCP offset calibration - защо е нужна
+---------------------------------------------------
+
+Robot calibration решава camera pixel -> robot XY за camera center alignment.
+Тя не знае къде се намира физическият TCP спрямо camera center. В реална
+работа обаче роботът не трябва просто да постави камерата над target-а, а
+трябва да постави инструмента:
+
+- gripper center;
+- nozzle;
+- dispenser tip;
+- brush/tool center;
+- друг физически TCP.
+
+Ако камерата е монтирана с offset спрямо TCP, тогава:
+
+    camera center != TCP
+
+и robot calibration сама по себе си ще води камерата правилно, но инструментът
+ще остане странично изместен. Това е типичната ситуация, при която marker или
+contour centroid изглежда правилно намерен, camera-to-robot mapping-ът е
+точен, но реалният инструмент е няколко millimeters встрани.
+
+Camera-to-TCP offset calibration намира точно този локален XY offset:
+
+    O_tcp = (offset_x, offset_y)
+
+където offset-ът е в локалната orientation рамка на робота. След като е
+известен, runtime targeting може да компенсира:
+
+    target_for_tcp = target_for_camera_center + rotated_camera_to_tcp_offset
+
+Тази процедура също трябва да се изпълнява в същата camera geometry като
+robot calibration:
+
+    Z_tcp_calibration  = Z_robot_calibration
+    RX_tcp_calibration = RX_robot_calibration
+    RY_tcp_calibration = RY_robot_calibration
+    RZ_tcp_reference   = RZ_robot_calibration
+
+Това важи дори когато camera-to-TCP calibration върти RZ за измерване на
+offset-а. Reference pose, initial camera-center alignment и връщането към
+reference трябва да са върху calibration Z и calibration RX/RY/RZ. Rotation
+samples са контролирано отклонение около тази reference orientation, не нова
+работна geometry.
+
+Ако TCP calibration се направи при друга височина или друга базова
+orientation, offset-ът може да изглежда правилен в самата процедура, но да
+даде систематичен runtime shift, защото е измерен върху различна camera
+projection plane.
+
+
+35. Основна идея на camera-to-TCP calibration
+---------------------------------------------
+
+Процедурата използва един физически неподвижен ArUco marker. Първо системата
+използва вече наличната robot calibration / homography, за да премести
+camera center над marker-а. Това създава reference pose:
+
+    P_ref = (X_ref, Y_ref, Z_ref, RX_ref, RY_ref, RZ_ref)
+
+След това роботът се завърта около RZ с известен ъгъл, например:
+
+    RZ_sample = RZ_ref + 15 deg
+
+Ако camera center и TCP са една и съща точка, завъртането около TCP не би
+преместило camera center спрямо marker-а. Но ако камерата има offset спрямо
+TCP, при rotation camera center описва дъга около TCP. Marker-ът вече няма да
+е в center на изображението.
+
+Системата после отново мести robot XY, докато marker-ът се върне в image
+center. Необходимата XY корекция след rotation е информацията, от която се
+изчислява camera-to-TCP offset.
+
+Интуитивно:
+
+    Колкото по-голям е camera-to-TCP offset-ът, толкова повече camera center
+    се измества при завъртане около TCP.
+
+
+36. Standalone процедура - как протича
+--------------------------------------
+
+Standalone CameraTcpOffsetCalibrationService изпълнява следната последователност:
+
+1. Refresh settings
+   Зареждат се актуалните robot calibration settings и robot config.
+
+2. Проверка за homography
+   Процедурата изисква налична camera-to-robot matrix. Без нея не може да
+   намери първоначалния robot target за marker-а.
+
+3. Lock на vision side effects
+   Временно се изключва contour drawing и при нужда се заключва auto brightness
+   region/adjustment, за да не се променя detection поведението по време на
+   calibration.
+
+4. Move to calibration position
+   Ако има navigation service, роботът се премества до calibration position.
+
+5. Capture orientation
+   RX и RY се взимат от текущата robot pose. Това избягва hardcoded RX/RY при
+   друг robot или друга работна ориентация.
+
+6. Standalone axis mapping
+   Прави се малко robot X движение и малко robot Y движение. Наблюдава се как
+   marker pixel position се измества в изображението. От това се изгражда
+   mapping между pixel error и robot delta.
+
+7. Transformer local scale
+   Homography transformer се оценява в image center и с +1 pixel по X/Y:
+
+       scale_x = H(u_C + 1, v_C).x - H(u_C, v_C).x
+       scale_y = H(u_C, v_C + 1).y - H(u_C, v_C).y
+
+   Това дава локална mm/px скала около camera center. Използва се за оценка на
+   текущата recenter грешка в millimeters.
+
+8. Initial marker acquisition
+   Marker center се открива в image pixels:
+
+       M = (u_m, v_m)
+
+   Чрез transformer се получава robot XY target:
+
+       (X_m, Y_m) = H(M)
+
+   Роботът отива до:
+
+       (X_m, Y_m, approach_z, current_RX, current_RY, approach_RZ)
+
+9. Initial recenter
+   Marker-ът се центрира итеративно в image center. Получената pose става
+   reference_pose.
+
+10. Rotation samples
+    За всяка итерация:
+
+       RZ_i = RZ_ref + i * rotation_step_deg
+
+    роботът се завърта до RZ_i, после marker-ът отново се центрира чрез XY
+    движения. Записва се колко XY движение е било нужно спрямо reference_pose.
+
+11. Solve offset
+    Всички samples се събират в общ least-squares solve за локалния offset.
+
+12. Save result
+    Получените:
+
+       camera_to_tcp_x_offset
+       camera_to_tcp_y_offset
+
+    се записват в robot config.
+
+
+37. Recenter math
+-----------------
+
+При recenter системата мери live marker center:
+
+    M_live = (u_live, v_live)
+
+и image center:
+
+    C = (u_C, v_C)
+
+Pixel error:
+
+    e_px = (u_live - u_C, v_live - v_C)
+
+Локалната homography scale около image center дава приблизителна грешка в mm:
+
+    e_mm_x = e_px_x * abs(scale_x)
+    e_mm_y = e_px_y * abs(scale_y)
+    error_mm = sqrt(e_mm_x^2 + e_mm_y^2)
+
+Ако роботът вече е завъртян с camera_rotation_deg, pixel error-ът се
+derotate-ва към reference orientation:
+
+    theta = camera_rotation_deg
+
+    e'_x =  e_x * cos(theta) + e_y * sin(theta)
+    e'_y = -e_x * sin(theta) + e_y * cos(theta)
+
+След това standalone axis calibration решава robot delta от pixel error:
+
+    J * d_robot = -e'_px
+
+където J е 2x2 матрица:
+
+    J = [ image_delta_per_robot_x_mm   image_delta_per_robot_y_mm ]
+
+по компоненти:
+
+    J = [ du/dX   du/dY ]
+        [ dv/dX   dv/dY ]
+
+Търсим:
+
+    d_robot = (dX, dY)
+
+Ако J е добре обусловена, се използва solve. Ако е singular или близо до
+singular, се използва least-squares fallback.
+
+След това движението се ограничава:
+
+    magnitude = sqrt(dX^2 + dY^2)
+
+    if magnitude > recenter_max_step_mm:
+        scale = recenter_max_step_mm / magnitude
+    else:
+        scale = 1
+
+    scale *= recenter_correction_gain
+
+    move = d_robot * scale
+
+Това е причината recenter да не прави винаги пълната корекция наведнъж. Целта
+е да се избегне overshoot и да се запази marker-ът в кадър.
+
+
+38. Rotation math за camera-to-TCP offset
+-----------------------------------------
+
+Нека търсеният camera-to-TCP offset в локалната reference рамка е:
+
+    L = (l_x, l_y)
+
+При reference RZ:
+
+    alpha = RZ_ref
+
+При sample RZ:
+
+    beta = RZ_sample
+
+Rotation matrix:
+
+    R(t) = [ cos(t)  -sin(t) ]
+           [ sin(t)   cos(t) ]
+
+Camera center world position спрямо TCP зависи от rotation:
+
+    camera_world_ref    = TCP_world + R(alpha) * L
+    camera_world_sample = TCP_world + R(beta)  * L
+
+Когато след rotation системата отново центрира marker-а, measured world
+correction е разликата между sample-aligned pose и reference pose:
+
+    W = (world_dx, world_dy)
+
+Тази разлика е:
+
+    W = R(alpha) * L - R(beta) * L
+      = (R(alpha) - R(beta)) * L
+
+По компоненти:
+
+    world_dx = (cos_alpha - cos_beta) * l_x
+             + (sin_beta  - sin_alpha) * l_y
+
+    world_dy = (sin_alpha - sin_beta) * l_x
+             + (cos_alpha - cos_beta) * l_y
+
+Това е линейна система:
+
+    A_i * L = W_i
+
+където:
+
+    A_i = [ cos_alpha - cos_beta    sin_beta  - sin_alpha ]
+          [ sin_alpha - sin_beta    cos_alpha - cos_beta  ]
+
+Един sample с достатъчно голяма rotation теоретично може да реши L. В
+практика се взимат няколко samples, защото:
+
+- marker detection има шум;
+- robot motion има repeatability error;
+- recenter може да спре в threshold, не в абсолютна нула;
+- малки rotation angles правят системата слабо обусловена.
+
+Standalone service решава всички samples заедно с weighted least squares:
+
+    A_all * L ~= W_all
+
+Теглото на sample е:
+
+    weight = 1 / max(pixel_error_norm, 1)
+
+Тоест sample-и с по-лош final pixel error имат по-малко влияние.
+
+Резултатът е:
+
+    L = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)
+
+
+39. Integrated TCP capture по време на robot calibration
+-------------------------------------------------------
+
+Има и режим, при който TCP offset samples се събират по време на main robot
+calibration, ако:
+
+    run_during_robot_calibration = true
+
+Тогава след успешно центриране на определени markers процесът:
+
+1. реалигнира marker-а при reference RZ;
+2. завърта до sample RZ;
+3. реалигнира marker-а;
+4. записва world_dx/world_dy;
+5. решава local_dx/local_dy за sample-а;
+6. връща reference pose;
+7. след достатъчно samples изчислява mean и standard deviation.
+
+Integrated режимът има допълнителен acceptance check:
+
+    len(samples) >= min_samples
+    std_x <= max_acceptance_std_mm
+    std_y <= max_acceptance_std_mm
+
+Ако spread-ът е твърде голям, offset-ът не се записва, защото samples не са
+достатъчно съгласувани.
+
+В този режим има важен guard: PPM working snapshot се възстановява след TCP
+capture. Причината е, че rotation може да изкриви observed PPM и да повреди
+следващите marker alignments, ако тази временна стойност остане в context-а.
+
+
+40. Как offset-ът се използва при runtime targeting
+--------------------------------------------------
+
+След robot calibration resolver-ът може да изчисли:
+
+    P_camera_target = H(camera_pixel)
+
+Това е robot XY позиция за camera center. За да се насочи TCP към същата
+физическа точка, трябва да се приложи camera-to-TCP offset-ът.
+
+Ако offset-ът е записан в локална tool/capture рамка:
+
+    L = (offset_x, offset_y)
+
+и runtime RZ е:
+
+    rz
+
+тогава offset-ът трябва да се завърти към world/robot XY:
+
+    L_world = R(rz - reference_rz) * L
+
+В опростен вид:
+
+    dx_world =  offset_x * cos(theta) - offset_y * sin(theta)
+    dy_world =  offset_x * sin(theta) + offset_y * cos(theta)
+
+След това target за TCP е:
+
+    P_tcp_target = P_camera_target + compensation
+
+Посоката на compensation зависи от дефиницията в resolver-а: дали offset-ът се
+пази като camera->TCP или TCP->camera. Затова е критично имената и sign
+convention-ът да са консистентни в robot config, resolver logs и calibration
+summary.
+
+Практически тест:
+
+1. избира се физическа точка;
+2. camera center се подравнява към нея;
+3. записва се camera-center robot pose;
+4. TCP/gripper/nozzle се подравнява към същата точка;
+5. сравнява се дали runtime compensation води TCP, а не камерата, към target-а.
+
+
+41. Runtime vision targeting: от pixel XY до robot tool pose
+------------------------------------------------------------
+
+Runtime vision targeting е стъпката, при която вече имаме image point:
+
+    p_img = (u, v)
+
+и искаме robot pose, така че избрана физическа точка от end-effector-а да
+попадне върху същата physical point в работната равнина.
+
+В текущия resolver входът е:
+
+    VisionPoseRequest(
+        x_pixels = u,
+        y_pixels = v,
+        z_mm,
+        rx_degrees,
+        ry_degrees,
+        rz_degrees
+    )
+
+и избран target point:
+
+    EndEffectorPoint(name, offset_x, offset_y)
+
+където `offset_x/offset_y` са локалният offset от camera center към избраната
+точка на инструмента. За самата camera center:
+
+    offset_x = 0
+    offset_y = 0
+
+Пълната runtime XY верига е:
+
+1. Pixel -> calibration XY
+
+       calibration_xy = transformer.transform(u, v)
+
+   Transformer-ът е homography или homography + residual model. Той връща
+   robot XY позиция за camera-center alignment в calibration plane.
+
+2. Calibration plane -> active plane/frame
+
+       plane_xy = mapper.map_point(calibration_xy)
+
+   Ако няма active plane mapper, тогава:
+
+       plane_xy = calibration_xy
+
+   Plane mapper се използва, когато точките трябва да се пренесат от source
+   plane pose към target plane pose. Математически:
+
+       rel = calibration_xy - source_pose.xy
+       rel_rotated = R(target_rz - source_rz) * rel
+       plane_xy = target_pose.xy + rel_rotated
+
+3. Изчисляване на camera-to-TCP rotation delta
+
+   Robot calibration е направена при reference RZ. Ако runtime RZ е различен,
+   camera-to-TCP offset-ът се завърта и camera center "sweep"-ва в XY.
+   Resolver-ът изчислява:
+
+       tcp_delta = rotate(camera_to_tcp, current_rz)
+                 - rotate(camera_to_tcp, reference_rz)
+
+   където:
+
+       camera_to_tcp = (camera_to_tcp_x_offset, camera_to_tcp_y_offset)
+
+   Ако този delta се пропусне, camera center ще попадне на грешно място при
+   RZ, различно от calibration/reference RZ.
+
+4. Изчисляване на selected tool point offset
+
+   Ако искаме не camera center, а друг tool point, локалният offset на този
+   point се завърта към runtime robot XY:
+
+       point_delta = rotate((point_offset_x, point_offset_y), current_rz)
+
+   За camera target point:
+
+       point_delta = (0, 0)
+
+5. Selected-point XY -> commanded robot XY
+
+   Resolver-ът трябва да командва robot XY така, че избраната точка да попадне
+   върху `plane_xy`. Формулата е:
+
+       command_xy = plane_xy - tcp_delta + point_delta
+
+   Това е обратната операция на:
+
+       selected_xy = command_xy + tcp_delta - point_delta
+
+   Интуицията е:
+
+   - `tcp_delta` компенсира факта, че camera center се измества спрямо TCP при
+     промяна на RZ;
+   - `point_delta` измества командата така, че избраната physical tool point,
+     а не непременно camera center, да попадне върху target-а.
+
+6. Z/RX/RY/RZ
+
+   Финалната pose е:
+
+       (command_x, command_y, z_mm + z_correction, rx, ry, rz)
+
+   `z_correction` може да дойде от active target frame, например height map или
+   plane correction. Важно: XY targeting е валидно за plane geometry, за която
+   е калибрирана веригата; Z correction не трябва да се използва като скрит
+   заместител на правилна camera-plane calibration.
+
+В логовете тази верига се вижда като:
+
+    pixels=(u, v)
+    calibration_xy=(...)
+    plane_xy=(...)
+    rz=...
+    reference_rz=...
+    tcp_delta=(...)
+    point_offset_local=(...)
+    point_delta_rotated=(...)
+    final_xy=(...)
+
+Тези полета са полезни при диагностика. Ако `calibration_xy` е правилно, но
+`final_xy` е изместено, проблемът често е в `tcp_delta`, `point_offset_local`,
+`reference_rz` или в избрания target point. Ако още `calibration_xy` е грешно,
+проблемът е по-рано във веригата: homography/residual, Z plane, orientation
+или calibration file.
+
+
+42. Camera-to-TCP "gotcha" моменти
+----------------------------------
+
+1. Homography е prerequisite.
+   Standalone TCP calibration първо използва camera-to-robot transformer, за да
+   стигне до marker-а. Ако robot calibration е грешна, TCP calibration ще
+   стартира от грешна геометрия.
+
+2. Marker-ът трябва да е неподвижен.
+   Ако marker-ът се мести между rotation samples, измереният offset става
+   физически безсмислен.
+
+3. Rotation angle трябва да е достатъчен.
+   Много малък rotation_step_deg прави системата почти singular и усилва
+   detection/motion noise.
+
+4. RX/RY трябва да са реалните capture ориентации.
+   Hardcoded RX/RY може да направи процедурата валидна само за стария robot
+   setup. Затова standalone flow взима RX/RY от текущата pose.
+
+5. TCP calibration трябва да започва от robot-calibration geometry.
+   Initial/reference pose трябва да използва същите Z/RX/RY/RZ като robot
+   calibration. RZ samples са само контролирани rotation samples около тази
+   reference; те не означават, че TCP offset може да се измерва при произволна
+   базова orientation.
+
+6. Recenter threshold влияе на качеството.
+   Ако threshold е твърде широк, samples ще имат голям остатъчен pixel error.
+   Ако е твърде тесен, процесът може да стане бавен или да не converge-не.
+
+7. Offset-ът е orientation-local.
+   Той трябва да се върти според runtime RZ/reference RZ. Ако се приложи като
+   постоянен world XY offset, ще е правилен само за една orientation.
+
+8. Sign convention трябва да е проверен физически.
+   Дори математиката да е правилна, swapped sign между "camera_to_tcp" и
+   "tcp_to_camera" ще даде компенсация в обратната посока.
+
+9. Това е следващата стъпка след robot calibration.
+   Robot calibration дава camera-center navigation. Camera-to-TCP calibration
+   превръща това в реално tool targeting.
+
+
+43. Финална physical-point проверка и tool-chain calibration
+------------------------------------------------------------
+
+След camera calibration, robot calibration и camera-to-TCP offset calibration
+имаме основната верига:
+
+    camera pixel -> camera center robot target -> TCP target
+
+Но в реални системи TCP не винаги е крайният работен инструмент. Може да има:
+
+- camera center;
+- robot TCP / flange-defined tool point;
+- gripper center;
+- suction cup;
+- nozzle;
+- brush;
+- dispensing needle;
+- друг сменяем или process-specific tool.
+
+Затова последната практическа стъпка е да се съберат точки върху една и съща
+физическа позиция, като последователно се подравнят camera center, TCP и
+другите инструменти към нея.
+
+Идеята е проста:
+
+    една физическа точка в света трябва да бъде достижима през всички
+    calibrated references.
+
+Ако камерата вижда точката, robot calibration казва къде трябва да отиде
+camera center. Camera-to-TCP offset казва как да преместим TCP към същата
+точка. Tool-specific offset казва как да преместим конкретния gripper/nozzle
+към същата точка.
+
+
+44. Защо не е достатъчно само camera-to-TCP offset
+--------------------------------------------------
+
+Camera-to-TCP offset решава само отношението между camera center и основния
+robot TCP:
+
+    camera <-> TCP
+
+Ако реалното действие се извършва от друг инструмент, имаме още една връзка:
+
+    TCP <-> tool
+
+Следователно runtime chain става:
+
+    camera -> TCP -> tool
+
+или в посоката на компенсация:
+
+    target_camera_center
+        -> compensate camera-to-TCP
+        -> compensate TCP-to-tool
+        -> commanded robot pose
+
+Ако пропуснем последната връзка, камерата и TCP може да са правилно
+калибрирани, но конкретният инструмент пак да не попада върху физическата
+точка.
+
+Пример:
+
+    Камерата е на 80 mm от TCP.
+    Gripper center е още 12 mm от TCP.
+
+След camera-to-TCP calibration роботът може да доведе TCP до target-а, но ако
+pickup се случва с gripper center, gripper-ът ще остане с неговия собствен
+12 mm offset, освен ако той също не е измерен.
+
+
+45. Процедура с една физическа точка
+------------------------------------
+
+Финалната процедура трябва да използва стабилна, ясно видима и физически
+достъпна точка. Това може да е:
+
+- остър mark върху fixture;
+- център на малък отвор;
+- връх на pin;
+- център на marker, ако той е физически достижим;
+- друга repeatable reference point.
+
+Препоръчителен flow:
+
+1. Align camera center
+   С camera view операторът избира/центрира същата физическа точка. Записва се:
+
+       P_camera = (X_camera, Y_camera, Z, RX, RY, RZ)
+
+   Това е pose, при която camera center гледа физическата точка.
+   Този запис трябва да бъде направен при calibration Z и calibration
+   RX/RY/RZ, т.е. при същата camera geometry, при която е валиден
+   camera-to-robot model-ът.
+
+2. Align TCP
+   Операторът движи робота така, че TCP да съвпадне със същата физическа
+   точка. Записва се:
+
+       P_tcp = (X_tcp, Y_tcp, Z, RX, RY, RZ)
+
+3. Align additional tool
+   За всеки допълнителен инструмент операторът подравнява реалната работна
+   точка на инструмента към същата физическа точка. Записва се:
+
+       P_tool = (X_tool, Y_tool, Z, RX, RY, RZ)
+
+4. Compute offsets
+   Разликите между pose-овете дават practical offset-и за runtime compensation.
+
+
+46. Math за physical-point offsets
+----------------------------------
+
+Нека всички измервания са направени при една и съща ориентация:
+
+    RX, RY, RZ = constant
+
+и върху една и съща физическа точка.
+
+Camera-to-TCP measured offset в world XY може да се провери като:
+
+    D_camera_to_tcp_world = P_tcp_xy - P_camera_xy
+
+Ако offset-ът се пази в локална рамка, той трябва да се върне към local чрез
+inverse rotation:
+
+    D_local = R(-theta) * D_world
+
+където:
+
+    theta = RZ - reference_RZ
+
+За допълнителен tool:
+
+    D_tcp_to_tool_world = P_tool_xy - P_tcp_xy
+
+и съответно:
+
+    D_tcp_to_tool_local = R(-theta) * D_tcp_to_tool_world
+
+Runtime компенсацията за tool target става:
+
+    P_camera_target = H(camera_pixel)
+
+    P_tcp_target = P_camera_target + rotate(camera_to_tcp_offset, theta)
+
+    P_tool_target = P_tcp_target + rotate(tcp_to_tool_offset, theta)
+
+В зависимост от sign convention-а може да се използва плюс или минус. Затова
+тези offsets трябва да се валидират с реално движение към физическа точка, а
+не само да се приемат от формулата.
+
+Най-важният принцип:
+
+    Всички offset-и трябва да описват една и съща посока.
+
+Например ако `camera_to_tcp_x_offset` означава "колко трябва да преместя
+робота от camera-centered pose, за да доведа TCP до същата точка", тогава
+`tcp_to_tool_x_offset` трябва да следва същата operational convention:
+
+    "колко трябва да преместя робота от TCP-centered pose, за да доведа tool
+    center до същата точка"
+
+Ако единият offset се пази като physical vector, а другият като commanded
+compensation, signs лесно се обръщат.
+
+
+47. Защо е добре да се съберат няколко physical points
+------------------------------------------------------
+
+Една точка е достатъчна за базова проверка на offset sign и magnitude, но не е
+достатъчна за robust validation. По-добре е да се съберат няколко точки в
+работната зона:
+
+- една близо до center;
+- една вляво;
+- една вдясно;
+- една напред;
+- една назад.
+
+За всяка physical point се записват:
+
+    P_camera[k]
+    P_tcp[k]
+    P_tool[k]
+
+После се гледа:
+
+    D_camera_to_tcp[k] = P_tcp[k] - P_camera[k]
+    D_tcp_to_tool[k]   = P_tool[k] - P_tcp[k]
+
+Ако calibration chain е добра, тези offsets трябва да са почти постоянни в
+local frame. Ако се променят силно според позицията в работното поле, това е
+индикация за:
+
+- грешна robot calibration / homography;
+- грешен camera-to-TCP offset;
+- orientation mismatch;
+- tool flex / mechanical play;
+- неточна physical-point процедура;
+- sign или axis convention проблем.
+
+
+48. Практическа интерпретация на веригата
+-----------------------------------------
+
+Цялата calibration chain може да се мисли така:
+
+1. Camera calibration
+   Прави image geometry стабилна и измерима.
+
+2. Robot calibration
+   Казва къде трябва да отиде robot XY, за да бъде camera center над image
+   target-а.
+
+3. Camera-to-TCP calibration
+   Казва как от camera-centered pose да стигнем до TCP-centered pose.
+
+4. Tool-specific physical-point calibration
+   Казва как от TCP-centered pose да стигнем до реалния tool-centered pose.
+
+С други думи:
+
+    image point
+        -> camera center target
+        -> TCP target
+        -> specific tool target
+
+Това е причината последната стъпка да използва една и съща физическа точка:
+тя е единствената лесна проверка, че всички references описват една и съща
+реална позиция, а не само вътрешно консистентни математически модели.
+
+
+49. Physical-point "gotcha" моменти
+-----------------------------------
+
+1. Точката трябва да е една и съща.
+   Ако camera center се подравни към marker center, а tool към близък, но не
+   идентичен физически ръб, offset-ът ще е грешен.
+
+2. Orientation трябва да е фиксирана.
+   Ако P_camera, P_tcp и P_tool се записват при различни RX/RY/RZ, разликата
+   включва rotation effect, не само tool offset.
+
+3. Z трябва да е дефиниран.
+   Contact tools и camera alignment често използват различни Z. Документът на
+   процедурата трябва ясно да казва дали offset-ът е само XY, или включва и Z.
+
+4. Sign convention трябва да се провери с движение.
+   Най-добрата проверка е: избери image target, приложи цялата chain, и виж
+   дали tool center физически попада върху точката.
+
+5. Mechanical repeatability има значение.
+   Ако gripper/nozzle има луфт, една и съща calibration math няма да даде
+   repeatable physical contact.
+
+6. Tool offsets са process-specific.
+   Paint, pickup, dispensing и welding може да използват различни effective
+   tool centers, дори robot TCP да е един и същ.
+
+
+50. Допълнителни критични зависимости
+-------------------------------------
+
+Следните зависимости не са отделни calibration steps, но могат да направят
+иначе правилна calibration невалидна в runtime.
+
+1. Camera image geometry трябва да е същата.
+   Calibration важи за конкретна image geometry:
+
+   - camera resolution;
+   - crop/ROI;
+   - image rotation/flip;
+   - lens/focus;
+   - intrinsic undistortion path;
+   - pixel coordinate convention.
+
+   Ако calibration е направена при 1280x720, но приложението подава pixels от
+   crop-нато, resize-нато или завъртяно изображение, същият `(u, v)` вече не
+   описва същия camera ray. Това води до систематичен offset, който не може да
+   се поправи с TCP offset.
+
+2. Detection point трябва да е същият semantic point.
+   Homography може да е точна за marker center, но приложението да използва
+   contour centroid, top-left corner, bounding-box center или друг feature.
+   Всеки feature трябва да описва реалната физическа точка, която искаме да
+   достигнем. Ако semantic point-ът е различен, targeting chain работи
+   правилно, но към грешна точка.
+
+3. Calibration artifacts трябва да са актуални.
+   Runtime трябва да зарежда същите файлове, които последната calibration е
+   записала:
+
+   - homography matrix;
+   - homography residual artifact;
+   - robot config camera-to-TCP offsets;
+   - targeting point/frame settings.
+
+   Ако transformer-ът е cached, ако приложението използва стар path, или ако
+   друг robot system profile зарежда различни settings, calibration test може
+   да е точен, а runtime приложението да използва стар модел.
+
+4. Residual model не поправя грешна geometry.
+   Homography residual correction може да компенсира локални систематични
+   грешки върху същата calibration plane. Той не може да компенсира:
+
+   - грешен Z plane;
+   - различна RX/RY/RZ geometry;
+   - махнат board без Z compensation;
+   - различна camera resolution/crop;
+   - грешен TCP/tool offset sign.
+
+5. Height correction не е заместител на camera-plane calibration.
+   Height map или `z_correction` може да коригира final robot Z за contact или
+   process execution. Това не променя факта, че XY camera projection трябва да
+   бъде изчислена за правилната physical plane. Ако pixel->XY mapping е
+   направен върху грешна plane, последващ Z correction няма автоматично да
+   поправи XY.
+
+6. Tool coordinate и robot tool/user frame трябва да са консистентни.
+   Ако robot controller използва различен tool/user frame от този, при който
+   offsets са измерени, pose може да изглежда числено правилна, но физически
+   да се изпълни с друго effective TCP. Calibration documentation и runtime
+   logs трябва ясно да показват tool/user IDs.
+
+7. Физическите fixtures трябва да са repeatable.
+   Board, marker, workpiece holder и tool mount трябва да се връщат в една и
+   съща позиция. Ако fixture има луфт или board/material се поставя различно
+   всеки път, математическият model остава коректен, но physical target се
+   измества.
+
+8. Нужна е end-to-end проверка, не само unit test на homography.
+   Минималната production проверка трябва да мине през цялата верига:
+
+       image point
+       -> transformer
+       -> plane/frame mapping
+       -> camera-to-TCP compensation
+       -> selected tool point compensation
+       -> robot movement
+       -> physical tool contact/position check
+
+   Само така може да се потвърди, че всички отделни calibration-и са
+   съвместими една с друга.

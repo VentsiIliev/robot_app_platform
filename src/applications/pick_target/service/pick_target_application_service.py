@@ -58,9 +58,6 @@ class PickTargetApplicationService(IPickTargetService):
 
         self._registry = None
         self._target_point = self._resolve_target_point(self._default_target_name)
-        self._last_contour_pixel_paths: List[List[List[float]]] = []
-        self._last_contour_robot_paths: List[List[List[float]]] = []
-        self._last_contour_homography_paths: List[List[List[float]]] = []
 
     def _current_resolver(self) -> Optional[VisionTargetResolver]:
         if self._resolver_getter is not None:
@@ -299,59 +296,19 @@ class PickTargetApplicationService(IPickTargetService):
             source="pick_target.capture_contour_trajectory"
         ).contours
         result = []
-        pixel_paths: List[List[List[float]]] = []
-        robot_paths: List[List[List[float]]] = []
-        homography_paths: List[List[List[float]]] = []
         for raw in raw_contours:
             try:
                 cnt = Contour(raw)
                 pts_px = cnt.get()                           # (N, 2) float32 pixel coords
                 robot_pts: List[Tuple[float, float]] = []
-                pixel_path: List[List[float]] = []
-                robot_path: List[List[float]] = []
                 for px, py in pts_px:
                     rx, ry = self._transform_point(float(px), float(py))
                     robot_pts.append((rx, ry))
-                    pixel_path.append([float(px), float(py)])
-                    robot_path.append([float(rx), float(ry), 0.0, 180.0, 0.0, float(self._pickup_plane_rz)])
                 if robot_pts:
                     result.append(np.array(robot_pts, dtype=np.float32))
-                    pixel_paths.append(pixel_path)
-                    robot_paths.append(robot_path)
-                    homography_paths.append(self._transform_points_homography_only(pts_px))
             except Exception:
                 _logger.exception("Failed to transform contour for trajectory")
-        self._last_contour_pixel_paths = pixel_paths
-        self._last_contour_robot_paths = robot_paths
-        self._last_contour_homography_paths = homography_paths
         return result
-
-    def save_contour_transform_debug_plot(self) -> Optional[str]:
-        if not self._last_contour_robot_paths:
-            return None
-        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
-            plot_pixel_to_mm_debug,
-        )
-
-        return plot_pixel_to_mm_debug(
-            self._last_contour_robot_paths,
-            raw_pixel_paths=self._last_contour_pixel_paths,
-            homography_paths=self._last_contour_homography_paths,
-            save_dir=_DEBUG_CAPTURE_DIR,
-        )
-
-    def _transform_points_homography_only(self, pts_px: np.ndarray) -> List[List[float]]:
-        resolver = self._current_resolver()
-        base_transformer = getattr(resolver, "_base", None) if resolver is not None else None
-        model = getattr(base_transformer, "_model", None)
-        homography_matrix = getattr(model, "homography_matrix", None)
-        if homography_matrix is None:
-            return []
-        xy = cv2.perspectiveTransform(
-            np.asarray(pts_px, dtype=np.float32).reshape(-1, 1, 2),
-            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
-        ).reshape(-1, 2)
-        return [[float(x), float(y), 0.0, 180.0, 0.0, float(self._pickup_plane_rz)] for x, y in xy]
 
     def execute_contour_trajectory(
         self,

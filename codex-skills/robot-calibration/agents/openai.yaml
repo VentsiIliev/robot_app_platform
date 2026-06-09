@@ -1,0 +1,7 @@
+interface:
+  display_name: "Robot Calibration"
+  short_description: "Debug and tune this repo's robot calibration"
+  default_prompt: "Use $robot-calibration to diagnose or modify the robot calibration pipeline in this repository."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Anti-Pattern Testing"
+  short_description: "Enforce meaningful, non-fake test quality"
+  default_prompt: "Use $anti-pattern-testing to write, review, or strengthen tests in this repository."
+
+policy:
+  allow_implicit_invocation: true

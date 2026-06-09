@@ -44,9 +44,6 @@ class PickTargetModel(IApplicationModel):
     def capture_contour_trajectory(self) -> List[np.ndarray]:
         return self._service.capture_contour_trajectory()
 
-    def save_contour_transform_debug_plot(self) -> Optional[str]:
-        return self._service.save_contour_transform_debug_plot()
-
     def execute_contour_trajectory(
         self,
         contour_robot_pts: List[np.ndarray],

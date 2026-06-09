@@ -54,10 +54,6 @@ class IPickTargetService(ABC):
         """
 
     @abstractmethod
-    def save_contour_transform_debug_plot(self) -> Optional[str]:
-        """Save a pixel-to-mm debug plot for the latest captured contour trajectory."""
-
-    @abstractmethod
     def execute_contour_trajectory(
         self,
         contour_robot_pts: List[np.ndarray],
