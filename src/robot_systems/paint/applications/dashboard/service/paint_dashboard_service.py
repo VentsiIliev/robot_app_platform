@@ -125,46 +125,17 @@ class PaintDashboardService(IPaintDashboardService):
         return ContourTransformDebugResult(True, message, image_path)
 
     def _transform_like_pick_target(self, contour: np.ndarray) -> tuple[list[list[float]], list[list[float]], list[list[float]]]:
-        resolver = self._resolver_getter() if callable(self._resolver_getter) else None
-        if resolver is None:
-            raise RuntimeError("Vision target resolver is not available.")
-
-        from src.engine.robot.targeting import VisionPoseRequest
-
-        target_point = resolver.registry.by_name(self._target_point_name)
         points = np.asarray(contour, dtype=float).reshape(-1, 2)
-        raw_pixel_path: list[list[float]] = []
-        camera_path: list[list[float]] = []
-        homography_path: list[list[float]] = []
+        raw_pixel_path = [[float(px), float(py)] for px, py in points]
 
-        for px, py in points:
-            raw_pixel_path.append([float(px), float(py)])
-            result = resolver.resolve(
-                VisionPoseRequest(
-                    x_pixels=float(px),
-                    y_pixels=float(py),
-                    z_mm=0.0,
-                    rz_degrees=0.0,
-                    rx_degrees=180.0,
-                    ry_degrees=0.0,
-                ),
-                target_point,
-                frame=self._frame_name,
-            )
-            camera_path.append([
-                float(result.final_xy[0]),
-                float(result.final_xy[1]),
-                float(result.z),
-                float(result.rx),
-                float(result.ry),
-                float(result.rz),
-            ])
-
-        homography_xy = self._homography_only_xy(resolver, points)
-        for x, y in homography_xy:
-            homography_path.append([float(x), float(y), 0.0, 180.0, 0.0, 0.0])
-
-        return raw_pixel_path, camera_path, homography_path
+        # TEMP: PPM-only transform for testing contour dimensions (2026-06-09)
+        # Revert to full homography resolver chain when done.
+        _PPM_TEST = 1.680  # initial board PPM from latest calibration
+        ppm_path = [
+            [float(px) / _PPM_TEST, float(py) / _PPM_TEST, 0.0, 180.0, 0.0, 0.0]
+            for px, py in points
+        ]
+        return raw_pixel_path, ppm_path, ppm_path
 
     @staticmethod
     def _homography_only_xy(resolver, points: np.ndarray) -> np.ndarray:

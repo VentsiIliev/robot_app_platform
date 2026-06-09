@@ -335,6 +335,36 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
             verify_error_mm,
             progress.iteration_count,
         )
+        frozen_px = artifacts.camera_points_for_homography.get(int(marker_id))
+        live_px = context.calibration_vision.marker_top_left_corners.get(int(marker_id))
+        if frozen_px is not None:
+            frozen_px = np.asarray(frozen_px, dtype=float).reshape(2)
+        if live_px is not None:
+            live_px = np.asarray(live_px, dtype=float).reshape(2)
+        pixel_delta = (
+            live_px - frozen_px
+            if frozen_px is not None and live_px is not None
+            else None
+        )
+        _logger.info(
+            "[CALIB_GEOMETRY_SAMPLE] marker=%d frozen_px=%s live_aligned_px=%s "
+            "live_minus_frozen_px=%s accepted_robot_xy=(%.3f, %.3f) z=%.3f "
+            "ppm_working=%.6f initial_ppm=%s verify_error_mm=%.3f",
+            marker_id,
+            _format_point(frozen_px),
+            _format_point(live_px),
+            _format_point(pixel_delta),
+            float(current_pose[0]),
+            float(current_pose[1]),
+            float(current_pose[2]),
+            float(new_ppm),
+            (
+                f"{float(context.calibration_vision.PPM):.6f}"
+                if context.calibration_vision.PPM is not None
+                else "None"
+            ),
+            float(verify_error_mm),
+        )
         context.robot_positions_for_calibration[marker_id] = current_pose
         artifacts.robot_positions_for_calibration = dict(context.robot_positions_for_calibration)
         show_live_feed(context, verification_frame, verify_error_mm, broadcast_image=context.broadcast_events)
@@ -426,3 +456,12 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     _logger.info(message)
 
     return RobotCalibrationStates.ITERATE_ALIGNMENT
+
+
+def _format_point(point) -> str:
+    if point is None:
+        return "None"
+    arr = np.asarray(point, dtype=float).reshape(-1)
+    if arr.size < 2:
+        return "None"
+    return f"({float(arr[0]):.3f}, {float(arr[1]):.3f})"

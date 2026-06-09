@@ -12,7 +12,7 @@
     "axis_flip_scale_min": 0.2,
     "fast_iteration_wait": 1.5,
     "initial_align_y_scale": 1.0,
-    "initial_align_approach_z": 200.0,
+    "initial_align_approach_z": 215.0,
     "post_align_settle_s": 0.3
   },
   "axis_mapping_config": {
@@ -27,7 +27,7 @@
     "marker_id": 43,
     "rotation_step_deg": 5.0,
     "iterations": 18,
-    "approach_z": 200.0,
+    "approach_z": 215.0,
     "approach_rx": -178.83,
     "approach_ry": 0.0,
     "approach_rz": 0.0,
@@ -56,15 +56,32 @@
   "auto_skip_known_unreachable_markers": true,
   "unreachable_marker_failure_threshold": 1,
   "known_unreachable_marker_ids": [
+    53,
+    62,
+    71,
+    81,
+    82,
+    92,
+    100,
+    101,
     234
   ],
   "unreachable_marker_failure_counts": {
-    "234": 1
+    "234": 1,
+    "53": 1,
+    "62": 1,
+    "71": 1,
+    "81": 1,
+    "100": 1,
+    "101": 1,
+    "92": 1,
+    "82": 1
   },
   "velocity": 50,
   "acceleration": 20,
   "travel_velocity": 50,
   "travel_acceleration": 20,
   "iterative_velocity": 10,
-  "iterative_acceleration": 10
+  "iterative_acceleration": 10,
+  "initial_ppm": 3.095287322998047
 }

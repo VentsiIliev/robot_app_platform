@@ -30,7 +30,9 @@ from src.engine.robot.calibration.robot_calibration.model_fitting import (
 )
 from src.engine.robot.calibration.robot_calibration.calibration_report import (
     build_calibration_reports,
+    derive_calibration_artifact_paths,
     save_calibration_model_report,
+    save_geometry_scale_artifact,
     save_homography_residual_artifact,
 )
 from src.engine.robot.calibration.robot_calibration.live_feed import (
@@ -507,6 +509,8 @@ class RefactoredRobotCalibrationPipeline:
             model_result.model_report,
             report_bundle.artifact_paths["report_path"],
         )
+        self._log_homography_dataset_geometry(dataset, model_result)
+        self._save_geometry_scale_diagnostics(dataset, model_result, report_bundle.artifact_paths)
         _logger.info("Homography residual artifact saved to %s", report_bundle.artifact_paths["homography_residual_path"])
         _logger.info("Calibration model report saved to %s", report_bundle.artifact_paths["report_path"])
         _logger.info(report_bundle.model_comparison_report)
@@ -515,6 +519,154 @@ class RefactoredRobotCalibrationPipeline:
         # Broadcast calibration stop event
         if context.broadcast_events:
             context.broker.publish(context.CALIBRATION_STOP_TOPIC, "")
+
+    def _log_homography_dataset_geometry(self, dataset, model_result) -> None:
+        initial_ppm = getattr(getattr(self.calibration_context, "calibration_vision", None), "PPM", None)
+        labels = list(model_result.labels)
+        camera_points = np.asarray(model_result.src_pts, dtype=float).reshape(-1, 2)
+        robot_points = np.asarray(model_result.dst_pts, dtype=float).reshape(-1, 2)
+        if camera_points.size == 0 or robot_points.size == 0:
+            _logger.info("[CALIB_GEOMETRY_FINAL] no homography geometry points available")
+            return
+
+        camera_bbox_px = np.ptp(camera_points, axis=0)
+        robot_bbox_mm = np.ptp(robot_points, axis=0)
+        expected_bbox_mm = (
+            camera_bbox_px / float(initial_ppm)
+            if initial_ppm
+            else np.asarray([np.nan, np.nan], dtype=float)
+        )
+        pairwise = self._pairwise_ppm_records(labels, camera_points, robot_points)
+        ppm_values = np.asarray([record[0] for record in pairwise], dtype=float)
+        _logger.info(
+            "[CALIB_GEOMETRY_FINAL] homography_points=%d initial_ppm=%s "
+            "camera_bbox_px=(%.3f x %.3f) expected_bbox_mm=(%.3f x %.3f) "
+            "robot_bbox_mm=(%.3f x %.3f) robot_vs_expected_scale=(%.3f, %.3f) "
+            "pairwise_ppm_min_median_max=(%.6f, %.6f, %.6f)",
+            len(labels),
+            f"{float(initial_ppm):.6f}" if initial_ppm is not None else "None",
+            float(camera_bbox_px[0]),
+            float(camera_bbox_px[1]),
+            float(expected_bbox_mm[0]),
+            float(expected_bbox_mm[1]),
+            float(robot_bbox_mm[0]),
+            float(robot_bbox_mm[1]),
+            float(robot_bbox_mm[0] / expected_bbox_mm[0]) if expected_bbox_mm[0] else float("nan"),
+            float(robot_bbox_mm[1] / expected_bbox_mm[1]) if expected_bbox_mm[1] else float("nan"),
+            float(np.min(ppm_values)) if ppm_values.size else float("nan"),
+            float(np.median(ppm_values)) if ppm_values.size else float("nan"),
+            float(np.max(ppm_values)) if ppm_values.size else float("nan"),
+        )
+
+        for ppm, label_a, label_b, dist_px, dist_mm in pairwise[:8]:
+            _logger.info(
+                "[CALIB_GEOMETRY_PAIR_LOW] markers=(%d,%d) ppm=%.6f dist_px=%.3f dist_mm=%.3f",
+                label_a,
+                label_b,
+                ppm,
+                dist_px,
+                dist_mm,
+            )
+        for ppm, label_a, label_b, dist_px, dist_mm in pairwise[-8:]:
+            _logger.info(
+                "[CALIB_GEOMETRY_PAIR_HIGH] markers=(%d,%d) ppm=%.6f dist_px=%.3f dist_mm=%.3f",
+                label_a,
+                label_b,
+                ppm,
+                dist_px,
+                dist_mm,
+            )
+
+    @staticmethod
+    def _pairwise_ppm_records(labels, camera_points, robot_points) -> list[tuple[float, int, int, float, float]]:
+        records: list[tuple[float, int, int, float, float]] = []
+        count = len(labels)
+        for i in range(count):
+            for j in range(i + 1, count):
+                dist_px = float(np.linalg.norm(camera_points[i] - camera_points[j]))
+                dist_mm = float(np.linalg.norm(robot_points[i] - robot_points[j]))
+                if dist_mm <= 1e-9:
+                    continue
+                records.append((dist_px / dist_mm, int(labels[i]), int(labels[j]), dist_px, dist_mm))
+        records.sort(key=lambda item: item[0])
+        return records
+
+    def _save_geometry_scale_diagnostics(self, dataset, model_result, artifact_paths: dict) -> None:
+        context = self.calibration_context
+        initial_ppm = getattr(getattr(context, "calibration_vision", None), "PPM", None)
+        homography_pairwise_ppm = metrics.compute_avg_ppm(model_result.src_pts, model_result.dst_pts)
+        local = self._estimate_homography_local_scale(
+            model_result.homography_matrix,
+            model_result.src_pts,
+        )
+        payload = {
+            "source": "robot_calibration_finalize",
+            "ppm": float(initial_ppm) if initial_ppm is not None else None,
+            "mm_per_px": float(1.0 / initial_ppm) if initial_ppm else None,
+            "homography_pairwise_ppm": float(homography_pairwise_ppm) if homography_pairwise_ppm else None,
+            "homography_pairwise_mm_per_px": (
+                float(1.0 / homography_pairwise_ppm) if homography_pairwise_ppm else None
+            ),
+            "homography_local_scale": local,
+            "used_marker_ids": list(model_result.labels),
+            "homography_training_ids": list(dataset.homography_training_ids),
+            "residual_training_ids": list(dataset.residual_training_ids),
+            "validation_ids": list(dataset.validation_ids),
+        }
+        geometry_path = artifact_paths.get("geometry_scale_path")
+        if not geometry_path:
+            geometry_path = derive_calibration_artifact_paths(
+                context.vision_service.camera_to_robot_matrix_path
+            )["geometry_scale_path"]
+        save_geometry_scale_artifact(payload, geometry_path)
+        _logger.info(
+            "Geometry scale artifact saved to %s: initial_ppm=%s homography_pairwise_ppm=%s local_mm_per_px=(%s, %s)",
+            geometry_path,
+            f"{float(initial_ppm):.3f}" if initial_ppm is not None else "n/a",
+            f"{float(homography_pairwise_ppm):.3f}" if homography_pairwise_ppm else "n/a",
+            f"{local['x_mm_per_px']:.4f}" if local else "n/a",
+            f"{local['y_mm_per_px']:.4f}" if local else "n/a",
+        )
+
+    @staticmethod
+    def _estimate_homography_local_scale(homography_matrix, src_pts) -> dict | None:
+        try:
+            import cv2
+
+            src = np.asarray(src_pts, dtype=np.float64).reshape(-1, 2)
+            if src.size == 0:
+                return None
+            center = np.mean(src, axis=0)
+            probe = np.array(
+                [
+                    center,
+                    center + np.array([1.0, 0.0], dtype=np.float64),
+                    center + np.array([0.0, 1.0], dtype=np.float64),
+                ],
+                dtype=np.float32,
+            ).reshape(-1, 1, 2)
+            mapped = cv2.perspectiveTransform(
+                probe,
+                np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
+            ).reshape(-1, 2)
+            x_vec = mapped[1] - mapped[0]
+            y_vec = mapped[2] - mapped[0]
+            x_mm_per_px = float(np.linalg.norm(x_vec))
+            y_mm_per_px = float(np.linalg.norm(y_vec))
+            dot = float(np.dot(x_vec, y_vec))
+            denom = float(np.linalg.norm(x_vec) * np.linalg.norm(y_vec))
+            angle_deg = float(np.degrees(np.arccos(np.clip(dot / denom, -1.0, 1.0)))) if denom > 1e-12 else None
+            return {
+                "center_px": [float(center[0]), float(center[1])],
+                "x_mm_per_px": x_mm_per_px,
+                "y_mm_per_px": y_mm_per_px,
+                "x_ppm": float(1.0 / x_mm_per_px) if x_mm_per_px > 1e-12 else None,
+                "y_ppm": float(1.0 / y_mm_per_px) if y_mm_per_px > 1e-12 else None,
+                "axis_angle_deg": angle_deg,
+            }
+        except Exception:
+            _logger.warning("Failed to estimate homography local geometry scale", exc_info=True)
+            return None
 
     def get_context(self) -> RobotCalibrationContext:
         """Get the calibration context for external access"""

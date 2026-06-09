@@ -6,6 +6,7 @@ This state processes the markers and converts their positions from pixel to mill
 """
 
 import logging
+import numpy as np
 from src.engine.robot.calibration.robot_calibration.states.robot_calibration_states import RobotCalibrationStates
 from src.engine.robot.calibration.robot_calibration.logging import construct_aruco_state_log_message
 
@@ -31,6 +32,7 @@ def handle_all_aruco_found_state(context) -> RobotCalibrationStates:
         int(marker_id): tuple(float(v) for v in top_left_corner_px)
         for marker_id, top_left_corner_px in context.calibration_vision.marker_top_left_corners.items()
     }
+    _log_frozen_camera_geometry(context)
 
     # Convert marker positions from pixels to millimeters
     if context.calibration_vision.PPM is not None and context.bottom_left_chessboard_corner_px is not None:
@@ -62,3 +64,51 @@ def handle_all_aruco_found_state(context) -> RobotCalibrationStates:
     )
 
     return RobotCalibrationStates.COMPUTE_OFFSETS
+
+
+def _log_frozen_camera_geometry(context) -> None:
+    frozen = context.camera_points_for_homography
+    ppm = context.calibration_vision.PPM
+    if not frozen or ppm is None:
+        _logger.info(
+            "[CALIB_GEOMETRY] frozen_camera_points unavailable: count=%d ppm=%s",
+            len(frozen or {}),
+            ppm,
+        )
+        return
+
+    labels = sorted(int(marker_id) for marker_id in frozen.keys())
+    points = np.asarray([frozen[label] for label in labels], dtype=float).reshape(-1, 2)
+    bbox_px = np.ptp(points, axis=0)
+    expected_bbox_mm = bbox_px / float(ppm)
+    _logger.info(
+        "[CALIB_GEOMETRY] frozen_camera_points count=%d ppm=%.6f "
+        "bbox_px=(%.3f x %.3f) expected_bbox_mm=(%.3f x %.3f) "
+        "min_px=(%.3f, %.3f) max_px=(%.3f, %.3f) ids=%s",
+        len(labels),
+        float(ppm),
+        float(bbox_px[0]),
+        float(bbox_px[1]),
+        float(expected_bbox_mm[0]),
+        float(expected_bbox_mm[1]),
+        float(points[:, 0].min()),
+        float(points[:, 1].min()),
+        float(points[:, 0].max()),
+        float(points[:, 1].max()),
+        labels,
+    )
+
+    center = np.mean(points, axis=0)
+    for label, point in zip(labels, points):
+        delta_px = point - center
+        _logger.debug(
+            "[CALIB_GEOMETRY_POINT] frozen marker=%d px=(%.3f, %.3f) "
+            "delta_px=(%.3f, %.3f) expected_delta_mm=(%.3f, %.3f)",
+            label,
+            float(point[0]),
+            float(point[1]),
+            float(delta_px[0]),
+            float(delta_px[1]),
+            float(delta_px[0] / ppm),
+            float(delta_px[1] / ppm),
+        )

@@ -184,6 +184,7 @@ class RobotCalibrationSettings:
     travel_acceleration: int = 10
     iterative_velocity: int = 30
     iterative_acceleration: int = 10
+    initial_ppm: float | None = None
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
@@ -219,6 +220,7 @@ class RobotCalibrationSettings:
             travel_acceleration=int(data.get("travel_acceleration", acceleration)),
             iterative_velocity=int(data.get("iterative_velocity", velocity)),
             iterative_acceleration=int(data.get("iterative_acceleration", acceleration)),
+            initial_ppm=data.get("initial_ppm"),
         )
 
     def to_dict(self) -> Dict:
@@ -245,6 +247,7 @@ class RobotCalibrationSettings:
             "travel_acceleration": self.travel_acceleration,
             "iterative_velocity": self.iterative_velocity,
             "iterative_acceleration": self.iterative_acceleration,
+            "initial_ppm": self.initial_ppm,
         }
 
 

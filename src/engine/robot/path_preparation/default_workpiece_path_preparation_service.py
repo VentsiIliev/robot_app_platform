@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from src.engine.robot.path_preparation.geometry import (
     _orient_contour_like_original,
 )
 from src.engine.robot.path_preparation.i_workpiece_path_preparation_service import IWorkpiecePathPreparationService
+from src.engine.robot.calibration.robot_calibration.calibration_report import derive_calibration_artifact_paths
 _EXECUTION_INTERPOLATION_SPACING_MM = 10.0
 _EXECUTION_MIN_PREPROCESS_SPACING_MM = 2.5
 _EXECUTION_DENSE_SAMPLING_FACTOR = 0.25
@@ -383,6 +385,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
+        self._geometry_scale_cache: tuple[str, float] | None = None
         try:
             pickup_alignment_sign = float(pickup_axis_alignment_sign)
         except (TypeError, ValueError):
@@ -644,12 +647,20 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         self._pickup_axis_alignment_sign,
                         float(pickup_rz),
                     )
+                pickup_contact_rz = 0.0
                 pickup_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._pickup_target_point_name,
                     frame_name=self._calibration_frame_name,
-                    rz_override=pickup_rz,
+                    rz_override=pickup_contact_rz,
+                )
+                self._logger.info(
+                    "[PICKUP_RZ] pickup point resolved at contact_rz=%.3f carried_pickup_rz=%.3f pickup_xy=(%.3f, %.3f)",
+                    float(pickup_contact_rz),
+                    float(pickup_rz),
+                    float(pickup_xy[0]),
+                    float(pickup_xy[1]),
                 )
 
             segment_pivot_offset_mm = _safe_float(
@@ -766,25 +777,36 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         if resolver is not None:
             from src.engine.robot.targeting import VisionPoseRequest
 
-            target_point = resolver.registry.by_name(self._target_point_name)
-            seeded_results = [
-                resolver.resolve(
-                    VisionPoseRequest(
-                        float(px),
-                        float(py),
-                        z_mm=base_z,
-                        rz_degrees=rz_offset,
-                        rx_degrees=rx,
-                        ry_degrees=ry,
-                    ),
-                    target_point,
-                )
-                for px, py in compensated_pts_px
-            ]
-            robot_xy_points = [
-                (float(result.final_xy[0]), float(result.final_xy[1]))
-                for result in seeded_results
-            ]
+            geometry_result = self._transform_to_robot_geometry_ppm(
+                compensated_pts_px,
+                base_z=base_z,
+                rz_offset=rz_offset,
+                rx=rx,
+                ry=ry,
+                resolver=resolver,
+            )
+            if geometry_result is not None:
+                seeded_results, robot_xy_points = geometry_result
+            else:
+                target_point = resolver.registry.by_name(self._target_point_name)
+                seeded_results = [
+                    resolver.resolve(
+                        VisionPoseRequest(
+                            float(px),
+                            float(py),
+                            z_mm=base_z,
+                            rz_degrees=rz_offset,
+                            rx_degrees=rx,
+                            ry_degrees=ry,
+                        ),
+                        target_point,
+                    )
+                    for px, py in compensated_pts_px
+                ]
+                robot_xy_points = [
+                    (float(result.final_xy[0]), float(result.final_xy[1]))
+                    for result in seeded_results
+                ]
         else:
             seeded_results = None
             if transformer is None or not transformer.is_available():
@@ -819,6 +841,166 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 [round(float(point[5]), 3) for point in result[: min(5, len(result))]],
             )
         return result
+
+    def _transform_to_robot_geometry_ppm(
+        self,
+        compensated_pts_px: np.ndarray,
+        *,
+        base_z: float,
+        rz_offset: float,
+        rx: float,
+        ry: float,
+        resolver,
+    ) -> tuple[list, list[tuple[float, float]]] | None:
+        points = np.asarray(compensated_pts_px, dtype=np.float64).reshape(-1, 2)
+        if points.shape[0] < 2:
+            return None
+
+        ppm = self._load_geometry_ppm(resolver)
+        if ppm is None or ppm <= 1e-9:
+            return None
+
+        anchor_px = self._compute_pixel_anchor(points)
+        axes = self._geometry_axes_from_homography(resolver, anchor_px)
+        if axes is None:
+            self._logger.warning("[EXECUTE] Geometry PPM available but homography direction basis is unavailable")
+            return None
+
+        from src.engine.robot.targeting import VisionPoseRequest
+
+        target_point = resolver.registry.by_name(self._target_point_name)
+        anchor_result = resolver.resolve(
+            VisionPoseRequest(
+                float(anchor_px[0]),
+                float(anchor_px[1]),
+                z_mm=base_z,
+                rz_degrees=rz_offset,
+                rx_degrees=rx,
+                ry_degrees=ry,
+            ),
+            target_point,
+            frame=self._calibration_frame_name,
+        )
+        anchor_xy = np.asarray(anchor_result.final_xy, dtype=np.float64).reshape(2)
+        x_axis, y_axis = axes
+        mm_per_px = 1.0 / float(ppm)
+
+        robot_xy = []
+        for point_px in points:
+            delta_px = point_px - anchor_px
+            delta_robot = (delta_px[0] * mm_per_px * x_axis) + (delta_px[1] * mm_per_px * y_axis)
+            xy = anchor_xy + delta_robot
+            robot_xy.append((float(xy[0]), float(xy[1])))
+
+        seeded_results = [anchor_result for _ in robot_xy]
+        if robot_xy:
+            xy_arr = np.asarray(robot_xy, dtype=np.float64)
+            bbox = np.ptp(xy_arr, axis=0)
+            self._logger.info(
+                "[EXECUTE] Geometry transform: mode=ppm_anchor ppm=%.6f mm_per_px=%.6f "
+                "anchor_px=(%.3f, %.3f) anchor_robot_xy=(%.3f, %.3f) "
+                "bbox_robot_mm=(%.3f x %.3f) points=%d",
+                float(ppm),
+                float(mm_per_px),
+                float(anchor_px[0]),
+                float(anchor_px[1]),
+                float(anchor_xy[0]),
+                float(anchor_xy[1]),
+                float(bbox[0]),
+                float(bbox[1]),
+                len(robot_xy),
+            )
+        return seeded_results, robot_xy
+
+    def _load_geometry_ppm(self, resolver) -> float | None:
+        matrix_path = self._resolver_matrix_path(resolver)
+        if not matrix_path:
+            return None
+        if self._geometry_scale_cache is not None and self._geometry_scale_cache[0] == matrix_path:
+            return self._geometry_scale_cache[1]
+
+        geometry_path = derive_calibration_artifact_paths(matrix_path)["geometry_scale_path"]
+        try:
+            with open(geometry_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            ppm = float(payload.get("ppm"))
+            if ppm <= 0.0:
+                return None
+            self._geometry_scale_cache = (matrix_path, ppm)
+            self._logger.info("[EXECUTE] Loaded geometry PPM %.6f from %s", ppm, geometry_path)
+            return ppm
+        except Exception:
+            self._logger.debug("[EXECUTE] Geometry PPM artifact unavailable at %s", geometry_path, exc_info=True)
+            return None
+
+    @staticmethod
+    def _resolver_matrix_path(resolver) -> str | None:
+        base = getattr(resolver, "_base", None)
+        matrix_path = getattr(base, "_matrix_path", None)
+        if matrix_path:
+            return str(matrix_path)
+        nested_base = getattr(base, "_base", None)
+        matrix_path = getattr(nested_base, "_matrix_path", None)
+        return str(matrix_path) if matrix_path else None
+
+    @staticmethod
+    def _compute_pixel_anchor(points: np.ndarray) -> np.ndarray:
+        pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+        if pts.shape[0] >= 3:
+            contour = np.ascontiguousarray(pts.astype(np.float32).reshape(-1, 1, 2))
+            moments = cv2.moments(contour)
+            if abs(float(moments.get("m00", 0.0))) > 1e-9:
+                return np.asarray(
+                    [
+                        float(moments["m10"] / moments["m00"]),
+                        float(moments["m01"] / moments["m00"]),
+                    ],
+                    dtype=np.float64,
+                )
+        return np.mean(pts, axis=0)
+
+    def _geometry_axes_from_homography(self, resolver, anchor_px: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+        homography_matrix = self._base_homography_matrix(resolver)
+        if homography_matrix is None:
+            return None
+
+        anchor = np.asarray(anchor_px, dtype=np.float64).reshape(2)
+        probe = np.asarray(
+            [
+                anchor,
+                anchor + np.asarray([1.0, 0.0], dtype=np.float64),
+                anchor + np.asarray([0.0, 1.0], dtype=np.float64),
+            ],
+            dtype=np.float32,
+        ).reshape(-1, 1, 2)
+        mapped = cv2.perspectiveTransform(
+            probe,
+            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
+        ).reshape(-1, 2).astype(np.float64)
+
+        frame_obj = resolver.get_frame(self._calibration_frame_name) if self._calibration_frame_name else None
+        mapper = getattr(frame_obj, "mapper", None) if frame_obj is not None else None
+        if mapper is not None:
+            mapped = np.asarray([mapper.map_point(float(x), float(y)) for x, y in mapped], dtype=np.float64)
+
+        x_vec = mapped[1] - mapped[0]
+        y_vec = mapped[2] - mapped[0]
+        x_norm = float(np.linalg.norm(x_vec))
+        y_norm = float(np.linalg.norm(y_vec))
+        if x_norm <= 1e-12 or y_norm <= 1e-12:
+            return None
+        return x_vec / x_norm, y_vec / y_norm
+
+    @staticmethod
+    def _base_homography_matrix(resolver):
+        base = getattr(resolver, "_base", None)
+        model = getattr(base, "_model", None)
+        homography_matrix = getattr(model, "homography_matrix", None)
+        if homography_matrix is not None:
+            return homography_matrix
+        nested_base = getattr(base, "_base", None)
+        model = getattr(nested_base, "_model", None)
+        return getattr(model, "homography_matrix", None)
 
     def _extract_pickup_pixel(self, merged: dict) -> tuple[float, float] | None:
         pickup_point = (merged or {}).get("pickupPoint")
