@@ -18,6 +18,8 @@ def plot_pixel_to_mm_debug(
     raw_paths,
     raw_pixel_paths=None,
     homography_paths=None,
+    min_rects_mm=None,
+    measurement_text=None,
     save_dir="debug_plots",
 ):
     """Plot robot-mm paths immediately after pixel-to-mm conversion."""
@@ -46,6 +48,7 @@ def plot_pixel_to_mm_debug(
         counts = []
         raw_pixel_paths = raw_pixel_paths or []
         homography_paths = homography_paths or []
+        min_rects_mm = min_rects_mm or []
         for index, path in enumerate(raw_paths or []):
             arr = np.asarray(path, dtype=float)
             if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] < 3:
@@ -62,6 +65,9 @@ def plot_pixel_to_mm_debug(
             ax_xz.plot(arr[:, 0], arr[:, 2], "o-", markersize=3, linewidth=1.5, label=label)
             ax_xz.scatter(arr[0, 0], arr[0, 2], s=70, color="green", edgecolors="black", zorder=5, label="start" if index == 0 else "")
             ax_xz.scatter(arr[-1, 0], arr[-1, 2], s=70, color="red", edgecolors="black", zorder=5, label="end" if index == 0 else "")
+
+            if index < len(min_rects_mm):
+                _draw_min_rect_overlay(ax_xy, min_rects_mm[index], index)
 
             if index < len(homography_paths):
                 hom_arr = np.asarray(homography_paths[index], dtype=float)
@@ -113,6 +119,18 @@ def plot_pixel_to_mm_debug(
         else:
             ax_counts.text(0.5, 0.5, "No raw robot-mm paths", ha="center", va="center", transform=ax_counts.transAxes)
 
+        if measurement_text:
+            ax_counts.text(
+                0.5,
+                0.98,
+                str(measurement_text),
+                ha="center",
+                va="top",
+                fontsize=9,
+                transform=ax_counts.transAxes,
+                bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": "tab:purple", "alpha": 0.9},
+            )
+
         plt.tight_layout()
         filename = f"pixel_to_mm_debug_{timestamp}.png"
         filepath = os.path.join(save_dir, filename)
@@ -125,6 +143,48 @@ def plot_pixel_to_mm_debug(
         import traceback
         traceback.print_exc()
         return None
+
+
+def _draw_min_rect_overlay(ax, rect_info, index: int) -> None:
+    if not isinstance(rect_info, dict):
+        return
+
+    corners = np.asarray(rect_info.get("corners"), dtype=float)
+    if corners.ndim != 2 or corners.shape[0] != 4 or corners.shape[1] < 2:
+        return
+
+    closed = np.vstack([corners[:, :2], corners[0, :2]])
+    label = "Min rect" if index == 0 else ""
+    ax.plot(
+        closed[:, 0],
+        closed[:, 1],
+        "-",
+        color="tab:purple",
+        linewidth=2.2,
+        alpha=0.95,
+        label=label,
+        zorder=6,
+    )
+
+    center = rect_info.get("center")
+    if center is None:
+        center_xy = np.mean(corners[:, :2], axis=0)
+    else:
+        center_xy = np.asarray(center, dtype=float).reshape(-1)[:2]
+    length_mm = float(rect_info.get("length_mm", 0.0))
+    width_mm = float(rect_info.get("width_mm", 0.0))
+    angle_deg = float(rect_info.get("angle_deg", 0.0))
+    text = f"Min rect\n{length_mm:.1f} x {width_mm:.1f} mm\nangle {angle_deg:.1f} deg"
+    ax.annotate(
+        text,
+        xy=(center_xy[0], center_xy[1]),
+        xytext=(10, 10),
+        textcoords="offset points",
+        fontsize=9,
+        color="tab:purple",
+        bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "tab:purple", "alpha": 0.85},
+        zorder=7,
+    )
 
 
 def _execution_rotation_change_mask(execution_arr: np.ndarray, threshold_deg: float = 1e-6) -> np.ndarray:

@@ -305,7 +305,14 @@ class PickTargetApplicationService(IPickTargetService):
                     rx, ry = self._transform_point(float(px), float(py))
                     robot_pts.append((rx, ry))
                 if robot_pts:
-                    result.append(np.array(robot_pts, dtype=np.float32))
+                    robot_arr = np.array(robot_pts, dtype=np.float32)
+                    result.append(robot_arr)
+                    _logger.info(
+                        "[PICK_TARGET_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                        len(result),
+                        len(robot_arr),
+                        self._describe_robot_contour_size(robot_arr),
+                    )
             except Exception:
                 _logger.exception("Failed to transform contour for trajectory")
         return result
@@ -328,10 +335,16 @@ class PickTargetApplicationService(IPickTargetService):
             rx, ry = self._current_capture_orientation()
             rz = self._pickup_plane_rz
             total_pts = 0
-            for pts in contour_robot_pts:
+            for index, pts in enumerate(contour_robot_pts):
                 path = [[float(x), float(y), float(z)] for x, y in pts]
                 if not path:
                     continue
+                _logger.info(
+                    "[PICK_TARGET_EXECUTE_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                    index + 1,
+                    len(path),
+                    self._describe_robot_contour_size(np.asarray(pts, dtype=np.float32)),
+                )
                 result_code = exec_fn(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=True)
                 if result_code not in (0, True, None):
                     return False, f"Trajectory failed with code {result_code}"
@@ -340,3 +353,22 @@ class PickTargetApplicationService(IPickTargetService):
         except Exception:
             _logger.exception("execute_contour_trajectory failed")
             return False, "Trajectory error — see log"
+
+    @staticmethod
+    def _describe_robot_contour_size(points: np.ndarray) -> str:
+        arr = np.asarray(points, dtype=np.float32)
+        if arr.ndim != 2 or arr.shape[0] < 3 or arr.shape[1] < 2:
+            return "min_rect=unavailable bbox=unavailable"
+
+        xy = np.ascontiguousarray(arr[:, :2].reshape(-1, 1, 2), dtype=np.float32)
+        (_center, size, angle_deg) = cv2.minAreaRect(xy)
+        length_mm = max(float(size[0]), float(size[1]))
+        width_mm = min(float(size[0]), float(size[1]))
+        x_min = float(np.min(arr[:, 0]))
+        x_max = float(np.max(arr[:, 0]))
+        y_min = float(np.min(arr[:, 1]))
+        y_max = float(np.max(arr[:, 1]))
+        return (
+            f"min_rect=({length_mm:.3f} x {width_mm:.3f} mm angle={float(angle_deg):.3f}) "
+            f"bbox=({x_max - x_min:.3f} x {y_max - y_min:.3f} mm)"
+        )
