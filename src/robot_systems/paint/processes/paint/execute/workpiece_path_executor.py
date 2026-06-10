@@ -11,7 +11,6 @@ from src.engine.geometry.planar import (
     axis_equivalent_shift_degrees,
     nearest_axis_equivalent_degrees,
     rotate_xy,
-    unwrap_degrees,
 )
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
@@ -102,15 +101,6 @@ def _mirror_pose_rotation_about_reference(
     return mirrored
 
 
-def _swap_ry_rz_command_axes(pose: list[float]) -> list[float]:
-    """Return a command pose with planned RY/RZ exchanged for the paint-plane wrist convention."""
-    command_pose = list(pose)
-    while len(command_pose) < 6:
-        command_pose.append(0.0)
-    command_pose[4], command_pose[5] = float(command_pose[5]), float(command_pose[4])
-    return command_pose
-
-
 def _projection_anchor_xy(job: dict, pivot_config: PaintSimulationConfig) -> tuple[float, float] | None:
     """Return the pickup anchor when the active projection source plane is robot X/Y."""
     if tuple(pivot_config.source_planar_coordinate_indices) != (0, 1):
@@ -122,41 +112,6 @@ def _projection_anchor_xy(job: dict, pivot_config: PaintSimulationConfig) -> tup
         return float(pickup_xy[0]), float(pickup_xy[1])
     except (TypeError, ValueError):
         return None
-
-
-def _projection_source_rotation_deg(
-    job: dict,
-    pivot_pose: list[float],
-    pivot_config: PaintSimulationConfig,
-    pivot_strategy,
-    *,
-    pickup_ry: float = 0.0,
-    mirrored_handoff: bool = False,
-) -> float:
-    """Return the held-contour source rotation applied before XZ/RY projection."""
-    if pivot_config.motion_plane != "xz_y_ry":
-        return 0.0
-    try:
-        pickup_rz = float(job.get("pickup_rz", 0.0))
-    except (TypeError, ValueError):
-        pickup_rz = 0.0
-    align_rz = pivot_strategy.compute_pickup_align_rotation(
-        pickup_rz=pickup_rz,
-        pickup_ry=float(pickup_ry),
-        first_pivot_pose=[],
-        paint_pivot_pose=pivot_pose,
-        mirrored_handoff=bool(mirrored_handoff),
-    )
-    return float(unwrap_degrees(pickup_rz, align_rz) - pickup_rz)
-
-
-def _pose_with_rz(pose: list[float], rz_degrees: float) -> list[float]:
-    """Return a 6D pose copy with RZ replaced by the supplied angle."""
-    result = list(pose)
-    while len(result) < 6:
-        result.append(0.0)
-    result[5] = float(rz_degrees)
-    return result
 
 
 def _project_paint_motion_geometry(
@@ -193,6 +148,7 @@ class PickupToPivotPlan:
     stage_transition_poses: list[list[float]]
     staged_pose: list[float]
     change_plane_pose: list[float]
+    paint_pivot_pose: list[float]
 
 def _normalize_pivot_config(
     *,
@@ -270,7 +226,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._debug_dump_dir = debug_dump_dir
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupToPivotPlan | None = None
-        self._last_staged_command_pose: list[float] | None = None
         self._pending_stage_pose: list[float] | None = None
         self._flip_xz_ry_execution_rotation_direction = bool(flip_xz_ry_execution_rotation_direction)
         self._mirror_xz_ry_pickup_handoff = bool(mirror_xz_ry_pickup_handoff)
@@ -525,19 +480,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 continue
             last_pivot_pose = list(pivot_pose)
             anchor_xy = _projection_anchor_xy(job, self._pivot_config)
-            source_rotation_deg = _projection_source_rotation_deg(
-                job,
-                pivot_pose,
-                self._pivot_config,
-                self._pivot_strategy,
-                mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-            )
             center_path, _, diagnostics = _project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
                 self._pivot_config,
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
             )
             # self._write_pivot_debug_dump(
             #     source_path=source_path,
@@ -572,19 +519,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 continue
             last_pivot_pose = list(pivot_pose)
             anchor_xy = _projection_anchor_xy(job, self._pivot_config)
-            source_rotation_deg = _projection_source_rotation_deg(
-                job,
-                pivot_pose,
-                self._pivot_config,
-                self._pivot_strategy,
-                mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-            )
             _, snapshots, _ = _project_paint_motion_geometry(
                 source_path,
                 pivot_pose,
                 self._pivot_config,
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
             )
             motion.append(snapshots)
         return motion, last_pivot_pose
@@ -597,16 +536,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pivot_offset_mm: float = 0.0,
         align_start_to_zero_rz: bool = False,
         anchor_xy: tuple[float, float] | None = None,
-        source_rotation_deg: float = 0.0,
-        pivot_pose_override: list[float] | None = None,
     ) -> list[list[float]] | None:
         """Project one prepared spline into the real pivot execution trajectory."""
         started = perf_counter()
-        pivot_pose = (
-            list(pivot_pose_override)
-            if pivot_pose_override is not None
-            else self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
-        )
+        pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
         if pivot_pose is None or len(pivot_pose) < 3:
             _logger.info("[TIMING] pivot_path_build status=missing_pivot elapsed_s=%.3f", _elapsed_s(started))
             return None
@@ -615,7 +548,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_pose,
             self._pivot_config,
             anchor_xy=anchor_xy,
-            source_rotation_deg=source_rotation_deg,
         )
         _logger.debug("Simulated pivot path has %d points", len(pivot_path))
         if align_start_to_zero_rz:
@@ -664,19 +596,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if pivot_pose is None or len(pivot_pose) < 3:
                 return False, "Pivot-path execution requires a valid base/pivot position"
             anchor_xy = _projection_anchor_xy(job, self._pivot_config)
-            source_rotation_deg = _projection_source_rotation_deg(
-                job,
-                pivot_pose,
-                self._pivot_config,
-                self._pivot_strategy,
-                mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-            )
             pivot_path, _, diagnostics = _project_paint_motion_geometry(
                 spline,
                 pivot_pose,
                 self._pivot_config,
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
             )
             if not pivot_path:
                 return False, "Pivot-path execution requires a valid base/pivot position"
@@ -731,7 +655,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return None
 
         pickup_pivot_pose = self._resolve_pickup_base_position()
+        _logger.debug(f"pickup_pivot_pose -> {pickup_pivot_pose}")
+
         paint_pivot_pose = self._resolve_base_position()
+        _logger.debug(f"paint_pivot_pose -> {paint_pivot_pose}")
+
         if pickup_pivot_pose is None or len(pickup_pivot_pose) < 3:
             return None
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
@@ -740,43 +668,67 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         source_path = jobs[0].get("execution_path") or jobs[0].get("path") or []
         if not source_path:
             return None
+
         pickup_xy = jobs[0].get("pickup_xy")
         if not pickup_xy or len(pickup_xy) < 2:
             return None
+
         pickup_centroid_x = float(pickup_xy[0])
         pickup_centroid_y = float(pickup_xy[1])
+
         anchor_xy = _projection_anchor_xy(jobs[0], self._pivot_config)
 
         pivot_offset_mm = self._resolve_pivot_offset_mm(jobs[0], execution_plan)
+
         paint_pivot_pose = self._apply_pivot_offset(paint_pivot_pose, pivot_offset_mm)
+
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
-        pickup_ry_for_projection = float(pickup_pivot_pose[4]) if len(pickup_pivot_pose) >= 5 else 0.0
-        source_rotation_deg = _projection_source_rotation_deg(
-            jobs[0],
-            paint_pivot_pose,
-            self._pivot_config,
-            self._pivot_strategy,
-            pickup_ry=pickup_ry_for_projection,
-            mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-        )
-        projection_pivot_pose = (
-            _pose_with_rz(paint_pivot_pose, source_rotation_deg)
-            if self._pivot_config.motion_plane == "xz_y_ry"
-            else paint_pivot_pose
-        )
         projected_pivot_path, _, _ = _project_paint_motion_geometry(
             source_path,
-            projection_pivot_pose,
+            paint_pivot_pose,
             self._pivot_config,
             anchor_xy=anchor_xy,
-            source_rotation_deg=source_rotation_deg,
         )
+
         if not projected_pivot_path:
             return None
 
         first_pivot_pose = list(projected_pivot_path[0])
+        if anchor_xy is not None and len(source_path[0]) >= 2 and len(first_pivot_pose) >= 3:
+            source_planar_i, source_planar_j = self._pivot_config.source_planar_coordinate_indices
+            planar_i, planar_j = self._pivot_config.planar_coordinate_indices
+            source_first = np.asarray(
+                [
+                    float(source_path[0][source_planar_i]),
+                    float(source_path[0][source_planar_j]),
+                ],
+                dtype=float,
+            )
+            source_anchor = np.asarray([float(anchor_xy[0]), float(anchor_xy[1])], dtype=float)
+            source_offset = source_first - source_anchor
+            command_offset = np.asarray(
+                [
+                    float(first_pivot_pose[planar_i]) - float(paint_pivot_pose[planar_i]),
+                    float(first_pivot_pose[planar_j]) - float(paint_pivot_pose[planar_j]),
+                ],
+                dtype=float,
+            )
+            _logger.info(
+                "[PICKUP] pivot anchor offset: source_first=(%.3f, %.3f) source_anchor=(%.3f, %.3f) "
+                "source_first_minus_anchor=(%.3f, %.3f) command_tcp_minus_pivot_%s%s=(%.3f, %.3f)",
+                float(source_first[0]),
+                float(source_first[1]),
+                float(source_anchor[0]),
+                float(source_anchor[1]),
+                float(source_offset[0]),
+                float(source_offset[1]),
+                self._pivot_config.planar_axes[0],
+                self._pivot_config.planar_axes[1],
+                float(command_offset[0]),
+                float(command_offset[1]),
+            )
         pickup_target_point_name = str(
             jobs[0].get("pickup_target_point_name", "") or ""
         ).strip().lower()
@@ -789,15 +741,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_z = self._pickup_safety_z_min_mm + workpiece_height_mm + PAINT_PROCESS_CONFIG.pickup_contact_offset_mm
 
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
-        pickup_contact_rz = 0.0
+
         pickup_rz_source = "execution_plan"
         should_apply_tcp_offset = False
         pickup_tcp_dx, pickup_tcp_dy = 0.0, 0.0
         _logger.info(
-            "[PICKUP] pickup_xy=(%.3f, %.3f) pickup_contact_rz=%.3f carried_pickup_rz=%.3f pickup_rz_source=%s pickup_target=%s workpiece_height=%.3f pickup_z=%.3f safety_z_min=%.3f apply_tcp_offset=%s configured_tcp_offset=(%.3f, %.3f) rotated_tcp_offset=(%.3f, %.3f)",
+            "[PICKUP] pickup_xy=(%.3f, %.3f) pickup_rz=%.3f pickup_rz_source=%s pickup_target=%s workpiece_height=%.3f pickup_z=%.3f safety_z_min=%.3f apply_tcp_offset=%s configured_tcp_offset=(%.3f, %.3f) rotated_tcp_offset=(%.3f, %.3f)",
             pickup_centroid_x,
             pickup_centroid_y,
-            pickup_contact_rz,
             pickup_rz,
             pickup_rz_source,
             pickup_target_point_name or "camera",
@@ -817,7 +768,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_approach_z,
             pickup_rx,
             pickup_ry,
-            pickup_contact_rz,
+            pickup_rz,
         ]
         pickup_pose = [
             pickup_centroid_x - pickup_tcp_dx,
@@ -825,41 +776,35 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             float(pickup_z),
             pickup_rx,
             pickup_ry,
-            pickup_contact_rz,
+            pickup_rz,
         ]
 
         align_rx = pickup_rx
         align_ry = pickup_ry
-        if self._pivot_config.motion_plane == "xz_y_ry":
-            align_rz = float(source_rotation_deg)
-        else:
-            align_rz = self._pivot_strategy.compute_pickup_align_rotation(
-                pickup_rz=pickup_rz,
-                pickup_ry=pickup_ry,
-                first_pivot_pose=first_pivot_pose,
-                paint_pivot_pose=paint_pivot_pose,
-                mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-            )
+        align_rz = self._pivot_strategy.compute_pickup_align_rotation(
+            pickup_rz=pickup_rz,
+            pickup_ry=pickup_ry,
+            first_pivot_pose=first_pivot_pose,
+            paint_pivot_pose=paint_pivot_pose,
+            mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
+        )
         if self._pivot_config.motion_plane == "xz_y_ry":
             _logger.info(
-                "[PICKUP] xz/ry handoff: mirrored=%s pickup_rz=%.3f source_rotation=%.3f first_pivot_ry=%.3f paint_reference_ry=%.3f align_rz=%.3f",
+                "[PICKUP] xz/ry handoff: mirrored=%s pickup_rz=%.3f first_pivot_ry=%.3f paint_reference_ry=%.3f align_rz=%.3f",
                 self._mirror_xz_ry_pickup_handoff,
                 pickup_rz,
-                source_rotation_deg,
                 float(first_pivot_pose[4]) if len(first_pivot_pose) >= 5 else pickup_ry,
                 float(paint_pivot_pose[4]) if len(paint_pivot_pose) >= 5 else pickup_ry,
                 align_rz,
             )
 
-        align_pose_rz = pickup_contact_rz if self._pivot_config.motion_plane == "xz_y_ry" else align_rz
-        change_plane_rz = pickup_contact_rz if self._pivot_config.motion_plane == "xz_y_ry" else align_rz
         align_pose = [
             pickup_centroid_x - pickup_tcp_dx,
             pickup_centroid_y - pickup_tcp_dy,
             pickup_approach_z,
             align_rx,
             align_ry,
-            align_pose_rz,
+            align_rz,
         ]
 
         change_plane_pose = [
@@ -868,7 +813,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             float(pickup_approach_z),
             float(paint_pivot_pose[3]) if len(paint_pivot_pose) >= 4 else pickup_rx,
             pickup_ry,
-            change_plane_rz,
+            align_rz,
         ]
 
         staged_pose = list(first_pivot_pose)
@@ -893,23 +838,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 float(staged_pose[4]),
                 float(align_rz),
             )
-            plane_aligned_pose = list(change_plane_pose)
-            plane_aligned_pose[5] = float(align_rz)
-            if abs(float(plane_aligned_pose[5]) - float(change_plane_pose[5])) > 1e-6:
-                stage_transition_poses.append(plane_aligned_pose)
-            height_handoff_pose = list(plane_aligned_pose)
-            height_handoff_pose[2] = float(staged_pose[2])
-            if abs(float(height_handoff_pose[2]) - float(change_plane_pose[2])) > 1e-6:
-                stage_transition_poses.append(height_handoff_pose)
             translation_handoff_pose = list(staged_pose)
-            translation_handoff_pose[4] = float(align_ry)
             stage_transition_poses.append(translation_handoff_pose)
             _logger.info(
-                "[PICKUP] xz/ry staged pose: first_pivot=%s change_plane=%s plane_aligned=%s height_handoff=%s translation_handoff=%s staged=%s",
+                "[PICKUP] xz/ry staged pose: first_pivot=%s change_plane=%s translation_handoff=%s staged=%s",
                 [round(float(v), 3) for v in first_pivot_pose[:6]],
                 [round(float(v), 3) for v in change_plane_pose[:6]],
-                [round(float(v), 3) for v in plane_aligned_pose[:6]],
-                [round(float(v), 3) for v in height_handoff_pose[:6]],
                 [round(float(v), 3) for v in translation_handoff_pose[:6]],
                 [round(float(v), 3) for v in staged_pose[:6]],
             )
@@ -921,6 +855,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             align_pose=align_pose,
             stage_transition_poses=stage_transition_poses,
             staged_pose=staged_pose,
+            paint_pivot_pose=list(paint_pivot_pose),
         )
 
     def _move_pickup_phase(self, label: str, pose: list[float]) -> bool:
@@ -941,23 +876,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             acceleration=PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
             wait_to_reach=True,
         )
-        actual_pose = self._robot_service.get_current_position() if ok else None
-        if actual_pose and len(actual_pose) >= 6 and len(pose) >= 6:
-            commanded = np.asarray(pose[:6], dtype=float)
-            actual = np.asarray(actual_pose[:6], dtype=float)
-            delta = actual - commanded
-            _logger.info(
-                "[PICKUP_ACTUAL] label=%s commanded=%s actual=%s delta_xyz_mm=(%.3f, %.3f, %.3f) delta_rxyz_deg=(%.3f, %.3f, %.3f)",
-                label,
-                [round(float(v), 3) for v in commanded],
-                [round(float(v), 3) for v in actual],
-                float(delta[0]),
-                float(delta[1]),
-                float(delta[2]),
-                float(delta[3]),
-                float(delta[4]),
-                float(delta[5]),
-            )
         _logger.info("[TIMING] pickup_phase label=%s success=%s elapsed_s=%.3f", label, bool(ok), _elapsed_s(started))
         return ok
 
@@ -976,12 +894,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 rotation_index=self._pivot_config.rotation_index,
                 reference_degrees=float(reference_pose[4]),
             )
-        command_pose = _swap_ry_rz_command_axes(command_pose)
         _logger.info(
-            "[PICKUP] xz/ry pivot staging command axes mapped: planned_ry=%.3f planned_rz=%.3f reference_ry=%.3f command_ry=%.3f command_rz=%.3f mirror=%s",
+            "[PICKUP] xz/ry pivot staging command mapped: planned_xz=(%.3f, %.3f) planned_ry=%.3f planned_rz=%.3f reference_xz=(%.3f, %.3f) reference_ry=%.3f command_xz=(%.3f, %.3f) command_ry=%.3f command_rz=%.3f mirror=%s",
+            float(pose[0]) if len(pose) >= 1 else 0.0,
+            float(pose[2]) if len(pose) >= 3 else 0.0,
             float(pose[4]) if len(pose) >= 5 else 0.0,
             float(pose[5]) if len(pose) >= 6 else 0.0,
+            float(self._last_pickup_plan.paint_pivot_pose[0]) if self._last_pickup_plan is not None else float(reference_pose[0]) if len(reference_pose) >= 1 else 0.0,
+            float(self._last_pickup_plan.paint_pivot_pose[2]) if self._last_pickup_plan is not None else float(reference_pose[2]) if len(reference_pose) >= 3 else 0.0,
             float(reference_pose[4]) if len(reference_pose) >= 5 else 0.0,
+            float(command_pose[0]) if len(command_pose) >= 1 else 0.0,
+            float(command_pose[2]) if len(command_pose) >= 3 else 0.0,
             float(command_pose[4]),
             float(command_pose[5]),
             self._flip_xz_ry_execution_rotation_direction,
@@ -1008,17 +931,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     reference_degrees=reference_ry,
                 )
             mirrored_path.append(command_pose)
-        command_path = [_swap_ry_rz_command_axes(pose) for pose in mirrored_path]
+        command_path = mirrored_path
         _logger.info(
-            "[PIVOT_PATH] xz/ry execution command axes mapped: planned_start_ry=%.3f planned_start_rz=%.3f command_start_ry=%.3f command_start_rz=%.3f planned_end_ry=%.3f planned_end_rz=%.3f command_end_ry=%.3f command_end_rz=%.3f reference_ry=%.3f mirror=%s",
+            "[PIVOT_PATH] xz/ry execution command mapped: planned_start_xz=(%.3f, %.3f) planned_start_ry=%.3f planned_start_rz=%.3f command_start_xz=(%.3f, %.3f) command_start_ry=%.3f command_start_rz=%.3f planned_end_xz=(%.3f, %.3f) planned_end_ry=%.3f planned_end_rz=%.3f command_end_xz=(%.3f, %.3f) command_end_ry=%.3f command_end_rz=%.3f reference_xz=(%.3f, %.3f) reference_ry=%.3f mirror=%s",
+            float(path[0][0]) if len(path[0]) >= 1 else 0.0,
+            float(path[0][2]) if len(path[0]) >= 3 else 0.0,
             float(path[0][4]) if len(path[0]) >= 5 else 0.0,
             float(path[0][5]) if len(path[0]) >= 6 else 0.0,
+            float(command_path[0][0]) if len(command_path[0]) >= 1 else 0.0,
+            float(command_path[0][2]) if len(command_path[0]) >= 3 else 0.0,
             float(command_path[0][4]) if len(command_path[0]) >= 5 else 0.0,
             float(command_path[0][5]) if len(command_path[0]) >= 6 else 0.0,
+            float(path[-1][0]) if len(path[-1]) >= 1 else 0.0,
+            float(path[-1][2]) if len(path[-1]) >= 3 else 0.0,
             float(path[-1][4]) if len(path[-1]) >= 5 else 0.0,
             float(path[-1][5]) if len(path[-1]) >= 6 else 0.0,
+            float(command_path[-1][0]) if len(command_path[-1]) >= 1 else 0.0,
+            float(command_path[-1][2]) if len(command_path[-1]) >= 3 else 0.0,
             float(command_path[-1][4]) if len(command_path[-1]) >= 5 else 0.0,
             float(command_path[-1][5]) if len(command_path[-1]) >= 6 else 0.0,
+            float(self._last_pickup_plan.paint_pivot_pose[0]) if len(self._last_pickup_plan.paint_pivot_pose) >= 1 else 0.0,
+            float(self._last_pickup_plan.paint_pivot_pose[2]) if len(self._last_pickup_plan.paint_pivot_pose) >= 3 else 0.0,
             reference_ry,
             self._flip_xz_ry_execution_rotation_direction,
         )
@@ -1139,32 +1072,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 continue
 
             anchor_xy = _projection_anchor_xy(job, self._pivot_config)
-            pivot_pose_for_projection = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
-            source_rotation_deg = (
-                _projection_source_rotation_deg(
-                    job,
-                    pivot_pose_for_projection,
-                    self._pivot_config,
-                    self._pivot_strategy,
-                    mirrored_handoff=self._mirror_xz_ry_pickup_handoff,
-                )
-                if pivot_pose_for_projection is not None else 0.0
-            )
-            if (
-                pivot_pose_for_projection is not None
-                and self._pivot_config.motion_plane == "xz_y_ry"
-            ):
-                pivot_pose_for_projection = _pose_with_rz(
-                    pivot_pose_for_projection,
-                    source_rotation_deg,
-                )
             pivot_path = self._build_pivot_execution_path(
                 spline,
                 pivot_offset_mm=pivot_offset_mm,
                 align_start_to_zero_rz=False,
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
-                pivot_pose_override=pivot_pose_for_projection,
             )
             if not pivot_path:
                 _logger.info(
@@ -1235,14 +1147,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 _path_length_mm(pivot_path),
             )
 
-            pivot_pose = pivot_pose_for_projection
+            pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
             if pivot_pose is not None and len(pivot_pose) >= 3:
                 _, snapshots, diagnostics = _project_paint_motion_geometry(
                     spline,
                     pivot_pose,
                     self._pivot_config,
                     anchor_xy=anchor_xy,
-                    source_rotation_deg=source_rotation_deg,
                 )
                 if abs(rotation_shift) > 1e-9 and diagnostics is not None:
                     diagnostics = [dict(item) for item in diagnostics]
@@ -1260,7 +1171,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 diagnostics=diagnostics,
                 pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
                 pattern_type=pattern_type,
                 stage="execute",
             )
@@ -1275,26 +1185,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 pattern_type=pattern_type,
                 stage="execute",
                 anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
             )
 
             command_pivot_path = self._pivot_execution_command_path(pivot_path)
-            if self._last_staged_command_pose is not None and command_pivot_path:
-                staged_pose = np.asarray(self._last_staged_command_pose[:6], dtype=float)
-                first_command_pose = np.asarray(command_pivot_path[0][:6], dtype=float)
-                delta = first_command_pose - staged_pose
-                _logger.info(
-                    "[PIVOT_PATH] staged_to_first_command_delta xyz_mm=(%.3f, %.3f, %.3f) "
-                    "rxyz_deg=(%.3f, %.3f, %.3f) staged=%s first_command=%s",
-                    float(delta[0]),
-                    float(delta[1]),
-                    float(delta[2]),
-                    float(delta[3]),
-                    float(delta[4]),
-                    float(delta[5]),
-                    [round(float(v), 3) for v in staged_pose],
-                    [round(float(v), 3) for v in first_command_pose],
-                )
             preflight_ok, preflight_message = self._validate_xz_ry_pivot_path(command_pivot_path)
             if not preflight_ok:
                 _logger.info(
@@ -1427,7 +1320,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 return False, f"Pickup succeeded, but stage transition {transition_index} failed"
 
         staged_command_pose = self._pivot_staging_command_pose(plan.staged_pose, plan.change_plane_pose)
-        self._last_staged_command_pose = list(staged_command_pose)
         if not self._move_pickup_phase("Moving to first pivot contact pose", staged_command_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=staged_pose total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup succeeded, but move to first pivot contact pose failed"
@@ -1449,30 +1341,30 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         # if not ok:
         #     _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
         #     return False, msg
-        # #
-        # ok, msg = self._run_pre_release_dropoff()
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
         #
-        # ok, msg = self._turn_vacuum_off()
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
+        ok, msg = self._run_pre_release_dropoff()
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
 
-        # ok, msg = self._run_post_execute_return(
-        #     "Pickup and pivot paint finished, but {reason}"
-        # )
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_and_paint success=false stage=post_return total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
+        ok, msg = self._turn_vacuum_off()
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
 
-        # _logger.info(
-        #     "[TIMING] pickup_and_paint success=true jobs=%d total_waypoints=%d total_elapsed_s=%.3f",
-        #     len(execution_plan.execution_jobs),
-        #     total_waypoints,
-        #     _elapsed_s(started),
-        # )
+        ok, msg = self._run_post_execute_return(
+            "Pickup and pivot paint finished, but {reason}"
+        )
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=post_return total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
+
+        _logger.info(
+            "[TIMING] pickup_and_paint success=true jobs=%d total_waypoints=%d total_elapsed_s=%.3f",
+            len(execution_plan.execution_jobs),
+            total_waypoints,
+            _elapsed_s(started),
+        )
         return True, (
             f"Pickup, alignment, and pivot paint completed "
             # f"for {len(execution_plan.execution_jobs)} path(s), {total_waypoints} waypoints"

@@ -22,6 +22,7 @@ from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
 _DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
 _TEMPORARILY_DISABLE_DXF_CAPTURE_BRANCH_FOR_CONTOUR_DEBUG = True
+_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW = True
 
 
 class _Bridge(QObject):
@@ -850,18 +851,35 @@ class WorkpieceEditorController(IApplicationController):
                 execution_paths = self._model.get_last_execution_preview_paths()
                 camera_preview_paths = self._model.get_last_camera_preview_paths()
                 if raw_paths or sampled_paths:
-                    self._show_interpolation_plot(
-                        raw_paths,
-                        raw_pixel_paths,
-                        raw_homography_paths,
-                        prepared_paths,
-                        curve_paths,
-                        sampled_paths,
-                        execution_paths,
-                        camera_preview_paths,
-                    )
+                    if _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                        self._continue_with_process_action_after_prepare()
+                    else:
+                        self._show_interpolation_plot(
+                            raw_paths,
+                            raw_pixel_paths,
+                            raw_homography_paths,
+                            prepared_paths,
+                            curve_paths,
+                            sampled_paths,
+                            execution_paths,
+                            camera_preview_paths,
+                        )
             except Exception:
                 self._logger.debug("Failed to show interpolation preview", exc_info=True)
+
+    def _continue_with_process_action_after_prepare(self) -> None:
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            return
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process preview bypass selected first process action out of %d: %s",
+                len(actions),
+                actions[0].action_id,
+            )
+        self._preview_dialog = None
+        self._on_execute_process_confirmed(actions[0])
 
     def _show_interpolation_plot(
             self,

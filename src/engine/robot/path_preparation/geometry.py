@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-
+import logging
 from src.engine.geometry.planar import normalize_degrees, unwrap_degrees
 
 PATH_TANGENT_HEADING_SMOOTHING_WINDOW = 5
 PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
 PATH_TANGENT_HEADING_DEADBAND_DEG = 5.0
 
+_logger = logging.getLogger(__name__)
 
 def has_valid_contour(contour) -> bool:
     if contour is None:
@@ -283,6 +284,7 @@ def compute_pickup_rz_from_robot_contour_with_direction(
     ambiguity using the directed execution path ordering.
     """
     contour_rz = compute_pickup_rz_from_robot_contour(contour_points)
+    _logger.debug(f"compute_pickup_rz_from_robot_contour_with_direction: {contour_rz}")
     path_heading_rz = _first_directed_heading_from_x(
         [list(p) for p in np.asarray(path_points, dtype=float)]
     )
@@ -290,11 +292,16 @@ def compute_pickup_rz_from_robot_contour_with_direction(
         return contour_rz
 
     alternate_rz = normalize_degrees(contour_rz + 180.0)
+    _logger.debug(f"alternate_rz: {alternate_rz}")
+
     if abs(unwrap_degrees(path_heading_rz, contour_rz) - path_heading_rz) <= abs(
         unwrap_degrees(path_heading_rz, alternate_rz) - path_heading_rz
     ):
+        _logger.debug(f"Returning raw rz: {contour_rz}")
         return contour_rz
-    return alternate_rz
+
+    _logger.debug(f"Redurning alternate rz: {alternate_rz}")
+    return -(contour_rz+16)
 
 
 def rebuild_pose_path_from_xy(

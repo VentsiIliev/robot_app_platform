@@ -154,6 +154,7 @@ def project_paint_motion_geometry(
     points = _canonicalize_closed_source_path(
         points,
         pivot_xy=pivot_xy,
+        start_reference_xy=tuple(tcp_anchor) if tcp_anchor is not None else None,
         translation_heading=translation_heading,
         contact_segment_heading=contact_segment_heading,
         side_sign=config.side_sign,
@@ -351,6 +352,7 @@ def _canonicalize_closed_source_path(
     points: np.ndarray,
     *,
     pivot_xy: tuple[float, float],
+    start_reference_xy: tuple[float, float] | None = None,
     translation_heading: float,
     contact_segment_heading: float,
     side_sign: float,
@@ -358,9 +360,8 @@ def _canonicalize_closed_source_path(
     """
     Give closed contours a pivot-aware start point and traversal direction.
 
-    The first point should be the boundary point that is closest to the actual
-    pivot location, then the loop direction should be chosen to match the
-    requested projected travel direction.
+    The first point should have a local segment already close to the requested
+    contact heading. Distance to the pickup/source anchor is only a tie-breaker.
     """
     contour = np.asarray(points, dtype=float)
     if len(contour) < 3:
@@ -373,15 +374,14 @@ def _canonicalize_closed_source_path(
         return points
 
     pivot_vec = np.asarray([float(pivot_xy[0]), float(pivot_xy[1])], dtype=float)
-    start_index = int(np.argmin(np.linalg.norm(contour - pivot_vec, axis=1)))
+    reference_vec = (
+        np.asarray([float(start_reference_xy[0]), float(start_reference_xy[1])], dtype=float)
+        if start_reference_xy is not None
+        else np.mean(contour, axis=0)
+    )
 
     desired_heading = float(contact_segment_heading)
     desired_side_sign = 1.0 if float(side_sign) >= 0.0 else -1.0
-
-    forward = np.roll(contour, -start_index, axis=0)
-    reverse = forward[::-1].copy()
-    reverse = np.roll(reverse, -np.argmin(np.linalg.norm(reverse - forward[0], axis=1)), axis=0)
-    candidates = [forward, reverse]
 
     def _preview_aligned(candidate: np.ndarray) -> tuple[np.ndarray, float, float]:
         heading = _segment_heading_deg(candidate[0], candidate[1])
@@ -407,17 +407,22 @@ def _canonicalize_closed_source_path(
             return 0.0
         return float(np.mean(relative @ normal))
 
-    best_ordered = forward
-    best_key: tuple[float, float] | None = None
-    for candidate in candidates:
-        aligned_preview, heading, _ = _preview_aligned(candidate)
-        heading_error = _angle_error_deg(heading, desired_heading)
-        side_score = _side_score(aligned_preview)
-        side_penalty = 0.0 if side_score * desired_side_sign >= 0.0 else 1.0
-        key = (side_penalty, heading_error)
-        if best_key is None or key < best_key:
-            best_key = key
-            best_ordered = candidate
+    best_ordered = contour
+    best_key: tuple[float, float, float] | None = None
+    for start_index in range(len(contour)):
+        forward = np.roll(contour, -start_index, axis=0)
+        reverse = forward[::-1].copy()
+        reverse = np.roll(reverse, -np.argmin(np.linalg.norm(reverse - forward[0], axis=1)), axis=0)
+        for candidate in (forward, reverse):
+            aligned_preview, heading, _ = _preview_aligned(candidate)
+            heading_error = _angle_error_deg(heading, desired_heading)
+            side_score = _side_score(aligned_preview)
+            side_penalty = 0.0 if side_score * desired_side_sign >= 0.0 else 1.0
+            anchor_distance = float(np.linalg.norm(candidate[0] - reference_vec))
+            key = (side_penalty, heading_error, anchor_distance)
+            if best_key is None or key < best_key:
+                best_key = key
+                best_ordered = candidate
 
     return np.vstack([best_ordered, best_ordered[:1]])
 

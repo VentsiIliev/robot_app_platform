@@ -606,7 +606,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._target_point_name,
                     frame_name=self._calibration_frame_name,
-                    rz_override=0.0,
                 )
                 if use_workpiece_layer and pickup_rz_source_contour and robot_paths:
                     pickup_rz = compute_pickup_rz_from_robot_contour_with_direction(
@@ -647,17 +646,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         self._pickup_axis_alignment_sign,
                         float(pickup_rz),
                     )
-                pickup_contact_rz = 0.0
                 pickup_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._pickup_target_point_name,
                     frame_name=self._calibration_frame_name,
-                    rz_override=pickup_contact_rz,
+                    rz_override=pickup_rz,
                 )
                 self._logger.info(
-                    "[PICKUP_RZ] pickup point resolved at contact_rz=%.3f carried_pickup_rz=%.3f pickup_xy=(%.3f, %.3f)",
-                    float(pickup_contact_rz),
+                    "[PICKUP_RZ] pickup point resolved at pickup_rz=%.3f pickup_xy=(%.3f, %.3f)",
                     float(pickup_rz),
                     float(pickup_xy[0]),
                     float(pickup_xy[1]),
@@ -899,6 +896,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             self._logger.info(
                 "[EXECUTE] Geometry transform: mode=ppm_anchor ppm=%.6f mm_per_px=%.6f "
                 "anchor_px=(%.3f, %.3f) anchor_robot_xy=(%.3f, %.3f) "
+                "basis_x=(%.6f, %.6f) basis_y=(%.6f, %.6f) "
                 "bbox_robot_mm=(%.3f x %.3f) points=%d",
                 float(ppm),
                 float(mm_per_px),
@@ -906,6 +904,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 float(anchor_px[1]),
                 float(anchor_xy[0]),
                 float(anchor_xy[1]),
+                float(x_axis[0]),
+                float(x_axis[1]),
+                float(y_axis[0]),
+                float(y_axis[1]),
                 float(bbox[0]),
                 float(bbox[1]),
                 len(robot_xy),
@@ -983,13 +985,23 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         if mapper is not None:
             mapped = np.asarray([mapper.map_point(float(x), float(y)) for x, y in mapped], dtype=np.float64)
 
-        x_vec = mapped[1] - mapped[0]
-        y_vec = mapped[2] - mapped[0]
-        x_norm = float(np.linalg.norm(x_vec))
-        y_norm = float(np.linalg.norm(y_vec))
+        jacobian = np.column_stack((mapped[1] - mapped[0], mapped[2] - mapped[0]))
+        if not np.all(np.isfinite(jacobian)):
+            return None
+        try:
+            u, _, vt = np.linalg.svd(jacobian)
+        except np.linalg.LinAlgError:
+            return None
+        # Use only the local rotation/reflection from calibration. PPM owns scale;
+        # homography scale/shear must not distort physical workpiece geometry.
+        basis = u @ vt
+        x_axis = basis[:, 0]
+        y_axis = basis[:, 1]
+        x_norm = float(np.linalg.norm(x_axis))
+        y_norm = float(np.linalg.norm(y_axis))
         if x_norm <= 1e-12 or y_norm <= 1e-12:
             return None
-        return x_vec / x_norm, y_vec / y_norm
+        return x_axis / x_norm, y_axis / y_norm
 
     @staticmethod
     def _base_homography_matrix(resolver):
