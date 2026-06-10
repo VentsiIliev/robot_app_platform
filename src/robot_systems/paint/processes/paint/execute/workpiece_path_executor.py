@@ -696,6 +696,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return None
 
         first_pivot_pose = list(projected_pivot_path[0])
+
+        _logger.debug(f"first_pivot_pose -> {first_pivot_pose}")
         if anchor_xy is not None and len(source_path[0]) >= 2 and len(first_pivot_pose) >= 3:
             source_planar_i, source_planar_j = self._pivot_config.source_planar_coordinate_indices
             planar_i, planar_j = self._pivot_config.planar_coordinate_indices
@@ -817,6 +819,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         ]
 
         staged_pose = list(first_pivot_pose)
+        _logger.debug(f"staged_pose = {staged_pose}")
         stage_transition_poses: list[list[float]] = []
         if self._pivot_config.motion_plane == "xy_z_rz" and len(staged_pose) >= 6:
             raw_staged_rz = float(staged_pose[5])
@@ -840,6 +843,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
             translation_handoff_pose = list(staged_pose)
             stage_transition_poses.append(translation_handoff_pose)
+
             _logger.info(
                 "[PICKUP] xz/ry staged pose: first_pivot=%s change_plane=%s translation_handoff=%s staged=%s",
                 [round(float(v), 3) for v in first_pivot_pose[:6]],
@@ -847,6 +851,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 [round(float(v), 3) for v in translation_handoff_pose[:6]],
                 [round(float(v), 3) for v in staged_pose[:6]],
             )
+
         return PickupToPivotPlan(
             pickup_approach_pose=pickup_approach_pose,
             pickup_pose=pickup_pose,

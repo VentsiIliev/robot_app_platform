@@ -5,6 +5,8 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROJECTION_TUNING,
     PaintSimulationConfig,
 )
+import logging
+_logger = logging.getLogger("Core")
 
 
 def rebase_projected_paint_path_to_zero_start_rz(
@@ -66,10 +68,15 @@ def project_paint_motion_geometry(
     rx = float(orientation_overrides.get("rx", rx))
     ry = float(orientation_overrides.get("ry", ry))
     rz = float(orientation_overrides.get("rz", rz))
+
+    _logger.debug(f"orientation_overrides {orientation_overrides}")
+
     base_rz = (
         float(pivot_pose[rotation_index])
         if len(pivot_pose) > rotation_index else float(path[0][rotation_index])
     )
+    _logger.debug(f"base_rz {base_rz}")
+
     # Translation axis and pivot side are separate concepts.
     # The axis heading defines travel along the pivot.
     # `paint_side` only chooses which normal-side of that axis the workpiece
@@ -86,7 +93,10 @@ def project_paint_motion_geometry(
         [[float(point[source_planar_i]), float(point[source_planar_j])] for point in path],
         dtype=float,
     )
+
     tcp_anchor = source_anchor.copy() if source_anchor is not None else None
+    _logger.debug(f"tcp_anchor {tcp_anchor}")
+
     source_rotation = float(source_rotation_deg or 0.0)
     if len(points) < 2:
         anchor_point = tcp_anchor if tcp_anchor is not None else points[0]
@@ -325,6 +335,7 @@ def _compose_pose(
     rz: float,
 ) -> list[float]:
     """Build a full 6D pose from a projected 2D point and the active motion plane."""
+    _logger.debug(f"Refference pose: {reference_pose}")
     pose = [float(value) for value in reference_pose[:6]]
     while len(pose) < 6:
         pose.append(0.0)
@@ -335,6 +346,8 @@ def _compose_pose(
     pose[planar_j] = float(planar_b)
     pose[orthogonal_index] = float(orthogonal_value)
     pose[rotation_index] = float(rotation_value)
+
+    _logger.debug(f"COMPOSE POSE: {pose}")
     return pose
 
 

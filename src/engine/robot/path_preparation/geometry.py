@@ -301,7 +301,7 @@ def compute_pickup_rz_from_robot_contour_with_direction(
         return contour_rz
 
     _logger.debug(f"Redurning alternate rz: {alternate_rz}")
-    return -(contour_rz+16)
+    return alternate_rz
 
 
 def rebuild_pose_path_from_xy(
