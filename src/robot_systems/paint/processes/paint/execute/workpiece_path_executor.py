@@ -832,7 +832,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
         elif self._pivot_config.motion_plane == "xz_y_ry" and len(staged_pose) >= 6:
             raw_staged_ry = float(staged_pose[4])
-            staged_pose[4] = raw_staged_ry
+            staged_pose[4] = float(change_plane_pose[4]) if len(change_plane_pose) >= 5 else float(pickup_ry)
             staged_pose[5] = float(align_rz)
             _logger.info(
                 "[PICKUP] xz/ry stage axis selection: raw_ry=%.3f reference_ry=%.3f selected_ry=%.3f fixed_rz=%.3f",
@@ -1342,10 +1342,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_and_paint success=false stage=pickup total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
-        # ok, msg, total_waypoints = self._execute_pivot_paths(execution_plan)
-        # if not ok:
-        #     _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
-        #     return False, msg
+        ok, msg, total_waypoints = self._execute_pivot_paths(execution_plan)
+        if not ok:
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, msg
         #
         ok, msg = self._run_pre_release_dropoff()
         if not ok:

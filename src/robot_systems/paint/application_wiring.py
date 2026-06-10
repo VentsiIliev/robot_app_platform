@@ -3,9 +3,6 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.processes.paint.align import (
-    DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
-)
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 
 
@@ -149,9 +146,8 @@ def _build_paint_path_preparation_service(robot_system):
         pickup_target_point_name=execution_target_point_name,
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
-        pickup_axis_alignment_sign=(
-            -1.0 if _PAINT_PROCESS.flip_pickup_axis_alignment_direction else 1.0
-        ),
+        pickup_axis_alignment_sign=_PAINT_PROCESS.pickup_axis_alignment_sign,
+        pickup_rz_frame_offset_deg=_PAINT_PROCESS.pickup_rz_frame_offset_deg,
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
@@ -179,8 +175,6 @@ def _build_paint_workpiece_preparation_service(robot_system):
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
         transformer=None,
         transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
-        dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
-        dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
     )
 
 
@@ -241,32 +235,16 @@ def _build_paint_workpiece_editor_service(robot_system):
         segment_config=SegmentEditorConfig(schema=segment_config),
         options=WorkpieceEditorOptions(
             debug_dump_dir=debug_dump_dir,
-            enable_dxf_import_test=True,
         ),
     )
 
 
 def _build_paint_contour_editor_application(robot_system):
-    from contour_editor import AdditionalFormBehaviorProvider
-
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
-    from src.robot_systems.paint.domain.dxf_path_form_behavior import PaintDxfPathFormBehavior
-    from src.engine.cad import import_dxf_to_workpiece_data
 
     service = _build_paint_workpiece_editor_service(robot_system)
-
-    AdditionalFormBehaviorProvider.get().set_behaviors(
-        [
-            PaintDxfPathFormBehavior(
-                prepare_dxf_raw_for_image=service.prepare_dxf_test_raw_for_image,
-                dxf_importer=import_dxf_to_workpiece_data,
-                dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
-                dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
-            )
-        ]
-    )
 
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(

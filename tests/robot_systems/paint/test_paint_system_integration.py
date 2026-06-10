@@ -151,19 +151,16 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], kwargs["pickup_base_position_provider"]())
         self.assertEqual([application_wiring._get_paint_base_group_id(), "pose"], kwargs["base_position_provider"]())
 
-    def test_build_paint_contour_editor_application_registers_form_behavior_and_factory(self):
+    def test_build_paint_contour_editor_application_wires_factory(self):
         robot_system = SimpleNamespace()
-        service = MagicMock(prepare_dxf_test_raw_for_image=MagicMock())
+        service = MagicMock()
         messaging = object()
         built_widget = object()
-        behavior_provider = MagicMock()
         factory = MagicMock()
         factory.build.return_value = built_widget
 
         with (
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_editor_service", return_value=service),
-            patch("contour_editor.AdditionalFormBehaviorProvider.get", return_value=behavior_provider),
-            patch("src.robot_systems.paint.domain.dxf_path_form_behavior.PaintDxfPathFormBehavior", return_value="behavior") as behavior_cls,
             patch("src.applications.base.robot_jog_service_builder.build_robot_system_jog_service", return_value="jog"),
             patch("src.applications.workpiece_editor.workpiece_editor_factory.WorkpieceEditorFactory", return_value=factory),
         ):
@@ -172,8 +169,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
             widget = app.create_widget()
 
         self.assertIs(widget, built_widget)
-        behavior_provider.set_behaviors.assert_called_once_with(["behavior"])
-        behavior_cls.assert_called_once()
         factory.build.assert_called_once_with(service, messaging=messaging, jog_service="jog")
 
     def test_build_workpiece_library_application_wires_repository_service_and_factory(self):
@@ -478,8 +473,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
             match_workpiece_fn=matching_service.match_saved_workpieces,
             transformer=None,
             transformer_getter=unittest.mock.ANY,
-            dxf_alignment_strategy=application_wiring._PAINT_PROCESS.dxf_alignment_strategy,
-            dxf_max_scale_deviation=application_wiring._PAINT_PROCESS.dxf_max_scale_deviation,
         )
         self.assertIs(prep_cls.call_args.kwargs["transformer_getter"](), "transformer")
 
@@ -514,7 +507,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(service.form_schema, "form-schema")
         self.assertEqual(service.segment_config.schema, "segment-schema")
         self.assertEqual(service.options.debug_dump_dir, "/tmp/debug")
-        self.assertTrue(service.options.enable_dxf_import_test)
         self.assertEqual(service.services.vision_service, "vision")
         self.assertEqual(service.services.capture_snapshot_service, "snapshot")
         self.assertEqual(service.services.robot_service, "robot")

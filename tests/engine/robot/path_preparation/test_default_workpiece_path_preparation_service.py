@@ -56,7 +56,6 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
             "height_mm": 12.0,
             "offset": 8.0,
             "pickupPoint": [15, 25],
-            "dxfPath": "/tmp/mock.dxf",
             "sprayPattern": {
                 "Contour": [
                     {
@@ -94,7 +93,6 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertEqual(2.5, job["execution_target_offset_y"])
         self.assertEqual(77.0, job["execution_reference_rz"])
         self.assertFalse(job["use_workpiece_layer"])
-        self.assertTrue(job["source_has_dxf"])
         pickup_rz.assert_called_once()
 
     def test_build_execution_plan_resolves_pickup_xy_with_normalized_axis_rz(self):
@@ -270,7 +268,6 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         workpiece = {
             "contour": [[0, 0], [10, 0], [10, 10], [0, 10]],
             "pickupPoint": {"x": 5, "y": 6},
-            "dxfPath": "/tmp/mock.dxf",
             "sprayPattern": {},
         }
 
@@ -316,7 +313,6 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         )
         workpiece = {
             "pickupPoint": "1,2",
-            "dxfPath": "/tmp/mock.dxf",
             "sprayPattern": {
                 "Contour": [
                     {

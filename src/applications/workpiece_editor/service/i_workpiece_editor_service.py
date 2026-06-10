@@ -64,17 +64,6 @@ class IWorkpieceEditorService(ABC):
     def execute_process_action(self, action_id: str) -> tuple[bool, str]: ...
 
     @abstractmethod
-    def can_import_dxf_test(self) -> bool: ...
-
-    @abstractmethod
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict: ...
-
-    @abstractmethod
     def set_editing(self, storage_id: Optional[str]) -> None:
         """Pass storage_id to edit an existing workpiece on the next save, or None for new."""
         ...

@@ -23,7 +23,6 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
     WorkpieceProcessAction,
 )
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
-from src.robot_systems.paint.processes.paint.align import map_raw_workpiece_mm_to_image
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)
@@ -53,7 +52,6 @@ class WorkpieceEditorServices:
 @dataclass(frozen=True)
 class WorkpieceEditorOptions:
     debug_dump_dir: Optional[str] = None
-    enable_dxf_import_test: bool = False
 
 
 class WorkpieceEditorService(IWorkpieceEditorService):
@@ -80,7 +78,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._debug_dump_dir = options.debug_dump_dir
         self._path_executor = services.path_executor
         self._path_preparation_service = services.path_preparation_service
-        self._enable_dxf_import_test = bool(options.enable_dxf_import_test)
         self._matching_service = services.matching_service
         self._workpiece_data_adapter = services.workpiece_data_adapter
         self._editing_storage_id = None
@@ -118,9 +115,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def get_segment_config(self) -> SegmentEditorConfig:
         return self._segment_config
 
-    def can_import_dxf_test(self) -> bool:
-        return self._enable_dxf_import_test
-
     def can_match_saved_workpieces(self) -> bool:
         return bool(self._matching_service is not None and self._matching_service.can_match_saved_workpieces())
 
@@ -136,25 +130,6 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         if self._matching_service is None:
             return False, None, "Matching is not available in this editor."
         return self._matching_service.match_saved_workpieces(contour)
-
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict:
-        placed = map_raw_workpiece_mm_to_image(
-            raw,
-            float(image_width),
-            float(image_height),
-            self._current_transformer(),
-        )
-        _logger.info(
-            "Prepared DXF test workpiece for image placement: image=(%.1f, %.1f)",
-            float(image_width),
-            float(image_height),
-        )
-        return placed
 
     def get_contours(self) -> list:
         if self._capture_snapshot_service is None and self._vision is None:

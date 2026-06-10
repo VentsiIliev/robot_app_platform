@@ -29,7 +29,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-13.172, 342.686, 140.358, -178.885, -0.002, 0.003]"
+      "position": "[-13.031, 342.767, 125.517, -178.881, -0.004, -0.028]"
     },
     "PAINTING_NEW": {
       "velocity": 10,
@@ -37,7 +37,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-80.217, 394.702, 323.352, -89.995, -0.050, -0.080]"
+      "position": "[-80.124, 379.505, 338.617, -89.927, -0.060, -0.093]"
     }
   }
 }

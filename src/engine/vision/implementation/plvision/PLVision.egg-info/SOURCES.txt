@@ -5,7 +5,6 @@ PLVision/CNC.py
 PLVision/Calibration.py
 PLVision/Camera.py
 PLVision/Contouring.py
-PLVision/DxfConverter.py
 PLVision/Example.py
 PLVision/FileSelector.py
 PLVision/HandTrackingModule.py

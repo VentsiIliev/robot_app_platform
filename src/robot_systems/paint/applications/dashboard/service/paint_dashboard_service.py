@@ -12,8 +12,6 @@ from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_se
     IPaintDashboardService,
 )
 
-_REFERENCE_DXF_PATH = "scripts/dxf/part2_venci.dxf"
-
 
 class PaintDashboardService(IPaintDashboardService):
 
@@ -81,8 +79,7 @@ class PaintDashboardService(IPaintDashboardService):
             return ContourTransformDebugResult(False, f"Failed to transform latest contour: {exc}")
 
         rect_info = self._minimum_area_rect_xy(camera_path)
-        dxf_rect_info = self._reference_dxf_minimum_area_rect()
-        measurement_text = self._format_min_rect_comparison(rect_info, dxf_rect_info)
+        measurement_text = self._format_min_rect_measurement(rect_info)
         try:
             from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
                 plot_pixel_to_mm_debug,
@@ -108,18 +105,6 @@ class PaintDashboardService(IPaintDashboardService):
                 f"{message}\n"
                 f"Min rect: {rect_info['length_mm']:.1f} x {rect_info['width_mm']:.1f} mm "
                 f"(angle {rect_info['angle_deg']:.1f} deg)"
-            )
-        if dxf_rect_info is not None:
-            message = (
-                f"{message}\n"
-                f"DXF rect: {dxf_rect_info['length_mm']:.1f} x {dxf_rect_info['width_mm']:.1f} mm "
-                f"({_REFERENCE_DXF_PATH})"
-            )
-        if rect_info is not None and dxf_rect_info is not None:
-            message = (
-                f"{message}\n"
-                f"Delta: {rect_info['length_mm'] - dxf_rect_info['length_mm']:+.1f} x "
-                f"{rect_info['width_mm'] - dxf_rect_info['width_mm']:+.1f} mm"
             )
 
         return ContourTransformDebugResult(True, message, image_path)
@@ -178,40 +163,13 @@ class PaintDashboardService(IPaintDashboardService):
             "angle_deg": float(angle_deg),
         }
 
-    def _reference_dxf_minimum_area_rect(self) -> dict | None:
-        dxf_path = self._repo_root() / _REFERENCE_DXF_PATH
-        if not dxf_path.exists():
-            return None
-
-        try:
-            from src.engine.cad import parse_dxf_to_geometry
-
-            path = parse_dxf_to_geometry(str(dxf_path)).largest_closed_path()
-        except Exception:
-            return None
-        return self._minimum_area_rect_xy([[float(x), float(y)] for x, y in path])
-
     @staticmethod
-    def _format_min_rect_comparison(captured: dict | None, reference: dict | None) -> str:
-        if captured is None and reference is None:
-            return ""
+    def _format_min_rect_measurement(captured: dict | None) -> str:
         if captured is None:
-            return (
-                "Captured min rect: unavailable\n"
-                f"DXF min rect: {reference['length_mm']:.1f} x {reference['width_mm']:.1f} mm"
-            )
-        if reference is None:
-            return (
-                f"Captured min rect: {captured['length_mm']:.1f} x {captured['width_mm']:.1f} mm\n"
-                "DXF min rect: unavailable"
-            )
-
-        delta_length = captured["length_mm"] - reference["length_mm"]
-        delta_width = captured["width_mm"] - reference["width_mm"]
+            return "Captured min rect: unavailable"
         return (
-            f"Captured min rect: {captured['length_mm']:.1f} x {captured['width_mm']:.1f} mm\n"
-            f"DXF min rect: {reference['length_mm']:.1f} x {reference['width_mm']:.1f} mm\n"
-            f"Delta: {delta_length:+.1f} x {delta_width:+.1f} mm"
+            f"Captured min rect: {captured['length_mm']:.1f} x "
+            f"{captured['width_mm']:.1f} mm"
         )
 
     @staticmethod

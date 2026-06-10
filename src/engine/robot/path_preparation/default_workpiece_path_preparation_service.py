@@ -370,6 +370,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         pickup_axis_alignment_sign: float = 1.0,
+        pickup_rz_frame_offset_deg: float = 0.0,
     ) -> None:
         self._logger = logger
         self._segment_config = segment_config
@@ -391,6 +392,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         except (TypeError, ValueError):
             pickup_alignment_sign = 1.0
         self._pickup_axis_alignment_sign = 1.0 if pickup_alignment_sign >= 0.0 else -1.0
+        try:
+            self._pickup_rz_frame_offset_deg = float(pickup_rz_frame_offset_deg)
+        except (TypeError, ValueError):
+            self._pickup_rz_frame_offset_deg = 0.0
 
     def _current_transformer(self):
         if self._transformer_getter is not None:
@@ -644,6 +649,18 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         raw_pickup_rz,
                         float(pickup_reference_rz),
                         self._pickup_axis_alignment_sign,
+                        float(pickup_rz),
+                    )
+                if abs(self._pickup_rz_frame_offset_deg) > 1e-9:
+                    offset_input_rz = float(pickup_rz)
+                    pickup_rz = nearest_axis_equivalent_degrees(
+                        float(pickup_reference_rz),
+                        offset_input_rz + self._pickup_rz_frame_offset_deg,
+                    )
+                    self._logger.info(
+                        "[PICKUP_RZ] frame_offset applied offset=%.3f before=%.3f selected=%.3f",
+                        self._pickup_rz_frame_offset_deg,
+                        offset_input_rz,
                         float(pickup_rz),
                     )
                 pickup_xy = self._transform_single_pixel_to_robot(

@@ -168,7 +168,7 @@ No contour math or payload mutation should live here.
 
 - `workpiece_preparation_service.py`
   - choose matched-vs-captured workpiece
-  - orchestrate DXF placement + alignment
+  - orchestrate saved-contour alignment
 - `workpiece_matching_service.py`
   - matching orchestration only
 - `matchable_workpiece.py`
@@ -364,7 +364,6 @@ Priority tests:
 
 4. `workpiece_preparation_service`
    - matched contour branch
-   - DXF branch
    - fallback-to-captured branch
 
 5. `workpiece_path_executor`

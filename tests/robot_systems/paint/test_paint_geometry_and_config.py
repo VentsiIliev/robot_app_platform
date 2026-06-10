@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import MagicMock
-
-import numpy as np
 
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
@@ -13,10 +10,6 @@ from src.robot_systems.paint.processes.paint.config import (
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     _camera_to_tcp_delta,
     _normalize_pivot_config,
-)
-from src.robot_systems.paint.processes.paint.align import (
-    estimate_local_image_basis,
-    map_raw_workpiece_mm_to_image,
 )
 
 
@@ -105,69 +98,6 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(fallback.translation_axis, "x")
         self.assertEqual(fallback.paint_side, "negative")
         self.assertEqual(fallback.translation_direction, "forward")
-
-
-class TestPaintDxfImagePlacement(unittest.TestCase):
-    def test_estimate_local_image_basis_uses_transformer_inverse_mapping(self) -> None:
-        transformer = MagicMock()
-        transformer.is_available.return_value = True
-        transformer.transform.return_value = (10.0, 20.0)
-
-        def inverse_transform(x: float, y: float) -> tuple[float, float]:
-            return (x - 10.0, y - 20.0)
-
-        transformer.inverse_transform.side_effect = inverse_transform
-
-        basis = estimate_local_image_basis(transformer, 100.0, 60.0)
-
-        self.assertIsNotNone(basis)
-        origin, basis_x, basis_y = basis
-        np.testing.assert_allclose(origin, np.array([0.0, 0.0]))
-        np.testing.assert_allclose(basis_x, np.array([1.0, 0.0]))
-        np.testing.assert_allclose(basis_y, np.array([0.0, 1.0]))
-
-    def test_estimate_local_image_basis_returns_none_when_unavailable_or_invalid(self) -> None:
-        unavailable = MagicMock()
-        unavailable.is_available.return_value = False
-        self.assertIsNone(estimate_local_image_basis(unavailable, 10.0, 10.0))
-
-        broken = MagicMock()
-        broken.is_available.return_value = True
-        broken.transform.side_effect = RuntimeError("boom")
-        self.assertIsNone(estimate_local_image_basis(broken, 10.0, 10.0))
-
-    def test_map_raw_workpiece_mm_to_image_recenters_contours_and_spray_segments(self) -> None:
-        raw = {
-            "contour": [[[10.0, 20.0]], [[14.0, 24.0]]],
-            "sprayPattern": {
-                "Contour": [{"contour": [[[10.0, 20.0]], [[14.0, 24.0]]]}],
-                "Fill": [{"contour": [[[12.0, 22.0]]]}],
-            },
-        }
-        transformer = MagicMock()
-        transformer.is_available.return_value = False
-
-        placed = map_raw_workpiece_mm_to_image(raw, 100.0, 50.0, transformer)
-
-        self.assertEqual(raw["contour"][0][0], [10.0, 20.0])
-        np.testing.assert_allclose(placed["contour"][0][0], [48.0, 23.0])
-        np.testing.assert_allclose(placed["contour"][1][0], [52.0, 27.0])
-        np.testing.assert_allclose(
-            placed["sprayPattern"]["Contour"][0]["contour"][0][0],
-            [48.0, 23.0],
-        )
-        np.testing.assert_allclose(
-            placed["sprayPattern"]["Fill"][0]["contour"][0][0],
-            [50.0, 25.0],
-        )
-
-    def test_map_raw_workpiece_mm_to_image_returns_copy_when_no_points_exist(self) -> None:
-        raw = {"contour": []}
-
-        placed = map_raw_workpiece_mm_to_image(raw, 100.0, 50.0, transformer=None)
-
-        self.assertEqual(placed, raw)
-        self.assertIsNot(placed, raw)
 
 
 class TestPaintPickupPlanner(unittest.TestCase):

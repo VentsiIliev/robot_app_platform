@@ -21,8 +21,8 @@ from src.robot_systems.paint.processes.paint.align.alignment.sampling import (
     _resample_closed_path,
 )
 
-DXF_ALIGNMENT_STRATEGY_RIGID = "rigid"
-DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH = "reference_smooth"
+ALIGNMENT_STRATEGY_RIGID = "rigid"
+ALIGNMENT_STRATEGY_REFERENCE_SMOOTH = "reference_smooth"
 DEFAULT_MAX_SCALE_DEVIATION = 0.03
 
 _logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ def align_raw_workpiece_to_contour(
     raw: dict,
     captured_contour,
     *,
-    strategy: str = DXF_ALIGNMENT_STRATEGY_RIGID,
+    strategy: str = ALIGNMENT_STRATEGY_RIGID,
     max_scale_deviation: float | None = DEFAULT_MAX_SCALE_DEVIATION,
     reference_scale_override: float | None = None,
 ) -> dict:
@@ -104,7 +104,7 @@ def align_raw_workpiece_to_contour(
     target_points = _normalize_contour_points(captured_contour)
     _logger.info(
         "[ALIGN] start strategy=%s max_scale_deviation=%s reference_scale_override=%s source=%s target=%s",
-        str(strategy or DXF_ALIGNMENT_STRATEGY_RIGID).strip().lower(),
+        str(strategy or ALIGNMENT_STRATEGY_RIGID).strip().lower(),
         None if max_scale_deviation is None else float(max_scale_deviation),
         None if reference_scale_override is None else float(reference_scale_override),
         _describe_contour(source_points),
@@ -176,7 +176,7 @@ def align_raw_workpiece_to_contour(
         float(source_centroid[1]),
     )
 
-    if str(strategy or DXF_ALIGNMENT_STRATEGY_RIGID).strip().lower() == DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH:
+    if str(strategy or ALIGNMENT_STRATEGY_RIGID).strip().lower() == ALIGNMENT_STRATEGY_REFERENCE_SMOOTH:
         _apply_reference_smoothed_main_contour(
             aligned,
             target_resampled,
@@ -291,7 +291,7 @@ def _robust_reference_scale(source_points: np.ndarray, target_points: np.ndarray
 
 
 def _clamp_scale(scale: float, max_scale_deviation: float | None, reference_scale: float = 1.0) -> float:
-    """Clamp scale around a reference value so noisy contours do not distort the DXF excessively."""
+    """Clamp scale around a reference value so noisy contours do not distort the saved contour excessively."""
     scale = max(1e-3, float(scale))
     if max_scale_deviation is None:
         return scale
@@ -348,7 +348,7 @@ def _bounded_reference_smooth(source_points: np.ndarray, reference_points: np.nd
     Nudge a smooth reference contour toward the captured contour without inheriting its noise.
 
     The correction is mostly along the local contour normal, with only a very small tangential
-    adjustment so the DXF shape remains the primary geometry.
+    adjustment so the saved contour remains the primary geometry.
     """
     if len(source_points) < 3 or len(reference_points) < 3:
         return source_points
@@ -389,7 +389,7 @@ def _apply_reference_smoothed_main_contour(
     scale: float,
     translation: np.ndarray,
 ) -> None:
-    """Use the aligned DXF as a prior to smooth the captured contour, then store that result."""
+    """Use the aligned saved contour as a prior to smooth the captured contour, then store that result."""
     contour_array = _main_contour_payload(aligned)
     source_contour = _resample_raw_contour_payload(contour_array, count=360)
     if len(source_contour) < 3:
@@ -404,7 +404,7 @@ def _apply_reference_smoothed_main_contour(
         translation,
     )
     # Use the captured contour as the visible/output contour, but denoise it by
-    # pulling it gently toward the aligned DXF reference and then smoothing it.
+    # pulling it gently toward the aligned saved-contour reference and then smoothing it.
     corrected_capture = _bounded_reference_smooth(target_points, aligned_reference)
     smoothed_capture = _laplacian_smooth_closed_path(corrected_capture, iterations=2, alpha=0.18)
     _replace_raw_contour_payload(contour_array, smoothed_capture)

@@ -75,12 +75,12 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             source="paint_process",
         )
         service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
-        service._path_preparation_service.build_execution_plan.side_effect = RuntimeError("bad dxf")
+        service._path_preparation_service.build_execution_plan.side_effect = RuntimeError("bad plan")
 
         ok, msg = service.run_once()
 
         self.assertFalse(ok)
-        self.assertEqual(msg, "Plan generation failed: bad dxf")
+        self.assertEqual(msg, "Plan generation failed: bad plan")
         service._path_executor.execute_pickup_and_paint.assert_not_called()
 
     def test_run_once_honors_stop_requests_and_execution_failure(self):

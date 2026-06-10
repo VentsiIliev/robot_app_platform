@@ -9,7 +9,7 @@ import cv2
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog, QTabWidget
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
@@ -21,7 +21,6 @@ from src.applications.base.styled_message_box import show_warning, show_info, sh
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
 _DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
-_TEMPORARILY_DISABLE_DXF_CAPTURE_BRANCH_FOR_CONTOUR_DEBUG = True
 _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW = True
 
 
@@ -45,11 +44,6 @@ class WorkpieceEditorController(IApplicationController):
         self._preview_dialog = None
         self._latest_frame_shape = None
         self._latest_frame_bgr = None
-        self._dxf_test_button = None
-        self._manual_align_button = None
-        self._manual_align_dialog = None
-        self._manual_align_snapshot = None
-        self._current_dxf_path = ""
         self._captured_pickup_point = None
         self._loaded_raw_workpiece = None
 
@@ -114,7 +108,6 @@ class WorkpieceEditorController(IApplicationController):
 
         # Stop live camera feed so the captured frame stays visible
         self._camera_active = False
-        self._current_dxf_path = ""
         self._captured_pickup_point = self._compute_contour_centroid(largest)
         self._save_pickup_debug_image(largest, self._captured_pickup_point)
         self._clear_verification_overlay()
@@ -126,7 +119,7 @@ class WorkpieceEditorController(IApplicationController):
                 self._view._editor.set_verification_contours([self._normalize_contour_points(largest)])
                 return [largest]
             except Exception:
-                self._logger.exception("Capture: failed to load matched DXF workpiece")
+                self._logger.exception("Capture: failed to load matched workpiece")
 
         try:
             self._load_capture_contour_into_editor(largest)
@@ -219,34 +212,18 @@ class WorkpieceEditorController(IApplicationController):
                 overlays.extend(self._build_pickup_point_overlay(pickup_point))
             self._view._editor.set_verification_contours(overlays)
         except Exception:
-            self._logger.debug("Failed to set DXF verification overlay", exc_info=True)
+            self._logger.debug("Failed to set verification overlay", exc_info=True)
 
     def _resolve_image_size(self) -> tuple[float, float]:
         if self._latest_frame_shape is not None and len(self._latest_frame_shape) >= 2:
             return float(self._latest_frame_shape[1]), float(self._latest_frame_shape[0])
         return 1280.0, 720.0
 
-    def _preview_aligned_dxf_from_path(self, dxf_path: str, captured_contour) -> bool:
-        if not dxf_path:
-            return False
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, captured_contour)
-            self._set_verification_overlay_from_raw(aligned)
-            return True
-        except Exception:
-            self._logger.exception("Failed to prepare aligned DXF overlay from %s", dxf_path)
-            return False
-
     def _clear_verification_overlay(self) -> None:
         try:
             self._view._editor.clear_verification_contours()
         except Exception:
-            self._logger.debug("Failed to clear DXF verification overlay", exc_info=True)
+            self._logger.debug("Failed to clear verification overlay", exc_info=True)
 
     def _set_pickup_point_overlay(self) -> None:
         try:
@@ -300,85 +277,15 @@ class WorkpieceEditorController(IApplicationController):
             self._logger.debug("Failed to save pickup centroid debug image", exc_info=True)
 
     def _install_optional_actions(self) -> None:
-        if not self._model.can_import_dxf_test():
-            return
         layout = self._view.layout()
         if layout is None:
             return
         row = QHBoxLayout()
         row.addStretch(1)
-        load_button = QPushButton("Load DXF Test")
-        load_button.clicked.connect(self._on_load_dxf_test)
-        row.addWidget(load_button)
-        align_button = QPushButton("Capture + Align DXF Test")
-        align_button.clicked.connect(self._on_capture_align_dxf_test)
-        row.addWidget(align_button)
-        manual_align_button = QPushButton("Adjust DXF Align")
-        manual_align_button.clicked.connect(self._on_adjust_dxf_alignment)
-        row.addWidget(manual_align_button)
         match_button = QPushButton("Match Workpiece Test")
         match_button.clicked.connect(self._on_match_workpiece_test)
         row.addWidget(match_button)
         layout.insertLayout(0, row)
-        self._dxf_test_button = load_button
-        self._manual_align_button = manual_align_button
-
-    def _on_load_dxf_test(self) -> None:
-        dxf_path, _ = QFileDialog.getOpenFileName(
-            self._view,
-            "Load DXF Test",
-            "",
-            "DXF Files (*.dxf)",
-        )
-        if not dxf_path:
-            return
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            placed["dxfPath"] = str(dxf_path)
-            self._current_dxf_path = str(dxf_path)
-            self._clear_verification_overlay()
-            self._on_load_workpiece_raw({"raw": placed, "storage_id": None})
-            show_info(self._view, "DXF Loaded", f"Loaded test DXF:\n{dxf_path}")
-        except Exception as exc:
-            self._logger.exception("Failed to load DXF test file: %s", exc)
-            show_warning(self._view, "DXF Load Failed", str(exc))
-
-    def _on_capture_align_dxf_test(self) -> None:
-        contours = self._model.get_contours()
-        largest = self._pick_largest(contours)
-        if largest is None:
-            show_warning(self._view, "Capture", "No contour detected.")
-            return
-
-        dxf_path, _ = QFileDialog.getOpenFileName(
-            self._view,
-            "Capture + Align DXF Test",
-            "",
-            "DXF Files (*.dxf)",
-        )
-        if not dxf_path:
-            return
-
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, largest)
-            aligned["dxfPath"] = str(dxf_path)
-            self._current_dxf_path = str(dxf_path)
-            self._camera_active = False
-            self._clear_verification_overlay()
-            self._on_load_workpiece_raw({"raw": aligned, "storage_id": None})
-            show_info(self._view, "DXF Aligned", f"Captured contour and aligned DXF:\n{dxf_path}")
-        except Exception as exc:
-            self._logger.exception("Failed to capture and align DXF test file: %s", exc)
-            show_warning(self._view, "DXF Align Failed", str(exc))
 
     def _on_match_workpiece_test(self) -> None:
         contours = self._model.get_contours()
@@ -400,10 +307,6 @@ class WorkpieceEditorController(IApplicationController):
             self._camera_active = False
             self._clear_verification_overlay()
             self._on_load_workpiece_raw({"raw": payload["raw"], "storage_id": payload.get("storage_id")})
-            dxf_overlay_loaded = self._preview_aligned_dxf_from_path(
-                str((payload.get("raw") or {}).get("dxfPath", "") or ""),
-                largest,
-            )
             show_info(
                 self._view,
                 "Matched Workpiece",
@@ -415,70 +318,11 @@ class WorkpieceEditorController(IApplicationController):
                     else ""
                 )
                 + f"\nSaved workpieces checked: {payload.get('candidate_count', 0)}"
-                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}"
-                + ("\nDXF overlay: aligned and shown" if dxf_overlay_loaded else "\nDXF overlay: unavailable"),
+                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}",
             )
         except Exception as exc:
             self._logger.exception("Failed to match saved workpieces: %s", exc)
             show_warning(self._view, "Match Workpiece Failed", str(exc))
-
-    def _on_adjust_dxf_alignment(self) -> None:
-        if self._manual_align_dialog is not None:
-            try:
-                self._manual_align_dialog.raise_()
-                self._manual_align_dialog.activateWindow()
-            except Exception:
-                pass
-            return
-
-        dxf_path = self._resolve_current_dxf_path()
-        if not dxf_path:
-            show_warning(self._view, "Adjust DXF Alignment", "No DXF path is selected.")
-            return
-
-        target_contour = self._get_current_editor_workpiece_contour()
-        if len(target_contour) < 3:
-            show_warning(
-                self._view,
-                "Adjust DXF Alignment",
-                "No captured workpiece contour is available for alignment.",
-            )
-            return
-
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-            from src.robot_systems.paint.domain.manual_dxf_alignment_dialog import (
-                ManualDxfAlignmentDialog,
-            )
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(
-                placed,
-                target_contour,
-                max_scale_deviation=0.0,
-                reference_scale_override=1.0,
-            )
-            aligned["dxfPath"] = str(dxf_path)
-
-            self._manual_align_snapshot = self._capture_editor_snapshot()
-            dialog = ManualDxfAlignmentDialog(
-                base_raw=aligned,
-                preview_callback=self._preview_manual_dxf_alignment,
-                parent=self._view,
-            )
-            dialog.accepted.connect(self._apply_manual_dxf_alignment)
-            dialog.rejected.connect(self._cancel_manual_dxf_alignment)
-            dialog.destroyed.connect(self._on_manual_dxf_alignment_closed)
-            self._manual_align_dialog = dialog
-            dialog.show()
-            dialog.raise_()
-            dialog.activateWindow()
-        except Exception as exc:
-            self._logger.exception("Failed to adjust DXF alignment: %s", exc)
-            self._manual_align_snapshot = None
-            show_warning(self._view, "Adjust DXF Alignment Failed", str(exc))
 
     def _align_raw_workpiece_to_contour(
         self,
@@ -504,56 +348,6 @@ class WorkpieceEditorController(IApplicationController):
             return np.empty((0, 2), dtype=np.float64)
         return self._normalize_contour_points(main_layer[0])
 
-    def _resolve_current_dxf_path(self) -> str:
-        if self._current_dxf_path:
-            return str(self._current_dxf_path)
-        try:
-            form = getattr(self._view._editor, "additional_data_form", None)
-            if form is not None and hasattr(form, "get_data"):
-                return str(form.get_data().get("dxfPath", "") or "").strip()
-        except Exception:
-            self._logger.debug("Failed to resolve dxfPath from active form", exc_info=True)
-        return ""
-
-    def _preview_manual_dxf_alignment(self, raw: dict) -> None:
-        try:
-            self._load_raw_into_editor(dict(raw or {}), storage_id=None)
-        except Exception:
-            self._logger.debug("Failed to preview manual DXF alignment", exc_info=True)
-
-    def _apply_manual_dxf_alignment(self) -> None:
-        dialog = self._manual_align_dialog
-        if dialog is None:
-            return
-        try:
-            adjusted = dialog.result_raw()
-            adjusted["dxfPath"] = self._resolve_current_dxf_path() or str(adjusted.get("dxfPath", "") or "")
-            self._load_raw_into_editor(adjusted, storage_id=None)
-            show_info(self._view, "DXF Alignment", "Manual DXF alignment applied.")
-        except Exception as exc:
-            self._logger.exception("Failed to apply manual DXF alignment: %s", exc)
-            show_warning(self._view, "DXF Alignment", str(exc))
-            self._cancel_manual_dxf_alignment()
-            return
-        self._manual_align_snapshot = None
-        try:
-            dialog.close()
-        except Exception:
-            pass
-
-    def _cancel_manual_dxf_alignment(self) -> None:
-        snapshot = self._manual_align_snapshot
-        self._manual_align_snapshot = None
-        if not snapshot:
-            return
-        try:
-            self._restore_editor_snapshot(snapshot)
-        except Exception:
-            self._logger.debug("Failed to restore editor state after manual DXF alignment cancel", exc_info=True)
-
-    def _on_manual_dxf_alignment_closed(self, *_args) -> None:
-        self._manual_align_dialog = None
-
     def _capture_editor_snapshot(self) -> dict | None:
         try:
             form = getattr(self._view._editor, "additional_data_form", None)
@@ -563,7 +357,6 @@ class WorkpieceEditorController(IApplicationController):
             return {
                 "form_data": form_data,
                 "editor_data": editor_data,
-                "current_dxf_path": str(self._current_dxf_path or ""),
                 "loaded_raw_workpiece": copy.deepcopy(self._loaded_raw_workpiece),
             }
         except Exception:
@@ -582,7 +375,6 @@ class WorkpieceEditorController(IApplicationController):
             for key, value in form_data.items():
                 if hasattr(form, "set_field_value"):
                     form.set_field_value(key, value)
-        self._current_dxf_path = str(snapshot.get("current_dxf_path", "") or "")
         self._loaded_raw_workpiece = copy.deepcopy(snapshot.get("loaded_raw_workpiece"))
         try:
             self._view._editor.pointManagerWidget.refresh_points()
@@ -1041,8 +833,6 @@ class WorkpieceEditorController(IApplicationController):
 
     def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
         enriched = dict(form_data or {})
-        if self._current_dxf_path and not str(enriched.get("dxfPath", "")).strip():
-            enriched["dxfPath"] = self._current_dxf_path
         if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
             enriched[
                 "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
@@ -1075,7 +865,6 @@ class WorkpieceEditorController(IApplicationController):
         inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
         self._view._editor.contourEditor.data = raw
         self._model.set_editing(storage_id)
-        self._current_dxf_path = str(raw.get("dxfPath", "") or "")
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
 
@@ -1164,41 +953,12 @@ class WorkpieceEditorController(IApplicationController):
                 return None
 
             matched_raw = copy.deepcopy(payload.get("raw") or {})
-            dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
-            if dxf_path and _TEMPORARILY_DISABLE_DXF_CAPTURE_BRANCH_FOR_CONTOUR_DEBUG:
-                self._logger.info(
-                    "Capture: ignoring matched dxfPath for temporary camera-contour debug"
-                )
-                dxf_path = ""
-            if not dxf_path:
-                if not matched_raw.get("contour"):
-                    return None
-                aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
-                self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
-                self._logger.info(
-                    "Capture: recognized known workpiece %s and loaded aligned saved contour",
-                    payload.get("workpieceId") or "(no id)",
-                )
-                return aligned
-
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            image_w, image_h = self._resolve_image_size()
-            dxf_raw = import_dxf_to_workpiece_data(dxf_path)
-            placed = self._model.prepare_dxf_test_raw_for_image(dxf_raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, captured_contour)
-            self._save_workpiece_alignment_debug_plot(placed, aligned)
-
-            # Preserve saved metadata while replacing geometry with the aligned DXF.
-            for key, value in matched_raw.items():
-                if key in {"contour", "sprayPattern"}:
-                    continue
-                aligned[key] = copy.deepcopy(value)
-            aligned["dxfPath"] = dxf_path
-            aligned.setdefault("sprayPattern", {"Contour": [], "Fill": []})
-
+            if not matched_raw.get("contour"):
+                return None
+            aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
+            self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
             self._logger.info(
-                "Capture: recognized known workpiece %s and loaded aligned DXF",
+                "Capture: recognized known workpiece %s and loaded aligned saved contour",
                 payload.get("workpieceId") or "(no id)",
             )
             return aligned

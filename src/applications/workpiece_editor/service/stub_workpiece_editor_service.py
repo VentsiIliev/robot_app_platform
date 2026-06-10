@@ -1,5 +1,4 @@
 import logging
-import copy
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from src.applications.workpiece_editor.service import IWorkpieceEditorService
 from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
@@ -63,22 +62,6 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
     def execute_process_action(self, action_id: str) -> tuple[bool, str]:
         _logger.info("Stub: execute_process_action action_id=%s", action_id)
         return True, f"Stub: executed process action {action_id}"
-
-    def can_import_dxf_test(self) -> bool:
-        return False
-
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict:
-        _logger.info(
-            "Stub: prepare_dxf_test_raw_for_image image_width=%s image_height=%s",
-            image_width,
-            image_height,
-        )
-        return copy.deepcopy(raw)
 
     def get_last_sampled_preview_paths(self) -> list:
         return []

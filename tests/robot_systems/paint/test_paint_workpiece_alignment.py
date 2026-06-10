@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from src.robot_systems.paint.processes.paint.align import (
-    DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
+    ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
     align_raw_workpiece_to_contour,
 )
 
@@ -120,7 +120,7 @@ class TestPaintWorkpieceAlignment(unittest.TestCase):
         aligned = align_raw_workpiece_to_contour(
             raw,
             captured,
-            strategy=DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
+            strategy=ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
             max_scale_deviation=0.0,
             reference_scale_override=1.0,
         )

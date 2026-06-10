@@ -60,13 +60,6 @@ def build_paint_contour_form_schema() -> WorkpieceFormSchema:
                 placeholder="0.0",
                 default_value=0.0,
             ),
-            WorkpieceFormFieldSpec(
-                key="dxfPath",
-                label="DXF Path",
-                field_type="text",
-                mandatory=False,
-                icon=FieldIcon.from_qta("fa5s.file-code", color=_COLOR),
-            ),
         ],
     )
 

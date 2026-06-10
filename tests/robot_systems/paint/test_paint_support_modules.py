@@ -261,7 +261,7 @@ class TestPaintSchemasAndLibraryService(unittest.TestCase):
         self.assertEqual(layer_config.default_segment_role, "workpiece")
         self.assertEqual(set(layer_config.roles), {"workpiece", "contour", "fill"})
         self.assertEqual(form_schema.id_key, "workpieceId")
-        self.assertEqual([field.key for field in form_schema.fields], ["workpieceId", "name", "description", "height_mm", "dxfPath"])
+        self.assertEqual([field.key for field in form_schema.fields], ["workpieceId", "name", "description", "height_mm"])
         self.assertEqual(form_schema.fields[3].default_value, 0.0)
         self.assertEqual(segment_schema.combo_key, "")
         self.assertEqual([field.key for field in segment_schema.fields[:3]], ["velocity", "acceleration", "rz_angle"])
@@ -282,7 +282,6 @@ class TestPaintSchemasAndLibraryService(unittest.TestCase):
         backing_service.load_raw.return_value = {
             "workpieceId": "wp-1",
             "name": "Stored Name",
-            "dxfPath": "/tmp/a.dxf",
             "description": "desc",
         }
         backing_service.update.return_value = (True, "updated")
@@ -299,14 +298,12 @@ class TestPaintSchemasAndLibraryService(unittest.TestCase):
         self.assertEqual(records[0].get("id"), "storage-1")
         self.assertEqual(records[0].get("workpieceId"), "wp-1")
         self.assertEqual(records[0].get("name"), "Stored Name")
-        self.assertEqual(records[0].get("dxfPath"), "/tmp/a.dxf")
         self.assertEqual(updated, (True, "updated"))
         backing_service.update.assert_called_once_with(
             "storage-1",
             {
                 "workpieceId": "wp-1",
                 "name": "New",
-                "dxfPath": "/tmp/a.dxf",
                 "description": "desc",
             },
         )

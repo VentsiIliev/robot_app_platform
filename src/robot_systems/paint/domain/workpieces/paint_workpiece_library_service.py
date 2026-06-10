@@ -18,7 +18,6 @@ def build_paint_workpiece_library_schema() -> WorkpieceSchema:
             WorkpieceFieldDescriptor(key="workpieceId", label="ID", table_display=True, detail_display=True, editable=True, widget="text"),
             WorkpieceFieldDescriptor(key="name", label="Name", table_display=True, detail_display=True, editable=True, widget="text"),
             WorkpieceFieldDescriptor(key="date", label="Date", table_display=True, detail_display=True, editable=False),
-            WorkpieceFieldDescriptor(key="dxfPath", label="DXF Path", table_display=False, detail_display=True, editable=True, widget="text"),
             WorkpieceFieldDescriptor(key="description", label="Description", table_display=False, detail_display=True, editable=True, widget="text"),
         ],
     )
@@ -42,7 +41,6 @@ class PaintWorkpieceLibraryService:
                         "workpieceId": raw.get("workpieceId", ""),
                         "name": raw.get("name", meta.get("name", "")),
                         "date": meta.get("date", ""),
-                        "dxfPath": raw.get("dxfPath", ""),
                         "description": raw.get("description", ""),
                     }
                 )

@@ -1,9 +1,5 @@
 from dataclasses import dataclass, field
 
-from src.robot_systems.paint.processes.paint.align import (
-    DXF_ALIGNMENT_STRATEGY_RIGID,
-)
-
 
 @dataclass(frozen=True)
 class PickupMotionConfig:
@@ -88,16 +84,16 @@ class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
     execution_target_point: str = "tool"
     enable_z_shift_pixel_compensation: bool = False
-    dxf_alignment_strategy: str = DXF_ALIGNMENT_STRATEGY_RIGID
-    dxf_max_scale_deviation: float = 0.03
-    pivot_motion_plane: str = "xz_y_ry"
+    # pivot_motion_plane: str = "xz_y_ry"
+    pivot_motion_plane: str = "xy_z_rz"
     primary_group_id: str = "PAINTING"
     secondary_group_id: str = "PAINTING_NEW"
     pivot_translation_axis: str = "x"
     pivot_translation_direction: str = "forward"
     flip_xz_ry_execution_rotation_direction: bool = True
     mirror_xz_ry_pickup_handoff: bool = True
-    flip_pickup_axis_alignment_direction: bool = False
+    flip_pickup_axis_alignment_direction: bool = True
+    pickup_rz_frame_offset_deg: float = 0
     enable_xz_ry_preflight: bool = False
     xz_ry_preflight_max_checks: int = 8
     enable_vacuum_pump: bool = True
@@ -115,6 +111,11 @@ class PaintProcessConfig:
     def pickup_base_group_id(self) -> str:
         """Return the navigation group used for pickup/alignment."""
         return self.primary_group_id
+
+    @property
+    def pickup_axis_alignment_sign(self) -> float:
+        """Return the pickup orientation ambiguity sign."""
+        return -1.0 if self.flip_pickup_axis_alignment_direction else 1.0
 
     @property
     def pivot_side(self) -> str:

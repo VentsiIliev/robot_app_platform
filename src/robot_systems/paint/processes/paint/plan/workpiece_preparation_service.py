@@ -6,16 +6,12 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from src.engine.cad import import_dxf_to_workpiece_data
 from src.robot_systems.paint.processes.paint.align import (
-    DXF_ALIGNMENT_STRATEGY_RIGID,
     _normalize_contour_points,
     align_raw_workpiece_to_contour,
 )
-from src.robot_systems.paint.processes.paint.align import map_raw_workpiece_mm_to_image
 
 _logger = logging.getLogger(__name__)
-_TEMPORARILY_DISABLE_DXF_MATCH_BRANCH_FOR_CONTOUR_DEBUG = True
 
 def contour_to_workpiece_raw(
     contour: np.ndarray,
@@ -46,16 +42,12 @@ class PaintWorkpiecePreparationService:
         match_workpiece_fn: Callable,
         transformer=None,
         transformer_getter: Optional[Callable[[], object]] = None,
-        dxf_alignment_strategy: str = DXF_ALIGNMENT_STRATEGY_RIGID,
-        dxf_max_scale_deviation: float = 0.03,
     ) -> None:
-        """Store matching hooks and the transformer needed for DXF placement."""
+        """Store matching hooks and the transformer needed for contour preparation."""
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
         self._transformer = transformer
         self._transformer_getter = transformer_getter
-        self._dxf_alignment_strategy = str(dxf_alignment_strategy or DXF_ALIGNMENT_STRATEGY_RIGID).strip().lower()
-        self._dxf_max_scale_deviation = float(dxf_max_scale_deviation)
 
     def _current_transformer(self):
         if self._transformer_getter is not None:
@@ -94,48 +86,6 @@ class PaintWorkpiecePreparationService:
         if not matched_raw:
             return None
 
-        dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
-        if dxf_path and not _TEMPORARILY_DISABLE_DXF_MATCH_BRANCH_FOR_CONTOUR_DEBUG:
-            image_h, image_w = self._resolve_frame_size(frame)
-            _logger.info(
-                "[PREP] branch=dxf workpiece_id=%s dxf_path=%s frame_size=(%.1f, %.1f) strategy=%s max_scale_deviation=%.6f raw=%s",
-                str(matched_raw.get("workpieceId") or matched_raw.get("name") or ""),
-                dxf_path,
-                float(image_w),
-                float(image_h),
-                self._dxf_alignment_strategy,
-                float(self._dxf_max_scale_deviation),
-                _describe_contour(_normalize_contour_points(captured_contour)),
-            )
-            dxf_raw = import_dxf_to_workpiece_data(dxf_path)
-            placed = map_raw_workpiece_mm_to_image(
-                dxf_raw,
-                image_w,
-                image_h,
-                self._current_transformer(),
-            )
-            _logger.info(
-                "[PREP] dxf placed main=%s",
-                _describe_contour(_extract_points_for_log(placed)),
-            )
-            aligned = align_raw_workpiece_to_contour(
-                placed,
-                captured_contour,
-                strategy=self._dxf_alignment_strategy,
-                max_scale_deviation=self._dxf_max_scale_deviation,
-            )
-            for key, value in matched_raw.items():
-                if key in {"contour", "sprayPattern"}:
-                    continue
-                aligned[key] = copy.deepcopy(value)
-            aligned["dxfPath"] = dxf_path
-            aligned.setdefault("sprayPattern", {"Contour": [], "Fill": []})
-            return aligned
-        if dxf_path:
-            _logger.info(
-                "[PREP] branch=dxf disabled for temporary camera-contour debug; using saved contour or captured fallback"
-            )
-
         if matched_raw.get("contour"):
             _logger.info(
                 "[PREP] branch=contour workpiece_id=%s source=%s captured=%s",
@@ -146,11 +96,13 @@ class PaintWorkpiecePreparationService:
             return align_raw_workpiece_to_contour(
                 matched_raw,
                 captured_contour,
-                strategy=self._dxf_alignment_strategy,
                 max_scale_deviation=0.0,
                 reference_scale_override=1.0,
             )
 
+        _logger.info(
+            "[PREP] matched workpiece has no saved contour; falling back to captured contour"
+        )
         return None
 
     @staticmethod
@@ -161,7 +113,7 @@ class PaintWorkpiecePreparationService:
         try:
             return float(frame.shape[0]), float(frame.shape[1])
         except Exception:
-            _logger.debug("Failed to read frame shape for DXF placement", exc_info=True)
+            _logger.debug("Failed to read frame shape", exc_info=True)
             return 720.0, 1280.0
 
 

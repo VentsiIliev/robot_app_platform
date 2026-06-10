@@ -335,7 +335,7 @@ def _compose_pose(
     rz: float,
 ) -> list[float]:
     """Build a full 6D pose from a projected 2D point and the active motion plane."""
-    _logger.debug(f"Refference pose: {reference_pose}")
+    # _logger.debug(f"Refference pose: {reference_pose}")
     pose = [float(value) for value in reference_pose[:6]]
     while len(pose) < 6:
         pose.append(0.0)
@@ -347,7 +347,7 @@ def _compose_pose(
     pose[orthogonal_index] = float(orthogonal_value)
     pose[rotation_index] = float(rotation_value)
 
-    _logger.debug(f"COMPOSE POSE: {pose}")
+    # _logger.debug(f"COMPOSE POSE: {pose}")
     return pose
 
 

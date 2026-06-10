@@ -514,6 +514,25 @@ def plot_pivot_path_debug(
                     'x-', color='magenta', linewidth=1.5, markersize=4,
                     label=f'Pivot {i+1}' if i == 0 else '',
                 )
+                if len(pivot_arr) >= 3:
+                    ax1.annotate(
+                        '',
+                        xy=(pivot_arr[2, planar_i], pivot_arr[2, planar_j]),
+                        xytext=(pivot_arr[0, planar_i], pivot_arr[0, planar_j]),
+                        arrowprops=dict(
+                            arrowstyle='->', color='darkmagenta',
+                            linewidth=2.5, shrinkA=6, shrinkB=6,
+                        ),
+                        zorder=9,
+                    )
+                for pt_idx in range(min(4, len(pivot_arr))):
+                    ax1.annotate(
+                        str(pt_idx),
+                        (pivot_arr[pt_idx, planar_i], pivot_arr[pt_idx, planar_j]),
+                        textcoords='offset points', xytext=(4, 4),
+                        fontsize=7, color='darkmagenta', fontweight='bold',
+                        zorder=10,
+                    )
                 ax2.plot(
                     np.arange(len(pivot_arr)), pivot_arr[:, rotation_i],
                     'x-', color='magenta', linewidth=1.5, markersize=4,

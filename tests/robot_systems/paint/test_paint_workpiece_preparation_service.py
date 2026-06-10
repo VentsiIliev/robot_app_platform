@@ -88,82 +88,21 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         self.assertIs(raw, aligned)
         self.assertEqual(description, "Executed saved-1")
         align.assert_called_once()
-        self.assertEqual(align.call_args.kwargs["strategy"], service._dxf_alignment_strategy)
         self.assertEqual(align.call_args.kwargs["max_scale_deviation"], 0.0)
         self.assertEqual(align.call_args.kwargs["reference_scale_override"], 1.0)
 
-    def test_prepare_workpiece_uses_dxf_branch_and_preserves_metadata(self):
+    def test_prepare_workpiece_falls_back_when_matched_raw_has_no_contour(self):
         payload = _matched_payload()
-        payload["raw"]["dxfPath"] = "/tmp/workpiece.dxf"
-        payload["raw"]["custom"] = {"a": 1}
+        payload["raw"].pop("contour")
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: True,
             match_workpiece_fn=lambda contour: (True, payload, "matched"),
-            transformer=object(),
-        )
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        contour = _square(4.0)
-        placed = {"contour": {"contour": [[0.0, 0.0], [1.0, 1.0]]}, "sprayPattern": {"Contour": [], "Fill": []}}
-        aligned = {"workpieceId": "aligned", "contour": {"contour": [[1.0, 1.0]]}, "sprayPattern": {"Contour": [], "Fill": []}}
-
-        with (
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.import_dxf_to_workpiece_data",
-                return_value={"dxf": True},
-            ) as import_dxf,
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.map_raw_workpiece_mm_to_image",
-                return_value=placed,
-            ) as place,
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
-                return_value=aligned,
-            ) as align,
-        ):
-            raw, description = service.prepare_workpiece(contour, frame=frame)
-
-        self.assertEqual(description, "Executed saved-1")
-        self.assertIs(raw, aligned)
-        self.assertEqual(raw["dxfPath"], "/tmp/workpiece.dxf")
-        self.assertEqual(raw["custom"], {"a": 1})
-        import_dxf.assert_called_once_with("/tmp/workpiece.dxf")
-        place.assert_called_once_with({"dxf": True}, 640.0, 480.0, service._transformer)
-        align.assert_called_once_with(
-            placed,
-            contour,
-            strategy=service._dxf_alignment_strategy,
-            max_scale_deviation=service._dxf_max_scale_deviation,
         )
 
-    def test_prepare_workpiece_uses_live_transformer_getter_for_dxf_branch(self):
-        payload = _matched_payload()
-        payload["raw"]["dxfPath"] = "/tmp/workpiece.dxf"
-        transformer = object()
-        service = PaintWorkpiecePreparationService(
-            can_match_fn=lambda: True,
-            match_workpiece_fn=lambda contour: (True, payload, "matched"),
-            transformer=None,
-            transformer_getter=lambda: transformer,
-        )
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        raw, description = service.prepare_workpiece(_square(4.0), frame=None)
 
-        with (
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.import_dxf_to_workpiece_data",
-                return_value={"dxf": True},
-            ),
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.map_raw_workpiece_mm_to_image",
-                return_value={"contour": {"contour": [[0.0, 0.0]]}, "sprayPattern": {"Contour": [], "Fill": []}},
-            ) as place,
-            patch(
-                "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
-                return_value={"workpieceId": "aligned", "sprayPattern": {"Contour": [], "Fill": []}},
-            ),
-        ):
-            service.prepare_workpiece(_square(4.0), frame=frame)
-
-        place.assert_called_once_with({"dxf": True}, 640.0, 480.0, transformer)
+        self.assertEqual(description, "Executed captured contour")
+        self.assertEqual(raw["workpieceId"], "captured")
 
     def test_prepare_workpiece_returns_captured_contour_when_matched_raw_empty(self):
         service = PaintWorkpiecePreparationService(
