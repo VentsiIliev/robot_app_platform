@@ -690,15 +690,21 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             execution_plan: WorkpieceExecutionPlan,
     ) -> PickupToPivotPlan | None:
         """Build XY/RZ pickup poses and the first staged pose for the active paint process plane."""
+        _fn_t = perf_counter()
         jobs = execution_plan.execution_jobs
         self._refresh_runtime_config()
+        _logger.info("[TIMING] _build_pickup_and_stage_poses refresh_config elapsed_s=%.3f", _elapsed_s(_fn_t))
         if not jobs:
             return None
 
+        _t1 = perf_counter()
         pickup_pivot_pose = self._resolve_pickup_base_position()
+        _logger.info("[TIMING] _build_pickup_and_stage_poses resolve_pickup elapsed_s=%.3f", _elapsed_s(_t1))
         _logger.debug(f"pickup_pivot_pose -> {pickup_pivot_pose}")
 
+        _t2 = perf_counter()
         paint_pivot_pose = self._resolve_base_position()
+        _logger.info("[TIMING] _build_pickup_and_stage_poses resolve_paint elapsed_s=%.3f", _elapsed_s(_t2))
         _logger.debug(f"paint_pivot_pose -> {paint_pivot_pose}")
 
         if pickup_pivot_pose is None or len(pickup_pivot_pose) < 3:
@@ -1393,6 +1399,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         """Run the pickup-only sequence: approach, vacuum on, descend, lift-align, and stage at the pivot."""
         started = perf_counter()
+        _logger.info("[TIMING] pickup_to_pivot entered")
         if self._robot_service is None:
             return False, "Robot service is not available"
 

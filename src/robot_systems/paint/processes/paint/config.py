@@ -119,7 +119,7 @@ class PaintProcessConfig:
     # Enables reachability sampling before executing XZ/RY pivot paths.
     enable_xz_ry_preflight: bool = False
     # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
-    xz_ry_preflight_max_checks: int = 8
+    xz_ry_preflight_max_checks: int = 0
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = False
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.

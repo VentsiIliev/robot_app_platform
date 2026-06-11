@@ -1,5 +1,6 @@
 import logging
 import os
+from time import perf_counter
 from typing import List, Tuple, Callable
 import copy
 from datetime import datetime
@@ -741,6 +742,7 @@ class WorkpieceEditorController(IApplicationController):
         dialog.show()
 
     def _on_execute_process_confirmed(self, action: WorkpieceProcessAction) -> None:
+        _t0 = perf_counter()
         self._restore_live_feed()
         if action.requires_projected_path_plot:
             from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
@@ -763,7 +765,10 @@ class WorkpieceEditorController(IApplicationController):
                 except Exception:
                     self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
                     return
+        self._logger.info("[TIMING] controller pre-execute elapsed_s=%.3f", perf_counter() - _t0)
+        _t1 = perf_counter()
         ok, msg = self._model.execute_process_action(action.action_id)
+        self._logger.info("[TIMING] controller execute_process_action elapsed_s=%.3f", perf_counter() - _t1)
         self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:
             show_info(self._preview_dialog or self._view, "Process Started", msg)
