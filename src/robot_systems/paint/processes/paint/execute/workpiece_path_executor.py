@@ -1390,7 +1390,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
-        """Run the pickup-only sequence: approach, vacuum on, descend, lift, and stage at the pivot."""
+        """Run the pickup-only sequence: approach, vacuum on, descend, lift-align, and stage at the pivot."""
         started = perf_counter()
         if self._robot_service is None:
             return False, "Robot service is not available"
@@ -1416,25 +1416,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_travel_pose[4] = float(current_pose[4])
             pickup_travel_pose[5] = float(current_pose[5])
 
-            pickup_entry_pose = list(pickup_travel_pose)
-            pickup_entry_pose[2] = float(plan.pickup_approach_pose[2])
-
             _logger.info(
-                "[PICKUP] split approach entry current=%s travel_pose=%s approach_position_pose=%s",
+                "[PICKUP] split approach entry current=%s travel_pose=%s approach_pose=%s",
                 [round(float(v), 3) for v in current_pose[:6]],
                 [round(float(v), 3) for v in pickup_travel_pose[:6]],
-                [round(float(v), 3) for v in pickup_entry_pose[:6]],
+                [round(float(v), 3) for v in plan.pickup_approach_pose[:6]],
             )
 
-            if not self._move_pickup_phase("Moving above pickup approach", pickup_travel_pose):
-                _logger.info("[TIMING] pickup_to_pivot success=false stage=approach_travel total_elapsed_s=%.3f", _elapsed_s(started))
-                return False, "Pickup approach travel move failed"
-            if not self._move_pickup_phase("Descending to pickup approach position", pickup_entry_pose):
-                _logger.info("[TIMING] pickup_to_pivot success=false stage=approach_position total_elapsed_s=%.3f", _elapsed_s(started))
-                return False, "Pickup approach position move failed"
-            if not self._move_pickup_phase("Aligning pickup approach orientation", plan.pickup_approach_pose):
-                _logger.info("[TIMING] pickup_to_pivot success=false stage=approach_orientation total_elapsed_s=%.3f", _elapsed_s(started))
-                return False, "Pickup approach orientation move failed"
+            # if not self._move_pickup_phase("Moving above pickup approach", pickup_travel_pose):
+            #     _logger.info("[TIMING] pickup_to_pivot success=false stage=approach_travel total_elapsed_s=%.3f", _elapsed_s(started))
+            #     return False, "Pickup approach travel move failed"
+            if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
+                _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
+                return False, "Pickup approach move failed"
         elif not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup approach move failed"
@@ -1443,13 +1437,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=descend total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup descend move failed"
 
-        if not self._move_pickup_phase("Lifting from pickup pose", plan.lift_pose):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=lift total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, "Pickup succeeded, but lift move failed"
-
-        if not self._move_pickup_phase("Aligning rotation at pickup pose", plan.align_pose):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=align total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, "Pickup succeeded, but align move failed"
+        if not self._move_pickup_phase("Lifting and aligning from pickup pose", plan.align_pose):
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=lift_align total_elapsed_s=%.3f", _elapsed_s(started))
+            return False, "Pickup succeeded, but lift-align move failed"
 
         if not self._move_pickup_phase("Changing plane", plan.change_plane_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=change_plane total_elapsed_s=%.3f", _elapsed_s(started))

@@ -433,6 +433,44 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             wait_to_reach=True,
         )
 
+    def test_execute_pickup_to_pivot_uses_deterministic_optimized_move_sequence(self):
+        robot_service = MagicMock()
+        robot_service.get_current_position.return_value = [0.0, 0.0, 300.0, 1.0, 2.0, 3.0]
+        robot_service.move_ptp.return_value = True
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            enable_vacuum_pump=False,
+            pivot_motion_plane="xy_z_rz",
+        )
+        plan = PickupToPivotPlan(
+            pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
+            lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            align_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 15.0],
+            stage_transition_poses=[[10.0, 20.0, 110.0, 90.0, 0.0, 15.0]],
+            staged_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+            change_plane_pose=[10.0, 20.0, 100.0, 90.0, 0.0, 15.0],
+            paint_pivot_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+        )
+        executor._build_pickup_and_stage_poses = MagicMock(return_value=plan)
+
+        ok, message = executor.execute_pickup_to_pivot(_execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]}))
+
+        self.assertTrue(ok, message)
+        commanded_positions = [call.kwargs["position"] for call in robot_service.move_ptp.call_args_list]
+        self.assertEqual(
+            [
+                [10.0, 20.0, 300.0, 1.0, 2.0, 3.0],
+                [10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+                [10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
+                [10.0, 20.0, 100.0, 180.0, 0.0, 15.0],
+                [10.0, 20.0, 100.0, 90.0, 0.0, 15.0],
+                [10.0, 20.0, 110.0, 90.0, 0.0, 15.0],
+                [30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+            ],
+            commanded_positions,
+        )
+
     def test_execute_pickup_and_paint_runs_post_execute_return_after_success(self):
         post_execute_callback = MagicMock(return_value=True)
         executor = PaintWorkpiecePathExecutor(
