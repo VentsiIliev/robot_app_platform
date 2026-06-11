@@ -447,7 +447,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 reference_rz = 0.0
         return resolved_name, offset_x, offset_y, reference_rz
 
-    def build_execution_plan(self, workpiece: dict) -> WorkpieceExecutionPlan:
+    def build_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import (
             ContourPathPipeline,
             InterpolationConfig,
@@ -706,17 +706,18 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 }
             )
 
-        self._save_interpolated_path_debug_plot(
-            raw_paths=raw_paths,
-            prepared_paths=prepared_paths,
-            curve_paths=curve_paths,
-            sampled_paths=sampled_paths,
-            execution_paths=[
-                [list(point) for point in job.get("execution_path", [])]
-                for job in execution_jobs
-            ],
-            heading_marker_threshold_deg=debug_heading_marker_threshold_deg,
-        )
+        if not skip_debug_plot:
+            self._save_interpolated_path_debug_plot(
+                raw_paths=raw_paths,
+                prepared_paths=prepared_paths,
+                curve_paths=curve_paths,
+                sampled_paths=sampled_paths,
+                execution_paths=[
+                    [list(point) for point in job.get("execution_path", [])]
+                    for job in execution_jobs
+                ],
+                heading_marker_threshold_deg=debug_heading_marker_threshold_deg,
+            )
 
         return WorkpieceExecutionPlan(
             workpiece=dict(merged),

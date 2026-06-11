@@ -25,8 +25,8 @@ class WorkpieceEditorModel(IApplicationModel):
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         return self._service.save_workpiece(data)
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
-        return self._service.execute_workpiece(data)
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
+        return self._service.execute_workpiece(data, skip_debug_plot=skip_debug_plot)
 
     def get_last_sampled_preview_paths(self) -> list:
         return self._service.get_last_sampled_preview_paths()

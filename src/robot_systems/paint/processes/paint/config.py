@@ -121,7 +121,7 @@ class PaintProcessConfig:
     # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
     xz_ry_preflight_max_checks: int = 8
     # Turns the vacuum pump on/off around pickup and release.
-    enable_vacuum_pump: bool = True
+    enable_vacuum_pump: bool = False
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.

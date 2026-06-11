@@ -47,7 +47,7 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: save_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece saved"
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
         _logger.info("Stub: execute_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece executed"
 

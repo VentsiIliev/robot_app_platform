@@ -175,7 +175,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             _logger.exception("save_workpiece failed")
             return False, str(exc)
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
         self._last_execution_plan = None
         form_data   = data.get("form_data", data)
         editor_data = data.get("editor_data")
@@ -184,28 +184,29 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         try:
             if self._path_executor is not None:
                 try:
-                    execution_plan = self._path_executor.prepare_workpiece_preview(merged)
+                    execution_plan = self._path_executor.prepare_workpiece_preview(merged, skip_debug_plot=skip_debug_plot)
                 except NotImplementedError:
                     if self._path_preparation_service is None:
                         return False, "Path preparation service is not available"
-                    execution_plan = self._path_preparation_service.build_execution_plan(merged)
+                    execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
             else:
                 if self._path_preparation_service is None:
                     return False, "Path preparation service is not available"
-                execution_plan = self._path_preparation_service.build_execution_plan(merged)
+                execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
         except Exception as exc:
             _logger.exception("[EXECUTE] Failed to build preview package")
             return False, str(exc)
 
         if self._executor_process_plan() is None:
             self._last_execution_plan = execution_plan
-        self._write_debug_path_dump(
-            raw_paths=execution_plan.raw_paths,
-            prepared_paths=execution_plan.prepared_paths,
-            curve_paths=execution_plan.curve_paths,
-            sampled_paths=execution_plan.sampled_paths,
-            execution_paths=execution_plan.execution_paths(),
-        )
+        if not skip_debug_plot:
+            self._write_debug_path_dump(
+                raw_paths=execution_plan.raw_paths,
+                prepared_paths=execution_plan.prepared_paths,
+                curve_paths=execution_plan.curve_paths,
+                sampled_paths=execution_plan.sampled_paths,
+                execution_paths=execution_plan.execution_paths(),
+            )
         _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
                      len(execution_plan.execution_jobs), execution_plan.total_spline_pts)
         return True, f"Prepared process: {len(execution_plan.execution_jobs)} path(s), {execution_plan.total_spline_pts} interpolated waypoints"

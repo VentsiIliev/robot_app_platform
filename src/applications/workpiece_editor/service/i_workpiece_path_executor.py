@@ -19,7 +19,7 @@ class WorkpieceProcessAction:
 class IWorkpiecePathExecutor(ABC):
     """Robot-system-owned execution adapter for editor preview paths."""
 
-    def prepare_workpiece_preview(self, workpiece: dict) -> "WorkpieceExecutionPlan":
+    def prepare_workpiece_preview(self, workpiece: dict, skip_debug_plot: bool = False) -> "WorkpieceExecutionPlan":
         """Optionally let the robot-system executor own workpiece-to-preview-plan preparation."""
         raise NotImplementedError
 

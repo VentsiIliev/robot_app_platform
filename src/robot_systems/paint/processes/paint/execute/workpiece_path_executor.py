@@ -339,11 +339,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         return True, ""
 
-    def prepare_workpiece_preview(self, workpiece: dict) -> WorkpieceExecutionPlan:
+    def prepare_workpiece_preview(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         """Build and cache the execution plan for a paint workpiece."""
         if self._path_preparation_service is None:
             raise RuntimeError("Path preparation service is not available")
-        self._last_execution_plan = self._path_preparation_service.build_execution_plan(workpiece)
+        self._last_execution_plan = self._path_preparation_service.build_execution_plan(workpiece, skip_debug_plot=skip_debug_plot)
         return self._last_execution_plan
 
     def get_last_execution_plan(self) -> WorkpieceExecutionPlan | None:

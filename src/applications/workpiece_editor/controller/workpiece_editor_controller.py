@@ -630,7 +630,7 @@ class WorkpieceEditorController(IApplicationController):
             except Exception:
                 self._logger.debug("Failed to inspect editor_data stats during execute", exc_info=True)
         payload = {"form_data": form_data, "editor_data": editor_data}
-        ok, msg = self._model.execute_workpiece(payload)
+        ok, msg = self._model.execute_workpiece(payload, skip_debug_plot=_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
         if ok:
             try:
@@ -743,24 +743,26 @@ class WorkpieceEditorController(IApplicationController):
     def _on_execute_process_confirmed(self, action: WorkpieceProcessAction) -> None:
         self._restore_live_feed()
         if action.requires_projected_path_plot:
-            try:
-                source_paths = self._model.get_last_execution_preview_paths()
-                pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
-                motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
-                if source_paths and pivot_paths:
-                    approved = self._show_pivot_path_plot(
-                        source_paths,
-                        pivot_paths,
-                        pivot_pose,
-                        motion_snapshots,
-                        approve_label=action.label,
-                    )
-                    if not approved:
-                        self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
-                        return
-            except Exception:
-                self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
-                return
+            from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+            if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+                try:
+                    source_paths = self._model.get_last_execution_preview_paths()
+                    pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
+                    motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
+                    if source_paths and pivot_paths:
+                        approved = self._show_pivot_path_plot(
+                            source_paths,
+                            pivot_paths,
+                            pivot_pose,
+                            motion_snapshots,
+                            approve_label=action.label,
+                        )
+                        if not approved:
+                            self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                            return
+                except Exception:
+                    self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
+                    return
         ok, msg = self._model.execute_process_action(action.action_id)
         self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:

@@ -5,6 +5,6 @@ from abc import ABC, abstractmethod
 
 class IWorkpiecePathPreparationService(ABC):
     @abstractmethod
-    def build_execution_plan(self, workpiece: dict):
+    def build_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False):
         ...
 
