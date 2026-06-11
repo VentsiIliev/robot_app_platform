@@ -6,11 +6,20 @@ from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDU
 @dataclass(frozen=True)
 class PickupMotionConfig:
     """Pickup-specific motion defaults shared by paint execution flows."""
+    # Safe Z height (mm) for pickup approach travel — keeps the TCP well above obstacles before descending.
     default_z_mm: float = 300.0
-    default_vel_percent: float = 10.0
-    default_acc_percent: float = 10.0
+    # Default velocity (%) for all pickup-phase moves except the final descend to contact.
+    default_vel_percent: float = 20.0
+    # Default acceleration (%) for all pickup-phase moves except the final descend to contact.
+    default_acc_percent: float = 50.0
+    # Vertical offset (mm) above the pickup surface at which the approach orientation is applied.
     approach_offset_mm: float = 100.0
+    # Standoff height (mm) above the pickup surface used for the first-contact alignment.
     contact_offset_mm: float = 2.0
+    # Velocity (%) for the final descend move from approach height down to the pickup pose.
+    descend_vel_percent: float = 10.0
+    # Acceleration (%) for the final descend move from approach height down to the pickup pose.
+    descend_acc_percent: float = 10.0
 
 
 @dataclass(frozen=True)
@@ -117,6 +126,8 @@ class PaintProcessConfig:
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
+    # Enables the matplotlib debug plot generated after pivot path computation.
+    enable_pivot_debug_plot: bool = False
 
     @property
     def paint_base_group_id(self) -> str:
@@ -153,6 +164,14 @@ class PaintProcessConfig:
     @property
     def pickup_default_acc_percent(self) -> float:
         return float(self.pickup_motion.default_acc_percent)
+
+    @property
+    def pickup_descend_vel_percent(self) -> float:
+        return float(self.pickup_motion.descend_vel_percent)
+
+    @property
+    def pickup_descend_acc_percent(self) -> float:
+        return float(self.pickup_motion.descend_acc_percent)
 
     @property
     def pickup_approach_offset_mm(self) -> float:

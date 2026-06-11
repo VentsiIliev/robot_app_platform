@@ -776,6 +776,9 @@ class WorkpieceEditorController(IApplicationController):
             motion_snapshots=None,
             approve_label: str = "Approve",
     ) -> bool:
+        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        if not PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+            return True
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug
 
         image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)

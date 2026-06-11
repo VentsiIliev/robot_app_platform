@@ -941,7 +941,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             source_rotation_deg=source_rotation_deg,
         )
 
-    def _move_pickup_phase(self, label: str, pose: list[float]) -> bool:
+    def _move_pickup_phase(self, label: str, pose: list[float], velocity: float | None = None, acceleration: float | None = None) -> bool:
         """Execute one pickup-related robot move with the configured pickup tool and user."""
         started = perf_counter()
         _logger.info(
@@ -955,8 +955,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             position=pose,
             tool=self._pickup_tool,
             user=self._pickup_user,
-            velocity=PAINT_PROCESS_CONFIG.pickup_default_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
+            velocity=velocity if velocity is not None else PAINT_PROCESS_CONFIG.pickup_default_vel_percent,
+            acceleration=acceleration if acceleration is not None else PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
             wait_to_reach=True,
         )
         _logger.info("[TIMING] pickup_phase label=%s success=%s elapsed_s=%.3f", label, bool(ok), _elapsed_s(started))
@@ -1322,19 +1322,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 pattern_type=pattern_type,
                 stage="execute",
             )
-            write_pivot_debug_plot(
-                debug_dump_dir=self._debug_dump_dir,
-                pivot_config=self._pivot_config,
-                source_path=spline,
-                pivot_path=command_pivot_path,
-                snapshots=snapshots,
-                diagnostics=diagnostics,
-                pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
-                pattern_type=pattern_type,
-                stage="execute",
-                anchor_xy=anchor_xy,
-                source_rotation_deg=source_rotation_deg,
-            )
+            if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+                write_pivot_debug_plot(
+                    debug_dump_dir=self._debug_dump_dir,
+                    pivot_config=self._pivot_config,
+                    source_path=spline,
+                    pivot_path=command_pivot_path,
+                    snapshots=snapshots,
+                    diagnostics=diagnostics,
+                    pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
+                    pattern_type=pattern_type,
+                    stage="execute",
+                    anchor_xy=anchor_xy,
+                    source_rotation_deg=source_rotation_deg,
+                )
 
             preflight_ok, preflight_message = self._validate_xz_ry_pivot_path(command_pivot_path)
             if not preflight_ok:
@@ -1408,32 +1409,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", _elapsed_s(started))
             return False, msg
 
-        current_pose = self._robot_service.get_current_position()
-        if current_pose and len(current_pose) >= 6:
-            pickup_travel_pose = list(plan.pickup_approach_pose)
-            pickup_travel_pose[2] = max(float(current_pose[2]), float(plan.pickup_approach_pose[2]))
-            pickup_travel_pose[3] = float(current_pose[3])
-            pickup_travel_pose[4] = float(current_pose[4])
-            pickup_travel_pose[5] = float(current_pose[5])
-
-            _logger.info(
-                "[PICKUP] split approach entry current=%s travel_pose=%s approach_pose=%s",
-                [round(float(v), 3) for v in current_pose[:6]],
-                [round(float(v), 3) for v in pickup_travel_pose[:6]],
-                [round(float(v), 3) for v in plan.pickup_approach_pose[:6]],
-            )
-
-            # if not self._move_pickup_phase("Moving above pickup approach", pickup_travel_pose):
-            #     _logger.info("[TIMING] pickup_to_pivot success=false stage=approach_travel total_elapsed_s=%.3f", _elapsed_s(started))
-            #     return False, "Pickup approach travel move failed"
-            if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
-                _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
-                return False, "Pickup approach move failed"
-        elif not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
+        if not self._move_pickup_phase("Moving to pickup approach pose", plan.pickup_approach_pose):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup approach move failed"
 
-        if not self._move_pickup_phase("Descending to pickup pose", plan.pickup_pose):
+        if not self._move_pickup_phase(
+            "Descending to pickup pose", plan.pickup_pose,
+            velocity=PAINT_PROCESS_CONFIG.pickup_descend_vel_percent,
+            acceleration=PAINT_PROCESS_CONFIG.pickup_descend_acc_percent,
+        ):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=descend total_elapsed_s=%.3f", _elapsed_s(started))
             return False, "Pickup descend move failed"
 
