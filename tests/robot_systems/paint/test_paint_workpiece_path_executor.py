@@ -11,6 +11,7 @@ from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts impor
 )
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
+    PickupToPivotPlan,
     _normalize_pivot_config,
     _shift_path_rotation,
 )
@@ -95,7 +96,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         captured_pivots = []
 
-        def _project(path, pivot_pose, config):
+        def _project(path, pivot_pose, config, **_kwargs):
             captured_pivots.append((path, list(pivot_pose), config.motion_plane))
             return [[list(pivot_pose)]], [], []
 
@@ -276,7 +277,114 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertAlmostEqual(16.845, plan.align_pose[5], places=3)
         self.assertAlmostEqual(16.845, plan.staged_pose[5], places=3)
 
-    def test_xz_ry_pickup_handoff_keeps_fixed_paint_rz(self):
+    def test_build_pickup_and_stage_poses_reprojects_after_pickup_alignment(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            base_position_provider=lambda: [100.0, 200.0, 300.0, 10.0, 20.0, 30.0],
+            pickup_base_position_provider=lambda: [10.0, 20.0, 30.0, 180.0, 5.0, 0.0],
+            pivot_motion_plane="xy_z_rz",
+        )
+        execution_plan = _execution_plan(
+            {
+                "execution_path": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+                "pickup_xy": [11.0, 22.0],
+                "pickup_rz": 0.0,
+                "workpiece_height_mm": 0.0,
+            }
+        )
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            side_effect=[
+                ([[101.0, 202.0, 303.0, 1.0, 2.0, 10.0]], [], []),
+                ([[111.0, 212.0, 313.0, 1.0, 2.0, 10.0]], [], []),
+            ],
+        ) as projection:
+            plan = executor._build_pickup_and_stage_poses(execution_plan)
+
+        self.assertIsNotNone(plan)
+        self.assertAlmostEqual(10.0, plan.source_rotation_deg, places=6)
+        self.assertEqual([111.0, 212.0, 313.0], plan.staged_pose[:3])
+        self.assertAlmostEqual(10.0, projection.call_args_list[1].kwargs["source_rotation_deg"], places=6)
+
+    def test_execute_pivot_paths_uses_carried_source_rotation(self):
+        robot_service = MagicMock()
+        robot_service.execute_trajectory.return_value = 0
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            base_position_provider=lambda: [100.0, 200.0, 300.0, 10.0, 20.0, 30.0],
+            pivot_motion_plane="xy_z_rz",
+            debug_dump_dir=None,
+        )
+        executor._last_pickup_plan = PickupToPivotPlan(
+            pickup_approach_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            pickup_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            lift_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            align_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 12.0],
+            stage_transition_poses=[],
+            staged_pose=[101.0, 202.0, 303.0, 1.0, 2.0, 12.0],
+            change_plane_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 12.0],
+            paint_pivot_pose=[100.0, 200.0, 300.0, 10.0, 20.0, 30.0],
+            source_rotation_deg=12.0,
+        )
+        execution_plan = _execution_plan(
+            {
+                "execution_path": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+                "pickup_xy": [0.0, 0.0],
+            }
+        )
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            return_value=(
+                [[101.0, 202.0, 303.0, 1.0, 2.0, 12.0], [111.0, 202.0, 303.0, 1.0, 2.0, 12.0]],
+                [],
+                [],
+            ),
+        ) as projection:
+            ok, message, total_waypoints = executor._execute_pivot_paths(execution_plan)
+
+        self.assertTrue(ok, message)
+        self.assertEqual(2, total_waypoints)
+        self.assertGreaterEqual(len(projection.call_args_list), 1)
+        self.assertAlmostEqual(12.0, projection.call_args_list[0].kwargs["source_rotation_deg"], places=6)
+
+    def test_pivot_preview_paths_use_pickup_source_rotation_and_command_mapping(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            base_position_provider=lambda: [100.0, 200.0, 300.0, -91.478, -0.047, -0.05],
+            pickup_base_position_provider=lambda: [10.0, 20.0, 30.0, -178.885, -0.002, 7.393],
+            pivot_motion_plane="xz_y_ry",
+            mirror_xz_ry_pickup_handoff=True,
+        )
+        execution_plan = _execution_plan(
+            {
+                "execution_path": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+                "pickup_xy": [-6.327, 303.338],
+                "pickup_rz": 7.393,
+                "workpiece_height_mm": 0.0,
+            }
+        )
+
+        def _project(_path, _pivot_pose, _config, **kwargs):
+            source_rotation = float(kwargs.get("source_rotation_deg", 0.0))
+            if abs(source_rotation) > 1e-9:
+                return ([[-83.655, 316.814, 283.401, -91.478, -69.416, -0.05]], [], [])
+            return ([[-83.655, 316.814, 283.401, -91.478, 25.0, -0.05]], [], [])
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            side_effect=_project,
+        ) as projection:
+            paths, _ = executor.get_pivot_preview_paths(execution_plan)
+
+        self.assertEqual(1, len(paths))
+        self.assertAlmostEqual(-0.002, paths[0][0][4], places=3)
+        self.assertTrue(
+            any(abs(float(call.kwargs.get("source_rotation_deg", 0.0))) > 1e-9 for call in projection.call_args_list)
+        )
+
+    def test_xz_ry_pickup_handoff_keeps_fixed_paint_rz_without_initial_pivot_rotation(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,
             base_position_provider=lambda: [100.0, 200.0, 300.0, -91.478, -0.047, -0.05],
@@ -303,9 +411,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertAlmostEqual(-0.05, plan.align_pose[5], places=3)
         self.assertAlmostEqual(-0.05, plan.change_plane_pose[5], places=3)
         self.assertAlmostEqual(-0.05, plan.stage_transition_poses[0][5], places=3)
-        self.assertEqual(plan.stage_transition_poses[0], plan.staged_pose)
+        self.assertAlmostEqual(-0.002, plan.stage_transition_poses[0][4], places=3)
         self.assertAlmostEqual(-0.05, plan.staged_pose[5], places=3)
-        self.assertAlmostEqual(-69.416, plan.staged_pose[4], places=3)
+        self.assertAlmostEqual(-0.002, plan.staged_pose[4], places=3)
 
     def test_move_pickup_phase_uses_pickup_motion_defaults(self):
         robot_service = MagicMock()
@@ -386,6 +494,27 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         second_center = np.mean(snapshots[1], axis=0)
         np.testing.assert_allclose(first_center, np.array([100.0, 200.0]), atol=1e-6)
         np.testing.assert_allclose(second_center, np.array([110.0, 210.0]), atol=1e-6)
+
+    def test_build_executed_snapshot_series_does_not_rotate_snapshots_from_command_axis_shift(self):
+        pivot_config = _normalize_pivot_config(motion_plane="xy_z_rz")
+        source_path = [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+        executed_path = [[100.0, 200.0, 300.0, 0.0, 0.0, 90.0]]
+        pivot_pose = [50.0, 60.0, 70.0, 0.0, 0.0, 15.0]
+        preview_path = [[10.0, 20.0, 0.0, 0.0, 0.0, 10.0]]
+        preview_snapshots = [np.asarray([[9.0, 20.0], [11.0, 20.0]], dtype=float)]
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.project_paint_motion_geometry",
+            return_value=(preview_path, preview_snapshots, []),
+        ):
+            snapshots = build_executed_snapshot_series(
+                source_path=source_path,
+                executed_path=executed_path,
+                pivot_pose=pivot_pose,
+                pivot_config=pivot_config,
+            )
+
+        np.testing.assert_allclose(snapshots[0], np.asarray([[99.0, 200.0], [101.0, 200.0]]), atol=1e-6)
 
 
 if __name__ == "__main__":

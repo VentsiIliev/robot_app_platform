@@ -376,8 +376,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None,
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         pickup_axis_alignment_sign: float = 1.0,
-        pickup_rz_frame_offset_deg: float = 0.0,
         pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
+        debug_plot_dir: Optional[str] = None,
     ) -> None:
         self._logger = logger
         self._segment_config = segment_config
@@ -393,16 +393,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
+        self._debug_plot_dir = str(debug_plot_dir) if debug_plot_dir else ""
         self._geometry_scale_cache: tuple[str, float] | None = None
         try:
             pickup_alignment_sign = float(pickup_axis_alignment_sign)
         except (TypeError, ValueError):
             pickup_alignment_sign = 1.0
         self._pickup_axis_alignment_sign = 1.0 if pickup_alignment_sign >= 0.0 else -1.0
-        try:
-            self._pickup_rz_frame_offset_deg = float(pickup_rz_frame_offset_deg)
-        except (TypeError, ValueError):
-            self._pickup_rz_frame_offset_deg = 0.0
         resolved_mode = str(pixel_to_mm_mode or PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR).strip().lower()
         if resolved_mode not in _PIXEL_TO_MM_MODES:
             raise ValueError(
@@ -551,6 +548,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         prepared_paths: list[list[list[float]]] = []
         curve_paths: list[list[list[float]]] = []
         execution_jobs: list[dict] = []
+        debug_heading_marker_threshold_deg = PATH_TANGENT_HEADING_DEADBAND_DEG
 
         for path_pts, settings, pattern_type, pts_px in robot_paths:
             raw_paths.append([list(pt) for pt in path_pts])
@@ -563,6 +561,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             acc = _safe_float(settings.get("acceleration"), 30.0)
             preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm = _resolve_segment_interpolation_settings(settings)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
+            debug_heading_marker_threshold_deg = tangent_heading_deadband_deg
             input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
             interpolation_method = "linear" if _is_explicitly_closed_path(path_pts) else "pchip"
             if interpolation_method == "linear":
@@ -665,18 +664,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         self._pickup_axis_alignment_sign,
                         float(pickup_rz),
                     )
-                if abs(self._pickup_rz_frame_offset_deg) > 1e-9:
-                    offset_input_rz = float(pickup_rz)
-                    pickup_rz = nearest_axis_equivalent_degrees(
-                        float(pickup_reference_rz),
-                        offset_input_rz + self._pickup_rz_frame_offset_deg,
-                    )
-                    self._logger.info(
-                        "[PICKUP_RZ] frame_offset applied offset=%.3f before=%.3f selected=%.3f",
-                        self._pickup_rz_frame_offset_deg,
-                        offset_input_rz,
-                        float(pickup_rz),
-                    )
                 pickup_xy = self._transform_single_pixel_to_robot(
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
@@ -719,6 +706,18 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 }
             )
 
+        self._save_interpolated_path_debug_plot(
+            raw_paths=raw_paths,
+            prepared_paths=prepared_paths,
+            curve_paths=curve_paths,
+            sampled_paths=sampled_paths,
+            execution_paths=[
+                [list(point) for point in job.get("execution_path", [])]
+                for job in execution_jobs
+            ],
+            heading_marker_threshold_deg=debug_heading_marker_threshold_deg,
+        )
+
         return WorkpieceExecutionPlan(
             workpiece=dict(merged),
             raw_paths=raw_paths,
@@ -730,6 +729,38 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             raw_pixel_paths=raw_pixel_paths,
             raw_homography_paths=raw_homography_paths,
         )
+
+    def _save_interpolated_path_debug_plot(
+        self,
+        *,
+        raw_paths: list[list[list[float]]],
+        prepared_paths: list[list[list[float]]],
+        curve_paths: list[list[list[float]]],
+        sampled_paths: list[list[list[float]]],
+        execution_paths: list[list[list[float]]],
+        heading_marker_threshold_deg: float,
+    ) -> None:
+        """Persist the post-interpolation path debug plot when a debug directory is configured."""
+        if not self._debug_plot_dir:
+            return
+        try:
+            from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+                plot_trajectory_debug,
+            )
+
+            image_path = plot_trajectory_debug(
+                raw_paths=raw_paths,
+                prepared_paths=prepared_paths,
+                curve_paths=curve_paths,
+                sampled_paths=sampled_paths,
+                execution_paths=execution_paths,
+                save_dir=self._debug_plot_dir,
+                heading_marker_threshold_deg=heading_marker_threshold_deg,
+            )
+            if image_path:
+                self._logger.info("[EXECUTE] Saved interpolated path debug plot to %s", image_path)
+        except Exception:
+            self._logger.debug("[EXECUTE] Failed to save interpolated path debug plot", exc_info=True)
 
     def _transform_to_robot_homography_only(self, pts_px: np.ndarray, settings: dict) -> list:
         """Return pixel-to-robot points using only the base homography, no residual warp."""

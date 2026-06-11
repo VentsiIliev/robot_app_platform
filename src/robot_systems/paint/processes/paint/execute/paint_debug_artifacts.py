@@ -5,8 +5,6 @@ import os
 from datetime import datetime
 
 import numpy as np
-
-from src.engine.geometry.planar import rotate_xy_about, unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
@@ -40,7 +38,7 @@ def build_executed_snapshot_series(
     anchor_xy: tuple[float, float] | None = None,
     source_rotation_deg: float = 0.0,
 ) -> list[np.ndarray]:
-    """Rebuild contour snapshots from the final executed pose sequence."""
+    """Rebase projected physical contour snapshots onto the final robot command poses."""
     if not source_path or not executed_path or pivot_pose is None or len(pivot_pose) < 3:
         return []
     try:
@@ -63,40 +61,16 @@ def build_executed_snapshot_series(
             return []
 
         planar_i, planar_j = pivot_config.planar_coordinate_indices
-        rotation_index = pivot_config.rotation_index
-        pivot_xy = (float(pivot_pose[planar_i]), float(pivot_pose[planar_j]))
-        reference_snapshot = np.asarray(preview_snapshots[0], dtype=float)
-        reference_anchor = np.asarray(
-            [
-                float(preview_path[0][planar_i]) if len(preview_path[0]) > planar_i else 0.0,
-                float(preview_path[0][planar_j]) if len(preview_path[0]) > planar_j else 0.0,
-            ],
-            dtype=float,
-        )
-        reference_rotation = (
-            float(preview_path[0][rotation_index]) if len(preview_path[0]) > rotation_index else 0.0
-        )
         rebuilt_snapshots: list[np.ndarray] = []
-        for pose in executed_path:
-            target_rotation = float(pose[rotation_index]) if len(pose) > rotation_index else reference_rotation
-            rotation_delta = unwrap_degrees(reference_rotation, target_rotation) - reference_rotation
-            rotated_snapshot = np.asarray(
+        for index, pose in enumerate(executed_path):
+            preview_index = min(index, len(preview_snapshots) - 1, len(preview_path) - 1)
+            snapshot = np.asarray(preview_snapshots[preview_index], dtype=float)
+            preview_pose = preview_path[preview_index]
+            preview_anchor = np.asarray(
                 [
-                    rotate_xy_about(
-                        (float(point[0]), float(point[1])),
-                        rotation_delta,
-                        pivot_xy,
-                    )
-                    for point in reference_snapshot
+                    float(preview_pose[planar_i]) if len(preview_pose) > planar_i else 0.0,
+                    float(preview_pose[planar_j]) if len(preview_pose) > planar_j else 0.0,
                 ],
-                dtype=float,
-            )
-            rotated_anchor = np.asarray(
-                rotate_xy_about(
-                    (float(reference_anchor[0]), float(reference_anchor[1])),
-                    rotation_delta,
-                    pivot_xy,
-                ),
                 dtype=float,
             )
             target_anchor = np.asarray(
@@ -106,7 +80,7 @@ def build_executed_snapshot_series(
                 ],
                 dtype=float,
             )
-            rebuilt_snapshots.append(rotated_snapshot + (target_anchor - rotated_anchor))
+            rebuilt_snapshots.append(snapshot + (target_anchor - preview_anchor))
         return rebuilt_snapshots
     except Exception:
         _logger.debug("[PIVOT] Failed to rebuild executed snapshots", exc_info=True)
@@ -126,7 +100,7 @@ def write_pivot_debug_dump(
     anchor_xy: tuple[float, float] | None = None,
     source_rotation_deg: float = 0.0,
 ) -> None:
-    """Write source and projected pivot paths to disk for offline trajectory inspection."""
+    """Write source and robot command paths to disk for offline trajectory inspection."""
     if not debug_dump_dir:
         return
 
@@ -151,9 +125,9 @@ def write_pivot_debug_dump(
                 f"# paint_side={pivot_config.paint_side}\n"
                 f"# translation_direction={pivot_config.translation_direction}\n"
                 f"# source_count={len(source_path)}\n"
-                f"# projected_count={len(pivot_path)}\n"
+                f"# command_count={len(pivot_path)}\n"
                 f"# source_xyz_len_mm={_path_length_mm(source_path):.6f}\n"
-                f"# projected_xyz_len_mm={_path_length_mm(pivot_path):.6f}\n"
+                f"# command_xyz_len_mm={_path_length_mm(pivot_path):.6f}\n"
             )
             if pivot_pose:
                 pose_values = ", ".join(f"{float(value):.6f}" for value in pivot_pose)
@@ -165,7 +139,7 @@ def write_pivot_debug_dump(
 
             for section_name, path in (
                 ("ORIGINAL_PLATFORM_PATH", source_path),
-                ("PROJECTED_EXECUTION_PATH", pivot_path),
+                ("ROBOT_COMMAND_PATH", pivot_path),
             ):
                 handle.write(f"\n[{section_name}]\n")
                 handle.write(f"count={len(path)}\n")
@@ -208,7 +182,7 @@ def write_pivot_debug_plot(
     pattern_type: str,
     stage: str,
 ) -> None:
-    """Write a compact visual debug plot for the source and projected pivot trajectories."""
+    """Write a compact visual debug plot for the source and robot command trajectories."""
     if not debug_dump_dir or not source_path or not pivot_path:
         return
 
@@ -287,7 +261,7 @@ def write_pivot_debug_plot(
             snapshot_axes = [axes[2]]
             sample_indices = np.asarray([], dtype=int)
 
-        fig.suptitle(f"Pivot Trajectory Debug: {pattern_type} [{pivot_config.motion_plane}]", fontsize=12)
+        fig.suptitle(f"Pivot Command Trajectory Debug: {pattern_type} [{pivot_config.motion_plane}]", fontsize=12)
 
         arrow_step = max(1, len(source_xy) // 12)
         ax_source.plot(source_xy[:, 0], source_xy[:, 1], color="#1f77b4", linewidth=1.5)
@@ -346,7 +320,7 @@ def write_pivot_debug_plot(
                 marker="x",
                 label="pivot",
             )
-        ax_projected.set_title("Projected Execution Path")
+        ax_projected.set_title("Robot Command Path")
         ax_projected.set_xlabel(_axis_label_from_index(planar_i))
         ax_projected.set_ylabel(_axis_label_from_index(planar_j))
         ax_projected.axis("equal")
@@ -446,7 +420,7 @@ def write_pivot_debug_plot(
             0.01,
             (
                 f"source_xyz_len={_path_length_mm(source_path):.1f} mm   "
-                f"projected_xyz_len={_path_length_mm(pivot_path):.1f} mm   "
+                f"command_xyz_len={_path_length_mm(pivot_path):.1f} mm   "
                 f"translation_axis={pivot_config.translation_axis}   "
                 f"plane={pivot_config.motion_plane}"
             ),

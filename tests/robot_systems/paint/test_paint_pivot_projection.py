@@ -74,6 +74,34 @@ class TestPaintPivotProjection(unittest.TestCase):
         np.testing.assert_allclose(projected[1][:2], [108.0, 200.0], atol=1e-6)
         np.testing.assert_allclose(snapshots[0], np.array([[100.0, 200.0], [90.0, 200.0]]), atol=1e-6)
 
+    def test_project_paint_motion_geometry_prefers_long_initial_translation_run(self) -> None:
+        config = PaintSimulationConfig(
+            motion_plane="xy_z_rz",
+            translation_axis="x",
+            paint_side="negative",
+            translation_direction="reverse",
+        )
+        path = [
+            [-100.0, 10.0, 5.0, 1.0, 2.0, 3.0],
+            [-1.0, 10.0, 5.0, 1.0, 2.0, 3.0],
+            [0.0, 10.0, 5.0, 1.0, 2.0, 3.0],
+            [0.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+            [-100.0, 0.0, 5.0, 1.0, 2.0, 3.0],
+            [-100.0, 10.0, 5.0, 1.0, 2.0, 3.0],
+        ]
+        pivot_pose = [100.0, 200.0, 300.0, 10.0, 20.0, 0.0]
+
+        _, snapshots, diagnostics = project_paint_motion_geometry(
+            path,
+            pivot_pose,
+            config,
+            anchor_xy=(-1.0, 10.0),
+        )
+
+        np.testing.assert_allclose(snapshots[0][0], np.array([100.0, 200.0]), atol=1e-6)
+        self.assertGreater(float(np.linalg.norm(snapshots[0][1] - snapshots[0][0])), 50.0)
+        self.assertAlmostEqual(float(diagnostics[1]["rotation_delta_applied"]), 0.0, places=6)
+
     def test_project_paint_motion_geometry_applies_source_rotation_about_tcp_anchor(self) -> None:
         config = PaintSimulationConfig(
             motion_plane="xz_y_ry",

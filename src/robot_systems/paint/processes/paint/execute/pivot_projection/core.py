@@ -420,8 +420,27 @@ def _canonicalize_closed_source_path(
             return 0.0
         return float(np.mean(relative @ normal))
 
+    def _initial_translation_run_length(candidate: np.ndarray) -> float:
+        if len(candidate) < 2:
+            return 0.0
+
+        aligned_preview, _, _ = _preview_aligned(candidate)
+        total = 0.0
+        for index in range(len(aligned_preview) - 1):
+            start = aligned_preview[index]
+            end = aligned_preview[index + 1]
+            segment_length = float(np.linalg.norm(end - start))
+            if segment_length <= 1e-9:
+                continue
+            heading = _segment_heading_deg(start, end)
+            heading_error = _angle_error_deg(heading, desired_heading)
+            if heading_error > PAINT_PROJECTION_TUNING.rotation_deadband_deg:
+                break
+            total += segment_length
+        return total
+
     best_ordered = contour
-    best_key: tuple[float, float, float] | None = None
+    best_key: tuple[float, float, float, float] | None = None
     for start_index in range(len(contour)):
         forward = np.roll(contour, -start_index, axis=0)
         reverse = forward[::-1].copy()
@@ -429,10 +448,15 @@ def _canonicalize_closed_source_path(
         for candidate in (forward, reverse):
             aligned_preview, heading, _ = _preview_aligned(candidate)
             heading_error = _angle_error_deg(heading, desired_heading)
+            heading_penalty = max(
+                0.0,
+                heading_error - float(PAINT_PROJECTION_TUNING.rotation_deadband_deg),
+            )
             side_score = _side_score(aligned_preview)
             side_penalty = 0.0 if side_score * desired_side_sign >= 0.0 else 1.0
+            initial_run_length = _initial_translation_run_length(candidate)
             anchor_distance = float(np.linalg.norm(candidate[0] - reference_vec))
-            key = (side_penalty, heading_error, anchor_distance)
+            key = (side_penalty, heading_penalty, -initial_run_length, anchor_distance)
             if best_key is None or key < best_key:
                 best_key = key
                 best_ordered = candidate

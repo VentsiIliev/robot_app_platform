@@ -66,6 +66,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["target_point_name"])
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["pickup_target_point_name"])
         self.assertEqual(application_wiring._PAINT_PROCESS.contour_pixel_to_mm_mode, kwargs["pixel_to_mm_mode"])
+        self.assertEqual(application_wiring._build_paint_path_debug_dump_dir(), kwargs["debug_plot_dir"])
         expected_pickup_sign = (
             -1.0
             if application_wiring._PAINT_PROCESS.flip_pickup_axis_alignment_direction

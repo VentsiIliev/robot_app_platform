@@ -122,6 +122,7 @@ def _build_paint_path_preparation_service(robot_system):
         except Exception:
             z_min = 0.0
     segment_config = SegmentEditorConfig(schema=build_paint_segment_settings_schema())
+    debug_dump_dir = _build_paint_path_debug_dump_dir()
     if _PAINT_PROCESS.enable_z_shift_pixel_compensation:
         pixel_height_compensation_fn = (
             lambda height_mm: (
@@ -147,8 +148,8 @@ def _build_paint_path_preparation_service(robot_system):
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
         pickup_axis_alignment_sign=_PAINT_PROCESS.pickup_axis_alignment_sign,
-        pickup_rz_frame_offset_deg=_PAINT_PROCESS.pickup_rz_frame_offset_deg,
         pixel_to_mm_mode=_PAINT_PROCESS.contour_pixel_to_mm_mode,
+        debug_plot_dir=debug_dump_dir,
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None

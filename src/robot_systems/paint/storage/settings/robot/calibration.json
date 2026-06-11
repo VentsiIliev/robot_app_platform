@@ -55,17 +55,13 @@
   "test_target_count": 20,
   "auto_skip_known_unreachable_markers": true,
   "unreachable_marker_failure_threshold": 1,
-  "known_unreachable_marker_ids": [
-    3
-  ],
-  "unreachable_marker_failure_counts": {
-    "3": 1
-  },
+  "known_unreachable_marker_ids": [],
+  "unreachable_marker_failure_counts": {},
   "velocity": 50,
   "acceleration": 20,
   "travel_velocity": 50,
   "travel_acceleration": 20,
   "iterative_velocity": 10,
   "iterative_acceleration": 10,
-  "initial_ppm": 1.8426549275716146
+  "initial_ppm": 1.801796849568685
 }

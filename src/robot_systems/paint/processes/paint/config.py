@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
+from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 
 
 @dataclass(frozen=True)
@@ -84,23 +84,38 @@ PAINT_PROJECTION_TUNING = PaintProjectionTuning()
 @dataclass(frozen=True)
 class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
+    # Target point used when transforming contours and pickup points into robot coordinates.
     execution_target_point: str = "tool"
+    # Apply the legacy camera-height Z compensation during pixel-to-mm conversion.
     enable_z_shift_pixel_compensation: bool = False
+    # Controls whether contours are converted with raw PPM geometry or calibrated homography/residuals.
     contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
+    # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
+    # Navigation group used for pickup/camera-table alignment poses.
     primary_group_id: str = "PAINTING"
+    # Navigation group used as the paint/pivot reference pose for XZ/RY painting.
     secondary_group_id: str = "PAINTING_NEW"
+    # Axis along the selected paint plane used as the linear travel direction along the pivot.
     pivot_translation_axis: str = "x"
+    # Direction along pivot_translation_axis; "forward" keeps the configured axis sign, "reverse" flips it.
     pivot_translation_direction: str = "forward"
+    # Mirrors commanded RY around the change-plane reference for XZ/RY execution when robot sign differs from projection sign.
     flip_xz_ry_execution_rotation_direction: bool = True
-    mirror_xz_ry_pickup_handoff: bool = True
+    # Mirrors the pickup-to-pivot staging handoff in XZ/RY; keep false when staging already matches the command frame.
+    mirror_xz_ry_pickup_handoff: bool = False
+    # Flips the measured pickup orientation before resolving pickup target XY; useful when contour axis direction is inverted.
     flip_pickup_axis_alignment_direction: bool = False
-    pickup_rz_frame_offset_deg: float = 0
+    # Enables reachability sampling before executing XZ/RY pivot paths.
     enable_xz_ry_preflight: bool = False
+    # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
     xz_ry_preflight_max_checks: int = 8
+    # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
+    # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
+    # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
 
     @property

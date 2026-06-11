@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 
 _PIVOT_DETAIL_SNAPSHOT_LIMIT = 8
 _PIVOT_PLOT_DPI = 110
+_EXECUTION_HEADING_MARKER_THRESHOLD_DEG = 2.0
 
 
 def plot_pixel_to_mm_debug(
@@ -187,7 +188,10 @@ def _draw_min_rect_overlay(ax, rect_info, index: int) -> None:
     )
 
 
-def _execution_rotation_change_mask(execution_arr: np.ndarray, threshold_deg: float = 1e-6) -> np.ndarray:
+def _execution_rotation_change_mask(
+    execution_arr: np.ndarray,
+    threshold_deg: float = _EXECUTION_HEADING_MARKER_THRESHOLD_DEG,
+) -> np.ndarray:
     if execution_arr.ndim != 2 or execution_arr.shape[0] < 2 or execution_arr.shape[1] < 6:
         return np.zeros(execution_arr.shape[0] if execution_arr.ndim == 2 else 0, dtype=bool)
 
@@ -206,6 +210,7 @@ def plot_trajectory_debug(
     prepared_paths=None,
     camera_preview_paths=None,
     save_dir="debug_plots",
+    heading_marker_threshold_deg: float = _EXECUTION_HEADING_MARKER_THRESHOLD_DEG,
 ):
 
     try:
@@ -216,6 +221,8 @@ def plot_trajectory_debug(
             execution_paths = sampled_paths
         if prepared_paths is None:
             prepared_paths = raw_paths
+        heading_marker_threshold_deg = max(0.0, float(heading_marker_threshold_deg))
+        heading_marker_label = f"Execute heading change >{heading_marker_threshold_deg:g}deg"
 
         has_camera_preview = bool(camera_preview_paths)
         if has_camera_preview:
@@ -249,7 +256,7 @@ def plot_trajectory_debug(
             ax1.plot(linear_arr[:, 0], linear_arr[:, 1], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=4, alpha=0.6, zorder=3)
             ax1.plot(spline_arr[:, 0], spline_arr[:, 1], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=2, alpha=0.5, zorder=4)
             ax1.plot(execution_arr[:, 0], execution_arr[:, 1], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=5, linewidth=1.5, zorder=5)
-            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            rotate_mask = _execution_rotation_change_mask(execution_arr, heading_marker_threshold_deg)
             if np.any(rotate_mask):
                 rotated_points = execution_arr[rotate_mask]
                 ax1.scatter(
@@ -260,7 +267,7 @@ def plot_trajectory_debug(
                     edgecolors='black',
                     linewidths=0.6,
                     zorder=6,
-                    label='Execute RZ Change' if i == 0 else '',
+                    label=heading_marker_label if i == 0 else '',
                 )
 
         ax1.legend()
@@ -320,7 +327,7 @@ def plot_trajectory_debug(
             ax2.plot(linear_arr[:, 0], linear_arr[:, 2], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
             ax2.plot(spline_arr[:, 0], spline_arr[:, 2], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=1, alpha=0.5)
             ax2.plot(execution_arr[:, 0], execution_arr[:, 2], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=4, linewidth=1.2)
-            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            rotate_mask = _execution_rotation_change_mask(execution_arr, heading_marker_threshold_deg)
             if np.any(rotate_mask):
                 rotated_points = execution_arr[rotate_mask]
                 ax2.scatter(
@@ -330,7 +337,7 @@ def plot_trajectory_debug(
                     color='cyan',
                     edgecolors='black',
                     linewidths=0.6,
-                    label='Execute RZ Change' if i == 0 else '',
+                    label=heading_marker_label if i == 0 else '',
                 )
 
         ax2.legend()
@@ -353,7 +360,7 @@ def plot_trajectory_debug(
             ax3.plot(np.linspace(0, len(orig_arr)-1, len(linear_arr)), linear_arr[:, 2], 's', color='blue', label=f'Curve {i+1}' if i == 0 else '', markersize=3, alpha=0.6)
             ax3.plot(np.linspace(0, len(orig_arr)-1, len(spline_arr)), spline_arr[:, 2], '.', color='green', label=f'Sampled {i+1}' if i == 0 else '', markersize=2, alpha=0.5)
             ax3.plot(np.linspace(0, len(orig_arr)-1, len(execution_arr)), execution_arr[:, 2], 'x-', color='magenta', label=f'Execute {i+1}' if i == 0 else '', markersize=4, linewidth=1.2)
-            rotate_mask = _execution_rotation_change_mask(execution_arr)
+            rotate_mask = _execution_rotation_change_mask(execution_arr, heading_marker_threshold_deg)
             if np.any(rotate_mask):
                 execution_idx = np.linspace(0, len(orig_arr) - 1, len(execution_arr))
                 ax3.scatter(
@@ -363,7 +370,7 @@ def plot_trajectory_debug(
                     color='cyan',
                     edgecolors='black',
                     linewidths=0.6,
-                    label='Execute RZ Change' if i == 0 else '',
+                    label=heading_marker_label if i == 0 else '',
                 )
 
         ax3.legend()
