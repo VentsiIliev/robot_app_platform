@@ -642,7 +642,9 @@ class WorkpieceEditorController(IApplicationController):
                 curve_paths = self._model.get_last_curve_preview_paths()
                 sampled_paths = self._model.get_last_sampled_preview_paths()
                 execution_paths = self._model.get_last_execution_preview_paths()
-                camera_preview_paths = self._model.get_last_camera_preview_paths()
+                camera_preview_paths: dict[str, list] | None = None
+                if not _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                    camera_preview_paths = self._model.get_last_camera_preview_paths()
                 if raw_paths or sampled_paths:
                     if _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
                         self._continue_with_process_action_after_prepare()
