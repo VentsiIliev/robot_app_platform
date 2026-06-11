@@ -113,14 +113,28 @@ class PaintDashboardService(IPaintDashboardService):
         points = np.asarray(contour, dtype=float).reshape(-1, 2)
         raw_pixel_path = [[float(px), float(py)] for px, py in points]
 
-        # TEMP: PPM-only transform for testing contour dimensions (2026-06-09)
-        # Revert to full homography resolver chain when done.
-        _PPM_TEST = 1.680  # initial board PPM from latest calibration
-        ppm_path = [
-            [float(px) / _PPM_TEST, float(py) / _PPM_TEST, 0.0, 180.0, 0.0, 0.0]
-            for px, py in points
+        resolver = self._current_resolver()
+        transformer = getattr(resolver, "_base", None)
+        if transformer is None:
+            raise RuntimeError("Vision resolver is not available.")
+        if not bool(getattr(transformer, "is_available", lambda: False)()):
+            raise RuntimeError("Calibration transformer is not available.")
+
+        transformed_path = [
+            [float(x), float(y), 0.0, 180.0, 0.0, 0.0]
+            for x, y in (transformer.transform(float(px), float(py)) for px, py in points)
         ]
-        return raw_pixel_path, ppm_path, ppm_path
+        homography_xy = self._homography_only_xy(resolver, points)
+        homography_path = [
+            [float(x), float(y), 0.0, 180.0, 0.0, 0.0]
+            for x, y in np.asarray(homography_xy, dtype=float).reshape(-1, 2)
+        ]
+        return raw_pixel_path, transformed_path, homography_path
+
+    def _current_resolver(self):
+        if self._resolver_getter is None:
+            return None
+        return self._resolver_getter()
 
     @staticmethod
     def _homography_only_xy(resolver, points: np.ndarray) -> np.ndarray:

@@ -745,8 +745,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
 
         pickup_rz_source = "execution_plan"
-        should_apply_tcp_offset = False
-        pickup_tcp_dx, pickup_tcp_dy = 0.0, 0.0
+        should_apply_tcp_offset = bool(self._pivot_config.apply_camera_to_tcp_for_pickup)
+        if should_apply_tcp_offset:
+            pickup_tcp_dx, pickup_tcp_dy = _camera_to_tcp_delta(
+                self._pivot_config.camera_to_tcp_x_offset,
+                self._pivot_config.camera_to_tcp_y_offset,
+                pickup_rz,
+            )
+        else:
+            pickup_tcp_dx, pickup_tcp_dy = 0.0, 0.0
         _logger.info(
             "[PICKUP] pickup_xy=(%.3f, %.3f) pickup_rz=%.3f pickup_rz_source=%s pickup_target=%s workpiece_height=%.3f pickup_z=%.3f safety_z_min=%.3f apply_tcp_offset=%s configured_tcp_offset=(%.3f, %.3f) rotated_tcp_offset=(%.3f, %.3f)",
             pickup_centroid_x,
@@ -1128,6 +1135,25 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                         "[PIVOT_PATH] Applied xy/rz axis-equivalent path shift: staged_rz=%.3f raw_start_rz=%.3f shift=%.3f selected_start_rz=%.3f",
                         staged_rotation,
                         raw_start_rotation,
+                        rotation_shift,
+                        float(pivot_path[0][rotation_index]),
+                    )
+            if (
+                self._pivot_config.motion_plane == "xz_y_ry"
+                and self._last_pickup_plan is not None
+                and pivot_path
+                and len(pivot_path[0]) > rotation_index
+                and len(self._last_pickup_plan.staged_pose) > rotation_index
+            ):
+                staged_ry = float(self._last_pickup_plan.staged_pose[rotation_index])
+                raw_start_ry = float(pivot_path[0][rotation_index])
+                rotation_shift = staged_ry - raw_start_ry
+                if abs(rotation_shift) > 1e-9:
+                    pivot_path = _shift_path_rotation(pivot_path, rotation_index, rotation_shift)
+                    _logger.info(
+                        "[PIVOT_PATH] Applied xz/ry staging RY alignment shift: staged_ry=%.3f raw_start_ry=%.3f shift=%.3f selected_start_ry=%.3f",
+                        staged_ry,
+                        raw_start_ry,
                         rotation_shift,
                         float(pivot_path[0][rotation_index]),
                     )

@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+
 from src.shared_contracts.events.process_events import (
     ProcessBusyEvent,
     ProcessState,
@@ -73,6 +75,34 @@ class TestPaintDashboardService(unittest.TestCase):
         process.pause.assert_called_once_with()
         process.resume.assert_called_once_with()
         process.reset_errors.assert_called_once_with()
+
+    def test_transform_debug_uses_calibrated_transformer_not_raw_ppm(self) -> None:
+        transformer = MagicMock()
+        transformer.is_available.return_value = True
+        transformer.transform.side_effect = lambda x, y: (x + 100.0, y + 200.0)
+        transformer._model = SimpleNamespace(
+            homography_matrix=np.array(
+                [
+                    [2.0, 0.0, 0.0],
+                    [0.0, 3.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ],
+                dtype=float,
+            )
+        )
+        resolver = SimpleNamespace(_base=transformer)
+        service = PaintDashboardService(
+            MagicMock(process_id="paint"),
+            resolver_getter=lambda: resolver,
+        )
+
+        raw_pixels, transformed, homography_only = service._transform_like_pick_target(
+            np.array([[[10.0, 20.0]], [[30.0, 40.0]]], dtype=np.float32)
+        )
+
+        self.assertEqual(raw_pixels, [[10.0, 20.0], [30.0, 40.0]])
+        self.assertEqual([point[:2] for point in transformed], [[110.0, 220.0], [130.0, 240.0]])
+        self.assertEqual([point[:2] for point in homography_only], [[20.0, 60.0], [60.0, 120.0]])
 
 
 class TestPaintCalibrationCoordinator(unittest.TestCase):

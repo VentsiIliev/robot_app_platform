@@ -84,8 +84,8 @@ class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
     execution_target_point: str = "tool"
     enable_z_shift_pixel_compensation: bool = False
-    # pivot_motion_plane: str = "xz_y_ry"
-    pivot_motion_plane: str = "xy_z_rz"
+    pivot_motion_plane: str = "xz_y_ry"
+    # pivot_motion_plane: str = "xy_z_rz"
     primary_group_id: str = "PAINTING"
     secondary_group_id: str = "PAINTING_NEW"
     pivot_translation_axis: str = "x"

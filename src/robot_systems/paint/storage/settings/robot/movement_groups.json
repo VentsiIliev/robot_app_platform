@@ -14,7 +14,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-13.327, 241.561, 215.059, -178.825, -0.010, -0.010]"
+      "position": "[-13.236, 286.465, 461.050, -178.800, -0.011, -0.034]"
     },
     "JOG": {
       "velocity": 0,
@@ -29,7 +29,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-13.031, 342.767, 125.517, -178.881, -0.004, -0.028]"
+      "position": "[12.452, 456.287, 156.031, -178.796, -0.010, -0.104]"
     },
     "PAINTING_NEW": {
       "velocity": 10,
@@ -37,7 +37,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-80.124, 379.505, 338.617, -89.927, -0.060, -0.093]"
+      "position": "[-12.556, 517.178, 387.367, -88.804, -0.059, -0.101]"
     }
   }
 }
