@@ -148,6 +148,7 @@ def _build_paint_path_preparation_service(robot_system):
         pixel_height_compensation_fn=pixel_height_compensation_fn,
         pickup_axis_alignment_sign=_PAINT_PROCESS.pickup_axis_alignment_sign,
         pickup_rz_frame_offset_deg=_PAINT_PROCESS.pickup_rz_frame_offset_deg,
+        pixel_to_mm_mode=_PAINT_PROCESS.contour_pixel_to_mm_mode,
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None

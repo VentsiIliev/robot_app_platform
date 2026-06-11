@@ -217,6 +217,38 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(plan.align_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 44.0])
         self.assertEqual(plan.staged_pose, [101.0, 202.0, 303.0, 1.0, 2.0, 44.0])
 
+    def test_build_pickup_and_stage_poses_does_not_double_apply_tcp_offset_for_resolved_pickup_target(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            base_position_provider=lambda: [100.0, 200.0, 300.0, 10.0, 20.0, 30.0],
+            pickup_base_position_provider=lambda: [10.0, 20.0, 30.0, 180.0, 5.0, 15.0],
+            pivot_motion_plane="xy_z_rz",
+            apply_camera_to_tcp_for_pickup=True,
+            camera_to_tcp_x_offset=50.0,
+            camera_to_tcp_y_offset=25.0,
+        )
+        execution_plan = _execution_plan(
+            {
+                "execution_path": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+                "pickup_xy": [11.0, 22.0],
+                "pickup_rz": 33.0,
+                "pickup_target_point_name": "tool",
+                "workpiece_height_mm": 0.0,
+            }
+        )
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, 44.0]], [], []),
+        ):
+            plan = executor._build_pickup_and_stage_poses(execution_plan)
+
+        self.assertIsNotNone(plan)
+        self.assertEqual(11.0, plan.pickup_pose[0])
+        self.assertEqual(22.0, plan.pickup_pose[1])
+        self.assertEqual(11.0, plan.pickup_approach_pose[0])
+        self.assertEqual(22.0, plan.pickup_approach_pose[1])
+
     def test_build_pickup_and_stage_poses_trusts_prepared_pickup_rz(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,

@@ -46,6 +46,12 @@ _SEGMENT_TANGENT_LOOKAHEAD_DISTANCE_KEY = "path_tangent_lookahead_mm"
 _SEGMENT_TANGENT_DEADBAND_KEY = "path_tangent_deadband_deg"
 _CANONICALIZE_WORKPIECE_LAYER_CONTOUR = True
 _TEMPORARILY_SKIP_CONTOUR_INTERPOLATION = False
+PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR = "geometry_ppm_anchor"
+PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL = "homography_residual"
+_PIXEL_TO_MM_MODES = {
+    PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
+    PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+}
 
 
 @dataclass(frozen=True)
@@ -371,6 +377,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
         pickup_axis_alignment_sign: float = 1.0,
         pickup_rz_frame_offset_deg: float = 0.0,
+        pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
     ) -> None:
         self._logger = logger
         self._segment_config = segment_config
@@ -396,6 +403,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             self._pickup_rz_frame_offset_deg = float(pickup_rz_frame_offset_deg)
         except (TypeError, ValueError):
             self._pickup_rz_frame_offset_deg = 0.0
+        resolved_mode = str(pixel_to_mm_mode or PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR).strip().lower()
+        if resolved_mode not in _PIXEL_TO_MM_MODES:
+            raise ValueError(
+                f"Unsupported pixel_to_mm_mode {pixel_to_mm_mode!r}; "
+                f"expected one of {sorted(_PIXEL_TO_MM_MODES)}"
+            )
+        self._pixel_to_mm_mode = resolved_mode
 
     def _current_transformer(self):
         if self._transformer_getter is not None:
@@ -735,6 +749,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         homography_matrix = getattr(model, "homography_matrix", None)
         if homography_matrix is None:
             return []
+        try:
+            homography = np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3)
+        except (TypeError, ValueError):
+            self._logger.debug("[EXECUTE] Homography-only debug matrix is unavailable or invalid", exc_info=True)
+            return []
 
         pts = np.asarray(pts_px, dtype=np.float64).reshape(-1, 2)
         workpiece_height_mm = _safe_float(settings.get("height_mm"), _DEFAULT_WORKPIECE_HEIGHT_MM)
@@ -749,7 +768,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         xy = cv2.perspectiveTransform(
             pts.astype(np.float32).reshape(-1, 1, 2),
-            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
+            homography,
         ).reshape(-1, 2)
         rx, ry = _base_orientation_xy(base_position)
         return [
@@ -789,8 +808,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         transformer = self._current_transformer()
 
         if resolver is not None:
-            from src.engine.robot.targeting import VisionPoseRequest
-
             geometry_result = self._transform_to_robot_geometry_ppm(
                 compensated_pts_px,
                 base_z=base_z,
@@ -798,29 +815,18 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 rx=rx,
                 ry=ry,
                 resolver=resolver,
-            )
+            ) if self._pixel_to_mm_mode == PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR else None
             if geometry_result is not None:
                 seeded_results, robot_xy_points = geometry_result
             else:
-                target_point = resolver.registry.by_name(self._target_point_name)
-                seeded_results = [
-                    resolver.resolve(
-                        VisionPoseRequest(
-                            float(px),
-                            float(py),
-                            z_mm=base_z,
-                            rz_degrees=rz_offset,
-                            rx_degrees=rx,
-                            ry_degrees=ry,
-                        ),
-                        target_point,
-                    )
-                    for px, py in compensated_pts_px
-                ]
-                robot_xy_points = [
-                    (float(result.final_xy[0]), float(result.final_xy[1]))
-                    for result in seeded_results
-                ]
+                seeded_results, robot_xy_points = self._transform_to_robot_resolver(
+                    compensated_pts_px,
+                    base_z=base_z,
+                    rz_offset=rz_offset,
+                    rx=rx,
+                    ry=ry,
+                    resolver=resolver,
+                )
         else:
             seeded_results = None
             if transformer is None or not transformer.is_available():
@@ -855,6 +861,48 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 [round(float(point[5]), 3) for point in result[: min(5, len(result))]],
             )
         return result
+
+    def _transform_to_robot_resolver(
+        self,
+        compensated_pts_px: np.ndarray,
+        *,
+        base_z: float,
+        rz_offset: float,
+        rx: float,
+        ry: float,
+        resolver,
+    ) -> tuple[list, list[tuple[float, float]]]:
+        """Transform every pixel point through the calibrated resolver model."""
+        from src.engine.robot.targeting import VisionPoseRequest
+
+        target_point = resolver.registry.by_name(self._target_point_name)
+        seeded_results = [
+            resolver.resolve(
+                VisionPoseRequest(
+                    float(px),
+                    float(py),
+                    z_mm=base_z,
+                    rz_degrees=rz_offset,
+                    rx_degrees=rx,
+                    ry_degrees=ry,
+                ),
+                target_point,
+                frame=self._calibration_frame_name,
+            )
+            for px, py in compensated_pts_px
+        ]
+        robot_xy_points = [
+            (float(result.final_xy[0]), float(result.final_xy[1]))
+            for result in seeded_results
+        ]
+        self._logger.info(
+            "[EXECUTE] Pixel-to-mm transform: mode=%s points=%d target=%s frame=%s",
+            self._pixel_to_mm_mode,
+            len(robot_xy_points),
+            self._target_point_name,
+            self._calibration_frame_name,
+        )
+        return seeded_results, robot_xy_points
 
     def _transform_to_robot_geometry_ppm(
         self,

@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
+
 
 @dataclass(frozen=True)
 class PickupMotionConfig:
@@ -84,6 +86,7 @@ class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
     execution_target_point: str = "tool"
     enable_z_shift_pixel_compensation: bool = False
+    contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
     primary_group_id: str = "PAINTING"
@@ -92,7 +95,7 @@ class PaintProcessConfig:
     pivot_translation_direction: str = "forward"
     flip_xz_ry_execution_rotation_direction: bool = True
     mirror_xz_ry_pickup_handoff: bool = True
-    flip_pickup_axis_alignment_direction: bool = True
+    flip_pickup_axis_alignment_direction: bool = False
     pickup_rz_frame_offset_deg: float = 0
     enable_xz_ry_preflight: bool = False
     xz_ry_preflight_max_checks: int = 8

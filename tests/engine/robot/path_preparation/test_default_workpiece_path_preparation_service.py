@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from src.engine.robot.path_preparation.default_workpiece_path_preparation_service import (
     DefaultWorkpiecePathPreparationService,
+    PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
 
 
@@ -138,7 +139,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         job = plan.execution_jobs[0]
         self.assertEqual([700.0, 800.0], job["pickup_xy"])
         self.assertAlmostEqual(-6.0, job["pickup_rz"], places=6)
-        self.assertEqual(0.0, transform_pickup.call_args_list[0].kwargs["rz_override"])
+        self.assertNotIn("rz_override", transform_pickup.call_args_list[0].kwargs)
         self.assertAlmostEqual(-6.0, transform_pickup.call_args_list[1].kwargs["rz_override"], places=6)
 
     def test_build_execution_plan_applies_pickup_axis_alignment_sign_before_resolving_xy(self):
@@ -511,6 +512,46 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertEqual(10.0, first_request.x_pixels)
         self.assertEqual(20.0, first_request.y_pixels)
         self.assertEqual(105.0, first_request.z_mm)
+        registry.by_name.assert_called_once_with("tool")
+
+    def test_transform_to_robot_homography_residual_mode_skips_geometry_ppm(self):
+        registry = MagicMock()
+        registry.by_name.return_value = SimpleNamespace(offset_x=0.0, offset_y=0.0)
+        resolver = MagicMock()
+        resolver.registry = registry
+        resolver.resolve.side_effect = [
+            SimpleNamespace(final_xy=(101.0, 201.0), z=301.0),
+            SimpleNamespace(final_xy=(102.0, 202.0), z=302.0),
+        ]
+        service = _make_service(
+            resolver=resolver,
+            target_point_name="tool",
+            calibration_frame_name="paint_frame",
+            pixel_to_mm_mode=PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+        )
+
+        with patch.object(
+            service,
+            "_transform_to_robot_geometry_ppm",
+            return_value=(
+                [SimpleNamespace(final_xy=(1.0, 2.0), z=3.0)],
+                [(1.0, 2.0)],
+            ),
+        ) as geometry_ppm:
+            result = service._transform_to_robot(
+                [[10.0, 20.0], [30.0, 40.0]],
+                {"spraying_height": "5", "rz_angle": "7"},
+            )
+
+        self.assertEqual(
+            [
+                [101.0, 201.0, 301.0, 0.0, 0.0, 7.0],
+                [102.0, 202.0, 302.0, 0.0, 0.0, 7.0],
+            ],
+            result,
+        )
+        geometry_ppm.assert_not_called()
+        self.assertEqual("paint_frame", resolver.resolve.call_args_list[0].kwargs["frame"])
         registry.by_name.assert_called_once_with("tool")
 
     def test_parse_pickup_point_accepts_string_sequence_and_mapping(self):

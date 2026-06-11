@@ -745,7 +745,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
 
         pickup_rz_source = "execution_plan"
-        should_apply_tcp_offset = bool(self._pivot_config.apply_camera_to_tcp_for_pickup)
+        # Modern path preparation resolves pickup_xy through the selected target
+        # point already. Keep the legacy manual camera-to-TCP offset only for
+        # older plans that do not declare a pickup target point.
+        should_apply_tcp_offset = (
+            bool(self._pivot_config.apply_camera_to_tcp_for_pickup)
+            and not pickup_target_point_name
+        )
         if should_apply_tcp_offset:
             pickup_tcp_dx, pickup_tcp_dy = _camera_to_tcp_delta(
                 self._pivot_config.camera_to_tcp_x_offset,
