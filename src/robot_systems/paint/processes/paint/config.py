@@ -22,19 +22,19 @@ class PickupMotionConfig:
     default_acc_percent: float = 50.0
 
     # Move from the current robot pose to the pickup approach pose.
-    approach_vel_percent: float = 10.0
-    approach_acc_percent: float = 100.0
+    approach_vel_percent: float = 40.0
+    approach_acc_percent: float = 80.0
 
     # Controlled final descent from approach height to pickup contact.
     descend_vel_percent: float = 60.0
-    descend_acc_percent: float = 20.0
+    descend_acc_percent: float = 40.0
 
     # Lift away from pickup contact while aligning to the paint start orientation.
-    lift_align_vel_percent: float = 20.0
+    lift_align_vel_percent: float = 50.0
     lift_align_acc_percent: float = 100.0
 
     # Change from pickup/table plane orientation to paint plane orientation.
-    change_plane_vel_percent: float = 30.0
+    change_plane_vel_percent: float = 40.0
     change_plane_acc_percent: float = 70.0
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
@@ -174,7 +174,7 @@ class PaintProcessConfig:
     # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
     xz_ry_preflight_max_checks: int = 0
     # Turns the vacuum pump on/off around pickup and release.
-    enable_vacuum_pump: bool = False
+    enable_vacuum_pump: bool = True
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
