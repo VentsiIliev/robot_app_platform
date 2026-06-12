@@ -41,9 +41,6 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return self.execute_preview_paths(execution_plan, mode="pose_path")
         return False, f"Unsupported welding process action: {action_id}"
 
-    def supports_pickup_to_pivot(self) -> bool:
-        return False
-
     def get_pivot_preview_paths(
         self,
         execution_plan: WorkpieceExecutionPlan,
@@ -102,12 +99,6 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
             f"Executed {len(jobs)} path(s), "
             f"{total_waypoints} waypoints in {mode} mode"
         )
-
-    def execute_pickup_to_pivot(
-        self,
-        execution_plan: WorkpieceExecutionPlan,
-    ) -> tuple[bool, str]:
-        return False, "Pickup-to-pivot is not supported in welding"
 
     def execute_pickup_and_paint(
         self,

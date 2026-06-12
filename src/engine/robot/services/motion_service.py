@@ -54,13 +54,21 @@ class MotionService(IMotionService):
             wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         self._last_jog_target = []
+        started = time.perf_counter()
+        safety_started = time.perf_counter()
         violations = self._safety.get_violations(position)
+        self._logger.info(
+            "[TIMING] move_ptp_safety_check elapsed_s=%.3f violations=%d",
+            time.perf_counter() - safety_started,
+            len(violations),
+        )
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
             return False
         try:
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
                                acceleration)
+            driver_started = time.perf_counter()
             ret = self._robot.move_linear(
                 position,
                 tool,
@@ -70,9 +78,23 @@ class MotionService(IMotionService):
                 0,
                 blocking=wait_to_reach,
             )
+            driver_elapsed = time.perf_counter() - driver_started
             success = ret >= 0
+            wait_elapsed = 0.0
             if wait_to_reach and success:
+                wait_started = time.perf_counter()
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
+                wait_elapsed = time.perf_counter() - wait_started
+            self._logger.info(
+                "[TIMING] move_ptp_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f pos=%s vel=%s acc=%s",
+                success,
+                driver_elapsed,
+                wait_elapsed,
+                time.perf_counter() - started,
+                [round(float(v), 3) for v in position[:6]] if position and len(position) >= 6 else position,
+                velocity,
+                acceleration,
+            )
             self._logger.debug("move_ptp ← success=%s", success)
             return success
         except Exception:

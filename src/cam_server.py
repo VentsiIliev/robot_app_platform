@@ -188,7 +188,7 @@ def cleanup():
 
 
 if __name__ == "__main__":
- app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False)
+ app.run(host="0.0.0.0", port=5005, threaded=True, use_reloader=False)
 
 
 # RUN WITH cd src && ../.venv/bin/gunicorn -w 1 -k gevent --threads 1 -b 0.0.0.0:5000 cam_server:app

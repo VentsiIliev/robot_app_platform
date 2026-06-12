@@ -5,21 +5,74 @@ from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDU
 
 @dataclass(frozen=True)
 class PickupMotionConfig:
-    """Pickup-specific motion defaults shared by paint execution flows."""
-    # Safe Z height (mm) for pickup approach travel — keeps the TCP well above obstacles before descending.
+    """Pickup/staging motion tuning.
+
+    Values are robot velocity/acceleration percentages unless the suffix is ``_mm``.
+    Each phase exposes its own ``vel_percent`` / ``acc_percent`` pair so cycle-time
+    tuning can be done without changing the pickup sequence.
+    """
+
+    # Heights and clearances.
     default_z_mm: float = 300.0
-    # Default velocity (%) for all pickup-phase moves except the final descend to contact.
-    default_vel_percent: float = 20.0
-    # Default acceleration (%) for all pickup-phase moves except the final descend to contact.
-    default_acc_percent: float = 50.0
-    # Vertical offset (mm) above the pickup surface at which the approach orientation is applied.
     approach_offset_mm: float = 100.0
-    # Standoff height (mm) above the pickup surface used for the first-contact alignment.
     contact_offset_mm: float = 2.0
-    # Velocity (%) for the final descend move from approach height down to the pickup pose.
-    descend_vel_percent: float = 10.0
-    # Acceleration (%) for the final descend move from approach height down to the pickup pose.
-    descend_acc_percent: float = 10.0
+
+    # Fallback motion used by generic pickup helper calls.
+    default_vel_percent: float = 20.0
+    default_acc_percent: float = 50.0
+
+    # Move from the current robot pose to the pickup approach pose.
+    approach_vel_percent: float = 10.0
+    approach_acc_percent: float = 100.0
+
+    # Controlled final descent from approach height to pickup contact.
+    descend_vel_percent: float = 60.0
+    descend_acc_percent: float = 20.0
+
+    # Lift away from pickup contact while aligning to the paint start orientation.
+    lift_align_vel_percent: float = 20.0
+    lift_align_acc_percent: float = 100.0
+
+    # Change from pickup/table plane orientation to paint plane orientation.
+    change_plane_vel_percent: float = 30.0
+    change_plane_acc_percent: float = 70.0
+    # Combine change-plane orientation with the first pivot-contact translation.
+    combine_change_plane_with_first_contact: bool = True
+
+    # Optional intermediate staging poses between change-plane and pivot contact.
+    stage_transition_vel_percent: float = 20.0
+    stage_transition_acc_percent: float = 50.0
+
+    # Move into the first pivot contact pose.
+    first_contact_vel_percent: float = 40.0
+    first_contact_acc_percent: float = 60.0
+
+    # Z lift added while restoring pickup orientation before release. This keeps
+    # the command from becoming a near-zero-translation orientation-only move.
+    restore_orientation_z_lift_mm: float = 10.0
+
+    # Return from pivot completion back to the pickup align pose before release.
+    release_align_vel_percent: float = 30.0
+    release_align_acc_percent: float = 70.0
+
+    # Restore the original pickup orientation before vacuum release.
+    release_restore_vel_percent: float = 30.0
+    release_restore_acc_percent: float = 70.0
+
+
+@dataclass(frozen=True)
+class PaintNavigationReturnConfig:
+    """Navigation-return motion tuning for paint-system cleanup moves."""
+
+    # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
+    unwind_vel_percent: float = 100.0
+    # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
+    unwind_acc_percent: float = 100.0
+    # Queue the unwind request if ROS2 is still finishing the previous motion.
+    unwind_queue_if_busy: bool = True
+    # Move from the post-unwind pose back to the calibration movement group pose.
+    calibration_move_vel_percent: float = 30.0
+    calibration_move_acc_percent: float = 40.0
 
 
 @dataclass(frozen=True)
@@ -126,6 +179,8 @@ class PaintProcessConfig:
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
+    # Cleanup return motion used before moving back to calibration.
+    navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False
 
@@ -174,12 +229,96 @@ class PaintProcessConfig:
         return float(self.pickup_motion.descend_acc_percent)
 
     @property
+    def pickup_approach_vel_percent(self) -> float:
+        return float(self.pickup_motion.approach_vel_percent)
+
+    @property
+    def pickup_approach_acc_percent(self) -> float:
+        return float(self.pickup_motion.approach_acc_percent)
+
+    @property
+    def pickup_lift_align_vel_percent(self) -> float:
+        return float(self.pickup_motion.lift_align_vel_percent)
+
+    @property
+    def pickup_lift_align_acc_percent(self) -> float:
+        return float(self.pickup_motion.lift_align_acc_percent)
+
+    @property
+    def pickup_change_plane_vel_percent(self) -> float:
+        return float(self.pickup_motion.change_plane_vel_percent)
+
+    @property
+    def pickup_change_plane_acc_percent(self) -> float:
+        return float(self.pickup_motion.change_plane_acc_percent)
+
+    @property
+    def pickup_combine_change_plane_with_first_contact(self) -> bool:
+        return bool(self.pickup_motion.combine_change_plane_with_first_contact)
+
+    @property
+    def pickup_stage_transition_vel_percent(self) -> float:
+        return float(self.pickup_motion.stage_transition_vel_percent)
+
+    @property
+    def pickup_stage_transition_acc_percent(self) -> float:
+        return float(self.pickup_motion.stage_transition_acc_percent)
+
+    @property
+    def pickup_first_contact_vel_percent(self) -> float:
+        return float(self.pickup_motion.first_contact_vel_percent)
+
+    @property
+    def pickup_first_contact_acc_percent(self) -> float:
+        return float(self.pickup_motion.first_contact_acc_percent)
+
+    @property
+    def pickup_restore_orientation_z_lift_mm(self) -> float:
+        return float(self.pickup_motion.restore_orientation_z_lift_mm)
+
+    @property
+    def pickup_release_align_vel_percent(self) -> float:
+        return float(self.pickup_motion.release_align_vel_percent)
+
+    @property
+    def pickup_release_align_acc_percent(self) -> float:
+        return float(self.pickup_motion.release_align_acc_percent)
+
+    @property
+    def pickup_release_restore_vel_percent(self) -> float:
+        return float(self.pickup_motion.release_restore_vel_percent)
+
+    @property
+    def pickup_release_restore_acc_percent(self) -> float:
+        return float(self.pickup_motion.release_restore_acc_percent)
+
+    @property
     def pickup_approach_offset_mm(self) -> float:
         return float(self.pickup_motion.approach_offset_mm)
 
     @property
     def pickup_contact_offset_mm(self) -> float:
         return float(self.pickup_motion.contact_offset_mm)
+
+    @property
+    def navigation_unwind_vel_percent(self) -> float:
+        return float(self.navigation_return.unwind_vel_percent)
+
+    @property
+    def navigation_unwind_acc_percent(self) -> float:
+        return float(self.navigation_return.unwind_acc_percent)
+
+    @property
+    def navigation_unwind_queue_if_busy(self) -> bool:
+        return bool(self.navigation_return.unwind_queue_if_busy)
+
+    @property
+    def navigation_calibration_move_vel_percent(self) -> float:
+        return float(self.navigation_return.calibration_move_vel_percent)
+
+    @property
+    def navigation_calibration_move_acc_percent(self) -> float:
+        return float(self.navigation_return.calibration_move_acc_percent)
 
 
 PAINT_PROCESS_CONFIG = PaintProcessConfig()

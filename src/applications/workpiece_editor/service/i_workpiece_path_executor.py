@@ -50,10 +50,6 @@ class IWorkpiecePathExecutor(ABC):
         ...
 
     @abstractmethod
-    def supports_pickup_to_pivot(self) -> bool:
-        ...
-
-    @abstractmethod
     def get_pivot_preview_paths(
         self,
         execution_plan: "WorkpieceExecutionPlan",
@@ -72,13 +68,6 @@ class IWorkpiecePathExecutor(ABC):
         self,
         execution_plan: "WorkpieceExecutionPlan",
         mode: str = "continuous",
-    ) -> tuple[bool, str]:
-        ...
-
-    @abstractmethod
-    def execute_pickup_to_pivot(
-        self,
-        execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[bool, str]:
         ...
 

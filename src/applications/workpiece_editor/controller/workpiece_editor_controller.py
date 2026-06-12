@@ -727,17 +727,26 @@ class WorkpieceEditorController(IApplicationController):
         _add_image_tab("Prepared paths", prepared_image_path)
         layout.addWidget(tabs)
 
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            return
+        action = actions[0]
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process dialog selected first process action out of %d: %s",
+                len(actions),
+                action.action_id,
+            )
+
         button_row = QHBoxLayout()
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(dialog.reject)
         button_row.addWidget(cancel_button)
         button_row.addStretch(1)
-        for action in self._model.get_process_actions():
-            button = QPushButton(action.label)
-            button.clicked.connect(
-                lambda _checked=False, selected_action=action: self._on_execute_process_confirmed(selected_action)
-            )
-            button_row.addWidget(button)
+        approve_button = QPushButton(action.label)
+        approve_button.clicked.connect(lambda _checked=False: self._on_execute_process_confirmed(action))
+        button_row.addWidget(approve_button)
         layout.addLayout(button_row)
 
         self._preview_dialog = dialog

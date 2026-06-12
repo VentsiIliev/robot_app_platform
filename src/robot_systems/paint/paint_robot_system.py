@@ -231,6 +231,7 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
+        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
@@ -243,7 +244,12 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  observed_area_by_group={
                                                      binding.movement_group_id: binding.area_id
                                                      for binding in self.get_work_area_observer_bindings()
-                                                 })
+                                                 },
+                                                 unwind_vel_percent=PAINT_PROCESS_CONFIG.navigation_unwind_vel_percent,
+                                                 unwind_acc_percent=PAINT_PROCESS_CONFIG.navigation_unwind_acc_percent,
+                                                 unwind_queue_if_busy=PAINT_PROCESS_CONFIG.navigation_unwind_queue_if_busy,
+                                                 calibration_move_vel_percent=PAINT_PROCESS_CONFIG.navigation_calibration_move_vel_percent,
+                                                 calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_calibration_move_acc_percent)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)

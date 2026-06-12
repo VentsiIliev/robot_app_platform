@@ -24,7 +24,13 @@ class NavigationService:
         self._settings = settings_service
         self._logger   = logging.getLogger(self.__class__.__name__)
 
-    def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
+    def move_to_group(
+        self,
+        group_name: str,
+        wait_cancelled: Callable[[], bool] | None = None,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> bool:
         try:
             config = self._get_robot_config()
             group  = self._get_group(group_name)
@@ -36,8 +42,8 @@ class NavigationService:
                 position=list(position),
                 tool=config.robot_tool,
                 user=config.robot_user,
-                velocity=group.velocity,
-                acceleration=group.acceleration,
+                velocity=velocity if velocity is not None else group.velocity,
+                acceleration=acceleration if acceleration is not None else group.acceleration,
                 wait_to_reach=True,
                 wait_cancelled=wait_cancelled,
             )
@@ -110,6 +116,8 @@ class NavigationService:
         position: list,
         group_name: str,
         wait_cancelled: Callable[[], bool] | None = None,
+        velocity: float | None = None,
+        acceleration: float | None = None,
     ) -> bool:
         """Move to an explicit position using the velocity/acceleration of the named group."""
         try:
@@ -119,8 +127,8 @@ class NavigationService:
                 position=position,
                 tool=config.robot_tool,
                 user=config.robot_user,
-                velocity=group.velocity,
-                acceleration=group.acceleration,
+                velocity=velocity if velocity is not None else group.velocity,
+                acceleration=acceleration if acceleration is not None else group.acceleration,
                 wait_to_reach=True,
                 wait_cancelled=wait_cancelled,
             )
