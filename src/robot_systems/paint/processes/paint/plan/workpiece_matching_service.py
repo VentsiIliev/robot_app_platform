@@ -1,31 +1,14 @@
 from __future__ import annotations
 
-import copy
 import logging
-from typing import Callable, Optional, Iterable
-
-import cv2
-import numpy as np
+from typing import Callable, Optional
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
+from src.robot_systems.paint.processes.paint.plan.contour_utils import pick_largest_contour
+from src.robot_systems.paint.processes.paint.plan.matchable_workpiece import MatchableWorkpiece
 
 _logger = logging.getLogger(__name__)
-
-def pick_largest_contour(contours: Iterable) -> np.ndarray | None:
-    """Return the contour with the largest valid area from a captured contour set."""
-    best = None
-    best_area = -1.0
-    for contour in contours or []:
-        try:
-            arr = np.asarray(contour, dtype=np.float32)
-            area = float(cv2.contourArea(arr))
-        except Exception:
-            continue
-        if area > best_area:
-            best_area = area
-            best = arr
-    return best
 
 class PaintWorkpieceMatchingService(IMatchingService):
     """Adapt paint workpiece storage to the shared contour-matching interface."""
@@ -120,40 +103,8 @@ class PaintWorkpieceMatchingService(IMatchingService):
 
     def _load_candidates(self) -> list:
         """Load saved workpieces and wrap them in the contour-matcher adapter shape."""
-        class _MatchableWorkpiece:
-            def __init__(self, raw: dict, storage_id: str | None = None):
-                self._raw = copy.deepcopy(raw or {})
-                self.storage_id = storage_id
-                self.workpieceId = self._raw.get("workpieceId", "")
-                self.name = self._raw.get("name", "")
-                self.contour = copy.deepcopy(self._raw.get("contour", []))
-                self.sprayPattern = copy.deepcopy(self._raw.get("sprayPattern", {"Contour": [], "Fill": []}))
-                self.pickupPoint = self._raw.get("pickupPoint")
-
-            def get_main_contour(self):
-                contour_entry = self.contour
-                if isinstance(contour_entry, dict):
-                    contour_points = contour_entry.get("contour", [])
-                else:
-                    contour_points = contour_entry or []
-                return np.asarray(contour_points, dtype=np.float32)
-
-            def get_spray_pattern_contours(self):
-                return list((self.sprayPattern or {}).get("Contour", []))
-
-            def get_spray_pattern_fills(self):
-                return list((self.sprayPattern or {}).get("Fill", []))
-
-            def to_raw(self) -> dict:
-                raw = copy.deepcopy(self._raw)
-                raw["contour"] = copy.deepcopy(self.contour)
-                raw["sprayPattern"] = copy.deepcopy(self.sprayPattern)
-                if self.pickupPoint is not None:
-                    raw["pickupPoint"] = self.pickupPoint
-                return raw
-
         stored = self._list_saved_workpieces_fn() or []
-        candidates: list[_MatchableWorkpiece] = []
+        candidates: list[MatchableWorkpiece] = []
         for item in stored:
             storage_id = item.get("id")
             if not storage_id:
@@ -161,5 +112,5 @@ class PaintWorkpieceMatchingService(IMatchingService):
             raw = self._load_saved_workpiece_fn(storage_id)
             if not raw or not raw.get("contour"):
                 continue
-            candidates.append(_MatchableWorkpiece(raw, storage_id=storage_id))
+            candidates.append(MatchableWorkpiece(raw, storage_id=storage_id))
         return candidates

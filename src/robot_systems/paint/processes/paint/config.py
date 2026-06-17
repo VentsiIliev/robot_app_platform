@@ -47,9 +47,8 @@ class PickupMotionConfig:
     first_contact_vel_percent: float = 40.0
     first_contact_acc_percent: float = 60.0
 
-    # Z lift added while restoring pickup orientation before release. This keeps
-    # the command from becoming a near-zero-translation orientation-only move.
-    restore_orientation_z_lift_mm: float = 10.0
+    # Extra Z lift while restoring pickup orientation before release.
+    restore_orientation_z_lift_mm: float = 0.0
 
     # Return from pivot completion back to the pickup align pose before release.
     release_align_vel_percent: float = 30.0
@@ -79,7 +78,8 @@ class PaintNavigationReturnConfig:
 class PaintProjectionTuning:
     """Numeric tuning values for projected paint-path geometry."""
     smooth_max_linear_step_mm: float = 1.0
-    smooth_max_angular_step_deg: float = 0.2
+    smooth_max_angular_step_deg: float = 1.0
+    sharp_corner_rotation_threshold_deg: float = 45.0
     rotation_deadband_deg: float = 0.5
 
 
@@ -144,6 +144,19 @@ PAINT_PROJECTION_TUNING = PaintProjectionTuning()
 
 
 @dataclass(frozen=True)
+class PaintPivotProfile:
+    """Derived low-level pivot settings consumed by the paint executor."""
+
+    motion_plane: str
+    translation_axis: str
+    translation_direction: str
+    paint_side: str
+    mirror_execution_rotation: bool
+    mirror_pickup_handoff: bool
+    pickup_axis_alignment_sign: float
+
+
+@dataclass(frozen=True)
 class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
     # Target point used when transforming contours and pickup points into robot coordinates.
@@ -151,7 +164,8 @@ class PaintProcessConfig:
     # Apply the legacy camera-height Z compensation during pixel-to-mm conversion.
     enable_z_shift_pixel_compensation: bool = False
     # Controls whether contours are converted with raw PPM geometry or calibrated homography/residuals.
-    contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
+    # contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
+    contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
     # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
@@ -159,16 +173,11 @@ class PaintProcessConfig:
     primary_group_id: str = "PAINTING"
     # Navigation group used as the paint/pivot reference pose for XZ/RY painting.
     secondary_group_id: str = "PAINTING_NEW"
-    # Axis along the selected paint plane used as the linear travel direction along the pivot.
-    pivot_translation_axis: str = "x"
-    # Direction along pivot_translation_axis; "forward" keeps the configured axis sign, "reverse" flips it.
-    pivot_translation_direction: str = "forward"
-    # Mirrors commanded RY around the change-plane reference for XZ/RY execution when robot sign differs from projection sign.
-    flip_xz_ry_execution_rotation_direction: bool = True
-    # Mirrors the pickup-to-pivot staging handoff in XZ/RY; keep false when staging already matches the command frame.
-    mirror_xz_ry_pickup_handoff: bool = False
-    # Flips the measured pickup orientation before resolving pickup target XY; useful when contour axis direction is inverted.
-    flip_pickup_axis_alignment_direction: bool = False
+    # Main pivot tuning knobs. The lower-level executor flags are derived from these.
+    pivot_axis: str = "x"
+    pivot_direction: str = "reverse"
+    pivot_contact_side: str = "positive"
+    pickup_axis_alignment_sign_value: float = 1.0
     # Enables reachability sampling before executing XZ/RY pivot paths.
     enable_xz_ry_preflight: bool = False
     # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
@@ -199,14 +208,56 @@ class PaintProcessConfig:
     @property
     def pickup_axis_alignment_sign(self) -> float:
         """Return the pickup orientation ambiguity sign."""
-        return -1.0 if self.flip_pickup_axis_alignment_direction else 1.0
+        return -1.0 if float(self.pickup_axis_alignment_sign_value) < 0.0 else 1.0
 
     @property
     def pivot_side(self) -> str:
         """Return the default contour side used for the active paint plane."""
-        if self.pivot_motion_plane == "xz_y_ry":
-            return "positive"
-        return "positive"
+        side = str(self.pivot_contact_side or "positive").strip().lower()
+        return side if side in PAINT_PROJECTION_RULES.side_signs else PAINT_PROJECTION_RULES.default_paint_side
+
+    @property
+    def pivot_translation_axis(self) -> str:
+        """Deprecated compatibility alias for the derived pivot axis."""
+        return str(self.pivot_axis or "x").strip().lower()
+
+    @property
+    def pivot_translation_direction(self) -> str:
+        """Deprecated compatibility alias for the derived pivot travel direction."""
+        direction = str(self.pivot_direction or "forward").strip().lower()
+        if direction in {"positive", "+", "forward"}:
+            return "forward"
+        if direction in {"negative", "-", "reverse"}:
+            return "reverse"
+        return PAINT_PROJECTION_RULES.default_translation_direction
+
+    @property
+    def flip_xz_ry_execution_rotation_direction(self) -> bool:
+        """Deprecated compatibility alias derived from the active motion plane."""
+        return self.pivot_motion_plane == "xz_y_ry"
+
+    @property
+    def mirror_xz_ry_pickup_handoff(self) -> bool:
+        """Deprecated compatibility alias for pickup handoff mapping."""
+        return False
+
+    @property
+    def flip_pickup_axis_alignment_direction(self) -> bool:
+        """Deprecated compatibility alias for the pickup alignment sign."""
+        return self.pickup_axis_alignment_sign < 0.0
+
+    @property
+    def pivot_profile(self) -> PaintPivotProfile:
+        """Return the derived pivot profile consumed by application wiring."""
+        return PaintPivotProfile(
+            motion_plane=self.pivot_motion_plane,
+            translation_axis=self.pivot_translation_axis,
+            translation_direction=self.pivot_translation_direction,
+            paint_side=self.pivot_side,
+            mirror_execution_rotation=self.flip_xz_ry_execution_rotation_direction,
+            mirror_pickup_handoff=self.mirror_xz_ry_pickup_handoff,
+            pickup_axis_alignment_sign=self.pickup_axis_alignment_sign,
+        )
 
     @property
     def pickup_default_z_mm(self) -> float:

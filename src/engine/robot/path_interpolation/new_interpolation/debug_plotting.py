@@ -146,6 +146,75 @@ def plot_pixel_to_mm_debug(
         return None
 
 
+def plot_pixel_to_mm_strategy_comparison(
+    raw_pixel_path,
+    strategy_paths,
+    *,
+    min_rects_mm=None,
+    save_dir="debug_plots",
+):
+    """Plot side-by-side pixel-to-mm strategy results with min-rect dimensions."""
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        strategy_paths = strategy_paths or []
+        min_rects_mm = min_rects_mm or []
+        column_count = max(2, len(strategy_paths) + 1)
+        fig, axes = plt.subplots(1, column_count, figsize=(6.2 * column_count, 5.8))
+        axes = np.asarray(axes).reshape(-1)
+
+        ax_px = axes[0]
+        ax_px.set_title("Input Pixel Contour")
+        ax_px.set_xlabel("Image X (px)")
+        ax_px.set_ylabel("Image Y (px)")
+        ax_px.grid(True)
+        px_arr = np.asarray(raw_pixel_path or [], dtype=float)
+        if px_arr.ndim == 2 and px_arr.shape[0] > 0 and px_arr.shape[1] >= 2:
+            ax_px.plot(px_arr[:, 0], px_arr[:, 1], "o-", markersize=3, linewidth=1.5, label="Pixels")
+            ax_px.scatter(px_arr[0, 0], px_arr[0, 1], s=70, color="green", edgecolors="black", zorder=5, label="start")
+            ax_px.scatter(px_arr[-1, 0], px_arr[-1, 1], s=70, color="red", edgecolors="black", zorder=5, label="end")
+        ax_px.axis("equal")
+        ax_px.invert_yaxis()
+        ax_px.legend()
+
+        for index, item in enumerate(strategy_paths):
+            ax = axes[index + 1]
+            name = str(item.get("name", f"Strategy {index + 1}"))
+            path = item.get("path") or []
+            arr = np.asarray(path, dtype=float)
+            ax.set_title(name)
+            ax.set_xlabel("X (mm)")
+            ax.set_ylabel("Y (mm)")
+            ax.grid(True)
+            if arr.ndim == 2 and arr.shape[0] > 0 and arr.shape[1] >= 2:
+                ax.plot(arr[:, 0], arr[:, 1], "o-", markersize=3, linewidth=1.5, label=name)
+                ax.scatter(arr[0, 0], arr[0, 1], s=70, color="green", edgecolors="black", zorder=5, label="start")
+                ax.scatter(arr[-1, 0], arr[-1, 1], s=70, color="red", edgecolors="black", zorder=5, label="end")
+                if index < len(min_rects_mm):
+                    _draw_min_rect_overlay(ax, min_rects_mm[index], 0)
+            else:
+                ax.text(0.5, 0.5, "Unavailable", ha="center", va="center", transform=ax.transAxes)
+            ax.axis("equal")
+            ax.legend()
+
+        for empty_index in range(len(strategy_paths) + 1, len(axes)):
+            axes[empty_index].axis("off")
+
+        plt.tight_layout()
+        filename = f"pixel_to_mm_strategy_comparison_{timestamp}.png"
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=150, bbox_inches="tight")
+        print(f"✓ Saved pixel-to-mm strategy comparison plot to: {filepath}")
+        plt.close(fig)
+        return filepath
+    except Exception as e:
+        print(f"⚠️ Error creating pixel-to-mm strategy comparison plot: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def _draw_min_rect_overlay(ax, rect_info, index: int) -> None:
     if not isinstance(rect_info, dict):
         return

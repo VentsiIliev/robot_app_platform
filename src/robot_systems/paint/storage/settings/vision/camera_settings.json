@@ -6,9 +6,9 @@
   "Capture position offset": -5.0,
   "Contour detection": true,
   "Draw contours": true,
-  "Threshold": 128,
+  "Threshold": 144,
   "Threshold pickup area": 150,
-  "Epsilon": 0.002,
+  "Epsilon": 0.001,
   "Min contour area": 1000.0,
   "Max contour area": 10010000.0,
   "Preprocessing": {
@@ -17,12 +17,12 @@
     "Threshold type": "binary_inv",
     "Contour smoothing mode": "none",
     "Contour smoothing strength": 1.0,
-    "Dilate enabled": false,
+    "Dilate enabled": true,
     "Dilate kernel size": 3,
     "Dilate iterations": 3,
-    "Erode enabled": false,
+    "Erode enabled": true,
     "Erode kernel size": 3,
-    "Erode iterations": 2
+    "Erode iterations": 3
   },
   "Brightness Control": {
     "Enable auto adjust": true,

@@ -160,12 +160,82 @@ def project_paint_motion_geometry(
         dy = float(point_b[1] - point_a[1])
         return float(np.degrees(np.arctan2(dy, dx)))
 
+    def _arc_rotation_schedule(source_points: np.ndarray) -> list[float]:
+        """Build per-segment rotation deltas for chorded arcs, not isolated corners."""
+        segment_count = len(source_points) - 1
+        if segment_count < 3:
+            return [0.0 for _ in range(max(0, segment_count))]
+
+        segment_lengths: list[float] = []
+        segment_starts: list[float] = []
+        segment_headings: list[float] = []
+        total_distance = 0.0
+        for segment_index in range(segment_count):
+            start = source_points[segment_index]
+            end = source_points[segment_index + 1]
+            segment_starts.append(total_distance)
+            segment_length = float(np.linalg.norm(end - start))
+            segment_lengths.append(segment_length)
+            heading = _segment_heading_deg(start, end)
+            if segment_headings:
+                heading = unwrap_degrees(segment_headings[-1], heading)
+            segment_headings.append(heading)
+            total_distance += segment_length
+
+        turn_candidates: list[tuple[int, float, float]] = []
+        for segment_index in range(1, segment_count):
+            turn = segment_headings[segment_index] - segment_headings[segment_index - 1]
+            abs_turn = abs(turn)
+            if abs_turn < float(PAINT_PROJECTION_TUNING.rotation_deadband_deg):
+                continue
+            if abs_turn >= float(PAINT_PROJECTION_TUNING.sharp_corner_rotation_threshold_deg):
+                continue
+            turn_candidates.append((segment_index, turn, segment_starts[segment_index]))
+
+        if len(turn_candidates) < 2:
+            return [0.0 for _ in range(segment_count)]
+
+        lookahead_distance = max(
+            float(PAINT_PROJECTION_TUNING.smooth_max_linear_step_mm) * 15.0,
+            float(PAINT_PROJECTION_TUNING.smooth_max_linear_step_mm),
+        )
+        neighbor_distance = lookahead_distance * 2.0
+        scheduled_deltas = [0.0 for _ in range(segment_count)]
+
+        for candidate_index, turn, turn_distance in turn_candidates:
+            has_arc_neighbor = any(
+                other_index != candidate_index
+                and (other_turn > 0.0) == (turn > 0.0)
+                and abs(other_distance - turn_distance) <= neighbor_distance
+                for other_index, other_turn, other_distance in turn_candidates
+            )
+            if not has_arc_neighbor:
+                continue
+
+            start_distance = max(0.0, turn_distance - lookahead_distance)
+            end_distance = turn_distance
+            span = end_distance - start_distance
+            if span <= 1e-9:
+                continue
+            for segment_index, segment_length in enumerate(segment_lengths):
+                if segment_length <= 1e-9:
+                    continue
+                segment_start = segment_starts[segment_index]
+                segment_end = segment_start + segment_length
+                overlap = max(0.0, min(segment_end, end_distance) - max(segment_start, start_distance))
+                if overlap <= 1e-9:
+                    continue
+                scheduled_deltas[segment_index] += -turn * (overlap / span)
+
+        return scheduled_deltas
+
     pivot_xy = (pivot_x, pivot_y)
     points = _canonicalize_closed_source_path(
         points,
         pivot_xy=pivot_xy,
         start_reference_xy=tuple(tcp_anchor) if tcp_anchor is not None else None,
         translation_heading=translation_heading,
+        side_reference_heading=paint_axis_heading,
         contact_segment_heading=contact_segment_heading,
         side_sign=config.side_sign,
     )
@@ -189,6 +259,7 @@ def project_paint_motion_geometry(
         tcp_anchor = tcp_anchor + translate_to_pivot
 
     current_rz = unwrap_degrees(base_rz, base_rz + initial_rotation)
+    arc_rotation_deltas = _arc_rotation_schedule(points)
     result: list[list[float]] = []
     snapshots: list[np.ndarray] = []
     diagnostics: list[dict[str, float | int]] = []
@@ -267,24 +338,143 @@ def project_paint_motion_geometry(
         # projected translation step.
         segment_heading = _segment_heading_deg(current_point, next_point)
         rotation_delta_raw = unwrap_degrees(0.0, contact_segment_heading - segment_heading)
-        rotation_delta = rotation_delta_raw
+        scheduled_arc_delta = (
+            float(arc_rotation_deltas[index])
+            if index < len(arc_rotation_deltas) else 0.0
+        )
+        using_scheduled_arc_delta = (
+            abs(scheduled_arc_delta) > 1e-9
+            and abs(rotation_delta_raw) < float(PAINT_PROJECTION_TUNING.sharp_corner_rotation_threshold_deg)
+        )
+        rotation_delta = (
+            scheduled_arc_delta
+            if using_scheduled_arc_delta
+            else rotation_delta_raw
+        )
 
         # Ignore tiny heading noise to avoid jittering the projected RZ.
-        if abs(rotation_delta) < PAINT_PROJECTION_TUNING.rotation_deadband_deg:
+        if (
+            not using_scheduled_arc_delta
+            and abs(rotation_delta) < PAINT_PROJECTION_TUNING.rotation_deadband_deg
+        ):
             rotation_delta = 0.0
-        if abs(rotation_delta) > 1e-9:
-            # Rotate the whole shape around the fixed pivot, because the
-            # workpiece is assumed to swing around that base point.
-            points = _rotate_shape(points, rotation_delta, pivot_xy)
-            tcp_anchor = _rotate_point(tcp_anchor, rotation_delta, pivot_xy)
-            current_rz = unwrap_degrees(current_rz, current_rz + rotation_delta)
+        emit_corner_rotation = (
+            abs(rotation_delta) >= float(PAINT_PROJECTION_TUNING.sharp_corner_rotation_threshold_deg)
+        )
+        if abs(rotation_delta) > 1e-9 and emit_corner_rotation:
+            # Rotate the whole shape around the fixed pivot in small emitted
+            # steps. A sharp corner is a rotation about the current contact
+            # point; sending only the final pose lets the controller interpolate
+            # linearly and can lift the real edge off the pivot.
+            max_angular_step = max(0.1, float(PAINT_PROJECTION_TUNING.smooth_max_angular_step_deg))
+            rotation_steps = max(1, int(np.ceil(abs(rotation_delta) / max_angular_step)))
+            step_delta = rotation_delta / float(rotation_steps)
+            for _ in range(rotation_steps):
+                points = _rotate_shape(points, step_delta, pivot_xy)
+                tcp_anchor = _rotate_point(tcp_anchor, step_delta, pivot_xy)
+                current_rz = unwrap_degrees(current_rz, current_rz + step_delta)
+                contact_error_mm = float(
+                    np.linalg.norm(points[index] - np.asarray(pivot_xy, dtype=float))
+                )
+                result.append(
+                    _compose_pose(
+                        reference_pose=path[min(index, len(path) - 1)],
+                        planar_i=planar_i,
+                        planar_j=planar_j,
+                        planar_a=float(tcp_anchor[0]),
+                        planar_b=float(tcp_anchor[1]),
+                        orthogonal_index=orthogonal_index,
+                        orthogonal_value=pivot_orthogonal,
+                        rotation_index=rotation_index,
+                        rotation_value=current_rz,
+                        rx=rx,
+                        ry=ry,
+                        rz=rz,
+                    )
+                )
+                snapshots.append(points.copy())
+                diagnostics.append(
+                    {
+                        "index": index + 1,
+                        "segment_length": 0.0,
+                        "segment_heading": segment_heading,
+                        "rotation_delta_raw": step_delta,
+                        "rotation_delta_applied": step_delta,
+                        "current_rz": current_rz,
+                        "contact_error_mm": contact_error_mm,
+                        "contact_correction_mm": 0.0,
+                    }
+                )
 
-        # After any rotation, advance the entire shape along the configured
-        # translation axis by the original segment length. This is the key
-        # "projected motion" assumption: source path arc length becomes linear
-        # travel of the whole workpiece along the pivot axis.
-        points = points + axis_vector * segment_length * config.direction_sign
-        tcp_anchor = tcp_anchor + axis_vector * segment_length * config.direction_sign
+        elif abs(rotation_delta) > 1e-9:
+            # For arcs, emit combined rotation+contact-advance samples. This
+            # keeps the active edge point on the pivot while avoiding the
+            # rotate-then-translate stepping that is visible on rounded corners.
+            max_angular_step = max(0.1, float(PAINT_PROJECTION_TUNING.smooth_max_angular_step_deg))
+            max_linear_step = max(0.1, float(PAINT_PROJECTION_TUNING.smooth_max_linear_step_mm))
+            blend_steps = max(
+                1,
+                int(np.ceil(abs(rotation_delta) / max_angular_step)),
+                int(np.ceil(segment_length / max_linear_step)),
+            )
+            start_points = points.copy()
+            start_tcp_anchor = tcp_anchor.copy()
+            start_rz = current_rz
+            for step_index in range(1, blend_steps + 1):
+                alpha = float(step_index) / float(blend_steps)
+                step_rotation = rotation_delta * alpha
+                step_points = _rotate_shape(start_points, step_rotation, pivot_xy)
+                step_tcp_anchor = _rotate_point(start_tcp_anchor, step_rotation, pivot_xy)
+                contact_point = (1.0 - alpha) * step_points[index] + alpha * step_points[index + 1]
+                contact_translation = np.asarray(pivot_xy, dtype=float) - contact_point
+                step_points = step_points + contact_translation
+                step_tcp_anchor = step_tcp_anchor + contact_translation
+                step_rz = unwrap_degrees(start_rz, start_rz + step_rotation)
+                contact_error_mm = float(np.linalg.norm(contact_point + contact_translation - np.asarray(pivot_xy, dtype=float)))
+                result.append(
+                    _compose_pose(
+                        reference_pose=path[min(index + 1, len(path) - 1)],
+                        planar_i=planar_i,
+                        planar_j=planar_j,
+                        planar_a=float(step_tcp_anchor[0]),
+                        planar_b=float(step_tcp_anchor[1]),
+                        orthogonal_index=orthogonal_index,
+                        orthogonal_value=pivot_orthogonal,
+                        rotation_index=rotation_index,
+                        rotation_value=step_rz,
+                        rx=rx,
+                        ry=ry,
+                        rz=rz,
+                    )
+                )
+                snapshots.append(step_points.copy())
+                diagnostics.append(
+                    {
+                        "index": index + 1,
+                        "segment_length": segment_length / float(blend_steps),
+                        "segment_heading": segment_heading,
+                        "rotation_delta_raw": rotation_delta / float(blend_steps),
+                        "rotation_delta_applied": rotation_delta / float(blend_steps),
+                        "current_rz": step_rz,
+                        "contact_error_mm": contact_error_mm,
+                        "contact_correction_mm": 0.0,
+                    }
+                )
+            points = step_points
+            tcp_anchor = step_tcp_anchor
+            current_rz = step_rz
+            continue
+
+        # After any rotation, move the next source edge point exactly onto the
+        # physical pivot. When the segment has been aligned with the configured
+        # contact heading this is equivalent to axis travel, but it also avoids
+        # contact drift from small heading errors, deadband, and noisy arcs.
+        contact_translation = np.asarray(pivot_xy, dtype=float) - points[index + 1]
+        axis_projection = axis_vector * segment_length * config.direction_sign
+        contact_correction = contact_translation - axis_projection
+        points = points + contact_translation
+        tcp_anchor = tcp_anchor + contact_translation
+        contact_error_mm = float(np.linalg.norm(points[index + 1] - np.asarray(pivot_xy, dtype=float)))
         result.append(
             _compose_pose(
                 reference_pose=path[min(index + 1, len(path) - 1)],
@@ -310,12 +500,11 @@ def project_paint_motion_geometry(
                 "rotation_delta_raw": rotation_delta_raw,
                 "rotation_delta_applied": rotation_delta,
                 "current_rz": current_rz,
+                "contact_error_mm": contact_error_mm,
+                "contact_correction_mm": float(np.linalg.norm(contact_correction)),
             }
         )
 
-    result = result[:len(path)]
-    snapshots = snapshots[:len(path)]
-    diagnostics = diagnostics[:len(path)]
     return result, snapshots, diagnostics
 
 
@@ -367,6 +556,7 @@ def _canonicalize_closed_source_path(
     pivot_xy: tuple[float, float],
     start_reference_xy: tuple[float, float] | None = None,
     translation_heading: float,
+    side_reference_heading: float,
     contact_segment_heading: float,
     side_sign: float,
 ) -> np.ndarray:
@@ -409,8 +599,8 @@ def _canonicalize_closed_source_path(
     def _side_score(aligned: np.ndarray) -> float:
         axis_vector = np.asarray(
             [
-                float(np.cos(np.radians(translation_heading))),
-                float(np.sin(np.radians(translation_heading))),
+                float(np.cos(np.radians(side_reference_heading))),
+                float(np.sin(np.radians(side_reference_heading))),
             ],
             dtype=float,
         )

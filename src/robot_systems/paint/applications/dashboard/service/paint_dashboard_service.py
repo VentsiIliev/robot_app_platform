@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 import numpy as np
 
+from src.engine.robot.path_preparation import config as path_prep_config
+from src.engine.robot.path_preparation.pixel_to_mm import (
+    GeometryPpmAnchorStrategy,
+    GeometryScaleCache,
+    HomographyResidualStrategy,
+    PixelToMmContext,
+)
 from src.shared_contracts.events.process_events import ProcessState
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
@@ -31,6 +39,10 @@ class PaintDashboardService(IPaintDashboardService):
         self._resolver_getter = resolver_getter
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
+        self._geometry_scale_cache = GeometryScaleCache()
+        self._geometry_ppm_strategy = GeometryPpmAnchorStrategy()
+        self._homography_residual_strategy = HomographyResidualStrategy()
+        self._logger = logging.getLogger(__name__)
 
     def get_process_id(self) -> str:
         return str(self._process.process_id)
@@ -74,23 +86,20 @@ class PaintDashboardService(IPaintDashboardService):
             return ContourTransformDebugResult(False, "No usable contour detected.")
 
         try:
-            raw_pixel_path, camera_path, homography_path = self._transform_like_pick_target(largest)
+            raw_pixel_path, strategy_paths = self._transform_with_pixel_to_mm_strategies(largest)
         except Exception as exc:
             return ContourTransformDebugResult(False, f"Failed to transform latest contour: {exc}")
 
-        rect_info = self._minimum_area_rect_xy(camera_path)
-        measurement_text = self._format_min_rect_measurement(rect_info)
+        min_rects = [self._minimum_area_rect_xy(item["path"]) for item in strategy_paths]
         try:
             from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
-                plot_pixel_to_mm_debug,
+                plot_pixel_to_mm_strategy_comparison,
             )
 
-            image_path = plot_pixel_to_mm_debug(
-                [camera_path],
-                raw_pixel_paths=[raw_pixel_path],
-                homography_paths=[homography_path],
-                min_rects_mm=[rect_info],
-                measurement_text=measurement_text,
+            image_path = plot_pixel_to_mm_strategy_comparison(
+                raw_pixel_path,
+                strategy_paths,
+                min_rects_mm=min_rects,
                 save_dir=self._debug_plot_dir(),
             )
         except Exception as exc:
@@ -100,36 +109,63 @@ class PaintDashboardService(IPaintDashboardService):
             return ContourTransformDebugResult(False, "Contour transform plot was not created.")
 
         message = f"Saved contour transform debug plot to {image_path}"
-        if rect_info is not None:
-            message = (
-                f"{message}\n"
-                f"Min rect: {rect_info['length_mm']:.1f} x {rect_info['width_mm']:.1f} mm "
+        rect_lines = []
+        for item, rect_info in zip(strategy_paths, min_rects):
+            if rect_info is None:
+                rect_lines.append(f"{item['name']}: min rect unavailable")
+                continue
+            rect_lines.append(
+                f"{item['name']}: {rect_info['length_mm']:.1f} x {rect_info['width_mm']:.1f} mm "
                 f"(angle {rect_info['angle_deg']:.1f} deg)"
             )
+        if rect_lines:
+            message = f"{message}\n" + "\n".join(rect_lines)
 
         return ContourTransformDebugResult(True, message, image_path)
 
-    def _transform_like_pick_target(self, contour: np.ndarray) -> tuple[list[list[float]], list[list[float]], list[list[float]]]:
+    def _transform_with_pixel_to_mm_strategies(self, contour: np.ndarray) -> tuple[list[list[float]], list[dict]]:
         points = np.asarray(contour, dtype=float).reshape(-1, 2)
         raw_pixel_path = [[float(px), float(py)] for px, py in points]
 
         resolver = self._current_resolver()
-        transformer = getattr(resolver, "_base", None)
-        if transformer is None:
+        if resolver is None:
             raise RuntimeError("Vision resolver is not available.")
-        if not bool(getattr(transformer, "is_available", lambda: False)()):
-            raise RuntimeError("Calibration transformer is not available.")
 
-        transformed_path = [
-            [float(x), float(y), 0.0, 180.0, 0.0, 0.0]
-            for x, y in (transformer.transform(float(px), float(py)) for px, py in points)
-        ]
-        homography_xy = self._homography_only_xy(resolver, points)
-        homography_path = [
-            [float(x), float(y), 0.0, 180.0, 0.0, 0.0]
-            for x, y in np.asarray(homography_xy, dtype=float).reshape(-1, 2)
-        ]
-        return raw_pixel_path, transformed_path, homography_path
+        context = PixelToMmContext(
+            base_z=0.0,
+            rz_offset=0.0,
+            rx=180.0,
+            ry=0.0,
+            target_point_name=self._target_point_name,
+            calibration_frame_name=self._frame_name,
+            mode_name=path_prep_config.PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
+            logger=self._logger,
+            geometry_scale_cache=self._geometry_scale_cache,
+        )
+
+        strategy_paths: list[dict] = []
+        ppm_result = self._geometry_ppm_strategy.convert(points, resolver=resolver, context=context)
+        if ppm_result is None:
+            ppm_path = []
+        else:
+            _, ppm_xy = ppm_result
+            ppm_path = self._xy_to_pose_path(ppm_xy)
+        strategy_paths.append({"name": "Geometry PPM Anchor", "path": ppm_path})
+
+        residual_context = PixelToMmContext(
+            base_z=0.0,
+            rz_offset=0.0,
+            rx=180.0,
+            ry=0.0,
+            target_point_name=self._target_point_name,
+            calibration_frame_name=self._frame_name,
+            mode_name=path_prep_config.PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+            logger=self._logger,
+            geometry_scale_cache=self._geometry_scale_cache,
+        )
+        _, residual_xy = self._homography_residual_strategy.convert(points, resolver=resolver, context=residual_context)
+        strategy_paths.append({"name": "Homography Residual", "path": self._xy_to_pose_path(residual_xy)})
+        return raw_pixel_path, strategy_paths
 
     def _current_resolver(self):
         if self._resolver_getter is None:
@@ -137,20 +173,11 @@ class PaintDashboardService(IPaintDashboardService):
         return self._resolver_getter()
 
     @staticmethod
-    def _homography_only_xy(resolver, points: np.ndarray) -> np.ndarray:
-        base_transformer = getattr(resolver, "_base", None)
-        model = getattr(base_transformer, "_model", None)
-        homography_matrix = getattr(model, "homography_matrix", None)
-        if homography_matrix is None:
-            return np.empty((0, 2), dtype=float)
-
-        import cv2
-
-        pts = np.asarray(points, dtype=np.float32).reshape(-1, 1, 2)
-        return cv2.perspectiveTransform(
-            pts,
-            np.asarray(homography_matrix, dtype=np.float64).reshape(3, 3),
-        ).reshape(-1, 2)
+    def _xy_to_pose_path(points: list[tuple[float, float]]) -> list[list[float]]:
+        return [
+            [float(x), float(y), 0.0, 180.0, 0.0, 0.0]
+            for x, y in points
+        ]
 
     @staticmethod
     def _minimum_area_rect_xy(path: list[list[float]]) -> dict | None:
@@ -176,15 +203,6 @@ class PaintDashboardService(IPaintDashboardService):
             "width_mm": float(short_width_mm),
             "angle_deg": float(angle_deg),
         }
-
-    @staticmethod
-    def _format_min_rect_measurement(captured: dict | None) -> str:
-        if captured is None:
-            return "Captured min rect: unavailable"
-        return (
-            f"Captured min rect: {captured['length_mm']:.1f} x "
-            f"{captured['width_mm']:.1f} mm"
-        )
 
     @staticmethod
     def _pick_largest_contour(contours) -> np.ndarray | None:

@@ -17,6 +17,11 @@ from src.applications.workpiece_editor.editor_core.adapters.adapter_utils import
     workpiece_layer_name,
 )
 from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
+from src.robot_systems.paint.domain.contour_cleanup import (
+    clean_straight_contour_noise,
+    contour_cleanup_settings,
+    save_straight_cleanup_debug_plot,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -41,6 +46,10 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
         "execution_spacing_mm",
         "path_tangent_lookahead_mm",
         "path_tangent_deadband_deg",
+        "straight_cleanup_enabled",
+        "straight_cleanup_distance_px",
+        "straight_cleanup_turn_deg",
+        "straight_cleanup_max_passes",
     )
 
     def from_workpiece(self, workpiece) -> ContourEditorData:
@@ -78,12 +87,28 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
         )
 
         if workpiece_layer and len(workpiece_layer.segments) > 0:
-            result["contour"] = segments_to_contour_array(workpiece_layer.segments)
-            result.update(
-                ensure_complete_settings(
-                    workpiece_layer.segments[0].settings
-                    if hasattr(workpiece_layer.segments[0], "settings") else None
+            main_settings = ensure_complete_settings(
+                workpiece_layer.segments[0].settings
+                if hasattr(workpiece_layer.segments[0], "settings") else None
+            )
+            raw_contour = segments_to_contour_array(workpiece_layer.segments)
+            result["contour"] = clean_straight_contour_noise(
+                raw_contour,
+                **contour_cleanup_settings(main_settings),
+                closed=True,
+            )
+            try:
+                debug_path = save_straight_cleanup_debug_plot(
+                    raw_contour,
+                    result["contour"],
+                    settings=main_settings,
                 )
+                if debug_path:
+                    _logger.info("Saved paint straight cleanup debug plot: %s", debug_path)
+            except Exception:
+                _logger.debug("Failed to save paint straight cleanup debug plot", exc_info=True)
+            result.update(
+                main_settings
             )
         else:
             result["contour"] = []

@@ -26,7 +26,7 @@ def _get_pickup_base_group_id() -> str:
 
 
 def _get_paint_pivot_side() -> str:
-    return _PAINT_PROCESS.pivot_side
+    return _PAINT_PROCESS.pivot_profile.paint_side
 
 
 def _build_dashboard_application(robot_system):
@@ -70,6 +70,7 @@ def _build_paint_path_executor(robot_system):
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
     debug_dump_dir = _build_paint_path_debug_dump_dir()
+    pivot_profile = _PAINT_PROCESS.pivot_profile
     return PaintWorkpiecePathExecutor(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
@@ -91,12 +92,12 @@ def _build_paint_path_executor(robot_system):
         pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
-        pivot_motion_plane=_PAINT_PROCESS.pivot_motion_plane,
-        pivot_translation_axis=_PAINT_PROCESS.pivot_translation_axis,
-        pivot_side=_get_paint_pivot_side(),
-        pivot_translation_direction=_PAINT_PROCESS.pivot_translation_direction,
-        flip_xz_ry_execution_rotation_direction=_PAINT_PROCESS.flip_xz_ry_execution_rotation_direction,
-        mirror_xz_ry_pickup_handoff=_PAINT_PROCESS.mirror_xz_ry_pickup_handoff,
+        pivot_motion_plane=pivot_profile.motion_plane,
+        pivot_translation_axis=pivot_profile.translation_axis,
+        pivot_side=pivot_profile.paint_side,
+        pivot_translation_direction=pivot_profile.translation_direction,
+        flip_xz_ry_execution_rotation_direction=pivot_profile.mirror_execution_rotation,
+        mirror_xz_ry_pickup_handoff=pivot_profile.mirror_pickup_handoff,
         enable_xz_ry_preflight=_PAINT_PROCESS.enable_xz_ry_preflight,
         xz_ry_preflight_max_checks=_PAINT_PROCESS.xz_ry_preflight_max_checks,
         apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,

@@ -37,6 +37,12 @@ from src.robot_systems.paint.timing import TimingRecorder, timed_block, timed_st
 
 _logger = logging.getLogger(__name__)
 
+_PIVOT_COMMAND_POSITION_TOLERANCE_MM = 0.35
+_PIVOT_COMMAND_ROTATION_TOLERANCE_DEG = 0.35
+_PIVOT_COMMAND_MAX_PLANAR_SEGMENT_MM = 8.0
+_PIVOT_COMMAND_MAX_ROTATION_SEGMENT_DEG = 3.0
+_PIVOT_COMMAND_ROTATION_DISTANCE_WEIGHT_MM_PER_DEG = 1.0
+
 
 def _elapsed_s(start: float) -> float:
     return perf_counter() - float(start)
@@ -63,6 +69,108 @@ def _path_length_mm(path: list[list[float]]) -> float:
     for start_pose, end_pose in zip(path, path[1:]):
         total += float(np.linalg.norm(np.asarray(end_pose[:3], dtype=float) - np.asarray(start_pose[:3], dtype=float)))
     return total
+
+
+def _simplify_pivot_command_path(
+    path: list[list[float]],
+    pivot_config: PaintSimulationConfig,
+    *,
+    position_tolerance_mm: float = _PIVOT_COMMAND_POSITION_TOLERANCE_MM,
+    rotation_tolerance_deg: float = _PIVOT_COMMAND_ROTATION_TOLERANCE_DEG,
+    max_planar_segment_mm: float = _PIVOT_COMMAND_MAX_PLANAR_SEGMENT_MM,
+    max_rotation_segment_deg: float = _PIVOT_COMMAND_MAX_ROTATION_SEGMENT_DEG,
+) -> list[list[float]]:
+    """Reduce final pivot command waypoints while preserving active-plane geometry."""
+    if len(path) < 3:
+        return [list(pose) for pose in path]
+
+    try:
+        planar_indices = tuple(int(index) for index in pivot_config.planar_coordinate_indices)
+        rotation_index = int(pivot_config.rotation_index)
+    except (KeyError, TypeError, ValueError):
+        return [list(pose) for pose in path]
+    if len(planar_indices) != 2:
+        return [list(pose) for pose in path]
+    required_index = max(planar_indices + (rotation_index,))
+    if any(len(pose) <= required_index for pose in path):
+        return [list(pose) for pose in path]
+
+    planar = np.asarray(
+        [[float(pose[planar_indices[0]]), float(pose[planar_indices[1]])] for pose in path],
+        dtype=float,
+    )
+    rotations = np.degrees(np.unwrap(np.radians([float(pose[rotation_index]) for pose in path])))
+    weighted_active = np.column_stack(
+        (
+            planar,
+            rotations * _PIVOT_COMMAND_ROTATION_DISTANCE_WEIGHT_MM_PER_DEG,
+        )
+    )
+    step_lengths = np.linalg.norm(np.diff(weighted_active, axis=0), axis=1)
+    cumulative = np.concatenate(([0.0], np.cumsum(step_lengths)))
+
+    keep: set[int] = {0, len(path) - 1}
+    position_tol = max(1e-6, float(position_tolerance_mm))
+    rotation_tol = max(1e-6, float(rotation_tolerance_deg))
+    max_planar = max(position_tol, float(max_planar_segment_mm))
+    max_rotation = max(rotation_tol, float(max_rotation_segment_deg))
+
+    def _midpoint_by_distance(start: int, end: int) -> int:
+        target = cumulative[start] + (cumulative[end] - cumulative[start]) * 0.5
+        local = int(np.searchsorted(cumulative[start + 1 : end], target, side="left")) + start + 1
+        return max(start + 1, min(end - 1, local))
+
+    def _recurse(start: int, end: int) -> None:
+        if end <= start + 1:
+            return
+
+        planar_span = float(np.linalg.norm(planar[end] - planar[start]))
+        rotation_span = abs(float(rotations[end] - rotations[start]))
+        if planar_span > max_planar or rotation_span > max_rotation:
+            midpoint = _midpoint_by_distance(start, end)
+            keep.add(midpoint)
+            _recurse(start, midpoint)
+            _recurse(midpoint, end)
+            return
+
+        total_distance = float(cumulative[end] - cumulative[start])
+        max_score = 0.0
+        max_index = -1
+        for index in range(start + 1, end):
+            if total_distance <= 1e-9:
+                ratio = (index - start) / float(end - start)
+            else:
+                ratio = float((cumulative[index] - cumulative[start]) / total_distance)
+            expected_planar = planar[start] + (planar[end] - planar[start]) * ratio
+            expected_rotation = rotations[start] + (rotations[end] - rotations[start]) * ratio
+            position_error = float(np.linalg.norm(planar[index] - expected_planar))
+            rotation_error = abs(float(rotations[index] - expected_rotation))
+            score = max(position_error / position_tol, rotation_error / rotation_tol)
+            if score > max_score:
+                max_score = score
+                max_index = index
+
+        if max_score > 1.0 and max_index > start:
+            keep.add(max_index)
+            _recurse(start, max_index)
+            _recurse(max_index, end)
+
+    _recurse(0, len(path) - 1)
+    simplified = [list(path[index]) for index in sorted(keep)]
+    if len(simplified) != len(path):
+        _logger.info(
+            "[PIVOT_PATH] simplified command path: plane=%s input=%d output=%d removed=%d pos_tol=%.2fmm rot_tol=%.2fdeg max_planar=%.1fmm max_rot=%.1fdeg",
+            pivot_config.motion_plane,
+            len(path),
+            len(simplified),
+            len(path) - len(simplified),
+            position_tol,
+            rotation_tol,
+            max_planar,
+            max_rotation,
+        )
+    return simplified
+
 
 def _camera_to_tcp_delta(
     x_offset: float,
@@ -136,6 +244,13 @@ def _projection_anchor_xy(job: dict, pivot_config: PaintSimulationConfig) -> tup
         return float(pickup_xy[0]), float(pickup_xy[1])
     except (TypeError, ValueError):
         return None
+
+
+def _pivot_source_path(job: dict, pivot_config: PaintSimulationConfig) -> list[list[float]]:
+    """Return the path used as geometric source for pivot projection."""
+    if pivot_config.motion_plane == "xz_y_ry":
+        return [list(point) for point in (job.get("path") or job.get("execution_path") or [])]
+    return [list(point) for point in (job.get("execution_path") or job.get("path") or [])]
 
 
 def _project_paint_motion_geometry(
@@ -492,7 +607,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         paths = []
         last_pivot_pose = list(base_pivot_pose)
         for job in execution_plan.execution_jobs:
-            source_path = job.get("execution_path") or job.get("path") or []
+            source_path = _pivot_source_path(job, self._pivot_config)
             if not source_path:
                 continue
             pivot_pose = self._apply_pivot_offset(
@@ -539,7 +654,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         motion = []
         last_pivot_pose = list(base_pivot_pose)
         for job in execution_plan.execution_jobs:
-            source_path = job.get("execution_path") or job.get("path") or []
+            source_path = _pivot_source_path(job, self._pivot_config)
             if not source_path:
                 continue
             pivot_pose = self._apply_pivot_offset(
@@ -613,7 +728,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         total_waypoints = 0
         for job in jobs:
-            spline = job.get("execution_path") or job.get("path") or []
+            spline = _pivot_source_path(job, self._pivot_config)
             _logger.debug(f"Execution path before build_pivot_execution_path: {len(spline)}")
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
@@ -636,17 +751,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not pivot_path:
                 return False, "Pivot-path execution requires a valid base/pivot position"
             _logger.debug(f"Pivot path after build_pivot_execution_path: {len(pivot_path)}")
+            command_pivot_path = self._pivot_execution_command_path(pivot_path)
 
             # self._write_pivot_debug_dump(
             #     source_path=spline,
-            #     pivot_path=pivot_path,
+            #     pivot_path=command_pivot_path,
             #     diagnostics=diagnostics,
             #     pivot_pose=pivot_pose,
             #     pattern_type=pattern_type,
             #     stage="execute",
             # )
             result = self._robot_service.execute_trajectory(
-                pivot_path,
+                command_pivot_path,
                 vel=vel,
                 acc=acc,
                 blocking=True,
@@ -654,10 +770,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
             if result not in (0, True, None):
                 return False, f"{pattern_type} pivot-path execution failed with code {result}"
-            total_waypoints += len(spline)
+            total_waypoints += len(command_pivot_path)
             _logger.info(
                 "[EXECUTE] [RUN PROCESS] Sent %d waypoints to robot in %s mode (vel=%.0f acc=%.0f)",
-                len(spline), mode, vel, acc,
+                len(command_pivot_path), mode, vel, acc,
             )
 
         if self._post_execute_callback is not None:
@@ -699,7 +815,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
-        source_path = jobs[0].get("execution_path") or jobs[0].get("path") or []
+        source_path = _pivot_source_path(jobs[0], self._pivot_config)
         if not source_path:
             return None
 
@@ -1011,49 +1127,51 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pickup_plan: PickupToPivotPlan | None = None,
     ) -> list[list[float]]:
         """Return robot command poses for XZ/RY pivot execution without changing planned geometry."""
+        if not path:
+            return []
+        command_path = [list(pose) for pose in path]
         plan = pickup_plan or self._last_pickup_plan
         if (
-            self._pivot_config.motion_plane != "xz_y_ry"
-            or not path
-            or plan is None
-            or len(plan.change_plane_pose) < 5
+            self._pivot_config.motion_plane == "xz_y_ry"
+            and plan is not None
+            and len(plan.change_plane_pose) >= 5
         ):
-            return [list(pose) for pose in path]
-        reference_ry = float(plan.change_plane_pose[4])
-        mirrored_path: list[list[float]] = []
-        for pose in path:
-            command_pose = list(pose)
-            if self._flip_xz_ry_execution_rotation_direction:
-                command_pose = _mirror_pose_rotation_about_reference(
-                    command_pose,
-                    rotation_index=self._pivot_config.rotation_index,
-                    reference_degrees=reference_ry,
-                )
-            mirrored_path.append(command_pose)
-        command_path = mirrored_path
-        _logger.info(
-            "[PIVOT_PATH] xz/ry execution command mapped: planned_start_xz=(%.3f, %.3f) planned_start_ry=%.3f planned_start_rz=%.3f command_start_xz=(%.3f, %.3f) command_start_ry=%.3f command_start_rz=%.3f planned_end_xz=(%.3f, %.3f) planned_end_ry=%.3f planned_end_rz=%.3f command_end_xz=(%.3f, %.3f) command_end_ry=%.3f command_end_rz=%.3f reference_xz=(%.3f, %.3f) reference_ry=%.3f mirror=%s",
-            float(path[0][0]) if len(path[0]) >= 1 else 0.0,
-            float(path[0][2]) if len(path[0]) >= 3 else 0.0,
-            float(path[0][4]) if len(path[0]) >= 5 else 0.0,
-            float(path[0][5]) if len(path[0]) >= 6 else 0.0,
-            float(command_path[0][0]) if len(command_path[0]) >= 1 else 0.0,
-            float(command_path[0][2]) if len(command_path[0]) >= 3 else 0.0,
-            float(command_path[0][4]) if len(command_path[0]) >= 5 else 0.0,
-            float(command_path[0][5]) if len(command_path[0]) >= 6 else 0.0,
-            float(path[-1][0]) if len(path[-1]) >= 1 else 0.0,
-            float(path[-1][2]) if len(path[-1]) >= 3 else 0.0,
-            float(path[-1][4]) if len(path[-1]) >= 5 else 0.0,
-            float(path[-1][5]) if len(path[-1]) >= 6 else 0.0,
-            float(command_path[-1][0]) if len(command_path[-1]) >= 1 else 0.0,
-            float(command_path[-1][2]) if len(command_path[-1]) >= 3 else 0.0,
-            float(command_path[-1][4]) if len(command_path[-1]) >= 5 else 0.0,
-            float(command_path[-1][5]) if len(command_path[-1]) >= 6 else 0.0,
-            float(plan.paint_pivot_pose[0]) if len(plan.paint_pivot_pose) >= 1 else 0.0,
-            float(plan.paint_pivot_pose[2]) if len(plan.paint_pivot_pose) >= 3 else 0.0,
-            reference_ry,
-            self._flip_xz_ry_execution_rotation_direction,
-        )
+            reference_ry = float(plan.change_plane_pose[4])
+            mirrored_path: list[list[float]] = []
+            for pose in path:
+                command_pose = list(pose)
+                if self._flip_xz_ry_execution_rotation_direction:
+                    command_pose = _mirror_pose_rotation_about_reference(
+                        command_pose,
+                        rotation_index=self._pivot_config.rotation_index,
+                        reference_degrees=reference_ry,
+                    )
+                mirrored_path.append(command_pose)
+            command_path = mirrored_path
+            _logger.info(
+                "[PIVOT_PATH] xz/ry execution command mapped: planned_start_xz=(%.3f, %.3f) planned_start_ry=%.3f planned_start_rz=%.3f command_start_xz=(%.3f, %.3f) command_start_ry=%.3f command_start_rz=%.3f planned_end_xz=(%.3f, %.3f) planned_end_ry=%.3f planned_end_rz=%.3f command_end_xz=(%.3f, %.3f) command_end_ry=%.3f command_end_rz=%.3f reference_xz=(%.3f, %.3f) reference_ry=%.3f mirror=%s",
+                float(path[0][0]) if len(path[0]) >= 1 else 0.0,
+                float(path[0][2]) if len(path[0]) >= 3 else 0.0,
+                float(path[0][4]) if len(path[0]) >= 5 else 0.0,
+                float(path[0][5]) if len(path[0]) >= 6 else 0.0,
+                float(command_path[0][0]) if len(command_path[0]) >= 1 else 0.0,
+                float(command_path[0][2]) if len(command_path[0]) >= 3 else 0.0,
+                float(command_path[0][4]) if len(command_path[0]) >= 5 else 0.0,
+                float(command_path[0][5]) if len(command_path[0]) >= 6 else 0.0,
+                float(path[-1][0]) if len(path[-1]) >= 1 else 0.0,
+                float(path[-1][2]) if len(path[-1]) >= 3 else 0.0,
+                float(path[-1][4]) if len(path[-1]) >= 5 else 0.0,
+                float(path[-1][5]) if len(path[-1]) >= 6 else 0.0,
+                float(command_path[-1][0]) if len(command_path[-1]) >= 1 else 0.0,
+                float(command_path[-1][2]) if len(command_path[-1]) >= 3 else 0.0,
+                float(command_path[-1][4]) if len(command_path[-1]) >= 5 else 0.0,
+                float(command_path[-1][5]) if len(command_path[-1]) >= 6 else 0.0,
+                float(plan.paint_pivot_pose[0]) if len(plan.paint_pivot_pose) >= 1 else 0.0,
+                float(plan.paint_pivot_pose[2]) if len(plan.paint_pivot_pose) >= 3 else 0.0,
+                reference_ry,
+                self._flip_xz_ry_execution_rotation_direction,
+            )
+        command_path = _simplify_pivot_command_path(command_path, self._pivot_config)
         return command_path
 
     @timed_step(_logger, "vacuum_on")
@@ -1166,7 +1284,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
-            spline = job.get("execution_path") or job.get("path") or []
+            spline = _pivot_source_path(job, self._pivot_config)
             vel = float(job.get("vel", 10.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
@@ -1344,7 +1462,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     job_index,
                     pattern_type,
                     len(spline),
-                    len(pivot_path),
+                    len(command_pivot_path),
                     _elapsed_s(job_started),
                 )
                 return False, preflight_message, total_waypoints
@@ -1364,19 +1482,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     job_index,
                     pattern_type,
                     len(spline),
-                    len(pivot_path),
+                    len(command_pivot_path),
                     _elapsed_s(execute_started),
                     _elapsed_s(job_started),
                 )
                 return False, f"Pickup succeeded, but {pattern_type} pivot paint failed with code {result}", total_waypoints
-            total_waypoints += len(spline)
+            total_waypoints += len(command_pivot_path)
             self._last_process_end_pose = list(command_pivot_path[-1])
             _logger.info(
                 "[TIMING] pivot_job index=%d pattern=%s success=true input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
                 job_index,
                 pattern_type,
                 len(spline),
-                len(pivot_path),
+                len(command_pivot_path),
                 _elapsed_s(execute_started),
                 _elapsed_s(job_started),
             )

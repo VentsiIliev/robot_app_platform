@@ -134,6 +134,7 @@ def compute_path_aligned_rz_degrees(
     base_rz_offset_degrees: float = 0.0,
     lookahead_distance_mm: float = PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     heading_deadband_deg: float = PATH_TANGENT_HEADING_DEADBAND_DEG,
+    boundary_xy_points: np.ndarray | None = None,
 ) -> list[float]:
     if not robot_xy_points:
         return []
@@ -159,7 +160,38 @@ def compute_path_aligned_rz_degrees(
                     heading_deg += 360.0
         segment_headings.append(heading_deg)
 
-    if len(segment_headings) >= 3:
+    boundary_indices: set[int] = set()
+    if boundary_xy_points is not None:
+        try:
+            boundary_xy = np.asarray(boundary_xy_points, dtype=float).reshape(-1, 2)
+        except (TypeError, ValueError):
+            boundary_xy = np.empty((0, 2), dtype=float)
+        for index, point in enumerate(robot_xy_points):
+            if len(boundary_xy) and bool(np.any(np.linalg.norm(boundary_xy - np.asarray(point, dtype=float), axis=1) <= 1e-6)):
+                boundary_indices.add(index)
+
+    if len(segment_headings) >= 3 and boundary_indices:
+        smoothed_headings = list(segment_headings)
+        split_points = sorted(index for index in boundary_indices if 0 < index < len(segment_headings))
+        span_starts = [0, *split_points]
+        span_ends = [index - 1 for index in split_points]
+        span_ends.append(len(segment_headings) - 1)
+        for start, end in zip(span_starts, span_ends):
+            span = segment_headings[start:end + 1]
+            if len(span) < 3:
+                continue
+            window = min(PATH_TANGENT_HEADING_SMOOTHING_WINDOW, len(span))
+            if window % 2 == 0:
+                window -= 1
+            if window < 3:
+                continue
+            radius = window // 2
+            padded = np.pad(np.asarray(span, dtype=float), (radius, radius), mode="edge")
+            for offset in range(len(span)):
+                smoothed_headings[start + offset] = float(np.mean(padded[offset:offset + window]))
+        segment_headings = smoothed_headings
+
+    if len(segment_headings) >= 3 and not boundary_indices:
         window = min(PATH_TANGENT_HEADING_SMOOTHING_WINDOW, len(segment_headings))
         if window % 2 == 0:
             window -= 1
@@ -181,6 +213,8 @@ def compute_path_aligned_rz_degrees(
         target_distance = start_distance + lookahead_distance_mm
         lookahead_index = index
         while lookahead_index + 1 < len(segment_headings) and point_distances[lookahead_index + 1] < target_distance:
+            if lookahead_index + 1 in boundary_indices and lookahead_index + 1 != index:
+                break
             lookahead_index += 1
         lookahead_headings.append(float(segment_headings[lookahead_index]))
 
@@ -310,6 +344,7 @@ def rebuild_pose_path_from_xy(
     rz_mode: str,
     tangent_lookahead_distance_mm: float = PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     tangent_heading_deadband_deg: float = PATH_TANGENT_HEADING_DEADBAND_DEG,
+    tangent_boundary_xy: np.ndarray | None = None,
 ) -> list[list[float]]:
     if len(xy_points) == 0 or not prototype_path:
         return []
@@ -325,6 +360,7 @@ def rebuild_pose_path_from_xy(
             base_rz_offset_degrees=base_rz,
             lookahead_distance_mm=tangent_lookahead_distance_mm,
             heading_deadband_deg=tangent_heading_deadband_deg,
+            boundary_xy_points=tangent_boundary_xy,
         )
     else:
         rz_values = [base_rz for _ in robot_xy_points]

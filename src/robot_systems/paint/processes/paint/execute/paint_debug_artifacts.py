@@ -154,13 +154,17 @@ def write_pivot_debug_dump(
                         "segment_heading={segment_heading:.6f}, "
                         "rotation_delta_raw={rotation_delta_raw:.6f}, "
                         "rotation_delta_applied={rotation_delta_applied:.6f}, "
-                        "current_rz={current_rz:.6f}\n".format(
+                        "current_rz={current_rz:.6f}, "
+                        "contact_error_mm={contact_error_mm:.6f}, "
+                        "contact_correction_mm={contact_correction_mm:.6f}\n".format(
                             index=int(entry.get("index", 0)),
                             segment_length=float(entry.get("segment_length", 0.0)),
                             segment_heading=float(entry.get("segment_heading", 0.0)),
                             rotation_delta_raw=float(entry.get("rotation_delta_raw", 0.0)),
                             rotation_delta_applied=float(entry.get("rotation_delta_applied", 0.0)),
                             current_rz=float(entry.get("current_rz", 0.0)),
+                            contact_error_mm=float(entry.get("contact_error_mm", 0.0)),
+                            contact_correction_mm=float(entry.get("contact_correction_mm", 0.0)),
                         )
                     )
         _logger.info("[PIVOT] Wrote pivot trajectory debug dump to %s", filepath)
