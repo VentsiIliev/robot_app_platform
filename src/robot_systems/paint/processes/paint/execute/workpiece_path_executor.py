@@ -1467,6 +1467,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 )
                 return False, preflight_message, total_waypoints
 
+            _APPROACH_Z_OFFSET_MM = -10.0 # TODO APPROACH THE SHAFT 10 MM BELOW IT WHILE PLANNING
+            if command_pivot_path and len(command_pivot_path[0]) > 2:
+                approach = list(command_pivot_path[0])
+                approach[2] = float(approach[2]) + _APPROACH_Z_OFFSET_MM
+                command_pivot_path.insert(0, approach)
             execute_started = perf_counter()
             with timed_block(_logger, "pivot_job_robot_execute", label=f"{job_label}:{pattern_type}"):
                 result = self._robot_service.execute_trajectory(
@@ -1587,15 +1592,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 return False, f"Pickup succeeded, but stage transition {transition_index} failed"
 
         staged_command_pose = self._pivot_staging_command_pose(plan.staged_pose, plan.change_plane_pose)
+        _STAGING_Z_OFFSET_MM = -10.0
+        staging_offset_pose = list(staged_command_pose)
+        if len(staging_offset_pose) > 2:
+            staging_offset_pose[2] = float(staging_offset_pose[2]) + _STAGING_Z_OFFSET_MM
         if not self._move_pickup_phase(
-            "Moving to first pivot contact pose",
-            staged_command_pose,
+            "Moving to staging offset below first pivot contact pose",
+            staging_offset_pose,
             velocity=PAINT_PROCESS_CONFIG.pickup_first_contact_vel_percent,
             acceleration=PAINT_PROCESS_CONFIG.pickup_first_contact_acc_percent,
         ):
             _logger.info("[TIMING] pickup_to_pivot success=false stage=staged_pose total_elapsed_s=%.3f", _elapsed_s(started))
-            return False, "Pickup succeeded, but move to first pivot contact pose failed"
-        return True, "Pickup completed and robot is positioned at the first pivot contact pose"
+            return False, "Pickup succeeded, but move to staging offset failed"
+        return True, "Pickup completed and robot is positioned below the first pivot contact pose"
 
     def execute_pickup_and_paint(
         self,
