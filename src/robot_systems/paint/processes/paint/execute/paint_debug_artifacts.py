@@ -149,6 +149,20 @@ def write_pivot_debug_dump(
             if diagnostics:
                 handle.write("\n[ROTATION_DIAGNOSTICS]\n")
                 for entry in diagnostics:
+                    extra_fields = []
+                    for key in (
+                        "corner_rotation_lift_mm",
+                        "corner_rotation_lift_axis",
+                        "corner_lift_phase",
+                        "corner_detach_planar_i_mm",
+                        "corner_detach_planar_j_mm",
+                        "corner_pivot_x",
+                        "corner_pivot_y",
+                        "corner_pivot_orthogonal",
+                    ):
+                        if key in entry:
+                            extra_fields.append(f"{key}={float(entry.get(key, 0.0)):.6f}")
+                    extra_suffix = ", " + ", ".join(extra_fields) if extra_fields else ""
                     handle.write(
                         "  {index:04d}: segment_length={segment_length:.6f}, "
                         "segment_heading={segment_heading:.6f}, "
@@ -156,7 +170,7 @@ def write_pivot_debug_dump(
                         "rotation_delta_applied={rotation_delta_applied:.6f}, "
                         "current_rz={current_rz:.6f}, "
                         "contact_error_mm={contact_error_mm:.6f}, "
-                        "contact_correction_mm={contact_correction_mm:.6f}\n".format(
+                        "contact_correction_mm={contact_correction_mm:.6f}{extra_suffix}\n".format(
                             index=int(entry.get("index", 0)),
                             segment_length=float(entry.get("segment_length", 0.0)),
                             segment_heading=float(entry.get("segment_heading", 0.0)),
@@ -165,6 +179,7 @@ def write_pivot_debug_dump(
                             current_rz=float(entry.get("current_rz", 0.0)),
                             contact_error_mm=float(entry.get("contact_error_mm", 0.0)),
                             contact_correction_mm=float(entry.get("contact_correction_mm", 0.0)),
+                            extra_suffix=extra_suffix,
                         )
                     )
         _logger.info("[PIVOT] Wrote pivot trajectory debug dump to %s", filepath)

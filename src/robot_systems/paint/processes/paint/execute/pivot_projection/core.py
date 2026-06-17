@@ -367,15 +367,125 @@ def project_paint_motion_geometry(
             # point; sending only the final pose lets the controller interpolate
             # linearly and can lift the real edge off the pivot.
             max_angular_step = max(0.1, float(PAINT_PROJECTION_TUNING.smooth_max_angular_step_deg))
+            corner_rotation_lift_mm = float(PAINT_PROJECTION_TUNING.sharp_corner_rotation_lift_mm)
+            corner_pivot_xy_array = np.asarray(pivot_xy, dtype=float).copy()
+            corner_rotation_orthogonal = pivot_orthogonal
+            corner_detach_vector = np.zeros(2, dtype=float)
+            if abs(corner_rotation_lift_mm) > 1e-9:
+                contact_normal = np.asarray([-axis_vector[1], axis_vector[0]], dtype=float)
+                corner_detach_vector = contact_normal * float(config.side_sign) * corner_rotation_lift_mm
+                corner_pivot_xy_array = corner_pivot_xy_array + corner_detach_vector
+            corner_pivot_xy = (float(corner_pivot_xy_array[0]), float(corner_pivot_xy_array[1]))
+            if not np.allclose(corner_pivot_xy_array, np.asarray(pivot_xy, dtype=float)):
+                pivot_delta = corner_pivot_xy_array - np.asarray(pivot_xy, dtype=float)
+                points = points + pivot_delta
+                tcp_anchor = tcp_anchor + pivot_delta
+            if abs(corner_rotation_lift_mm) > 1e-9:
+                result.append(
+                    _compose_pose(
+                        reference_pose=path[min(index, len(path) - 1)],
+                        planar_i=planar_i,
+                        planar_j=planar_j,
+                        planar_a=float(tcp_anchor[0]),
+                        planar_b=float(tcp_anchor[1]),
+                        orthogonal_index=orthogonal_index,
+                        orthogonal_value=corner_rotation_orthogonal,
+                        rotation_index=rotation_index,
+                        rotation_value=current_rz,
+                        rx=rx,
+                        ry=ry,
+                        rz=rz,
+                    )
+                )
+                snapshots.append(points.copy())
+                diagnostics.append(
+                    {
+                        "index": index + 1,
+                        "segment_length": 0.0,
+                        "segment_heading": segment_heading,
+                        "rotation_delta_raw": 0.0,
+                        "rotation_delta_applied": 0.0,
+                        "current_rz": current_rz,
+                        "contact_error_mm": float(np.linalg.norm(points[index] - corner_pivot_xy_array)),
+                        "contact_correction_mm": 0.0,
+                        "corner_rotation_lift_mm": corner_rotation_lift_mm,
+                        "corner_rotation_lift_axis": -1,
+                        "corner_lift_phase": 1,
+                        "corner_detach_planar_i_mm": float(corner_detach_vector[0]),
+                        "corner_detach_planar_j_mm": float(corner_detach_vector[1]),
+                        "corner_pivot_x": float(corner_pivot_xy[0]),
+                        "corner_pivot_y": float(corner_pivot_xy[1]),
+                        "corner_pivot_orthogonal": float(corner_rotation_orthogonal),
+                    }
+                )
             rotation_steps = max(1, int(np.ceil(abs(rotation_delta) / max_angular_step)))
             step_delta = rotation_delta / float(rotation_steps)
             for _ in range(rotation_steps):
-                points = _rotate_shape(points, step_delta, pivot_xy)
-                tcp_anchor = _rotate_point(tcp_anchor, step_delta, pivot_xy)
+                points = _rotate_shape(points, step_delta, corner_pivot_xy)
+                tcp_anchor = _rotate_point(tcp_anchor, step_delta, corner_pivot_xy)
                 current_rz = unwrap_degrees(current_rz, current_rz + step_delta)
                 contact_error_mm = float(
-                    np.linalg.norm(points[index] - np.asarray(pivot_xy, dtype=float))
+                    np.linalg.norm(points[index] - corner_pivot_xy_array)
                 )
+                result.append(
+                    _compose_pose(
+                        reference_pose=path[min(index, len(path) - 1)],
+                        planar_i=planar_i,
+                        planar_j=planar_j,
+                        planar_a=float(tcp_anchor[0]),
+                        planar_b=float(tcp_anchor[1]),
+                        orthogonal_index=orthogonal_index,
+                        orthogonal_value=corner_rotation_orthogonal,
+                        rotation_index=rotation_index,
+                        rotation_value=current_rz,
+                        rx=rx,
+                        ry=ry,
+                        rz=rz,
+                    )
+                )
+                snapshots.append(points.copy())
+                diagnostics.append(
+                    {
+                        "index": index + 1,
+                        "segment_length": 0.0,
+                        "segment_heading": segment_heading,
+                        "rotation_delta_raw": step_delta,
+                        "rotation_delta_applied": step_delta,
+                        "current_rz": current_rz,
+                        "contact_error_mm": contact_error_mm,
+                        "contact_correction_mm": 0.0,
+                        "corner_rotation_lift_mm": corner_rotation_lift_mm,
+                        "corner_rotation_lift_axis": -1,
+                        "corner_detach_planar_i_mm": float(corner_detach_vector[0]),
+                        "corner_detach_planar_j_mm": float(corner_detach_vector[1]),
+                        "corner_pivot_x": float(corner_pivot_xy[0]),
+                        "corner_pivot_y": float(corner_pivot_xy[1]),
+                        "corner_pivot_orthogonal": float(corner_rotation_orthogonal),
+                    }
+                )
+            if abs(corner_rotation_lift_mm) > 1e-9:
+                reattach_vector = corner_detach_vector.copy()
+                next_segment_vector = points[index + 1] - points[index]
+                next_segment_length = float(np.linalg.norm(next_segment_vector))
+                if next_segment_length > 1e-9:
+                    next_segment_unit = next_segment_vector / next_segment_length
+                    next_segment_normal = np.asarray(
+                        [-next_segment_unit[1], next_segment_unit[0]],
+                        dtype=float,
+                    )
+                    reattach_vector = next_segment_normal * corner_rotation_lift_mm
+                    if float(np.dot(reattach_vector, corner_detach_vector)) < 0.0:
+                        reattach_vector = -reattach_vector
+
+                    desired_detached_corner = np.asarray(pivot_xy, dtype=float) + reattach_vector
+                    detached_corner_correction = desired_detached_corner - points[index]
+                    points = points + detached_corner_correction
+                    tcp_anchor = tcp_anchor + detached_corner_correction
+
+                if not np.allclose(corner_pivot_xy_array, np.asarray(pivot_xy, dtype=float)):
+                    reattach_delta = np.asarray(pivot_xy, dtype=float) - points[index]
+                    points = points + reattach_delta
+                    tcp_anchor = tcp_anchor + reattach_delta
                 result.append(
                     _compose_pose(
                         reference_pose=path[min(index, len(path) - 1)],
@@ -398,11 +508,19 @@ def project_paint_motion_geometry(
                         "index": index + 1,
                         "segment_length": 0.0,
                         "segment_heading": segment_heading,
-                        "rotation_delta_raw": step_delta,
-                        "rotation_delta_applied": step_delta,
+                        "rotation_delta_raw": 0.0,
+                        "rotation_delta_applied": 0.0,
                         "current_rz": current_rz,
-                        "contact_error_mm": contact_error_mm,
+                        "contact_error_mm": float(np.linalg.norm(points[index] - np.asarray(pivot_xy, dtype=float))),
                         "contact_correction_mm": 0.0,
+                        "corner_rotation_lift_mm": corner_rotation_lift_mm,
+                        "corner_rotation_lift_axis": -1,
+                        "corner_lift_phase": -1,
+                        "corner_detach_planar_i_mm": float(-reattach_vector[0]),
+                        "corner_detach_planar_j_mm": float(-reattach_vector[1]),
+                        "corner_pivot_x": float(pivot_xy[0]),
+                        "corner_pivot_y": float(pivot_xy[1]),
+                        "corner_pivot_orthogonal": float(pivot_orthogonal),
                     }
                 )
 

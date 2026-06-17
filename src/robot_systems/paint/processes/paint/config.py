@@ -80,6 +80,7 @@ class PaintProjectionTuning:
     smooth_max_linear_step_mm: float = 1.0
     smooth_max_angular_step_deg: float = 1.0
     sharp_corner_rotation_threshold_deg: float = 45.0
+    sharp_corner_rotation_lift_mm: float = 5.0
     rotation_deadband_deg: float = 0.5
 
 
