@@ -17,10 +17,10 @@
     "Threshold type": "binary_inv",
     "Contour smoothing mode": "none",
     "Contour smoothing strength": 1.0,
-    "Dilate enabled": true,
+    "Dilate enabled": false,
     "Dilate kernel size": 3,
     "Dilate iterations": 3,
-    "Erode enabled": true,
+    "Erode enabled": false,
     "Erode kernel size": 3,
     "Erode iterations": 3
   },

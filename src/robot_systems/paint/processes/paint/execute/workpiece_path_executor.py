@@ -460,11 +460,31 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if self._path_preparation_service is None:
             raise RuntimeError("Path preparation service is not available")
         self._last_execution_plan = self._path_preparation_service.build_execution_plan(workpiece, skip_debug_plot=skip_debug_plot)
+        self._write_path_shape_comparison_debug(self._last_execution_plan)
         return self._last_execution_plan
 
     def get_last_execution_plan(self) -> WorkpieceExecutionPlan | None:
         """Return the last paint preview plan prepared by this executor."""
         return self._last_execution_plan
+
+    def _write_path_shape_comparison_debug(self, plan: WorkpieceExecutionPlan) -> None:
+        if not self._debug_dump_dir:
+            return
+        try:
+            from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+                write_path_shape_comparison_debug,
+            )
+
+            result = write_path_shape_comparison_debug(
+                raw_paths=plan.raw_paths,
+                sampled_paths=plan.sampled_paths,
+                execution_paths=plan.execution_paths(),
+                save_dir=self._debug_dump_dir,
+            )
+            if result:
+                _logger.info("[EXECUTE] Saved path shape comparison debug artifacts: %s", result)
+        except Exception:
+            _logger.debug("[EXECUTE] Failed to write path shape comparison debug artifacts", exc_info=True)
 
     def _refresh_runtime_config(self) -> None:
         """Refresh robot-dependent pickup settings from the latest robot configuration."""

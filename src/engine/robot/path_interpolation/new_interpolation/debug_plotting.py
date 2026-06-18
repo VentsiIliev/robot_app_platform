@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 
@@ -269,6 +270,227 @@ def _execution_rotation_change_mask(
     mask = np.zeros(len(execution_arr), dtype=bool)
     mask[1:] = rz_delta > float(threshold_deg)
     return mask
+
+
+def write_path_shape_comparison_debug(
+    *,
+    raw_paths,
+    sampled_paths,
+    execution_paths,
+    save_dir="debug_plots",
+):
+    """Persist metrics and an overlay comparing pixel-to-mm output to move-prep paths."""
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        reports = []
+        for index, raw in enumerate(raw_paths or []):
+            raw_xy = _path_xy(raw)
+            sampled_xy = _path_xy(sampled_paths[index]) if index < len(sampled_paths or []) else np.empty((0, 2))
+            execution_xy = _path_xy(execution_paths[index]) if index < len(execution_paths or []) else np.empty((0, 2))
+            reports.append(
+                {
+                    "path_index": index,
+                    "pixel_to_mm": _shape_metrics(raw_xy),
+                    "move_prep_sampled": _shape_metrics(sampled_xy),
+                    "final_execution": _shape_metrics(execution_xy),
+                    "pixel_to_mm_to_move_prep_sampled": _shape_delta(raw_xy, sampled_xy),
+                    "pixel_to_mm_to_final_execution": _shape_delta(raw_xy, execution_xy),
+                }
+            )
+
+        json_path = os.path.join(save_dir, f"path_shape_comparison_{timestamp}.json")
+        with open(json_path, "w", encoding="utf-8") as handle:
+            json.dump({"timestamp": timestamp, "paths": reports}, handle, indent=2)
+
+        png_path = _plot_path_shape_comparison_overlay(
+            raw_paths=raw_paths,
+            sampled_paths=sampled_paths,
+            execution_paths=execution_paths,
+            reports=reports,
+            save_dir=save_dir,
+            timestamp=timestamp,
+        )
+        print(f"✓ Saved path shape comparison report to: {json_path}")
+        return {"json": json_path, "png": png_path}
+    except Exception as e:
+        print(f"⚠️ Error creating path shape comparison report: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def _path_xy(path) -> np.ndarray:
+    arr = np.asarray([] if path is None else path, dtype=float)
+    if arr.ndim != 2 or arr.shape[0] == 0 or arr.shape[1] < 2:
+        return np.empty((0, 2), dtype=float)
+    return arr[:, :2]
+
+
+def _shape_metrics(xy: np.ndarray) -> dict:
+    xy = np.asarray(xy, dtype=float)
+    if xy.ndim != 2 or xy.shape[0] == 0 or xy.shape[1] < 2:
+        return {
+            "count": 0,
+            "path_length_mm": 0.0,
+            "bbox_width_mm": 0.0,
+            "bbox_height_mm": 0.0,
+            "min_rect_width_mm": 0.0,
+            "min_rect_height_mm": 0.0,
+            "min_rect_angle_deg": 0.0,
+            "area_mm2": 0.0,
+            "centroid": [0.0, 0.0],
+        }
+
+    mins = np.min(xy, axis=0)
+    maxs = np.max(xy, axis=0)
+    rect_width = 0.0
+    rect_height = 0.0
+    rect_angle = 0.0
+    if len(xy) >= 3:
+        try:
+            import cv2
+            rect = cv2.minAreaRect(xy.astype(np.float32).reshape(-1, 1, 2))
+            (_, _), (rect_width, rect_height), rect_angle = rect
+            rect_width = float(rect_width)
+            rect_height = float(rect_height)
+            rect_angle = float(rect_angle)
+            if rect_width < rect_height:
+                rect_width, rect_height = rect_height, rect_width
+                rect_angle += 90.0
+        except Exception:
+            rect_width = float(maxs[0] - mins[0])
+            rect_height = float(maxs[1] - mins[1])
+            rect_angle = 0.0
+
+    return {
+        "count": int(len(xy)),
+        "path_length_mm": _xy_path_length(xy),
+        "bbox_width_mm": float(maxs[0] - mins[0]),
+        "bbox_height_mm": float(maxs[1] - mins[1]),
+        "min_rect_width_mm": float(rect_width),
+        "min_rect_height_mm": float(rect_height),
+        "min_rect_angle_deg": float(rect_angle),
+        "area_mm2": _signed_area_abs(xy),
+        "centroid": [float(np.mean(xy[:, 0])), float(np.mean(xy[:, 1]))],
+    }
+
+
+def _shape_delta(reference_xy: np.ndarray, candidate_xy: np.ndarray) -> dict:
+    reference_metrics = _shape_metrics(reference_xy)
+    candidate_metrics = _shape_metrics(candidate_xy)
+    nearest = _nearest_distance_stats(reference_xy, candidate_xy)
+    return {
+        "count_delta": int(candidate_metrics["count"] - reference_metrics["count"]),
+        "path_length_delta_mm": float(candidate_metrics["path_length_mm"] - reference_metrics["path_length_mm"]),
+        "bbox_width_delta_mm": float(candidate_metrics["bbox_width_mm"] - reference_metrics["bbox_width_mm"]),
+        "bbox_height_delta_mm": float(candidate_metrics["bbox_height_mm"] - reference_metrics["bbox_height_mm"]),
+        "min_rect_width_delta_mm": float(candidate_metrics["min_rect_width_mm"] - reference_metrics["min_rect_width_mm"]),
+        "min_rect_height_delta_mm": float(candidate_metrics["min_rect_height_mm"] - reference_metrics["min_rect_height_mm"]),
+        "area_delta_mm2": float(candidate_metrics["area_mm2"] - reference_metrics["area_mm2"]),
+        **nearest,
+    }
+
+
+def _nearest_distance_stats(reference_xy: np.ndarray, candidate_xy: np.ndarray) -> dict:
+    reference_xy = np.asarray(reference_xy, dtype=float)
+    candidate_xy = np.asarray(candidate_xy, dtype=float)
+    if len(reference_xy) == 0 or len(candidate_xy) == 0:
+        return {
+            "candidate_to_reference_mean_mm": 0.0,
+            "candidate_to_reference_max_mm": 0.0,
+            "reference_to_candidate_mean_mm": 0.0,
+            "reference_to_candidate_max_mm": 0.0,
+            "symmetric_hausdorff_mm": 0.0,
+        }
+
+    cand_to_ref = _nearest_distances(candidate_xy, reference_xy)
+    ref_to_cand = _nearest_distances(reference_xy, candidate_xy)
+    return {
+        "candidate_to_reference_mean_mm": float(np.mean(cand_to_ref)),
+        "candidate_to_reference_max_mm": float(np.max(cand_to_ref)),
+        "reference_to_candidate_mean_mm": float(np.mean(ref_to_cand)),
+        "reference_to_candidate_max_mm": float(np.max(ref_to_cand)),
+        "symmetric_hausdorff_mm": float(max(np.max(cand_to_ref), np.max(ref_to_cand))),
+    }
+
+
+def _nearest_distances(source_xy: np.ndarray, target_xy: np.ndarray) -> np.ndarray:
+    distances = np.linalg.norm(source_xy[:, None, :] - target_xy[None, :, :], axis=2)
+    return np.min(distances, axis=1)
+
+
+def _xy_path_length(xy: np.ndarray) -> float:
+    if len(xy) < 2:
+        return 0.0
+    return float(np.sum(np.linalg.norm(np.diff(xy, axis=0), axis=1)))
+
+
+def _signed_area_abs(xy: np.ndarray) -> float:
+    if len(xy) < 3:
+        return 0.0
+    x = xy[:, 0]
+    y = xy[:, 1]
+    return 0.5 * float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+
+
+def _plot_path_shape_comparison_overlay(
+    *,
+    raw_paths,
+    sampled_paths,
+    execution_paths,
+    reports,
+    save_dir: str,
+    timestamp: str,
+):
+    if not raw_paths:
+        return None
+
+    cols = min(3, max(1, len(raw_paths)))
+    rows = int(np.ceil(len(raw_paths) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(6.4 * cols, 5.6 * rows))
+    axes = np.asarray(axes).reshape(-1)
+
+    for index, axis in enumerate(axes):
+        if index >= len(raw_paths):
+            axis.axis("off")
+            continue
+        raw_xy = _path_xy(raw_paths[index])
+        sampled_xy = _path_xy(sampled_paths[index]) if index < len(sampled_paths or []) else np.empty((0, 2))
+        execution_xy = _path_xy(execution_paths[index]) if index < len(execution_paths or []) else np.empty((0, 2))
+        report = reports[index]
+        axis.set_title(f"Path {index + 1}: pixel-to-mm vs move prep")
+        axis.set_xlabel("X (mm)")
+        axis.set_ylabel("Y (mm)")
+        axis.grid(True, alpha=0.45)
+        if len(raw_xy):
+            axis.plot(raw_xy[:, 0], raw_xy[:, 1], "o-", color="red", markersize=4, linewidth=1.6, label="pixel-to-mm")
+        if len(sampled_xy):
+            axis.plot(sampled_xy[:, 0], sampled_xy[:, 1], ".", color="green", markersize=2, alpha=0.7, label="move prep sampled")
+        if len(execution_xy):
+            axis.plot(execution_xy[:, 0], execution_xy[:, 1], "x-", color="magenta", markersize=4, linewidth=1.2, label="final execution")
+        delta = report["pixel_to_mm_to_final_execution"]
+        axis.text(
+            0.02,
+            0.98,
+            "final delta\n"
+            f"rect {delta['min_rect_width_delta_mm']:+.3f} x {delta['min_rect_height_delta_mm']:+.3f} mm\n"
+            f"length {delta['path_length_delta_mm']:+.3f} mm\n"
+            f"Hausdorff {delta['symmetric_hausdorff_mm']:.3f} mm",
+            transform=axis.transAxes,
+            va="top",
+            fontsize=8,
+            bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "0.35", "alpha": 0.9},
+        )
+        axis.axis("equal")
+        axis.legend(loc="best")
+
+    fig.tight_layout()
+    filepath = os.path.join(save_dir, f"path_shape_comparison_{timestamp}.png")
+    fig.savefig(filepath, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return filepath
 
 
 def plot_trajectory_debug(

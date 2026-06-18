@@ -60,6 +60,20 @@ class CalibrationRobotController:
         max_error_ref      = self.adaptive_movement_config.max_error_ref
         k                  = self.adaptive_movement_config.k
         derivative_scaling = self.adaptive_movement_config.derivative_scaling
+        iterative_gain     = float(getattr(self.adaptive_movement_config, "iterative_gain", 1.0))
+        near_target_gain   = float(getattr(self.adaptive_movement_config, "near_target_gain", iterative_gain))
+        axis_deadband_mm   = max(0.0, float(getattr(self.adaptive_movement_config, "axis_deadband_mm", 0.0)))
+        axis_flip_scale    = float(getattr(self.adaptive_movement_config, "axis_flip_scale_min", 1.0))
+        axis_flip_scale    = min(1.0, max(0.0, axis_flip_scale))
+
+        if abs(offset_x_mm) <= axis_deadband_mm:
+            offset_x_mm = 0.0
+        if abs(offset_y_mm) <= axis_deadband_mm:
+            offset_y_mm = 0.0
+
+        near_target_ref = max(target_error_mm * 8.0, 2.0)
+        gain_blend = min(max(current_error_mm / near_target_ref, 0.0), 1.0)
+        correction_gain = near_target_gain + (iterative_gain - near_target_gain) * gain_blend
 
         normalized_error = min(current_error_mm / max_error_ref, 1.0)
         step_scale  = np.tanh(k * normalized_error)
@@ -85,10 +99,26 @@ class CalibrationRobotController:
             scale = max_move_mm / magnitude
         else:
             scale = 1.0   # magnitude fits within the allowed step — take the full correction
-        move_x_mm = offset_x_mm * scale
-        move_y_mm = offset_y_mm * scale
+        move_x_mm = offset_x_mm * scale * correction_gain
+        move_y_mm = offset_y_mm * scale * correction_gain
 
-        _logger.debug("Adaptive movement: max_move=%.1fmm (error=%.3fmm)", max_move_mm, current_error_mm)
+        prev_x = getattr(self, "previous_offset_x_mm", 0.0)
+        prev_y = getattr(self, "previous_offset_y_mm", 0.0)
+        if prev_x and move_x_mm and np.sign(prev_x) != np.sign(move_x_mm):
+            move_x_mm *= axis_flip_scale
+        if prev_y and move_y_mm and np.sign(prev_y) != np.sign(move_y_mm):
+            move_y_mm *= axis_flip_scale
+        self.previous_offset_x_mm = move_x_mm
+        self.previous_offset_y_mm = move_y_mm
+
+        _logger.debug(
+            "Adaptive movement: max_move=%.1fmm gain=%.2f deadband=%.3fmm flip_scale=%.2f (error=%.3fmm)",
+            max_move_mm,
+            correction_gain,
+            axis_deadband_mm,
+            axis_flip_scale,
+            current_error_mm,
+        )
         _logger.debug("Making iterative movement: X+=%.3fmm, Y+=%.3fmm", move_x_mm, move_y_mm)
 
         raw = self.robot_service.get_current_position()
@@ -154,3 +184,7 @@ class CalibrationRobotController:
         """Clear the derivative term so the first iteration of a new marker is not wrongly damped."""
         if hasattr(self, 'previous_error_mm'):
             del self.previous_error_mm
+        if hasattr(self, 'previous_offset_x_mm'):
+            del self.previous_offset_x_mm
+        if hasattr(self, 'previous_offset_y_mm'):
+            del self.previous_offset_y_mm
