@@ -18,7 +18,7 @@ from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     canonicalize_closed_contour_points,
     compute_pickup_rz_from_robot_path,
-    compute_pickup_rz_from_robot_contour_with_direction,
+    compute_pickup_rz_from_stable_paint_segment,
     has_valid_contour,
     rebuild_pose_path_from_xy,
 )
@@ -359,7 +359,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         pickup_rz = 0.0
         pickup_camera_xy = None
         pickup_rz_source_path: list[list[float]] | None = None
-        pickup_rz_source_contour: list[list[float]] | None = None
 
         if use_workpiece_layer:
             self._logger.debug(f"USING WORKPIECE LAYER")
@@ -390,11 +389,6 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     len(pts_px),
                     settings,
                 )
-                if pickup_px is not None:
-                    raw_robot_pts = self._transform_to_robot(raw_pts_px, settings)
-                    if raw_robot_pts:
-                        pickup_rz_source_path = [list(pt) for pt in raw_robot_pts]
-                        pickup_rz_source_contour = [list(pt) for pt in raw_robot_pts]
                 robot_pts = self._transform_to_robot(pts_px, settings)
                 if robot_pts:
                     robot_paths.append((robot_pts, settings, "Workpiece", pts_px, source_before_bezier_px))
@@ -536,21 +530,21 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     frame_name=self._calibration_frame_name,
                 )
 
-                if use_workpiece_layer and pickup_rz_source_contour and robot_paths:
-                    pickup_rz = compute_pickup_rz_from_robot_contour_with_direction(
-                        pickup_rz_source_contour,
-                        robot_paths[0][0],
+                if use_workpiece_layer and execution_spline:
+                    pickup_rz = compute_pickup_rz_from_stable_paint_segment(
+                        execution_spline,
+                        pickup_reference_rz,
                     )
 
                     self._logger.info(
-                        "[PICKUP_RZ] method=contour_axis_directed pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f contour_pts=%d path_pts=%d",
+                        "[PICKUP_RZ] method=stable_paint_segment pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f path_pts=%d",
                         float(pickup_px[0]),
                         float(pickup_px[1]),
                         float(pickup_camera_xy[0]),
                         float(pickup_camera_xy[1]),
                         float(pickup_rz),
-                        len(pickup_rz_source_contour),
-                        len(robot_paths[0][0]),
+                        float(pickup_reference_rz),
+                        len(execution_spline),
                     )
                 else:
                     pickup_rz_path = pickup_rz_source_path or execution_spline

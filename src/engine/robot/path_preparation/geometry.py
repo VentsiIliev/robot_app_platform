@@ -3,7 +3,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import logging
-from src.engine.geometry.planar import normalize_degrees, unwrap_degrees
+from src.engine.geometry.planar import nearest_axis_equivalent_degrees, normalize_degrees, unwrap_degrees
 
 PATH_TANGENT_HEADING_SMOOTHING_WINDOW = 5
 PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
@@ -264,6 +264,69 @@ def compute_pickup_rz_from_robot_path(
         return 0.0
     heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
     return normalize_degrees(heading_from_x_deg)
+
+
+def compute_pickup_rz_from_stable_paint_segment(
+    path: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+) -> float:
+    """
+    Select a pickup orientation from a stable segment of the prepared paint path.
+
+    Closed workpiece contours do not always have a useful whole-shape axis:
+    asymmetry can pull moment/PCA orientation away from the edge frame that will
+    be painted. This selector instead scans the final execution contour and
+    favors segments that are locally straight and require the smallest
+    axis-equivalent rotation from the pickup reference orientation.
+    """
+    points = np.asarray(path, dtype=float)
+    if points.ndim != 2 or points.shape[1] < 2 or len(points) < 2:
+        return 0.0
+    points = points[:, :2]
+
+    vectors = points[1:] - points[:-1]
+    lengths = np.linalg.norm(vectors, axis=1)
+    valid_indices = [int(index) for index, length in enumerate(lengths) if float(length) > 1e-6]
+    if not valid_indices:
+        return 0.0
+
+    headings = np.asarray(
+        [
+            normalize_degrees(float(np.degrees(np.arctan2(vector[1], vector[0]))))
+            if float(lengths[index]) > 1e-6 else 0.0
+            for index, vector in enumerate(vectors)
+        ],
+        dtype=float,
+    )
+
+    reference = float(reference_rz)
+    best_index = valid_indices[0]
+    best_key: tuple[float, float, float, int] | None = None
+    window = 5
+
+    for index in valid_indices:
+        heading = float(headings[index])
+        selected_heading = nearest_axis_equivalent_degrees(reference, heading)
+        rotation_cost = abs(unwrap_degrees(reference, selected_heading) - reference)
+
+        neighbor_errors: list[float] = []
+        straight_run_length = float(lengths[index])
+        for neighbor in range(max(0, index - window), min(len(headings), index + window + 1)):
+            if neighbor == index or float(lengths[neighbor]) <= 1e-6:
+                continue
+            error = abs(unwrap_degrees(heading, float(headings[neighbor])) - heading)
+            neighbor_errors.append(error)
+            if error <= 5.0:
+                straight_run_length += float(lengths[neighbor])
+
+        straightness_cost = float(np.mean(neighbor_errors)) if neighbor_errors else 0.0
+        straight_bonus = -min(straight_run_length, 25.0)
+        key = (rotation_cost, straightness_cost, straight_bonus, index)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_index = index
+
+    return nearest_axis_equivalent_degrees(reference, float(headings[best_index]))
 
 
 def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:

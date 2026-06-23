@@ -6,6 +6,7 @@ from src.engine.robot.path_preparation.default_workpiece_path_preparation_servic
     DefaultWorkpiecePathPreparationService,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
+from src.engine.robot.path_preparation.geometry import compute_pickup_rz_from_stable_paint_segment
 
 
 class _Schema:
@@ -280,7 +281,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         job = plan.execution_jobs[0]
         self.assertEqual(12.5, job["pivot_offset_mm"])
 
-    def test_build_execution_plan_workpiece_layer_uses_contour_directed_pickup_rz(self):
+    def test_build_execution_plan_workpiece_layer_uses_stable_paint_segment_pickup_rz(self):
         service = _make_service(
             execute_from_workpiece_layer=True,
             target_point_name="tool",
@@ -294,18 +295,15 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         with patch.object(
             service,
             "_transform_to_robot",
-            side_effect=[
-                [[1, 2, 3, 180, 0, 0], [4, 5, 3, 180, 0, 0]],
-                [[10, 20, 30, 180, 0, 0], [40, 50, 30, 180, 0, 0]],
-            ],
+            return_value=[[10, 20, 30, 180, 0, 0], [40, 50, 30, 180, 0, 0]],
         ), patch.object(
             service,
             "_transform_single_pixel_to_robot",
             side_effect=[(11.0, 12.0), (13.0, 14.0)],
         ), patch(
-            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_robot_contour_with_direction",
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_stable_paint_segment",
             return_value=44.0,
-        ) as contour_rz, patch(
+        ) as segment_rz, patch(
             "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_robot_path",
         ) as path_rz:
             plan = service.build_execution_plan(workpiece)
@@ -314,7 +312,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertTrue(job["use_workpiece_layer"])
         self.assertEqual([13.0, 14.0], job["pickup_xy"])
         self.assertEqual(44.0, job["pickup_rz"])
-        contour_rz.assert_called_once()
+        segment_rz.assert_called_once()
         path_rz.assert_not_called()
 
     def test_pickup_target_defaults_to_execution_target_when_not_configured(self):
@@ -619,6 +617,21 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         service = _make_service()
 
         self.assertIsNone(service._extract_pickup_pixel({}))
+
+    def test_stable_paint_segment_pickup_rz_prefers_straight_low_rotation_segment(self):
+        path = [
+            [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [-10.0, 0.5, 0.0, 180.0, 0.0, 0.0],
+            [-20.0, 1.0, 0.0, 180.0, 0.0, 0.0],
+            [-30.0, 1.6, 0.0, 180.0, 0.0, 0.0],
+            [-31.0, 8.0, 0.0, 180.0, 0.0, 0.0],
+            [-28.0, 16.0, 0.0, 180.0, 0.0, 0.0],
+            [-20.0, 20.0, 0.0, 180.0, 0.0, 0.0],
+        ]
+
+        pickup_rz = compute_pickup_rz_from_stable_paint_segment(path, reference_rz=0.0)
+
+        self.assertAlmostEqual(-2.862, pickup_rz, places=3)
 
 
 if __name__ == "__main__":
