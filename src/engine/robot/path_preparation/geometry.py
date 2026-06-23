@@ -329,6 +329,61 @@ def compute_pickup_rz_from_stable_paint_segment(
     return nearest_axis_equivalent_degrees(reference, float(headings[best_index]))
 
 
+def compute_pickup_rz_from_initial_paint_segment(
+    path: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+    *,
+    max_run_mm: float = 25.0,
+    heading_tolerance_deg: float = 5.0,
+) -> float:
+    """Return pickup RZ from the first stable run of the prepared paint path.
+
+    The workpiece is picked before the paint handoff. To align the selected
+    start of the contour with the paint axis, pickup RZ must follow the initial
+    directed segment instead of whichever later segment happens to be closest
+    to zero rotation.
+    """
+    points = np.asarray(path, dtype=float)
+    if points.ndim != 2 or points.shape[1] < 2 or len(points) < 2:
+        return 0.0
+    points = points[:, :2]
+
+    vectors = points[1:] - points[:-1]
+    lengths = np.linalg.norm(vectors, axis=1)
+    valid_indices = [int(index) for index, length in enumerate(lengths) if float(length) > 1e-6]
+    if not valid_indices:
+        return 0.0
+
+    first_index = valid_indices[0]
+    first_heading = normalize_degrees(
+        float(np.degrees(np.arctan2(vectors[first_index][1], vectors[first_index][0])))
+    )
+    run_vector = np.zeros(2, dtype=float)
+    run_length = 0.0
+    max_run_mm = max(0.0, float(max_run_mm))
+    heading_tolerance_deg = max(0.0, float(heading_tolerance_deg))
+
+    for index in valid_indices:
+        heading = normalize_degrees(
+            float(np.degrees(np.arctan2(vectors[index][1], vectors[index][0])))
+        )
+        heading_error = abs(unwrap_degrees(first_heading, heading) - first_heading)
+        if index != first_index and heading_error > heading_tolerance_deg:
+            break
+        run_vector += vectors[index]
+        run_length += float(lengths[index])
+        if max_run_mm > 0.0 and run_length >= max_run_mm:
+            break
+
+    if float(np.linalg.norm(run_vector)) <= 1e-9:
+        selected_heading = first_heading
+    else:
+        selected_heading = normalize_degrees(
+            float(np.degrees(np.arctan2(run_vector[1], run_vector[0])))
+        )
+    return nearest_axis_equivalent_degrees(float(reference_rz), selected_heading)
+
+
 def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:
     if len(path) < 2:
         return None

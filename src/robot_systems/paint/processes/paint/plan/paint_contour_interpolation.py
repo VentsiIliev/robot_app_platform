@@ -112,9 +112,10 @@ class PaintContourInterpolation:
             tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
             tangent_boundary_xy=sharp_boundary_xy,
         )
-        execution_xy = _densify_xy_preserving_anchors(
+        execution_xy = resample_contour_xy(
             prepared_xy,
-            target_spacing_mm=self._config.output_spacing,
+            spacing=self._config.output_spacing,
+            closed=True,
         )
         execution_path = rebuild_pose_path_from_xy(
             execution_xy,
@@ -149,9 +150,25 @@ def resample_contour_xy(
     fit curves. Use it after pixel-to-mm conversion when the contour shape has
     already been finalized and only execution density is needed.
     """
+    source_xy = _remove_degenerate_backtracks(np.asarray(xy_points, dtype=float))
     if closed:
-        return _resample_closed_xy(np.asarray(xy_points, dtype=float), spacing)
-    return _densify_xy_preserving_anchors(np.asarray(xy_points, dtype=float), spacing)
+        cleaned = _remove_short_chord_kinks(
+            _remove_degenerate_backtracks(_resample_closed_xy(source_xy, spacing)),
+            min_chord=max(0.05, float(spacing) * 0.80),
+            closed=True,
+        )
+        if _max_segment_length(cleaned) > float(spacing) * 1.01:
+            cleaned = _resample_closed_xy(cleaned, spacing)
+        return _close_if_needed(cleaned, True)
+
+    cleaned = _remove_short_chord_kinks(
+        _remove_degenerate_backtracks(_resample_open_xy(source_xy, spacing)),
+        min_chord=max(0.05, float(spacing) * 0.80),
+        closed=False,
+    )
+    if _max_segment_length(cleaned) > float(spacing) * 1.01:
+        cleaned = _resample_open_xy(cleaned, spacing)
+    return cleaned
 
 
 def save_paint_contour_interpolation_debug_plot(
@@ -312,6 +329,36 @@ def _resample_closed_xy(xy_points: np.ndarray, spacing: float) -> np.ndarray:
     return np.column_stack(
         [np.interp(sample_distances, cumulative, closed_points[:, dim]) for dim in range(2)]
     ).astype(np.float64)
+
+
+def _resample_open_xy(xy_points: np.ndarray, spacing: float) -> np.ndarray:
+    points = _clean_xy(xy_points)
+    if len(points) < 2:
+        return points
+
+    segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+    keep = np.r_[True, np.diff(cumulative) > 1e-9]
+    points = points[keep]
+    cumulative = cumulative[keep]
+    total_length = float(cumulative[-1])
+    if total_length <= 1e-9:
+        return points
+
+    spacing = max(0.05, float(spacing))
+    sample_distances = list(np.arange(0.0, total_length, spacing))
+    if not sample_distances or abs(sample_distances[-1] - total_length) > 1e-9:
+        sample_distances.append(total_length)
+    return np.column_stack(
+        [np.interp(sample_distances, cumulative, points[:, dim]) for dim in range(2)]
+    ).astype(np.float64)
+
+
+def _max_segment_length(xy_points: np.ndarray) -> float:
+    points = _clean_xy(xy_points)
+    if len(points) < 2:
+        return 0.0
+    return float(np.max(np.linalg.norm(np.diff(points, axis=0), axis=1)))
 
 
 def _smooth_closed_xy_with_beziers(
@@ -485,6 +532,135 @@ def _clean_xy(xy_points: np.ndarray) -> np.ndarray:
     segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
     keep_mask = np.concatenate([[True], segment_lengths > 1e-9])
     return points[keep_mask]
+
+
+def _remove_degenerate_backtracks(xy_points: np.ndarray) -> np.ndarray:
+    """Remove tiny reversed samples that create a local 180-degree fold."""
+    points = _clean_xy(xy_points)
+    if len(points) < 4:
+        return points
+
+    closed = float(np.linalg.norm(points[0] - points[-1])) <= 1e-6
+    if closed:
+        points = points[:-1]
+    if len(points) < 4:
+        return _close_if_needed(points, closed)
+
+    changed = True
+    while changed and len(points) >= 4:
+        changed = False
+        keep = np.ones(len(points), dtype=bool)
+        for index in range(len(points)):
+            prev_index = (index - 1) % len(points) if closed else index - 1
+            next_index = (index + 1) % len(points) if closed else index + 1
+            if prev_index < 0 or next_index >= len(points):
+                continue
+
+            incoming = points[index] - points[prev_index]
+            outgoing = points[next_index] - points[index]
+            incoming_len = float(np.linalg.norm(incoming))
+            outgoing_len = float(np.linalg.norm(outgoing))
+            if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
+                continue
+            if incoming_len > min(0.75, outgoing_len * 0.75):
+                continue
+
+            turn_cos = float(np.dot(incoming, outgoing) / (incoming_len * outgoing_len))
+            if turn_cos > -0.95:
+                continue
+
+            bridge = points[next_index] - points[prev_index]
+            bridge_len = float(np.linalg.norm(bridge))
+            if bridge_len <= 1e-9:
+                continue
+            bridge_cos = float(np.dot(bridge, outgoing) / (bridge_len * outgoing_len))
+            if bridge_cos < 0.95:
+                continue
+
+            keep[index] = False
+            changed = True
+
+        if changed:
+            points = points[keep]
+
+    return _close_if_needed(points, closed)
+
+
+def _remove_short_chord_kinks(
+    xy_points: np.ndarray,
+    *,
+    min_chord: float,
+    closed: bool,
+) -> np.ndarray:
+    """Remove sub-spacing kink samples introduced by contour smoothing/resampling.
+
+    The pivot projector treats every final contour segment as physical contact
+    travel. A tiny chord with a large heading change becomes many near-pure
+    rotation samples and can create a local cusp in the robot command path.
+    """
+    points = _clean_xy(xy_points)
+    if len(points) < 4:
+        return points
+
+    if closed and float(np.linalg.norm(points[0] - points[-1])) <= 1e-6:
+        points = points[:-1]
+    if len(points) < 4:
+        return _close_if_needed(points, closed)
+
+    min_chord = max(0.0, float(min_chord))
+    changed = True
+    while changed and len(points) >= 4:
+        changed = False
+        segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
+        if closed:
+            segment_lengths = np.append(
+                segment_lengths,
+                float(np.linalg.norm(points[0] - points[-1])),
+            )
+
+        candidate_indices = range(len(segment_lengths)) if closed else range(len(segment_lengths))
+        for segment_index in candidate_indices:
+            if segment_lengths[segment_index] >= min_chord:
+                continue
+            left_index = segment_index
+            right_index = (segment_index + 1) % len(points)
+            if not closed and (left_index == 0 or right_index == len(points) - 1):
+                continue
+
+            remove_left_score = _removal_turn_score(points, left_index, closed=closed)
+            remove_right_score = _removal_turn_score(points, right_index, closed=closed)
+            remove_index = left_index if remove_left_score <= remove_right_score else right_index
+            if not closed and (remove_index <= 0 or remove_index >= len(points) - 1):
+                continue
+            points = np.delete(points, remove_index, axis=0)
+            changed = True
+            break
+
+    return _close_if_needed(points, closed)
+
+
+def _removal_turn_score(points: np.ndarray, remove_index: int, *, closed: bool) -> float:
+    count = len(points)
+    if count < 4:
+        return float("inf")
+    if not closed and (remove_index <= 0 or remove_index >= count - 1):
+        return float("inf")
+
+    candidate = np.delete(points, remove_index, axis=0)
+    if len(candidate) < 3:
+        return float("inf")
+    mapped_index = remove_index % len(candidate)
+    prev_index = (mapped_index - 1) % len(candidate)
+    next_index = (mapped_index + 1) % len(candidate)
+    if not closed and (prev_index < 0 or next_index >= len(candidate)):
+        return float("inf")
+    return abs(
+        _signed_turn_degrees(
+            candidate[prev_index],
+            candidate[mapped_index],
+            candidate[next_index],
+        )
+    )
 
 
 def _cleanup_straight_runs(

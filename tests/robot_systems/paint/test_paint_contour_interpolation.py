@@ -7,6 +7,7 @@ import numpy as np
 from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
     PaintContourInterpolation,
     PaintContourInterpolationConfig,
+    resample_contour_xy,
 )
 
 
@@ -104,6 +105,43 @@ class TestPaintContourInterpolation(unittest.TestCase):
         self.assertLessEqual(float(np.max(raw_to_execution)), 1.6)
         self.assertLessEqual(float(np.mean(execution_to_raw)), 0.8)
         self.assertLessEqual(_max_xy_spacing(result.execution_path), 1.0 + 1e-9)
+
+    def test_resample_contour_removes_tiny_backtrack_fold(self) -> None:
+        folded_paths = [
+            np.asarray(
+                [
+                    [11.628474, 334.760731],
+                    [12.628305, 334.743211],
+                    [13.628210, 334.729421],
+                    [13.425821, 334.727847],
+                    [14.182460, 334.708627],
+                    [15.182255, 334.688399],
+                ],
+                dtype=float,
+            ),
+            np.asarray(
+                [
+                    [1.421070, 376.069181],
+                    [2.419677, 376.016442],
+                    [3.418623, 375.970628],
+                    [3.017813, 376.038684],
+                    [3.795902, 376.057214],
+                    [4.795302, 376.022665],
+                ],
+                dtype=float,
+            ),
+        ]
+
+        for raw_xy in folded_paths:
+            with self.subTest(raw_xy=raw_xy.tolist()):
+                resampled = resample_contour_xy(raw_xy, spacing=1.0, closed=False)
+                vectors = np.diff(resampled, axis=0)
+                lengths = np.linalg.norm(vectors, axis=1)
+                unit_vectors = vectors[lengths > 1e-9] / lengths[lengths > 1e-9, None]
+                turn_dots = np.sum(unit_vectors[1:] * unit_vectors[:-1], axis=1)
+
+                self.assertGreaterEqual(len(resampled), 4)
+                self.assertTrue(np.all(turn_dots > -0.95))
 
 
 if __name__ == "__main__":

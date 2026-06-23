@@ -18,6 +18,7 @@ from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     canonicalize_closed_contour_points,
     compute_pickup_rz_from_robot_path,
+    compute_pickup_rz_from_initial_paint_segment,
     compute_pickup_rz_from_stable_paint_segment,
     has_valid_contour,
     rebuild_pose_path_from_xy,
@@ -531,13 +532,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 )
 
                 if use_workpiece_layer and execution_spline:
-                    pickup_rz = compute_pickup_rz_from_stable_paint_segment(
+                    pickup_rz = compute_pickup_rz_from_initial_paint_segment(
                         execution_spline,
                         pickup_reference_rz,
                     )
 
                     self._logger.info(
-                        "[PICKUP_RZ] method=stable_paint_segment pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f path_pts=%d",
+                        "[PICKUP_RZ] method=initial_paint_segment pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f path_pts=%d",
                         float(pickup_px[0]),
                         float(pickup_px[1]),
                         float(pickup_camera_xy[0]),

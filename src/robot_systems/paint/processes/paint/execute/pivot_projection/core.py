@@ -318,7 +318,7 @@ def project_paint_motion_geometry_continuous(
                 contact_point=pivot_array,
             )
 
-    return result, snapshots, diagnostics
+    return _remove_projected_command_cusps(result, snapshots, diagnostics, config)
 
 
 def _compose_pose(
@@ -351,6 +351,91 @@ def _compose_pose(
 
     # _logger.debug(f"COMPOSE POSE: {pose}")
     return pose
+
+
+def _remove_projected_command_cusps(
+    result: list[list[float]],
+    snapshots: list[np.ndarray],
+    diagnostics: list[dict[str, float | int]],
+    config: PaintSimulationConfig,
+) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
+    """Drop local projected TCP/tool cusps caused by tiny rotation reversals.
+
+    The source contour is still the authority. This only removes emitted robot
+    command samples where the projected anchor moves out and immediately back
+    while the active rotation change across the skipped point remains small.
+    Such samples are numerically valid RTCP states, but they create a local
+    180-degree turn that MoveIt's time parameterizer rejects.
+    """
+    if len(result) < 3:
+        return result, snapshots, diagnostics
+
+    planar_i, planar_j = config.planar_coordinate_indices
+    rotation_index = config.rotation_index
+    max_join_rotation = max(
+        4.0,
+        float(PAINT_PROJECTION_TUNING.smooth_max_angular_step_deg) * 4.0,
+    )
+    min_turn_cos = float(np.cos(np.radians(170.0)))
+
+    keep = [True] * len(result)
+    changed = True
+    while changed:
+        changed = False
+        kept_indices = [index for index, include in enumerate(keep) if include]
+        if len(kept_indices) < 3:
+            break
+        for local_index in range(1, len(kept_indices) - 1):
+            prev_index = kept_indices[local_index - 1]
+            index = kept_indices[local_index]
+            next_index = kept_indices[local_index + 1]
+            prev_pose = result[prev_index]
+            pose = result[index]
+            next_pose = result[next_index]
+
+            incoming = np.asarray(
+                [pose[planar_i] - prev_pose[planar_i], pose[planar_j] - prev_pose[planar_j]],
+                dtype=float,
+            )
+            outgoing = np.asarray(
+                [next_pose[planar_i] - pose[planar_i], next_pose[planar_j] - pose[planar_j]],
+                dtype=float,
+            )
+            incoming_len = float(np.linalg.norm(incoming))
+            outgoing_len = float(np.linalg.norm(outgoing))
+            if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
+                continue
+
+            turn_cos = float(np.dot(incoming, outgoing) / (incoming_len * outgoing_len))
+            if turn_cos > min_turn_cos:
+                continue
+
+            joined_rotation = abs(
+                unwrap_degrees(float(prev_pose[rotation_index]), float(next_pose[rotation_index]))
+                - float(prev_pose[rotation_index])
+            )
+            if joined_rotation > max_join_rotation:
+                continue
+
+            bridge = np.asarray(
+                [next_pose[planar_i] - prev_pose[planar_i], next_pose[planar_j] - prev_pose[planar_j]],
+                dtype=float,
+            )
+            bridge_len = float(np.linalg.norm(bridge))
+            if bridge_len > (incoming_len + outgoing_len) * 1.05:
+                continue
+
+            keep[index] = False
+            changed = True
+            break
+
+    if all(keep):
+        return result, snapshots, diagnostics
+
+    filtered_result = [pose for pose, include in zip(result, keep) if include]
+    filtered_snapshots = [snapshot for snapshot, include in zip(snapshots, keep) if include]
+    filtered_diagnostics = [entry for entry, include in zip(diagnostics, keep) if include]
+    return filtered_result, filtered_snapshots, filtered_diagnostics
 
 
 def _segment_heading_deg(point_a: np.ndarray, point_b: np.ndarray) -> float:
