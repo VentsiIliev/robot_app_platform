@@ -79,9 +79,5 @@ def build_paint_segment_settings_schema() -> SegmentSettingsSchema:
             SegmentSettingSpec("execution_spacing_mm", "Execution Spacing (mm)", "7.5", "Interpolation"),
             SegmentSettingSpec("path_tangent_lookahead_mm", "Tangent Lookahead (mm)", "15.0", "Interpolation"),
             SegmentSettingSpec("path_tangent_deadband_deg", "Tangent Deadband (deg)", "5.0", "Interpolation"),
-            SegmentSettingSpec("straight_cleanup_enabled", "Straight Cleanup", "true", "Capture Cleanup"),
-            SegmentSettingSpec("straight_cleanup_distance_px", "Straight Dist (px)", "1.25", "Capture Cleanup"),
-            SegmentSettingSpec("straight_cleanup_turn_deg", "Straight Turn (deg)", "1.0", "Capture Cleanup"),
-            SegmentSettingSpec("straight_cleanup_max_passes", "Straight Passes", "6", "Capture Cleanup"),
         ],
     )

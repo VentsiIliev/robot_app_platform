@@ -8,7 +8,7 @@ from .paint_debug_artifacts import (
     write_pivot_debug_plot,
 )
 from .pivot_projection import (
-    project_paint_motion_geometry,
+    project_paint_motion_geometry_continuous,
     rebase_projected_paint_path_to_zero_start_rz,
 )
 from .workpiece_path_executor import (

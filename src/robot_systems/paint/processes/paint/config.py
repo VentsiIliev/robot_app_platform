@@ -22,8 +22,8 @@ class PickupMotionConfig:
     default_acc_percent: float = 50.0
 
     # Move from the current robot pose to the pickup approach pose.
-    approach_vel_percent: float = 40.0
-    approach_acc_percent: float = 80.0
+    approach_vel_percent: float = 30.0
+    approach_acc_percent: float = 50.0
 
     # Controlled final descent from approach height to pickup contact.
     descend_vel_percent: float = 60.0
@@ -34,7 +34,7 @@ class PickupMotionConfig:
     lift_align_acc_percent: float = 100.0
 
     # Change from pickup/table plane orientation to paint plane orientation.
-    change_plane_vel_percent: float = 40.0
+    change_plane_vel_percent: float = 30.0
     change_plane_acc_percent: float = 70.0
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
@@ -79,8 +79,6 @@ class PaintProjectionTuning:
     """Numeric tuning values for projected paint-path geometry."""
     smooth_max_linear_step_mm: float = 1.0
     smooth_max_angular_step_deg: float = 1.0
-    sharp_corner_rotation_threshold_deg: float = 45.0
-    sharp_corner_rotation_lift_mm: float = 5.0
     rotation_deadband_deg: float = 0.5
 
 
@@ -167,6 +165,10 @@ class PaintProcessConfig:
     # Controls whether contours are converted with raw PPM geometry or calibrated homography/residuals.
     # contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
     contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
+    # Sample current robot poses during blocking paint trajectory execution and compare
+    # them with the commanded path. Disabled by default because it polls the robot state.
+    enable_execution_motion_trace: bool = True
+    execution_motion_trace_sample_period_s: float = 0.05
     # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
@@ -178,6 +180,7 @@ class PaintProcessConfig:
     pivot_axis: str = "x"
     pivot_direction: str = "reverse"
     pivot_contact_side: str = "positive"
+    mirror_xz_ry_execution_rotation_value: bool = True
     pickup_axis_alignment_sign_value: float = 1.0
     # Enables reachability sampling before executing XZ/RY pivot paths.
     enable_xz_ry_preflight: bool = False
@@ -235,7 +238,7 @@ class PaintProcessConfig:
     @property
     def flip_xz_ry_execution_rotation_direction(self) -> bool:
         """Deprecated compatibility alias derived from the active motion plane."""
-        return self.pivot_motion_plane == "xz_y_ry"
+        return self.pivot_motion_plane == "xz_y_ry" and bool(self.mirror_xz_ry_execution_rotation_value)
 
     @property
     def mirror_xz_ry_pickup_handoff(self) -> bool:
@@ -385,6 +388,7 @@ class PaintSimulationConfig:
     apply_camera_to_tcp_for_pickup: bool = False
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
+    rotation_direction_sign: float = 1.0
 
     @property
     def rules(self) -> PaintProjectionRules:

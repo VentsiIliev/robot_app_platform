@@ -101,7 +101,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             return [[list(pivot_pose)]], [], []
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             side_effect=_project,
         ):
             paths, last_pivot_pose = executor.get_pivot_preview_paths(execution_plan)
@@ -122,7 +122,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         expected_snapshots = [np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=float)]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([], expected_snapshots, []),
         ):
             motion, last_pivot_pose = executor.get_pivot_motion_preview(execution_plan)
@@ -138,7 +138,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=(
                 [[1, 2, 3, 0, 0, 45], [4, 5, 6, 0, 0, 60]],
                 [],
@@ -204,7 +204,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, 44.0]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -239,7 +239,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, 44.0]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -267,7 +267,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, -163.155]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -294,7 +294,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             side_effect=[
                 ([[101.0, 202.0, 303.0, 1.0, 2.0, 10.0]], [], []),
                 ([[111.0, 212.0, 313.0, 1.0, 2.0, 10.0]], [], []),
@@ -335,7 +335,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=(
                 [[101.0, 202.0, 303.0, 1.0, 2.0, 12.0], [111.0, 202.0, 303.0, 1.0, 2.0, 12.0]],
                 [],
@@ -373,7 +373,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             return ([[-83.655, 316.814, 283.401, -91.478, 25.0, -0.05]], [], [])
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             side_effect=_project,
         ) as projection:
             paths, _ = executor.get_pivot_preview_paths(execution_plan)
@@ -402,7 +402,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([[-83.655, 316.814, 283.401, -91.478, -69.416, -0.05]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -614,7 +614,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         preview_snapshots = [np.asarray([[1.0, 1.0], [3.0, 1.0]], dtype=float)]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.project_paint_motion_geometry_continuous",
             return_value=(preview_path, preview_snapshots, []),
         ):
             snapshots = build_executed_snapshot_series(
@@ -639,7 +639,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         preview_snapshots = [np.asarray([[9.0, 20.0], [11.0, 20.0]], dtype=float)]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.project_paint_motion_geometry",
+            "src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts.project_paint_motion_geometry_continuous",
             return_value=(preview_path, preview_snapshots, []),
         ):
             snapshots = build_executed_snapshot_series(

@@ -6,9 +6,9 @@
   "Capture position offset": -5.0,
   "Contour detection": true,
   "Draw contours": true,
-  "Threshold": 144,
+  "Threshold": 128,
   "Threshold pickup area": 150,
-  "Epsilon": 0.001,
+  "Epsilon": 0.0,
   "Min contour area": 1000.0,
   "Max contour area": 10010000.0,
   "Preprocessing": {

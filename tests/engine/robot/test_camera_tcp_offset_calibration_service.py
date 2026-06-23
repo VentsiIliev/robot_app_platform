@@ -178,6 +178,184 @@ class TestCameraTcpOffsetCalibrationService(unittest.TestCase):
             self.assertEqual(saved_key, "robot_config")
             self.assertIs(saved_config, robot_config)
 
+    def test_axis_mapping_prefers_tcp_marker_id_before_axis_mapping_marker(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+            vision = _FakeVisionService(matrix_path=matrix_path, detections=[])
+            robot = _FakeRobotService()
+            settings = _FakeSettingsService()
+            robot_config = RobotSettings()
+            calibration_settings = RobotCalibrationSettings()
+            calibration_settings.camera_tcp_offset.marker_id = 41
+            calibration_settings.axis_mapping.marker_id = 43
+
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=vision,
+                robot_service=robot,
+                navigation_service=None,
+                settings_service=settings,
+                robot_config_key="robot_config",
+                robot_config=robot_config,
+                calibration_settings=calibration_settings,
+                robot_tool=0,
+                robot_user=0,
+            )
+
+            requested_marker_ids = []
+
+            def fake_calibrate(marker_id, move_mm, delay_s):
+                requested_marker_ids.append(marker_id)
+                return "mapping" if marker_id == 41 else None
+
+            with patch.object(service, "_calibrate_axis_mapping_for_marker", side_effect=fake_calibrate):
+                mapping = service._calibrate_axis_mapping()
+
+            self.assertEqual(mapping, "mapping")
+            self.assertEqual(requested_marker_ids, [41])
+
+    def test_axis_mapping_falls_back_to_configured_axis_marker(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+            vision = _FakeVisionService(matrix_path=matrix_path, detections=[])
+            robot = _FakeRobotService()
+            settings = _FakeSettingsService()
+            robot_config = RobotSettings()
+            calibration_settings = RobotCalibrationSettings()
+            calibration_settings.camera_tcp_offset.marker_id = 41
+            calibration_settings.axis_mapping.marker_id = 43
+
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=vision,
+                robot_service=robot,
+                navigation_service=None,
+                settings_service=settings,
+                robot_config_key="robot_config",
+                robot_config=robot_config,
+                calibration_settings=calibration_settings,
+                robot_tool=0,
+                robot_user=0,
+            )
+
+            requested_marker_ids = []
+
+            def fake_calibrate(marker_id, move_mm, delay_s):
+                requested_marker_ids.append(marker_id)
+                return "fallback-mapping" if marker_id == 43 else None
+
+            with patch.object(service, "_calibrate_axis_mapping_for_marker", side_effect=fake_calibrate):
+                mapping = service._calibrate_axis_mapping()
+
+            self.assertEqual(mapping, "fallback-mapping")
+            self.assertEqual(requested_marker_ids, [41, 43])
+
+    def test_calibrate_rejects_high_sample_spread_before_saving(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+
+            vision = _FakeVisionService(matrix_path=matrix_path, detections=[])
+            robot = _FakeRobotService()
+            settings = _FakeSettingsService()
+            robot_config = RobotSettings()
+            calibration_settings = RobotCalibrationSettings()
+            cfg = calibration_settings.camera_tcp_offset
+            cfg.marker_id = 4
+            cfg.iterations = 2
+            cfg.rotation_step_deg = 15.0
+            cfg.settle_time_s = 0.0
+            cfg.recenter_stability_wait_s = 0.0
+            cfg.min_samples = 2
+            cfg.max_acceptance_std_mm = 1.0
+
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=vision,
+                robot_service=robot,
+                navigation_service=None,
+                settings_service=settings,
+                robot_config_key="robot_config",
+                robot_config=robot_config,
+                calibration_settings=calibration_settings,
+                robot_tool=0,
+                robot_user=0,
+            )
+
+            axis_mapping = ImageToRobotMapping(
+                robot_x=AxisMapping(image_axis=ImageAxis.X, direction=Direction.PLUS),
+                robot_y=AxisMapping(image_axis=ImageAxis.Y, direction=Direction.PLUS),
+            )
+            reference_pose = [100.0, 200.0, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, cfg.approach_rz]
+            aligned_poses = [
+                [110.0, 220.0, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, 15.0],
+                [-30.0, -40.0, cfg.approach_z, cfg.approach_rx, cfg.approach_ry, 30.0],
+            ]
+
+            with (
+                patch.object(service, "_calibrate_axis_mapping", return_value=axis_mapping),
+                patch.object(service, "_detect_marker_center", return_value=(100.0, 200.0)),
+                patch.object(service, "_recenter_marker_to_center", side_effect=[reference_pose, *aligned_poses]),
+                patch.object(service._transformer, "is_available", return_value=True),
+                patch.object(service._transformer, "transform", side_effect=lambda x, y: (x, y)),
+            ):
+                ok, msg = service.calibrate()
+
+            self.assertFalse(ok)
+            self.assertIn("sample spread too high", msg)
+            self.assertEqual(settings.saved, [])
+
+    def test_recenter_noise_floor_tracks_axis_mapping_pixel_scale(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=_FakeVisionService(matrix_path=matrix_path, detections=[]),
+                robot_service=_FakeRobotService(),
+                navigation_service=None,
+                settings_service=_FakeSettingsService(),
+                robot_config_key="robot_config",
+                robot_config=RobotSettings(),
+                calibration_settings=RobotCalibrationSettings(),
+                robot_tool=0,
+                robot_user=0,
+            )
+            service._image_to_robot_mapping = type(
+                "_Mapping",
+                (),
+                {
+                    "map_pixel_error_to_robot_delta": lambda self, x, y: (2.0 * x, 3.0 * y),
+                },
+            )()
+
+            self.assertAlmostEqual(service._effective_recenter_noise_floor_mm(), 2.25, places=6)
+
+    def test_near_target_recenter_move_uses_lower_gain(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            matrix_path = str(Path(tmp_dir) / "cameraToRobotMatrix_camera_center.npy")
+            np.save(matrix_path, np.eye(3, dtype=np.float32))
+            calibration_settings = RobotCalibrationSettings()
+            calibration_settings.camera_tcp_offset.recenter_correction_gain = 0.6
+            service = CameraTcpOffsetCalibrationService(
+                vision_service=_FakeVisionService(matrix_path=matrix_path, detections=[]),
+                robot_service=_FakeRobotService(),
+                navigation_service=None,
+                settings_service=_FakeSettingsService(),
+                robot_config_key="robot_config",
+                robot_config=RobotSettings(),
+                calibration_settings=calibration_settings,
+                robot_tool=0,
+                robot_user=0,
+            )
+
+            move_x, move_y = service._compute_iterative_move(
+                current_error_mm=0.8,
+                correction_x_mm=0.8,
+                correction_y_mm=0.0,
+            )
+
+            self.assertAlmostEqual(move_x, 0.2, places=6)
+            self.assertAlmostEqual(move_y, 0.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

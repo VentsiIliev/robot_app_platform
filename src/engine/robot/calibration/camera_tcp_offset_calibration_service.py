@@ -17,6 +17,10 @@ from src.engine.vision.homography_residual_transformer import HomographyResidual
 
 _logger = logging.getLogger(__name__)
 
+_RECENTER_PIXEL_NOISE_FLOOR_PX = 0.75
+_RECENTER_NEAR_TARGET_MM = 1.0
+_RECENTER_NEAR_TARGET_GAIN_LIMIT = 0.25
+
 
 class _IRobotService(Protocol):
     def get_current_position(self) -> list: ...
@@ -363,8 +367,9 @@ class CameraTcpOffsetCalibrationService:
             finally:
                 self._move(reference_pose, cfg.velocity, cfg.acceleration, "final reference restore")
 
-            if not samples:
-                return False, "No valid samples collected"
+            min_samples = max(1, int(getattr(cfg, "min_samples", 1)))
+            if len(samples) < min_samples:
+                return False, f"Not enough valid TCP offset samples collected ({len(samples)}/{min_samples})"
 
             # Global weighted least-squares across all samples.
             # Each sample contributes two rows to the linear system:
@@ -394,6 +399,9 @@ class CameraTcpOffsetCalibrationService:
             residuals = b - A @ result
             std_x = float(np.std(residuals[0::2]))
             std_y = float(np.std(residuals[1::2]))
+            sample_std_x = float(np.std([sample.local_dx for sample in samples]))
+            sample_std_y = float(np.std([sample.local_dy for sample in samples]))
+            max_std = float(getattr(cfg, "max_acceptance_std_mm", 10.0))
 
             _logger.info(
                 _build_tcp_offset_summary(
@@ -412,6 +420,13 @@ class CameraTcpOffsetCalibrationService:
                 )
             )
 
+            if sample_std_x > max_std or sample_std_y > max_std:
+                return False, (
+                    "TCP offset sample spread too high: "
+                    f"std_x={sample_std_x:.3f}mm std_y={sample_std_y:.3f}mm "
+                    f"(limit {max_std:.3f}mm)"
+                )
+
             self._robot_config.camera_to_tcp_x_offset = offset_x
             self._robot_config.camera_to_tcp_y_offset = offset_y
             self._settings.save(self._robot_config_key, self._robot_config)
@@ -428,7 +443,8 @@ class CameraTcpOffsetCalibrationService:
 
             return True, (
                 f"Camera-to-TCP offset calibrated: X={offset_x:.3f} mm, Y={offset_y:.3f} mm "
-                f"(std X={std_x:.3f}, Y={std_y:.3f})"
+                f"(residual std X={std_x:.3f}, Y={std_y:.3f}; "
+                f"sample std X={sample_std_x:.3f}, Y={sample_std_y:.3f})"
             )
         finally:
             if draw_contours_was_enabled:
@@ -670,10 +686,15 @@ class CameraTcpOffsetCalibrationService:
             )
             scale_error_mm = math.hypot(offset_x_mm, offset_y_mm)
             mapped_error_mm = math.hypot(mapped_x_mm, mapped_y_mm)
+            effective_threshold_mm = max(
+                recenter_alignment_threshold_mm,
+                self._effective_recenter_noise_floor_mm(),
+            )
             _logger.info(
                 "%s: iter=%d computed_error pixel=(%.3f, %.3f | norm=%.3f px) "
                 "scale_mm=(%.3f, %.3f | norm=%.3f mm) derotated_mm=(%.3f, %.3f) "
-                "derotated_px=(%.3f, %.3f) mapped_mm=(%.3f, %.3f | norm=%.3f mm) threshold=%.3f mm",
+                "derotated_px=(%.3f, %.3f) mapped_mm=(%.3f, %.3f | norm=%.3f mm) "
+                "threshold=%.3f mm effective_threshold=%.3f mm",
                 label,
                 iteration,
                 pixel_error_x,
@@ -690,12 +711,13 @@ class CameraTcpOffsetCalibrationService:
                 mapped_y_mm,
                 mapped_error_mm,
                 recenter_alignment_threshold_mm,
+                effective_threshold_mm,
             )
-            if mapped_error_mm <= recenter_alignment_threshold_mm:
+            if mapped_error_mm <= effective_threshold_mm:
                 current_pose = self._robot.get_current_position()
                 _logger.info(
                     "%s: converged iter=%d marker_px=(%.3f, %.3f) "
-                    "pixel_error=(%.3f, %.3f | norm=%.3f px) mapped_error=%.3f mm",
+                    "pixel_error=(%.3f, %.3f | norm=%.3f px) mapped_error=%.3f mm threshold=%.3f mm",
                     label,
                     iteration,
                     marker_px,
@@ -704,6 +726,7 @@ class CameraTcpOffsetCalibrationService:
                     pixel_error_y,
                     pixel_error_norm,
                     mapped_error_mm,
+                    effective_threshold_mm,
                 )
                 return list(current_pose) if current_pose else None
             move_x_mm, move_y_mm = self._compute_iterative_move(
@@ -760,15 +783,47 @@ class CameraTcpOffsetCalibrationService:
         )
         return None
 
+    def _effective_recenter_noise_floor_mm(self) -> float:
+        if self._image_to_robot_mapping is None:
+            return 0.0
+        x_mm = self._image_to_robot_mapping.map_pixel_error_to_robot_delta(
+            _RECENTER_PIXEL_NOISE_FLOOR_PX,
+            0.0,
+        )
+        y_mm = self._image_to_robot_mapping.map_pixel_error_to_robot_delta(
+            0.0,
+            _RECENTER_PIXEL_NOISE_FLOOR_PX,
+        )
+        return max(math.hypot(*x_mm), math.hypot(*y_mm))
+
     def _interruptible_sleep(self, seconds: float) -> bool:
         return self._stop_event.wait(timeout=max(0.0, seconds))
 
     def _calibrate_axis_mapping(self) -> Optional[_StandaloneTcpAxisCalibration]:
         cfg = self._calibration_settings.axis_mapping or AxisMappingConfig()
-        marker_id = int(cfg.marker_id)
+        tcp_cfg = self._calibration_settings.camera_tcp_offset
+        tcp_marker_id = int(getattr(tcp_cfg, "marker_id", cfg.marker_id))
+        fallback_marker_id = int(cfg.marker_id)
         move_mm = float(cfg.move_mm)
         delay_s = float(cfg.delay_after_move_s)
 
+        marker_ids = [tcp_marker_id]
+        if fallback_marker_id != tcp_marker_id:
+            marker_ids.append(fallback_marker_id)
+
+        for marker_id in marker_ids:
+            mapping = self._calibrate_axis_mapping_for_marker(marker_id, move_mm, delay_s)
+            if mapping is not None:
+                return mapping
+            _logger.warning("Standalone TCP axis mapping failed with marker %d", marker_id)
+        return None
+
+    def _calibrate_axis_mapping_for_marker(
+        self,
+        marker_id: int,
+        move_mm: float,
+        delay_s: float,
+    ) -> Optional[_StandaloneTcpAxisCalibration]:
         before_x = self._detect_marker_center(marker_id, "axis mapping +X before", n_avg=1)
         if before_x is None:
             _logger.warning("Standalone TCP axis mapping: marker %d not found before +X move", marker_id)
@@ -777,15 +832,21 @@ class CameraTcpOffsetCalibrationService:
         if not self._move_relative(dx_mm=move_mm, dy_mm=0.0, velocity=self._calibration_settings.travel_velocity,
                                    acceleration=self._calibration_settings.travel_acceleration, label="axis mapping +X"):
             return None
-        if self._interruptible_sleep(delay_s):
-            return None
-        after_x = self._detect_marker_center(marker_id, "axis mapping +X after", n_avg=1)
-        if after_x is None:
-            return None
-
-        if not self._move_relative(dx_mm=-move_mm, dy_mm=0.0, velocity=self._calibration_settings.travel_velocity,
-                                   acceleration=self._calibration_settings.travel_acceleration, label="axis mapping restore X"):
-            return None
+        try:
+            if self._interruptible_sleep(delay_s):
+                return None
+            after_x = self._detect_marker_center(marker_id, "axis mapping +X after", n_avg=1)
+            if after_x is None:
+                return None
+        finally:
+            if not self._move_relative(
+                dx_mm=-move_mm,
+                dy_mm=0.0,
+                velocity=self._calibration_settings.travel_velocity,
+                acceleration=self._calibration_settings.travel_acceleration,
+                label="axis mapping restore X",
+            ):
+                return None
 
         before_y = self._detect_marker_center(marker_id, "axis mapping -Y before", n_avg=1)
         if before_y is None:
@@ -793,15 +854,21 @@ class CameraTcpOffsetCalibrationService:
         if not self._move_relative(dx_mm=0.0, dy_mm=-move_mm, velocity=self._calibration_settings.travel_velocity,
                                    acceleration=self._calibration_settings.travel_acceleration, label="axis mapping -Y"):
             return None
-        if self._interruptible_sleep(delay_s):
-            return None
-        after_y = self._detect_marker_center(marker_id, "axis mapping -Y after", n_avg=1)
-        if after_y is None:
-            return None
-
-        if not self._move_relative(dx_mm=0.0, dy_mm=move_mm, velocity=self._calibration_settings.travel_velocity,
-                                   acceleration=self._calibration_settings.travel_acceleration, label="axis mapping restore Y"):
-            return None
+        try:
+            if self._interruptible_sleep(delay_s):
+                return None
+            after_y = self._detect_marker_center(marker_id, "axis mapping -Y after", n_avg=1)
+            if after_y is None:
+                return None
+        finally:
+            if not self._move_relative(
+                dx_mm=0.0,
+                dy_mm=move_mm,
+                velocity=self._calibration_settings.travel_velocity,
+                acceleration=self._calibration_settings.travel_acceleration,
+                label="axis mapping restore Y",
+            ):
+                return None
 
         dx_img_xmove = float(after_x[0] - before_x[0])
         dy_img_xmove = float(after_x[1] - before_x[1])
@@ -876,6 +943,8 @@ class CameraTcpOffsetCalibrationService:
         cfg = self._calibration_settings.camera_tcp_offset
         max_move_mm = max(0.0, float(getattr(cfg, "recenter_max_step_mm", 15.0)))
         gain = min(1.0, max(0.05, float(getattr(cfg, "recenter_correction_gain", 0.6))))
+        if current_error_mm <= _RECENTER_NEAR_TARGET_MM:
+            gain = min(gain, _RECENTER_NEAR_TARGET_GAIN_LIMIT)
         magnitude = math.hypot(correction_x_mm, correction_y_mm)
         if magnitude > max_move_mm and magnitude > 1e-9:
             scale = max_move_mm / magnitude

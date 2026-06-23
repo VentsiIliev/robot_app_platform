@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import cv2
 import numpy as np
+from scipy.optimize import least_squares
 
 from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_HEADING_DEADBAND_DEG,
@@ -14,14 +16,20 @@ from src.engine.robot.path_preparation.geometry import (
 
 @dataclass(frozen=True)
 class PaintContourInterpolationConfig:
-    """Paint-only contour interpolation settings for offline testing."""
+    """Paint contour processing settings.
+
+    The processor is unit-agnostic. In production paint execution it receives
+    robot-space millimetres after pixel-to-mm conversion; in standalone vision
+    experiments it may receive pixels. No integer rounding is performed here.
+    """
 
     units: str = "mm"
-    anchor_spacing_mm: float = 1.0
-    execution_spacing_mm: float = 3.0
-    straight_cleanup_distance_mm: float = 0.35
-    straight_cleanup_turn_deg: float = 3.0
-    straight_cleanup_passes: int = 6
+    fit_sample_spacing: float = 1.0
+    output_spacing: float = 1.0
+    corner_epsilon_ratio: float = 0.004
+    bezier_max_error: float = 1.5
+    bezier_min_points: int = 10
+    bezier_max_depth: int = 10
     sharp_boundary_deg: float = 45.0
     tangent_lookahead_distance_mm: float = PATH_TANGENT_LOOKAHEAD_DISTANCE_MM
     tangent_heading_deadband_deg: float = PATH_TANGENT_HEADING_DEADBAND_DEG
@@ -51,11 +59,13 @@ class PaintContourInterpolationResult:
 
 
 class PaintContourInterpolation:
-    """Experimental paint contour interpolation, not wired into production.
+    """Curve-preserving paint contour processor.
 
-    This keeps original contour anchors, adds uniform support points along the
-    contour, reconstructs tangent heading once, then produces a final execution
-    path that still preserves the anchors and detected sharp boundaries.
+    The algorithm mirrors the validated standalone runner:
+    normalize float XY, sample the closed source contour uniformly, detect hard
+    contour corners, fit adaptive cubic Beziers between corners, then sample the
+    fitted curve back to a float XY contour. It removes local camera/jitter noise
+    while preserving continuous curvature instead of collapsing arcs into chords.
     """
 
     def __init__(self, config: PaintContourInterpolationConfig | None = None) -> None:
@@ -84,21 +94,15 @@ class PaintContourInterpolation:
                 anchor_xy=[list(point[:2]) for point in raw_path[:1]],
             )
 
-        cleaned_anchor_xy = _cleanup_straight_runs(
-            raw_xy,
-            distance_tolerance_mm=self._config.straight_cleanup_distance_mm,
-            turn_tolerance_deg=self._config.straight_cleanup_turn_deg,
-            passes=self._config.straight_cleanup_passes,
-        )
-        prepared_xy = _densify_xy_preserving_anchors(
-            cleaned_anchor_xy,
-            target_spacing_mm=self._config.anchor_spacing_mm,
-        )
+        dense_xy = _resample_closed_xy(raw_xy, self._config.fit_sample_spacing)
+        prepared_xy, corner_indices = _smooth_closed_xy_with_beziers(dense_xy, self._config)
+        cleaned_anchor_xy = dense_xy
         sharp_boundary_xy = _sharp_tangent_boundary_xy(
-            cleaned_anchor_xy,
+            prepared_xy,
             threshold_deg=self._config.sharp_boundary_deg,
         )
-        preserve_xy = _merge_unique_xy_points(cleaned_anchor_xy, sharp_boundary_xy)
+        corner_xy = prepared_xy[np.asarray(corner_indices, dtype=int)] if corner_indices else np.empty((0, 2))
+        preserve_xy = _merge_unique_xy_points(corner_xy, sharp_boundary_xy)
 
         prepared_path = rebuild_pose_path_from_xy(
             prepared_xy,
@@ -108,10 +112,17 @@ class PaintContourInterpolation:
             tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
             tangent_boundary_xy=sharp_boundary_xy,
         )
-        execution_path = _resample_pose_path_preserving_xy(
-            prepared_path,
-            target_spacing_mm=self._config.execution_spacing_mm,
-            preserve_xy=preserve_xy,
+        execution_xy = _densify_xy_preserving_anchors(
+            prepared_xy,
+            target_spacing_mm=self._config.output_spacing,
+        )
+        execution_path = rebuild_pose_path_from_xy(
+            execution_xy,
+            raw_path,
+            self._config.rz_mode,
+            tangent_lookahead_distance_mm=self._config.tangent_lookahead_distance_mm,
+            tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
+            tangent_boundary_xy=sharp_boundary_xy,
         )
 
         return PaintContourInterpolationResult(
@@ -124,6 +135,23 @@ class PaintContourInterpolation:
             cleaned_anchor_xy=cleaned_anchor_xy.tolist(),
             sharp_boundary_xy=sharp_boundary_xy.tolist(),
         )
+
+
+def resample_contour_xy(
+    xy_points: np.ndarray,
+    *,
+    spacing: float,
+    closed: bool = True,
+) -> np.ndarray:
+    """Return a float XY contour/path sampled at approximately *spacing* units.
+
+    This is a linear arclength resampler only. It does not smooth, simplify, or
+    fit curves. Use it after pixel-to-mm conversion when the contour shape has
+    already been finalized and only execution density is needed.
+    """
+    if closed:
+        return _resample_closed_xy(np.asarray(xy_points, dtype=float), spacing)
+    return _densify_xy_preserving_anchors(np.asarray(xy_points, dtype=float), spacing)
 
 
 def save_paint_contour_interpolation_debug_plot(
@@ -259,6 +287,194 @@ def _plot_xy(axis, path: np.ndarray, title: str, units: str) -> None:
     axis.set_ylabel(f"Y ({units})")
 
 
+def _resample_closed_xy(xy_points: np.ndarray, spacing: float) -> np.ndarray:
+    points = _clean_xy(xy_points)
+    if len(points) < 2:
+        return points
+
+    closed_points = points
+    if float(np.linalg.norm(points[0] - points[-1])) > 1e-9:
+        closed_points = np.vstack([points, points[:1]])
+
+    segment_lengths = np.linalg.norm(np.diff(closed_points, axis=0), axis=1)
+    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+    keep = np.r_[True, np.diff(cumulative) > 1e-9]
+    closed_points = closed_points[keep]
+    cumulative = cumulative[keep]
+    total_length = float(cumulative[-1])
+    if total_length <= 1e-9:
+        return closed_points[:-1]
+
+    spacing = max(0.05, float(spacing))
+    sample_distances = np.arange(0.0, total_length, spacing)
+    if len(sample_distances) < 3:
+        sample_distances = np.linspace(0.0, total_length, 3, endpoint=False)
+    return np.column_stack(
+        [np.interp(sample_distances, cumulative, closed_points[:, dim]) for dim in range(2)]
+    ).astype(np.float64)
+
+
+def _smooth_closed_xy_with_beziers(
+    dense_xy: np.ndarray,
+    config: PaintContourInterpolationConfig,
+) -> tuple[np.ndarray, list[int]]:
+    dense = _clean_xy(dense_xy)
+    if len(dense) < 3:
+        return dense.astype(np.float64), []
+
+    corner_indices = _find_corner_indices(dense, config.corner_epsilon_ratio)
+    if len(corner_indices) < 3:
+        return dense.astype(np.float64), []
+
+    segments = _split_closed_points(dense, corner_indices)
+    all_points: list[np.ndarray] = []
+    for segment in segments:
+        beziers = _adaptive_bezier_fit(segment, config, depth=0)
+        for control_points in beziers:
+            sampled = _sample_bezier_segment(control_points, config.output_spacing)
+            if len(sampled):
+                all_points.append(sampled[:-1] if len(sampled) > 1 else sampled)
+
+    if not all_points:
+        return dense.astype(np.float64), corner_indices
+    result = _rotate_xy_to_nearest_start(_clean_xy(np.vstack(all_points)), dense[0])
+    remapped_corner_indices = _nearest_indices(result, dense[np.asarray(corner_indices, dtype=int)])
+    return result.astype(np.float64), remapped_corner_indices
+
+
+def _rotate_xy_to_nearest_start(points: np.ndarray, start_xy: np.ndarray) -> np.ndarray:
+    path = _clean_xy(points)
+    if len(path) < 2:
+        return path
+    start = np.asarray(start_xy, dtype=np.float64).reshape(2)
+    index = int(np.argmin(np.linalg.norm(path - start, axis=1)))
+    if index <= 0:
+        return path
+    return np.vstack([path[index:], path[:index]])
+
+
+def _nearest_indices(points: np.ndarray, query_points: np.ndarray) -> list[int]:
+    path = _clean_xy(points)
+    queries = _clean_xy(query_points)
+    if len(path) == 0 or len(queries) == 0:
+        return []
+    indices = [int(np.argmin(np.linalg.norm(path - query, axis=1))) for query in queries]
+    return sorted(set(indices))
+
+
+def _find_corner_indices(dense_xy: np.ndarray, epsilon_ratio: float) -> list[int]:
+    points = _clean_xy(dense_xy)
+    if len(points) < 3:
+        return []
+    contour = np.ascontiguousarray(points.astype(np.float32).reshape(-1, 1, 2))
+    epsilon = max(1e-6, float(epsilon_ratio)) * float(cv2.arcLength(contour, True))
+    approx = cv2.approxPolyDP(contour, epsilon, True)
+    corners = np.asarray(approx, dtype=np.float64).reshape(-1, 2)
+    indices: list[int] = []
+    for corner in corners:
+        index = int(np.argmin(np.linalg.norm(points - corner, axis=1)))
+        indices.append(index)
+    return sorted(set(indices))
+
+
+def _split_closed_points(points: np.ndarray, corner_indices: list[int]) -> list[np.ndarray]:
+    dense = _clean_xy(points)
+    count = len(dense)
+    if count < 4:
+        return []
+    corners = sorted(set(int(index) % count for index in corner_indices))
+    segments: list[np.ndarray] = []
+    for start, end in zip(corners, corners[1:] + [corners[0] + count]):
+        if end >= count:
+            segment = np.vstack([dense[start:], dense[: end - count + 1]])
+        else:
+            segment = dense[start: end + 1]
+        if len(segment) >= 4:
+            segments.append(segment)
+    return segments
+
+
+def _bezier(t: np.ndarray, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray, p3: np.ndarray) -> np.ndarray:
+    parameter = np.asarray(t, dtype=np.float64)[:, None]
+    return (
+        (1.0 - parameter) ** 3 * p0
+        + 3.0 * (1.0 - parameter) ** 2 * parameter * p1
+        + 3.0 * (1.0 - parameter) * parameter ** 2 * p2
+        + parameter ** 3 * p3
+    )
+
+
+def _fit_cubic_bezier(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    samples = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    p0 = samples[0]
+    p3 = samples[-1]
+    chord = p3 - p0
+    p1_initial = p0 + chord / 3.0
+    p2_initial = p0 + 2.0 * chord / 3.0
+
+    segment_lengths = np.linalg.norm(np.diff(samples, axis=0), axis=1)
+    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
+    total_length = float(cumulative[-1])
+    if total_length <= 1e-9:
+        return p0, p1_initial, p2_initial, p3, 0.0
+
+    parameters = cumulative / total_length
+
+    def residual(values: np.ndarray) -> np.ndarray:
+        p1 = values[:2]
+        p2 = values[2:]
+        return (_bezier(parameters, p0, p1, p2, p3) - samples).ravel()
+
+    result = least_squares(
+        residual,
+        np.hstack([p1_initial, p2_initial]),
+        max_nfev=80,
+    )
+    p1 = result.x[:2]
+    p2 = result.x[2:]
+    fitted = _bezier(parameters, p0, p1, p2, p3)
+    error = float(np.max(np.linalg.norm(fitted - samples, axis=1)))
+    return p0, p1, p2, p3, error
+
+
+def _adaptive_bezier_fit(
+    points: np.ndarray,
+    config: PaintContourInterpolationConfig,
+    *,
+    depth: int,
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    min_points = max(4, int(config.bezier_min_points))
+    max_depth = max(1, int(config.bezier_max_depth))
+    if len(points) < min_points or depth >= max_depth:
+        p0, p1, p2, p3, _ = _fit_cubic_bezier(points)
+        return [(p0, p1, p2, p3)]
+
+    p0, p1, p2, p3, error = _fit_cubic_bezier(points)
+    if error <= max(0.01, float(config.bezier_max_error)):
+        return [(p0, p1, p2, p3)]
+
+    midpoint = len(points) // 2
+    return (
+        _adaptive_bezier_fit(points[: midpoint + 1], config, depth=depth + 1)
+        + _adaptive_bezier_fit(points[midpoint:], config, depth=depth + 1)
+    )
+
+
+def _sample_bezier_segment(
+    control_points: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    spacing: float,
+) -> np.ndarray:
+    p0, p1, p2, p3 = control_points
+    approx_length = (
+        float(np.linalg.norm(p1 - p0))
+        + float(np.linalg.norm(p2 - p1))
+        + float(np.linalg.norm(p3 - p2))
+    )
+    spacing = max(0.05, float(spacing))
+    count = max(8, int(np.ceil(approx_length / spacing)) + 1)
+    return _bezier(np.linspace(0.0, 1.0, count), p0, p1, p2, p3)
+
+
 def _clean_xy(xy_points: np.ndarray) -> np.ndarray:
     points = np.asarray(xy_points, dtype=float)
     if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] < 2:
@@ -277,7 +493,17 @@ def _cleanup_straight_runs(
     distance_tolerance_mm: float,
     turn_tolerance_deg: float,
     passes: int,
+    curvature_window: int = 3,
+    curvature_total_deg: float = 8.0,
+    corner_keep_turn_deg: float = 12.0,
 ) -> np.ndarray:
+    """Remove redundant straight-run samples while preserving real shape.
+
+    A point is removable only when it is close to the line between its neighbors,
+    has tiny local turn, and is not inside a short window whose accumulated turn
+    indicates an arc or corner. This keeps rounded sections from collapsing into
+    long chords while still deleting jitter along straight edges.
+    """
     points = _clean_xy(xy_points)
     if len(points) < 4:
         return points
@@ -291,15 +517,27 @@ def _cleanup_straight_runs(
     distance_tolerance_mm = max(0.0, float(distance_tolerance_mm))
     turn_tolerance_deg = max(0.0, float(turn_tolerance_deg))
     passes = max(1, int(passes))
+    curvature_window = max(1, int(curvature_window))
+    curvature_total_deg = max(float(curvature_total_deg), turn_tolerance_deg)
+    corner_keep_turn_deg = max(float(corner_keep_turn_deg), turn_tolerance_deg)
 
     current = points.copy()
     for _ in range(passes):
         if len(current) < 4:
             break
+        protected = _curvature_protected_mask(
+            current,
+            closed=closed,
+            window=curvature_window,
+            total_turn_deg=curvature_total_deg,
+            corner_turn_deg=corner_keep_turn_deg,
+        )
         keep = np.ones(len(current), dtype=bool)
         candidate_range = range(len(current)) if closed else range(1, len(current) - 1)
         removed_any = False
         for index in candidate_range:
+            if protected[index]:
+                continue
             prev_index = (index - 1) % len(current)
             next_index = (index + 1) % len(current)
             prev_point = current[prev_index]
@@ -315,6 +553,62 @@ def _cleanup_straight_runs(
         current = current[keep]
 
     return _close_if_needed(current, closed)
+
+
+def _curvature_protected_mask(
+    points: np.ndarray,
+    *,
+    closed: bool,
+    window: int,
+    total_turn_deg: float,
+    corner_turn_deg: float,
+) -> np.ndarray:
+    """Return points that must survive cleanup because they carry shape."""
+    count = len(points)
+    protected = np.zeros(count, dtype=bool)
+    if count < 3:
+        protected[:] = True
+        return protected
+
+    if not closed:
+        protected[0] = True
+        protected[-1] = True
+
+    turns = np.zeros(count, dtype=float)
+    turn_range = range(count) if closed else range(1, count - 1)
+    for index in turn_range:
+        turns[index] = _signed_turn_degrees(
+            points[(index - 1) % count],
+            points[index],
+            points[(index + 1) % count],
+        )
+        if abs(float(turns[index])) >= corner_turn_deg:
+            protected[index] = True
+
+    min_curvature_turn = 0.25
+    for index in turn_range:
+        turn = float(turns[index])
+        if abs(turn) < min_curvature_turn:
+            continue
+        sign = 1.0 if turn > 0.0 else -1.0
+        same_sign_total = abs(turn)
+        for direction in (-1, 1):
+            for distance in range(1, window + 1):
+                sample = index + direction * distance
+                if closed:
+                    sample %= count
+                elif sample < 0 or sample >= count:
+                    break
+                sample_turn = float(turns[sample])
+                if abs(sample_turn) < min_curvature_turn:
+                    continue
+                if (sample_turn > 0.0) != (sign > 0.0):
+                    break
+                same_sign_total += abs(sample_turn)
+        if same_sign_total >= total_turn_deg:
+            protected[index] = True
+
+    return protected
 
 
 def _close_if_needed(points: np.ndarray, closed: bool) -> np.ndarray:
@@ -340,6 +634,8 @@ def _densify_xy_preserving_anchors(xy_points: np.ndarray, target_spacing_mm: flo
     points = _clean_xy(xy_points)
     if len(points) < 2:
         return points
+    if float(target_spacing_mm) <= 0.0:
+        return points.copy()
 
     segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
     cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
@@ -355,47 +651,6 @@ def _densify_xy_preserving_anchors(xy_points: np.ndarray, target_spacing_mm: flo
     return np.column_stack(
         [np.interp(sample_distances, cumulative, points[:, dim]) for dim in range(2)]
     )
-
-
-def _resample_pose_path_preserving_xy(
-    path: list[list[float]],
-    *,
-    target_spacing_mm: float,
-    preserve_xy: np.ndarray,
-) -> list[list[float]]:
-    if len(path) < 2:
-        return [list(point) for point in path]
-
-    points = np.asarray(path, dtype=float)
-    if points.ndim != 2 or points.shape[0] < 2:
-        return [list(point) for point in path]
-
-    segment_lengths = np.linalg.norm(np.diff(points[:, :3], axis=0), axis=1)
-    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
-    total_length = float(cumulative[-1])
-    if total_length <= 1e-9:
-        return [list(path[0])]
-
-    preserve_distances: list[float] = []
-    anchors = np.asarray(preserve_xy, dtype=float).reshape(-1, 2) if len(preserve_xy) else np.empty((0, 2))
-    for index, point in enumerate(points):
-        if len(anchors) and bool(np.any(np.linalg.norm(anchors - point[:2], axis=1) <= 1e-6)):
-            preserve_distances.append(float(cumulative[index]))
-
-    target_spacing_mm = max(1.0, float(target_spacing_mm))
-    sample_distances = list(np.arange(0.0, total_length, target_spacing_mm))
-    sample_distances.extend(preserve_distances)
-    sample_distances.append(total_length)
-    sample_distances = sorted(set(round(float(distance), 9) for distance in sample_distances))
-    resampled = np.column_stack(
-        [np.interp(sample_distances, cumulative, points[:, dim]) for dim in range(points.shape[1])]
-    )
-
-    output: list[list[float]] = []
-    for point in resampled.tolist():
-        if not output or any(abs(float(a) - float(b)) > 1e-9 for a, b in zip(output[-1], point)):
-            output.append(point)
-    return output
 
 
 def _merge_unique_xy_points(*point_sets: np.ndarray | None) -> np.ndarray:

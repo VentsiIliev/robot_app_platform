@@ -11,9 +11,9 @@ from src.engine.robot.targeting.end_effector_point import EndEffectorPoint
 from src.engine.robot.targeting.point_registry import PointRegistry
 from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.target_point_geometry import (
-    command_xy_from_selected_xy,
-    rotate_offset_xy,
-    tcp_delta_xy,
+    command_xyz_from_selected_xyz,
+    rotate_offset_xyz,
+    tcp_delta_xyz,
 )
 from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 
@@ -87,26 +87,41 @@ class VisionTargetResolver:
         # equivalent to the previous behaviour at rz=0 (delta==0) while being
         # correct for all other angles.
         reference_rz = _reference_rz(active_mapper)
-        final_xy = command_xy_from_selected_xy(
+        reference_orientation = (target.rx_degrees, target.ry_degrees, reference_rz)
+        final_x, final_y, final_z = command_xyz_from_selected_xyz(
             plane_xy[0],
             plane_xy[1],
-            current_rz,
-            point.offset_x,
-            point.offset_y,
+            target.z_mm,
+            orientation=(target.rx_degrees, target.ry_degrees, current_rz),
+            point_offset_x=point.offset_x,
+            point_offset_y=point.offset_y,
+            camera_to_tcp_x_offset=self._tcp_x,
+            camera_to_tcp_y_offset=self._tcp_y,
+            reference_orientation=reference_orientation,
+        )
+        final_xy = (final_x, final_y)
+        tcp_delta = tcp_delta_xyz(
             self._tcp_x,
             self._tcp_y,
-            reference_rz,
+            current_orientation=(target.rx_degrees, target.ry_degrees, current_rz),
+            reference_orientation=reference_orientation,
         )
-        tcp_delta = tcp_delta_xy(self._tcp_x, self._tcp_y, current_rz, reference_rz)
         if point.offset_x == 0.0 and point.offset_y == 0.0:
-            target_delta = (0.0, 0.0)
+            target_delta = (0.0, 0.0, 0.0)
         else:
-            target_delta = rotate_offset_xy(point.offset_x, point.offset_y, current_rz)
+            target_delta = rotate_offset_xyz(
+                point.offset_x,
+                point.offset_y,
+                0.0,
+                rx_degrees=target.rx_degrees,
+                ry_degrees=target.ry_degrees,
+                rz_degrees=current_rz,
+            )
 
         _logger.info(
             "[TARGETING] point=%s frame=%s pixels=(%.3f, %.3f) calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) "
-            "rz=%.3f reference_rz=%.3f tcp_delta=(%.3f, %.3f) point_offset_local=(%.3f, %.3f) "
-            "point_delta_rotated=(%.3f, %.3f) final_xy=(%.3f, %.3f)",
+            "orientation=(%.3f, %.3f, %.3f) reference_rz=%.3f tcp_delta=(%.3f, %.3f, %.3f) point_offset_local=(%.3f, %.3f) "
+            "point_delta_rotated=(%.3f, %.3f, %.3f) final_xyz=(%.3f, %.3f, %.3f)",
             str(point.name),
             str(frame or ""),
             float(target.x_pixels),
@@ -115,16 +130,21 @@ class VisionTargetResolver:
             float(calibration_xy[1]),
             float(plane_xy[0]),
             float(plane_xy[1]),
+            float(target.rx_degrees),
+            float(target.ry_degrees),
             float(current_rz),
             float(reference_rz),
             float(tcp_delta[0]),
             float(tcp_delta[1]),
+            float(tcp_delta[2]),
             float(point.offset_x),
             float(point.offset_y),
             float(target_delta[0]),
             float(target_delta[1]),
+            float(target_delta[2]),
             float(final_xy[0]),
             float(final_xy[1]),
+            float(final_z),
         )
 
         z_correction = frame_obj.get_z_correction(final_xy[0], final_xy[1]) if frame_obj is not None else 0.0
@@ -136,9 +156,9 @@ class VisionTargetResolver:
             rx=target.rx_degrees,
             ry=target.ry_degrees,
             rz=current_rz,
-            z=target.z_mm + z_correction,
-            pickup_plane_reference_delta_xy=tcp_delta,
-            target_delta_xy=target_delta,
+            z=final_z + z_correction,
+            pickup_plane_reference_delta_xy=(tcp_delta[0], tcp_delta[1]),
+            target_delta_xy=(target_delta[0], target_delta[1]),
             reference_rz=reference_rz,
         )
 

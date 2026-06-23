@@ -25,7 +25,7 @@
     "run_during_robot_calibration": false,
     "max_markers_for_tcp_capture": 4,
     "marker_id": 41,
-    "rotation_step_deg": 25.0,
+    "rotation_step_deg": 15.0,
     "iterations": 3,
     "approach_z": 200.0,
     "approach_rx": -178.83,
@@ -50,8 +50,8 @@
   "candidate_ids": [],
   "min_target_separation_px": 100.0,
   "homography_target_count": 20,
-  "residual_target_count": 60,
-  "validation_target_count": 10,
+  "residual_target_count": 80,
+  "validation_target_count": 5,
   "test_target_count": 20,
   "auto_skip_known_unreachable_markers": true,
   "unreachable_marker_failure_threshold": 1,
@@ -63,5 +63,5 @@
   "travel_acceleration": 20,
   "iterative_velocity": 10,
   "iterative_acceleration": 10,
-  "initial_ppm": 1.9168556213378907
+  "initial_ppm": 2.9775899251302085
 }

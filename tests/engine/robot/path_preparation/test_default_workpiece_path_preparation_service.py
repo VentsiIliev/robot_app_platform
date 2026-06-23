@@ -188,7 +188,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertAlmostEqual(6.0, job["pickup_rz"], places=6)
         self.assertAlmostEqual(6.0, transform_pickup.call_args_list[1].kwargs["rz_override"], places=6)
 
-    def test_build_execution_plan_uses_linear_interpolation_for_closed_contours(self):
+    def test_build_execution_plan_uses_transformed_path_when_no_contour_processor_is_configured(self):
         service = _make_service()
         workpiece = {
             "sprayPattern": {
@@ -207,35 +207,54 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
             [0.0, 10.0, 0.0, 180.0, 0.0, 0.0],
             [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
         ]
-        methods: list[str] = []
-
-        class FakePipeline:
-            def __init__(self, *, preprocess, interpolation, ruckig):
-                methods.append(interpolation.method)
-
-            def run(self, points):
-                return SimpleNamespace(prepared=points, curve=points, sampled=points)
 
         with patch.object(
             service,
             "_transform_to_robot",
             return_value=robot_path,
-        ), patch(
-            "src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline.ContourPathPipeline",
-            FakePipeline,
         ):
             plan = service.build_execution_plan(workpiece)
 
-        self.assertEqual(["linear"], methods)
-        for point in plan.execution_jobs[0]["execution_path"]:
-            x, y = float(point[0]), float(point[1])
-            on_boundary = (
-                abs(x - 0.0) <= 1e-6
-                or abs(x - 10.0) <= 1e-6
-                or abs(y - 0.0) <= 1e-6
-                or abs(y - 10.0) <= 1e-6
-            )
-            self.assertTrue(on_boundary, point)
+        self.assertEqual(robot_path, plan.prepared_paths[0])
+        self.assertEqual(robot_path, plan.sampled_paths[0])
+        self.assertEqual(robot_path, plan.execution_jobs[0]["execution_path"])
+
+    def test_build_execution_plan_uses_injected_contour_processor_output(self):
+        def contour_processor(_path_pts, _settings):
+            return {
+                "method": "test_processor",
+                "prepared_xy": [[0.0, 0.0], [5.0, 0.0], [10.0, 0.0]],
+                "curve_xy": [[0.0, 0.0], [10.0, 0.0]],
+            }
+
+        service = _make_service(contour_processor=contour_processor)
+        workpiece = {
+            "sprayPattern": {
+                "Contour": [
+                    {
+                        "contour": [[0, 0], [10, 0], [10, 10]],
+                        "settings": {},
+                    }
+                ]
+            },
+        }
+        robot_path = [
+            [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [10.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0, 180.0, 0.0, 0.0],
+        ]
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=robot_path,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        self.assertEqual(3, len(plan.prepared_paths[0]))
+        self.assertEqual(3, len(plan.sampled_paths[0]))
+        self.assertEqual(3, len(plan.execution_jobs[0]["execution_path"]))
+        self.assertEqual([5.0, 0.0], plan.execution_jobs[0]["execution_path"][1][:2])
 
     def test_build_execution_plan_paint_job_prefers_segment_offset_over_workpiece_offset(self):
         service = _make_service()
@@ -530,14 +549,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
             pixel_to_mm_mode=PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
         )
 
-        with patch.object(
-            service,
-            "_transform_to_robot_geometry_ppm",
-            return_value=(
-                [SimpleNamespace(final_xy=(1.0, 2.0), z=3.0)],
-                [(1.0, 2.0)],
-            ),
-        ) as geometry_ppm:
+        with patch.object(service._geometry_ppm_strategy, "convert") as geometry_ppm:
             result = service._transform_to_robot(
                 [[10.0, 20.0], [30.0, 40.0]],
                 {"spraying_height": "5", "rz_angle": "7"},

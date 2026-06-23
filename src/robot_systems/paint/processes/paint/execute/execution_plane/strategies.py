@@ -52,7 +52,7 @@ class XyZRzExecutionPlaneStrategy(ExecutionPlaneStrategy):
         paint_pivot_pose: list[float],
         mirrored_handoff: bool = False,
     ) -> float:
-        target_rz = float(first_pivot_pose[5]) if len(first_pivot_pose) >= 6 else float(pickup_rz)
+        target_rz = float(paint_pivot_pose[5]) if len(paint_pivot_pose) >= 6 else float(pickup_rz)
         return nearest_axis_equivalent_degrees(float(pickup_rz), target_rz)
 
 

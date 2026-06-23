@@ -8,7 +8,7 @@ from src.robot_systems.paint.processes.paint.execute.execution_plane import (
 
 
 class TestPaintExecutionPlaneStrategies(unittest.TestCase):
-    def test_xy_strategy_uses_y_offset_rz_alignment_and_no_preflight_or_flip(self) -> None:
+    def test_xy_strategy_uses_paint_reference_rz_alignment_and_no_preflight_or_flip(self) -> None:
         strategy = get_execution_plane_strategy("xy_z_rz")
         pivot_path = [[0.0, 0.0, 0.0, 0.0, 1.0, 10.0]]
 
@@ -27,10 +27,10 @@ class TestPaintExecutionPlaneStrategies(unittest.TestCase):
         self.assertEqual(strategy.pivot_offset_position_index, 1)
         self.assertFalse(strategy.requires_reachability_preflight)
         self.assertEqual(strategy.rotation_axis_label, "RZ")
-        self.assertEqual(align_rotation, 44.0)
+        self.assertEqual(align_rotation, 6.0)
         self.assertEqual(flipped, pivot_path)
 
-    def test_xy_strategy_unwraps_axis_equivalent_rz_alignment_near_pickup(self) -> None:
+    def test_xy_strategy_unwraps_paint_reference_rz_alignment_near_pickup(self) -> None:
         strategy = get_execution_plane_strategy("xy_z_rz")
 
         align_rotation = strategy.compute_pickup_align_rotation(
@@ -40,7 +40,7 @@ class TestPaintExecutionPlaneStrategies(unittest.TestCase):
             paint_pivot_pose=[10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
         )
 
-        self.assertAlmostEqual(16.845, align_rotation, places=3)
+        self.assertAlmostEqual(0.0, align_rotation, places=3)
 
     def test_xz_strategy_uses_z_offset_ry_alignment_and_optional_flip(self) -> None:
         strategy = get_execution_plane_strategy("xz_y_ry")

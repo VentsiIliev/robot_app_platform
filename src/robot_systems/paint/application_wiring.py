@@ -107,9 +107,45 @@ def _build_paint_path_executor(robot_system):
 
 
 def _build_paint_path_preparation_service(robot_system):
+    import numpy as np
+
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
+    from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+        PaintContourInterpolation,
+        PaintContourInterpolationConfig,
+        resample_contour_xy,
+    )
+
+    def _pose_path_from_xy(xy_points):
+        return [[float(point[0]), float(point[1]), 0.0, 0.0, 0.0, 0.0] for point in xy_points]
+
+    def _paint_source_contour_processor(pts_px, _settings):
+        result = PaintContourInterpolation(
+            PaintContourInterpolationConfig(
+                units="px",
+                fit_sample_spacing=1.0,
+                output_spacing=1.0,
+            )
+        ).build(_pose_path_from_xy(pts_px))
+        return [point[:2] for point in result.execution_path]
+
+    def _paint_mm_contour_processor(path_pts, _settings):
+        resampled_xy = resample_contour_xy(
+            np.asarray(path_pts, dtype=float)[:, :2],
+            spacing=1.0,
+            closed=True,
+        )
+        return {
+            "method": "paint_mm_1mm_resample",
+            "prepared_xy": resampled_xy.tolist(),
+            "curve_xy": resampled_xy.tolist(),
+        }
+
+    def _paint_contour_processor(path_pts, settings):
+        """Backward-compatible name for the mm-only contour processor."""
+        return _paint_mm_contour_processor(path_pts, settings)
 
     robot_config = getattr(robot_system, "_robot_config", None)
     execution_target_point_name = _get_paint_execution_target_point_name(robot_system)
@@ -155,6 +191,8 @@ def _build_paint_path_preparation_service(robot_system):
             getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
+        source_contour_processor=_paint_source_contour_processor,
+        contour_processor=_paint_contour_processor,
     )
 
 

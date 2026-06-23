@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+import os
+from pathlib import Path
 from typing import Callable, Optional
-import logging
 
 import cv2
 import numpy as np
@@ -10,14 +12,11 @@ import numpy as np
 from src.engine.robot.path_preparation.debug import _save_contour_canonicalization_steps_debug_plot, \
     _save_contour_reordering_debug_plot
 
-_logger = logging.getLogger(__name__)
-
 from src.engine.geometry.planar import nearest_axis_equivalent_degrees, unwrap_degrees
 from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_HEADING_DEADBAND_DEG,
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     canonicalize_closed_contour_points,
-    compute_pickup_rz_from_robot_contour,
     compute_pickup_rz_from_robot_path,
     compute_pickup_rz_from_robot_contour_with_direction,
     has_valid_contour,
@@ -32,6 +31,9 @@ from src.engine.robot.path_preparation.pixel_to_mm import (
     HomographyResidualStrategy,
     PixelToMmContext,
 )
+
+PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR = config.PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
+PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL = config.PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
 
 
 
@@ -70,209 +72,29 @@ def _safe_float(value, default: float) -> float:
         return float(default)
 
 
-def _resample_execution_path(
-        path: list[list[float]],
-        target_spacing_mm: float,
-        *,
-        preserve_waypoint_xy: np.ndarray | None = None,
-) -> list[list[float]]:
-    """Resample a pose path while forcing selected XY anchors to remain in the output."""
-    if len(path) < 2:
-        return [list(point) for point in path]
-
-    target_spacing_mm = max(1.0, float(target_spacing_mm))
-    points = np.asarray(path, dtype=float)
-    if points.ndim != 2 or points.shape[0] < 2:
-        return [list(point) for point in path]
-    segment_lengths_all = np.linalg.norm(np.diff(points[:, :3], axis=0), axis=1)
-    cumulative_all = np.concatenate([[0.0], np.cumsum(segment_lengths_all)])
-    total_distance = float(cumulative_all[-1])
-    if total_distance <= 1e-9:
-        return [list(path[0])]
-
-    preserve_distances: list[float] = []
-    if preserve_waypoint_xy is not None and points.shape[1] >= 2:
+def _plot_xy_debug_axis(axis, points: np.ndarray, title: str, x_label: str, y_label: str) -> None:
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    axis.set_title(title)
+    axis.set_xlabel(x_label)
+    axis.set_ylabel(y_label)
+    axis.grid(True, alpha=0.45)
+    axis.set_aspect("equal", adjustable="box")
+    if len(pts) == 0:
+        return
+    closed = np.vstack([pts, pts[:1]]) if len(pts) > 2 else pts
+    axis.plot(closed[:, 0], closed[:, 1], "-", linewidth=0.8, alpha=0.55, label="contour")
+    axis.scatter(pts[:, 0], pts[:, 1], s=8, alpha=0.85, label="all points", zorder=4)
+    axis.scatter([pts[0, 0]], [pts[0, 1]], s=45, color="green", edgecolors="black", zorder=5, label="start")
+    axis.scatter([pts[-1, 0]], [pts[-1, 1]], s=45, color="red", edgecolors="black", zorder=5, label="end")
+    if len(pts) >= 3:
         try:
-            preserve_xy = np.asarray(preserve_waypoint_xy, dtype=float).reshape(-1, 2)
-        except (TypeError, ValueError):
-            preserve_xy = np.empty((0, 2), dtype=float)
-        if len(preserve_xy):
-            for index, point in enumerate(points):
-                if bool(np.any(np.linalg.norm(preserve_xy - point[:2], axis=1) <= 1e-6)):
-                    preserve_distances.append(float(cumulative_all[index]))
-
-    sample_distances = list(np.arange(0.0, total_distance, target_spacing_mm))
-    sample_distances.extend(preserve_distances)
-    sample_distances.append(total_distance)
-    sample_distances = sorted(set(round(float(distance), 9) for distance in sample_distances))
-
-    resampled_array = np.column_stack(
-        [np.interp(sample_distances, cumulative_all, points[:, dim]) for dim in range(points.shape[1])]
-    )
-    resampled: list[list[float]] = []
-    for point in resampled_array.tolist():
-        if not resampled or any(abs(float(a) - float(b)) > 1e-9 for a, b in zip(resampled[-1], point)):
-            resampled.append(point)
-    return resampled
-
-
-def _densify_xy_preserving_anchors(xy_points: np.ndarray, target_spacing_mm: float) -> np.ndarray:
-    """Densify a 2D point path to at most *target_spacing_mm* intervals, keeping all original vertices.
-
-    Uses linear interpolation along the cumulative arclength so that original vertices
-    (anchors) appear verbatim in the output. The output is strictly XY-only (no Z/RX/RY).
-    """
-    points = np.asarray(xy_points, dtype=float)
-    if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] < 2:
-        return points[:, :2].copy() if points.ndim == 2 and points.shape[1] >= 2 else np.empty((0, 2), dtype=float)
-
-    points = points[:, :2].copy()
-    segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
-    keep_mask = np.concatenate([[True], segment_lengths > 1e-9])
-    points = points[keep_mask]
-    if len(points) < 2:
-        return points
-
-    segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
-    cumulative = np.concatenate([[0.0], np.cumsum(segment_lengths)])
-    total_length = float(cumulative[-1])
-    if total_length <= 1e-9:
-        return points
-
-    target_spacing_mm = max(0.1, float(target_spacing_mm))
-    sample_distances = list(np.arange(0.0, total_length, target_spacing_mm))
-    sample_distances.extend(float(distance) for distance in cumulative)
-    sample_distances.append(total_length)
-    sample_distances = sorted(set(round(float(distance), 9) for distance in sample_distances))
-
-    dense = np.column_stack(
-        [np.interp(sample_distances, cumulative, points[:, dim]) for dim in range(2)]
-    )
-    return dense
-
-
-def _merge_unique_xy_points(*point_sets: np.ndarray | None) -> np.ndarray:
-    """Union of multiple 2-D point sets, deduplicated within a 1e-6 distance tolerance."""
-    merged: list[np.ndarray] = []
-    for point_set in point_sets:
-        if point_set is None:
-            continue
-        try:
-            points = np.asarray(point_set, dtype=float).reshape(-1, 2)
-        except (TypeError, ValueError):
-            continue
-        for point in points:
-            if not merged or not any(float(np.linalg.norm(point - existing)) <= 1e-6 for existing in merged):
-                merged.append(point.copy())
-    if not merged:
-        return np.empty((0, 2), dtype=float)
-    return np.asarray(merged, dtype=float)
-
-
-def _signed_turn_degrees(prev: np.ndarray, current: np.ndarray, nxt: np.ndarray) -> float:
-    """Signed turning angle (degrees) at *current* when travelling *prev → current → nxt*.
-
-    Positive = counter-clockwise turn. Returns 0 if either segment is a zero-length
-    degenerate edge.
-    """
-    incoming = np.asarray(current, dtype=float) - np.asarray(prev, dtype=float)
-    outgoing = np.asarray(nxt, dtype=float) - np.asarray(current, dtype=float)
-    in_len = float(np.linalg.norm(incoming))
-    out_len = float(np.linalg.norm(outgoing))
-    if in_len <= 1e-9 or out_len <= 1e-9:
-        return 0.0
-    cross = float(incoming[0] * outgoing[1] - incoming[1] * outgoing[0])
-    dot = float(np.dot(incoming, outgoing))
-    return float(np.degrees(np.arctan2(cross, dot)))
-
-
-
-
-def _sharp_tangent_boundary_xy(anchor_xy: np.ndarray, threshold_deg: float = config._SHARP_TANGENT_BOUNDARY_DEG) -> np.ndarray:
-    """Find XY points where the path makes a sharp turn (≥*threshold_deg* cumulative or peak).
-
-    Clusters consecutive high-turn vertices and returns one representative point per
-    compact cluster (≤3 vertices) or clusters whose peak turn exceeds the threshold.
-    Rounded arcs (long clusters with distributed turn) are excluded.
-    """
-    points = np.asarray(anchor_xy, dtype=float)
-    if points.ndim != 2 or points.shape[0] < 3 or points.shape[1] < 2:
-        return np.empty((0, 2), dtype=float)
-    points = points[:, :2].copy()
-    closed = len(points) >= 4 and float(np.linalg.norm(points[0] - points[-1])) <= 1e-6
-    if closed:
-        points = points[:-1]
-    if len(points) < 3:
-        return np.empty((0, 2), dtype=float)
-
-    turns = np.zeros(len(points), dtype=float)
-    turn_range = range(len(points)) if closed else range(1, len(points) - 1)
-    for index in turn_range:
-        turns[index] = _signed_turn_degrees(
-            points[index - 1],
-            points[index],
-            points[(index + 1) % len(points)],
-        )
-    abs_turns = np.abs(turns)
-    threshold = max(float(threshold_deg), 1.0)
-    active_threshold = max(5.0, threshold * 0.2)
-    candidate_indices = [index for index in turn_range if abs_turns[index] >= active_threshold]
-    if not candidate_indices:
-        return np.empty((0, 2), dtype=float)
-
-    clusters: list[list[int]] = []
-    current_cluster: list[int] = []
-    for index in candidate_indices:
-        if current_cluster and index != current_cluster[-1] + 1:
-            clusters.append(current_cluster)
-            current_cluster = []
-        current_cluster.append(index)
-    if current_cluster:
-        clusters.append(current_cluster)
-
-    if closed and len(clusters) > 1 and clusters[0][0] == 0 and clusters[-1][-1] == len(points) - 1:
-        clusters[0] = clusters[-1] + clusters[0]
-        clusters.pop()
-
-    sharp_indices: list[int] = []
-    for cluster in clusters:
-        total_turn = float(np.sum(abs_turns[cluster]))
-        peak_turn = float(np.max(abs_turns[cluster]))
-        if total_turn < threshold and peak_turn < threshold:
-            continue
-        # Rounded arcs normally distribute turn over many anchors. A hard
-        # corner may be one vertex or a short bevel after cleanup, so mark the
-        # start of compact turn clusters and let longer clusters flow as arcs.
-        if len(cluster) <= 3 or peak_turn >= threshold:
-            sharp_indices.append(cluster[0] % len(points))
-    if not sharp_indices:
-        return np.empty((0, 2), dtype=float)
-    return points[sorted(set(sharp_indices))]
-
-
-def _resolve_segment_interpolation_settings(settings: dict) -> tuple[float, float, float, float]:
-    """Extract and clamp the four interpolation parameters from per-segment *settings*.
-
-    Returns (preprocess_min_spacing, interpolation_spacing, dense_sampling_factor, execution_spacing),
-    each floored at a safe minimum to prevent degenerate values.
-    """
-    preprocess_spacing_mm = max(
-        0.1,
-        _safe_float(settings.get(config._SEGMENT_PREPROCESS_MIN_SPACING_KEY), config._EXECUTION_MIN_PREPROCESS_SPACING_MM),
-    )
-    interpolation_spacing_mm = max(
-        0.5,
-        _safe_float(settings.get(config._SEGMENT_INTERPOLATION_SPACING_KEY), config._EXECUTION_INTERPOLATION_SPACING_MM),
-    )
-    dense_sampling_factor = max(
-        0.05,
-        _safe_float(settings.get(config._SEGMENT_DENSE_SAMPLING_FACTOR_KEY), config._EXECUTION_DENSE_SAMPLING_FACTOR),
-    )
-    execution_spacing_mm = max(
-        1.0,
-        _safe_float(settings.get(config._SEGMENT_EXECUTION_SPACING_KEY), config._EXECUTION_DEFAULT_OUTPUT_SPACING_MM),
-    )
-    return preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm
+            rect = cv2.minAreaRect(pts.astype(np.float32).reshape(-1, 1, 2))
+            box = cv2.boxPoints(rect)
+            box = np.vstack([box, box[:1]])
+            axis.plot(box[:, 0], box[:, 1], "--", linewidth=1.0, label="min rect")
+        except Exception:
+            pass
+    axis.legend(loc="best")
 
 
 def _resolve_segment_tangent_settings(settings: dict) -> tuple[float, float]:
@@ -290,47 +112,6 @@ def _resolve_segment_tangent_settings(settings: dict) -> tuple[float, float]:
         _safe_float(settings.get(config._SEGMENT_TANGENT_DEADBAND_KEY), PATH_TANGENT_HEADING_DEADBAND_DEG),
     )
     return lookahead_distance_mm, heading_deadband_deg
-
-
-def _auto_input_densify_spacing(path_pts: list[list[float]], interpolation_spacing_mm: float) -> float:
-    """Return a spacing hint for pre-densification if any segment exceeds the trigger ratio.
-
-    When the longest segment in *path_pts* is > *interpolation_spacing_mm* × TRIGGER_RATIO
-    (2.5×), densify at TARGET_RATIO (1.25×) so the interpolation pipeline sees evenly-
-    spaced inputs. Returns 0.0 (no densification needed) when all segments are already fine.
-    """
-    if len(path_pts) < 3:
-        return 0.0
-
-    xy = np.asarray(path_pts, dtype=float)[:, :2]
-    diffs = np.diff(xy, axis=0)
-
-    seg_lengths = np.linalg.norm(diffs, axis=1)
-    seg_lengths = seg_lengths[seg_lengths > 1e-9]
-
-    if seg_lengths.size == 0:
-        return 0.0
-    max_segment = float(np.max(seg_lengths))
-    trigger_spacing = max(float(interpolation_spacing_mm) * config._AUTO_DENSIFY_TRIGGER_RATIO, 1.0)
-
-    if max_segment <= trigger_spacing:
-        return 0.0
-
-    return max(1.0, float(interpolation_spacing_mm) * config._AUTO_DENSIFY_TARGET_RATIO)
-
-
-def _is_closed_contour(path_pts: list[list[float]]) -> bool:
-    """True if the first and last XY point of *path_pts* coincide within 1e-6 mm."""
-    if len(path_pts) < 3:
-        return False
-
-    try:
-        start = np.asarray(path_pts[0][:2], dtype=float)
-        end = np.asarray(path_pts[-1][:2], dtype=float)
-    except Exception:
-        return False
-
-    return float(np.linalg.norm(start - end)) <= 1e-6
 
 
 class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
@@ -354,6 +135,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             pickup_axis_alignment_sign: float = 1.0,
             pixel_to_mm_mode: str = config.PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
             debug_plot_dir: Optional[str] = None,
+            source_contour_processor: Optional[Callable[[np.ndarray, dict], np.ndarray | None]] = None,
+            contour_processor: Optional[Callable[[list[list[float]], dict], dict | None]] = None,
     ) -> None:
         """Configure the service with transformer/resolver references and per-application settings.
 
@@ -378,6 +161,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
         self._debug_plot_dir = str(debug_plot_dir) if debug_plot_dir else ""
+        self._source_contour_processor = source_contour_processor
+        self._contour_processor = contour_processor
         self._geometry_scale_cache = GeometryScaleCache()
         self._geometry_ppm_strategy = GeometryPpmAnchorStrategy()
         self._homography_residual_strategy = HomographyResidualStrategy()
@@ -412,6 +197,87 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             except Exception:
                 self._logger.debug("Path preparation resolver lookup failed", exc_info=True)
         return self._resolver
+
+    def _save_contour_pipeline_debug_plot(
+            self,
+            *,
+            label: str,
+            before_bezier_px: np.ndarray,
+            after_bezier_px: np.ndarray,
+            after_conversion_mm: np.ndarray,
+    ) -> None:
+        """Save before/after source-contour and post-conversion debug plots."""
+        if not self._debug_plot_dir:
+            return
+        try:
+            before_px = np.asarray(before_bezier_px, dtype=np.float64).reshape(-1, 2)
+            after_px = np.asarray(after_bezier_px, dtype=np.float64).reshape(-1, 2)
+            after_mm = np.asarray(after_conversion_mm, dtype=np.float64).reshape(-1, 2)
+        except Exception:
+            self._logger.debug("Failed to normalize contour pipeline debug data", exc_info=True)
+            return
+        if len(before_px) == 0 or len(after_px) == 0 or len(after_mm) == 0:
+            return
+
+        try:
+            os.environ.setdefault("MPLCONFIGDIR", "/tmp/robot_app_platform_matplotlib")
+            os.makedirs(os.environ["MPLCONFIGDIR"], exist_ok=True)
+            import matplotlib
+
+            matplotlib.use("Agg")
+            from matplotlib import pyplot as plt
+
+            output_dir = Path(self._debug_plot_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            safe_label = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(label or "contour"))
+            output_path = output_dir / f"paint_contour_pipeline_{timestamp}_{safe_label}.png"
+
+            fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+            _plot_xy_debug_axis(axes[0], before_px, f"Before Bezier ({len(before_px)} px pts)", "Image X (px)", "Image Y (px)")
+            _plot_xy_debug_axis(axes[1], after_px, f"After Bezier ({len(after_px)} px pts)", "Image X (px)", "Image Y (px)")
+            _plot_xy_debug_axis(axes[2], after_mm, f"After pixel-to-mm ({len(after_mm)} mm pts)", "Robot X (mm)", "Robot Y (mm)")
+            axes[0].invert_yaxis()
+            axes[1].invert_yaxis()
+            fig.suptitle(f"Paint contour pipeline: {label}")
+            fig.tight_layout()
+            fig.savefig(output_path, dpi=140)
+            plt.close(fig)
+            self._logger.info("Saved paint contour pipeline debug plot: %s", output_path)
+        except Exception:
+            self._logger.debug("Failed to save contour pipeline debug plot", exc_info=True)
+
+    def _process_source_contour(self, pts_px: np.ndarray, settings: dict, *, label: str) -> np.ndarray:
+        """Apply an optional source-contour processor before pixel-to-mm conversion."""
+        points = np.asarray(pts_px, dtype=np.float64).reshape(-1, 2)
+        if self._source_contour_processor is None or len(points) < 3:
+            return points
+        try:
+            processed = self._source_contour_processor(points, settings)
+        except Exception:
+            self._logger.exception("[EXECUTE] Source contour processor failed for %s; using original pixels", label)
+            return points
+        if processed is None:
+            return points
+        try:
+            processed_points = np.asarray(processed, dtype=np.float64).reshape(-1, 2)
+        except Exception:
+            self._logger.exception("[EXECUTE] Source contour processor returned invalid contour for %s", label)
+            return points
+        if len(processed_points) < 3:
+            self._logger.warning(
+                "[EXECUTE] Source contour processor returned too few points for %s: %d",
+                label,
+                len(processed_points),
+            )
+            return points
+        self._logger.info(
+            "[EXECUTE] Source contour processor: %s input_px=%d processed_px=%d",
+            label,
+            len(points),
+            len(processed_points),
+        )
+        return processed_points
 
     def _resolve_target_point_metadata(self, target_point_name: str, frame_name: str) -> tuple[
         str, float, float, float]:
@@ -448,17 +314,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         The pipeline is:
           1. Select source — workpiece layer contour or sprayPattern paths.
           2. Pixel→robot transform — via calibration resolver or fallback transformer.
-          3. Interpolation — densify, smooth, and optionally detect sharp tangent boundaries.
+          3. Optional contour processor — injected by the robot system for smoothing/resampling.
           4. Heading reconstruction — constant RZ or path-tangent-aligned.
-          5. Execution resampling — final evenly-spaced path with anchor-point preservation.
-          6. Pickup resolution — compute the first-segment pickup XY and RZ.
+          5. Pickup resolution — compute the first-segment pickup XY and RZ.
         """
-        from src.engine.robot.path_interpolation.new_interpolation.interpolation_pipeline import (
-            ContourPathPipeline,
-            InterpolationConfig,
-            PreprocessConfig,
-        )
-
         merged = workpiece
         original_pickup_source = dict(merged)
         if has_valid_contour(merged.get("contour")):
@@ -513,15 +372,20 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 raw_pts_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3:
                     _save_contour_canonicalization_steps_debug_plot(raw_pts_px, pickup_px)
-                pts_px = (
+                source_before_bezier_px = (
                     canonicalize_closed_contour_points(raw_pts_px)
                     if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR
                     else raw_pts_px
                 )
+                pts_px = self._process_source_contour(
+                    source_before_bezier_px,
+                    settings,
+                    label="workpiece_layer",
+                )
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3 and len(pts_px) >= 3:
                     _save_contour_reordering_debug_plot(raw_pts_px, pts_px, pickup_px)
                 self._logger.info(
-                    "[EXECUTE] source=workpiece_layer cleaned_contour_px=%d canonical_px=%d settings=%s",
+                    "[EXECUTE] source=workpiece_layer cleaned_contour_px=%d prepared_px=%d settings=%s",
                     len(raw_pts_px),
                     len(pts_px),
                     settings,
@@ -533,7 +397,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         pickup_rz_source_contour = [list(pt) for pt in raw_robot_pts]
                 robot_pts = self._transform_to_robot(pts_px, settings)
                 if robot_pts:
-                    robot_paths.append((robot_pts, settings, "Workpiece", pts_px))
+                    robot_paths.append((robot_pts, settings, "Workpiece", pts_px, source_before_bezier_px))
         else:
             self._logger.debug(f"USING SPRAY PATTERN")
             for pattern_type in ("Contour", "Fill"):
@@ -545,12 +409,17 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                         contour_arr = np.array(contour_arr, dtype=np.float32)
                     if contour_arr.size == 0:
                         continue
-                    pts_px = contour_arr.reshape(-1, 2)
+                    source_before_bezier_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
+                    pts_px = self._process_source_contour(
+                        source_before_bezier_px,
+                        settings,
+                        label=f"sprayPattern.{pattern_type}[{i}]",
+                    )
                     self._logger.info("[EXECUTE] source=sprayPattern.%s[%d] pixel_points=%d settings=%s", pattern_type,
                                       i, len(pts_px), settings)
                     robot_pts = self._transform_to_robot(pts_px, settings)
                     if robot_pts:
-                        robot_paths.append((robot_pts, settings, pattern_type, pts_px))
+                        robot_paths.append((robot_pts, settings, pattern_type, pts_px, source_before_bezier_px))
 
         if not robot_paths:
             raise ValueError("No executable paths after transformation")
@@ -565,7 +434,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         execution_jobs: list[dict] = []
         debug_heading_marker_threshold_deg = PATH_TANGENT_HEADING_DEADBAND_DEG
 
-        for path_pts, settings, pattern_type, pts_px in robot_paths:
+        for path_pts, settings, pattern_type, pts_px, source_before_bezier_px in robot_paths:
+            self._save_contour_pipeline_debug_plot(
+                label=str(pattern_type),
+                before_bezier_px=source_before_bezier_px,
+                after_bezier_px=pts_px,
+                after_conversion_mm=np.asarray(path_pts, dtype=float)[:, :2],
+            )
             raw_paths.append([list(pt) for pt in path_pts])
             raw_pixel_paths.append([
                 [float(point[0]), float(point[1])]
@@ -586,62 +461,46 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             )
             vel = _safe_float(settings.get("velocity"), 60.0)
             acc = _safe_float(settings.get("acceleration"), 30.0)
-            preprocess_spacing_mm, interpolation_spacing_mm, dense_sampling_factor, execution_spacing_mm = _resolve_segment_interpolation_settings(
-                settings)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
             debug_heading_marker_threshold_deg = tangent_heading_deadband_deg
-            input_densify_spacing_mm = _auto_input_densify_spacing(path_pts, interpolation_spacing_mm)
-            interpolation_method = "linear" if _is_closed_contour(path_pts) else "pchip"
 
-            self._logger.debug(f"INTERPOLATION METHOD {interpolation_method}")
+            processed_contour = None
+            if self._contour_processor is not None:
+                try:
+                    processed_contour = self._contour_processor(path_pts, settings)
+                except Exception:
+                    self._logger.exception("[EXECUTE] Contour processor failed; using transformed path")
 
-            """BUILD THE INTERPOLATION PIPELINE"""
-            pipeline = ContourPathPipeline(
-                preprocess=PreprocessConfig(
-                    min_spacing=preprocess_spacing_mm,
-                    max_segment_length=input_densify_spacing_mm,
-                    noise_method="none",
-                    noise_strength=0.0,
-                ),
-                interpolation=InterpolationConfig(
-                    method=interpolation_method,
-                    output_spacing=interpolation_spacing_mm,
-                    dense_sampling_factor=dense_sampling_factor,
+            if processed_contour:
+                prepared_xy = np.asarray(processed_contour.get("prepared_xy"), dtype=float).reshape(-1, 2)
+                curve_xy = np.asarray(processed_contour.get("curve_xy", prepared_xy), dtype=float).reshape(-1, 2)
+                interpolation_method = str(processed_contour.get("method") or "custom")
+                self._logger.info(
+                    "[EXECUTE] Contour processor: pattern=%s method=%s input=%d prepared=%d curve=%d",
+                    pattern_type,
+                    interpolation_method,
+                    len(path_pts),
+                    len(prepared_xy),
+                    len(curve_xy),
                 )
-            )
+            else:
+                prepared_xy = np.asarray(path_pts, dtype=float)[:, :2]
+                curve_xy = prepared_xy
+                interpolation_method = "raw"
+                self._logger.info(
+                    "[EXECUTE] No contour processor configured: pattern=%s using transformed path points=%d",
+                    pattern_type,
+                    len(prepared_xy),
+                )
 
-            """RUN THE INTERPOLATION PIPELINE"""
-            pipeline_result = pipeline.run(np.asarray(path_pts, dtype=float)[:, :2])
-
-            prepared_xy = pipeline_result.prepared
-            curve_xy = pipeline_result.curve
-
-            """ADD HEADING SUPPORT"""
-            sampled_xy = _densify_xy_preserving_anchors(
-                prepared_xy,
-                config._HEADING_SUPPORT_SPACING_MM,
-            )
-
-            tangent_boundary_xy = _sharp_tangent_boundary_xy(prepared_xy)
-
+            sampled_xy = prepared_xy
+            tangent_boundary_xy = np.empty((0, 2), dtype=float)
             self._logger.info(
-                "[EXECUTE] Dense tangent support: pattern=%s method=%s prepared=%d dense=%d spacing=%.3fmm sharp_boundaries=%d",
+                "[EXECUTE] Prepared contour output is final: pattern=%s method=%s points=%d",
                 pattern_type,
                 interpolation_method,
                 len(prepared_xy),
-                len(sampled_xy),
-                config._HEADING_SUPPORT_SPACING_MM,
-                len(tangent_boundary_xy),
             )
-
-            if len(tangent_boundary_xy):
-                self._logger.info(
-                    "[EXECUTE] Sharp tangent boundaries XY: %s",
-                    [
-                        [round(float(point[0]), 3), round(float(point[1]), 3)]
-                        for point in tangent_boundary_xy
-                    ],
-                )
 
             prepared_path = rebuild_pose_path_from_xy(
                 prepared_xy, path_pts, self._rz_mode,
@@ -662,23 +521,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 tangent_boundary_xy=tangent_boundary_xy,
             )
 
-            execution_anchor_xy = _merge_unique_xy_points(
-                np.asarray(path_pts, dtype=float)[:, :2],
-                tangent_boundary_xy,
-            )
-
-            self._logger.info(
-                "[EXECUTE] Execution resampling preserve anchors: contour=%d sharp_boundaries=%d merged=%d",
-                len(path_pts),
-                len(tangent_boundary_xy),
-                len(execution_anchor_xy),
-            )
-
-            execution_spline = _resample_execution_path(
-                sampled_path,
-                target_spacing_mm=execution_spacing_mm,
-                preserve_waypoint_xy=execution_anchor_xy,
-            )
+            execution_spline = [list(point) for point in sampled_path]
 
             total_spline_pts += len(execution_spline)
             prepared_paths.append([list(pt) for pt in prepared_path])

@@ -1,19 +1,75 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 from datetime import datetime
+from threading import Event, Thread
+from time import perf_counter
+from typing import Callable, Sequence
 
 import numpy as np
+from src.engine.robot.targeting.target_point_geometry import rotate_offset_xyz
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
 from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
-    project_paint_motion_geometry,
+    project_paint_motion_geometry_continuous,
 )
 
 _logger = logging.getLogger(__name__)
+
+
+class RobotMotionTrace:
+    """Background sampler for actual robot poses during blocking trajectory execution."""
+
+    def __init__(
+        self,
+        *,
+        get_pose: Callable[[], Sequence[float] | None],
+        sample_period_s: float,
+    ) -> None:
+        self._get_pose = get_pose
+        self._sample_period_s = max(0.01, float(sample_period_s))
+        self._stop = Event()
+        self._samples: list[dict[str, object]] = []
+        self._started_at = perf_counter()
+        self._thread = Thread(target=self._run, name="paint-motion-trace", daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> list[dict[str, object]]:
+        self._stop.set()
+        self._thread.join(timeout=max(1.0, self._sample_period_s * 4.0))
+        return list(self._samples)
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            timestamp_s = perf_counter() - self._started_at
+            try:
+                pose = self._get_pose()
+                if pose is not None and len(pose) >= 6:
+                    self._samples.append(
+                        {
+                            "t_s": timestamp_s,
+                            "pose": [float(pose[index]) for index in range(6)],
+                        }
+                    )
+            except Exception as exc:
+                self._samples.append({"t_s": timestamp_s, "error": str(exc)})
+            self._stop.wait(self._sample_period_s)
+
+
+def start_robot_motion_trace(
+    *,
+    get_pose: Callable[[], Sequence[float] | None],
+    sample_period_s: float,
+) -> RobotMotionTrace:
+    trace = RobotMotionTrace(get_pose=get_pose, sample_period_s=sample_period_s)
+    trace.start()
+    return trace
 
 
 def _path_length_mm(path: list[list[float]]) -> float:
@@ -27,6 +83,280 @@ def _path_length_mm(path: list[list[float]]) -> float:
 
 def _axis_label_from_index(index: int) -> str:
     return {0: "X", 1: "Y", 2: "Z"}.get(int(index), f"Axis {index}")
+
+
+def _unwrap_degrees(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return values
+    return np.degrees(np.unwrap(np.radians(values.astype(float))))
+
+
+def _angle_delta_deg(value: float, reference: float) -> float:
+    return float((float(value) - float(reference) + 180.0) % 360.0 - 180.0)
+
+
+def _motion_trace_comparison(
+    *,
+    commanded_path: list[list[float]],
+    actual_samples: list[dict[str, object]],
+    pivot_config: PaintSimulationConfig,
+    pivot_pose: list[float] | None,
+    tcp_to_tool_local_xy: tuple[float, float] | None = None,
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    if not commanded_path:
+        return {"sample_count": len(actual_samples), "command_count": 0}, []
+
+    planar_i, planar_j = pivot_config.planar_coordinate_indices
+    rotation_index = pivot_config.rotation_index
+    required_index = max(planar_i, planar_j, rotation_index)
+    command_valid = [pose for pose in commanded_path if len(pose) > required_index]
+    if not command_valid:
+        return {"sample_count": len(actual_samples), "command_count": len(commanded_path)}, []
+
+    command_planar = np.asarray(
+        [[float(pose[planar_i]), float(pose[planar_j])] for pose in command_valid],
+        dtype=float,
+    )
+    command_rot = _unwrap_degrees(np.asarray([float(pose[rotation_index]) for pose in command_valid], dtype=float))
+    command_step = np.linalg.norm(np.diff(command_planar, axis=0), axis=1)
+    command_s = np.concatenate(([0.0], np.cumsum(command_step)))
+    command_total_s = float(command_s[-1]) if command_s.size else 0.0
+
+    pivot_planar = None
+    if pivot_pose is not None and len(pivot_pose) > max(planar_i, planar_j):
+        pivot_planar = np.asarray([float(pivot_pose[planar_i]), float(pivot_pose[planar_j])], dtype=float)
+
+    def _tool_pose_from_tcp_pose(pose: list[float]) -> list[float] | None:
+        if tcp_to_tool_local_xy is None or len(pose) < 6:
+            return None
+        offset_x, offset_y, offset_z = rotate_offset_xyz(
+            float(tcp_to_tool_local_xy[0]),
+            float(tcp_to_tool_local_xy[1]),
+            0.0,
+            rx_degrees=float(pose[3]),
+            ry_degrees=float(pose[4]),
+            rz_degrees=float(pose[5]),
+        )
+        tool_pose = list(pose[:6])
+        tool_pose[0] = float(pose[0]) + offset_x
+        tool_pose[1] = float(pose[1]) + offset_y
+        tool_pose[2] = float(pose[2]) + offset_z
+        return tool_pose
+
+    comparisons: list[dict[str, object]] = []
+    actual_pose_rows: list[tuple[dict[str, object], list[float]]] = []
+    for sample in actual_samples:
+        raw_pose = sample.get("pose")
+        if not isinstance(raw_pose, list) or len(raw_pose) <= required_index:
+            continue
+        try:
+            pose = [float(raw_pose[index]) for index in range(6)]
+        except (TypeError, ValueError):
+            continue
+        actual_pose_rows.append((sample, pose))
+
+    if not actual_pose_rows:
+        return {
+            "sample_count": len(actual_samples),
+            "valid_sample_count": 0,
+            "command_count": len(command_valid),
+        }, []
+
+    actual_rot = _unwrap_degrees(np.asarray([pose[rotation_index] for _, pose in actual_pose_rows], dtype=float))
+    for sample_index, (sample, pose) in enumerate(actual_pose_rows):
+        actual_xy = np.asarray([pose[planar_i], pose[planar_j]], dtype=float)
+        planar_distances = np.linalg.norm(command_planar - actual_xy, axis=1)
+        nearest_planar_index = int(np.argmin(planar_distances))
+        rotation_distances = np.abs(command_rot - actual_rot[sample_index])
+        nearest_rotation_index = int(np.argmin(rotation_distances))
+        command_at_planar = command_valid[nearest_planar_index]
+        command_planar_rot = float(command_rot[nearest_planar_index])
+        actual_rot_value = float(actual_rot[sample_index])
+
+        row: dict[str, object] = {
+            "sample_index": sample_index,
+            "t_s": float(sample.get("t_s", 0.0)),
+            "actual_pose": pose,
+            "nearest_planar_command_index": nearest_planar_index,
+            "nearest_rotation_command_index": nearest_rotation_index,
+            "phase_index_delta": int(nearest_rotation_index - nearest_planar_index),
+            "command_progress_at_planar": (
+                float(command_s[nearest_planar_index] / command_total_s)
+                if command_total_s > 1e-9 else 0.0
+            ),
+            "planar_error_mm": float(planar_distances[nearest_planar_index]),
+            "rotation_error_at_nearest_planar_deg": _angle_delta_deg(actual_rot_value, command_planar_rot),
+            "command_pose_at_nearest_planar": [float(value) for value in command_at_planar[:6]],
+        }
+        if pivot_planar is not None:
+            actual_radius = float(np.linalg.norm(actual_xy - pivot_planar))
+            command_radius = float(np.linalg.norm(command_planar[nearest_planar_index] - pivot_planar))
+            row["actual_pivot_radius_mm"] = actual_radius
+            row["command_pivot_radius_at_nearest_planar_mm"] = command_radius
+            row["pivot_radius_error_mm"] = actual_radius - command_radius
+        actual_tool_pose = _tool_pose_from_tcp_pose(pose)
+        command_tool_pose = _tool_pose_from_tcp_pose(list(command_at_planar[:6]))
+        if actual_tool_pose is not None and command_tool_pose is not None:
+            actual_tool_planar = np.asarray(
+                [actual_tool_pose[planar_i], actual_tool_pose[planar_j]],
+                dtype=float,
+            )
+            command_tool_planar = np.asarray(
+                [command_tool_pose[planar_i], command_tool_pose[planar_j]],
+                dtype=float,
+            )
+            row["actual_tool_pose"] = [float(value) for value in actual_tool_pose[:6]]
+            row["command_tool_pose_at_nearest_planar"] = [
+                float(value) for value in command_tool_pose[:6]
+            ]
+            row["tool_planar_error_mm"] = float(
+                np.linalg.norm(actual_tool_planar - command_tool_planar)
+            )
+            if pivot_planar is not None:
+                actual_tool_radius = float(np.linalg.norm(actual_tool_planar - pivot_planar))
+                command_tool_radius = float(np.linalg.norm(command_tool_planar - pivot_planar))
+                row["actual_tool_pivot_radius_mm"] = actual_tool_radius
+                row["command_tool_pivot_radius_at_nearest_planar_mm"] = command_tool_radius
+                row["tool_pivot_radius_error_mm"] = actual_tool_radius - command_tool_radius
+        comparisons.append(row)
+
+    planar_errors = np.asarray([float(row["planar_error_mm"]) for row in comparisons], dtype=float)
+    rotation_errors = np.asarray(
+        [abs(float(row["rotation_error_at_nearest_planar_deg"])) for row in comparisons],
+        dtype=float,
+    )
+    phase_deltas = np.asarray([int(row["phase_index_delta"]) for row in comparisons], dtype=float)
+    radius_errors = np.asarray(
+        [float(row.get("pivot_radius_error_mm", 0.0)) for row in comparisons if "pivot_radius_error_mm" in row],
+        dtype=float,
+    )
+    tool_planar_errors = np.asarray(
+        [
+            float(row.get("tool_planar_error_mm", 0.0))
+            for row in comparisons
+            if "tool_planar_error_mm" in row
+        ],
+        dtype=float,
+    )
+    tool_radius_errors = np.asarray(
+        [
+            float(row.get("tool_pivot_radius_error_mm", 0.0))
+            for row in comparisons
+            if "tool_pivot_radius_error_mm" in row
+        ],
+        dtype=float,
+    )
+    actual_tool_radii = np.asarray(
+        [
+            float(row.get("actual_tool_pivot_radius_mm", 0.0))
+            for row in comparisons
+            if "actual_tool_pivot_radius_mm" in row
+        ],
+        dtype=float,
+    )
+    summary: dict[str, object] = {
+        "sample_count": len(actual_samples),
+        "valid_sample_count": len(comparisons),
+        "command_count": len(command_valid),
+        "command_planar_length_mm": command_total_s,
+        "max_planar_error_mm": float(np.max(planar_errors)) if planar_errors.size else 0.0,
+        "mean_planar_error_mm": float(np.mean(planar_errors)) if planar_errors.size else 0.0,
+        "max_rotation_error_at_nearest_planar_deg": float(np.max(rotation_errors)) if rotation_errors.size else 0.0,
+        "mean_rotation_error_at_nearest_planar_deg": float(np.mean(rotation_errors)) if rotation_errors.size else 0.0,
+        "max_abs_phase_index_delta": int(np.max(np.abs(phase_deltas))) if phase_deltas.size else 0,
+        "mean_phase_index_delta": float(np.mean(phase_deltas)) if phase_deltas.size else 0.0,
+    }
+    if radius_errors.size:
+        summary.update(
+            {
+                "max_abs_pivot_radius_error_mm": float(np.max(np.abs(radius_errors))),
+                "mean_pivot_radius_error_mm": float(np.mean(radius_errors)),
+            }
+        )
+    if tcp_to_tool_local_xy is not None:
+        summary["tcp_to_tool_local_xy"] = [
+            float(tcp_to_tool_local_xy[0]),
+            float(tcp_to_tool_local_xy[1]),
+        ]
+    if tool_planar_errors.size:
+        summary.update(
+            {
+                "max_tool_planar_error_mm": float(np.max(tool_planar_errors)),
+                "mean_tool_planar_error_mm": float(np.mean(tool_planar_errors)),
+            }
+        )
+    if tool_radius_errors.size:
+        summary.update(
+            {
+                "max_abs_tool_pivot_radius_error_mm": float(np.max(np.abs(tool_radius_errors))),
+                "mean_tool_pivot_radius_error_mm": float(np.mean(tool_radius_errors)),
+            }
+        )
+    if actual_tool_radii.size:
+        summary.update(
+            {
+                "min_actual_tool_pivot_radius_mm": float(np.min(actual_tool_radii)),
+                "max_actual_tool_pivot_radius_mm": float(np.max(actual_tool_radii)),
+                "mean_actual_tool_pivot_radius_mm": float(np.mean(actual_tool_radii)),
+            }
+        )
+    return summary, comparisons
+
+
+def write_execution_motion_trace(
+    *,
+    debug_dump_dir: str | None,
+    pivot_config: PaintSimulationConfig,
+    commanded_path: list[list[float]],
+    actual_samples: list[dict[str, object]],
+    pivot_pose: list[float] | None,
+    pattern_type: str,
+    stage: str,
+    tcp_to_tool_local_xy: tuple[float, float] | None = None,
+) -> None:
+    """Write commanded-vs-actual robot motion samples for execution diagnostics."""
+    if not debug_dump_dir:
+        return
+
+    try:
+        os.makedirs(debug_dump_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_pattern = str(pattern_type or "path").strip().lower().replace(" ", "_")
+        safe_stage = str(stage or "run").strip().lower().replace(" ", "_")
+        safe_plane = str(pivot_config.motion_plane or "unknown").strip().lower()
+        filepath = os.path.join(
+            debug_dump_dir,
+            f"execution_motion_trace_{safe_stage}_{safe_pattern}_{safe_plane}_{timestamp}.json",
+        )
+        summary, comparisons = _motion_trace_comparison(
+            commanded_path=commanded_path,
+            actual_samples=actual_samples,
+            pivot_config=pivot_config,
+            pivot_pose=pivot_pose,
+            tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+        )
+        payload = {
+            "timestamp": timestamp,
+            "pattern_type": pattern_type,
+            "stage": stage,
+            "motion_plane": pivot_config.motion_plane,
+            "planar_coordinate_indices": list(pivot_config.planar_coordinate_indices),
+            "rotation_index": pivot_config.rotation_index,
+            "pivot_pose": [float(value) for value in pivot_pose] if pivot_pose is not None else None,
+            "tcp_to_tool_local_xy": (
+                [float(tcp_to_tool_local_xy[0]), float(tcp_to_tool_local_xy[1])]
+                if tcp_to_tool_local_xy is not None else None
+            ),
+            "summary": summary,
+            "commanded_path": [[float(value) for value in pose[:6]] for pose in commanded_path],
+            "actual_samples": actual_samples,
+            "comparisons": comparisons,
+        }
+        with open(filepath, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        _logger.info("[PIVOT] Wrote execution motion trace to %s", filepath)
+    except Exception:
+        _logger.debug("[PIVOT] Failed to write execution motion trace", exc_info=True)
 
 
 def build_executed_snapshot_series(
@@ -43,14 +373,14 @@ def build_executed_snapshot_series(
         return []
     try:
         if anchor_xy is None:
-            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
+            preview_path, preview_snapshots, _ = project_paint_motion_geometry_continuous(
                 source_path,
                 pivot_pose,
                 pivot_config,
                 source_rotation_deg=source_rotation_deg,
             )
         else:
-            preview_path, preview_snapshots, _ = project_paint_motion_geometry(
+            preview_path, preview_snapshots, _ = project_paint_motion_geometry_continuous(
                 source_path,
                 pivot_pose,
                 pivot_config,
@@ -133,7 +463,7 @@ def write_pivot_debug_dump(
                 pose_values = ", ".join(f"{float(value):.6f}" for value in pivot_pose)
                 handle.write(f"# pivot_pose=[{pose_values}]\n")
             if anchor_xy is not None:
-                handle.write(f"# tcp_anchor_xy=[{float(anchor_xy[0]):.6f}, {float(anchor_xy[1]):.6f}]\n")
+                handle.write(f"# tool_anchor_xy=[{float(anchor_xy[0]):.6f}, {float(anchor_xy[1]):.6f}]\n")
             if abs(float(source_rotation_deg or 0.0)) > 1e-9:
                 handle.write(f"# source_rotation_deg={float(source_rotation_deg):.6f}\n")
 
@@ -151,14 +481,8 @@ def write_pivot_debug_dump(
                 for entry in diagnostics:
                     extra_fields = []
                     for key in (
-                        "corner_rotation_lift_mm",
-                        "corner_rotation_lift_axis",
-                        "corner_lift_phase",
-                        "corner_detach_planar_i_mm",
-                        "corner_detach_planar_j_mm",
-                        "corner_pivot_x",
-                        "corner_pivot_y",
-                        "corner_pivot_orthogonal",
+                        "command_rz",
+                        "command_rotation_delta",
                     ):
                         if key in entry:
                             extra_fields.append(f"{key}={float(entry.get(key, 0.0)):.6f}")
@@ -286,6 +610,27 @@ def write_pivot_debug_plot(
         ax_source.plot(source_xy[:, 0], source_xy[:, 1], color="#1f77b4", linewidth=1.5)
         ax_source.scatter(source_xy[0, 0], source_xy[0, 1], color="green", s=40, label="start")
         ax_source.scatter(source_xy[-1, 0], source_xy[-1, 1], color="red", s=40, label="end")
+        if anchor_xy is not None:
+            anchor_x = float(anchor_xy[0])
+            anchor_y = float(anchor_xy[1])
+            ax_source.scatter(
+                anchor_x,
+                anchor_y,
+                color="#ff7f0e",
+                s=65,
+                marker="x",
+                linewidths=2.0,
+                label="tool_anchor_xy",
+                zorder=6,
+            )
+            ax_source.annotate(
+                "tool anchor",
+                xy=(anchor_x, anchor_y),
+                xytext=(6, 6),
+                textcoords="offset points",
+                color="#ff7f0e",
+                fontsize=8,
+            )
         ax_source.quiver(
             source_xy[:-1:arrow_step, 0],
             source_xy[:-1:arrow_step, 1],
@@ -434,6 +779,10 @@ def write_pivot_debug_plot(
             ax_rotation.grid(True, alpha=0.25)
             ax_rotation.legend(loc="best")
 
+        anchor_text = ""
+        if anchor_xy is not None:
+            anchor_text = f"   tool_anchor_xy=({float(anchor_xy[0]):.3f}, {float(anchor_xy[1]):.3f})"
+
         fig.text(
             0.5,
             0.01,
@@ -442,6 +791,7 @@ def write_pivot_debug_plot(
                 f"command_xyz_len={_path_length_mm(pivot_path):.1f} mm   "
                 f"translation_axis={pivot_config.translation_axis}   "
                 f"plane={pivot_config.motion_plane}"
+                f"{anchor_text}"
             ),
             ha="center",
             fontsize=9,
