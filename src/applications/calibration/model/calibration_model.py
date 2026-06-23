@@ -65,6 +65,21 @@ class CalibrationModel(IApplicationModel):
     ) -> tuple[bool, str]:
         return self._service.calibrate_camera_z_shift(marker_id, samples, z_step_mm, settle_time_s)
 
+    def start_tool_tcp_calibration(self, tool_id: int) -> tuple[bool, str]:
+        return self._service.start_tool_tcp_calibration(tool_id)
+
+    def capture_tool_tcp_sample(self) -> tuple[bool, str]:
+        return self._service.capture_tool_tcp_sample()
+
+    def solve_tool_tcp_calibration(self) -> tuple[bool, str, dict]:
+        return self._service.solve_tool_tcp_calibration()
+
+    def save_tool_tcp_calibration(self) -> tuple[bool, str]:
+        return self._service.save_tool_tcp_calibration()
+
+    def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
+        return self._service.clear_tool_tcp_calibration()
+
     def calibrate_laser(self) -> tuple[bool, str]:
         return self._service.calibrate_laser()
 

@@ -45,6 +45,24 @@ class RobotService(IRobotService):
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
 
+    def get_current_flange_position(self) -> List[float]:
+        return self._robot.get_current_flange_position()
+
+    def set_active_tool(self, tool: int) -> bool:
+        try:
+            ok = bool(self._robot.set_active_tool(int(tool)))
+        except Exception:
+            self._logger.exception("set_active_tool failed for tool=%s", tool)
+            return False
+        if ok:
+            refresh = getattr(self._state, "refresh_once", None)
+            if callable(refresh):
+                try:
+                    refresh()
+                except Exception:
+                    self._logger.warning("State refresh after set_active_tool failed", exc_info=True)
+        return ok
+
     # --- IRobotLifecycle ---
 
     def enable_robot(self) -> None:

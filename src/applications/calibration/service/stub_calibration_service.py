@@ -80,6 +80,32 @@ class StubCalibrationService(ICalibrationService):
             f"(samples={samples}, z_step={z_step_mm}, settle={settle_time_s})"
         )
 
+    def start_tool_tcp_calibration(self, tool_id: int) -> tuple[bool, str]:
+        _logger.info("Stub: start_tool_tcp_calibration tool_id=%s", tool_id)
+        return True, f"Stub: Tool TCP calibration started for tool {tool_id}"
+
+    def capture_tool_tcp_sample(self) -> tuple[bool, str]:
+        _logger.info("Stub: capture_tool_tcp_sample")
+        return True, "Stub: Tool TCP sample captured"
+
+    def solve_tool_tcp_calibration(self) -> tuple[bool, str, dict]:
+        _logger.info("Stub: solve_tool_tcp_calibration")
+        return True, "Stub: Tool TCP solved", {
+            "tool_offset": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            "pivot_point": [10.0, 20.0, 30.0],
+            "residual_rms_mm": 0.1,
+            "residual_max_mm": 0.2,
+            "sample_count": 6,
+        }
+
+    def save_tool_tcp_calibration(self) -> tuple[bool, str]:
+        _logger.info("Stub: save_tool_tcp_calibration")
+        return True, "Stub: Tool TCP saved"
+
+    def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
+        _logger.info("Stub: clear_tool_tcp_calibration")
+        return True, "Stub: Tool TCP samples cleared"
+
     def calibrate_laser(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_laser")
         return True, "Stub: laser calibrated"

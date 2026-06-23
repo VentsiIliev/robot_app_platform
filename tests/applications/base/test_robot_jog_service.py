@@ -1,0 +1,114 @@
+import unittest
+from unittest.mock import MagicMock
+
+from src.applications.base.robot_jog_service import RobotJogService
+
+
+class TestRobotJogService(unittest.TestCase):
+    def test_jog_moves_configured_tool_from_current_pose(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 2,
+            move_velocity=20.0,
+            move_acceleration=10.0,
+        )
+
+        service.jog("X", "PLUS", 5.0)
+
+        robot.set_active_tool.assert_called_once_with(1)
+        robot.move_ptp.assert_called_once_with(
+            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            tool=1,
+            user=2,
+            velocity=20.0,
+            acceleration=10.0,
+            wait_to_reach=True,
+        )
+
+    def test_jog_activates_tool_before_reading_current_position(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        calls = []
+        robot.set_active_tool.side_effect = lambda tool: calls.append(("set_active_tool", tool)) or True
+        robot.get_current_position.side_effect = lambda: calls.append(("get_current_position", None)) or [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(robot_service=robot, tool_getter=lambda: 1, user_getter=lambda: 0)
+
+        service.jog("X", "PLUS", 1.0)
+
+        self.assertEqual(calls[:2], [("set_active_tool", 1), ("get_current_position", None)])
+
+    def test_jog_aborts_when_configured_tool_cannot_be_activated(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = False
+        service = RobotJogService(robot_service=robot, tool_getter=lambda: 1, user_getter=lambda: 0)
+
+        service.jog("X", "PLUS", 1.0)
+
+        robot.get_current_position.assert_not_called()
+        robot.move_ptp.assert_not_called()
+
+    def test_jog_applies_delta_in_current_tool_orientation(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 90.0]
+        service = RobotJogService(robot_service=robot, tool_getter=lambda: 1, user_getter=lambda: 0)
+
+        service.jog("X", "PLUS", 5.0)
+
+        target = robot.move_ptp.call_args.args[0]
+        self.assertAlmostEqual(target[0], 10.0, places=6)
+        self.assertAlmostEqual(target[1], 25.0, places=6)
+        self.assertAlmostEqual(target[2], 30.0, places=6)
+        self.assertEqual(target[3:], [0.0, 0.0, 90.0])
+
+    def test_jog_ignores_frame_options_and_pose_resolver_offsets(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
+        resolver = MagicMock()
+        resolver.available_frames.return_value = ["camera", "tool"]
+        resolver.resolve.return_value = [999.0, 999.0, 999.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(
+            robot_service=robot,
+            pose_resolver=resolver,
+            frame_options_getter=lambda: ["camera", "tool"],
+            default_frame_getter=lambda: "camera",
+            tool_getter=lambda: 1,
+        )
+
+        service.set_frame("camera")
+        service.jog("Z", "MINUS", 2.0)
+
+        self.assertEqual(service.get_available_frames(), [])
+        self.assertEqual(service.get_default_frame(), "")
+        resolver.resolve.assert_not_called()
+        robot.move_ptp.assert_called_once()
+        self.assertEqual(robot.move_ptp.call_args.args[0], [1.0, 2.0, 1.0, 0.0, 0.0, 0.0])
+
+    def test_jog_does_not_use_native_incremental_jog_when_driver_prefers_it(self):
+        robot = MagicMock()
+        robot._robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot._robot.prefers_incremental_jog.return_value = True
+        robot.get_current_position.return_value = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(robot_service=robot, tool_getter=lambda: 1, user_getter=lambda: 0)
+
+        service.jog("Y", "PLUS", 4.0)
+
+        robot.start_jog.assert_not_called()
+        robot.move_ptp.assert_called_once()
+        self.assertEqual(robot.move_ptp.call_args.args[0], [0.0, 4.0, 0.0, 0.0, 0.0, 0.0])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
@@ -25,7 +26,13 @@ def _make_vision(capture=None, calibrate=None):
     return vs
 
 
-def _make_svc(capture=None, calibrate=None, calibrator=None, calibration_settings_service=None):
+def _make_svc(
+    capture=None,
+    calibrate=None,
+    calibrator=None,
+    calibration_settings_service=None,
+    tool_tcp_calibrator=None,
+):
     vs = _make_vision(capture=capture, calibrate=calibrate)
     pc = MagicMock()
     return (
@@ -34,6 +41,7 @@ def _make_svc(capture=None, calibrate=None, calibrator=None, calibration_setting
             pc,
             camera_tcp_offset_calibrator=calibrator,
             calibration_settings_service=calibration_settings_service,
+            tool_tcp_calibrator=tool_tcp_calibrator,
         ),
         vs,
         pc,
@@ -158,6 +166,55 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
 
         pc.stop_calibration.assert_called_once()
         calibrator.stop.assert_called_once()
+
+    def test_tool_tcp_methods_delegate_to_calibrator(self):
+        result = SimpleNamespace(
+            tool_offset=[1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            residual_rms_mm=0.1,
+            to_dict=MagicMock(return_value={
+                "tool_offset": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+                "sample_count": 6,
+            }),
+        )
+        tool_tcp = MagicMock()
+        tool_tcp.capture_sample.return_value = SimpleNamespace(flange_pose=[10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        tool_tcp.solve.return_value = result
+        tool_tcp.save.return_value = (True, "saved")
+        svc, _, _ = _make_svc(tool_tcp_calibrator=tool_tcp)
+
+        self.assertEqual(svc.start_tool_tcp_calibration(3), (True, "Tool TCP calibration started for tool 3"))
+        ok, capture_msg = svc.capture_tool_tcp_sample()
+        self.assertTrue(ok)
+        self.assertIn("Captured Tool TCP sample", capture_msg)
+        ok, solve_msg, payload = svc.solve_tool_tcp_calibration()
+        self.assertTrue(ok)
+        self.assertIn("Tool TCP solved", solve_msg)
+        self.assertEqual(payload["sample_count"], 6)
+        self.assertEqual(svc.save_tool_tcp_calibration(), (True, "saved"))
+        self.assertEqual(svc.clear_tool_tcp_calibration(), (True, "Tool TCP samples cleared"))
+
+        tool_tcp.start.assert_called_once_with(3)
+        tool_tcp.capture_sample.assert_called_once()
+        tool_tcp.solve.assert_called_once()
+        tool_tcp.save.assert_called_once()
+        tool_tcp.clear_samples.assert_called_once()
+
+    def test_tool_tcp_methods_report_not_configured(self):
+        svc, _, _ = _make_svc()
+
+        self.assertFalse(svc.start_tool_tcp_calibration(1)[0])
+        self.assertFalse(svc.capture_tool_tcp_sample()[0])
+        self.assertFalse(svc.solve_tool_tcp_calibration()[0])
+        self.assertFalse(svc.save_tool_tcp_calibration()[0])
+        self.assertFalse(svc.clear_tool_tcp_calibration()[0])
+
+    def test_stop_calibration_stops_tool_tcp_calibrator(self):
+        tool_tcp = MagicMock()
+        svc, _, _ = _make_svc(tool_tcp_calibrator=tool_tcp)
+
+        svc.stop_calibration()
+
+        tool_tcp.stop.assert_called_once()
 
     def test_service_with_none_vision_raises_on_call(self):
         svc = CalibrationApplicationService(None, MagicMock())

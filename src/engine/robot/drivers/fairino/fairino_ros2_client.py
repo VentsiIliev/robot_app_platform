@@ -72,6 +72,7 @@ class FairinoRos2Client:
     # ============ Motion Commands ============
 
     def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        self.set_active_tool(tool)
         payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
         logger.debug("move_cartesian → POST /move/cartesian payload=%s", payload)
         try:
@@ -90,6 +91,7 @@ class FairinoRos2Client:
             return -1
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        self.set_active_tool(tool)
         payload = {
             "position": self._to_float_list(position),
             "tool": tool,
@@ -119,6 +121,7 @@ class FairinoRos2Client:
             return -1
 
     def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        self.set_active_tool(tool)
         payload = {
             "position": self._to_float_list(position),
             "tool": tool,
@@ -304,6 +307,41 @@ class FairinoRos2Client:
             self._mark_unavailable(e)
             logger.error("get_current_position error: %s", e, exc_info=True)
             return None
+
+    def get_current_flange_position(self):
+        try:
+            response = requests.get(f"{self.server_url}/position/flange", timeout=2)
+            data = response.json()
+            self._mark_available()
+            position = data.get("position")
+            if response.status_code >= 400 or data.get("success") is False or position is None:
+                logger.warning("get_current_flange_position rejected: http=%s data=%s", response.status_code, data)
+                return None
+            return [float(v) for v in position]
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_flange_position error: %s", e, exc_info=True)
+            return None
+
+    def set_active_tool(self, tool: int) -> bool:
+        try:
+            tool_id = int(tool)
+            response = requests.post(
+                f"{self.server_url}/tool/active",
+                json={"tool_id": tool_id},
+                timeout=5,
+            )
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                logger.warning("set_active_tool rejected: tool=%s http=%s data=%s", tool, response.status_code, data)
+                return False
+            self._mark_available()
+            logger.info("Active ROS2 tool set to %s (%s)", tool_id, data.get("tool_name"))
+            return True
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("set_active_tool error: %s", e, exc_info=True)
+            return False
 
     def GetActualTCPPose(self):
         position = self.get_current_position()
@@ -516,6 +554,7 @@ class FakeRos2Client:
         self._safety_walls_enabled = True
         self._digital_outputs = {}
         self._workobject = None
+        self._active_tool = 0
         logger.info("Using fake Fairino ROS2 client at %s", self.server_url)
 
     def _next_task_id(self) -> int:
@@ -564,16 +603,23 @@ class FakeRos2Client:
         }
 
     def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        self.set_active_tool(tool)
         logger.debug("FakeRos2Client.move_cartesian position=%s", position)
         return self._accept_motion(position, blocking=True)
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        self.set_active_tool(tool)
         logger.debug("FakeRos2Client.move_liner position=%s blocking=%s", position, blocking)
         return self._accept_motion(position, blocking=blocking)
 
     def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        self.set_active_tool(tool)
         logger.debug("FakeRos2Client.move_ptp position=%s blocking=%s", position, blocking)
         return self._accept_motion(position, blocking=blocking)
+
+    def set_active_tool(self, tool: int) -> bool:
+        self._active_tool = int(tool)
+        return True
 
     def execute_path(
         self,
@@ -646,6 +692,9 @@ class FakeRos2Client:
         return deepcopy(self._last_stop_response)
 
     def get_current_position(self):
+        return list(self._current_position)
+
+    def get_current_flange_position(self):
         return list(self._current_position)
 
     def GetActualTCPPose(self):

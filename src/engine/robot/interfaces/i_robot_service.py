@@ -71,6 +71,9 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
         start_joint_state: dict | None = None,
     ) -> dict: ...
 
+    @abstractmethod
+    def set_active_tool(self, tool: int) -> bool: ...
+
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
         return self.get_state() not in ("error", "disconnected", "fault")

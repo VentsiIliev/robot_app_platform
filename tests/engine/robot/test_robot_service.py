@@ -44,6 +44,21 @@ class TestRobotService(unittest.TestCase):
         self.state.position = [1, 2, 3, 0, 0, 0]
         self.assertEqual(self.service.get_current_position(), [1, 2, 3, 0, 0, 0])
 
+    def test_set_active_tool_delegates_and_refreshes_state(self):
+        self.robot.set_active_tool.return_value = True
+
+        self.assertTrue(self.service.set_active_tool(1))
+
+        self.robot.set_active_tool.assert_called_once_with(1)
+        self.state.refresh_once.assert_called_once()
+
+    def test_set_active_tool_does_not_refresh_when_driver_rejects(self):
+        self.robot.set_active_tool.return_value = False
+
+        self.assertFalse(self.service.set_active_tool(1))
+
+        self.state.refresh_once.assert_not_called()
+
     # --- lifecycle delegation ---
 
     def test_enable_robot_delegates_to_robot(self):

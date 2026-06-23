@@ -47,6 +47,12 @@ class FairinoRos2Robot(IRobot):
         # logger.debug("get_current_position ← raw=%s resolved=%s", result, position)
         return position
 
+    def get_current_flange_position(self) -> List[float] | None:
+        return self._client.get_current_flange_position()
+
+    def set_active_tool(self, tool: int) -> bool:
+        return self._client.set_active_tool(tool)
+
     def get_current_velocity(self) -> float:
         # logger.debug("get_current_velocity →")
         result = self._client.get_current_velocity()

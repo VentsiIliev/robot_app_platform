@@ -1,3 +1,4 @@
+import math
 import threading
 import logging
 
@@ -37,34 +38,13 @@ class RobotJogService:
         self._lock = threading.Lock()
 
     def set_frame(self, frame_name: str) -> None:
-        self._frame_name = str(frame_name or "").strip()
-        _logger.info("[JOG] selected_frame=%s", self._frame_name)
+        self._frame_name = ""
 
     def get_available_frames(self) -> list[str]:
-        if callable(self._frame_options_getter):
-            try:
-                return list(self._frame_options_getter())
-            except Exception:
-                return []
-        resolver = self._current_pose_resolver()
-        available_frames = getattr(resolver, "available_frames", None)
-        if callable(available_frames):
-            try:
-                return list(available_frames())
-            except Exception:
-                return []
         return []
 
     def get_default_frame(self) -> str:
-        if callable(self._default_frame_getter):
-            try:
-                value = str(self._default_frame_getter() or "").strip()
-                if value:
-                    return value
-            except Exception:
-                pass
-        frames = self.get_available_frames()
-        return frames[0] if frames else ""
+        return ""
 
     def jog(self, axis: str, direction: str, step: float) -> None:
         if self._robot is None:
@@ -72,64 +52,43 @@ class RobotJogService:
         try:
             if not self._lock.acquire(blocking=False):
                 return
-            resolver = self._current_pose_resolver()
-            point = self._current_frame_point(resolver)
-            if resolver is not None and point is not None:
-                try:
-                    current = self._robot.get_current_position()
-                    target = resolver.resolve(current, axis, direction, step, point)
-                    _logger.info(
-                        "[JOG] mode=resolver frame=%s axis=%s direction=%s step=%s current=%s target=%s point_offsets=(%.3f, %.3f)",
-                        getattr(point, "name", ""),
-                        axis,
-                        direction,
-                        step,
-                        current,
-                        target,
-                        float(getattr(point, "offset_x", 0.0)),
-                        float(getattr(point, "offset_y", 0.0)),
-                    )
-                    if target is not None:
-                        tool = int(self._tool_getter()) if self._tool_getter is not None else 0
-                        user = int(self._user_getter()) if self._user_getter is not None else 0
-                        self._robot.move_ptp(
-                            target,
-                            tool=tool,
-                            user=user,
-                            velocity=self._move_velocity,
-                            acceleration=self._move_acceleration,
-                            wait_to_reach=True,
-                        )
-                        return
-                finally:
-                    self._lock.release()
-                    return
-            if self._prefers_incremental_jog():
-                try:
-                    _logger.info(
-                        "[JOG] mode=incremental axis=%s direction=%s step=%s",
-                        axis,
-                        direction,
-                        step,
-                    )
-                    self._robot.start_jog(
-                        RobotAxis.get_by_string(axis),
-                        Direction.get_by_string(direction),
-                        step,
-                    )
-                    return
-                finally:
-                    self._lock.release()
-            self._robot.start_jog(
-                RobotAxis.get_by_string(axis),
-                Direction.get_by_string(direction),
+            tool = int(self._tool_getter()) if self._tool_getter is not None else 0
+            user = int(self._user_getter()) if self._user_getter is not None else 0
+            if not self._activate_configured_tool(tool):
+                _logger.warning("[JOG] aborted: failed to activate configured tool=%s", tool)
+                self._lock.release()
+                return
+            current = self._robot.get_current_position()
+            target = self._resolve_tool_frame_target(current, axis, direction, step)
+            _logger.info(
+                "[JOG] mode=configured_tool tool=%s axis=%s direction=%s step=%s current=%s target=%s",
+                tool,
+                axis,
+                direction,
                 step,
+                current,
+                target,
             )
+            if target is not None:
+                self._robot.move_ptp(
+                    target,
+                    tool=tool,
+                    user=user,
+                    velocity=self._move_velocity,
+                    acceleration=self._move_acceleration,
+                    wait_to_reach=True,
+                )
             self._lock.release()
         except Exception:
             if self._lock.locked():
                 self._lock.release()
             pass
+
+    def _activate_configured_tool(self, tool: int) -> bool:
+        setter = getattr(self._robot, "set_active_tool", None)
+        if not callable(setter):
+            return True
+        return bool(setter(tool))
 
     def stop_jog(self) -> None:
         if self._robot is None:
@@ -159,12 +118,34 @@ class RobotJogService:
                 return None
         return None
 
-    def _prefers_incremental_jog(self) -> bool:
-        robot = getattr(self._robot, "_robot", None)
-        prefers_incremental = getattr(robot, "prefers_incremental_jog", None)
-        if callable(prefers_incremental):
-            try:
-                return bool(prefers_incremental())
-            except Exception:
-                return False
-        return False
+    def _resolve_tool_frame_target(self, current_pose, axis: str, direction: str, step: float) -> list[float] | None:
+        if not current_pose or len(current_pose) < 6:
+            return None
+        target = [float(v) for v in current_pose[:6]]
+        robot_axis = RobotAxis.get_by_string(axis)
+        robot_direction = Direction.get_by_string(direction)
+        idx = robot_axis.value - 1
+        if idx < 0 or idx >= len(target):
+            return None
+        if idx < 3:
+            dx, dy, dz = self._tool_frame_delta(target, idx, robot_direction.value, float(step))
+            target[0] += dx
+            target[1] += dy
+            target[2] += dz
+        else:
+            target[idx] += robot_direction.value * float(step)
+        return target
+
+    @staticmethod
+    def _tool_frame_delta(position: list[float], axis_idx: int, direction_value: float, step: float):
+        cx, sx = math.cos(math.radians(position[3])), math.sin(math.radians(position[3]))
+        cy, sy = math.cos(math.radians(position[4])), math.sin(math.radians(position[4]))
+        cz, sz = math.cos(math.radians(position[5])), math.sin(math.radians(position[5]))
+        cols = (
+            (cy * cz, cy * sz, -sy),
+            (cz * sx * sy - cx * sz, cx * cz + sx * sy * sz, cy * sx),
+            (cx * cz * sy + sx * sz, cx * sy * sz - cz * sx, cx * cy),
+        )
+        col = cols[axis_idx]
+        scale = direction_value * step
+        return col[0] * scale, col[1] * scale, col[2] * scale

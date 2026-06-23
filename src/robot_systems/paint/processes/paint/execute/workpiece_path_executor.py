@@ -74,9 +74,6 @@ def _planar_spacing_stats(
     return float(np.min(positive)), float(np.mean(positive)), float(np.max(positive))
 
 
-
-
-
 def _camera_to_tcp_delta(
     x_offset: float,
     y_offset: float,

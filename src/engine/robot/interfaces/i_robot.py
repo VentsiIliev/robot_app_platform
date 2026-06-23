@@ -143,6 +143,10 @@ class IRobot(ABC):
         """Optional remote pose reachability validation."""
         return {"supported": False, "reachable": False}
 
+    def set_active_tool(self, tool: int) -> bool:
+        """Optional remote active TCP selection for status/current-pose reporting."""
+        return False
+
     def prefers_incremental_jog(self) -> bool:
         """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""
         return False

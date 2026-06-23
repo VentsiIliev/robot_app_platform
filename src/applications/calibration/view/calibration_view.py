@@ -287,6 +287,11 @@ class CalibrationView(IApplicationView):
     calibrate_sequence_requested = pyqtSignal()
     calibrate_camera_tcp_offset_requested = pyqtSignal()
     calibrate_camera_z_shift_requested = pyqtSignal()
+    tool_tcp_start_requested = pyqtSignal(int)
+    tool_tcp_capture_requested = pyqtSignal()
+    tool_tcp_solve_requested = pyqtSignal()
+    tool_tcp_save_requested = pyqtSignal()
+    tool_tcp_clear_requested = pyqtSignal()
     calibrate_laser_requested = pyqtSignal()
     detect_laser_requested = pyqtSignal()
     stop_calibration_requested = pyqtSignal()
@@ -354,6 +359,11 @@ class CalibrationView(IApplicationView):
         self._controls_panel.calibrate_camera_z_shift_btn.clicked.connect(
             self.calibrate_camera_z_shift_requested.emit
         )
+        self._controls_panel.tool_tcp_start_btn.clicked.connect(self._emit_tool_tcp_start_requested)
+        self._controls_panel.tool_tcp_capture_btn.clicked.connect(self.tool_tcp_capture_requested.emit)
+        self._controls_panel.tool_tcp_solve_btn.clicked.connect(self.tool_tcp_solve_requested.emit)
+        self._controls_panel.tool_tcp_save_btn.clicked.connect(self.tool_tcp_save_requested.emit)
+        self._controls_panel.tool_tcp_clear_btn.clicked.connect(self.tool_tcp_clear_requested.emit)
         self._controls_panel.calibrate_laser_btn.clicked.connect(self.calibrate_laser_requested.emit)
         self._controls_panel.detect_laser_btn.clicked.connect(self.detect_laser_requested.emit)
         self._controls_panel.test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
@@ -392,6 +402,12 @@ class CalibrationView(IApplicationView):
 
     def set_camera_z_shift_enabled(self, enabled: bool) -> None:
         self._controls_panel.set_camera_z_shift_enabled(enabled)
+
+    def set_tool_tcp_result(self, result: dict | None) -> None:
+        self._controls_panel.set_tool_tcp_result(result)
+
+    def _emit_tool_tcp_start_requested(self) -> None:
+        self.tool_tcp_start_requested.emit(int(self._controls_panel.tool_tcp_tool_spin.value()))
 
     def prompt_z_shift_calibration_config(
         self,

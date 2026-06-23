@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from ..interfaces.i_robot import IRobot
 from ..interfaces.i_robot_state_provider import IRobotStateProvider
@@ -13,10 +13,18 @@ class RobotStateManager(IRobotStateProvider):
 
     _POLL_INTERVAL_S = 0.1
 
-    def __init__(self, robot: IRobot, publisher: Optional[IStatePublisher] = None, state_topic: str = "robot/state"):
+    def __init__(
+        self,
+        robot: IRobot,
+        publisher: Optional[IStatePublisher] = None,
+        state_topic: str = "robot/state",
+        active_tool_getter: Callable[[], int] | None = None,
+    ):
         self._robot = robot
         self._publisher = publisher
         self._state_topic = state_topic
+        self._active_tool_getter = active_tool_getter
+        self._active_tool_synced: int | None = None
         self._logger = logging.getLogger(self.__class__.__name__)
 
         self._position: List[float] = []
@@ -64,6 +72,15 @@ class RobotStateManager(IRobotStateProvider):
         self._thread.start()
         self._logger.info("State monitoring started (poll interval=%.1fs)", self._POLL_INTERVAL_S)
 
+    def refresh_once(self) -> None:
+        """Synchronously refresh cached robot state once."""
+        try:
+            self._poll_once()
+        except Exception:
+            with self._lock:
+                self._state = "error"
+            self._logger.warning("State refresh failed", exc_info=True)
+
     def stop_monitoring(self) -> None:
         self._running = False
         if self._thread:
@@ -98,31 +115,7 @@ class RobotStateManager(IRobotStateProvider):
     def _poll_loop(self) -> None:
         while self._running:
             try:
-                state_getter = getattr(self._robot, "get_connection_state", None)
-                connection_state = state_getter() if callable(state_getter) else "idle"
-
-                if connection_state == "disconnected":
-                    with self._lock:
-                        self._state = "disconnected"
-
-                    if self._publisher:
-                        self._publisher.publish(self._build_snapshot())
-
-                    time.sleep(self._POLL_INTERVAL_S)
-                    continue
-
-                pos  = self._robot.get_current_position()
-                vel  = self._robot.get_current_velocity()
-                acc  = self._robot.get_current_acceleration()
-
-                with self._lock:
-                    self._position     = pos or self._position
-                    self._velocity     = vel or self._velocity
-                    self._acceleration = acc or self._acceleration
-                    self._state        = connection_state or "idle"
-
-                if self._publisher:
-                    self._publisher.publish(self._build_snapshot())
+                self._poll_once()
 
             except Exception:
                 with self._lock:
@@ -130,3 +123,66 @@ class RobotStateManager(IRobotStateProvider):
                 self._logger.warning("State poll failed", exc_info=True)
 
             time.sleep(self._POLL_INTERVAL_S)
+
+    def _poll_once(self) -> None:
+        state_getter = getattr(self._robot, "get_connection_state", None)
+        connection_state = state_getter() if callable(state_getter) else "idle"
+
+        if connection_state == "disconnected":
+            with self._lock:
+                self._state = "disconnected"
+            if self._publisher:
+                self._publisher.publish(self._build_snapshot())
+            return
+
+        if not self._sync_configured_tool():
+            self._logger.warning("Failed to configure robot tool", exc_info=True)
+            with self._lock:
+                self._state = "tool_mismatch"
+                self._position = []
+            if self._publisher:
+                self._publisher.publish(self._build_snapshot())
+            return
+
+        pos = self._robot.get_current_position()
+        vel = self._robot.get_current_velocity()
+        acc = self._robot.get_current_acceleration()
+
+        with self._lock:
+            self._position = pos or self._position
+            self._velocity = vel or self._velocity
+            self._acceleration = acc or self._acceleration
+            self._state = connection_state or "idle"
+
+        if self._publisher:
+            self._publisher.publish(self._build_snapshot())
+
+    def _sync_configured_tool(self) -> bool:
+        if self._active_tool_getter is None:
+            self._logger.warning("Failed to get configured robot tool (no active tool getter)", exc_info=True)
+            return False
+
+        # self._logger.info("Configured robot tool synced: %s", self._active_tool_getter())
+
+        try:
+            desired_tool = int(self._active_tool_getter())
+        except Exception:
+            self._logger.warning("Failed to read configured robot tool", exc_info=True)
+            return False
+
+        if self._active_tool_synced == desired_tool:
+            return True
+
+        try:
+            ok = bool(self._robot.set_active_tool(desired_tool))
+        except Exception:
+            self._logger.warning("Failed to activate configured robot tool=%s", desired_tool, exc_info=True)
+            return False
+
+        if not ok:
+            self._logger.warning("Robot rejected configured active tool=%s", desired_tool)
+            return False
+
+        self._active_tool_synced = desired_tool
+        self._logger.info("Configured active robot tool synced: %s", desired_tool)
+        return True

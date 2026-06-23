@@ -71,6 +71,28 @@ class TestFairinoRos2Client(unittest.TestCase):
         self.assertEqual(client.stop_motion(), -2)
         self.assertEqual(client.get_last_stop_response()["stop_state"], "STOP_REQUESTED_BUT_UNCONFIRMED")
 
+    @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.post")
+    @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.get")
+    def test_move_linear_sets_active_tool_before_motion(self, get_mock, post_mock):
+        health = MagicMock()
+        health.json.return_value = {"status": "ok"}
+        get_mock.return_value = health
+        active_response = MagicMock()
+        active_response.status_code = 200
+        active_response.json.return_value = {"success": True, "tool_name": "TOOL_1"}
+        move_response = MagicMock()
+        move_response.status_code = 200
+        move_response.text = '{"success": true, "result": 0}'
+        move_response.json.return_value = {"success": True, "result": 0}
+        post_mock.side_effect = [active_response, move_response]
+
+        client = FairinoRos2Client(server_url="http://localhost:5000")
+
+        self.assertEqual(client.move_liner([1, 2, 3, 4, 5, 6], tool=1), 0)
+        self.assertEqual(post_mock.call_args_list[0].args[0], "http://localhost:5000/tool/active")
+        self.assertEqual(post_mock.call_args_list[0].kwargs["json"], {"tool_id": 1})
+        self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:5000/move/linear")
+
     def test_fake_client_factory_selects_fake_backend(self):
         client = build_fairino_ros2_client(server_url="fake://local")
 

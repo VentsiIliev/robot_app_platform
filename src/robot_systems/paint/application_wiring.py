@@ -467,6 +467,8 @@ def _build_calibration_application(robot_system):
         CameraZShiftCalibrationService,
     )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
+    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+    from src.engine.robot.calibration.tool_tcp_calibration_service import ToolTcpCalibrationService
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
@@ -544,6 +546,12 @@ def _build_calibration_application(robot_system):
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
 
+    ros_tool_registry_client = RosToolRegistryClient()
+    tool_tcp_calibrator = ToolTcpCalibrationService(
+        robot_service=robot_service,
+        tool_registry_client=ros_tool_registry_client,
+    )
+
     def _observer_position(group_id: str):
         navigation = getattr(robot_system, "_navigation", None)
         return navigation.get_group_position(group_id) if navigation is not None else None
@@ -561,6 +569,7 @@ def _build_calibration_application(robot_system):
         camera_z_shift_calibrator=camera_z_shift_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
+        tool_tcp_calibrator=tool_tcp_calibrator,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),

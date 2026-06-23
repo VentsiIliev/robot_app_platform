@@ -270,6 +270,21 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Camera TCP offset calibration is not configured"
         return self._camera_tcp_offset_calibrator.calibrate()
 
+    def start_tool_tcp_calibration(self, tool_id: int) -> tuple[bool, str]:
+        return False, "Tool TCP calibration is not configured in Calibration v2"
+
+    def capture_tool_tcp_sample(self) -> tuple[bool, str]:
+        return False, "Tool TCP calibration is not configured in Calibration v2"
+
+    def solve_tool_tcp_calibration(self) -> tuple[bool, str, dict]:
+        return False, "Tool TCP calibration is not configured in Calibration v2", {}
+
+    def save_tool_tcp_calibration(self) -> tuple[bool, str]:
+        return False, "Tool TCP calibration is not configured in Calibration v2"
+
+    def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
+        return False, "Tool TCP calibration is not configured in Calibration v2"
+
     def calibrate_laser(self) -> tuple[bool, str]:
         if self._laser_calibration_service is None:
             return False, "Laser calibration is not configured"

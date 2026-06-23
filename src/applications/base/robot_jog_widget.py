@@ -189,6 +189,7 @@ class RobotJogWidget(QFrame):
             if index >= 0:
                 self._frame_combo.setCurrentIndex(index)
         self._frame_combo.blockSignals(False)
+        self.enable_frame_selector(bool(values))
 
     def enable_frame_selector(self, enabled: bool) -> None:
         """Show or hide the optional frame selector."""
@@ -526,4 +527,3 @@ class RobotJogWidget(QFrame):
             direction = "Minus" if direction == "Plus" else "Plus"
 
         self.jog_requested.emit("JOG_ROBOT", axis, direction, step)
-

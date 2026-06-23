@@ -186,6 +186,11 @@ class CalibrationController(IApplicationController):
         self._view.calibrate_sequence_requested.connect(self._on_calibrate_sequence)
         self._view.calibrate_camera_tcp_offset_requested.connect(self._on_calibrate_camera_tcp_offset)
         self._view.calibrate_camera_z_shift_requested.connect(self._on_calibrate_camera_z_shift)
+        self._view.tool_tcp_start_requested.connect(self._on_tool_tcp_start)
+        self._view.tool_tcp_capture_requested.connect(self._on_tool_tcp_capture)
+        self._view.tool_tcp_solve_requested.connect(self._on_tool_tcp_solve)
+        self._view.tool_tcp_save_requested.connect(self._on_tool_tcp_save)
+        self._view.tool_tcp_clear_requested.connect(self._on_tool_tcp_clear)
         self._view.calibrate_laser_requested.connect(self._on_calibrate_laser)
         self._view.detect_laser_requested.connect(self._on_detect_laser)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
@@ -320,11 +325,44 @@ class CalibrationController(IApplicationController):
             manage_buttons=False,
         )
 
+    def _on_tool_tcp_start(self, tool_id: int) -> None:
+        ok, msg = self._model.start_tool_tcp_calibration(tool_id)
+        self._log(ok, msg)
+        if ok:
+            self._view.set_tool_tcp_result(None)
+
+    def _on_tool_tcp_capture(self) -> None:
+        self._run_in_thread(self._model.capture_tool_tcp_sample)
+
+    def _on_tool_tcp_solve(self) -> None:
+        self._run_tool_tcp_result_task(self._model.solve_tool_tcp_calibration)
+
+    def _on_tool_tcp_save(self) -> None:
+        self._run_in_thread(self._model.save_tool_tcp_calibration)
+
+    def _on_tool_tcp_clear(self) -> None:
+        ok, msg = self._model.clear_tool_tcp_calibration()
+        self._log(ok, msg)
+        if ok:
+            self._view.set_tool_tcp_result(None)
+
     def _on_task_done(self, result) -> None:
         if not self._running:
             return
         ok, msg = result
         self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_buttons_enabled(True)
+        self._refresh_calibration_dependent_actions()
+
+    def _on_tool_tcp_result_done(self, result) -> None:
+        if not self._running:
+            return
+        try:
+            ok, msg, payload = result
+        except Exception:
+            ok, msg, payload = False, f"Unexpected Tool TCP result: {result}", {}
+        self._view.append_log(f"{'✓' if ok else '✗'} {msg}")
+        self._view.set_tool_tcp_result(payload if ok else None)
         self._view.set_buttons_enabled(True)
         self._refresh_calibration_dependent_actions()
 
@@ -809,6 +847,22 @@ class CalibrationController(IApplicationController):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_task_done)
+        worker.failed.connect(self._on_task_failed)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._on_thread_finished)
+        self._threads.append((thread, worker))
+        thread.start()
+
+    def _run_tool_tcp_result_task(self, fn: Callable) -> None:
+        self._view.set_buttons_enabled(False)
+        self._bridge.camera_tcp_btn_enabled.emit(False)
+        self._bridge.camera_z_shift_btn_enabled.emit(False)
+        thread = QThread()
+        worker = _Worker(fn)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_tool_tcp_result_done)
         worker.failed.connect(self._on_task_failed)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         worker.failed.connect(thread.quit, Qt.ConnectionType.DirectConnection)

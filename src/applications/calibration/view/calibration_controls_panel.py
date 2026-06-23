@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QScrollArea, QTabWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QScrollArea, QSpinBox, QTabWidget, QVBoxLayout, QWidget
 
 from src.applications.calibration_settings.view.calibration_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP,
@@ -30,6 +30,7 @@ from src.applications.calibration.view.calibration_phase_tabs import (
     LaserCalibrationTab,
     RobotCalibrationTab,
     SystemCalibrationTab,
+    ToolTcpCalibrationTab,
 )
 from src.applications.calibration.view.intrinsic_auto_capture_widget import IntrinsicAutoCaptureWidget
 
@@ -70,6 +71,21 @@ class CalibrationControlsPanel(QWidget):
         self.calibrate_camera_z_shift_btn = MaterialButton("Calibrate XY Shift vs Z")
         self.calibrate_camera_z_shift_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
         self.calibrate_camera_z_shift_btn.setEnabled(False)
+        self.tool_tcp_tool_spin = QSpinBox()
+        self.tool_tcp_tool_spin.setRange(0, 99)
+        self.tool_tcp_tool_spin.setValue(1)
+        self.tool_tcp_start_btn = MaterialButton("Start Tool TCP")
+        self.tool_tcp_start_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
+        self.tool_tcp_capture_btn = MaterialButton("Capture Sample")
+        self.tool_tcp_capture_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
+        self.tool_tcp_solve_btn = MaterialButton("Solve Tool TCP")
+        self.tool_tcp_solve_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.tool_tcp_save_btn = MaterialButton("Save Tool TCP")
+        self.tool_tcp_save_btn.setStyleSheet(APP_PRIMARY_BUTTON_STYLE)
+        self.tool_tcp_clear_btn = MaterialButton("Clear Samples")
+        self.tool_tcp_clear_btn.setStyleSheet(APP_SECONDARY_BUTTON_STYLE)
+        self.tool_tcp_result_label = QLabel("No Tool TCP result")
+        self.tool_tcp_result_label.setWordWrap(True)
         self.calibrate_sequence_btn = MaterialButton("Calibrate Camera → Robot")
         self.calibrate_sequence_btn.setStyleSheet(APP_SEQUENCE_BUTTON_STYLE)
         self.stop_robot_btn = MaterialButton("⏹  Stop Active Task")
@@ -93,6 +109,7 @@ class CalibrationControlsPanel(QWidget):
         self._tabs.addTab(self._build_system_tab(), "System")
         self._tabs.addTab(self._build_camera_tab(), "Camera")
         self._tabs.addTab(self._build_robot_tab(), "Robot")
+        self._tabs.addTab(self._build_tool_tcp_tab(), "Tool TCP")
         self._tabs.addTab(self._build_laser_tab(), "Laser")
         self._tabs.addTab(self._build_height_tab(), "Height Mapping")
         layout.addWidget(self._tabs, stretch=1)
@@ -136,6 +153,17 @@ class CalibrationControlsPanel(QWidget):
         )
         self._phase_tabs.append(tab)
         return tab
+
+    def _build_tool_tcp_tab(self) -> QWidget:
+        return ToolTcpCalibrationTab(
+            tool_spin=self.tool_tcp_tool_spin,
+            start_btn=self.tool_tcp_start_btn,
+            capture_btn=self.tool_tcp_capture_btn,
+            solve_btn=self.tool_tcp_solve_btn,
+            save_btn=self.tool_tcp_save_btn,
+            clear_btn=self.tool_tcp_clear_btn,
+            result_label=self.tool_tcp_result_label,
+        )
 
     def _build_laser_tab(self) -> QWidget:
         tab = LaserCalibrationTab(
@@ -206,6 +234,22 @@ class CalibrationControlsPanel(QWidget):
     def set_camera_z_shift_enabled(self, enabled: bool) -> None:
         self.calibrate_camera_z_shift_btn.setEnabled(enabled)
 
+    def set_tool_tcp_result(self, result: dict | None) -> None:
+        if not result:
+            self.tool_tcp_result_label.setText("No Tool TCP result")
+            return
+        offset = result.get("tool_offset") or []
+        rms = float(result.get("residual_rms_mm", 0.0))
+        max_err = float(result.get("residual_max_mm", 0.0))
+        samples = int(result.get("sample_count", 0))
+        if len(offset) >= 3:
+            self.tool_tcp_result_label.setText(
+                f"Offset: X={float(offset[0]):.3f} mm, Y={float(offset[1]):.3f} mm, "
+                f"Z={float(offset[2]):.3f} mm | RMS={rms:.3f} mm, Max={max_err:.3f} mm, Samples={samples}"
+            )
+        else:
+            self.tool_tcp_result_label.setText("Tool TCP result unavailable")
+
     def set_measure_marker_heights_enabled(self, enabled: bool) -> None:
         self.measure_marker_heights_btn.setEnabled(enabled)
 
@@ -222,6 +266,11 @@ class CalibrationControlsPanel(QWidget):
             self.calibrate_camera_btn,
             self.calibrate_robot_btn,
             self.calibrate_sequence_btn,
+            self.tool_tcp_start_btn,
+            self.tool_tcp_capture_btn,
+            self.tool_tcp_solve_btn,
+            self.tool_tcp_save_btn,
+            self.tool_tcp_clear_btn,
         ):
             button.setEnabled(enabled)
         self.intrinsic_auto_capture.setEnabled(enabled)

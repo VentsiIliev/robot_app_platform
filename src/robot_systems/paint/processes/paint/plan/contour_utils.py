@@ -13,14 +13,17 @@ def pick_largest_contour(contours: Iterable) -> np.ndarray | None:
     best = None
     best_area = -1.0
     for contour in contours or []:
+
         try:
             arr = np.asarray(contour, dtype=np.float32)
             area = float(cv2.contourArea(arr))
         except Exception:
             continue
+
         if area > best_area:
             best_area = area
             best = arr
+
     return best
 
 

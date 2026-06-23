@@ -247,6 +247,7 @@ def project_paint_motion_geometry_continuous(
             segment_length=0.0,
             contact_index=0,
         )
+
         return result, snapshots, diagnostics
 
     initial_heading = _segment_heading_deg(points[0], points[1])
@@ -471,6 +472,7 @@ def _canonicalize_closed_source_path(
     is_closed = float(np.linalg.norm(contour[0] - contour[-1])) <= 1e-6
     if is_closed:
         contour = contour[:-1]
+
     if len(contour) < 3:
         return points
 
@@ -492,6 +494,7 @@ def _canonicalize_closed_source_path(
             dtype=float,
         )
         translated = rotated + (pivot_vec - rotated[0])
+
         return translated, heading, rotation
 
     def _side_score(aligned: np.ndarray) -> float:
@@ -504,8 +507,10 @@ def _canonicalize_closed_source_path(
         )
         normal = np.asarray([-axis_vector[1], axis_vector[0]], dtype=float)
         relative = aligned[1:] - pivot_vec if len(aligned) > 1 else aligned - pivot_vec
+
         if len(relative) == 0:
             return 0.0
+
         return float(np.mean(relative @ normal))
 
     def _initial_translation_run_length(candidate: np.ndarray) -> float:
@@ -518,10 +523,13 @@ def _canonicalize_closed_source_path(
             start = aligned_preview[index]
             end = aligned_preview[index + 1]
             segment_length = float(np.linalg.norm(end - start))
+
             if segment_length <= 1e-9:
                 continue
+
             heading = _segment_heading_deg(start, end)
             heading_error = _angle_error_deg(heading, desired_heading)
+
             if heading_error > PAINT_PROJECTION_TUNING.rotation_deadband_deg:
                 break
             total += segment_length
@@ -533,6 +541,7 @@ def _canonicalize_closed_source_path(
         forward = np.roll(contour, -start_index, axis=0)
         reverse = forward[::-1].copy()
         reverse = np.roll(reverse, -np.argmin(np.linalg.norm(reverse - forward[0], axis=1)), axis=0)
+
         for candidate in (forward, reverse):
             aligned_preview, heading, _ = _preview_aligned(candidate)
             heading_error = _angle_error_deg(heading, desired_heading)
@@ -545,6 +554,7 @@ def _canonicalize_closed_source_path(
             initial_run_length = _initial_translation_run_length(candidate)
             anchor_distance = float(np.linalg.norm(candidate[0] - reference_vec))
             key = (side_penalty, heading_penalty, -initial_run_length, anchor_distance)
+
             if best_key is None or key < best_key:
                 best_key = key
                 best_ordered = candidate
