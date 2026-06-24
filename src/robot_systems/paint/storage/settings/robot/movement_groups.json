@@ -14,7 +14,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[0.130, 340.114, 150.000, -179.910, -0.310, -0.340]"
+      "position": "[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005]"
     },
     "JOG": {
       "velocity": 0,

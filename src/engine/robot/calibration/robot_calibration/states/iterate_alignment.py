@@ -390,8 +390,15 @@ def handle_iterate_alignment_state(context) -> RobotCalibrationStates:
     )
 
     try:
+        """
+        # Preserve the current tool orientation during iterative alignment.
+        # The fine-alignment loop must only correct X/Y. Z is locked separately to the
+        # calibration plane; otherwise tiny live Z readback/settling differences can be
+        # copied into each new target and accumulate into Z drift, changing camera scale
+        # and making small visual corrections stop converging.
+        """
         iterative_position = context.calibration_robot_controller.get_iterative_align_position(
-            current_error_mm, mapped_x_mm, mapped_y_mm, alignment_threshold_mm
+            current_error_mm, mapped_x_mm, mapped_y_mm, alignment_threshold_mm,preserve_current_orientation=True
         )
     except RuntimeError as exc:
         _logger.error("Cannot compute iterative position: %s", exc)

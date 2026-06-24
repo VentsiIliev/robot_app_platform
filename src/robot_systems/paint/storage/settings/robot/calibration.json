@@ -61,7 +61,7 @@
   "acceleration": 20,
   "travel_velocity": 50,
   "travel_acceleration": 20,
-  "iterative_velocity": 10,
+  "iterative_velocity": 20,
   "iterative_acceleration": 10,
-  "initial_ppm": 2.9854860941569012
+  "initial_ppm": 3.633564249674479
 }

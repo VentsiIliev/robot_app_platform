@@ -99,6 +99,7 @@ class CalibrationRobotController:
             scale = max_move_mm / magnitude
         else:
             scale = 1.0   # magnitude fits within the allowed step — take the full correction
+
         move_x_mm = offset_x_mm * scale * correction_gain
         move_y_mm = offset_y_mm * scale * correction_gain
 
@@ -126,9 +127,11 @@ class CalibrationRobotController:
         if preserve_current_orientation:
             # Keep the robot's current orientation (e.g. after a TCP-capture rotation).
             return [x + move_x_mm, y + move_y_mm, z, rx, ry, rz]
+        
         cx, cy, cz, crx, cry, crz = self._require_pose(
             self._calibration_position, "get_iterative_align_position/calibration_position"
         )
+
         # Preserve the original calibration orientation during fine alignment.
         return [x + move_x_mm, y + move_y_mm, z, crx, cry, crz]
 

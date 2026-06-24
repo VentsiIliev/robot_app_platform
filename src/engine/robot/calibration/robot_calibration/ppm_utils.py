@@ -40,7 +40,7 @@ import math
 _logger = logging.getLogger(__name__)
 
 # ── Adaptive wait constants (same formula in both callers) ────────────────────
-_MIN_SETTLE_S   = 0.10   # absolute minimum wait after any move
+_MIN_SETTLE_S   = 0.5   # absolute minimum wait after any move
 _MAX_ERR_REF_MM = 10.0   # errors ≥ this use the full configured wait
 
 # ── PPM learning thresholds ───────────────────────────────────────────────────
