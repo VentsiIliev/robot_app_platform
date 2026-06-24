@@ -37,7 +37,7 @@ class PickupMotionConfig:
     change_plane_vel_percent: float = 30.0
     change_plane_acc_percent: float = 70.0
     # Combine change-plane orientation with the first pivot-contact translation.
-    combine_change_plane_with_first_contact: bool = False
+    combine_change_plane_with_first_contact: bool = True
 
     # Optional intermediate staging poses between change-plane and pivot contact.
     stage_transition_vel_percent: float = 20.0
