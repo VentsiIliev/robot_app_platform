@@ -156,7 +156,7 @@ class FairinoRos2Client:
         vel=0.6,
         acc=0.4,
         blocking=False,
-        trajectory_optimizer="RUCKIG",
+        trajectory_optimizer=None,
         orientation_mode="constant",
     ):
         sanitized_path = [self._to_float_list(p) for p in path] if path else path
@@ -168,9 +168,10 @@ class FairinoRos2Client:
             "vel": vel,
             "acc": acc,
             "blocking": blocking,
-            "trajectory_optimizer": trajectory_optimizer,
             "orientation_mode": orientation_mode,
         }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
         logger.debug(
             "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s orientation_mode=%s",
             len(path) if path else 0,
@@ -630,7 +631,7 @@ class FakeRos2Client:
         vel=0.6,
         acc=0.4,
         blocking=False,
-        trajectory_optimizer="RUCKIG",
+        trajectory_optimizer=None,
         orientation_mode="constant",
     ):
         logger.debug(

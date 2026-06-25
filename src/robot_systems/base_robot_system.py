@@ -236,13 +236,13 @@ class BaseRobotSystem(ABC):
             and cached_resolver is not None
             and cached_signature == cache_signature
         ):
-            _logger.info(
-                "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
-                cached_transformer.__class__.__name__,
-                bool(getattr(cached_transformer, "is_available", lambda: False)()),
-                str(getattr(cached_transformer, "_matrix_path", "")),
-                str(getattr(cached_transformer, "_artifact_path", "")),
-            )
+            # _logger.info(
+            #     "[CALIB] Reusing shared vision resolver: transformer=%s available=%s matrix_path=%s residual_path=%s",
+            #     cached_transformer.__class__.__name__,
+            #     bool(getattr(cached_transformer, "is_available", lambda: False)()),
+            #     str(getattr(cached_transformer, "_matrix_path", "")),
+            #     str(getattr(cached_transformer, "_artifact_path", "")),
+            # )
             return cached_transformer, cached_resolver
         if cached_transformer is not None or cached_resolver is not None:
             _logger.info("[CALIB] Shared vision resolver cache changed; rebuilding resolver")

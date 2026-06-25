@@ -29,7 +29,7 @@ class PickupMotionConfig:
     descend_vel_percent: float = 60.0
     descend_acc_percent: float = 40.0
 
-    # Lift away from pickup contact while aligning to the paint start orientation.
+    # Lift away from pickup contact, then align to the paint start orientation.
     lift_align_vel_percent: float = 50.0
     lift_align_acc_percent: float = 100.0
 
@@ -47,14 +47,14 @@ class PickupMotionConfig:
     first_contact_vel_percent: float = 40.0
     first_contact_acc_percent: float = 60.0
 
-    # Extra Z lift while restoring pickup orientation before release.
+    # Deprecated: pickup orientation is no longer restored before release.
     restore_orientation_z_lift_mm: float = 0.0
 
     # Return from pivot completion back to the pickup align pose before release.
     release_align_vel_percent: float = 30.0
     release_align_acc_percent: float = 70.0
 
-    # Restore the original pickup orientation before vacuum release.
+    # Deprecated: pickup orientation is no longer restored before vacuum release.
     release_restore_vel_percent: float = 30.0
     release_restore_acc_percent: float = 70.0
 

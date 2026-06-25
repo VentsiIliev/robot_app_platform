@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from queue import Full, Queue
 from dataclasses import dataclass, field
 from datetime import datetime
 import os
 from pathlib import Path
+import threading
 from typing import Callable, Optional
 
 import cv2
@@ -19,6 +21,7 @@ from src.engine.robot.path_preparation.geometry import (
     canonicalize_closed_contour_points,
     compute_pickup_rz_from_robot_path,
     compute_pickup_rz_from_initial_paint_segment,
+    compute_pickup_rz_from_min_rect_long_axis,
     compute_pickup_rz_from_stable_paint_segment,
     has_valid_contour,
     rebuild_pose_path_from_xy,
@@ -36,6 +39,49 @@ from src.engine.robot.path_preparation.pixel_to_mm import (
 PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR = config.PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL = config.PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL
 
+_DEBUG_PLOT_QUEUE: Queue = Queue(maxsize=4)
+_DEBUG_PLOT_WORKER_LOCK = threading.Lock()
+_DEBUG_PLOT_WORKER_STARTED = False
+
+
+def _ensure_debug_plot_worker() -> None:
+    global _DEBUG_PLOT_WORKER_STARTED
+    if _DEBUG_PLOT_WORKER_STARTED:
+        return
+    with _DEBUG_PLOT_WORKER_LOCK:
+        if _DEBUG_PLOT_WORKER_STARTED:
+            return
+        thread = threading.Thread(
+            target=_debug_plot_worker_loop,
+            name="PathDebugPlotWorker",
+            daemon=True,
+        )
+        thread.start()
+        _DEBUG_PLOT_WORKER_STARTED = True
+
+
+def _debug_plot_worker_loop() -> None:
+    while True:
+        logger, label, fn, args, kwargs = _DEBUG_PLOT_QUEUE.get()
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            logger.debug("[EXECUTE] Background debug plot failed: %s", label, exc_info=True)
+        finally:
+            _DEBUG_PLOT_QUEUE.task_done()
+
+
+def _submit_debug_plot(logger, label: str, fn: Callable, *args, **kwargs) -> None:
+    _ensure_debug_plot_worker()
+    try:
+        _DEBUG_PLOT_QUEUE.put_nowait((logger, label, fn, args, kwargs))
+    except Full:
+        logger.warning("[EXECUTE] Dropping debug plot because background plot queue is full: %s", label)
+
+
+def _copy_path_collection(paths: list[list[list[float]]]) -> list[list[list[float]]]:
+    return [[list(point) for point in path] for path in paths]
+
 
 
 @dataclass(frozen=True)
@@ -43,7 +89,7 @@ class WorkpieceExecutionPlan:
     """Complete execution plan for a workpiece, holding all path representations and per-segment job specs.
 
     Stores the transformation chain: raw pixel paths → prepared/curve/sampled poses → final
-    execution splines, plus per-job metadata (velocity, acceleration, pickup point, target offsets).
+    execution paths, plus per-job metadata (velocity, acceleration, pickup point, target offsets).
     """
     workpiece: dict
     raw_paths: list[list[list[float]]]
@@ -51,6 +97,7 @@ class WorkpieceExecutionPlan:
     curve_paths: list[list[list[float]]]
     sampled_paths: list[list[list[float]]]
     execution_jobs: list[dict]
+    # Legacy field name: this counts final execution path points, not spline control points.
     total_spline_pts: int
     raw_pixel_paths: list[list[list[float]]] = field(default_factory=list)
     raw_homography_paths: list[list[list[float]]] = field(default_factory=list)
@@ -180,6 +227,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 f"expected one of {sorted(config._PIXEL_TO_MM_MODES)}"
             )
         self._pixel_to_mm_mode = resolved_mode
+
+    def _queue_debug_plot(self, plot_label: str, fn: Callable, *args, **kwargs) -> None:
+        if not self._debug_plot_dir:
+            return
+        _submit_debug_plot(self._logger, plot_label, fn, *args, **kwargs)
 
     def _current_transformer(self):
         """Return the active pixel-to-robot transformer, resolving lazily if a getter is set."""
@@ -371,7 +423,14 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             if contour_arr.size != 0:
                 raw_pts_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3:
-                    _save_contour_canonicalization_steps_debug_plot(raw_pts_px, pickup_px)
+                    if not skip_debug_plot:
+                        self._queue_debug_plot(
+                            "contour_canonicalization_steps",
+                            _save_contour_canonicalization_steps_debug_plot,
+                            raw_pts_px.copy(),
+                            pickup_px,
+                            debug_dir=self._debug_plot_dir,
+                        )
                 source_before_bezier_px = (
                     canonicalize_closed_contour_points(raw_pts_px)
                     if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR
@@ -383,7 +442,15 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     label="workpiece_layer",
                 )
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3 and len(pts_px) >= 3:
-                    _save_contour_reordering_debug_plot(raw_pts_px, pts_px, pickup_px)
+                    if not skip_debug_plot:
+                        self._queue_debug_plot(
+                            "contour_reordering",
+                            _save_contour_reordering_debug_plot,
+                            raw_pts_px.copy(),
+                            np.asarray(pts_px, dtype=np.float64).copy(),
+                            pickup_px,
+                            debug_dir=self._debug_plot_dir,
+                        )
                 self._logger.info(
                     "[EXECUTE] source=workpiece_layer cleaned_contour_px=%d prepared_px=%d settings=%s",
                     len(raw_pts_px),
@@ -419,7 +486,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         if not robot_paths:
             raise ValueError("No executable paths after transformation")
 
-        total_spline_pts = 0
+        total_execution_points = 0
         sampled_paths: list[list[list[float]]] = []
         raw_paths: list[list[list[float]]] = []
         raw_pixel_paths: list[list[list[float]]] = []
@@ -428,14 +495,20 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         curve_paths: list[list[list[float]]] = []
         execution_jobs: list[dict] = []
         debug_heading_marker_threshold_deg = PATH_TANGENT_HEADING_DEADBAND_DEG
+        preview_base_position = self._resolve_base_position()
+        preview_transformer = self._current_transformer()
+        preview_resolver = self._current_resolver()
 
         for path_pts, settings, pattern_type, pts_px, source_before_bezier_px in robot_paths:
-            self._save_contour_pipeline_debug_plot(
-                label=str(pattern_type),
-                before_bezier_px=source_before_bezier_px,
-                after_bezier_px=pts_px,
-                after_conversion_mm=np.asarray(path_pts, dtype=float)[:, :2],
-            )
+            if not skip_debug_plot:
+                self._queue_debug_plot(
+                    f"contour_pipeline_{pattern_type}",
+                    self._save_contour_pipeline_debug_plot,
+                    label=str(pattern_type),
+                    before_bezier_px=np.asarray(source_before_bezier_px, dtype=np.float64).copy(),
+                    after_bezier_px=np.asarray(pts_px, dtype=np.float64).copy(),
+                    after_conversion_mm=np.asarray(path_pts, dtype=float)[:, :2].copy(),
+                )
             raw_paths.append([list(pt) for pt in path_pts])
             raw_pixel_paths.append([
                 [float(point[0]), float(point[1])]
@@ -447,9 +520,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     settings,
                     segment_config=self._segment_config,
                     z_min=self._z_min,
-                    base_position=self._resolve_base_position(),
-                    transformer=self._current_transformer(),
-                    resolver=self._current_resolver(),
+                    base_position=preview_base_position,
+                    transformer=preview_transformer,
+                    resolver=preview_resolver,
                     pixel_height_compensation_fn=self._pixel_height_compensation_fn,
                     logger=self._logger,
                 )
@@ -516,12 +589,12 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 tangent_boundary_xy=tangent_boundary_xy,
             )
 
-            execution_spline = [list(point) for point in sampled_path]
+            execution_path = [list(point) for point in sampled_path]
 
-            total_spline_pts += len(execution_spline)
+            total_execution_points += len(execution_path)
             prepared_paths.append([list(pt) for pt in prepared_path])
             curve_paths.append([list(pt) for pt in curve_path])
-            sampled_paths.append([list(pt) for pt in sampled_path])
+            sampled_paths.append([list(pt) for pt in execution_path])
 
             if pickup_px is not None and pickup_xy is None:
                 pickup_camera_xy = self._transform_single_pixel_to_robot(
@@ -531,24 +604,24 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     frame_name=self._calibration_frame_name,
                 )
 
-                if use_workpiece_layer and execution_spline:
-                    pickup_rz = compute_pickup_rz_from_initial_paint_segment(
-                        execution_spline,
+                if use_workpiece_layer and len(prepared_xy) >= 3:
+                    pickup_rz = compute_pickup_rz_from_min_rect_long_axis(
+                        prepared_xy,
                         pickup_reference_rz,
                     )
 
                     self._logger.info(
-                        "[PICKUP_RZ] method=initial_paint_segment pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f path_pts=%d",
+                        "[PICKUP_RZ] method=min_rect_long_axis pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f reference_rz=%.3f contour_pts=%d",
                         float(pickup_px[0]),
                         float(pickup_px[1]),
                         float(pickup_camera_xy[0]),
                         float(pickup_camera_xy[1]),
                         float(pickup_rz),
                         float(pickup_reference_rz),
-                        len(execution_spline),
+                        len(prepared_xy),
                     )
                 else:
-                    pickup_rz_path = pickup_rz_source_path or execution_spline
+                    pickup_rz_path = pickup_rz_source_path or execution_path
                     pickup_rz = compute_pickup_rz_from_robot_path(pickup_rz_path, pickup_camera_xy)
                     self._logger.info(
                         "[PICKUP_RZ] method=path_tangent pickup_px=(%.3f, %.3f) pickup_camera_xy=(%.3f, %.3f) pickup_rz=%.3f path_pts=%d",
@@ -563,7 +636,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 raw_pickup_rz = float(pickup_rz)
                 measured_delta = unwrap_degrees(pickup_reference_rz, raw_pickup_rz) - pickup_reference_rz
                 signed_pickup_axis = pickup_reference_rz + self._pickup_axis_alignment_sign * measured_delta
-                pickup_rz = nearest_axis_equivalent_degrees(pickup_reference_rz, signed_pickup_axis)
+                if use_workpiece_layer:
+                    pickup_rz = unwrap_degrees(pickup_reference_rz, signed_pickup_axis)
+                else:
+                    pickup_rz = nearest_axis_equivalent_degrees(pickup_reference_rz, signed_pickup_axis)
 
                 if abs(pickup_rz - raw_pickup_rz) > 1e-9:
                     self._logger.info(
@@ -596,8 +672,8 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
             execution_jobs.append(
                 {
-                    "path": [list(pt) for pt in sampled_path],
-                    "execution_path": [list(pt) for pt in execution_spline],
+                    "path": execution_path,
+                    "execution_path": [list(pt) for pt in execution_path],
                     "vel": vel,
                     "acc": acc,
                     "pattern_type": pattern_type,
@@ -618,11 +694,13 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             )
 
         if not skip_debug_plot:
-            self._save_interpolated_path_debug_plot(
-                raw_paths=raw_paths,
-                prepared_paths=prepared_paths,
-                curve_paths=curve_paths,
-                sampled_paths=sampled_paths,
+            self._queue_debug_plot(
+                "interpolated_path",
+                self._save_interpolated_path_debug_plot,
+                raw_paths=_copy_path_collection(raw_paths),
+                prepared_paths=_copy_path_collection(prepared_paths),
+                curve_paths=_copy_path_collection(curve_paths),
+                sampled_paths=_copy_path_collection(sampled_paths),
                 execution_paths=[
                     [list(point) for point in job.get("execution_path", [])]
                     for job in execution_jobs
@@ -637,7 +715,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             curve_paths=curve_paths,
             sampled_paths=sampled_paths,
             execution_jobs=execution_jobs,
-            total_spline_pts=total_spline_pts,
+            total_spline_pts=total_execution_points,
             raw_pixel_paths=raw_pixel_paths,
             raw_homography_paths=raw_homography_paths,
         )

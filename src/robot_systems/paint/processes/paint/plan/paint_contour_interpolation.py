@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from src.engine.robot.path_preparation.geometry import (
     PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     rebuild_pose_path_from_xy,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,11 @@ class PaintContourInterpolation:
         )
         execution_xy = resample_contour_xy(
             prepared_xy,
+            spacing=self._config.output_spacing,
+            closed=True,
+        )
+        execution_xy = _fair_resampled_contour_xy(
+            execution_xy,
             spacing=self._config.output_spacing,
             closed=True,
         )
@@ -636,6 +644,83 @@ def _remove_short_chord_kinks(
             changed = True
             break
 
+    return _close_if_needed(points, closed)
+
+
+def _fair_resampled_contour_xy(
+    xy_points: np.ndarray,
+    *,
+    spacing: float,
+    closed: bool,
+) -> np.ndarray:
+    """Remove tiny local resampling wiggles before pivot projection.
+
+    Projection treats the source contour as physical contact geometry, so this
+    pass is intentionally conservative: it only removes a point when the direct
+    bridge stays within the paint-scale tolerance and clearly lowers local
+    second-difference curvature.
+    """
+    points = _clean_xy(xy_points)
+    if len(points) < 5:
+        return points
+
+    if closed and float(np.linalg.norm(points[0] - points[-1])) <= 1e-6:
+        points = points[:-1]
+    if len(points) < 5:
+        return _close_if_needed(points, closed)
+
+    spacing = max(0.05, float(spacing))
+    tolerance = max(0.03, min(0.10, spacing * 0.10))
+    max_local_segment = spacing * 2.5
+    min_improvement_ratio = 0.35
+
+    removed = 0
+    max_bridge_error = 0.0
+    changed = True
+    while changed and len(points) >= 5:
+        changed = False
+        candidate_range = range(len(points)) if closed else range(1, len(points) - 1)
+        for index in candidate_range:
+            prev_index = (index - 1) % len(points)
+            next_index = (index + 1) % len(points)
+            if not closed and (prev_index < 0 or next_index >= len(points)):
+                continue
+
+            prev_point = points[prev_index]
+            point = points[index]
+            next_point = points[next_index]
+            incoming_len = float(np.linalg.norm(point - prev_point))
+            outgoing_len = float(np.linalg.norm(next_point - point))
+            if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
+                continue
+            if incoming_len > max_local_segment or outgoing_len > max_local_segment:
+                continue
+
+            bridge_error = _point_to_segment_distance(point, prev_point, next_point)
+            if bridge_error > tolerance:
+                continue
+
+            local_curvature = float(np.linalg.norm(next_point - 2.0 * point + prev_point))
+            bridge_len = float(np.linalg.norm(next_point - prev_point))
+            path_len = incoming_len + outgoing_len
+            if path_len <= 1e-9:
+                continue
+            bridge_curvature = abs(path_len - bridge_len)
+            if bridge_curvature > local_curvature * (1.0 - min_improvement_ratio):
+                continue
+
+            points = np.delete(points, index, axis=0)
+            removed += 1
+            max_bridge_error = max(max_bridge_error, bridge_error)
+            changed = True
+            break
+
+    if removed:
+        _logger.info(
+            "[PAINT] Source contour fairing removed "
+            f"{removed} resampling wiggle sample(s); "
+            f"max_bridge_error={max_bridge_error:.4f}mm tolerance={tolerance:.4f}mm"
+        )
     return _close_if_needed(points, closed)
 
 

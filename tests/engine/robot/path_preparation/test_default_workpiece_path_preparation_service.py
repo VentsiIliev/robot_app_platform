@@ -8,6 +8,7 @@ from src.engine.robot.path_preparation.default_workpiece_path_preparation_servic
 )
 from src.engine.robot.path_preparation.geometry import (
     compute_pickup_rz_from_initial_paint_segment,
+    compute_pickup_rz_from_min_rect_long_axis,
     compute_pickup_rz_from_stable_paint_segment,
 )
 
@@ -284,7 +285,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         job = plan.execution_jobs[0]
         self.assertEqual(12.5, job["pivot_offset_mm"])
 
-    def test_build_execution_plan_workpiece_layer_uses_initial_paint_segment_pickup_rz(self):
+    def test_build_execution_plan_workpiece_layer_uses_min_rect_pickup_rz(self):
         service = _make_service(
             execute_from_workpiece_layer=True,
             target_point_name="tool",
@@ -298,15 +299,19 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         with patch.object(
             service,
             "_transform_to_robot",
-            return_value=[[10, 20, 30, 180, 0, 0], [40, 50, 30, 180, 0, 0]],
+            return_value=[
+                [10, 20, 30, 180, 0, 0],
+                [40, 50, 30, 180, 0, 0],
+                [45, 55, 30, 180, 0, 0],
+            ],
         ), patch.object(
             service,
             "_transform_single_pixel_to_robot",
             side_effect=[(11.0, 12.0), (13.0, 14.0)],
         ), patch(
-            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_initial_paint_segment",
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_min_rect_long_axis",
             return_value=44.0,
-        ) as initial_rz, patch(
+        ) as min_rect_rz, patch(
             "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_robot_path",
         ) as path_rz:
             plan = service.build_execution_plan(workpiece)
@@ -315,7 +320,7 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         self.assertTrue(job["use_workpiece_layer"])
         self.assertEqual([13.0, 14.0], job["pickup_xy"])
         self.assertEqual(44.0, job["pickup_rz"])
-        initial_rz.assert_called_once()
+        min_rect_rz.assert_called_once()
         path_rz.assert_not_called()
 
     def test_pickup_target_defaults_to_execution_target_when_not_configured(self):
@@ -648,6 +653,41 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         pickup_rz = compute_pickup_rz_from_initial_paint_segment(path, reference_rz=0.0)
 
         self.assertAlmostEqual(10.0, pickup_rz, places=2)
+
+    def test_initial_paint_segment_pickup_rz_preserves_reverse_direction(self):
+        path = [
+            [0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [-10.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            [-20.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+        ]
+
+        pickup_rz = compute_pickup_rz_from_initial_paint_segment(path, reference_rz=0.0)
+
+        self.assertAlmostEqual(180.0, pickup_rz, places=6)
+
+    def test_min_rect_long_axis_pickup_rz_ignores_contour_direction(self):
+        contour = [
+            [100.0, 10.0],
+            [0.0, 10.0],
+            [0.0, 0.0],
+            [100.0, 0.0],
+        ]
+
+        pickup_rz = compute_pickup_rz_from_min_rect_long_axis(contour, reference_rz=0.0)
+
+        self.assertAlmostEqual(0.0, pickup_rz, places=6)
+
+    def test_min_rect_long_axis_pickup_rz_uses_long_side(self):
+        contour = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 100.0],
+            [0.0, 100.0],
+        ]
+
+        pickup_rz = compute_pickup_rz_from_min_rect_long_axis(contour, reference_rz=0.0)
+
+        self.assertAlmostEqual(90.0, abs(pickup_rz), places=6)
 
 
 if __name__ == "__main__":

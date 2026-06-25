@@ -67,15 +67,15 @@ class VisionTargetResolver:
         active_mapper = mapper if mapper is not None else (frame_obj.mapper if frame_obj else None)
         current_rz = target.rz_degrees
 
-        _logger.info(
-            "[CALIB] Resolve using transformer=%s available=%s frame=%s point=%s tcp_offset=(%.3f, %.3f)",
-            self._base.__class__.__name__,
-            bool(getattr(self._base, "is_available", lambda: False)()),
-            str(frame or ""),
-            str(point.name),
-            float(self._tcp_x),
-            float(self._tcp_y),
-        )
+        # _logger.info(
+        #     "[CALIB] Resolve using transformer=%s available=%s frame=%s point=%s tcp_offset=(%.3f, %.3f)",
+        #     self._base.__class__.__name__,
+        #     bool(getattr(self._base, "is_available", lambda: False)()),
+        #     str(frame or ""),
+        #     str(point.name),
+        #     float(self._tcp_x),
+        #     float(self._tcp_y),
+        # )
 
         calibration_xy = self._base.transform(target.x_pixels, target.y_pixels)
         plane_xy = _map_plane(calibration_xy, active_mapper)

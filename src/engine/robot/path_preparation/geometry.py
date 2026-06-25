@@ -381,7 +381,42 @@ def compute_pickup_rz_from_initial_paint_segment(
         selected_heading = normalize_degrees(
             float(np.degrees(np.arctan2(run_vector[1], run_vector[0])))
         )
-    return nearest_axis_equivalent_degrees(float(reference_rz), selected_heading)
+    return unwrap_degrees(float(reference_rz), selected_heading)
+
+
+def compute_pickup_rz_from_min_rect_long_axis(
+    points: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+) -> float:
+    """Return pickup RZ from the long axis of the contour minimum-area rectangle."""
+    contour = np.asarray(points, dtype=float)
+    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 2:
+        return 0.0
+    contour = contour[:, :2]
+    if len(contour) < 3:
+        return 0.0
+
+    rect = cv2.minAreaRect(contour.astype(np.float32).reshape(-1, 1, 2))
+    box = cv2.boxPoints(rect).astype(float)
+    if len(box) < 4:
+        return 0.0
+
+    best_vector: np.ndarray | None = None
+    best_length = 0.0
+    for index in range(4):
+        vector = box[(index + 1) % 4] - box[index]
+        length = float(np.linalg.norm(vector))
+        if length > best_length:
+            best_length = length
+            best_vector = vector
+
+    if best_vector is None or best_length <= 1e-9:
+        return 0.0
+
+    heading = normalize_degrees(
+        float(np.degrees(np.arctan2(float(best_vector[1]), float(best_vector[0]))))
+    )
+    return nearest_axis_equivalent_degrees(float(reference_rz), heading)
 
 
 def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:
