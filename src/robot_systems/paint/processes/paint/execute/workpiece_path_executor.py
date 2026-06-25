@@ -1020,10 +1020,22 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_tcp_dy,
         )
         pickup_approach_z = float(pickup_z) + PAINT_PROCESS_CONFIG.pickup_approach_offset_mm
+        pickup_lift_z = float(pickup_z) + min(
+            PAINT_PROCESS_CONFIG.pickup_initial_lift_clearance_mm,
+            PAINT_PROCESS_CONFIG.pickup_approach_offset_mm,
+        )
         pickup_approach_pose = [
             pickup_centroid_x - pickup_tcp_dx,
             pickup_centroid_y - pickup_tcp_dy,
             pickup_approach_z,
+            pickup_rx,
+            pickup_ry,
+            pickup_rz,
+        ]
+        lift_pose = [
+            pickup_centroid_x - pickup_tcp_dx,
+            pickup_centroid_y - pickup_tcp_dy,
+            pickup_lift_z,
             pickup_rx,
             pickup_ry,
             pickup_rz,
@@ -1128,7 +1140,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return PickupToPivotPlan(
             pickup_approach_pose=pickup_approach_pose,
             pickup_pose=pickup_pose,
-            lift_pose=list(pickup_approach_pose),
+            lift_pose=lift_pose,
             change_plane_pose=change_plane_pose,
             align_pose=align_pose,
             stage_transition_poses=stage_transition_poses,

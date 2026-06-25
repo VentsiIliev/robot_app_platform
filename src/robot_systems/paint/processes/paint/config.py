@@ -16,6 +16,7 @@ class PickupMotionConfig:
     default_z_mm: float = 300.0
     approach_offset_mm: float = 100.0
     contact_offset_mm: float = 2.0
+    initial_lift_clearance_mm: float = 20.0
 
     # Fallback motion used by generic pickup helper calls.
     default_vel_percent: float = 20.0
@@ -354,6 +355,10 @@ class PaintProcessConfig:
     @property
     def pickup_contact_offset_mm(self) -> float:
         return float(self.pickup_motion.contact_offset_mm)
+
+    @property
+    def pickup_initial_lift_clearance_mm(self) -> float:
+        return float(self.pickup_motion.initial_lift_clearance_mm)
 
     @property
     def navigation_unwind_vel_percent(self) -> float:

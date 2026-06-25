@@ -212,11 +212,12 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertIsNotNone(plan)
         expected_pickup_z = 100.0 + 7.0 + PAINT_PROCESS_CONFIG.pickup_contact_offset_mm
         expected_approach_z = expected_pickup_z + PAINT_PROCESS_CONFIG.pickup_approach_offset_mm
+        expected_lift_z = expected_pickup_z + PAINT_PROCESS_CONFIG.pickup_initial_lift_clearance_mm
         self.assertEqual(plan.pickup_pose, [11.0, 22.0, expected_pickup_z, 180.0, 5.0, 33.0])
         self.assertEqual(plan.pickup_approach_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 33.0])
-        self.assertEqual(plan.lift_pose, plan.pickup_approach_pose)
-        self.assertEqual(plan.align_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 44.0])
-        self.assertEqual(plan.staged_pose, [101.0, 202.0, 303.0, 1.0, 2.0, 44.0])
+        self.assertEqual(plan.lift_pose, [11.0, 22.0, expected_lift_z, 180.0, 5.0, 33.0])
+        self.assertEqual(plan.align_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 15.0])
+        self.assertEqual(plan.staged_pose, [101.0, 202.0, 303.0, 1.0, 2.0, 15.0])
 
     def test_build_pickup_and_stage_poses_does_not_double_apply_tcp_offset_for_resolved_pickup_target(self):
         executor = PaintWorkpiecePathExecutor(
@@ -527,7 +528,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         plan = PickupToPivotPlan(
             pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 10.0],
             pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 10.0],
-            lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 10.0],
+            lift_pose=[10.0, 20.0, 70.0, 180.0, 0.0, 10.0],
             align_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 0.0],
             stage_transition_poses=[],
             staged_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 0.0],
@@ -546,6 +547,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(10.0, commanded_positions[1][5])
         self.assertEqual(10.0, commanded_positions[2][5])
         self.assertEqual(0.0, commanded_positions[3][5])
+        self.assertEqual(70.0, commanded_positions[2][2])
+        self.assertEqual(100.0, commanded_positions[3][2])
 
     def test_pre_release_dropoff_does_not_restore_pickup_rz_before_release(self):
         robot_service = MagicMock()
