@@ -2,6 +2,7 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
 from src.engine.robot.configuration import (
@@ -205,6 +206,7 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),
                      "height_measuring/calibration_data.json"),
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
+        SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
     ]
 
     services = [

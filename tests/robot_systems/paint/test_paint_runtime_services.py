@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 
@@ -18,9 +16,9 @@ from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_serv
 )
 from src.robot_systems.paint.calibration.coordinator import PaintCalibrationCoordinator
 from src.robot_systems.paint.component_ids import ProcessID
-from src.robot_systems.paint.domain.vacuum_pump.relay_vacuum_pump_controller import (
-    RelayVacuumPumpController,
-)
+from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
+from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import ModbusVacuumPumpTransport
+from src.engine.hardware.vacuum_pump.vacuum_pump_controller import VacuumPumpController
 from src.robot_systems.paint.processes.robot_calibration_process import (
     RobotCalibrationProcess,
 )
@@ -221,64 +219,105 @@ class TestRobotCalibrationProcess(unittest.TestCase):
         process.set_error.assert_not_called()
 
 
-class TestRelayVacuumPumpController(unittest.TestCase):
-    def test_turn_on_and_off_delegate_to_state_setter(self) -> None:
-        controller = RelayVacuumPumpController("/tmp/relay_client.py")
-        controller._set_state = MagicMock(side_effect=[True, False])
+class TestVacuumPumpController(unittest.TestCase):
+    def test_turn_on_and_off_write_configured_values(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(pump_register=128, on_value=1, off_value=0),
+        )
 
         self.assertTrue(controller.turn_on())
+        self.assertTrue(controller.turn_off())
+
+        transport.write_register.assert_any_call(128, 1)
+        transport.write_register.assert_any_call(128, 0)
+
+    def test_turn_off_pulses_blow_off_after_pump_off(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(
+                pump_register=128,
+                blow_off_register=129,
+                blow_off_pulse_seconds=0.0,
+            ),
+        )
+
+        self.assertTrue(controller.turn_off())
+
+        self.assertEqual(
+            transport.write_register.call_args_list,
+            [
+                call(128, 0),
+                call(129, 1),
+                call(129, 0),
+            ],
+        )
+
+    def test_transport_failures_return_false(self) -> None:
+        transport = MagicMock()
+        transport.write_register.side_effect = RuntimeError("boom")
+        controller = VacuumPumpController(transport)
+
+        self.assertFalse(controller.turn_on())
         self.assertFalse(controller.turn_off())
-        controller._set_state.assert_any_call("on")
-        controller._set_state.assert_any_call("off")
 
-    def test_set_state_returns_false_when_module_missing(self) -> None:
-        controller = RelayVacuumPumpController("/tmp/missing.py")
-        controller._load_module = MagicMock(return_value=None)
 
-        self.assertFalse(controller._set_state("on"))
+class TestModbusVacuumPumpTransport(unittest.TestCase):
+    def test_no_response_write_is_treated_as_success_for_write_only_relay(self) -> None:
+        class NoResponseError(Exception):
+            pass
 
-    def test_set_state_calls_control_relay_and_returns_success_flag(self) -> None:
-        module = SimpleNamespace(control_relay=MagicMock(return_value={"success": True}))
-        controller = RelayVacuumPumpController("/tmp/relay_client.py", host="host", port=55, output_num=7)
-        controller._load_module = MagicMock(return_value=module)
+        inst = MagicMock()
+        inst.write_bits.side_effect = NoResponseError("no answer")
+        session = MagicMock()
+        session.__enter__.return_value = inst
+        session.__exit__.return_value = None
+        transport = ModbusVacuumPumpTransport(
+            port="/dev/null",
+            slave_address=1,
+            no_response_retry_delay_s=0.0,
+        )
+        transport._session = MagicMock(return_value=session)
 
-        self.assertTrue(controller._set_state("on"))
-        module.control_relay.assert_called_once_with(7, "on", host="host", port=55)
+        transport.write_register(128, 1)
 
-        module.control_relay.reset_mock()
-        module.control_relay.return_value = {"success": False}
-        self.assertFalse(controller._set_state("off"))
-        module.control_relay.assert_called_once_with(7, "off", host="host", port=55)
+        self.assertEqual(inst.write_bits.call_count, 3)
+        inst.write_bits.assert_called_with(128, [1])
 
-    def test_set_state_returns_false_on_client_exception(self) -> None:
-        module = SimpleNamespace(control_relay=MagicMock(side_effect=RuntimeError("boom")))
-        controller = RelayVacuumPumpController("/tmp/relay_client.py")
-        controller._load_module = MagicMock(return_value=module)
+    def test_no_response_write_returns_after_successful_retry(self) -> None:
+        class NoResponseError(Exception):
+            pass
 
-        self.assertFalse(controller._set_state("on"))
+        inst = MagicMock()
+        inst.write_bits.side_effect = [NoResponseError("no answer"), None]
+        session = MagicMock()
+        session.__enter__.return_value = inst
+        session.__exit__.return_value = None
+        transport = ModbusVacuumPumpTransport(
+            port="/dev/null",
+            slave_address=1,
+            no_response_retry_delay_s=0.0,
+        )
+        transport._session = MagicMock(return_value=session)
 
-    def test_load_module_handles_missing_and_invalid_paths_and_caches_success(self) -> None:
-        missing = RelayVacuumPumpController("/tmp/definitely-missing.py")
-        self.assertIsNone(missing._load_module())
+        transport.write_register(128, 0)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            relay_path = Path(tmp) / "relay_client.py"
-            relay_path.write_text(
-                "def control_relay(output_num, state, host='x', port=1):\n"
-                "    return {'success': True, 'output_num': output_num, 'state': state}\n",
-                encoding="utf-8",
-            )
-            controller = RelayVacuumPumpController(str(relay_path))
-            module = controller._load_module()
+        self.assertEqual(inst.write_bits.call_count, 2)
+        inst.write_bits.assert_called_with(128, [0])
 
-            self.assertIsNotNone(module)
-            self.assertIs(module, controller._load_module())
-            self.assertTrue(module.control_relay(1, 'on')["success"])
+    def test_other_write_errors_still_raise(self) -> None:
+        inst = MagicMock()
+        inst.write_bits.side_effect = RuntimeError("serial failed")
+        session = MagicMock()
+        session.__enter__.return_value = inst
+        session.__exit__.return_value = None
+        transport = ModbusVacuumPumpTransport(port="/dev/null", slave_address=1)
+        transport._session = MagicMock(return_value=session)
 
-        with tempfile.TemporaryDirectory() as tmp:
-            bad_path = Path(tmp) / "bad_relay.py"
-            bad_path.write_text("raise RuntimeError('import failed')\n", encoding="utf-8")
-            self.assertIsNone(RelayVacuumPumpController(str(bad_path))._load_module())
+        with self.assertRaises(RuntimeError):
+            transport.write_register(128, 1)
 
 
 if __name__ == "__main__":

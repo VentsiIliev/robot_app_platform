@@ -31,6 +31,8 @@ class RobotStateManager(IRobotStateProvider):
         self._velocity: float = 0.0
         self._acceleration: float = 0.0
         self._state: str = "idle"
+        self._connection_was_disconnected = False
+        self._last_connection_generation = None
 
         self._running = False
         self._thread: threading.Thread | None = None
@@ -125,12 +127,18 @@ class RobotStateManager(IRobotStateProvider):
             time.sleep(self._POLL_INTERVAL_S)
 
     def _poll_once(self) -> None:
+        self._sync_connection_generation()
         state_getter = getattr(self._robot, "get_connection_state", None)
         connection_state = state_getter() if callable(state_getter) else "idle"
 
         if connection_state == "disconnected":
             with self._lock:
                 self._state = "disconnected"
+                self._position = []
+                self._velocity = 0.0
+                self._acceleration = 0.0
+                self._active_tool_synced = None
+                self._connection_was_disconnected = True
             if self._publisher:
                 self._publisher.publish(self._build_snapshot())
             return
@@ -143,6 +151,16 @@ class RobotStateManager(IRobotStateProvider):
             if self._publisher:
                 self._publisher.publish(self._build_snapshot())
             return
+
+        if self._connection_was_disconnected:
+            drive_status_getter = getattr(self._robot, "get_drive_status", None)
+            if callable(drive_status_getter):
+                try:
+                    drive_status_getter()
+                except Exception:
+                    self._logger.debug("Failed to refresh robot drive status after reconnect", exc_info=True)
+            with self._lock:
+                self._connection_was_disconnected = False
 
         pos = self._robot.get_current_position()
         vel = self._robot.get_current_velocity()
@@ -186,3 +204,26 @@ class RobotStateManager(IRobotStateProvider):
         self._active_tool_synced = desired_tool
         self._logger.info("Configured active robot tool synced: %s", desired_tool)
         return True
+
+    def _sync_connection_generation(self) -> None:
+        details_getter = getattr(self._robot, "get_connection_details", None)
+        if not callable(details_getter):
+            return
+        try:
+            details = details_getter() or {}
+        except Exception:
+            self._logger.debug("Failed to collect robot connection generation", exc_info=True)
+            return
+        generation = details.get("connection_generation")
+        if generation is None:
+            return
+        with self._lock:
+            if self._last_connection_generation is None:
+                self._last_connection_generation = generation
+                return
+            if generation == self._last_connection_generation:
+                return
+            self._last_connection_generation = generation
+            self._active_tool_synced = None
+            self._connection_was_disconnected = True
+        self._logger.info("Robot connection generation changed; active tool will be re-synced")

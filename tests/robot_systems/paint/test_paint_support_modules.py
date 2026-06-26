@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.robot.targeting import (
     RemoteTcpDefinition,
@@ -168,19 +170,28 @@ class TestPaintIdentifiersAndExports(unittest.TestCase):
 
 
 class TestPaintServiceBuildersAndProviders(unittest.TestCase):
-    def test_build_vacuum_pump_service_uses_repo_local_relay_client(self) -> None:
+    def test_build_vacuum_pump_service_uses_modbus_factory(self) -> None:
+        modbus_config = object()
+        ctx = SimpleNamespace(
+            settings=SimpleNamespace(get=MagicMock(return_value=modbus_config)),
+        )
+
         with patch(
-            "src.robot_systems.paint.domain.vacuum_pump.RelayVacuumPumpController",
+            "src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_factory.build_modbus_vacuum_pump_controller",
             return_value="vacuum",
-        ) as controller_cls:
-            result = build_vacuum_pump_service(object())
+        ) as factory:
+            result = build_vacuum_pump_service(ctx)
 
         self.assertEqual(result, "vacuum")
-        kwargs = controller_cls.call_args.kwargs
-        self.assertTrue(kwargs["relay_client_path"].endswith("domain/vacuum_pump/relay_client.py"))
-        self.assertEqual(kwargs["host"], "127.0.0.1")
-        self.assertEqual(kwargs["port"], 5003)
-        self.assertEqual(kwargs["output_num"], 0)
+        ctx.settings.get.assert_called_once_with(CommonSettingsID.MODBUS_CONFIG)
+        kwargs = factory.call_args.kwargs
+        self.assertIs(kwargs["modbus_config"], modbus_config)
+        self.assertEqual(kwargs["vacuum_config"].pump_register, 128)
+
+    def test_build_vacuum_pump_service_returns_none_on_build_failure(self) -> None:
+        ctx = SimpleNamespace(settings=SimpleNamespace(get=MagicMock(side_effect=RuntimeError("bad"))))
+
+        self.assertIsNone(build_vacuum_pump_service(ctx))
 
     def test_height_measuring_provider_builds_mock_laser(self) -> None:
         provider = PaintRobotSystemHeightMeasuringProvider(robot_system=object())

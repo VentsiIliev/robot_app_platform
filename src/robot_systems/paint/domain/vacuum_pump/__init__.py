@@ -1,2 +1,4 @@
-from .relay_vacuum_pump_controller import RelayVacuumPumpController
+"""Paint vacuum-pump domain package.
 
+Runtime vacuum-pump control is provided by src.engine.hardware.vacuum_pump.
+"""

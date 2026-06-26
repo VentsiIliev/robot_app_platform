@@ -120,6 +120,9 @@ class FairinoRos2Robot(IRobot):
     def get_safety_walls_status(self) -> dict:
         return self._client.get_safety_walls_status()
 
+    def get_drive_status(self) -> dict:
+        return self._client.get_drive_status()
+
     def validate_pose(
         self,
         start_position,
