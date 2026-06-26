@@ -842,6 +842,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 return False, "Pivot-path execution requires a valid base/pivot position"
             _logger.debug(f"Pivot path after build_pivot_execution_path: {len(pivot_path)}")
             command_pivot_path = self._pivot_execution_command_path(pivot_path)
+            command_pivot_path = self._append_pivot_retreat_waypoint(command_pivot_path)
 
             # self._write_pivot_debug_dump(
             #     source_path=spline,
@@ -1260,6 +1261,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
         return command_path
 
+    def _append_pivot_retreat_waypoint(self, command_path: list[list[float]]) -> list[list[float]]:
+        """Append an off-pivot retreat waypoint to the paint trajectory command."""
+        if not command_path:
+            return []
+        path_with_retreat = [list(pose) for pose in command_path]
+        final_contact_pose = list(path_with_retreat[-1])
+        retreat_pose = _paint_axis_staging_offset_pose(final_contact_pose, self._pivot_config)
+        if np.allclose(
+            np.asarray(final_contact_pose[:3], dtype=float),
+            np.asarray(retreat_pose[:3], dtype=float),
+            atol=1e-6,
+        ):
+            return path_with_retreat
+        path_with_retreat.append(retreat_pose)
+        _logger.info(
+            "[PIVOT_PATH] appended off-pivot retreat waypoint: contact_pose=%s retreat_pose=%s",
+            [round(float(v), 3) for v in final_contact_pose[:6]],
+            [round(float(v), 3) for v in retreat_pose[:6]],
+        )
+        return path_with_retreat
+
     @timed_step(_logger, "vacuum_on")
     def _turn_vacuum_on(self) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
@@ -1464,6 +1486,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
             with timed_block(_logger, "pivot_job_prepare", label=f"{job_label}:build_command_path"):
                 command_pivot_path = self._pivot_execution_command_path(pivot_path)
+                command_pivot_path = self._append_pivot_retreat_waypoint(command_pivot_path)
             if self._last_process_start_rz is None and command_pivot_path:
                 self._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 

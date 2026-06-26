@@ -31,33 +31,33 @@ class PickupMotionConfig:
     descend_acc_percent: float = 40.0
 
     # Lift away from pickup contact, then align to the paint start orientation.
-    lift_align_vel_percent: float = 50.0
-    lift_align_acc_percent: float = 100.0
+    lift_align_vel_percent: float = 80.0
+    lift_align_acc_percent: float = 30.0
 
     # Change from pickup/table plane orientation to paint plane orientation.
-    change_plane_vel_percent: float = 30.0
-    change_plane_acc_percent: float = 70.0
+    change_plane_vel_percent: float = 50.0
+    change_plane_acc_percent: float = 20.0
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
 
     # Optional intermediate staging poses between change-plane and pivot contact.
-    stage_transition_vel_percent: float = 20.0
-    stage_transition_acc_percent: float = 50.0
+    stage_transition_vel_percent: float = 50.0
+    stage_transition_acc_percent: float = 20.0
 
     # Move into the first pivot contact pose.
-    first_contact_vel_percent: float = 40.0
-    first_contact_acc_percent: float = 60.0
+    first_contact_vel_percent: float = 50.0
+    first_contact_acc_percent: float = 20.0
 
     # Deprecated: pickup orientation is no longer restored before release.
     restore_orientation_z_lift_mm: float = 0.0
 
     # Return from pivot completion back to the pickup align pose before release.
-    release_align_vel_percent: float = 30.0
-    release_align_acc_percent: float = 70.0
+    release_align_vel_percent: float = 50.0
+    release_align_acc_percent: float = 20.0
 
     # Deprecated: pickup orientation is no longer restored before vacuum release.
-    release_restore_vel_percent: float = 30.0
-    release_restore_acc_percent: float = 70.0
+    release_restore_vel_percent: float = 50.0
+    release_restore_acc_percent: float = 30.0
 
 
 @dataclass(frozen=True)
@@ -65,9 +65,9 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 100.0
+    unwind_vel_percent: float = 50.0
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 100.0
+    unwind_acc_percent: float = 20.0
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
