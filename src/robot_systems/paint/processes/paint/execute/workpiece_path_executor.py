@@ -38,6 +38,12 @@ from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
     project_paint_motion_geometry_continuous,
     rebase_projected_paint_path_to_zero_start_rz,
 )
+from src.robot_systems.paint.processes.paint.execute.projection_preview import (
+    pivot_source_path,
+    project_pivot_motion_snapshots_for_editor,
+    project_pivot_paths_for_editor,
+    projection_tool_anchor_xy,
+)
 from src.robot_systems.paint.timing import timed_block, timed_step, timing_session
 
 _logger = logging.getLogger(__name__)
@@ -132,21 +138,6 @@ def _paint_axis_staging_offset_pose(
     return offset_pose
 
 
-def _projection_tool_anchor_xy(job: dict, pivot_config: PaintSimulationConfig) -> tuple[float, float] | None:
-    """Return the selected tool/workpiece anchor used by pivot projection."""
-    if tuple(pivot_config.source_planar_coordinate_indices) != (0, 1):
-        return None
-
-    pickup_xy = job.get("pickup_xy")
-    if not pickup_xy or len(pickup_xy) < 2:
-        return None
-
-    try:
-        return float(pickup_xy[0]), float(pickup_xy[1])
-    except (TypeError, ValueError):
-        return None
-
-
 def _tcp_to_tool_local_xy(job: dict, pivot_config: PaintSimulationConfig) -> tuple[float, float] | None:
     """Return the local vector from configured robot TCP to selected tool point."""
     target_name = str(job.get("execution_target_point_name", "") or "").strip().lower()
@@ -168,14 +159,6 @@ def _tcp_to_tool_local_xy(job: dict, pivot_config: PaintSimulationConfig) -> tup
         return None
 
     return tcp_to_tool_x, tcp_to_tool_y
-
-
-def _pivot_source_path(job: dict, pivot_config: PaintSimulationConfig) -> list[list[float]]:
-    """Return the path used as geometric source for pivot projection."""
-    path = job.get("pivot_source_path") or job.get("execution_path") or []
-    if isinstance(path, list):
-        return path
-    return [list(point) for point in path]
 
 
 def _prepare_pivot_source_plan(
@@ -460,6 +443,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Build and cache the execution plan for a paint workpiece."""
         if self._path_preparation_service is None:
             raise RuntimeError("Path preparation service is not available")
+
         generic_plan = self._path_preparation_service.build_execution_plan(workpiece, skip_debug_plot=skip_debug_plot)
         self._last_execution_plan = _prepare_pivot_source_plan(generic_plan, self._pivot_config)
         return self._last_execution_plan
@@ -610,34 +594,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if base_pivot_pose is None or len(base_pivot_pose) < 3:
             return [], base_pivot_pose
         pickup_plan = self._build_pickup_and_stage_poses(execution_plan)
-        paths = []
-        last_pivot_pose = list(base_pivot_pose)
-        for job in execution_plan.execution_jobs:
-            source_path = _pivot_source_path(job, self._pivot_config)
-            if not source_path:
-                continue
-            pivot_pose = self._apply_pivot_offset(
-                base_pivot_pose,
-                self._resolve_pivot_offset_mm(job, execution_plan),
-            )
-            if pivot_pose is None or len(pivot_pose) < 3:
-                continue
-            last_pivot_pose = list(pivot_pose)
-            anchor_xy = _projection_tool_anchor_xy(job, self._pivot_config)
-            center_path, _, _ = _project_paint_motion_geometry_continuous(
-                source_path,
-                pivot_pose,
-                self._pivot_config,
-                anchor_xy=anchor_xy,
-                source_rotation_deg=(
-                    float(pickup_plan.source_rotation_deg)
-                    if pickup_plan is not None else 0.0
-                ),
-            )
-            center_path = self._align_projected_path_to_pickup_plan(center_path, pickup_plan)
-            center_path = self._pivot_execution_command_path(center_path, pickup_plan=pickup_plan)
-            paths.append(center_path)
-        return paths, last_pivot_pose
+        return project_pivot_paths_for_editor(
+            execution_plan=execution_plan,
+            pivot_config=self._pivot_config,
+            base_pivot_pose=base_pivot_pose,
+            pickup_plan=pickup_plan,
+            apply_pivot_offset=self._apply_pivot_offset,
+            resolve_pivot_offset_mm=self._resolve_pivot_offset_mm,
+            align_projected_path_to_pickup_plan=self._align_projected_path_to_pickup_plan,
+            pivot_execution_command_path=self._pivot_execution_command_path,
+            project_motion_geometry=_project_paint_motion_geometry_continuous,
+        )
 
     def get_pivot_motion_snapshots(
         self,
@@ -649,32 +616,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if base_pivot_pose is None or len(base_pivot_pose) < 3:
             return [], base_pivot_pose
         pickup_plan = self._build_pickup_and_stage_poses(execution_plan)
-        motion = []
-        last_pivot_pose = list(base_pivot_pose)
-        for job in execution_plan.execution_jobs:
-            source_path = _pivot_source_path(job, self._pivot_config)
-            if not source_path:
-                continue
-            pivot_pose = self._apply_pivot_offset(
-                base_pivot_pose,
-                self._resolve_pivot_offset_mm(job, execution_plan),
-            )
-            if pivot_pose is None or len(pivot_pose) < 3:
-                continue
-            last_pivot_pose = list(pivot_pose)
-            anchor_xy = _projection_tool_anchor_xy(job, self._pivot_config)
-            _, snapshots, _ = _project_paint_motion_geometry_continuous(
-                source_path,
-                pivot_pose,
-                self._pivot_config,
-                anchor_xy=anchor_xy,
-                source_rotation_deg=(
-                    float(pickup_plan.source_rotation_deg)
-                    if pickup_plan is not None else 0.0
-                ),
-            )
-            motion.append(snapshots)
-        return motion, last_pivot_pose
+        return project_pivot_motion_snapshots_for_editor(
+            execution_plan=execution_plan,
+            pivot_config=self._pivot_config,
+            base_pivot_pose=base_pivot_pose,
+            pickup_plan=pickup_plan,
+            apply_pivot_offset=self._apply_pivot_offset,
+            resolve_pivot_offset_mm=self._resolve_pivot_offset_mm,
+            project_motion_geometry=_project_paint_motion_geometry_continuous,
+        )
 
 
     def _build_pivot_execution_path(
@@ -731,7 +681,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         total_waypoints = 0
         for job in jobs:
-            spline = _pivot_source_path(job, self._pivot_config)
+            spline = pivot_source_path(job, self._pivot_config)
             _logger.debug(f"Execution path before build_pivot_execution_path: {len(spline)}")
             vel = float(job.get("vel", 60.0))
             acc = float(job.get("acc", 30.0))
@@ -745,7 +695,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pivot_pose = self._apply_pivot_offset(self._resolve_base_position(), pivot_offset_mm)
             if pivot_pose is None or len(pivot_pose) < 3:
                 return False, "Pivot-path execution requires a valid base/pivot position"
-            anchor_xy = _projection_tool_anchor_xy(job, self._pivot_config)
+            anchor_xy = projection_tool_anchor_xy(job, self._pivot_config)
             pivot_path, _, _ = _project_paint_motion_geometry_continuous(
                 spline,
                 pivot_pose,
@@ -817,7 +767,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
-        source_path = _pivot_source_path(jobs[0], self._pivot_config)
+        source_path = pivot_source_path(jobs[0], self._pivot_config)
         if not source_path:
             return None
 
@@ -828,7 +778,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         pickup_centroid_x = float(pickup_xy[0])
         pickup_centroid_y = float(pickup_xy[1])
 
-        anchor_xy = _projection_tool_anchor_xy(jobs[0], self._pivot_config)
+        anchor_xy = projection_tool_anchor_xy(jobs[0], self._pivot_config)
 
         pivot_offset_mm = self._resolve_pivot_offset_mm(jobs[0], execution_plan)
 
@@ -1282,7 +1232,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
-            spline = _pivot_source_path(job, self._pivot_config)
+            spline = pivot_source_path(job, self._pivot_config)
             vel = float(job.get("vel", 10.0))
             acc = float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
@@ -1290,7 +1240,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not spline:
                 continue
 
-            anchor_xy = _projection_tool_anchor_xy(job, self._pivot_config)
+            anchor_xy = projection_tool_anchor_xy(job, self._pivot_config)
             tcp_to_tool_local_xy = _tcp_to_tool_local_xy(job, self._pivot_config)
             source_rotation_deg = (
                 float(self._last_pickup_plan.source_rotation_deg)
