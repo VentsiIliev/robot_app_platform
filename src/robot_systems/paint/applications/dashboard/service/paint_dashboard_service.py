@@ -249,6 +249,12 @@ class PaintDashboardService(IPaintDashboardService):
 
     @staticmethod
     def _status_lines(process_state: str) -> list[str]:
-        return [
-            f"Paint process state: {process_state}",
-        ]
+        if process_state == ProcessState.RUNNING.value:
+            return ["Painting workpiece"]
+        if process_state == ProcessState.PAUSED.value:
+            return ["Paint job paused"]
+        if process_state == ProcessState.STOPPED.value:
+            return ["Paint job stopped"]
+        if process_state == ProcessState.ERROR.value:
+            return ["Resolve error before restart"]
+        return ["Waiting for start"]

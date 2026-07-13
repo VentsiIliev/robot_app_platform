@@ -2,9 +2,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+
 from src.engine.robot.path_preparation.default_workpiece_path_preparation_service import (
     DefaultWorkpiecePathPreparationService,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
+    _submit_debug_plot,
 )
 from src.engine.robot.path_preparation.geometry import (
     compute_pickup_rz_from_initial_paint_segment,
@@ -41,6 +44,21 @@ def _make_service(**kwargs):
 
 
 class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
+    def test_submit_debug_plot_allows_plot_function_label_keyword(self):
+        logger = MagicMock()
+        plot_fn = MagicMock()
+
+        with patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service._ensure_debug_plot_worker"
+        ), patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service._DEBUG_PLOT_QUEUE"
+        ) as queue:
+            _submit_debug_plot(logger, "debug_plot", plot_fn, label="workpiece_layer")
+
+        queue.put_nowait.assert_called_once_with(
+            (logger, "debug_plot", plot_fn, (), {"label": "workpiece_layer"})
+        )
+
     def test_build_execution_plan_paint_job_includes_pickup_and_target_metadata(self):
         registry = MagicMock()
         registry.by_name.side_effect = lambda name: {
@@ -323,6 +341,72 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         min_rect_rz.assert_called_once()
         path_rz.assert_not_called()
 
+    def test_build_execution_plan_accepts_nested_workpiece_contour_payload(self):
+        service = _make_service(
+            execute_from_workpiece_layer=True,
+            target_point_name="tool",
+        )
+        workpiece = {
+            "contour": {"contour": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+            "sprayPattern": {},
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[
+                [10, 20, 30, 180, 0, 0],
+                [40, 50, 30, 180, 0, 0],
+                [45, 55, 30, 180, 0, 0],
+            ],
+        ), patch.object(
+            service,
+            "_transform_single_pixel_to_robot",
+            side_effect=[(11.0, 12.0), (13.0, 14.0)],
+        ), patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_min_rect_long_axis",
+            return_value=44.0,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        job = plan.execution_jobs[0]
+        self.assertTrue(job["use_workpiece_layer"])
+        self.assertEqual([13.0, 14.0], job["pickup_xy"])
+        service._logger.warning.assert_not_called()
+
+    def test_build_execution_plan_accepts_numpy_nested_workpiece_contour_payload(self):
+        service = _make_service(
+            execute_from_workpiece_layer=True,
+            target_point_name="tool",
+        )
+        workpiece = {
+            "contour": {"contour": np.asarray([[0, 0], [10, 0], [10, 10], [0, 10]], dtype=np.float32)},
+            "sprayPattern": {},
+        }
+
+        with patch.object(
+            service,
+            "_transform_to_robot",
+            return_value=[
+                [10, 20, 30, 180, 0, 0],
+                [40, 50, 30, 180, 0, 0],
+                [45, 55, 30, 180, 0, 0],
+            ],
+        ), patch.object(
+            service,
+            "_transform_single_pixel_to_robot",
+            side_effect=[(11.0, 12.0), (13.0, 14.0)],
+        ), patch(
+            "src.engine.robot.path_preparation.default_workpiece_path_preparation_service.compute_pickup_rz_from_min_rect_long_axis",
+            return_value=44.0,
+        ):
+            plan = service.build_execution_plan(workpiece)
+
+        job = plan.execution_jobs[0]
+        self.assertTrue(job["use_workpiece_layer"])
+        self.assertEqual([13.0, 14.0], job["pickup_xy"])
+        service._logger.warning.assert_not_called()
+
     def test_pickup_target_defaults_to_execution_target_when_not_configured(self):
         registry = MagicMock()
         registry.by_name.return_value = SimpleNamespace(offset_x=9.0, offset_y=10.0)
@@ -601,6 +685,17 @@ class TestDefaultWorkpiecePathPreparationService(unittest.TestCase):
         result = service._extract_pickup_pixel(
             {
                 "contour": [[0, 0], [10, 0], [10, 10], [0, 10]],
+            }
+        )
+
+        self.assertEqual((5.0, 5.0), result)
+
+    def test_extract_pickup_pixel_accepts_nested_contour_payload(self):
+        service = _make_service()
+
+        result = service._extract_pickup_pixel(
+            {
+                "contour": {"contour": [[0, 0], [10, 0], [10, 10], [0, 10]]},
             }
         )
 

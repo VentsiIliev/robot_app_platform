@@ -71,12 +71,42 @@ def _debug_plot_worker_loop() -> None:
             _DEBUG_PLOT_QUEUE.task_done()
 
 
-def _submit_debug_plot(logger, label: str, fn: Callable, *args, **kwargs) -> None:
+def _submit_debug_plot(logger, plot_label: str, fn: Callable, *args, **kwargs) -> None:
     _ensure_debug_plot_worker()
     try:
-        _DEBUG_PLOT_QUEUE.put_nowait((logger, label, fn, args, kwargs))
+        _DEBUG_PLOT_QUEUE.put_nowait((logger, plot_label, fn, args, kwargs))
     except Full:
-        logger.warning("[EXECUTE] Dropping debug plot because background plot queue is full: %s", label)
+        logger.warning("[EXECUTE] Dropping debug plot because background plot queue is full: %s", plot_label)
+
+
+def _unwrap_contour_payload(contour):
+    if isinstance(contour, dict):
+        if contour.get("contour") is not None:
+            return contour.get("contour")
+        if contour.get("points") is not None:
+            return contour.get("points")
+        return []
+    return contour
+
+
+def _contour_points_array(contour) -> np.ndarray:
+    contour = _unwrap_contour_payload(contour)
+    try:
+        arr = np.asarray(contour if contour is not None else [], dtype=np.float32)
+    except (TypeError, ValueError):
+        return np.empty((0, 2), dtype=np.float32)
+    if arr.size == 0:
+        return np.empty((0, 2), dtype=np.float32)
+    if arr.ndim == 3 and arr.shape[1] == 1:
+        arr = arr[:, 0, :]
+    try:
+        return arr.reshape(-1, 2)
+    except ValueError:
+        return np.empty((0, 2), dtype=np.float32)
+
+
+def _has_valid_contour_payload(contour) -> bool:
+    return has_valid_contour(_unwrap_contour_payload(contour))
 
 
 def _copy_path_collection(paths: list[list[list[float]]]) -> list[list[list[float]]]:
@@ -373,9 +403,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         """
         merged = workpiece
         original_pickup_source = dict(merged)
-        if has_valid_contour(merged.get("contour")):
+        if _has_valid_contour_payload(merged.get("contour")):
             try:
-                original_pickup_source["contour"] = np.array(merged.get("contour", []), dtype=np.float32).copy()
+                original_pickup_source["contour"] = _contour_points_array(merged.get("contour")).copy()
             except Exception:
                 original_pickup_source["contour"] = merged.get("contour")
         spray_pattern = merged.get("sprayPattern", {})
@@ -392,7 +422,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         contour = spray_pattern.get("Contour") or None
         fill = spray_pattern.get("Fill") or None
 
-        has_workpiece_contour = has_valid_contour(merged.get("contour"))
+        has_workpiece_contour = _has_valid_contour_payload(merged.get("contour"))
         if self._execute_from_workpiece_layer and has_workpiece_contour:
             use_workpiece_layer = True
             if contour or fill:
@@ -415,11 +445,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         if use_workpiece_layer:
             self._logger.debug(f"USING WORKPIECE LAYER")
-            contour_arr = merged.get("contour", [])
+            contour_arr = _contour_points_array(merged.get("contour"))
             settings = {key: value for key, value in merged.items() if key not in {"contour", "sprayPattern"}}
             settings["height_mm"] = workpiece_height_mm
-            if not isinstance(contour_arr, np.ndarray):
-                contour_arr = np.array(contour_arr, dtype=np.float32)
             if contour_arr.size != 0:
                 raw_pts_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3:
@@ -464,11 +492,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             self._logger.debug(f"USING SPRAY PATTERN")
             for pattern_type in ("Contour", "Fill"):
                 for i, pattern in enumerate(spray_pattern.get(pattern_type, [])):
-                    contour_arr = pattern.get("contour", [])
+                    contour_arr = _contour_points_array(pattern.get("contour"))
                     settings = dict(pattern.get("settings", {}) or {})
                     settings["height_mm"] = workpiece_height_mm
-                    if not isinstance(contour_arr, np.ndarray):
-                        contour_arr = np.array(contour_arr, dtype=np.float32)
                     if contour_arr.size == 0:
                         continue
                     source_before_bezier_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
@@ -878,7 +904,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         if parsed_pickup is not None:
             return parsed_pickup
 
-        contour_arr = np.asarray((merged or {}).get("contour", []), dtype=np.float32)
+        contour_arr = _contour_points_array((merged or {}).get("contour"))
         if contour_arr.size == 0:
             return None
         contour_pts = contour_arr.reshape(-1, 1, 2)

@@ -182,6 +182,23 @@ class TestPaintProcessIntegration(unittest.TestCase):
         process._on_reset_errors()
         self.assertFalse(process._stopping)
 
+    def test_stop_requests_robot_motion_stop_and_vacuum_off(self):
+        robot = MagicMock()
+        vacuum = MagicMock()
+        process = PaintProcess(
+            production_service=MagicMock(),
+            messaging=MagicMock(),
+            robot_service=robot,
+            vacuum_pump=vacuum,
+        )
+
+        process._on_stop()
+        process._stop_thread.join(timeout=1.0)
+
+        self.assertTrue(process._stopping)
+        robot.stop_motion.assert_called_once_with()
+        vacuum.turn_off.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

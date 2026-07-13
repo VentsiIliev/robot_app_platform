@@ -210,10 +210,12 @@ def _build_paint_matching_service(robot_system, workpiece_service=None, capture_
 
 def _build_paint_workpiece_preparation_service(robot_system):
     from src.robot_systems.paint.processes.paint.plan import PaintWorkpiecePreparationService
+    from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
 
     return PaintWorkpiecePreparationService(
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
+        default_settings=build_paint_segment_settings_schema().get_defaults(),
         transformer=None,
         transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
     )

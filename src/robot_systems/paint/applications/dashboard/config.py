@@ -8,14 +8,22 @@ from pl_gui.dashboard.config import ActionButtonConfig, CardConfig, DashboardCon
 @dataclass
 class PaintDashboardConfig(DashboardConfig):
     show_placeholders: bool = False
+    card_grid_rows: int = 4
+    card_grid_cols: int = 1
+    card_grid_min_width: int = 360
+    card_grid_max_width: int = 430
+    action_grid_rows: int = 1
+    action_grid_cols: int = 1
+    bottom_section_height: int = 380
 
 
 PAINT_DASHBOARD_CARDS: list[CardConfig] = [
-    CardConfig(card_id=1, label="Paint Process"),
+    CardConfig(card_id=1, label="Mock"),
+    CardConfig(card_id=2, label="Mock"),
+    CardConfig(card_id=3, label="Mock"),
 ]
 
 
 PAINT_DASHBOARD_ACTIONS: list[ActionButtonConfig] = [
-    ActionButtonConfig(action_id="reset_errors", label="Reset Errors", row=1, col=0),
-    ActionButtonConfig(action_id="debug_contour_transform", label="Contour Transform", row=1, col=1),
+    ActionButtonConfig(action_id="reset_errors", label="Reset Errors", row=0, col=0),
 ]

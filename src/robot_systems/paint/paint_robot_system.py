@@ -305,6 +305,7 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         self._main_process = PaintProcess(
             production_service=self._paint_production_service,
+            robot_service=self._robot,
             vacuum_pump=self._vacuum_pump,
             messaging=self._messaging_service,
             system_manager=self._system_manager,

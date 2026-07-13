@@ -23,12 +23,14 @@ class PaintWorkpiecePreparationService:
         *,
         can_match_fn: Callable[[], bool],
         match_workpiece_fn: Callable,
+        default_settings: Optional[dict] = None,
         transformer=None,
         transformer_getter: Optional[Callable[[], object]] = None,
     ) -> None:
         """Store matching hooks and the transformer needed for contour preparation."""
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
+        self._default_settings = dict(default_settings or {})
         self._transformer = transformer
         self._transformer_getter = transformer_getter
 
@@ -59,7 +61,12 @@ class PaintWorkpiecePreparationService:
 
         _logger.info("[PREP] fallback to captured contour")
         return (
-            contour_to_workpiece_raw(captured_contour, workpiece_id="captured", name="Captured contour"),
+            contour_to_workpiece_raw(
+                captured_contour,
+                workpiece_id="captured",
+                name="Captured contour",
+                default_settings=self._default_settings,
+            ),
             "Executed captured contour",
         )
 

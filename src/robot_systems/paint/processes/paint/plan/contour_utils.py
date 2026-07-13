@@ -33,10 +33,11 @@ def contour_to_workpiece_raw(
     workpiece_id: str = "captured",
     name: str = "Captured contour",
     height_mm: float = 0.0,
+    default_settings: dict | None = None,
 ) -> dict:
     """Wrap a captured contour into the raw workpiece payload shape used by paint execution."""
     normalized = _normalize_contour_points(contour)
-    return {
+    payload = {
         "workpieceId": str(workpiece_id),
         "name": str(name),
         "height_mm": float(height_mm),
@@ -46,6 +47,16 @@ def contour_to_workpiece_raw(
         ],
         "sprayPattern": {"Contour": [], "Fill": []},
     }
+    if default_settings:
+        payload.update(
+            {
+                str(key): value
+                for key, value in dict(default_settings).items()
+                if value is not None
+            }
+        )
+        payload["height_mm"] = float(height_mm)
+    return payload
 
 
 def extract_points_for_log(raw: dict) -> np.ndarray:

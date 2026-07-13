@@ -473,6 +473,18 @@ class TestPaintApplicationWiring(unittest.TestCase):
         prep_cls.assert_called_once_with(
             can_match_fn=matching_service.can_match_saved_workpieces,
             match_workpiece_fn=matching_service.match_saved_workpieces,
+            default_settings={
+                "velocity": "10",
+                "acceleration": "10",
+                "rz_angle": "0",
+                "offset": "0",
+                "preprocess_min_spacing_mm": "2.5",
+                "interpolation_spacing_mm": "10.0",
+                "dense_sampling_factor": "0.25",
+                "execution_spacing_mm": "7.5",
+                "path_tangent_lookahead_mm": "15.0",
+                "path_tangent_deadband_deg": "5.0",
+            },
             transformer=None,
             transformer_getter=unittest.mock.ANY,
         )

@@ -7,13 +7,12 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QScrollArea,
-    QTextEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
+from pl_gui.settings.settings_view.styles import BG_COLOR
 
 
 class PaintDashboardView(IApplicationView):
@@ -31,6 +30,8 @@ class PaintDashboardView(IApplicationView):
         super().__init__("PaintDashboard", parent)
 
     def setup_ui(self) -> None:
+        self.setStyleSheet(f"background-color: {BG_COLOR};")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -41,42 +42,58 @@ class PaintDashboardView(IApplicationView):
             cards=self._cards_input,
         )
         layout.addWidget(self._dashboard)
-
-        self._state_label = QLabel("State: idle")
-        self._mode_label = QLabel("Mode: Paint Mode")
-        self._job_label = QLabel("Job: No active job")
-
-        self._notes = QTextEdit()
-        self._notes.setReadOnly(True)
-        self._notes.setPlaceholderText("Dashboard notes")
-
-        self._status_widget = QWidget()
-        status_layout = QVBoxLayout(self._status_widget)
-        status_layout.setContentsMargins(8, 8, 8, 8)
-        status_layout.setSpacing(8)
-        status_layout.addWidget(self._state_label)
-        status_layout.addWidget(self._mode_label)
-        status_layout.addWidget(self._job_label)
-        status_layout.addWidget(self._notes, 1)
-        self._inject_aux_widget(self._status_widget)
+        self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
+        self._align_preview_and_card_columns()
+        self._move_reset_below_cards()
+        self._expand_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
         self._dashboard.stop_requested.connect(self.stop_requested)
         self._dashboard.pause_requested.connect(self.pause_requested)
         self._dashboard.action_requested.connect(self._on_inner_action)
 
-    def _inject_aux_widget(self, widget) -> None:
+    def _align_preview_and_card_columns(self) -> None:
         try:
             main_layout = self._dashboard.layout_manager.main_layout
             top_section = main_layout.itemAt(0).layout()
             preview_container = top_section.itemAt(0).widget()
+            preview_container.setStyleSheet(f"background-color: {BG_COLOR};")
             aux_grid = preview_container.layout().itemAt(1).widget()
-            aux_layout = aux_grid.layout()
-            rows = self._config.preview_aux_rows
-            cols = self._config.preview_aux_cols
-            aux_layout.addWidget(widget, 0, 0, rows, cols)
+            aux_grid.setStyleSheet(f"background-color: {BG_COLOR};")
+            aux_grid.hide()
+            side_panel = top_section.itemAt(1).widget()
+            if side_panel is not None:
+                side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
+                side_panel.setFixedHeight(self._config.trajectory_height + 8)
+                top_section.setAlignment(side_panel, Qt.AlignmentFlag.AlignTop)
         except Exception:
-            widget.setParent(self._dashboard)
+            pass
+
+    def _move_reset_below_cards(self) -> None:
+        try:
+            reset_button = self._dashboard._action_buttons.get("reset_errors")
+            if reset_button is None:
+                return
+            main_layout = self._dashboard.layout_manager.main_layout
+            top_section = main_layout.itemAt(0).layout()
+            side_panel = top_section.itemAt(1).widget()
+            side_layout = side_panel.layout()
+            side_layout.addWidget(reset_button, 3, 0)
+        except Exception:
+            pass
+
+    def _expand_process_controls(self) -> None:
+        try:
+            main_layout = self._dashboard.layout_manager.main_layout
+            bottom_container = main_layout.itemAt(1).widget()
+            bottom_layout = bottom_container.layout()
+            action_area = bottom_layout.itemAt(0).widget()
+            controls = bottom_layout.itemAt(1).widget()
+            action_area.hide()
+            bottom_layout.setStretchFactor(action_area, 0)
+            bottom_layout.setStretchFactor(controls, 1)
+        except Exception:
+            pass
 
     def _on_inner_action(self, action_id: str) -> None:
         if action_id == "reset_errors":
@@ -88,16 +105,16 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.set_trajectory_image(image)
 
     def set_state(self, state: str) -> None:
-        self._state_label.setText(f"State: {state}")
+        _ = state
 
     def set_mode(self, mode: str) -> None:
-        self._mode_label.setText(f"Mode: {mode}")
+        _ = mode
 
     def set_active_job(self, label: str) -> None:
-        self._job_label.setText(f"Job: {label}")
+        _ = label
 
     def set_notes(self, lines: list[str]) -> None:
-        self._notes.setPlainText("\n".join(lines))
+        _ = lines
 
     def set_start_enabled(self, enabled: bool) -> None:
         self._dashboard.set_start_enabled(enabled)
