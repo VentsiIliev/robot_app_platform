@@ -5,8 +5,7 @@ from typing import Callable, Optional
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
-from src.robot_systems.paint.processes.paint.plan.contour_utils import pick_largest_contour
-from src.robot_systems.paint.processes.paint.plan.matchable_workpiece import MatchableWorkpiece
+from src.robot_systems.paint.processes.paint.match.matchable_workpiece import MatchableWorkpiece
 
 _logger = logging.getLogger(__name__)
 

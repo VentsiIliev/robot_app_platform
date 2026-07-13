@@ -36,24 +36,24 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         action_id = str(action_id or "").strip().lower()
         if action_id == "weld_continuous":
-            return self.execute_preview_paths(execution_plan, mode="continuous")
+            return self.execute_process_paths(execution_plan, mode="continuous")
         if action_id == "weld_pose_path":
-            return self.execute_preview_paths(execution_plan, mode="pose_path")
+            return self.execute_process_paths(execution_plan, mode="pose_path")
         return False, f"Unsupported welding process action: {action_id}"
 
-    def get_pivot_preview_paths(
+    def get_projected_pivot_paths(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         return [], None
 
-    def get_pivot_motion_preview(
+    def get_pivot_motion_snapshots(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ):
         return [], None
 
-    def execute_preview_paths(
+    def execute_process_paths(
         self,
         execution_plan: WorkpieceExecutionPlan,
         mode: str = "continuous",

@@ -17,14 +17,18 @@ class WorkpieceProcessAction:
 
 
 class IWorkpiecePathExecutor(ABC):
-    """Robot-system-owned execution adapter for editor preview paths."""
+    """Robot-system-owned execution adapter for prepared workpiece paths."""
 
-    def prepare_workpiece_preview(self, workpiece: dict, skip_debug_plot: bool = False) -> "WorkpieceExecutionPlan":
-        """Optionally let the robot-system executor own workpiece-to-preview-plan preparation."""
+    def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> "WorkpieceExecutionPlan":
+        """Optionally let the robot-system executor own workpiece-to-execution-plan preparation."""
         raise NotImplementedError
 
+    def prepare_workpiece_preview(self, workpiece: dict, skip_debug_plot: bool = False) -> "WorkpieceExecutionPlan":
+        """Backward-compatible alias for editor preview callers."""
+        return self.prepare_workpiece_execution_plan(workpiece, skip_debug_plot=skip_debug_plot)
+
     def get_last_execution_plan(self) -> "WorkpieceExecutionPlan | None":
-        """Optionally expose the executor-owned preview plan cache."""
+        """Optionally expose the executor-owned execution plan cache."""
         raise NotImplementedError
 
     def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
@@ -43,33 +47,55 @@ class IWorkpiecePathExecutor(ABC):
         action_id: str,
     ) -> tuple[bool, str]:
         """Execute one executor-owned process action."""
-        return self.execute_preview_paths(execution_plan, mode=action_id)
+        return self.execute_process_paths(execution_plan, mode=action_id)
 
     @abstractmethod
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         ...
 
     @abstractmethod
-    def get_pivot_preview_paths(
+    def get_projected_pivot_paths(
         self,
         execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         ...
 
+    def get_pivot_preview_paths(
+        self,
+        execution_plan: "WorkpieceExecutionPlan",
+    ) -> tuple[list[list[list[float]]], list[float] | None]:
+        """Backward-compatible alias for editor preview callers."""
+        return self.get_projected_pivot_paths(execution_plan)
+
     @abstractmethod
-    def get_pivot_motion_preview(
+    def get_pivot_motion_snapshots(
         self,
         execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[list[list[np.ndarray]], list[float] | None]:
         ...
 
+    def get_pivot_motion_preview(
+        self,
+        execution_plan: "WorkpieceExecutionPlan",
+    ) -> tuple[list[list[np.ndarray]], list[float] | None]:
+        """Backward-compatible alias for editor preview callers."""
+        return self.get_pivot_motion_snapshots(execution_plan)
+
     @abstractmethod
-    def execute_preview_paths(
+    def execute_process_paths(
         self,
         execution_plan: "WorkpieceExecutionPlan",
         mode: str = "continuous",
     ) -> tuple[bool, str]:
         ...
+
+    def execute_preview_paths(
+        self,
+        execution_plan: "WorkpieceExecutionPlan",
+        mode: str = "continuous",
+    ) -> tuple[bool, str]:
+        """Backward-compatible alias for older executor callers."""
+        return self.execute_process_paths(execution_plan, mode=mode)
 
     @abstractmethod
     def execute_pickup_and_paint(

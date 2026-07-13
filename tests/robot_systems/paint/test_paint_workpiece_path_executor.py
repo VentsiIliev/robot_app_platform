@@ -62,7 +62,7 @@ class TestPaintPathRotationHelpers(unittest.TestCase):
 
 
 class TestPaintWorkpiecePathExecutor(unittest.TestCase):
-    def test_prepare_workpiece_preview_builds_and_caches_execution_plan(self):
+    def test_prepare_workpiece_execution_plan_builds_and_caches_execution_plan(self):
         expected_plan = _execution_plan()
         path_preparation_service = MagicMock()
         path_preparation_service.build_execution_plan.return_value = expected_plan
@@ -71,19 +71,22 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             path_preparation_service=path_preparation_service,
         )
 
-        result = executor.prepare_workpiece_preview({"workpieceId": "wp1"})
+        result = executor.prepare_workpiece_execution_plan({"workpieceId": "wp1"})
 
         self.assertIs(expected_plan, result)
         self.assertIs(expected_plan, executor.get_last_execution_plan())
-        path_preparation_service.build_execution_plan.assert_called_once_with({"workpieceId": "wp1"})
+        path_preparation_service.build_execution_plan.assert_called_once_with(
+            {"workpieceId": "wp1"},
+            skip_debug_plot=False,
+        )
 
-    def test_prepare_workpiece_preview_requires_path_preparation_service(self):
+    def test_prepare_workpiece_execution_plan_requires_path_preparation_service(self):
         executor = PaintWorkpiecePathExecutor(robot_service=None)
 
         with self.assertRaises(RuntimeError):
-            executor.prepare_workpiece_preview({})
+            executor.prepare_workpiece_execution_plan({})
 
-    def test_get_pivot_preview_paths_skips_jobs_without_paths_and_applies_offsets(self):
+    def test_get_projected_pivot_paths_skips_jobs_without_paths_and_applies_offsets(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,
             base_position_provider=lambda: [100, 200, 300, 0, 0, 90],
@@ -104,14 +107,14 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             side_effect=_project,
         ):
-            paths, last_pivot_pose = executor.get_pivot_preview_paths(execution_plan)
+            paths, last_pivot_pose = executor.get_projected_pivot_paths(execution_plan)
 
         self.assertEqual(2, len(paths))
         self.assertEqual([100.0, 215.0, 300.0, 0.0, 0.0, 90.0], captured_pivots[0][1])
         self.assertEqual([100.0, 195.0, 300.0, 0.0, 0.0, 90.0], captured_pivots[1][1])
         self.assertEqual([100.0, 195.0, 300.0, 0.0, 0.0, 90.0], last_pivot_pose)
 
-    def test_get_pivot_motion_preview_returns_projected_snapshots(self):
+    def test_get_pivot_motion_snapshots_returns_projected_snapshots(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,
             base_position_provider=lambda: [10, 20, 30, 0, 0, 0],
@@ -125,7 +128,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             return_value=([], expected_snapshots, []),
         ):
-            motion, last_pivot_pose = executor.get_pivot_motion_preview(execution_plan)
+            motion, last_pivot_pose = executor.get_pivot_motion_snapshots(execution_plan)
 
         self.assertEqual(1, len(motion))
         self.assertTrue(np.array_equal(expected_snapshots[0], motion[0][0]))
@@ -352,7 +355,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertGreaterEqual(len(projection.call_args_list), 1)
         self.assertAlmostEqual(12.0, projection.call_args_list[0].kwargs["source_rotation_deg"], places=6)
 
-    def test_pivot_preview_paths_use_pickup_source_rotation_and_command_mapping(self):
+    def test_projected_pivot_paths_use_pickup_source_rotation_and_command_mapping(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,
             base_position_provider=lambda: [100.0, 200.0, 300.0, -91.478, -0.047, -0.05],
@@ -380,7 +383,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
             side_effect=_project,
         ) as projection:
-            paths, _ = executor.get_pivot_preview_paths(execution_plan)
+            paths, _ = executor.get_projected_pivot_paths(execution_plan)
 
         self.assertEqual(1, len(paths))
         self.assertAlmostEqual(-0.002, paths[0][0][4], places=3)

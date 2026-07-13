@@ -197,7 +197,7 @@ def _build_paint_path_preparation_service(robot_system):
 
 
 def _build_paint_matching_service(robot_system, workpiece_service=None, capture_snapshot_service=None):
-    from src.robot_systems.paint.processes.paint.plan import PaintWorkpieceMatchingService
+    from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import PaintWorkpieceMatchingService
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     return PaintWorkpieceMatchingService(

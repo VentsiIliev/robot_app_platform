@@ -285,7 +285,7 @@ class WorkpieceEditorController(IApplicationController):
         row.addStretch(1)
         match_button = QPushButton("Match Workpiece Test")
         match_button.clicked.connect(self._on_match_workpiece_test)
-        row.addWidget(match_button)
+        # row.addWidget(match_button)
         layout.insertLayout(0, row)
 
     def _on_match_workpiece_test(self) -> None:

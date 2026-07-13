@@ -184,7 +184,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         try:
             if self._path_executor is not None:
                 try:
-                    execution_plan = self._path_executor.prepare_workpiece_preview(merged, skip_debug_plot=skip_debug_plot)
+                    execution_plan = self._path_executor.prepare_workpiece_execution_plan(merged, skip_debug_plot=skip_debug_plot)
                 except NotImplementedError:
                     if self._path_preparation_service is None:
                         return False, "Path preparation service is not available"
@@ -298,7 +298,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         execution_plan = self._active_process_plan()
         if execution_plan is None:
             return [], None
-        return self._path_executor.get_pivot_preview_paths(execution_plan)
+        return self._path_executor.get_projected_pivot_paths(execution_plan)
 
     def get_last_pivot_motion_preview(self):
         if self._path_executor is None:
@@ -306,7 +306,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         execution_plan = self._active_process_plan()
         if execution_plan is None:
             return [], None
-        return self._path_executor.get_pivot_motion_preview(execution_plan)
+        return self._path_executor.get_pivot_motion_snapshots(execution_plan)
 
     def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
         if self._path_executor is not None:

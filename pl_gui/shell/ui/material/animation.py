@@ -44,6 +44,12 @@ class AnimationManager(QObject):
         self.animation_groups = {}
         self._active_animations = set()
 
+    def _create_property_animation(self, property_name: bytes) -> QPropertyAnimation:
+        animation = QPropertyAnimation(self)
+        animation.setTargetObject(self.target)
+        animation.setPropertyName(property_name)
+        return animation
+
     def create_fade_animation(
             self,
             duration: int = MaterialDesignTiming.MEDIUM,
@@ -51,7 +57,7 @@ class AnimationManager(QObject):
             animation_id: str = "fade"
     ) -> QPropertyAnimation:
         """Create opacity fade animation"""
-        animation = QPropertyAnimation(self.target, b"windowOpacity")
+        animation = self._create_property_animation(b"windowOpacity")
         animation.setDuration(duration)
         animation.setEasingCurve(easing)
 
@@ -68,7 +74,7 @@ class AnimationManager(QObject):
             animation_id: str = "geometry"
     ) -> QPropertyAnimation:
         """Create geometry/scale animation"""
-        animation = QPropertyAnimation(self.target, b"geometry")
+        animation = self._create_property_animation(b"geometry")
         animation.setDuration(duration)
         animation.setEasingCurve(easing)
 

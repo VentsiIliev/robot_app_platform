@@ -54,6 +54,8 @@ class RobotJogService:
                 return
             tool = int(self._tool_getter()) if self._tool_getter is not None else 0
             user = int(self._user_getter()) if self._user_getter is not None else 0
+            robot_axis = RobotAxis.get_by_string(axis)
+            robot_direction = Direction.get_by_string(direction)
             if not self._activate_configured_tool(tool):
                 _logger.warning("[JOG] aborted: failed to activate configured tool=%s", tool)
                 self._lock.release()
@@ -70,14 +72,17 @@ class RobotJogService:
                 target,
             )
             if target is not None:
-                self._robot.move_ptp(
-                    target,
-                    tool=tool,
-                    user=user,
-                    velocity=self._move_velocity,
-                    acceleration=self._move_acceleration,
-                    wait_to_reach=True,
-                )
+                if robot_axis.value > 3:
+                    self._robot.start_jog(robot_axis, robot_direction, float(step))
+                else:
+                    self._robot.move_ptp(
+                        target,
+                        tool=tool,
+                        user=user,
+                        velocity=self._move_velocity,
+                        acceleration=self._move_acceleration,
+                        wait_to_reach=True,
+                    )
             self._lock.release()
         except Exception:
             if self._lock.locked():
