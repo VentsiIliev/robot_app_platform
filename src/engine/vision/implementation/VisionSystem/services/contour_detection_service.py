@@ -94,6 +94,11 @@ class ContourDetectionService:
 
     def _approx_contours(self, contours: list) -> list:
         eps = self._settings.get_epsilon()
+
+        # If eps = 0 approx is disabled and returning the original contours
+        if eps == 0:
+            return contours
+
         return [
             cv2.approxPolyDP(c, eps * cv2.arcLength(c, True), True)
             for c in contours
