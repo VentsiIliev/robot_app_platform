@@ -48,6 +48,16 @@ class PickupMotionConfig:
     first_contact_vel_percent: float = 50.0
     first_contact_acc_percent: float = 20.0
 
+    # XY/RZ edge-cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
+    edge_cleanup_vel_percent: float = 50.0
+    edge_cleanup_acc_percent: float = 30.0
+    # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
+    edge_cleanup_spacing_mm: float = 3.0
+    # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
+    edge_cleanup_z_offset_mm: float = 0.0
+    # ROS reachability validation costs ~2s per cleanup transition; enable only when commissioning.
+    edge_cleanup_validate_transition_poses: bool = False
+
     # Deprecated: pickup orientation is no longer restored before release.
     restore_orientation_z_lift_mm: float = 0.0
 
@@ -168,7 +178,7 @@ class PaintProcessConfig:
     contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
     # Sample current robot poses during blocking paint trajectory execution and compare
     # them with the commanded path. Disabled by default because it polls the robot state.
-    enable_execution_motion_trace: bool = True
+    enable_execution_motion_trace: bool = False
     execution_motion_trace_sample_period_s: float = 0.05
     # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
@@ -183,6 +193,9 @@ class PaintProcessConfig:
     pivot_contact_side: str = "positive"
     mirror_xz_ry_execution_rotation_value: bool = True
     pickup_axis_alignment_sign_value: float = 1.0
+    # When the active process paints in XZ/RY, run an XY/RZ edge-cleanup pass
+    # before releasing the held workpiece. Disable for the original single-pass flow.
+    enable_edge_cleanup_after_xz_ry: bool = False
     # Enables reachability sampling before executing XZ/RY pivot paths.
     enable_xz_ry_preflight: bool = False
     # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
@@ -327,6 +340,26 @@ class PaintProcessConfig:
     @property
     def pickup_first_contact_acc_percent(self) -> float:
         return float(self.pickup_motion.first_contact_acc_percent)
+
+    @property
+    def pickup_edge_cleanup_vel_percent(self) -> float:
+        return float(self.pickup_motion.edge_cleanup_vel_percent)
+
+    @property
+    def pickup_edge_cleanup_acc_percent(self) -> float:
+        return float(self.pickup_motion.edge_cleanup_acc_percent)
+
+    @property
+    def pickup_edge_cleanup_spacing_mm(self) -> float:
+        return float(self.pickup_motion.edge_cleanup_spacing_mm)
+
+    @property
+    def pickup_edge_cleanup_z_offset_mm(self) -> float:
+        return float(self.pickup_motion.edge_cleanup_z_offset_mm)
+
+    @property
+    def pickup_edge_cleanup_validate_transition_poses(self) -> bool:
+        return bool(self.pickup_motion.edge_cleanup_validate_transition_poses)
 
     @property
     def pickup_restore_orientation_z_lift_mm(self) -> float:

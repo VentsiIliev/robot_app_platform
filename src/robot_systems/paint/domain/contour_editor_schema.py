@@ -73,6 +73,7 @@ def build_paint_segment_settings_schema() -> SegmentSettingsSchema:
             SegmentSettingSpec("acceleration", "Acceleration", "10", "Robot"),
             SegmentSettingSpec("rz_angle", "Rz Angle", "0", "Robot"),
             SegmentSettingSpec("offset", "Pivot Offset (mm)", "0", "Robot"),
+            SegmentSettingSpec("edge_cleanup_z_offset_mm", "Cleanup Z Offset (mm)", "0", "Robot"),
             SegmentSettingSpec("preprocess_min_spacing_mm", "Preprocess Spacing (mm)", "2.5", "Interpolation"),
             SegmentSettingSpec("interpolation_spacing_mm", "Sampled Spacing (mm)", "10.0", "Interpolation"),
             SegmentSettingSpec("dense_sampling_factor", "Dense Factor", "0.25", "Interpolation"),

@@ -695,6 +695,10 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 settings.get("offset"),
                 default_pivot_offset_mm,
             )
+            edge_cleanup_z_offset_mm = _safe_float(
+                settings.get("edge_cleanup_z_offset_mm"),
+                _safe_float(merged.get("edge_cleanup_z_offset_mm"), 0.0),
+            )
 
             execution_jobs.append(
                 {
@@ -706,6 +710,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     "use_workpiece_layer": bool(use_workpiece_layer),
                     "workpiece_height_mm": float(workpiece_height_mm),
                     "pivot_offset_mm": float(segment_pivot_offset_mm),
+                    "edge_cleanup_z_offset_mm": float(edge_cleanup_z_offset_mm),
                     "pickup_xy": [float(pickup_xy[0]), float(pickup_xy[1])] if pickup_xy is not None else None,
                     "pickup_rz": float(pickup_rz),
                     "pickup_target_point_name": pickup_target_name,

@@ -23,6 +23,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintSimulationConfig,
 )
+from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
@@ -347,6 +348,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupToPivotPlan | None = None
         self._pending_stage_pose: list[float] | None = None
+        self._edge_cleanup = PaintEdgeCleanupExecutor(self)
+        self._configured_pivot_motion_plane = str(pivot_motion_plane or "xy_z_rz").strip().lower()
+        self._configured_pivot_translation_axis = str(pivot_translation_axis or "x").strip().lower()
+        self._configured_pivot_side = str(pivot_side or "negative").strip().lower()
+        self._configured_pivot_translation_direction = str(pivot_translation_direction or "forward").strip().lower()
+        self._apply_camera_to_tcp_for_pickup = bool(apply_camera_to_tcp_for_pickup)
         self._flip_xz_ry_execution_rotation_direction = bool(flip_xz_ry_execution_rotation_direction)
         self._mirror_xz_ry_pickup_handoff = bool(mirror_xz_ry_pickup_handoff)
         self._enable_xz_ry_preflight = bool(enable_xz_ry_preflight)
@@ -493,6 +500,28 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         self._pivot_strategy = get_execution_plane_strategy(self._pivot_config.motion_plane)
 
+    def _make_runtime_pivot_config(self, motion_plane: str) -> PaintSimulationConfig:
+        """Build a projection config for a requested execution plane."""
+        plane = str(motion_plane or "xy_z_rz").strip().lower()
+        return _normalize_pivot_config(
+            motion_plane=plane,
+            translation_axis=self._configured_pivot_translation_axis,
+            pivot_side=self._configured_pivot_side,
+            translation_direction=self._configured_pivot_translation_direction,
+            apply_camera_to_tcp_for_pickup=self._apply_camera_to_tcp_for_pickup,
+            camera_to_tcp_x_offset=self._pivot_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=self._pivot_config.camera_to_tcp_y_offset,
+            rotation_direction_sign=_xz_ry_projection_rotation_sign(
+                plane,
+                self._flip_xz_ry_execution_rotation_direction,
+            ),
+        )
+
+    def _set_runtime_pivot_config(self, pivot_config: PaintSimulationConfig) -> None:
+        """Switch the active projection config used by executor helper methods."""
+        self._pivot_config = pivot_config
+        self._pivot_strategy = get_execution_plane_strategy(pivot_config.motion_plane)
+
     def get_supported_execution_modes(self) -> tuple[str, ...]:
         """Report the execution modes supported by the paint executor."""
         return ("pivot_path",)
@@ -521,6 +550,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def _resolve_base_position(self) -> Optional[list[float]]:
         """Resolve the configured pivot/base pose used to project paint motion."""
         provider = self._base_position_provider
+        if self._pivot_config.motion_plane == "xy_z_rz" and self._pickup_base_position_provider is not None:
+            provider = self._pickup_base_position_provider
         if provider is None:
             return None
         try:
@@ -1221,7 +1252,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return True, ""
 
     @timed_step(_logger, "execute_pivot_paths")
-    def _execute_pivot_paths(self, execution_plan: WorkpieceExecutionPlan) -> tuple[bool, str, int]:
+    def _execute_pivot_paths(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        *,
+        vel_override: float | None = None,
+        acc_override: float | None = None,
+        append_retreat: bool = True,
+        retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None = None,
+    ) -> tuple[bool, str, int]:
         """Execute all projected pivot paint paths in the prepared execution plan."""
         started = perf_counter()
         total_waypoints = 0
@@ -1233,8 +1272,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
             spline = pivot_source_path(job, self._pivot_config)
-            vel = float(job.get("vel", 10.0))
-            acc = float(job.get("acc", 30.0))
+            vel = float(vel_override) if vel_override is not None else float(job.get("vel", 10.0))
+            acc = float(acc_override) if acc_override is not None else float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
             pivot_offset_mm = self._resolve_pivot_offset_mm(job, execution_plan)
             if not spline:
@@ -1250,6 +1289,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 if (
                     job_index == 1
                     and self._last_pickup_plan is not None
+                    and self._pivot_config.motion_plane == self._configured_pivot_motion_plane
                     and self._last_pickup_plan.projected_source_path is spline
                     and self._last_pickup_plan.projected_pivot_path
                 ):
@@ -1345,7 +1385,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
             with timed_block(_logger, "pivot_job_prepare", label=f"{job_label}:build_command_path"):
                 command_pivot_path = self._pivot_execution_command_path(pivot_path)
-                command_pivot_path = self._append_pivot_retreat_waypoint(command_pivot_path)
+                if retreat_fn is not None:
+                    command_pivot_path = retreat_fn(command_pivot_path)
+                elif append_retreat:
+                    command_pivot_path = self._append_pivot_retreat_waypoint(command_pivot_path)
             if self._last_process_start_rz is None and command_pivot_path:
                 self._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 
@@ -1603,6 +1646,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not ok:
             _logger.info("[TIMING] pickup_and_paint success=false stage=pivot total_elapsed_s=%.3f", elapsed_s(started))
             return (False, msg), total_waypoints
+
+        if self._edge_cleanup.should_run_after_xz_ry():
+            ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_unwind(execution_plan, started)
+            total_waypoints += cleanup_waypoints
+            if not ok:
+                return (False, msg), total_waypoints
 
         ok, msg = self._run_pre_release_dropoff()
         if not ok:
