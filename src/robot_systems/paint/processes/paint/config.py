@@ -62,6 +62,7 @@ class PickupMotionConfig:
     restore_orientation_z_lift_mm: float = 0.0
 
     # Return from pivot completion back to the pickup align pose before release.
+    dropoff_strategy: str = "pickup_origin"
     release_align_vel_percent: float = 50.0
     release_align_acc_percent: float = 20.0
 
@@ -75,9 +76,9 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 50.0
+    unwind_vel_percent: float = 100.0
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 20.0
+    unwind_acc_percent: float = 45.0
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
@@ -368,6 +369,10 @@ class PaintProcessConfig:
     @property
     def pickup_release_align_vel_percent(self) -> float:
         return float(self.pickup_motion.release_align_vel_percent)
+
+    @property
+    def pickup_dropoff_strategy(self) -> str:
+        return str(self.pickup_motion.dropoff_strategy or "pickup_origin")
 
     @property
     def pickup_release_align_acc_percent(self) -> float:

@@ -23,10 +23,12 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintSimulationConfig,
 )
+from src.robot_systems.paint.processes.paint.execute.dropoff_executor import PaintDropoffExecutor
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
+from src.robot_systems.paint.processes.paint.execute.pickup_executor import PaintPickupExecutor
 from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     diagnostics_with_command_rotation,
     elapsed_s,
@@ -348,7 +350,11 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupToPivotPlan | None = None
         self._pending_stage_pose: list[float] | None = None
+        self._dropoff = PaintDropoffExecutor(self)
         self._edge_cleanup = PaintEdgeCleanupExecutor(self)
+        self._pickup = PaintPickupExecutor(self)
+        self._staging_z_offset_mm = _STAGING_Z_OFFSET_MM
+        self._staging_paint_axis_offset_mm = _STAGING_PAINT_AXIS_OFFSET_MM
         self._configured_pivot_motion_plane = str(pivot_motion_plane or "xy_z_rz").strip().lower()
         self._configured_pivot_translation_axis = str(pivot_translation_axis or "x").strip().lower()
         self._configured_pivot_side = str(pivot_side or "negative").strip().lower()
@@ -597,6 +603,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             except (AttributeError, TypeError, ValueError):
                 pass
         return 0.0
+
+    def _paint_start_staging_offset_pose(self, contact_pose: list[float]) -> list[float]:
+        """Return the configured pre-paint staging offset pose."""
+        return _paint_axis_staging_offset_pose(contact_pose, self._pivot_config)
 
     def _resolve_pickup_base_position(self) -> Optional[list[float]]:
         """Resolve the pickup/staging base pose used for XY/RZ pickup alignment."""
@@ -1200,31 +1210,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return True, ""
         return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
 
-    @timed_step(_logger, "pre_release_dropoff")
-    def _run_pre_release_dropoff(self) -> tuple[bool, str]:
-        """Return to the saved pickup-align area before releasing the workpiece."""
-        started = perf_counter()
-        plan = self._last_pickup_plan
-        if plan is None:
-            _logger.info("[PICKUP] Pre-release dropoff skipped: no pickup plan")
-            return True, ""
-
-        move_started = perf_counter()
-        if not self._move_pickup_phase(
-            "Returning to align pose for release",
-            plan.align_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_release_align_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_release_align_acc_percent,
-        ):
-            _logger.info(
-                "[TIMING] pre_release_dropoff success=false stage=align elapsed_s=%.3f total_elapsed_s=%.3f",
-                elapsed_s(move_started),
-                elapsed_s(started),
-            )
-            return False, "Pivot paint finished, but return-to-align move failed before release"
-
-        return True, ""
-
     @timed_step(_logger, "post_execute_return")
     def _run_post_execute_return(self, failure_message: str) -> tuple[bool, str]:
         """Run post-execution return logic after pivot painting finishes."""
@@ -1249,6 +1234,47 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 elapsed_s(started),
             )
             return False, failure_message.format(reason="return-to-calibration failed")
+        return True, ""
+
+    @timed_step(_logger, "pre_dropoff_unwind_align")
+    def _align_before_pre_dropoff_unwind(self) -> tuple[bool, str]:
+        """Move to a known safe orientation before pre-dropoff Joint 6 unwind when required."""
+        if self._configured_pivot_motion_plane != "xz_y_ry":
+            return True, ""
+        plan = self._last_pickup_plan
+        if plan is None:
+            return False, "Pivot paint finished, but no pickup plan is available for safe pre-dropoff unwind alignment"
+        if not self._move_pickup_phase(
+            "Returning to original orientation before dropoff unwind",
+            plan.align_pose,
+            velocity=PAINT_PROCESS_CONFIG.pickup_release_align_vel_percent,
+            acceleration=PAINT_PROCESS_CONFIG.pickup_release_align_acc_percent,
+        ):
+            return False, "Pivot paint finished, but return to original orientation failed before dropoff unwind"
+        return True, ""
+
+    @timed_step(_logger, "pre_dropoff_unwind")
+    def _unwind_joint6_before_dropoff(self) -> tuple[bool, str]:
+        """Relieve Joint 6 before running the configured dropoff strategy."""
+        ok, msg = self._align_before_pre_dropoff_unwind()
+        if not ok:
+            return False, msg
+        if self._robot_service is None:
+            return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
+        _logger.info(
+            "[DROPOFF] Unwinding Joint 6 before dropoff strategy vel=%.1f acc=%.1f queue_if_busy=%s",
+            PAINT_PROCESS_CONFIG.navigation_unwind_vel_percent,
+            PAINT_PROCESS_CONFIG.navigation_unwind_acc_percent,
+            PAINT_PROCESS_CONFIG.navigation_unwind_queue_if_busy,
+        )
+        ok = self._robot_service.unwind_joint6(
+            blocking=True,
+            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_unwind_queue_if_busy,
+            vel=PAINT_PROCESS_CONFIG.navigation_unwind_vel_percent,
+            acc=PAINT_PROCESS_CONFIG.navigation_unwind_acc_percent,
+        )
+        if not ok:
+            return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"
         return True, ""
 
     @timed_step(_logger, "execute_pivot_paths")
@@ -1497,115 +1523,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         return True, "", total_waypoints
 
-    @timed_step(_logger, "pickup_to_pivot")
     def _execute_pickup_to_pivot_stage(
         self,
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[bool, str]:
         """Run the pickup-only sequence: approach, vacuum on, descend, lift-align, and stage at the pivot."""
-        started = perf_counter()
-        _logger.info("[TIMING] pickup_to_pivot entered")
-        if self._robot_service is None:
-            return False, "Robot service is not available"
-
-        plan_started = perf_counter()
-        with timed_block(_logger, "pickup_to_pivot_prepare", label="build_pickup_and_stage_poses"):
-            plan = self._build_pickup_and_stage_poses(execution_plan)
-        if plan is None:
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Could not compute pickup-to-pivot poses"
-        self._last_pickup_plan = plan
-        _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
-
-        ok, msg = self._turn_vacuum_on()
-        if not ok:
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", elapsed_s(started))
-            return False, msg
-
-        if not self._move_pickup_phase(
-            "Moving to pickup approach pose",
-            plan.pickup_approach_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_approach_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_approach_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=approach total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup approach move failed"
-
-        if not self._move_pickup_phase(
-            "Descending to pickup pose", plan.pickup_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_descend_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_descend_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=descend total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup descend move failed"
-
-        if not self._move_pickup_phase(
-            "Lifting from pickup pose",
-            plan.lift_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_lift_align_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_lift_align_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=lift total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup succeeded, but lift move failed"
-
-        if not self._move_pickup_phase(
-            "Aligning workpiece to paint axis",
-            plan.align_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_lift_align_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_lift_align_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=align total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup succeeded, but align move failed"
-
-        combine_change_plane = PAINT_PROCESS_CONFIG.pickup_combine_change_plane_with_first_contact
-        if combine_change_plane:
-            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
-                _logger.info(
-                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
-                )
-        elif not self._move_pickup_phase(
-            "Changing plane",
-            plan.change_plane_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_change_plane_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_change_plane_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=change_plane total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup succeeded, but change-plane move failed"
-
-        for transition_index, transition_pose in enumerate(plan.stage_transition_poses, start=1):
-            if not self._move_pickup_phase(
-                f"Stage transition {transition_index}",
-                self._pivot_staging_command_pose(transition_pose, plan.change_plane_pose),
-                velocity=PAINT_PROCESS_CONFIG.pickup_stage_transition_vel_percent,
-                acceleration=PAINT_PROCESS_CONFIG.pickup_stage_transition_acc_percent,
-            ):
-                _logger.info(
-                    "[TIMING] pickup_to_pivot success=false stage=stage_transition_%d total_elapsed_s=%.3f",
-                    transition_index,
-                    elapsed_s(started),
-                )
-                return False, f"Pickup succeeded, but stage transition {transition_index} failed"
-
-        staged_command_pose = self._pivot_staging_command_pose(plan.staged_pose, plan.change_plane_pose)
-        staging_offset_pose = _paint_axis_staging_offset_pose(staged_command_pose, self._pivot_config)
-        _logger.info(
-            "[PICKUP] staging offset before pivot contact: z_offset_mm=%.3f paint_axis=%s paint_axis_offset_mm=%.3f direction=%s contact_pose=%s offset_pose=%s",
-            _STAGING_Z_OFFSET_MM,
-            self._pivot_config.translation_axis,
-            _STAGING_PAINT_AXIS_OFFSET_MM,
-            self._pivot_config.translation_direction,
-            [round(float(v), 3) for v in staged_command_pose[:6]],
-            [round(float(v), 3) for v in staging_offset_pose[:6]],
-        )
-        if not self._move_pickup_phase(
-            "Moving to staging offset before first pivot contact pose",
-            staging_offset_pose,
-            velocity=PAINT_PROCESS_CONFIG.pickup_first_contact_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_first_contact_acc_percent,
-        ):
-            _logger.info("[TIMING] pickup_to_pivot success=false stage=staged_pose total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Pickup succeeded, but move to staging offset failed"
-        return True, "Pickup completed and robot is positioned before the first pivot contact pose"
+        return self._pickup.execute(execution_plan)
 
     def execute_pickup_and_paint(
         self,
@@ -1653,14 +1576,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not ok:
                 return (False, msg), total_waypoints
 
-        ok, msg = self._run_pre_release_dropoff()
+        ok, msg = self._unwind_joint6_before_dropoff()
         if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_dropoff_unwind total_elapsed_s=%.3f", elapsed_s(started))
             return (False, msg), total_waypoints
 
-        ok, msg = self._turn_vacuum_off()
+        ok, msg = self._dropoff.execute(execution_plan)
         if not ok:
-            _logger.info("[TIMING] pickup_and_paint success=false stage=vacuum_off total_elapsed_s=%.3f", elapsed_s(started))
+            _logger.info("[TIMING] pickup_and_paint success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
             return (False, msg), total_waypoints
 
         _logger.info("[EXECUTE] Pickup and pivot paint completed: jobs=%d total_waypoints=%d", len(execution_plan.execution_jobs), total_waypoints)
