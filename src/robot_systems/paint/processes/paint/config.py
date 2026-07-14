@@ -50,7 +50,7 @@ class PickupMotionConfig:
 
     # XY/RZ edge-cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
     edge_cleanup_vel_percent: float = 80.0
-    edge_cleanup_acc_percent: float = 40.0
+    edge_cleanup_acc_percent: float = 60.0
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
     edge_cleanup_spacing_mm: float = 3.0
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
@@ -74,9 +74,9 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 90.0
+    unwind_vel_percent: float = 80.0
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 40.0
+    unwind_acc_percent: float = 35.0
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
