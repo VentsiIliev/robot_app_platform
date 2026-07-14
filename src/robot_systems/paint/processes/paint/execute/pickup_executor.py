@@ -39,7 +39,7 @@ class PaintPickupStrategy(Protocol):
 
     name: str
 
-    def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> PickupPlan | None:
+    def build_plan(self, owner, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
         """Return the ordered pickup actions for the active workpiece."""
 
 
@@ -48,8 +48,8 @@ class DefaultPickupStrategy:
 
     name = "default"
 
-    def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> PickupPlan | None:
-        motion_plan = owner._build_pickup_and_stage_poses(execution_plan)
+    def build_plan(self, owner, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
+        motion_plan = owner._pickup_transfer_planner.build_plan(prepared_workpiece)
         if motion_plan is None:
             return None
 
@@ -95,13 +95,13 @@ class DefaultPickupStrategy:
             waypoints.append(
                 PickupWaypoint(
                     f"Stage transition {transition_index}",
-                    owner._pivot_staging_command_pose(transition_pose, motion_plan.change_plane_pose),
+                    owner._paint_contact_staging_command_pose(transition_pose, motion_plan.change_plane_pose),
                     PAINT_PROCESS_CONFIG.pickup_stage_transition_vel_percent,
                     PAINT_PROCESS_CONFIG.pickup_stage_transition_acc_percent,
                 )
             )
 
-        staged_command_pose = owner._pivot_staging_command_pose(
+        staged_command_pose = owner._paint_contact_staging_command_pose(
             motion_plan.staged_pose,
             motion_plan.change_plane_pose,
         )
@@ -109,9 +109,9 @@ class DefaultPickupStrategy:
         _logger.info(
             "[PICKUP] staging offset before pivot contact: z_offset_mm=%.3f paint_axis=%s paint_axis_offset_mm=%.3f direction=%s contact_pose=%s offset_pose=%s",
             owner._staging_z_offset_mm,
-            owner._pivot_config.translation_axis,
+            owner._contact_motion_config.translation_axis,
             owner._staging_paint_axis_offset_mm,
-            owner._pivot_config.translation_direction,
+            owner._contact_motion_config.translation_direction,
             [round(float(v), 3) for v in staged_command_pose[:6]],
             [round(float(v), 3) for v in staging_offset_pose[:6]],
         )
@@ -141,7 +141,7 @@ class PaintPickupExecutor:
         self._strategy = strategy or DefaultPickupStrategy()
 
     @timed_step(_logger, "pickup_to_pivot")
-    def execute(self, execution_plan: WorkpieceExecutionPlan) -> tuple[bool, str]:
+    def execute(self, prepared_workpiece: WorkpieceExecutionPlan) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
         _logger.info("[TIMING] pickup_to_pivot entered")
@@ -149,8 +149,8 @@ class PaintPickupExecutor:
             return False, "Robot service is not available"
 
         plan_started = perf_counter()
-        with timed_block(_logger, "pickup_to_pivot_prepare", label="build_pickup_and_stage_poses"):
-            pickup_plan = self._strategy.build_plan(self._owner, execution_plan)
+        with timed_block(_logger, "pickup_to_pivot_prepare", label="build_pickup_transfer_plan"):
+            pickup_plan = self._strategy.build_plan(self._owner, prepared_workpiece)
 
         if pickup_plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))

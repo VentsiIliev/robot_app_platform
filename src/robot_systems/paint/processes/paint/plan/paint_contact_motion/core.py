@@ -1,8 +1,10 @@
-"""Paint pivot projection helpers.
+"""Paint contact-motion projection helpers.
 
 This module converts a prepared workpiece contour into robot poses that keep a
-chosen contour/contact point on the physical paint pivot. The calculation is
-done in the active 2D motion plane from ``PaintSimulationConfig``:
+chosen contour point touching the fixed paint contact axis. The calculation is
+done in the active 2D motion plane from ``PaintSimulationConfig``. The shape is
+rotated and translated so each sampled point contacts the paint axis in turn;
+it is not orbiting around the axis.
 
 * ``xy_z_rz`` uses X/Y as the contact plane and RZ as the active rotation.
 * ``xz_y_ry`` uses X/Z as the contact plane and RY as the active rotation.
@@ -29,11 +31,11 @@ _logger = logging.getLogger("Core")
 _EMPTY_SNAPSHOT = np.empty((0, 2), dtype=float)
 
 
-def rebase_projected_paint_path_to_zero_start_rz(
+def rebase_contact_motion_path_to_zero_start_rotation(
         path: list[list[float]],
         config: PaintSimulationConfig,
 ) -> list[list[float]]:
-    """Shift a projected paint path so its active rotation component starts at zero."""
+    """Shift a paint contact-motion path so its active rotation starts at zero."""
     if not path:
         return []
 
@@ -87,21 +89,21 @@ def _save_projection_snapshots(config: PaintSimulationConfig) -> bool:
     )
 
 
-def project_paint_motion_geometry_continuous(
+def project_paint_contact_motion_continuous(
         path: list[list[float]],
-        pivot_pose: list[float],
+        paint_axis_pose: list[float],
         config: PaintSimulationConfig,
         anchor_xy: tuple[float, float] | None = None,
         source_rotation_deg: float = 0.0,
 ) -> tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]:
-    """Project a dense contour with an incremental RTCP workpiece transform.
+    """Project a dense contour into paint-axis contact motion.
 
-    The input path is expected to be the final pivot source contour, already
-    resampled to roughly 1 mm spacing by the executor. The algorithm mirrors the
-    legacy KAREL RTCP loop: the current contour point is the pivot contact,
-    the remaining workpiece is rotated around that point, then translated along
-    the contact axis so the next contour point becomes the new pivot contact.
-    The geometry rotation is kept separate from the robot command rotation sign.
+    The input path is expected to be the prepared paint source contour. The
+    algorithm mirrors the legacy KAREL RTCP loop: the current contour point is
+    the paint-axis contact, the remaining workpiece is rotated around that
+    point, then translated along the contact axis so the next contour point
+    becomes the new contact. The geometry rotation is kept separate from the
+    robot command rotation sign.
     """
     if not path:
         return [], [], []
@@ -121,30 +123,31 @@ def project_paint_motion_geometry_continuous(
 
     # The fixed RTCP/pivot location in robot coordinates. During projection, the
     # active source point is repeatedly brought back to this exact 2D point.
+    pivot_pose = paint_axis_pose
     pivot_xy = np.asarray(
-        [float(pivot_pose[planar_i]), float(pivot_pose[planar_j])],
+        [float(paint_axis_pose[planar_i]), float(paint_axis_pose[planar_j])],
         dtype=float,
     )
     pivot_xy_tuple = (float(pivot_xy[0]), float(pivot_xy[1]))
     pivot_orthogonal = (
-        float(pivot_pose[orthogonal_index])
-        if len(pivot_pose) > orthogonal_index
+        float(paint_axis_pose[orthogonal_index])
+        if len(paint_axis_pose) > orthogonal_index
         else float(path[0][orthogonal_index])
     )
 
     # The non-active orientation components are fixed from the pivot pose unless
     # the motion-plane config overrides them. Only rotation_index changes during
     # the simulated rolling/painting transform.
-    rx = float(pivot_pose[3]) if len(pivot_pose) >= 4 else float(path[0][3])
-    ry = float(pivot_pose[4]) if len(pivot_pose) >= 5 else float(path[0][4])
-    rz = float(pivot_pose[5]) if len(pivot_pose) >= 6 else float(path[0][5])
+    rx = float(paint_axis_pose[3]) if len(paint_axis_pose) >= 4 else float(path[0][3])
+    ry = float(paint_axis_pose[4]) if len(paint_axis_pose) >= 5 else float(path[0][4])
+    rz = float(paint_axis_pose[5]) if len(paint_axis_pose) >= 6 else float(path[0][5])
     orientation_overrides = config.orientation_overrides_deg
     rx = float(orientation_overrides.get("rx", rx))
     ry = float(orientation_overrides.get("ry", ry))
     rz = float(orientation_overrides.get("rz", rz))
     base_rz = (
-        float(pivot_pose[rotation_index])
-        if len(pivot_pose) > rotation_index
+        float(paint_axis_pose[rotation_index])
+        if len(paint_axis_pose) > rotation_index
         else float(path[0][rotation_index])
     )
 
@@ -579,3 +582,8 @@ def _canonicalize_closed_source_path(
                 best_ordered = candidate
 
     return np.vstack([best_ordered, best_ordered[:1]])
+
+
+# Compatibility aliases for old pivot/projection naming.
+project_paint_motion_geometry_continuous = project_paint_contact_motion_continuous
+rebase_projected_paint_path_to_zero_start_rz = rebase_contact_motion_path_to_zero_start_rotation

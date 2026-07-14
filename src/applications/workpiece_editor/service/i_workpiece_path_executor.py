@@ -97,9 +97,9 @@ class IWorkpiecePathExecutor(ABC):
         """Backward-compatible alias for older executor callers."""
         return self.execute_process_paths(execution_plan, mode=mode)
 
-    @abstractmethod
-    def execute_pickup_and_paint(
+    def execute_paint_process(
         self,
         execution_plan: "WorkpieceExecutionPlan",
     ) -> tuple[bool, str]:
-        ...
+        """Paint-specific full-process entry point when supported by the robot system."""
+        return False, "Paint process is not supported by this executor"

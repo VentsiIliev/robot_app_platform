@@ -14,9 +14,11 @@ from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
-from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
-    project_paint_motion_geometry_continuous,
+from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
+    project_paint_contact_motion_continuous,
 )
+
+project_paint_motion_geometry_continuous = project_paint_contact_motion_continuous
 
 _logger = logging.getLogger(__name__)
 

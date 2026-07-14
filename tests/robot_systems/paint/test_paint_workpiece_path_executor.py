@@ -11,8 +11,8 @@ from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts impor
 )
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
-    PickupToPivotPlan,
-    _normalize_pivot_config,
+    PickupTransferPlan,
+    _normalize_contact_motion_config,
     _shift_path_rotation,
 )
 
@@ -31,7 +31,7 @@ def _execution_plan(*jobs, workpiece=None):
 
 class TestNormalizePivotConfig(unittest.TestCase):
     def test_invalid_plane_axis_and_direction_fall_back_to_defaults(self):
-        config = _normalize_pivot_config(
+        config = _normalize_contact_motion_config(
             motion_plane="bad-plane",
             translation_axis="bad-axis",
             pivot_side="bad-side",
@@ -104,7 +104,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             return [[list(pivot_pose)]], [], []
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             side_effect=_project,
         ):
             paths, last_pivot_pose = executor.get_projected_pivot_paths(execution_plan)
@@ -125,7 +125,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         expected_snapshots = [np.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=float)]
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=([], expected_snapshots, []),
         ):
             motion, last_pivot_pose = executor.get_pivot_motion_snapshots(execution_plan)
@@ -134,21 +134,21 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertTrue(np.array_equal(expected_snapshots[0], motion[0][0]))
         self.assertEqual([10.0, 20.0, 30.0, 0.0, 0.0, 0.0], last_pivot_pose)
 
-    def test_build_pivot_execution_path_can_rebase_start_rotation_to_zero(self):
+    def test_build_paint_contact_path_can_rebase_start_rotation_to_zero(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,
             base_position_provider=lambda: [0, 0, 0, 0, 0, 0],
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=(
                 [[1, 2, 3, 0, 0, 45], [4, 5, 6, 0, 0, 60]],
                 [],
                 [],
             ),
         ):
-            path = executor._build_pivot_execution_path(
+            path = executor._build_paint_contact_path(
                 [[0, 0, 0, 0, 0, 0], [10, 0, 0, 0, 0, 0]],
                 align_start_to_zero_rz=True,
             )
@@ -207,7 +207,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, 44.0]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -243,7 +243,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, 44.0]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -271,7 +271,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=([[101.0, 202.0, 303.0, 1.0, 2.0, -163.155]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -300,7 +300,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             side_effect=[
                 ([[101.0, 202.0, 303.0, 1.0, 2.0, 10.0]], [], []),
                 ([[111.0, 212.0, 313.0, 1.0, 2.0, 10.0]], [], []),
@@ -313,7 +313,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual([111.0, 212.0, 313.0], plan.staged_pose[:3])
         self.assertAlmostEqual(-10.0, projection.call_args_list[1].kwargs["source_rotation_deg"], places=6)
 
-    def test_execute_pivot_paths_uses_carried_source_rotation(self):
+    def test_execute_paint_contact_paths_uses_carried_source_rotation(self):
         robot_service = MagicMock()
         robot_service.execute_trajectory.return_value = 0
         executor = PaintWorkpiecePathExecutor(
@@ -322,7 +322,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             pivot_motion_plane="xy_z_rz",
             debug_dump_dir=None,
         )
-        executor._last_pickup_plan = PickupToPivotPlan(
+        executor._last_pickup_plan = PickupTransferPlan(
             pickup_approach_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             pickup_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
             lift_pose=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
@@ -341,14 +341,17 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=(
                 [[101.0, 202.0, 303.0, 1.0, 2.0, 12.0], [111.0, 202.0, 303.0, 1.0, 2.0, 12.0]],
                 [],
                 [],
             ),
         ) as projection:
-            ok, message, total_waypoints = executor._execute_pivot_paths(execution_plan)
+            ok, message, total_waypoints = executor._paint_contact.execute(
+                execution_plan,
+                append_retreat=False,
+            )
 
         self.assertTrue(ok, message)
         self.assertEqual(2, total_waypoints)
@@ -380,7 +383,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             return ([[-83.655, 316.814, 283.401, -91.478, 25.0, -0.05]], [], [])
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             side_effect=_project,
         ) as projection:
             paths, _ = executor.get_projected_pivot_paths(execution_plan)
@@ -410,7 +413,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         with patch(
-            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor._project_paint_motion_geometry_continuous",
+            "src.robot_systems.paint.processes.paint.execute.workpiece_path_executor.project_paint_contact_motion_continuous",
             return_value=([[-83.655, 316.814, 283.401, -91.478, -69.416, -0.05]], [], []),
         ):
             plan = executor._build_pickup_and_stage_poses(execution_plan)
@@ -448,7 +451,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             enable_vacuum_pump=False,
             pivot_motion_plane="xy_z_rz",
         )
-        plan = PickupToPivotPlan(
+        plan = PickupTransferPlan(
             pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
             pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
             lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
@@ -491,7 +494,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             enable_vacuum_pump=False,
             pivot_motion_plane="xy_z_rz",
         )
-        plan = PickupToPivotPlan(
+        plan = PickupTransferPlan(
             pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
             pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
             lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
@@ -528,7 +531,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             enable_vacuum_pump=False,
             pivot_motion_plane="xy_z_rz",
         )
-        plan = PickupToPivotPlan(
+        plan = PickupTransferPlan(
             pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 10.0],
             pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 10.0],
             lift_pose=[10.0, 20.0, 70.0, 180.0, 0.0, 10.0],
@@ -557,7 +560,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         robot_service = MagicMock()
         robot_service.move_ptp.return_value = True
         executor = PaintWorkpiecePathExecutor(robot_service=robot_service)
-        executor._last_pickup_plan = PickupToPivotPlan(
+        executor._last_pickup_plan = PickupTransferPlan(
             pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
             pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
             lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
@@ -574,73 +577,77 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         commanded_positions = [call.kwargs["position"] for call in robot_service.move_ptp.call_args_list]
         self.assertEqual([[10.0, 20.0, 100.0, 180.0, 0.0, 15.0]], commanded_positions)
 
-    def test_execute_pickup_and_paint_runs_post_execute_return_after_success(self):
+    def test_execute_paint_process_runs_post_execute_return_after_success(self):
         post_execute_callback = MagicMock(return_value=True)
         executor = PaintWorkpiecePathExecutor(
             robot_service=MagicMock(),
             post_execute_callback=post_execute_callback,
         )
-        executor.execute_pickup_to_pivot = MagicMock(return_value=(True, "pickup ok"))
-        executor._execute_pivot_paths = MagicMock(return_value=(True, "", 3))
-        executor._run_pre_release_dropoff = MagicMock(return_value=(True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(True, ""))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
-        ok, msg = executor.execute_pickup_and_paint(plan)
+        ok, msg = executor.execute_paint_process(plan)
 
         self.assertTrue(ok)
         self.assertIn("3 waypoints", msg)
         post_execute_callback.assert_called_once_with()
 
-    def test_execute_pickup_and_paint_fails_when_post_execute_return_fails(self):
+    def test_execute_paint_process_fails_when_post_execute_return_fails(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=MagicMock(),
             post_execute_callback=MagicMock(return_value=False),
         )
-        executor.execute_pickup_to_pivot = MagicMock(return_value=(True, "pickup ok"))
-        executor._execute_pivot_paths = MagicMock(return_value=(True, "", 3))
-        executor._run_pre_release_dropoff = MagicMock(return_value=(True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(True, ""))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
-        ok, msg = executor.execute_pickup_and_paint(plan)
+        ok, msg = executor.execute_paint_process(plan)
 
         self.assertFalse(ok)
-        self.assertEqual("Pickup and pivot paint finished, but return-to-calibration failed", msg)
+        self.assertEqual("Paint process finished, but return-to-calibration failed", msg)
 
-    def test_execute_pickup_and_paint_returns_to_calibration_after_pivot_failure(self):
+    def test_execute_paint_process_returns_to_calibration_after_paint_contact_failure(self):
         post_execute_callback = MagicMock(return_value=True)
         executor = PaintWorkpiecePathExecutor(
             robot_service=MagicMock(),
             post_execute_callback=post_execute_callback,
         )
-        executor.execute_pickup_to_pivot = MagicMock(return_value=(True, "pickup ok"))
-        executor._execute_pivot_paths = MagicMock(return_value=(False, "pivot failed", 0))
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(False, "pivot failed", 0))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
-        ok, msg = executor.execute_pickup_and_paint(plan)
+        ok, msg = executor.execute_paint_process(plan)
 
         self.assertFalse(ok)
         self.assertEqual("pivot failed", msg)
         post_execute_callback.assert_called_once_with()
 
-    def test_execute_pickup_and_paint_reports_cleanup_failure_after_motion_failure(self):
+    def test_execute_paint_process_reports_cleanup_failure_after_motion_failure(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=MagicMock(),
             post_execute_callback=MagicMock(return_value=False),
         )
-        executor.execute_pickup_to_pivot = MagicMock(return_value=(True, "pickup ok"))
-        executor._execute_pivot_paths = MagicMock(return_value=(True, "", 3))
-        executor._run_pre_release_dropoff = MagicMock(return_value=(False, "restore failed"))
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(False, "restore failed"))
         plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
 
-        ok, msg = executor.execute_pickup_and_paint(plan)
+        ok, msg = executor.execute_paint_process(plan)
 
         self.assertFalse(ok)
         self.assertEqual("restore failed; additionally, return-to-calibration failed", msg)
 
     def test_build_executed_snapshot_series_rebases_preview_snapshot_to_executed_poses(self):
-        pivot_config = _normalize_pivot_config(motion_plane="xy_z_rz")
+        pivot_config = _normalize_contact_motion_config(motion_plane="xy_z_rz")
         source_path = [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
         executed_path = [
             [100.0, 200.0, 300.0, 0.0, 0.0, 45.0],
@@ -668,7 +675,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         np.testing.assert_allclose(second_center, np.array([110.0, 210.0]), atol=1e-6)
 
     def test_build_executed_snapshot_series_does_not_rotate_snapshots_from_command_axis_shift(self):
-        pivot_config = _normalize_pivot_config(motion_plane="xy_z_rz")
+        pivot_config = _normalize_contact_motion_config(motion_plane="xy_z_rz")
         source_path = [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
         executed_path = [[100.0, 200.0, 300.0, 0.0, 0.0, 90.0]]
         pivot_pose = [50.0, 60.0, 70.0, 0.0, 0.0, 15.0]

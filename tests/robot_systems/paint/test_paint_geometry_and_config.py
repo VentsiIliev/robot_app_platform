@@ -9,7 +9,7 @@ from src.robot_systems.paint.processes.paint.config import (
 )
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     _camera_to_tcp_delta,
-    _normalize_pivot_config,
+    _normalize_contact_motion_config,
 )
 
 
@@ -82,8 +82,8 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(xz.side_sign, -1.0)
         self.assertEqual(xz.direction_sign, -1.0)
 
-    def test_normalize_pivot_config_preserves_valid_inputs_and_sanitizes_invalid_ones(self) -> None:
-        normalized = _normalize_pivot_config(
+    def test_normalize_contact_motion_config_preserves_valid_inputs_and_sanitizes_invalid_ones(self) -> None:
+        normalized = _normalize_contact_motion_config(
             motion_plane="xz_y_ry",
             translation_axis="z",
             pivot_side="positive",
@@ -92,7 +92,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             camera_to_tcp_x_offset=12.5,
             camera_to_tcp_y_offset=-3.0,
         )
-        fallback = _normalize_pivot_config(
+        fallback = _normalize_contact_motion_config(
             motion_plane="bad-plane",
             translation_axis="bad-axis",
             pivot_side="bad-side",

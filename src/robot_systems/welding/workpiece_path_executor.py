@@ -99,9 +99,3 @@ class WeldingWorkpiecePathExecutor(IWorkpiecePathExecutor):
             f"Executed {len(jobs)} path(s), "
             f"{total_waypoints} waypoints in {mode} mode"
         )
-
-    def execute_pickup_and_paint(
-        self,
-        execution_plan: WorkpieceExecutionPlan,
-    ) -> tuple[bool, str]:
-        return False, "Pickup-and-pivot-paint is not supported in welding"

@@ -7,10 +7,16 @@ from .paint_debug_artifacts import (
     write_pivot_debug_dump,
     write_pivot_debug_plot,
 )
-from .pivot_projection import (
+from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
+    project_paint_contact_motion_continuous,
     project_paint_motion_geometry_continuous,
+    rebase_contact_motion_path_to_zero_start_rotation,
     rebase_projected_paint_path_to_zero_start_rz,
 )
 from .workpiece_path_executor import (
+    PaintExecutorContactMotionConfig,
+    PaintExecutorDependencies,
+    PaintExecutorMotionConfig,
+    PaintExecutorPivotConfig,
     PaintWorkpiecePathExecutor,
 )

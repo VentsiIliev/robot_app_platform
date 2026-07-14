@@ -65,13 +65,18 @@ def _build_paint_path_debug_dump_dir():
 
 
 def _build_paint_path_executor(robot_system):
-    from src.robot_systems.paint.processes.paint.execute import PaintWorkpiecePathExecutor
+    from src.robot_systems.paint.processes.paint.execute import (
+        PaintExecutorDependencies,
+        PaintExecutorContactMotionConfig,
+        PaintExecutorMotionConfig,
+        PaintWorkpiecePathExecutor,
+    )
 
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
     debug_dump_dir = _build_paint_path_debug_dump_dir()
     pivot_profile = _PAINT_PROCESS.pivot_profile
-    return PaintWorkpiecePathExecutor(
+    dependencies = PaintExecutorDependencies(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
         pickup_base_position_provider=lambda: (
@@ -88,21 +93,28 @@ def _build_paint_path_executor(robot_system):
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+    )
+    motion_config = PaintExecutorMotionConfig(
         enable_vacuum_pump=_PAINT_PROCESS.enable_vacuum_pump,
         pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
-        pivot_motion_plane=pivot_profile.motion_plane,
-        pivot_translation_axis=pivot_profile.translation_axis,
-        pivot_side=pivot_profile.paint_side,
-        pivot_translation_direction=pivot_profile.translation_direction,
+    )
+    contact_motion_config = PaintExecutorContactMotionConfig(
+        motion_plane=pivot_profile.motion_plane,
+        translation_axis=pivot_profile.translation_axis,
+        paint_side=pivot_profile.paint_side,
+        translation_direction=pivot_profile.translation_direction,
         flip_xz_ry_execution_rotation_direction=pivot_profile.mirror_execution_rotation,
         mirror_xz_ry_pickup_handoff=pivot_profile.mirror_pickup_handoff,
-        enable_xz_ry_preflight=_PAINT_PROCESS.enable_xz_ry_preflight,
-        xz_ry_preflight_max_checks=_PAINT_PROCESS.xz_ry_preflight_max_checks,
         apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
         camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+    )
+    return PaintWorkpiecePathExecutor(
+        dependencies=dependencies,
+        motion_config=motion_config,
+        contact_motion_config=contact_motion_config,
     )
 
 

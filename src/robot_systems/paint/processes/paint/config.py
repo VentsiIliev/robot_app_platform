@@ -49,14 +49,12 @@ class PickupMotionConfig:
     first_contact_acc_percent: float = 20.0
 
     # XY/RZ edge-cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
-    edge_cleanup_vel_percent: float = 50.0
-    edge_cleanup_acc_percent: float = 30.0
+    edge_cleanup_vel_percent: float = 80.0
+    edge_cleanup_acc_percent: float = 40.0
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
     edge_cleanup_spacing_mm: float = 3.0
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
     edge_cleanup_z_offset_mm: float = 0.0
-    # ROS reachability validation costs ~2s per cleanup transition; enable only when commissioning.
-    edge_cleanup_validate_transition_poses: bool = False
 
     # Deprecated: pickup orientation is no longer restored before release.
     restore_orientation_z_lift_mm: float = 0.0
@@ -76,9 +74,9 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 100.0
+    unwind_vel_percent: float = 90.0
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 45.0
+    unwind_acc_percent: float = 40.0
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
@@ -196,11 +194,10 @@ class PaintProcessConfig:
     pickup_axis_alignment_sign_value: float = 1.0
     # When the active process paints in XZ/RY, run an XY/RZ edge-cleanup pass
     # before releasing the held workpiece. Disable for the original single-pass flow.
-    enable_edge_cleanup_after_xz_ry: bool = False
-    # Enables reachability sampling before executing XZ/RY pivot paths.
-    enable_xz_ry_preflight: bool = False
-    # Maximum number of sampled XZ/RY poses checked when preflight is enabled.
-    xz_ry_preflight_max_checks: int = 0
+    enable_edge_cleanup_after_xz_ry: bool = True
+    enable_edge_cleanup_second_pass: bool = True
+    # Additional paint-axis/base Z offset for the optional second cleanup pass.
+    edge_cleanup_second_pass_pivot_z_offset_mm: float = -15.0 # 20mm below the belt !
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
@@ -357,10 +354,6 @@ class PaintProcessConfig:
     @property
     def pickup_edge_cleanup_z_offset_mm(self) -> float:
         return float(self.pickup_motion.edge_cleanup_z_offset_mm)
-
-    @property
-    def pickup_edge_cleanup_validate_transition_poses(self) -> bool:
-        return bool(self.pickup_motion.edge_cleanup_validate_transition_poses)
 
     @property
     def pickup_restore_orientation_z_lift_mm(self) -> float:

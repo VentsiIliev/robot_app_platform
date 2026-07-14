@@ -8,7 +8,7 @@ from src.robot_systems.paint.processes.paint.execute.execution_plane import (
 
 
 class TestPaintExecutionPlaneStrategies(unittest.TestCase):
-    def test_xy_strategy_uses_paint_reference_rz_alignment_and_no_preflight_or_flip(self) -> None:
+    def test_xy_strategy_uses_paint_reference_rz_alignment_and_no_flip(self) -> None:
         strategy = get_execution_plane_strategy("xy_z_rz")
         pivot_path = [[0.0, 0.0, 0.0, 0.0, 1.0, 10.0]]
 
@@ -25,7 +25,6 @@ class TestPaintExecutionPlaneStrategies(unittest.TestCase):
 
         self.assertEqual(strategy.motion_plane, "xy_z_rz")
         self.assertEqual(strategy.pivot_offset_position_index, 1)
-        self.assertFalse(strategy.requires_reachability_preflight)
         self.assertEqual(strategy.rotation_axis_label, "RZ")
         self.assertEqual(align_rotation, 6.0)
         self.assertEqual(flipped, pivot_path)
@@ -62,7 +61,6 @@ class TestPaintExecutionPlaneStrategies(unittest.TestCase):
 
         self.assertEqual(strategy.motion_plane, "xz_y_ry")
         self.assertEqual(strategy.pivot_offset_position_index, 2)
-        self.assertTrue(strategy.requires_reachability_preflight)
         self.assertEqual(strategy.rotation_axis_label, "RY")
         self.assertEqual(align_rotation, 6.0)
         self.assertEqual(flipped[0][4], 10.0)

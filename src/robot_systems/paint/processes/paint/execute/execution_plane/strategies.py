@@ -11,7 +11,6 @@ class ExecutionPlaneStrategy:
     motion_plane: str
     pivot_offset_position_index: int
     rotation_axis_label: str
-    requires_reachability_preflight: bool = False
 
     def compute_pickup_align_rotation(
         self,
@@ -40,7 +39,6 @@ class XyZRzExecutionPlaneStrategy(ExecutionPlaneStrategy):
             motion_plane="xy_z_rz",
             pivot_offset_position_index=1,
             rotation_axis_label="RZ",
-            requires_reachability_preflight=False,
         )
 
     def compute_pickup_align_rotation(
@@ -63,7 +61,6 @@ class XzYRyExecutionPlaneStrategy(ExecutionPlaneStrategy):
             motion_plane="xz_y_ry",
             pivot_offset_position_index=2,
             rotation_axis_label="RY",
-            requires_reachability_preflight=True,
         )
 
     def compute_pickup_align_rotation(

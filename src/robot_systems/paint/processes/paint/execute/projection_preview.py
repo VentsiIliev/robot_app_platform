@@ -6,8 +6,8 @@ import numpy as np
 
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
-    project_paint_motion_geometry_continuous,
+from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
+    project_paint_contact_motion_continuous,
 )
 
 
@@ -42,7 +42,7 @@ def project_pivot_paths_for_editor(
     resolve_pivot_offset_mm: Callable[[dict | None, WorkpieceExecutionPlan | None], float],
     align_projected_path_to_pickup_plan: Callable[[list[list[float]], object | None], list[list[float]]],
     pivot_execution_command_path: Callable[..., list[list[float]]],
-    project_motion_geometry: Callable[..., tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]] = project_paint_motion_geometry_continuous,
+    project_motion_geometry: Callable[..., tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]] = project_paint_contact_motion_continuous,
 ) -> tuple[list[list[list[float]]], list[float] | None]:
     """Project editor-visible pivot center paths for each prepared execution job."""
     paths = []
@@ -83,7 +83,7 @@ def project_pivot_motion_snapshots_for_editor(
     pickup_plan,
     apply_pivot_offset: Callable[[list[float] | None, float], list[float] | None],
     resolve_pivot_offset_mm: Callable[[dict | None, WorkpieceExecutionPlan | None], float],
-    project_motion_geometry: Callable[..., tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]] = project_paint_motion_geometry_continuous,
+    project_motion_geometry: Callable[..., tuple[list[list[float]], list[np.ndarray], list[dict[str, float | int]]]] = project_paint_contact_motion_continuous,
 ) -> tuple[list[list[np.ndarray]], list[float] | None]:
     """Return per-step projected shape snapshots for pivot motion plotting."""
     motion = []
