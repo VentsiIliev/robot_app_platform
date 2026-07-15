@@ -1,6 +1,7 @@
 import math
 import threading
 import logging
+from typing import Callable
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 
@@ -22,8 +23,10 @@ class RobotJogService:
         default_frame_getter=None,
         tool_getter=None,
         user_getter=None,
-        move_velocity: float = 20.0,
+        move_velocity: float = 10.0,
         move_acceleration: float = 10.0,
+        move_velocity_getter: Callable[[], float | None] | None = None,
+        move_acceleration_getter: Callable[[], float | None] | None = None,
     ):
         self._robot = robot_service
         self._pose_resolver = pose_resolver
@@ -32,8 +35,10 @@ class RobotJogService:
         self._default_frame_getter = default_frame_getter
         self._tool_getter = tool_getter
         self._user_getter = user_getter
-        self._move_velocity = float(move_velocity)
-        self._move_acceleration = float(move_acceleration)
+        self._default_move_velocity = float(move_velocity)
+        self._default_move_acceleration = float(move_acceleration)
+        self._move_velocity_getter = move_velocity_getter
+        self._move_acceleration_getter = move_acceleration_getter
         self._frame_name = ""
         self._lock = threading.Lock()
 
@@ -72,15 +77,23 @@ class RobotJogService:
                 target,
             )
             if target is not None:
+                velocity = self._current_move_velocity()
+                acceleration = self._current_move_acceleration()
                 if robot_axis.value > 3:
-                    self._robot.start_jog(robot_axis, robot_direction, float(step))
+                    self._robot.start_jog(
+                        robot_axis,
+                        robot_direction,
+                        float(step),
+                        velocity,
+                        acceleration,
+                    )
                 else:
                     self._robot.move_ptp(
                         target,
                         tool=tool,
                         user=user,
-                        velocity=self._move_velocity,
-                        acceleration=self._move_acceleration,
+                        velocity=velocity,
+                        acceleration=acceleration,
                         wait_to_reach=True,
                     )
             self._lock.release()
@@ -102,6 +115,23 @@ class RobotJogService:
             self._robot.stop_motion()
         except Exception:
             pass
+
+    def _current_move_velocity(self) -> float:
+        return self._current_positive_float(self._move_velocity_getter, self._default_move_velocity)
+
+    def _current_move_acceleration(self) -> float:
+        return self._current_positive_float(self._move_acceleration_getter, self._default_move_acceleration)
+
+    @staticmethod
+    def _current_positive_float(getter, default: float) -> float:
+        if callable(getter):
+            try:
+                value = float(getter())
+                if value > 0:
+                    return value
+            except Exception:
+                pass
+        return float(default)
 
     def _current_pose_resolver(self):
         if callable(self._pose_resolver_getter):

@@ -14,7 +14,7 @@ from pl_gui.settings.settings_view.styles import (
 )
 
 _LINEAR_STEPS:   list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 50.0,100,250]
-_ROTATION_STEPS: list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0]
+_ROTATION_STEPS: list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0,180,360]
 _LINEAR_AXES  = {"X", "Y", "Z"}
 _JOG_INTERVAL_MS = 100
 

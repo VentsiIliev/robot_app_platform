@@ -4,6 +4,7 @@ from typing import List
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
+from src.engine.robot.motion_sequence import MotionSequenceSegment
 from .fairino_ros2_client import build_fairino_ros2_client
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,90 @@ class FairinoRos2Robot(IRobot):
             orientation_mode=orientation_mode,
         )
         logger.debug("execute_trajectory ← result=%s", result)
+        return result
+
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_motion_sequence → segments=%d tool=%s user=%s blocking=%s",
+            len(segments),
+            tool,
+            user,
+            blocking,
+        )
+        result = self._client.execute_sequence(
+            segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
+        )
+        logger.debug("execute_motion_sequence ← result=%s", result)
+        return result
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_custom_motion_sequence → segments=%d tool=%s user=%s blocking=%s",
+            len(segments),
+            tool,
+            user,
+            blocking,
+        )
+        result = self._client.execute_custom_sequence(
+            segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
+        )
+        logger.debug("execute_custom_motion_sequence ← result=%s", result)
+        return result
+
+    def execute_staged_trajectory(
+        self,
+        stage_position,
+        path,
+        tool: int,
+        user: int,
+        stage_vel: float,
+        stage_acc: float,
+        path_vel: float,
+        path_acc: float,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_staged_trajectory → stage=%s waypoints=%d tool=%s user=%s stage_vel=%s stage_acc=%s path_vel=%s path_acc=%s blocking=%s",
+            stage_position,
+            len(path) if path else 0,
+            tool,
+            user,
+            stage_vel,
+            stage_acc,
+            path_vel,
+            path_acc,
+            blocking,
+        )
+        result = self._client.execute_staged_path(
+            stage_position=stage_position,
+            path=path,
+            tool=tool,
+            user=user,
+            stage_vel=stage_vel,
+            stage_acc=stage_acc,
+            path_vel=path_vel,
+            path_acc=path_acc,
+            blocking=blocking,
+        )
+        logger.debug("execute_staged_trajectory ← result=%s", result)
         return result
 
     def reset_all_errors(self) -> int:

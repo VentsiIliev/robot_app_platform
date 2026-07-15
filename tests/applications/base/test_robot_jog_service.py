@@ -2,6 +2,10 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.applications.base.robot_jog_service import RobotJogService
+from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+from src.engine.common_settings_ids import CommonSettingsID
+from src.engine.robot.configuration.movement_group_settings import MovementGroupSettings
+from src.engine.robot.configuration.robot_settings import MovementGroup
 
 
 class TestRobotJogService(unittest.TestCase):
@@ -26,6 +30,79 @@ class TestRobotJogService(unittest.TestCase):
             tool=1,
             user=2,
             velocity=20.0,
+            acceleration=10.0,
+            wait_to_reach=True,
+        )
+
+    def test_jog_uses_live_motion_settings_getters(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 2,
+            move_velocity=10.0,
+            move_acceleration=10.0,
+            move_velocity_getter=lambda: 35.0,
+            move_acceleration_getter=lambda: 25.0,
+        )
+
+        service.jog("X", "PLUS", 5.0)
+
+        robot.move_ptp.assert_called_once_with(
+            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            tool=1,
+            user=2,
+            velocity=35.0,
+            acceleration=25.0,
+            wait_to_reach=True,
+        )
+
+    def test_rotation_jog_passes_motion_settings_to_robot(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 2,
+            move_velocity=10.0,
+            move_acceleration=10.0,
+            move_velocity_getter=lambda: 35.0,
+            move_acceleration_getter=lambda: 25.0,
+        )
+
+        service.jog("RZ", "PLUS", 5.0)
+
+        robot.start_jog.assert_called_once()
+        self.assertEqual(robot.start_jog.call_args.args[3:], (35.0, 25.0))
+
+    def test_builder_uses_ten_when_saved_jog_velocity_or_acceleration_is_zero(self):
+        robot = MagicMock()
+        robot._robot = None
+        robot.set_active_tool.return_value = True
+        robot.get_current_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        settings_service = MagicMock()
+        settings_service.get.return_value = MovementGroupSettings(
+            movement_groups={"JOG": MovementGroup(velocity=0, acceleration=0)}
+        )
+        robot_system = MagicMock()
+        robot_system._robot = robot
+        robot_system._settings_service = settings_service
+        robot_system._robot_config = MagicMock(robot_tool=1, robot_user=2)
+        service = build_robot_system_jog_service(robot_system)
+
+        service.jog("X", "PLUS", 5.0)
+
+        settings_service.get.assert_called_with(CommonSettingsID.MOVEMENT_GROUPS)
+        robot.move_ptp.assert_called_once_with(
+            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            tool=1,
+            user=2,
+            velocity=10.0,
             acceleration=10.0,
             wait_to_reach=True,
         )

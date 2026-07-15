@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, List
 from ..enums import axis
+from ..motion_sequence import MotionSequenceSegment
 
 
 class IMotionService(ABC):
@@ -41,11 +42,37 @@ class IMotionService(ABC):
         ...
 
     @abstractmethod
+    def move_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        """Execute an ordered sequence of explicitly parameterized motion segments."""
+        ...
+
+    @abstractmethod
+    def move_custom_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        wait_to_reach: bool = False,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        """Execute a custom queued sequence of explicitly parameterized motion segments."""
+        ...
+
+    @abstractmethod
     def start_jog(
         self,
         axis: axis.RobotAxis,
         direction: axis.Direction,
-        step: float
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
     ) -> int:
         ...
 

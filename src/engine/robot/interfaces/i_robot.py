@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from ..enums.axis import RobotAxis, Direction
+from ..motion_sequence import MotionSequenceSegment
 
 
 class IRobot(ABC):
@@ -73,6 +74,41 @@ class IRobot(ABC):
         orientation_mode: str = "constant",
     ) -> None:
         ...
+
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional explicit segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional custom queued segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_staged_trajectory(
+        self,
+        stage_position,
+        path,
+        tool: int,
+        user: int,
+        stage_vel: float,
+        stage_acc: float,
+        path_vel: float,
+        path_acc: float,
+        blocking: bool = False,
+    ) -> int:
+        """Optional staged move followed by a preplanned trajectory. Returns 0 on success."""
+        return -1
 
     @abstractmethod
     def enable(self) -> None:

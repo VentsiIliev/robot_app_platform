@@ -12,6 +12,7 @@ from src.engine.geometry.planar import (
     nearest_axis_equivalent_degrees,
     rotate_xy,
 )
+from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
@@ -36,7 +37,7 @@ from src.robot_systems.paint.processes.paint.execute.paint_contact_executor impo
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import PaintPickupExecutor
 from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     elapsed_s,
-    write_timing_summary,
+
 )
 from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
     project_paint_contact_motion_continuous,
@@ -594,6 +595,29 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         return ok
 
+    @timed_step(_logger, "pickup_phase", label_arg="label")
+    def _move_custom_pickup_sequence(self, label: str, segments: list[MotionSequenceSegment]) -> bool:
+        """Execute an experimental custom pickup sequence with per-segment speed/accel."""
+        _logger.info(
+            "[PICKUP] %s tool=%d user=%d segments=%d",
+            label,
+            self._pickup_tool,
+            self._pickup_user,
+            len(segments),
+        )
+        move_sequence = getattr(self._robot_service, "move_custom_sequence", None)
+        if not callable(move_sequence):
+            _logger.info("[PICKUP] Custom motion sequence unavailable")
+            return False
+        return bool(
+            move_sequence(
+                segments=segments,
+                tool=self._pickup_tool,
+                user=self._pickup_user,
+                wait_to_reach=True,
+            )
+        )
+
     def _paint_contact_staging_command_pose(self, pose: list[float], reference_pose: list[float]) -> list[float]:
         """Return the robot command pose for moving the held workpiece into XZ/RY pivot contact."""
         if self._contact_motion_config.motion_plane != "xz_y_ry":
@@ -865,5 +889,4 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 started_at=started,
                 ended_at=perf_counter(),
             )
-            write_timing_summary(recorder=recorder, debug_dump_dir=self._debug_dump_dir)
             return result

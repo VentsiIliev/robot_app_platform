@@ -17,8 +17,8 @@
       "position": "[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005]"
     },
     "JOG": {
-      "velocity": 0,
-      "acceleration": 0,
+      "velocity": 50,
+      "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": false

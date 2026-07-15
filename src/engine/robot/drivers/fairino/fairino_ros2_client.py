@@ -288,6 +288,177 @@ class FairinoRos2Client:
     def get_last_execute_path_response(self):
         return self._last_execute_path_response
 
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        payload_segments = []
+        for segment in segments or []:
+            payload_segments.append(
+                {
+                    "position": self._to_float_list(segment.position),
+                    "vel": float(segment.velocity),
+                    "acc": float(segment.acceleration),
+                    "motion_type": str(segment.motion_type),
+                    "blend_radius": float(segment.blend_radius),
+                }
+            )
+        payload = {
+            "segments": payload_segments,
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        logger.debug(
+            "execute_sequence → POST /execute/sequence segments=%d blocking=%s",
+            len(payload_segments),
+            blocking,
+        )
+        try:
+            response = requests.post(f"{self.server_url}/execute/sequence", json=payload, timeout=120)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
+            logger.debug(
+                "execute_sequence ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_sequence error: %s", e, exc_info=True)
+            return -1
+
+    def execute_custom_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_custom_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        payload_segments = []
+        for segment in segments or []:
+            payload_segments.append(
+                {
+                    "position": self._to_float_list(segment.position),
+                    "vel": float(segment.velocity),
+                    "acc": float(segment.acceleration),
+                    "motion_type": str(segment.motion_type),
+                    "blend_radius": float(segment.blend_radius),
+                }
+            )
+        payload = {
+            "segments": payload_segments,
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        logger.debug(
+            "execute_custom_sequence → POST /execute/custom_sequence segments=%d blocking=%s",
+            len(payload_segments),
+            blocking,
+        )
+        try:
+            response = requests.post(f"{self.server_url}/execute/custom_sequence", json=payload, timeout=180)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
+            logger.debug(
+                "execute_custom_sequence ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_custom_sequence error: %s", e, exc_info=True)
+            return -1
+
+    def execute_staged_path(
+        self,
+        stage_position,
+        path,
+        tool=0,
+        user=0,
+        stage_vel=0.6,
+        stage_acc=0.4,
+        path_vel=0.6,
+        path_acc=0.4,
+        blocking=False,
+        trajectory_optimizer="TOTG",
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_staged_path")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "stage_position": self._to_float_list(stage_position),
+            "path": [self._to_float_list(point) for point in (path or [])],
+            "tool": int(tool),
+            "user": int(user),
+            "stage_vel": float(stage_vel),
+            "stage_acc": float(stage_acc),
+            "path_vel": float(path_vel),
+            "path_acc": float(path_acc),
+            "blocking": bool(blocking),
+        }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
+        logger.debug(
+            "execute_staged_path → POST /execute/staged_path waypoints=%d blocking=%s stage_vel=%s stage_acc=%s path_vel=%s path_acc=%s",
+            len(payload["path"]),
+            blocking,
+            stage_vel,
+            stage_acc,
+            path_vel,
+            path_acc,
+        )
+        try:
+            response = requests.post(f"{self.server_url}/execute/staged_path", json=payload, timeout=240)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
+            logger.debug(
+                "execute_staged_path ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_staged_path error: %s", e, exc_info=True)
+            return -1
+
     def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
         if not self._drive_enabled and self.enable() != 0:
             return -1
@@ -817,6 +988,70 @@ class FakeRos2Client:
 
     def get_last_execute_path_response(self):
         return deepcopy(self._last_execute_path_response)
+
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.execute_sequence segments=%s blocking=%s",
+            len(segments) if segments else 0,
+            blocking,
+        )
+        path = [self._to_float_list(segment.position) for segment in segments or []]
+        return self._set_path_result(path, blocking=blocking)
+
+    def execute_custom_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_custom_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.execute_custom_sequence segments=%s blocking=%s",
+            len(segments) if segments else 0,
+            blocking,
+        )
+        path = [self._to_float_list(segment.position) for segment in segments or []]
+        return self._set_path_result(path, blocking=blocking)
+
+    def execute_staged_path(
+        self,
+        stage_position,
+        path,
+        tool=0,
+        user=0,
+        stage_vel=0.6,
+        stage_acc=0.4,
+        path_vel=0.6,
+        path_acc=0.4,
+        blocking=False,
+        trajectory_optimizer="TOTG",
+    ):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_staged_path")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.execute_staged_path waypoints=%s blocking=%s stage_vel=%s stage_acc=%s path_vel=%s path_acc=%s",
+            len(path) if path else 0,
+            blocking,
+            stage_vel,
+            stage_acc,
+            path_vel,
+            path_acc,
+        )
+        full_path = [self._to_float_list(stage_position)] + [self._to_float_list(point) for point in path or []]
+        return self._set_path_result(full_path, blocking=blocking)
 
     def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
         if not self._drive_enabled and self.enable() != 0:

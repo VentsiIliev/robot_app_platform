@@ -34,6 +34,20 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     ):
         ...
 
+    def execute_staged_trajectory(
+        self,
+        stage_position,
+        path,
+        tool: int,
+        user: int,
+        stage_vel: float,
+        stage_acc: float,
+        path_vel: float,
+        path_acc: float,
+        blocking: bool = False,
+    ):
+        return -1
+
     def get_execution_status(self):
         return None
 
