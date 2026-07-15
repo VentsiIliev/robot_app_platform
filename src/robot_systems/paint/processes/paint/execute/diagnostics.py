@@ -169,13 +169,3 @@ def write_pivot_job_debug_artifacts(
         )
 
 
-def write_timing_summary(
-    *,
-    recorder: TimingRecorder,
-    debug_dump_dir: str | None,
-) -> None:
-    try:
-        csv_path = recorder.write_csv(debug_dump_dir)
-        recorder.log_summary(_logger, csv_path=csv_path)
-    except Exception:
-        _logger.exception("[TIMING_SUMMARY] Failed to write paint timing summary")
