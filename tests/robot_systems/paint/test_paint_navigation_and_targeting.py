@@ -100,6 +100,22 @@ class TestPaintNavigationService(unittest.TestCase):
 
         navigation.move_to_group.assert_not_called()
 
+    def test_move_to_calibration_position_can_skip_pre_move_unwind(self):
+        navigation = MagicMock()
+        robot = MagicMock()
+        navigation.move_to_group.return_value = True
+        service = PaintNavigationService(navigation, robot_service=robot)
+
+        self.assertTrue(service.move_to_calibration_position(unwind_before_move=False))
+
+        robot.unwind_joint6.assert_not_called()
+        navigation.move_to_group.assert_called_once_with(
+            "CALIBRATION",
+            wait_cancelled=None,
+            velocity=30.0,
+            acceleration=40.0,
+        )
+
     def test_get_group_position_returns_none_on_lookup_or_parse_failure(self):
         navigation = MagicMock()
         service = PaintNavigationService(navigation)

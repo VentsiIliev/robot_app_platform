@@ -6,7 +6,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[238.064, 28.158, 366.199, -178.345, -0.049, 0.101]"
+      "position": "[-7.120, 366.715, 99.870, -178.876, 0.003, -0.008]"
     },
     "CALIBRATION": {
       "velocity": 10,
@@ -23,14 +23,6 @@
       "has_iterations": false,
       "has_trajectory_execution": false
     },
-    "PAINTING": {
-      "velocity": 10,
-      "acceleration": 10,
-      "iterations": 1,
-      "has_iterations": false,
-      "has_trajectory_execution": true,
-      "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
-    },
     "Horizontal Shaft": {
       "velocity": 10,
       "acceleration": 10,
@@ -38,6 +30,22 @@
       "has_iterations": false,
       "has_trajectory_execution": true,
       "position": "[-1.549, 697.501, 378.207, -89.947, -0.353, -0.489]"
+    },
+    "Vertical Shaft": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-6.220, 607.405, 235.637, -178.740, -0.016, -0.092]"
+    },
+    "Clean": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
     }
   }
 }

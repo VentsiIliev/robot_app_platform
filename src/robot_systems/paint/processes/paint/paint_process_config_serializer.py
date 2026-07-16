@@ -6,6 +6,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
+    PaintInterpolationConfig,
     PaintNavigationReturnConfig,
     PaintProcessConfig,
     PickupMotionConfig,
@@ -48,6 +49,7 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
                 "edge_cleanup",
                 "dropoff",
                 "navigation_return",
+                "interpolation",
             }
         })
         values["pickup_motion"] = _build_dataclass(
@@ -69,5 +71,10 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             PaintNavigationReturnConfig,
             _section(raw, "navigation_return"),
             default.navigation_return,
+        )
+        values["interpolation"] = _build_dataclass(
+            PaintInterpolationConfig,
+            _section(raw, "interpolation"),
+            default.interpolation,
         )
         return PaintProcessConfig(**values)

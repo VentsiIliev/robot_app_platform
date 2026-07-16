@@ -60,6 +60,35 @@ class PaintEdgeCleanupExecutor:
             and self._owner._configured_contact_motion_plane == "xz_y_ry"
         )
 
+    def should_run_after_xy_rz(self) -> bool:
+        """Return whether the configured XY/RZ process should run XY/RZ edge cleanup."""
+        enabled = self._cleanup_config().enabled_after_xy_rz
+        return (
+            bool(enabled)
+            and self._owner._configured_contact_motion_plane == "xy_z_rz"
+        )
+
+    def _use_cleanup_base_provider(self) -> tuple[bool, str, object, object]:
+        """Temporarily route XY/RZ projection helpers through the cleanup movement-group pose."""
+        original_base_provider = self._owner._base_position_provider
+        original_pickup_base_provider = self._owner._pickup_base_position_provider
+        cleanup_position = self._owner._resolve_cleanup_base_position()
+        if cleanup_position is None:
+            return (
+                False,
+                "Clean movement group pose is not available for XY/RZ edge cleanup",
+                original_base_provider,
+                original_pickup_base_provider,
+            )
+        cleanup_provider = lambda: list(cleanup_position)
+        self._owner._base_position_provider = cleanup_provider
+        self._owner._pickup_base_position_provider = cleanup_provider
+        return True, "", original_base_provider, original_pickup_base_provider
+
+    def _restore_base_providers(self, original_base_provider, original_pickup_base_provider) -> None:
+        self._owner._base_position_provider = original_base_provider
+        self._owner._pickup_base_position_provider = original_pickup_base_provider
+
     @timed_step(_logger, "edge_cleanup_pre_unwind_align")
     def move_to_original_orientation_before_unwind(self) -> tuple[bool, str]:
         """Return the held workpiece to the saved align pose before Joint 6 unwind."""
@@ -657,6 +686,9 @@ class PaintEdgeCleanupExecutor:
                 _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_pre_unwind_align total_elapsed_s=%.3f", elapsed_s(started))
                 return False, msg, 0
             self._owner._set_runtime_contact_motion_config(self._owner._make_runtime_contact_motion_config("xy_z_rz"))
+            ok, msg, original_base_provider, original_pickup_base_provider = self._use_cleanup_base_provider()
+            if not ok:
+                return False, f"XZ/RY paint succeeded, but {msg}", 0
             combined_cleanup_enabled = bool(self._cleanup_config().enable_second_pass)
             wait_started = perf_counter()
             try:
@@ -716,3 +748,82 @@ class PaintEdgeCleanupExecutor:
             self._active_cleanup_z_offset_mm = original_cleanup_z_offset
             self._owner._contact_motion_config = original_config
             self._owner._contact_motion_strategy = original_strategy
+            if "original_base_provider" in locals():
+                self._restore_base_providers(original_base_provider, original_pickup_base_provider)
+
+    @timed_step(_logger, "edge_cleanup_xy_rz_direct_pass")
+    def execute_after_xy_rz_paint(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        started: float,
+        *,
+        unwind_before_cleanup: bool = True,
+    ) -> tuple[bool, str, int]:
+        """Run an XY/RZ cleanup pass by reprojecting the prepared contour at the Clean pose."""
+        original_config = self._owner._contact_motion_config
+        original_strategy = self._owner._contact_motion_strategy
+        original_cleanup_z_offset = self._active_cleanup_z_offset_mm
+        original_contact_base_z_offset = self._owner._active_contact_base_z_offset_mm
+        original_cleanup_contact_path = self._last_cleanup_contact_path
+        try:
+            self._last_cleanup_contact_path = None
+            self._owner._set_runtime_contact_motion_config(self._owner._make_runtime_contact_motion_config("xy_z_rz"))
+            ok, msg, original_base_provider, original_pickup_base_provider = self._use_cleanup_base_provider()
+            if not ok:
+                return False, msg, 0
+            combined_cleanup_enabled = bool(self._cleanup_config().enable_second_pass)
+            try:
+                preplan = self._preplan_cleanup_path(
+                    execution_plan,
+                    started=started,
+                    combined_cleanup_enabled=combined_cleanup_enabled,
+                )
+            except Exception as exc:
+                _logger.exception("[EDGE_CLEANUP] direct XY/RZ preplan failed")
+                return False, f"XY/RZ paint succeeded, but edge-cleanup preplan failed: {exc}", 0
+            if not preplan.ok:
+                return False, preplan.message, preplan.total_waypoints
+
+            if unwind_before_cleanup:
+                ok, msg = self.unwind_joint6_before_cleanup(
+                    failure_context="XY/RZ paint succeeded, but Joint 6 unwind failed before edge cleanup"
+                )
+                if not ok:
+                    _logger.info(
+                        "[TIMING] paint_process success=false stage=edge_cleanup_unwind total_elapsed_s=%.3f",
+                        elapsed_s(started),
+                    )
+                    return False, msg, preplan.total_waypoints
+
+            staged_ok, staged_msg, staged_waypoints = self._execute_staged_cleanup_path(
+                preplan.stage_approach_pose,
+                preplan.command_path,
+                started=started,
+            )
+            if staged_ok:
+                return True, "", staged_waypoints
+            if staged_msg != "staged trajectory endpoint unavailable":
+                return False, staged_msg, staged_waypoints
+
+            _logger.warning(
+                "[EDGE_CLEANUP] staged cleanup endpoint unavailable; falling back to separate stage/path execution: %s",
+                staged_msg,
+            )
+            ok, msg = self._move_to_preplanned_xy_rz_stage(preplan.stage_approach_pose)
+            if not ok:
+                return False, msg, preplan.total_waypoints
+            ok, msg, combined_waypoints = self._execute_combined_cleanup_path(
+                preplan.command_path,
+                started=started,
+            )
+            if not ok:
+                return False, msg, combined_waypoints
+            return True, "", combined_waypoints
+        finally:
+            self._last_cleanup_contact_path = original_cleanup_contact_path
+            self._owner._active_contact_base_z_offset_mm = original_contact_base_z_offset
+            self._active_cleanup_z_offset_mm = original_cleanup_z_offset
+            self._owner._contact_motion_config = original_config
+            self._owner._contact_motion_strategy = original_strategy
+            if "original_base_provider" in locals():
+                self._restore_base_providers(original_base_provider, original_pickup_base_provider)

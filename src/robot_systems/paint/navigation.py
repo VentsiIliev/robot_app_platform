@@ -89,8 +89,9 @@ class PaintNavigationService:
         self,
         z_offset: float = 0.0,
         wait_cancelled: Callable[[], bool] | None = None,
+        unwind_before_move: bool = True,
     ) -> bool:
-        if not self._unwind_joint6_before_calibration_return():
+        if unwind_before_move and not self._unwind_joint6_before_calibration_return():
             return False
         ok = self._move_with_z_offset(self._GROUP_CALIBRATION, z_offset, wait_cancelled=wait_cancelled)
         if ok:

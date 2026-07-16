@@ -49,7 +49,7 @@ class TestPaintWorkpieceEditorAdapter(unittest.TestCase):
                         {"contour": np.array([[1, 2], [3, 4]], dtype=np.float32), "settings": {"velocity": 7, "offset": None}},
                     ],
                     contour_layer_name(): [
-                        {"contour": np.array([[5, 6], [7, 8]], dtype=np.float32), "settings": {"rz_angle": 15}},
+                        {"contour": np.array([[5, 6], [7, 8]], dtype=np.float32), "settings": {"offset": 15}},
                     ],
                     fill_layer_name(): [
                         {"contour": np.array([[9, 10], [11, 12]], dtype=np.float32), "settings": {}},
@@ -69,7 +69,7 @@ class TestPaintWorkpieceEditorAdapter(unittest.TestCase):
         self.assertEqual(len(result["sprayPattern"]["Contour"]), 1)
         self.assertEqual(result["sprayPattern"]["Contour"][0]["settings"]["velocity"], 10)
         self.assertEqual(result["sprayPattern"]["Contour"][0]["settings"]["acceleration"], 20)
-        self.assertEqual(result["sprayPattern"]["Contour"][0]["settings"]["rz_angle"], 15)
+        self.assertEqual(result["sprayPattern"]["Contour"][0]["settings"]["offset"], 15)
         self.assertEqual(len(result["sprayPattern"]["Fill"]), 1)
         self.assertEqual(result["sprayPattern"]["Fill"][0]["settings"], {"velocity": 10, "acceleration": 20})
 
@@ -95,7 +95,7 @@ class TestPaintWorkpieceEditorAdapter(unittest.TestCase):
             "contour": {"contour": [[1, 2], [3, 4]]},
             "velocity": 5,
             "acceleration": 6,
-            "rz_angle": None,
+            "rz_angle": 15,
             "sprayPattern": {
                 "Contour": [{"contour": [[5, 6], [7, 8]], "settings": {"offset": 1}}],
                 "Fill": [{"contour": [[9, 10], [11, 12]], "settings": {"offset": 2}}],

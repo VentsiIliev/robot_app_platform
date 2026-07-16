@@ -79,12 +79,7 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.VELOCITY_ONLY,
         ),
 
-        MovementGroupDefinition(
-            id="PAINTING",
-            label="Painting",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-         ),
+
         MovementGroupDefinition(
             id="Horizontal Shaft",
             label="Horizontal Shaft",
@@ -94,6 +89,12 @@ class PaintRobotSystem(BaseRobotSystem):
         MovementGroupDefinition(
             id="Vertical Shaft",
             label="Vertical Shaft",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+        MovementGroupDefinition(
+            id="Clean",
+            label="Clean",
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
@@ -185,8 +186,8 @@ class PaintRobotSystem(BaseRobotSystem):
             #                 factory=application_wiring._build_hand_eye_calibration_application),
             ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
                             factory=application_wiring._build_pick_target_application),
-            # ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
-            #                 factory=application_wiring._build_paint_motion_plane_setup_application),
+            ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
+                            factory=application_wiring._build_paint_motion_plane_setup_application),
         ],
     )
 

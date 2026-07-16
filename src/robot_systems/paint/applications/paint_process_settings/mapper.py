@@ -16,6 +16,7 @@ class PaintProcessSettingsMapper:
         cleanup = settings.edge_cleanup
         dropoff = settings.dropoff
         nav = settings.navigation_return
+        interpolation = settings.interpolation
         return {
             "enable_vacuum_pump": settings.enable_vacuum_pump,
             "apply_camera_to_tcp_for_pickup": settings.apply_camera_to_tcp_for_pickup,
@@ -24,6 +25,7 @@ class PaintProcessSettingsMapper:
             "pivot_motion_plane": settings.pivot_motion_plane,
             "primary_group_id": settings.primary_group_id,
             "secondary_group_id": settings.secondary_group_id,
+            "cleanup_group_id": settings.cleanup_group_id,
             "pivot_axis": settings.pivot_axis,
             "pivot_direction": settings.pivot_direction,
             "pivot_contact_side": settings.pivot_contact_side,
@@ -46,6 +48,7 @@ class PaintProcessSettingsMapper:
             "pickup_first_contact_vel_percent": pickup.first_contact_vel_percent,
             "pickup_first_contact_acc_percent": pickup.first_contact_acc_percent,
             "cleanup_enabled_after_xz_ry": cleanup.enabled_after_xz_ry,
+            "cleanup_enabled_after_xy_rz": cleanup.enabled_after_xy_rz,
             "cleanup_enable_second_pass": cleanup.enable_second_pass,
             "cleanup_vel_percent": cleanup.vel_percent,
             "cleanup_acc_percent": cleanup.acc_percent,
@@ -60,6 +63,8 @@ class PaintProcessSettingsMapper:
             "nav_unwind_queue_if_busy": nav.unwind_queue_if_busy,
             "nav_calibration_move_vel_percent": nav.calibration_move_vel_percent,
             "nav_calibration_move_acc_percent": nav.calibration_move_acc_percent,
+            "path_tangent_lookahead_mm": interpolation.path_tangent_lookahead_mm,
+            "path_tangent_deadband_deg": interpolation.path_tangent_deadband_deg,
             "enable_pivot_debug_plot": settings.enable_pivot_debug_plot,
             "enable_execution_motion_trace": settings.enable_execution_motion_trace,
             "execution_motion_trace_sample_period_s": settings.execution_motion_trace_sample_period_s,
@@ -108,6 +113,7 @@ class PaintProcessSettingsMapper:
         cleanup = replace(
             base.edge_cleanup,
             enabled_after_xz_ry=bool(flat.get("cleanup_enabled_after_xz_ry", base.edge_cleanup.enabled_after_xz_ry)),
+            enabled_after_xy_rz=bool(flat.get("cleanup_enabled_after_xy_rz", base.edge_cleanup.enabled_after_xy_rz)),
             enable_second_pass=bool(flat.get("cleanup_enable_second_pass", base.edge_cleanup.enable_second_pass)),
             vel_percent=float(flat.get("cleanup_vel_percent", base.edge_cleanup.vel_percent)),
             acc_percent=float(flat.get("cleanup_acc_percent", base.edge_cleanup.acc_percent)),
@@ -139,6 +145,15 @@ class PaintProcessSettingsMapper:
                 flat.get("nav_calibration_move_acc_percent", base.navigation_return.calibration_move_acc_percent)
             ),
         )
+        interpolation = replace(
+            base.interpolation,
+            path_tangent_lookahead_mm=float(
+                flat.get("path_tangent_lookahead_mm", base.interpolation.path_tangent_lookahead_mm)
+            ),
+            path_tangent_deadband_deg=float(
+                flat.get("path_tangent_deadband_deg", base.interpolation.path_tangent_deadband_deg)
+            ),
+        )
         return replace(
             base,
             enable_z_shift_pixel_compensation=bool(
@@ -157,6 +172,7 @@ class PaintProcessSettingsMapper:
             pivot_motion_plane=str(flat.get("pivot_motion_plane", base.pivot_motion_plane)),
             primary_group_id=str(flat.get("primary_group_id", base.primary_group_id)),
             secondary_group_id=str(flat.get("secondary_group_id", base.secondary_group_id)),
+            cleanup_group_id=str(flat.get("cleanup_group_id", base.cleanup_group_id)),
             pivot_axis=str(flat.get("pivot_axis", base.pivot_axis)),
             pivot_direction=str(flat.get("pivot_direction", base.pivot_direction)),
             pivot_contact_side=str(flat.get("pivot_contact_side", base.pivot_contact_side)),
@@ -174,5 +190,6 @@ class PaintProcessSettingsMapper:
             edge_cleanup=cleanup,
             dropoff=dropoff,
             navigation_return=nav,
+            interpolation=interpolation,
             enable_pivot_debug_plot=bool(flat.get("enable_pivot_debug_plot", base.enable_pivot_debug_plot)),
         )

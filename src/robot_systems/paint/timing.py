@@ -17,6 +17,18 @@ R = TypeVar("R")
 
 _ACTIVE_RECORDER: ContextVar["TimingRecorder | None"] = ContextVar("paint_timing_recorder", default=None)
 
+_SUMMARY_STEPS = (
+    "pickup_to_pivot",
+    "execute_paint_contact_paths",
+    "execute_pivot_paths",
+    "edge_cleanup_xy_rz_pass",
+    "prepare_dropoff_unwind",
+    "pre_release_dropoff",
+    "return_after_paint_process",
+    "return_after_pickup",
+    "post_execute_return",
+)
+
 
 @dataclass(frozen=True)
 class TimingRecord:
@@ -98,16 +110,22 @@ class TimingRecorder:
         return path
 
     def log_summary(self, logger: logging.Logger, *, csv_path: str | None = None) -> None:
+        records = self._records_by_start()
+        total = self._total_record(records)
+        failures = [record for record in records if not record.success or record.exception]
+        total_s = total.elapsed_s if total is not None else self._latest_end_offset(records)
         logger.info(
-            "[TIMING_SUMMARY] name=%s operations=%d csv=%s",
+            "[TIMING_SUMMARY] name=%s success=%s total_s=%.3f operations=%d csv=%s",
             self.name,
+            not failures,
+            total_s,
             len(self.records),
             csv_path or "",
         )
-        for display_order, record in enumerate(self._records_by_start(), start=1):
+
+        for record in self._summary_records(records):
             logger.info(
-                "[TIMING_SUMMARY] order=%d step=%s label=%s success=%s elapsed_s=%.3f start_s=%.3f end_s=%.3f",
-                display_order,
+                "[TIMING_SUMMARY] phase=%s label=%s success=%s elapsed_s=%.3f start_s=%.3f end_s=%.3f",
                 record.step,
                 record.label or "-",
                 record.success,
@@ -116,8 +134,50 @@ class TimingRecorder:
                 record.end_offset_s,
             )
 
+        for record in failures:
+            logger.info(
+                "[TIMING_SUMMARY] failure step=%s label=%s exception=%s elapsed_s=%.3f start_s=%.3f end_s=%.3f",
+                record.step,
+                record.label or "-",
+                record.exception,
+                record.elapsed_s,
+                record.start_offset_s,
+                record.end_offset_s,
+            )
+
+        for display_order, record in enumerate(records, start=1):
+            logger.debug(
+                "[TIMING_DETAIL] order=%d step=%s label=%s success=%s exception=%s elapsed_s=%.3f start_s=%.3f end_s=%.3f",
+                display_order,
+                record.step,
+                record.label or "-",
+                record.success,
+                record.exception,
+                record.elapsed_s,
+                record.start_offset_s,
+                record.end_offset_s,
+            )
+
     def _records_by_start(self) -> list[TimingRecord]:
         return sorted(self.records, key=lambda record: (record.start_offset_s, record.end_offset_s, record.order))
+
+    def _total_record(self, records: list[TimingRecord]) -> TimingRecord | None:
+        for record in records:
+            if record.step == self.name:
+                return record
+        return None
+
+    @staticmethod
+    def _latest_end_offset(records: list[TimingRecord]) -> float:
+        if not records:
+            return 0.0
+        return max(record.end_offset_s for record in records)
+
+    @staticmethod
+    def _summary_records(records: list[TimingRecord]) -> list[TimingRecord]:
+        by_step = {step: index for index, step in enumerate(_SUMMARY_STEPS)}
+        selected = [record for record in records if record.step in by_step]
+        return sorted(selected, key=lambda record: (by_step[record.step], record.start_offset_s, record.order))
 
 
 @contextmanager

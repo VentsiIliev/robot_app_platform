@@ -5,7 +5,7 @@ import numpy as np
 
 from src.engine.geometry.planar import axis_equivalent_shift_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG, PaintProcessConfig
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
@@ -431,15 +431,20 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor = PaintWorkpiecePathExecutor(robot_service=robot_service)
         pose = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 
-        result = executor._move_pickup_phase("test move", pose)
+        result = executor._move_pickup_phase(
+            "test move",
+            pose,
+            velocity=PAINT_PROCESS_CONFIG.pickup_motion.approach_vel_percent,
+            acceleration=PAINT_PROCESS_CONFIG.pickup_motion.approach_acc_percent,
+        )
 
         self.assertTrue(result)
         robot_service.move_ptp.assert_called_once_with(
             position=pose,
             tool=0,
             user=0,
-            velocity=PAINT_PROCESS_CONFIG.pickup_default_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
+            velocity=PAINT_PROCESS_CONFIG.pickup_motion.approach_vel_percent,
+            acceleration=PAINT_PROCESS_CONFIG.pickup_motion.approach_acc_percent,
             wait_to_reach=True,
         )
 
@@ -595,6 +600,70 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("3 waypoints", msg)
         post_execute_callback.assert_called_once_with()
+
+    def test_execute_paint_process_logs_timing_summary_after_cycle(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=MagicMock(),
+            post_execute_callback=MagicMock(return_value=True),
+            debug_dump_dir="/tmp/paint-timing",
+        )
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
+
+        with (
+            patch("src.robot_systems.paint.timing.TimingRecorder.write_csv", return_value="/tmp/timing.csv") as write_csv,
+            patch("src.robot_systems.paint.timing.TimingRecorder.log_summary") as log_summary,
+        ):
+            ok, msg = executor.execute_paint_process(plan)
+
+        self.assertTrue(ok, msg)
+        write_csv.assert_called_once_with("/tmp/paint-timing")
+        log_summary.assert_called_once()
+        self.assertEqual(log_summary.call_args.kwargs["csv_path"], "/tmp/timing.csv")
+
+    def test_xy_rz_cleanup_returns_to_calibration_then_unwinds_before_cleanup(self):
+        events = []
+        robot_service = MagicMock()
+
+        def _calibration_return():
+            events.append("calibration")
+            return True
+
+        def _unwind_joint6(**_kwargs):
+            events.append("unwind")
+            return True
+
+        def _cleanup(_plan, _started, *, unwind_before_cleanup=True):
+            events.append(("cleanup", unwind_before_cleanup))
+            return True, "", 5
+
+        robot_service.unwind_joint6.side_effect = _unwind_joint6
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(pivot_motion_plane="xy_z_rz")
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            calibration_position_callback=_calibration_return,
+            post_execute_callback=MagicMock(return_value=True),
+            paint_process_config_service=config_service,
+        )
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._paint_contact.execute = MagicMock(return_value=(True, "", 3))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=True)
+        executor._edge_cleanup.execute_after_xy_rz_paint = MagicMock(side_effect=_cleanup)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
+
+        ok, msg = executor.execute_paint_process(plan)
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(["calibration", "unwind", ("cleanup", False)], events)
 
     def test_execute_paint_process_fails_when_post_execute_return_fails(self):
         executor = PaintWorkpiecePathExecutor(

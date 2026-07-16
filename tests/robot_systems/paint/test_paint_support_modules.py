@@ -277,7 +277,10 @@ class TestPaintSchemasAndLibraryService(unittest.TestCase):
         self.assertEqual([field.key for field in form_schema.fields], ["workpieceId", "name", "description", "height_mm"])
         self.assertEqual(form_schema.fields[3].default_value, 0.0)
         self.assertEqual(segment_schema.combo_key, "")
-        self.assertEqual([field.key for field in segment_schema.fields[:3]], ["velocity", "acceleration", "rz_angle"])
+        self.assertEqual(
+            [field.key for field in segment_schema.fields],
+            ["velocity", "acceleration", "offset", "edge_cleanup_z_offset_mm"],
+        )
 
     def test_user_schema_uses_role_values_in_combo_field(self) -> None:
         schema = build_paint_user_schema(["admin", "operator"])

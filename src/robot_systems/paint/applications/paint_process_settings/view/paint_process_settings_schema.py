@@ -44,6 +44,21 @@ def _mm_field(key: str, label: str, default: float = 0.0, min_val: float = -500.
     )
 
 
+def _deg_field(key: str, label: str, default: float = 0.0, min_val: float = 0.0) -> SettingField:
+    return SettingField(
+        key,
+        _t(label),
+        "double_spinbox",
+        default=default,
+        min_val=min_val,
+        max_val=180.0,
+        step=1.0,
+        decimals=1,
+        suffix=" deg",
+        step_options=[0.5, 1.0, 5.0, 10.0],
+    )
+
+
 def _toggle(key: str, label: str, default: bool = False) -> SettingField:
     return SettingField(key, _t(label), "toggle", default=default)
 
@@ -61,8 +76,9 @@ def build_process_groups() -> list[SettingGroup]:
             SettingField("contour_pixel_to_mm_mode", _t("Pixel-to-mm Mode"), "combo",
                          default=PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
                          choices=[PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR, PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL]),
-            SettingField("primary_group_id", _t("Primary Movement Group"), "line_edit", default="PAINTING"),
+            SettingField("primary_group_id", _t("Primary Movement Group"), "line_edit", default="Vertical Shaft"),
             SettingField("secondary_group_id", _t("Secondary Movement Group"), "line_edit", default="Horizontal Shaft"),
+            SettingField("cleanup_group_id", _t("Cleanup Movement Group"), "line_edit", default="Clean"),
         ]),
     ]
 
@@ -134,10 +150,20 @@ def build_cleanup_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("Enable"), [
             _toggle("cleanup_enabled_after_xz_ry", "Enable Cleanup After XZ/RY Paint"),
+            _toggle("cleanup_enabled_after_xy_rz", "Enable Cleanup After XY/RZ Paint"),
             _toggle("cleanup_enable_second_pass", "Enable Second Cleanup Pass"),
         ]),
         SettingGroup(_t("Path"), [
             _mm_field("cleanup_spacing_mm", "Cleanup Spacing", min_val=0.1),
+        ]),
+    ]
+
+
+def build_interpolation_groups() -> list[SettingGroup]:
+    return [
+        SettingGroup(_t("Path Tangent"), [
+            _mm_field("path_tangent_lookahead_mm", "Tangent Lookahead", default=15.0, min_val=1.0),
+            _deg_field("path_tangent_deadband_deg", "Tangent Deadband", default=5.0, min_val=0.0),
         ]),
     ]
 
@@ -161,6 +187,7 @@ def build_paint_process_settings_tabs() -> list[tuple[str, list[SettingGroup]]]:
         (_t("Motion Speeds"), build_motion_speed_groups()),
         (_t("Distances & Offsets"), build_distance_offset_groups()),
         (_t("Paint Path"), build_paint_path_groups()),
+        (_t("Interpolation"), build_interpolation_groups()),
         (_t("Cleanup"), build_cleanup_groups()),
         (_t("Diagnostics"), build_diagnostics_groups()),
     ]

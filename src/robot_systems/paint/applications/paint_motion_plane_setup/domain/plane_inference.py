@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 AXES = ("x", "y", "z")
 ROT_AXES = ("rx", "ry", "rz")
+POSITION_INDICES = {"x": 0, "y": 1, "z": 2}
+ROTATION_INDICES = {"rx": 3, "ry": 4, "rz": 5}
 ROTATION_PLANES = {
     "rx": (("y", "z"), "x"),
     "ry": (("x", "z"), "y"),
@@ -75,6 +77,32 @@ class PlaneInference:
             "pivot_motion_plane_config": self.as_plane_object(),
             "pivot_translation_axis": self.translation_axis,
             "pivot_translation_direction": self.translation_direction,
+            "axis_offsets_deg": self.axis_offsets_deg,
+            "orientation_overrides_deg": {},
+        }
+
+    def as_paint_plane_config(
+        self,
+        *,
+        movement_group_id: str,
+        reference_pose: Pose6D | None,
+    ) -> dict:
+        return {
+            "label": self.suggested_plane_key,
+            "movement_group_id": str(movement_group_id or "").strip(),
+            "reference_pose": reference_pose.as_list() if reference_pose is not None else None,
+            "translation_axis": self.translation_axis,
+            "translation_direction": self.translation_direction,
+            "rotation_axis": self.rotation_axis,
+            "fixed_axis": self.fixed_axis,
+            "planar_axes": list(self.planar_axes),
+            "source_planar_coordinate_indices": [0, 1],
+            "planar_coordinate_indices": [
+                POSITION_INDICES[axis]
+                for axis in self.planar_axes
+            ],
+            "orthogonal_position_index": POSITION_INDICES[self.fixed_axis],
+            "rotation_index": ROTATION_INDICES[self.rotation_axis],
             "axis_offsets_deg": self.axis_offsets_deg,
             "orientation_overrides_deg": {},
         }

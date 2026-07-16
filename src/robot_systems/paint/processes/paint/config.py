@@ -54,6 +54,8 @@ class PaintEdgeCleanupConfig:
 
     # Run an XY/RZ edge-cleanup pass before releasing the held workpiece.
     enabled_after_xz_ry: bool = False  # [LIVE SETTINGS]
+    # Run an XY/RZ edge-cleanup pass after XY/RZ paint, reprojected at the cleanup station.
+    enabled_after_xy_rz: bool = False  # [LIVE SETTINGS]
     # Replay the cleanup path in reverse with an additional paint-axis/base Z offset.
     enable_second_pass: bool = False  # [LIVE SETTINGS]
     # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
@@ -93,6 +95,16 @@ class PaintNavigationReturnConfig:
 
 
 @dataclass(frozen=True)
+class PaintInterpolationConfig:
+    """Path-heading interpolation tuning for paint contour preparation."""
+
+    # Lookahead distance used when deriving per-point RZ from the path tangent.
+    path_tangent_lookahead_mm: float = 15.0  # [LIVE SETTINGS]
+    # Ignore smaller tangent heading changes when rebuilding path RZ.
+    path_tangent_deadband_deg: float = 5.0  # [LIVE SETTINGS]
+
+
+@dataclass(frozen=True)
 class PaintProjectionTuning:
     """Numeric tuning values for projected paint-path geometry."""
     smooth_max_linear_step_mm: float = 1.0
@@ -109,7 +121,6 @@ class PaintMotionPlaneSpec:
     orthogonal_position_index: int
     rotation_index: int
     orientation_overrides_deg: dict[str, float] = field(default_factory=dict)
-    contact_heading_offset_deg: float = 180.0
     axis_offsets_deg: dict[str, float] = field(default_factory=dict)
 
 
@@ -180,10 +191,12 @@ class PaintProcessConfig:
     # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
-    # Navigation group used for pickup/camera-table alignment poses.
-    primary_group_id: str = "PAINTING"
+    # Navigation group used as the paint/pivot reference pose for XY/RZ painting.
+    primary_group_id: str = "Vertical Shaft"
     # Navigation group used as the paint/pivot reference pose for XZ/RY painting.
     secondary_group_id: str = "Horizontal Shaft"
+    # Navigation group used as the XY/RZ reference pose for the post-paint cleanup pass.
+    cleanup_group_id: str = "Clean"
     # Main pivot tuning knobs. The lower-level executor flags are derived from these.
     pivot_axis: str = "x"
     pivot_direction: str = "reverse"
@@ -202,6 +215,8 @@ class PaintProcessConfig:
     dropoff: PaintDropoffConfig = field(default_factory=PaintDropoffConfig)
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
+    # Interpolation and heading reconstruction tuning.
+    interpolation: PaintInterpolationConfig = field(default_factory=PaintInterpolationConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
 
@@ -229,7 +244,6 @@ class PaintSimulationConfig:
     orthogonal_position_index: int = field(init=False)
     rotation_index: int = field(init=False)
     orientation_overrides_deg: dict[str, float] = field(init=False)
-    contact_heading_offset_deg: float = field(init=False)
     valid_translation_axes: tuple[str, ...] = field(init=False)
     paint_axis_offset_deg: float = field(init=False)
     side_sign: float = field(init=False)
@@ -246,7 +260,6 @@ class PaintSimulationConfig:
         object.__setattr__(self, "orthogonal_position_index", int(plane_spec.orthogonal_position_index))
         object.__setattr__(self, "rotation_index", int(plane_spec.rotation_index))
         object.__setattr__(self, "orientation_overrides_deg", dict(plane_spec.orientation_overrides_deg))
-        object.__setattr__(self, "contact_heading_offset_deg", float(plane_spec.contact_heading_offset_deg))
         object.__setattr__(self, "valid_translation_axes", tuple(plane_spec.axis_offsets_deg.keys()))
         object.__setattr__(self, "paint_axis_offset_deg", float(plane_spec.axis_offsets_deg[self.translation_axis]))
         object.__setattr__(self, "side_sign", float(rules.side_signs[self.paint_side]))

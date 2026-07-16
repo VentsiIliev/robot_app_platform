@@ -40,14 +40,18 @@ class PaintMotionPlaneSetupController(IApplicationController):
         self._pending_capture: str | None = None
 
         view.move_to_paint_pose_requested.connect(self._on_move_to_paint_pose)
+        view.paint_group_selected.connect(self._on_paint_group_selected)
         view.capture_reference_requested.connect(self._on_capture_reference)
         view.capture_translation_requested.connect(self._on_capture_translation)
         view.capture_rotation_requested.connect(self._on_capture_rotation)
-        view.fixed_axis_selected.connect(self._on_fixed_axis_selected)
 
     def load(self) -> None:
         try:
             self._model.load()
+            self._view.set_paint_groups(
+                self._model.paint_group_ids,
+                self._model.selected_paint_group_id,
+            )
             self._view.set_paint_pose(self._model.paint_pose)
             self._view.set_result(None)
         except Exception as exc:
@@ -68,10 +72,10 @@ class PaintMotionPlaneSetupController(IApplicationController):
         self._active.clear()
         try:
             self._view.move_to_paint_pose_requested.disconnect(self._on_move_to_paint_pose)
+            self._view.paint_group_selected.disconnect(self._on_paint_group_selected)
             self._view.capture_reference_requested.disconnect(self._on_capture_reference)
             self._view.capture_translation_requested.disconnect(self._on_capture_translation)
             self._view.capture_rotation_requested.disconnect(self._on_capture_rotation)
-            self._view.fixed_axis_selected.disconnect(self._on_fixed_axis_selected)
         except (RuntimeError, TypeError):
             pass
 
@@ -81,6 +85,15 @@ class PaintMotionPlaneSetupController(IApplicationController):
         self._view.set_busy(True, "Moving to paint position...")
         self._run_worker(self._model.move_to_paint_pose, self._on_move_finished)
 
+    def _on_paint_group_selected(self, group_id: str) -> None:
+        try:
+            pose = self._model.select_paint_group(group_id)
+        except Exception as exc:
+            self._view.show_error("Paint pose unavailable", str(exc))
+            return
+        self._view.set_paint_pose(pose)
+        self._view.set_paint_move_complete(False)
+
     def _on_capture_reference(self) -> None:
         self._capture_current("reference")
 
@@ -89,10 +102,6 @@ class PaintMotionPlaneSetupController(IApplicationController):
 
     def _on_capture_rotation(self) -> None:
         self._capture_current("rotation")
-
-    def _on_fixed_axis_selected(self, axis: str) -> None:
-        self._model.fixed_axis = axis
-        self._refresh_result()
 
     def _capture_current(self, slot: str) -> None:
         self._pending_capture = slot
@@ -139,7 +148,15 @@ class PaintMotionPlaneSetupController(IApplicationController):
         if inference is None:
             self._view.set_result(None)
             return
-        self._view.set_result(inference.as_runtime_config(), inference.warnings)
+        paint_plane_config = inference.as_paint_plane_config(
+            movement_group_id=self._model.selected_paint_group_id,
+            reference_pose=self._model.reference_pose,
+        )
+        self._view.set_result(
+            inference.as_runtime_config(),
+            inference.warnings,
+            paint_plane_config=paint_plane_config,
+        )
 
     def _run_worker(self, fn, on_finished) -> None:
         thread = QThread()

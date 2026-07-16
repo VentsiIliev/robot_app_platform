@@ -29,6 +29,7 @@ from src.robot_systems.paint.processes.paint.config import (
 
 _logger = logging.getLogger("Core")
 _EMPTY_SNAPSHOT = np.empty((0, 2), dtype=float)
+_CONTACT_HEADING_OPPOSES_TRANSLATION_DEG = 180.0
 
 
 def rebase_contact_motion_path_to_zero_start_rotation(
@@ -186,7 +187,7 @@ def project_paint_contact_motion_continuous(
     if config.direction_sign < 0:
         translation_heading = normalize_degrees(translation_heading + 180.0)
     contact_segment_heading = normalize_degrees(
-        translation_heading + config.contact_heading_offset_deg
+        translation_heading + _CONTACT_HEADING_OPPOSES_TRANSLATION_DEG
     )
 
     is_closed_path = (

@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
+from src.robot_systems.paint import application_wiring
+from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
+from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
+    build_paint_process_settings_tabs,
+)
+from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_inference import (
+    Pose6D,
+    infer_plane,
+)
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
+    PaintEdgeCleanupConfig,
     PaintProcessConfig,
     PaintSimulationConfig,
 )
+from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
+    PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
     _normalize_contact_motion_config,
 )
@@ -16,36 +30,152 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
 class TestPaintProcessConfig(unittest.TestCase):
     def test_process_config_derived_properties_follow_motion_plane(self) -> None:
         default_config = PaintProcessConfig()
-        xy_config = PaintProcessConfig(pivot_motion_plane="xy_z_rz")
 
-        self.assertEqual(PAINT_PROCESS_CONFIG.paint_base_group_id, "Horizontal Shaft")
-        self.assertEqual(default_config.paint_base_group_id, "Horizontal Shaft")
-        self.assertEqual(default_config.pickup_base_group_id, "PAINTING")
-        self.assertEqual(default_config.pivot_side, "positive")
-        self.assertEqual(xy_config.paint_base_group_id, "PAINTING")
-        self.assertEqual(xy_config.pivot_side, "positive")
+        self.assertEqual(PAINT_PROCESS_CONFIG.primary_group_id, "Vertical Shaft")
+        self.assertEqual(default_config.primary_group_id, "Vertical Shaft")
+        self.assertEqual(default_config.secondary_group_id, "Horizontal Shaft")
+        self.assertEqual(default_config.cleanup_group_id, "Clean")
+        self.assertEqual(default_config.pivot_contact_side, "positive")
+
+        original = application_wiring._PAINT_PROCESS
+        try:
+            application_wiring._PAINT_PROCESS = PaintProcessConfig(pivot_motion_plane="xy_z_rz")
+            self.assertEqual(application_wiring._get_paint_base_group_id(), "Vertical Shaft")
+
+            application_wiring._PAINT_PROCESS = PaintProcessConfig(pivot_motion_plane="xz_y_ry")
+            self.assertEqual(application_wiring._get_paint_base_group_id(), "Horizontal Shaft")
+            self.assertEqual(application_wiring._get_cleanup_base_group_id(), "Clean")
+        finally:
+            application_wiring._PAINT_PROCESS = original
 
     def test_process_config_exposes_pickup_defaults_used_by_executor(self) -> None:
         default_config = PaintProcessConfig()
 
-        self.assertEqual(default_config.pickup_default_z_mm, 300.0)
-        self.assertEqual(default_config.pickup_default_vel_percent, 20.0)
-        self.assertEqual(default_config.pickup_default_acc_percent, 50.0)
-        self.assertEqual(default_config.pickup_approach_vel_percent, 10.0)
-        self.assertEqual(default_config.pickup_approach_acc_percent, 30.0)
-        self.assertEqual(default_config.pickup_descend_vel_percent, 60.0)
-        self.assertEqual(default_config.pickup_descend_acc_percent, 20.0)
-        self.assertEqual(default_config.pickup_lift_align_vel_percent, 20.0)
-        self.assertEqual(default_config.pickup_lift_align_acc_percent, 70.0)
-        self.assertEqual(default_config.pickup_change_plane_vel_percent, 20.0)
-        self.assertEqual(default_config.pickup_change_plane_acc_percent, 50.0)
-        self.assertEqual(default_config.pickup_stage_transition_vel_percent, 20.0)
-        self.assertEqual(default_config.pickup_stage_transition_acc_percent, 50.0)
-        self.assertEqual(default_config.pickup_first_contact_vel_percent, 20.0)
-        self.assertEqual(default_config.pickup_first_contact_acc_percent, 70.0)
-        self.assertEqual(default_config.pickup_restore_orientation_z_lift_mm, 10.0)
-        self.assertEqual(default_config.pickup_approach_offset_mm, 100.0)
-        self.assertEqual(default_config.pickup_contact_offset_mm, 2.0)
+        self.assertEqual(default_config.pickup_motion.approach_offset_mm, 100.0)
+        self.assertEqual(default_config.pickup_motion.contact_offset_mm, 2.0)
+        self.assertEqual(default_config.pickup_motion.initial_lift_clearance_mm, 20.0)
+        self.assertEqual(default_config.pickup_motion.approach_vel_percent, 60.0)
+        self.assertEqual(default_config.pickup_motion.approach_acc_percent, 50.0)
+        self.assertEqual(default_config.pickup_motion.descend_vel_percent, 60.0)
+        self.assertEqual(default_config.pickup_motion.descend_acc_percent, 40.0)
+        self.assertEqual(default_config.pickup_motion.lift_align_vel_percent, 80.0)
+        self.assertEqual(default_config.pickup_motion.lift_align_acc_percent, 40.0)
+        self.assertEqual(default_config.pickup_motion.change_plane_vel_percent, 80.0)
+        self.assertEqual(default_config.pickup_motion.change_plane_acc_percent, 40.0)
+        self.assertEqual(default_config.pickup_motion.stage_transition_vel_percent, 50.0)
+        self.assertEqual(default_config.pickup_motion.stage_transition_acc_percent, 20.0)
+        self.assertEqual(default_config.pickup_motion.first_contact_vel_percent, 80.0)
+        self.assertEqual(default_config.pickup_motion.first_contact_acc_percent, 30.0)
+        self.assertEqual(default_config.interpolation.path_tangent_lookahead_mm, 15.0)
+        self.assertEqual(default_config.interpolation.path_tangent_deadband_deg, 5.0)
+
+    def test_process_settings_mapper_roundtrips_interpolation_settings(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertEqual(flat["path_tangent_lookahead_mm"], 15.0)
+        self.assertEqual(flat["path_tangent_deadband_deg"], 5.0)
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "path_tangent_lookahead_mm": 22.5,
+                "path_tangent_deadband_deg": 3.5,
+            },
+            base,
+        )
+
+        self.assertEqual(restored.interpolation.path_tangent_lookahead_mm, 22.5)
+        self.assertEqual(restored.interpolation.path_tangent_deadband_deg, 3.5)
+
+    def test_process_settings_schema_has_interpolation_tab(self) -> None:
+        tabs = build_paint_process_settings_tabs()
+        interpolation = dict(tabs)["Interpolation"]
+        keys = [field.key for group in interpolation for field in group.fields]
+
+        self.assertEqual(keys, ["path_tangent_lookahead_mm", "path_tangent_deadband_deg"])
+
+    def test_executor_contact_motion_plane_refreshes_from_config_service(self) -> None:
+        service = type(
+            "_Service",
+            (),
+            {
+                "get_snapshot": lambda _self: PaintProcessConfig(
+                    pivot_motion_plane="xy_z_rz",
+                    primary_group_id="Vertical Shaft",
+                    secondary_group_id="Horizontal Shaft",
+                )
+            },
+        )()
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            pivot_motion_plane="xz_y_ry",
+            paint_process_config_service=service,
+        )
+
+        executor._refresh_paint_process_config_snapshot()
+        executor._apply_paint_process_contact_config()
+
+        self.assertEqual(executor._configured_contact_motion_plane, "xy_z_rz")
+        self.assertEqual(executor._contact_motion_config.motion_plane, "xy_z_rz")
+
+    def test_edge_cleanup_has_separate_xy_rz_enable_gate(self) -> None:
+        config = PaintProcessConfig(
+            edge_cleanup=PaintEdgeCleanupConfig(
+                enabled_after_xz_ry=False,
+                enabled_after_xy_rz=True,
+            )
+        )
+        owner = type(
+            "_Owner",
+            (),
+            {
+                "_configured_contact_motion_plane": "xy_z_rz",
+                "_paint_process_config": lambda _self: config,
+            },
+        )()
+
+        cleanup = PaintEdgeCleanupExecutor(owner)
+
+        self.assertTrue(cleanup.should_run_after_xy_rz())
+        self.assertFalse(cleanup.should_run_after_xz_ry())
+
+    def test_xy_rz_cleanup_fails_before_clean_move_when_unwind_fails(self) -> None:
+        config = PaintProcessConfig(
+            edge_cleanup=PaintEdgeCleanupConfig(enabled_after_xy_rz=True)
+        )
+        owner = SimpleNamespace(
+            _base_position_provider=lambda: [1, 2, 3, 4, 5, 6],
+            _pickup_base_position_provider=lambda: [1, 2, 3, 4, 5, 6],
+            _contact_motion_config=SimpleNamespace(motion_plane="xy_z_rz"),
+            _contact_motion_strategy=object(),
+            _active_contact_base_z_offset_mm=0.0,
+            _paint_process_config=lambda: config,
+            _resolve_cleanup_base_position=lambda: [10, 20, 30, 0, 0, 0],
+            _set_runtime_contact_motion_config=MagicMock(),
+            _make_runtime_contact_motion_config=MagicMock(return_value=SimpleNamespace(motion_plane="xy_z_rz")),
+        )
+        cleanup = PaintEdgeCleanupExecutor(owner)
+        cleanup._preplan_cleanup_path = MagicMock(
+            return_value=SimpleNamespace(
+                ok=True,
+                message="",
+                total_waypoints=7,
+                stage_approach_pose=[10, 20, 30, 0, 0, 0],
+                command_path=[[10, 20, 30, 0, 0, 0]],
+            )
+        )
+        cleanup.unwind_joint6_before_cleanup = MagicMock(return_value=(False, "unwind failed"))
+        cleanup._execute_staged_cleanup_path = MagicMock()
+        cleanup._move_to_preplanned_xy_rz_stage = MagicMock()
+
+        ok, msg, waypoints = cleanup.execute_after_xy_rz_paint(SimpleNamespace(), started=0.0)
+
+        self.assertFalse(ok)
+        self.assertEqual(msg, "unwind failed")
+        self.assertEqual(waypoints, 7)
+        cleanup._execute_staged_cleanup_path.assert_not_called()
+        cleanup._move_to_preplanned_xy_rz_stage.assert_not_called()
 
     def test_simulation_config_exposes_plane_specific_indices_and_signs(self) -> None:
         xy = PaintSimulationConfig(
@@ -77,10 +207,35 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(xz.orthogonal_position_index, 1)
         self.assertEqual(xz.rotation_index, 4)
         self.assertEqual(xz.orientation_overrides_deg, {})
-        self.assertEqual(xz.contact_heading_offset_deg, 180.0)
         self.assertEqual(xz.paint_axis_offset_deg, 90.0)
         self.assertEqual(xz.side_sign, -1.0)
         self.assertEqual(xz.direction_sign, -1.0)
+
+    def test_motion_plane_setup_outputs_complete_paint_plane_config(self) -> None:
+        reference = Pose6D(10.0, 20.0, 30.0, 180.0, 0.0, 0.0)
+        translation = Pose6D(-10.0, 20.0, 30.0, 180.0, 0.0, 0.0)
+        rotation = Pose6D(10.0, 20.0, 30.0, 180.0, 0.0, 12.0)
+
+        inference = infer_plane(reference, translation, rotation)
+        config = inference.as_paint_plane_config(
+            movement_group_id="Vertical Shaft",
+            reference_pose=reference,
+        )
+
+        self.assertEqual(config["label"], "xy_z_rz")
+        self.assertEqual(config["movement_group_id"], "Vertical Shaft")
+        self.assertEqual(config["reference_pose"], reference.as_list())
+        self.assertEqual(config["translation_axis"], "x")
+        self.assertEqual(config["translation_direction"], "reverse")
+        self.assertEqual(config["rotation_axis"], "rz")
+        self.assertEqual(config["fixed_axis"], "z")
+        self.assertEqual(config["planar_axes"], ["x", "y"])
+        self.assertEqual(config["source_planar_coordinate_indices"], [0, 1])
+        self.assertEqual(config["planar_coordinate_indices"], [0, 1])
+        self.assertEqual(config["orthogonal_position_index"], 2)
+        self.assertEqual(config["rotation_index"], 5)
+        self.assertEqual(config["axis_offsets_deg"], {"x": 0.0, "y": 90.0})
+        self.assertEqual(config["orientation_overrides_deg"], {})
 
     def test_normalize_contact_motion_config_preserves_valid_inputs_and_sanitizes_invalid_ones(self) -> None:
         normalized = _normalize_contact_motion_config(

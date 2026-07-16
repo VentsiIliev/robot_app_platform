@@ -63,7 +63,7 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: False,
             match_workpiece_fn=lambda contour: (False, None, "unused"),
-            default_settings={"velocity": "10", "acceleration": "10", "execution_spacing_mm": "7.5"},
+            default_settings={"velocity": "10", "acceleration": "10"},
         )
         contour = _square(2.0)
 
@@ -74,7 +74,6 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         self.assertEqual(raw["name"], "Captured contour")
         self.assertEqual(raw["velocity"], "10")
         self.assertEqual(raw["acceleration"], "10")
-        self.assertEqual(raw["execution_spacing_mm"], "7.5")
 
     def test_prepare_workpiece_falls_back_when_match_returns_no_payload(self):
         service = PaintWorkpiecePreparationService(

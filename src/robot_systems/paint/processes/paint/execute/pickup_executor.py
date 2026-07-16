@@ -165,10 +165,14 @@ class PaintPickupExecutor:
                 _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", elapsed_s(started))
                 return False, msg
 
-        if self._execute_custom_pickup_sequence(pickup_plan):
+        insert_calibration_return = self._owner._should_return_to_calibration_between_xy_rz_pickup_and_pivot()
+        if not insert_calibration_return and self._execute_custom_pickup_sequence(pickup_plan):
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
 
-        _logger.warning("[PICKUP] Custom pickup sequence unavailable or failed; falling back to individual moves")
+        if insert_calibration_return:
+            _logger.info("[PICKUP] XY/RZ pickup will return to calibration after alignment before pivot staging")
+        else:
+            _logger.warning("[PICKUP] Custom pickup sequence unavailable or failed; falling back to individual moves")
         for waypoint in pickup_plan.waypoints:
             if (
                 pickup_plan.change_plane_combined_with_first_contact
@@ -191,6 +195,14 @@ class PaintPickupExecutor:
                     elapsed_s(started),
                 )
                 return False, self._failure_message_for(waypoint.label)
+            if waypoint.label == "Aligning workpiece to paint axis":
+                ok, msg = self._owner._return_to_calibration_before_xy_rz_pivot()
+                if not ok:
+                    _logger.info(
+                        "[TIMING] pickup_to_pivot success=false stage=return_to_calibration_after_align total_elapsed_s=%.3f",
+                        elapsed_s(started),
+                    )
+                    return False, msg
 
         return True, "Pickup completed and robot is positioned before the first pivot contact pose"
 

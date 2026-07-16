@@ -131,6 +131,8 @@ class PaintExecutorDependencies:
     path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
     base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     pickup_base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
+    cleanup_base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
+    calibration_position_callback: Optional[Callable[[], bool]] = None
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
@@ -222,6 +224,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             path_preparation_service=legacy_options.get("path_preparation_service"),
             base_position_provider=legacy_options.get("base_position_provider"),
             pickup_base_position_provider=legacy_options.get("pickup_base_position_provider"),
+            cleanup_base_position_provider=legacy_options.get("cleanup_base_position_provider"),
+            calibration_position_callback=legacy_options.get("calibration_position_callback"),
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
@@ -254,6 +258,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._path_preparation_service = dependencies.path_preparation_service
         self._base_position_provider = dependencies.base_position_provider
         self._pickup_base_position_provider = dependencies.pickup_base_position_provider or dependencies.base_position_provider
+        self._cleanup_base_position_provider = dependencies.cleanup_base_position_provider
+        self._calibration_position_callback = dependencies.calibration_position_callback
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
@@ -320,6 +326,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if self._path_preparation_service is None:
             raise RuntimeError("Path preparation service is not available")
 
+        self._refresh_paint_process_config_snapshot()
+        self._apply_paint_process_contact_config()
         generic_plan = self._path_preparation_service.build_execution_plan(workpiece, skip_debug_plot=skip_debug_plot)
         self._last_execution_plan = build_paint_contact_source_plan(generic_plan, self._contact_motion_config)
         return self._last_execution_plan
@@ -383,6 +391,48 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def _paint_process_config(self) -> PaintProcessConfig:
         return self._paint_process_config_snapshot or PAINT_PROCESS_CONFIG
 
+    def _apply_paint_process_contact_config(self) -> None:
+        """Apply the latest Paint process settings to the active contact-motion profile."""
+        config = self._paint_process_config()
+        plane = str(config.pivot_motion_plane or self._configured_contact_motion_plane).strip().lower()
+        translation_axis = str(config.pivot_axis or self._configured_contact_translation_axis).strip().lower()
+        side = str(config.pivot_contact_side or self._configured_contact_side).strip().lower()
+        direction = str(config.pivot_direction or self._configured_contact_translation_direction).strip().lower()
+        mirror_execution_rotation = (
+            plane == "xz_y_ry"
+            and bool(config.mirror_xz_ry_execution_rotation_value)
+        )
+
+        self._configured_contact_motion_plane = plane
+        self._configured_contact_translation_axis = translation_axis
+        self._configured_contact_side = side
+        self._configured_contact_translation_direction = direction
+        self._apply_camera_to_tcp_for_pickup = bool(config.apply_camera_to_tcp_for_pickup)
+        self._flip_xz_ry_execution_rotation_direction = mirror_execution_rotation
+        self._contact_motion_config = _normalize_contact_motion_config(
+            motion_plane=plane,
+            translation_axis=translation_axis,
+            pivot_side=side,
+            translation_direction=direction,
+            apply_camera_to_tcp_for_pickup=self._apply_camera_to_tcp_for_pickup,
+            camera_to_tcp_x_offset=self._contact_motion_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=self._contact_motion_config.camera_to_tcp_y_offset,
+            rotation_direction_sign=_xz_ry_projection_rotation_sign(
+                plane,
+                self._flip_xz_ry_execution_rotation_direction,
+            ),
+        )
+        self._pickup_contact_motion_config = _normalize_contact_motion_config(
+            motion_plane="xy_z_rz",
+            translation_axis=translation_axis,
+            pivot_side=side,
+            translation_direction=direction,
+            apply_camera_to_tcp_for_pickup=self._apply_camera_to_tcp_for_pickup,
+            camera_to_tcp_x_offset=self._pickup_contact_motion_config.camera_to_tcp_x_offset,
+            camera_to_tcp_y_offset=self._pickup_contact_motion_config.camera_to_tcp_y_offset,
+        )
+        self._contact_motion_strategy = get_execution_plane_strategy(self._contact_motion_config.motion_plane)
+
     def _make_runtime_contact_motion_config(self, motion_plane: str) -> PaintSimulationConfig:
         """Build a projection config for a requested execution plane."""
         plane = str(motion_plane or "xy_z_rz").strip().lower()
@@ -430,11 +480,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, f"Unsupported paint process action: {action_id}"
         return self.execute_paint_process(execution_plan)
 
-    def _resolve_base_position(self) -> Optional[list[float]]:
-        """Resolve the configured pivot/base pose used to project paint motion."""
-        provider = self._base_position_provider
-        if self._contact_motion_config.motion_plane == "xy_z_rz" and self._pickup_base_position_provider is not None:
-            provider = self._pickup_base_position_provider
+    @staticmethod
+    def _read_provider_position(provider: Optional[Callable[[], Optional[list[float]]]]) -> Optional[list[float]]:
+        """Read and normalize a movement-group position provider result."""
         if provider is None:
             return None
         try:
@@ -445,14 +493,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not position or len(position) < 3:
             return None
         try:
-            resolved = [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
+            return [float(position[i]) for i in range(6 if len(position) >= 6 else len(position))]
         except (TypeError, ValueError):
+            return None
+
+    def _resolve_base_position(self) -> Optional[list[float]]:
+        """Resolve the configured pivot/base pose used to project paint motion."""
+        provider = self._base_position_provider
+        if self._contact_motion_config.motion_plane == "xy_z_rz" and self._pickup_base_position_provider is not None:
+            provider = self._pickup_base_position_provider
+        resolved = self._read_provider_position(provider)
+        if resolved is None:
             return None
         if abs(float(self._active_contact_base_z_offset_mm)) > 1e-9:
             while len(resolved) < 3:
                 resolved.append(0.0)
             resolved[2] = float(resolved[2]) + float(self._active_contact_base_z_offset_mm)
         return resolved
+
+    def _resolve_cleanup_base_position(self) -> Optional[list[float]]:
+        """Resolve the dedicated XY/RZ cleanup base pose."""
+        return self._read_provider_position(self._cleanup_base_position_provider)
 
     def _apply_pivot_offset(self, pivot_pose: list[float] | None, offset_mm: float) -> list[float] | None:
         """Apply the editor-configured pivot offset in the active pivot plane."""
@@ -512,6 +573,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[list[float]]], list[float] | None]:
         """Project center paths for each prepared execution job around the pivot pose."""
+        self._refresh_paint_process_config_snapshot()
+        self._apply_paint_process_contact_config()
         self._refresh_runtime_config()
         base_pivot_pose = self._resolve_base_position()
         if base_pivot_pose is None or len(base_pivot_pose) < 3:
@@ -534,6 +597,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         execution_plan: WorkpieceExecutionPlan,
     ) -> tuple[list[list[np.ndarray]], list[float] | None]:
         """Return per-step projected shape snapshots for pivot motion plotting."""
+        self._refresh_paint_process_config_snapshot()
+        self._apply_paint_process_contact_config()
         self._refresh_runtime_config()
         base_pivot_pose = self._resolve_base_position()
         if base_pivot_pose is None or len(base_pivot_pose) < 3:
@@ -810,6 +875,45 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"
         return True, ""
 
+    def _should_return_to_calibration_between_xy_rz_pickup_and_pivot(self) -> bool:
+        """Return whether XY/RZ pickup must pass through calibration before pivot staging."""
+        return self._configured_contact_motion_plane == "xy_z_rz"
+
+    @timed_step(_logger, "xy_rz_pickup_to_calibration_before_pivot")
+    def _return_to_calibration_before_xy_rz_pivot(self) -> tuple[bool, str]:
+        """Move the held part to calibration after pickup alignment and before pivot staging."""
+        if not self._should_return_to_calibration_between_xy_rz_pickup_and_pivot():
+            return True, ""
+        if self._calibration_position_callback is None:
+            return False, "Pickup aligned, but calibration move callback is not configured before XY/RZ pivot"
+        try:
+            moved = bool(self._calibration_position_callback())
+        except Exception:
+            _logger.exception("[PICKUP] Calibration return before XY/RZ pivot failed")
+            return False, "Pickup aligned, but return to calibration failed before XY/RZ pivot"
+        if not moved:
+            return False, "Pickup aligned, but return to calibration failed before XY/RZ pivot"
+        return True, ""
+
+    @timed_step(_logger, "xy_rz_cleanup_calibration_return")
+    def _return_to_calibration_and_unwind_before_xy_rz_cleanup(self) -> tuple[bool, str]:
+        """Move to calibration after XY/RZ paint, then unwind Joint 6 there before cleanup."""
+        if self._configured_contact_motion_plane != "xy_z_rz":
+            return True, ""
+        if self._calibration_position_callback is None:
+            return False, "XY/RZ paint succeeded, but calibration move callback is not configured before cleanup"
+        try:
+            moved = bool(self._calibration_position_callback())
+        except Exception:
+            _logger.exception("[EDGE_CLEANUP] Calibration return before XY/RZ cleanup failed")
+            return False, "XY/RZ paint succeeded, but return to calibration failed before edge cleanup"
+        if not moved:
+            return False, "XY/RZ paint succeeded, but return to calibration failed before edge cleanup"
+        ok, msg = self._edge_cleanup.unwind_joint6_before_cleanup(
+            failure_context="XY/RZ paint succeeded, but Joint 6 unwind failed at calibration before edge cleanup"
+        )
+        return ok, msg
+
     def execute_paint_process(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,
@@ -829,6 +933,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         with timing_session("paint_process") as recorder:
             started = perf_counter()
             self._refresh_paint_process_config_snapshot()
+            self._apply_paint_process_contact_config()
             total_waypoints = 0
             result: tuple[bool, str]
 
@@ -849,6 +954,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                         ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_unwind(prepared_workpiece, started)
                         total_waypoints += cleanup_waypoints
                         result = (False, msg) if not ok else (True, "")
+                    elif self._edge_cleanup.should_run_after_xy_rz():
+                        # Phase 3: optional edge cleanup in XY/RZ, reprojected at the cleanup station.
+                        ok, msg = self._return_to_calibration_and_unwind_before_xy_rz_cleanup()
+                        if not ok:
+                            _logger.info("[TIMING] paint_process success=false stage=xy_rz_cleanup_calibration_return total_elapsed_s=%.3f", elapsed_s(started))
+                            result = (False, msg)
+                        else:
+                            ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_xy_rz_paint(
+                                prepared_workpiece,
+                                started,
+                                unwind_before_cleanup=False,
+                            )
+                            total_waypoints += cleanup_waypoints
+                            result = (False, msg) if not ok else (True, "")
                     else:
                         result = (True, "")
 
@@ -914,4 +1033,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 started_at=started,
                 ended_at=perf_counter(),
             )
+            csv_path = recorder.write_csv(self._debug_dump_dir)
+            recorder.log_summary(_logger, csv_path=csv_path)
             return result

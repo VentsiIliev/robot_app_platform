@@ -3,10 +3,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.paint import application_wiring
-from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 
 
@@ -67,11 +69,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), kwargs["pickup_target_point_name"])
         self.assertEqual(application_wiring._PAINT_PROCESS.contour_pixel_to_mm_mode, kwargs["pixel_to_mm_mode"])
         self.assertEqual(application_wiring._build_paint_path_debug_dump_dir(), kwargs["debug_plot_dir"])
-        expected_pickup_sign = (
-            -1.0
-            if application_wiring._PAINT_PROCESS.flip_pickup_axis_alignment_direction
-            else 1.0
-        )
+        expected_pickup_sign = application_wiring._get_pickup_axis_alignment_sign()
         self.assertEqual(expected_pickup_sign, kwargs["pickup_axis_alignment_sign"])
         expected_compensation = (
             (15.0, -20.0)
@@ -80,6 +78,10 @@ class TestPaintApplicationWiring(unittest.TestCase):
         )
         self.assertEqual(expected_compensation, kwargs["pixel_height_compensation_fn"](10.0))
         self.assertEqual([1, 2, 3, 4, 5, 6], kwargs["base_position_provider"]())
+        contour_settings = {}
+        kwargs["source_contour_processor"](np.asarray([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], dtype=float), contour_settings)
+        self.assertEqual(15.0, contour_settings["path_tangent_lookahead_mm"])
+        self.assertEqual(5.0, contour_settings["path_tangent_deadband_deg"])
         navigation.get_group_position.assert_called_once()
 
     def test_build_paint_path_preparation_service_falls_back_when_robot_config_values_are_unusable(self):
@@ -140,18 +142,24 @@ class TestPaintApplicationWiring(unittest.TestCase):
 
         self.assertIs(result, built_executor)
         kwargs = cls.call_args.kwargs
-        self.assertIs(kwargs["robot_service"], robot_service)
-        self.assertIs(kwargs["path_preparation_service"], path_preparation_service)
-        self.assertEqual(7, kwargs["pickup_tool"])
-        self.assertEqual(9, kwargs["pickup_user"])
-        self.assertEqual("/tmp/paint_debug", kwargs["debug_dump_dir"])
-        self.assertEqual(1.25, kwargs["camera_to_tcp_x_offset"])
-        self.assertEqual(-3.5, kwargs["camera_to_tcp_y_offset"])
-        self.assertEqual("pump", kwargs["vacuum_pump"])
-        self.assertEqual("live_robot_config", kwargs["robot_config_provider"]())
-        self.assertTrue(kwargs["post_execute_callback"]())
-        self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], kwargs["pickup_base_position_provider"]())
-        self.assertEqual([application_wiring._get_paint_base_group_id(), "pose"], kwargs["base_position_provider"]())
+        dependencies = kwargs["dependencies"]
+        motion_config = kwargs["motion_config"]
+        contact_motion_config = kwargs["contact_motion_config"]
+
+        self.assertIs(dependencies.robot_service, robot_service)
+        self.assertIs(dependencies.path_preparation_service, path_preparation_service)
+        self.assertEqual("pump", dependencies.vacuum_pump)
+        self.assertEqual("live_robot_config", dependencies.robot_config_provider())
+        self.assertTrue(dependencies.post_execute_callback())
+        self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], dependencies.pickup_base_position_provider())
+        self.assertEqual([application_wiring._get_paint_base_group_id(), "pose"], dependencies.base_position_provider())
+        self.assertEqual([application_wiring._get_cleanup_base_group_id(robot_system), "pose"], dependencies.cleanup_base_position_provider())
+
+        self.assertEqual(7, motion_config.pickup_tool)
+        self.assertEqual(9, motion_config.pickup_user)
+        self.assertEqual("/tmp/paint_debug", motion_config.debug_dump_dir)
+        self.assertEqual(1.25, contact_motion_config.camera_to_tcp_x_offset)
+        self.assertEqual(-3.5, contact_motion_config.camera_to_tcp_y_offset)
 
     def test_build_paint_contour_editor_application_wires_factory(self):
         robot_system = SimpleNamespace()
@@ -389,8 +397,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
             navigation="navigation",
             height_measuring="height",
             default_target_name="tool",
-            calibration_frame_name="spray-frame",
-            pickup_frame_name="pickup-frame",
+            calibration_frame_name="paint-frame",
+            pickup_frame_name="",
         )
         self.assertIs(pick_service_cls.call_args.kwargs["resolver_getter"](), "resolver")
         pick_target_factory.build.assert_called_once_with(pick_service, messaging=messaging, jog_service="jog")
@@ -418,18 +426,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
     def test_small_application_wiring_helpers_cover_debug_dir_and_target_validation(self):
         robot_system = SimpleNamespace(get_target_point_definition=MagicMock(return_value=SimpleNamespace(name="")))
 
-        with patch(
-            "src.robot_systems.paint.application_wiring._PAINT_PROCESS",
-            replace(application_wiring._PAINT_PROCESS, execution_target_point="camera"),
-        ):
-            self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), "camera")
-
-        with patch(
-            "src.robot_systems.paint.application_wiring._PAINT_PROCESS",
-            replace(application_wiring._PAINT_PROCESS, execution_target_point="invalid"),
-        ):
-            with self.assertRaises(ValueError):
-                application_wiring._get_paint_execution_target_point_name(robot_system)
+        self.assertEqual(application_wiring._get_paint_execution_target_point_name(robot_system), "tool")
 
         debug_dir = application_wiring._build_paint_path_debug_dump_dir()
         self.assertTrue(debug_dir.endswith("src/bootstrap/debug_plots"))
@@ -448,7 +445,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         )
 
         with (
-            patch("src.robot_systems.paint.processes.paint.plan.PaintWorkpieceMatchingService", return_value="built-matching") as matching_cls,
+            patch("src.robot_systems.paint.processes.paint.match.workpiece_matching_service.PaintWorkpieceMatchingService", return_value="built-matching") as matching_cls,
             patch("src.robot_systems.paint.application_wiring._build_capture_snapshot_service", return_value="snapshot"),
         ):
             built_matching = application_wiring._build_paint_matching_service(
@@ -476,14 +473,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
             default_settings={
                 "velocity": "10",
                 "acceleration": "10",
-                "rz_angle": "0",
                 "offset": "0",
-                "preprocess_min_spacing_mm": "2.5",
-                "interpolation_spacing_mm": "10.0",
-                "dense_sampling_factor": "0.25",
-                "execution_spacing_mm": "7.5",
-                "path_tangent_lookahead_mm": "15.0",
-                "path_tangent_deadband_deg": "5.0",
+                "edge_cleanup_z_offset_mm": "0",
             },
             transformer=None,
             transformer_getter=unittest.mock.ANY,
@@ -524,7 +515,8 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual(service.services.vision_service, "vision")
         self.assertEqual(service.services.capture_snapshot_service, "snapshot")
         self.assertEqual(service.services.robot_service, "robot")
-        self.assertEqual(service.services.transformer, "transformer")
+        self.assertIsNone(service.services.transformer)
+        self.assertIs(service.services.transformer_getter(), "transformer")
         self.assertEqual(service.services.path_executor, "path-executor")
         self.assertEqual(service.services.path_preparation_service, "path-prep")
         self.assertEqual(service.services.matching_service, "matching")
@@ -561,6 +553,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
             get_service=MagicMock(side_effect=lambda key: {"work_areas": work_area_service, "navigation": "nav-service"}[getattr(key, "value", key)]),
             get_observer_group_for_area=MagicMock(return_value="observer-group"),
             get_work_area_definitions=MagicMock(return_value=["paint-area"]),
+            invalidate_shared_vision_resolver=MagicMock(),
             storage_path=MagicMock(return_value="/tmp/intrinsic"),
         )
         messaging = object()
@@ -662,6 +655,12 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         system = PaintRobotSystem()
         system._messaging_service = MagicMock()
         system._system_manager = MagicMock()
+        system._settings_service = MagicMock()
+        system._settings_service.get.side_effect = lambda key: (
+            application_wiring._PAINT_PROCESS
+            if key == SettingsID.PAINT_PROCESS_CONFIG
+            else MagicMock()
+        )
         system._health_registry = SimpleNamespace(check=MagicMock(return_value=True))
         system.register_managed_resource = MagicMock(side_effect=lambda resource: resource)
         return system
