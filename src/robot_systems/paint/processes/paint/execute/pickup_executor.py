@@ -54,31 +54,31 @@ class DefaultPickupStrategy:
         if motion_plan is None:
             return None
 
-        combine_change_plane = PAINT_PROCESS_CONFIG.pickup_combine_change_plane_with_first_contact
+        combine_change_plane = PAINT_PROCESS_CONFIG.pickup_motion.combine_change_plane_with_first_contact
         waypoints: list[PickupWaypoint] = [
             PickupWaypoint(
                 "Moving to pickup approach pose",
                 list(motion_plan.pickup_approach_pose),
-                PAINT_PROCESS_CONFIG.pickup_approach_vel_percent,
-                PAINT_PROCESS_CONFIG.pickup_approach_acc_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.approach_vel_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.approach_acc_percent,
             ),
             PickupWaypoint(
                 "Descending to pickup pose",
                 list(motion_plan.pickup_pose),
-                PAINT_PROCESS_CONFIG.pickup_descend_vel_percent,
-                PAINT_PROCESS_CONFIG.pickup_descend_acc_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.descend_vel_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.descend_acc_percent,
             ),
             PickupWaypoint(
                 "Lifting from pickup pose",
                 list(motion_plan.lift_pose),
-                PAINT_PROCESS_CONFIG.pickup_lift_align_vel_percent,
-                PAINT_PROCESS_CONFIG.pickup_lift_align_acc_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.lift_align_vel_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.lift_align_acc_percent,
             ),
             PickupWaypoint(
                 "Aligning workpiece to paint axis",
                 list(motion_plan.align_pose),
-                PAINT_PROCESS_CONFIG.pickup_lift_align_vel_percent,
-                PAINT_PROCESS_CONFIG.pickup_lift_align_acc_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.lift_align_vel_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.lift_align_acc_percent,
             ),
         ]
 
@@ -87,8 +87,8 @@ class DefaultPickupStrategy:
                 PickupWaypoint(
                     "Changing plane",
                     list(motion_plan.change_plane_pose),
-                    PAINT_PROCESS_CONFIG.pickup_change_plane_vel_percent,
-                    PAINT_PROCESS_CONFIG.pickup_change_plane_acc_percent,
+                    PAINT_PROCESS_CONFIG.pickup_motion.change_plane_vel_percent,
+                    PAINT_PROCESS_CONFIG.pickup_motion.change_plane_acc_percent,
                 )
             )
 
@@ -97,8 +97,8 @@ class DefaultPickupStrategy:
                 PickupWaypoint(
                     f"Stage transition {transition_index}",
                     owner._paint_contact_staging_command_pose(transition_pose, motion_plan.change_plane_pose),
-                    PAINT_PROCESS_CONFIG.pickup_stage_transition_vel_percent,
-                    PAINT_PROCESS_CONFIG.pickup_stage_transition_acc_percent,
+                    PAINT_PROCESS_CONFIG.pickup_motion.stage_transition_vel_percent,
+                    PAINT_PROCESS_CONFIG.pickup_motion.stage_transition_acc_percent,
                 )
             )
 
@@ -120,8 +120,8 @@ class DefaultPickupStrategy:
             PickupWaypoint(
                 "Moving to staging offset before first pivot contact pose",
                 staging_offset_pose,
-                PAINT_PROCESS_CONFIG.pickup_first_contact_vel_percent,
-                PAINT_PROCESS_CONFIG.pickup_first_contact_acc_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.first_contact_vel_percent,
+                PAINT_PROCESS_CONFIG.pickup_motion.first_contact_acc_percent,
             )
         )
 

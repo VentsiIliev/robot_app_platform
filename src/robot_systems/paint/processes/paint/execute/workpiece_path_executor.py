@@ -576,8 +576,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return False, "Direct paint path execution is not supported; use the paint process action"
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
-    def _move_pickup_phase(self, label: str, pose: list[float], velocity: float | None = None, acceleration: float | None = None) -> bool:
-        """Execute one pickup-related robot move with the configured pickup tool and user."""
+    def _move_pickup_phase(self, label: str, pose: list[float], *, velocity: float, acceleration: float) -> bool:
+        """Execute one pickup-related robot move with explicit motion limits."""
+        if velocity is None or acceleration is None:
+            raise ValueError(
+                f"Pickup phase '{label}' requires explicit velocity and acceleration"
+            )
         _logger.info(
             "[PICKUP] %s tool=%d user=%d pose=%s",
             label,
@@ -589,8 +593,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             position=pose,
             tool=self._pickup_tool,
             user=self._pickup_user,
-            velocity=velocity if velocity is not None else PAINT_PROCESS_CONFIG.pickup_default_vel_percent,
-            acceleration=acceleration if acceleration is not None else PAINT_PROCESS_CONFIG.pickup_default_acc_percent,
+            velocity=velocity,
+            acceleration=acceleration,
             wait_to_reach=True,
         )
         return ok
@@ -764,23 +768,23 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not self._move_pickup_phase(
                 "Returning to original orientation before dropoff unwind",
                 plan.align_pose,
-                velocity=PAINT_PROCESS_CONFIG.pickup_release_align_vel_percent,
-                acceleration=PAINT_PROCESS_CONFIG.pickup_release_align_acc_percent,
+                velocity=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
+                acceleration=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
             ):
                 return False, "Pivot paint finished, but return to original orientation failed before dropoff unwind"
         if self._robot_service is None:
             return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
         _logger.info(
             "[DROPOFF] Unwinding Joint 6 before dropoff strategy vel=%.1f acc=%.1f queue_if_busy=%s",
-            PAINT_PROCESS_CONFIG.navigation_unwind_vel_percent,
-            PAINT_PROCESS_CONFIG.navigation_unwind_acc_percent,
-            PAINT_PROCESS_CONFIG.navigation_unwind_queue_if_busy,
+            PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
+            PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+            PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
         )
         ok = self._robot_service.unwind_joint6(
             blocking=True,
-            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_unwind_queue_if_busy,
-            vel=PAINT_PROCESS_CONFIG.navigation_unwind_vel_percent,
-            acc=PAINT_PROCESS_CONFIG.navigation_unwind_acc_percent,
+            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+            vel=PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
+            acc=PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
         )
         if not ok:
             return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"

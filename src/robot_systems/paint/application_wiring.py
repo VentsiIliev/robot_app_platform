@@ -3,7 +3,11 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROCESS_CONFIG,
+    PAINT_PROJECTION_RULES,
+    PaintPivotProfile,
+)
 
 
 _logger = logging.getLogger(__name__)
@@ -18,15 +22,52 @@ def _get_paint_execution_target_point_name(robot_system) -> str:
 
 
 def _get_paint_base_group_id() -> str:
-    return _PAINT_PROCESS.paint_base_group_id
+    if _PAINT_PROCESS.pivot_motion_plane == "xz_y_ry":
+        return _PAINT_PROCESS.secondary_group_id
+    return _PAINT_PROCESS.primary_group_id
 
 
 def _get_pickup_base_group_id() -> str:
-    return _PAINT_PROCESS.pickup_base_group_id
+    return _PAINT_PROCESS.primary_group_id
+
+
+def _get_pickup_axis_alignment_sign() -> float:
+    return -1.0 if float(_PAINT_PROCESS.pickup_axis_alignment_sign_value) < 0.0 else 1.0
+
+
+def _get_pivot_side() -> str:
+    side = str(_PAINT_PROCESS.pivot_contact_side or "positive").strip().lower()
+    if side in PAINT_PROJECTION_RULES.side_signs:
+        return side
+    return PAINT_PROJECTION_RULES.default_paint_side
+
+
+def _get_pivot_translation_direction() -> str:
+    direction = str(_PAINT_PROCESS.pivot_direction or "forward").strip().lower()
+    if direction in {"positive", "+", "forward"}:
+        return "forward"
+    if direction in {"negative", "-", "reverse"}:
+        return "reverse"
+    return PAINT_PROJECTION_RULES.default_translation_direction
+
+
+def _get_pivot_profile() -> PaintPivotProfile:
+    return PaintPivotProfile(
+        motion_plane=_PAINT_PROCESS.pivot_motion_plane,
+        translation_axis=str(_PAINT_PROCESS.pivot_axis or "x").strip().lower(),
+        translation_direction=_get_pivot_translation_direction(),
+        paint_side=_get_pivot_side(),
+        mirror_execution_rotation=(
+            _PAINT_PROCESS.pivot_motion_plane == "xz_y_ry"
+            and bool(_PAINT_PROCESS.mirror_xz_ry_execution_rotation_value)
+        ),
+        mirror_pickup_handoff=False,
+        pickup_axis_alignment_sign=_get_pickup_axis_alignment_sign(),
+    )
 
 
 def _get_paint_pivot_side() -> str:
-    return _PAINT_PROCESS.pivot_profile.paint_side
+    return _get_pivot_profile().paint_side
 
 
 def _build_dashboard_application(robot_system):
@@ -75,7 +116,7 @@ def _build_paint_path_executor(robot_system):
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
     debug_dump_dir = _build_paint_path_debug_dump_dir()
-    pivot_profile = _PAINT_PROCESS.pivot_profile
+    pivot_profile = _get_pivot_profile()
     dependencies = PaintExecutorDependencies(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
@@ -196,7 +237,7 @@ def _build_paint_path_preparation_service(robot_system):
         pickup_target_point_name=execution_target_point_name,
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
-        pickup_axis_alignment_sign=_PAINT_PROCESS.pickup_axis_alignment_sign,
+        pickup_axis_alignment_sign=_get_pickup_axis_alignment_sign(),
         pixel_to_mm_mode=_PAINT_PROCESS.contour_pixel_to_mm_mode,
         debug_plot_dir=debug_dump_dir,
         base_position_provider=lambda: (

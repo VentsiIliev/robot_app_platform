@@ -13,17 +13,13 @@ class PickupMotionConfig:
     """
 
     # Heights and clearances.
-    default_z_mm: float = 300.0
+    default_z_mm: float = 200.0
     approach_offset_mm: float = 100.0
     contact_offset_mm: float = 2.0
     initial_lift_clearance_mm: float = 20.0
 
-    # Fallback motion used by generic pickup helper calls.
-    default_vel_percent: float = 20.0
-    default_acc_percent: float = 50.0
-
     # Move from the current robot pose to the pickup approach pose.
-    approach_vel_percent: float = 30.0
+    approach_vel_percent: float = 60.0
     approach_acc_percent: float = 50.0
 
     # Controlled final descent from approach height to pickup contact.
@@ -32,11 +28,11 @@ class PickupMotionConfig:
 
     # Lift away from pickup contact, then align to the paint start orientation.
     lift_align_vel_percent: float = 80.0
-    lift_align_acc_percent: float = 30.0
+    lift_align_acc_percent: float = 40.0
 
     # Change from pickup/table plane orientation to paint plane orientation.
-    change_plane_vel_percent: float = 50.0
-    change_plane_acc_percent: float = 20.0
+    change_plane_vel_percent: float = 80.0
+    change_plane_acc_percent: float = 40.0
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
 
@@ -45,28 +41,36 @@ class PickupMotionConfig:
     stage_transition_acc_percent: float = 20.0
 
     # Move into the first pivot contact pose.
-    first_contact_vel_percent: float = 50.0
-    first_contact_acc_percent: float = 20.0
+    first_contact_vel_percent: float = 80.0
+    first_contact_acc_percent: float = 30.0
 
-    # XY/RZ edge-cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
-    edge_cleanup_vel_percent: float = 80.0
-    edge_cleanup_acc_percent: float = 60.0
+@dataclass(frozen=True)
+class PaintEdgeCleanupConfig:
+    """Optional XY/RZ cleanup pass tuning used after XZ/RY paint."""
+
+    # Run an XY/RZ edge-cleanup pass before releasing the held workpiece.
+    enabled_after_xz_ry: bool = False
+    # Replay the cleanup path in reverse with an additional paint-axis/base Z offset.
+    enable_second_pass: bool = False
+    # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
+    vel_percent: float = 80.0
+    acc_percent: float = 60.0
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
-    edge_cleanup_spacing_mm: float = 3.0
+    spacing_mm: float = 3.0
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
-    edge_cleanup_z_offset_mm: float = 0.0
+    z_offset_mm: float = 0.0
+    # Additional paint-axis/base Z offset for the optional second cleanup pass.
+    second_pass_pivot_z_offset_mm: float = -15.0 # 20mm below the belt !
 
-    # Deprecated: pickup orientation is no longer restored before release.
-    restore_orientation_z_lift_mm: float = 0.0
+
+@dataclass(frozen=True)
+class PaintDropoffConfig:
+    """Dropoff/release motion tuning after paint and Joint 6 unwind."""
 
     # Return from pivot completion back to the pickup align pose before release.
-    dropoff_strategy: str = "pickup_origin"
-    release_align_vel_percent: float = 50.0
-    release_align_acc_percent: float = 20.0
-
-    # Deprecated: pickup orientation is no longer restored before vacuum release.
-    release_restore_vel_percent: float = 50.0
-    release_restore_acc_percent: float = 30.0
+    strategy: str = "pickup_origin"
+    release_align_vel_percent: float = 60.0
+    release_align_acc_percent: float = 40.0
 
 
 @dataclass(frozen=True)
@@ -74,9 +78,9 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 80.0
+    unwind_vel_percent: float = 100.0
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 35.0
+    unwind_acc_percent: float = 60.0
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
@@ -135,17 +139,9 @@ class PaintProjectionRules:
         "reverse": -1.0,
     })
 
-    @property
-    def default_motion_plane(self) -> str:
-        return "xy_z_rz"
-
-    @property
-    def default_paint_side(self) -> str:
-        return "negative"
-
-    @property
-    def default_translation_direction(self) -> str:
-        return "forward"
+    default_motion_plane: str = "xy_z_rz"
+    default_paint_side: str = "negative"
+    default_translation_direction: str = "forward"
 
 
 PAINT_PROJECTION_RULES = PaintProjectionRules()
@@ -192,224 +188,21 @@ class PaintProcessConfig:
     pivot_contact_side: str = "positive"
     mirror_xz_ry_execution_rotation_value: bool = True
     pickup_axis_alignment_sign_value: float = 1.0
-    # When the active process paints in XZ/RY, run an XY/RZ edge-cleanup pass
-    # before releasing the held workpiece. Disable for the original single-pass flow.
-    enable_edge_cleanup_after_xz_ry: bool = True
-    enable_edge_cleanup_second_pass: bool = True
-    # Additional paint-axis/base Z offset for the optional second cleanup pass.
-    edge_cleanup_second_pass_pivot_z_offset_mm: float = -15.0 # 20mm below the belt !
     # Turns the vacuum pump on/off around pickup and release.
-    enable_vacuum_pump: bool = True
+    enable_vacuum_pump: bool = False
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
+    # Optional XY/RZ cleanup pass tuning.
+    edge_cleanup: PaintEdgeCleanupConfig = field(default_factory=PaintEdgeCleanupConfig)
+    # Dropoff/release motion tuning.
+    dropoff: PaintDropoffConfig = field(default_factory=PaintDropoffConfig)
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False
 
-    @property
-    def paint_base_group_id(self) -> str:
-        """Return the navigation group used as the active paint base."""
-        if self.pivot_motion_plane == "xz_y_ry":
-            return self.secondary_group_id
-        return self.primary_group_id
-
-    @property
-    def pickup_base_group_id(self) -> str:
-        """Return the navigation group used for pickup/alignment."""
-        return self.primary_group_id
-
-    @property
-    def pickup_axis_alignment_sign(self) -> float:
-        """Return the pickup orientation ambiguity sign."""
-        return -1.0 if float(self.pickup_axis_alignment_sign_value) < 0.0 else 1.0
-
-    @property
-    def pivot_side(self) -> str:
-        """Return the default contour side used for the active paint plane."""
-        side = str(self.pivot_contact_side or "positive").strip().lower()
-        return side if side in PAINT_PROJECTION_RULES.side_signs else PAINT_PROJECTION_RULES.default_paint_side
-
-    @property
-    def pivot_translation_axis(self) -> str:
-        """Deprecated compatibility alias for the derived pivot axis."""
-        return str(self.pivot_axis or "x").strip().lower()
-
-    @property
-    def pivot_translation_direction(self) -> str:
-        """Deprecated compatibility alias for the derived pivot travel direction."""
-        direction = str(self.pivot_direction or "forward").strip().lower()
-        if direction in {"positive", "+", "forward"}:
-            return "forward"
-        if direction in {"negative", "-", "reverse"}:
-            return "reverse"
-        return PAINT_PROJECTION_RULES.default_translation_direction
-
-    @property
-    def flip_xz_ry_execution_rotation_direction(self) -> bool:
-        """Deprecated compatibility alias derived from the active motion plane."""
-        return self.pivot_motion_plane == "xz_y_ry" and bool(self.mirror_xz_ry_execution_rotation_value)
-
-    @property
-    def mirror_xz_ry_pickup_handoff(self) -> bool:
-        """Deprecated compatibility alias for pickup handoff mapping."""
-        return False
-
-    @property
-    def flip_pickup_axis_alignment_direction(self) -> bool:
-        """Deprecated compatibility alias for the pickup alignment sign."""
-        return self.pickup_axis_alignment_sign < 0.0
-
-    @property
-    def pivot_profile(self) -> PaintPivotProfile:
-        """Return the derived pivot profile consumed by application wiring."""
-        return PaintPivotProfile(
-            motion_plane=self.pivot_motion_plane,
-            translation_axis=self.pivot_translation_axis,
-            translation_direction=self.pivot_translation_direction,
-            paint_side=self.pivot_side,
-            mirror_execution_rotation=self.flip_xz_ry_execution_rotation_direction,
-            mirror_pickup_handoff=self.mirror_xz_ry_pickup_handoff,
-            pickup_axis_alignment_sign=self.pickup_axis_alignment_sign,
-        )
-
-    @property
-    def pickup_default_z_mm(self) -> float:
-        return float(self.pickup_motion.default_z_mm)
-
-    @property
-    def pickup_default_vel_percent(self) -> float:
-        return float(self.pickup_motion.default_vel_percent)
-
-    @property
-    def pickup_default_acc_percent(self) -> float:
-        return float(self.pickup_motion.default_acc_percent)
-
-    @property
-    def pickup_descend_vel_percent(self) -> float:
-        return float(self.pickup_motion.descend_vel_percent)
-
-    @property
-    def pickup_descend_acc_percent(self) -> float:
-        return float(self.pickup_motion.descend_acc_percent)
-
-    @property
-    def pickup_approach_vel_percent(self) -> float:
-        return float(self.pickup_motion.approach_vel_percent)
-
-    @property
-    def pickup_approach_acc_percent(self) -> float:
-        return float(self.pickup_motion.approach_acc_percent)
-
-    @property
-    def pickup_lift_align_vel_percent(self) -> float:
-        return float(self.pickup_motion.lift_align_vel_percent)
-
-    @property
-    def pickup_lift_align_acc_percent(self) -> float:
-        return float(self.pickup_motion.lift_align_acc_percent)
-
-    @property
-    def pickup_change_plane_vel_percent(self) -> float:
-        return float(self.pickup_motion.change_plane_vel_percent)
-
-    @property
-    def pickup_change_plane_acc_percent(self) -> float:
-        return float(self.pickup_motion.change_plane_acc_percent)
-
-    @property
-    def pickup_combine_change_plane_with_first_contact(self) -> bool:
-        return bool(self.pickup_motion.combine_change_plane_with_first_contact)
-
-    @property
-    def pickup_stage_transition_vel_percent(self) -> float:
-        return float(self.pickup_motion.stage_transition_vel_percent)
-
-    @property
-    def pickup_stage_transition_acc_percent(self) -> float:
-        return float(self.pickup_motion.stage_transition_acc_percent)
-
-    @property
-    def pickup_first_contact_vel_percent(self) -> float:
-        return float(self.pickup_motion.first_contact_vel_percent)
-
-    @property
-    def pickup_first_contact_acc_percent(self) -> float:
-        return float(self.pickup_motion.first_contact_acc_percent)
-
-    @property
-    def pickup_edge_cleanup_vel_percent(self) -> float:
-        return float(self.pickup_motion.edge_cleanup_vel_percent)
-
-    @property
-    def pickup_edge_cleanup_acc_percent(self) -> float:
-        return float(self.pickup_motion.edge_cleanup_acc_percent)
-
-    @property
-    def pickup_edge_cleanup_spacing_mm(self) -> float:
-        return float(self.pickup_motion.edge_cleanup_spacing_mm)
-
-    @property
-    def pickup_edge_cleanup_z_offset_mm(self) -> float:
-        return float(self.pickup_motion.edge_cleanup_z_offset_mm)
-
-    @property
-    def pickup_restore_orientation_z_lift_mm(self) -> float:
-        return float(self.pickup_motion.restore_orientation_z_lift_mm)
-
-    @property
-    def pickup_release_align_vel_percent(self) -> float:
-        return float(self.pickup_motion.release_align_vel_percent)
-
-    @property
-    def pickup_dropoff_strategy(self) -> str:
-        return str(self.pickup_motion.dropoff_strategy or "pickup_origin")
-
-    @property
-    def pickup_release_align_acc_percent(self) -> float:
-        return float(self.pickup_motion.release_align_acc_percent)
-
-    @property
-    def pickup_release_restore_vel_percent(self) -> float:
-        return float(self.pickup_motion.release_restore_vel_percent)
-
-    @property
-    def pickup_release_restore_acc_percent(self) -> float:
-        return float(self.pickup_motion.release_restore_acc_percent)
-
-    @property
-    def pickup_approach_offset_mm(self) -> float:
-        return float(self.pickup_motion.approach_offset_mm)
-
-    @property
-    def pickup_contact_offset_mm(self) -> float:
-        return float(self.pickup_motion.contact_offset_mm)
-
-    @property
-    def pickup_initial_lift_clearance_mm(self) -> float:
-        return float(self.pickup_motion.initial_lift_clearance_mm)
-
-    @property
-    def navigation_unwind_vel_percent(self) -> float:
-        return float(self.navigation_return.unwind_vel_percent)
-
-    @property
-    def navigation_unwind_acc_percent(self) -> float:
-        return float(self.navigation_return.unwind_acc_percent)
-
-    @property
-    def navigation_unwind_queue_if_busy(self) -> bool:
-        return bool(self.navigation_return.unwind_queue_if_busy)
-
-    @property
-    def navigation_calibration_move_vel_percent(self) -> float:
-        return float(self.navigation_return.calibration_move_vel_percent)
-
-    @property
-    def navigation_calibration_move_acc_percent(self) -> float:
-        return float(self.navigation_return.calibration_move_acc_percent)
 
 
 PAINT_PROCESS_CONFIG = PaintProcessConfig()
@@ -426,67 +219,33 @@ class PaintSimulationConfig:
     camera_to_tcp_y_offset: float = 0.0
     rotation_direction_sign: float = 1.0
 
-    @property
-    def rules(self) -> PaintProjectionRules:
-        """Return the shared projection rules for all supported paint planes."""
-        return PAINT_PROJECTION_RULES
+    rules: PaintProjectionRules = field(init=False, repr=False)
+    plane_spec: PaintMotionPlaneSpec = field(init=False, repr=False)
+    planar_axes: tuple[str, str] = field(init=False)
+    planar_coordinate_indices: tuple[int, int] = field(init=False)
+    source_planar_coordinate_indices: tuple[int, int] = field(init=False)
+    orthogonal_position_index: int = field(init=False)
+    rotation_index: int = field(init=False)
+    orientation_overrides_deg: dict[str, float] = field(init=False)
+    contact_heading_offset_deg: float = field(init=False)
+    valid_translation_axes: tuple[str, ...] = field(init=False)
+    paint_axis_offset_deg: float = field(init=False)
+    side_sign: float = field(init=False)
+    direction_sign: float = field(init=False)
 
-    @property
-    def plane_spec(self) -> PaintMotionPlaneSpec:
-        """Return the axis/index mapping for the selected motion plane."""
-        return self.rules.motion_plane_specs[self.motion_plane]
-
-    @property
-    def planar_axes(self) -> tuple[str, str]:
-        """Return the coordinate names that span the active 2D motion plane."""
-        return tuple(self.plane_spec.planar_axes)
-
-    @property
-    def planar_coordinate_indices(self) -> tuple[int, int]:
-        """Return the robot pose indices used as planar coordinates."""
-        return tuple(self.plane_spec.planar_coordinate_indices)
-
-    @property
-    def source_planar_coordinate_indices(self) -> tuple[int, int]:
-        """Return the source path indices used to derive 2D contour geometry."""
-        return tuple(self.plane_spec.source_planar_coordinate_indices)
-
-    @property
-    def orthogonal_position_index(self) -> int:
-        """Return the fixed position component outside the active motion plane."""
-        return int(self.plane_spec.orthogonal_position_index)
-
-    @property
-    def rotation_index(self) -> int:
-        """Return the orientation component rotated while projecting paint motion."""
-        return int(self.plane_spec.rotation_index)
-
-    @property
-    def orientation_overrides_deg(self) -> dict[str, float]:
-        """Return any fixed orientation overrides for process poses in the active plane."""
-        return dict(self.plane_spec.orientation_overrides_deg)
-
-    @property
-    def contact_heading_offset_deg(self) -> float:
-        """Return the in-plane heading offset used for the first contact alignment."""
-        return float(self.plane_spec.contact_heading_offset_deg)
-
-    @property
-    def valid_translation_axes(self) -> tuple[str, ...]:
-        """Return the translation-axis names valid for the selected motion plane."""
-        return tuple(self.plane_spec.axis_offsets_deg.keys())
-
-    @property
-    def paint_axis_offset_deg(self) -> float:
-        """Return the heading offset for the selected translation axis in the active plane."""
-        return float(self.plane_spec.axis_offsets_deg[self.translation_axis])
-
-    @property
-    def side_sign(self) -> float:
-        """Return the signed multiplier for which side of the paint path to use."""
-        return self.rules.side_signs[self.paint_side]
-
-    @property
-    def direction_sign(self) -> float:
-        """Return the signed multiplier for forward vs reverse projected travel."""
-        return self.rules.translation_direction_signs[self.translation_direction]
+    def __post_init__(self) -> None:
+        rules = PAINT_PROJECTION_RULES
+        plane_spec = rules.motion_plane_specs[self.motion_plane]
+        object.__setattr__(self, "rules", rules)
+        object.__setattr__(self, "plane_spec", plane_spec)
+        object.__setattr__(self, "planar_axes", tuple(plane_spec.planar_axes))
+        object.__setattr__(self, "planar_coordinate_indices", tuple(plane_spec.planar_coordinate_indices))
+        object.__setattr__(self, "source_planar_coordinate_indices", tuple(plane_spec.source_planar_coordinate_indices))
+        object.__setattr__(self, "orthogonal_position_index", int(plane_spec.orthogonal_position_index))
+        object.__setattr__(self, "rotation_index", int(plane_spec.rotation_index))
+        object.__setattr__(self, "orientation_overrides_deg", dict(plane_spec.orientation_overrides_deg))
+        object.__setattr__(self, "contact_heading_offset_deg", float(plane_spec.contact_heading_offset_deg))
+        object.__setattr__(self, "valid_translation_axes", tuple(plane_spec.axis_offsets_deg.keys()))
+        object.__setattr__(self, "paint_axis_offset_deg", float(plane_spec.axis_offsets_deg[self.translation_axis]))
+        object.__setattr__(self, "side_sign", float(rules.side_signs[self.paint_side]))
+        object.__setattr__(self, "direction_sign", float(rules.translation_direction_signs[self.translation_direction]))

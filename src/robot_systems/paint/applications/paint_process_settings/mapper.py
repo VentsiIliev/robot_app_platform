@@ -1,0 +1,182 @@
+from dataclasses import replace
+
+from src.robot_systems.paint.processes.paint.config import (
+    PaintDropoffConfig,
+    PaintEdgeCleanupConfig,
+    PaintNavigationReturnConfig,
+    PaintProcessConfig,
+    PickupMotionConfig,
+)
+
+
+class PaintProcessSettingsMapper:
+    @staticmethod
+    def to_flat_dict(settings: PaintProcessConfig) -> dict:
+        pickup = settings.pickup_motion
+        cleanup = settings.edge_cleanup
+        dropoff = settings.dropoff
+        nav = settings.navigation_return
+        return {
+            "execution_target_point": settings.execution_target_point,
+            "enable_vacuum_pump": settings.enable_vacuum_pump,
+            "apply_camera_to_tcp_for_pickup": settings.apply_camera_to_tcp_for_pickup,
+            "enable_z_shift_pixel_compensation": settings.enable_z_shift_pixel_compensation,
+            "contour_pixel_to_mm_mode": settings.contour_pixel_to_mm_mode,
+            "pivot_motion_plane": settings.pivot_motion_plane,
+            "primary_group_id": settings.primary_group_id,
+            "secondary_group_id": settings.secondary_group_id,
+            "pivot_axis": settings.pivot_axis,
+            "pivot_direction": settings.pivot_direction,
+            "pivot_contact_side": settings.pivot_contact_side,
+            "mirror_xz_ry_execution_rotation_value": settings.mirror_xz_ry_execution_rotation_value,
+            "pickup_axis_alignment_sign_value": settings.pickup_axis_alignment_sign_value,
+            "combine_change_plane_with_first_contact": pickup.combine_change_plane_with_first_contact,
+            "pickup_default_z_mm": pickup.default_z_mm,
+            "pickup_approach_offset_mm": pickup.approach_offset_mm,
+            "pickup_contact_offset_mm": pickup.contact_offset_mm,
+            "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
+            "pickup_approach_vel_percent": pickup.approach_vel_percent,
+            "pickup_approach_acc_percent": pickup.approach_acc_percent,
+            "pickup_descend_vel_percent": pickup.descend_vel_percent,
+            "pickup_descend_acc_percent": pickup.descend_acc_percent,
+            "pickup_lift_align_vel_percent": pickup.lift_align_vel_percent,
+            "pickup_lift_align_acc_percent": pickup.lift_align_acc_percent,
+            "pickup_change_plane_vel_percent": pickup.change_plane_vel_percent,
+            "pickup_change_plane_acc_percent": pickup.change_plane_acc_percent,
+            "pickup_stage_transition_vel_percent": pickup.stage_transition_vel_percent,
+            "pickup_stage_transition_acc_percent": pickup.stage_transition_acc_percent,
+            "pickup_first_contact_vel_percent": pickup.first_contact_vel_percent,
+            "pickup_first_contact_acc_percent": pickup.first_contact_acc_percent,
+            "cleanup_enabled_after_xz_ry": cleanup.enabled_after_xz_ry,
+            "cleanup_enable_second_pass": cleanup.enable_second_pass,
+            "cleanup_vel_percent": cleanup.vel_percent,
+            "cleanup_acc_percent": cleanup.acc_percent,
+            "cleanup_spacing_mm": cleanup.spacing_mm,
+            "cleanup_z_offset_mm": cleanup.z_offset_mm,
+            "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
+            "dropoff_strategy": dropoff.strategy,
+            "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
+            "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
+            "nav_unwind_vel_percent": nav.unwind_vel_percent,
+            "nav_unwind_acc_percent": nav.unwind_acc_percent,
+            "nav_unwind_queue_if_busy": nav.unwind_queue_if_busy,
+            "nav_calibration_move_vel_percent": nav.calibration_move_vel_percent,
+            "nav_calibration_move_acc_percent": nav.calibration_move_acc_percent,
+            "enable_pivot_debug_plot": settings.enable_pivot_debug_plot,
+            "enable_execution_motion_trace": settings.enable_execution_motion_trace,
+            "execution_motion_trace_sample_period_s": settings.execution_motion_trace_sample_period_s,
+        }
+
+    @staticmethod
+    def from_flat_dict(flat: dict, base: PaintProcessConfig) -> PaintProcessConfig:
+        pickup = replace(
+            base.pickup_motion,
+            default_z_mm=float(flat.get("pickup_default_z_mm", base.pickup_motion.default_z_mm)),
+            approach_offset_mm=float(flat.get("pickup_approach_offset_mm", base.pickup_motion.approach_offset_mm)),
+            contact_offset_mm=float(flat.get("pickup_contact_offset_mm", base.pickup_motion.contact_offset_mm)),
+            initial_lift_clearance_mm=float(
+                flat.get("pickup_initial_lift_clearance_mm", base.pickup_motion.initial_lift_clearance_mm)
+            ),
+            approach_vel_percent=float(flat.get("pickup_approach_vel_percent", base.pickup_motion.approach_vel_percent)),
+            approach_acc_percent=float(flat.get("pickup_approach_acc_percent", base.pickup_motion.approach_acc_percent)),
+            descend_vel_percent=float(flat.get("pickup_descend_vel_percent", base.pickup_motion.descend_vel_percent)),
+            descend_acc_percent=float(flat.get("pickup_descend_acc_percent", base.pickup_motion.descend_acc_percent)),
+            lift_align_vel_percent=float(flat.get("pickup_lift_align_vel_percent", base.pickup_motion.lift_align_vel_percent)),
+            lift_align_acc_percent=float(flat.get("pickup_lift_align_acc_percent", base.pickup_motion.lift_align_acc_percent)),
+            change_plane_vel_percent=float(
+                flat.get("pickup_change_plane_vel_percent", base.pickup_motion.change_plane_vel_percent)
+            ),
+            change_plane_acc_percent=float(
+                flat.get("pickup_change_plane_acc_percent", base.pickup_motion.change_plane_acc_percent)
+            ),
+            combine_change_plane_with_first_contact=bool(
+                flat.get(
+                    "combine_change_plane_with_first_contact",
+                    base.pickup_motion.combine_change_plane_with_first_contact,
+                )
+            ),
+            stage_transition_vel_percent=float(
+                flat.get("pickup_stage_transition_vel_percent", base.pickup_motion.stage_transition_vel_percent)
+            ),
+            stage_transition_acc_percent=float(
+                flat.get("pickup_stage_transition_acc_percent", base.pickup_motion.stage_transition_acc_percent)
+            ),
+            first_contact_vel_percent=float(
+                flat.get("pickup_first_contact_vel_percent", base.pickup_motion.first_contact_vel_percent)
+            ),
+            first_contact_acc_percent=float(
+                flat.get("pickup_first_contact_acc_percent", base.pickup_motion.first_contact_acc_percent)
+            ),
+        )
+        cleanup = replace(
+            base.edge_cleanup,
+            enabled_after_xz_ry=bool(flat.get("cleanup_enabled_after_xz_ry", base.edge_cleanup.enabled_after_xz_ry)),
+            enable_second_pass=bool(flat.get("cleanup_enable_second_pass", base.edge_cleanup.enable_second_pass)),
+            vel_percent=float(flat.get("cleanup_vel_percent", base.edge_cleanup.vel_percent)),
+            acc_percent=float(flat.get("cleanup_acc_percent", base.edge_cleanup.acc_percent)),
+            spacing_mm=float(flat.get("cleanup_spacing_mm", base.edge_cleanup.spacing_mm)),
+            z_offset_mm=float(flat.get("cleanup_z_offset_mm", base.edge_cleanup.z_offset_mm)),
+            second_pass_pivot_z_offset_mm=float(
+                flat.get("cleanup_second_pass_pivot_z_offset_mm", base.edge_cleanup.second_pass_pivot_z_offset_mm)
+            ),
+        )
+        dropoff = replace(
+            base.dropoff,
+            strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
+            release_align_vel_percent=float(
+                flat.get("dropoff_release_align_vel_percent", base.dropoff.release_align_vel_percent)
+            ),
+            release_align_acc_percent=float(
+                flat.get("dropoff_release_align_acc_percent", base.dropoff.release_align_acc_percent)
+            ),
+        )
+        nav = replace(
+            base.navigation_return,
+            unwind_vel_percent=float(flat.get("nav_unwind_vel_percent", base.navigation_return.unwind_vel_percent)),
+            unwind_acc_percent=float(flat.get("nav_unwind_acc_percent", base.navigation_return.unwind_acc_percent)),
+            unwind_queue_if_busy=bool(flat.get("nav_unwind_queue_if_busy", base.navigation_return.unwind_queue_if_busy)),
+            calibration_move_vel_percent=float(
+                flat.get("nav_calibration_move_vel_percent", base.navigation_return.calibration_move_vel_percent)
+            ),
+            calibration_move_acc_percent=float(
+                flat.get("nav_calibration_move_acc_percent", base.navigation_return.calibration_move_acc_percent)
+            ),
+        )
+        return replace(
+            base,
+            execution_target_point=str(flat.get("execution_target_point", base.execution_target_point)),
+            enable_z_shift_pixel_compensation=bool(
+                flat.get("enable_z_shift_pixel_compensation", base.enable_z_shift_pixel_compensation)
+            ),
+            contour_pixel_to_mm_mode=str(flat.get("contour_pixel_to_mm_mode", base.contour_pixel_to_mm_mode)),
+            enable_execution_motion_trace=bool(
+                flat.get("enable_execution_motion_trace", base.enable_execution_motion_trace)
+            ),
+            execution_motion_trace_sample_period_s=float(
+                flat.get(
+                    "execution_motion_trace_sample_period_s",
+                    base.execution_motion_trace_sample_period_s,
+                )
+            ),
+            pivot_motion_plane=str(flat.get("pivot_motion_plane", base.pivot_motion_plane)),
+            primary_group_id=str(flat.get("primary_group_id", base.primary_group_id)),
+            secondary_group_id=str(flat.get("secondary_group_id", base.secondary_group_id)),
+            pivot_axis=str(flat.get("pivot_axis", base.pivot_axis)),
+            pivot_direction=str(flat.get("pivot_direction", base.pivot_direction)),
+            pivot_contact_side=str(flat.get("pivot_contact_side", base.pivot_contact_side)),
+            mirror_xz_ry_execution_rotation_value=bool(
+                flat.get("mirror_xz_ry_execution_rotation_value", base.mirror_xz_ry_execution_rotation_value)
+            ),
+            pickup_axis_alignment_sign_value=float(
+                flat.get("pickup_axis_alignment_sign_value", base.pickup_axis_alignment_sign_value)
+            ),
+            enable_vacuum_pump=bool(flat.get("enable_vacuum_pump", base.enable_vacuum_pump)),
+            apply_camera_to_tcp_for_pickup=bool(
+                flat.get("apply_camera_to_tcp_for_pickup", base.apply_camera_to_tcp_for_pickup)
+            ),
+            pickup_motion=pickup,
+            edge_cleanup=cleanup,
+            dropoff=dropoff,
+            navigation_return=nav,
+            enable_pivot_debug_plot=bool(flat.get("enable_pivot_debug_plot", base.enable_pivot_debug_plot)),
+        )

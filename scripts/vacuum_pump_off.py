@@ -51,7 +51,7 @@ def main() -> int:
     all_ok = True
     for index in range(repeat):
         attempt_ok = controller.turn_on()
-        time.sleep(1)
+        time.sleep(5)
         attempt_ok = controller.turn_off()
         all_ok = attempt_ok and all_ok
         print(f"OFF command {index + 1}/{repeat}: {'ok' if attempt_ok else 'failed'}")

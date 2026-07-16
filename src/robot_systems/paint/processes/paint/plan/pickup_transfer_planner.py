@@ -121,7 +121,7 @@ class PaintPickupTransferPlanner:
             pickup_z = (
                 owner._pickup_safety_z_min_mm
                 + workpiece_height_mm
-                + PAINT_PROCESS_CONFIG.pickup_contact_offset_mm
+                + PAINT_PROCESS_CONFIG.pickup_motion.contact_offset_mm
             )
 
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
@@ -155,10 +155,10 @@ class PaintPickupTransferPlanner:
             pickup_tcp_dy,
         )
 
-        pickup_approach_z = float(pickup_z) + PAINT_PROCESS_CONFIG.pickup_approach_offset_mm
+        pickup_approach_z = float(pickup_z) + PAINT_PROCESS_CONFIG.pickup_motion.approach_offset_mm
         pickup_lift_z = float(pickup_z) + min(
-            PAINT_PROCESS_CONFIG.pickup_initial_lift_clearance_mm,
-            PAINT_PROCESS_CONFIG.pickup_approach_offset_mm,
+            PAINT_PROCESS_CONFIG.pickup_motion.initial_lift_clearance_mm,
+            PAINT_PROCESS_CONFIG.pickup_motion.approach_offset_mm,
         )
         pickup_x = pickup_centroid_x - pickup_tcp_dx
         pickup_y = pickup_centroid_y - pickup_tcp_dy

@@ -54,8 +54,8 @@ class PickupOriginDropoffStrategy:
                 DropoffWaypoint(
                     label="Release at current pose",
                     pose=None,
-                    vel_percent=PAINT_PROCESS_CONFIG.pickup_release_align_vel_percent,
-                    acc_percent=PAINT_PROCESS_CONFIG.pickup_release_align_acc_percent,
+                    vel_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
+                    acc_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
                     release_here=True,
                 ),
             )
@@ -64,8 +64,8 @@ class PickupOriginDropoffStrategy:
                 DropoffWaypoint(
                     label="Returning to align pose for release",
                     pose=list(plan.align_pose),
-                    vel_percent=PAINT_PROCESS_CONFIG.pickup_release_align_vel_percent,
-                    acc_percent=PAINT_PROCESS_CONFIG.pickup_release_align_acc_percent,
+                    vel_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
+                    acc_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
                     release_here=True,
                 ),
             )
@@ -85,7 +85,7 @@ class PaintDropoffExecutor:
     def _resolve_strategy(self) -> PaintDropoffStrategy | None:
         if self._strategy_override is not None:
             return self._strategy_override
-        strategy_name = str(PAINT_PROCESS_CONFIG.pickup_dropoff_strategy or "pickup_origin").strip().lower()
+        strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "pickup_origin").strip().lower()
         return self._strategies.get(strategy_name)
 
     @timed_step(_logger, "pre_release_dropoff")
@@ -94,7 +94,7 @@ class PaintDropoffExecutor:
         started = perf_counter()
         strategy = self._resolve_strategy()
         if strategy is None:
-            strategy_name = str(PAINT_PROCESS_CONFIG.pickup_dropoff_strategy or "").strip()
+            strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "").strip()
             return False, f"Unknown paint dropoff strategy '{strategy_name}'"
         plan = strategy.build_plan(self._owner, execution_plan)
         release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
