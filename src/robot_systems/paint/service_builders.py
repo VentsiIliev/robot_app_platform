@@ -17,7 +17,11 @@ def build_vacuum_pump_service(ctx):
         modbus_config = ctx.settings.get(CommonSettingsID.MODBUS_CONFIG)
         return build_modbus_vacuum_pump_controller(
             modbus_config=modbus_config,
-            vacuum_config=VacuumPumpConfig(pump_register=128),
+            vacuum_config=VacuumPumpConfig(
+                pump_register=128,
+                blow_off_register=129,
+                blow_off_pulse_seconds=0.2,
+            ),
         )
     except Exception:
         _logger.exception("Vacuum pump service could not be built; continuing without it")

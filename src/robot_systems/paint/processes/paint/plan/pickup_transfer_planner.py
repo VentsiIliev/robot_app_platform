@@ -7,7 +7,6 @@ import numpy as np
 
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
     project_paint_contact_motion_continuous,
 )
@@ -115,13 +114,14 @@ class PaintPickupTransferPlanner:
         workpiece_height_mm = float(jobs[0].get("workpiece_height_mm", 0.0) or 0.0)
         pickup_rx = float(pickup_pivot_pose[3]) if len(pickup_pivot_pose) >= 4 else 180.0
         pickup_ry = float(pickup_pivot_pose[4]) if len(pickup_pivot_pose) >= 5 else 0.0
+        pickup_motion = owner._paint_process_config().pickup_motion
 
         pickup_z = owner._pickup_z_mm
         if pickup_z is None:
             pickup_z = (
                 owner._pickup_safety_z_min_mm
                 + workpiece_height_mm
-                + PAINT_PROCESS_CONFIG.pickup_motion.contact_offset_mm
+                + pickup_motion.contact_offset_mm
             )
 
         pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
@@ -155,10 +155,10 @@ class PaintPickupTransferPlanner:
             pickup_tcp_dy,
         )
 
-        pickup_approach_z = float(pickup_z) + PAINT_PROCESS_CONFIG.pickup_motion.approach_offset_mm
+        pickup_approach_z = float(pickup_z) + pickup_motion.approach_offset_mm
         pickup_lift_z = float(pickup_z) + min(
-            PAINT_PROCESS_CONFIG.pickup_motion.initial_lift_clearance_mm,
-            PAINT_PROCESS_CONFIG.pickup_motion.approach_offset_mm,
+            pickup_motion.initial_lift_clearance_mm,
+            pickup_motion.approach_offset_mm,
         )
         pickup_x = pickup_centroid_x - pickup_tcp_dx
         pickup_y = pickup_centroid_y - pickup_tcp_dy

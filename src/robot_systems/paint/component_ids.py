@@ -7,7 +7,7 @@ class ServiceID(str, Enum):
 
 
 class SettingsID(str, Enum):
-    pass
+    PAINT_PROCESS_CONFIG = "paint_process_config"
 
 
 class ProcessID(str, Enum):

@@ -249,6 +249,7 @@ class PaintContactExecutor:
                     source_rotation_deg=source_rotation_deg,
                     pattern_type=pattern_type,
                     stage="execute",
+                    paint_process_config=owner._paint_process_config(),
                 )
 
             if collected_command_paths is not None:
@@ -280,6 +281,7 @@ class PaintContactExecutor:
                     pattern_type=pattern_type,
                     stage="execute",
                     tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+                    paint_process_config=owner._paint_process_config(),
                 )
             if result not in (0, True, None):
                 _logger.info(

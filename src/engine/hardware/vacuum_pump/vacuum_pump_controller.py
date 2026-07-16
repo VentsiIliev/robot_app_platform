@@ -35,11 +35,14 @@ class VacuumPumpController(IVacuumPumpController):
     def turn_on(self) -> bool:
         """Turn the vacuum pump ON.
 
-        Writes the configured on_value to the pump register.
+        Closes the blow-off register first if configured, then writes the
+        configured on_value to the pump register.
 
         Returns:
             True if the write succeeded, False otherwise.
         """
+        if not self._close_blow_off():
+            return False
         return self._write_pump(self._config.on_value, "ON")
 
     def turn_off(self) -> bool:
@@ -104,5 +107,17 @@ class VacuumPumpController(IVacuumPumpController):
             self._transport.write_register(register, int(self._config.blow_off_off_value))
         except Exception:
             _logger.exception("Vacuum pump blow-off pulse failed register=%d", register)
+            return False
+        return True
+
+    def _close_blow_off(self) -> bool:
+        """Force the blow-off valve closed before creating vacuum."""
+        register = self._config.blow_off_register
+        if register is None:
+            return True
+        try:
+            self._transport.write_register(register, int(self._config.blow_off_off_value))
+        except Exception:
+            _logger.exception("Vacuum pump blow-off close failed register=%d", register)
             return False
         return True

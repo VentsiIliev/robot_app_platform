@@ -21,6 +21,7 @@ from src.engine.robot.path_preparation import IWorkpiecePathPreparationService
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
+    PaintProcessConfig,
     PaintSimulationConfig,
 )
 from src.robot_systems.paint.processes.paint.plan import (
@@ -133,6 +134,7 @@ class PaintExecutorDependencies:
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
+    paint_process_config_service: object | None = None
 
 @dataclass(frozen=True)
 class PaintExecutorMotionConfig:
@@ -223,6 +225,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
+            paint_process_config_service=legacy_options.get("paint_process_config_service"),
         )
         motion_config = motion_config or PaintExecutorMotionConfig(
             enable_vacuum_pump=legacy_options.get("enable_vacuum_pump", True),
@@ -254,6 +257,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
+        self._paint_process_config_service = dependencies.paint_process_config_service
 
         # Motion settings.
         self._enable_vacuum_pump = bool(motion_config.enable_vacuum_pump)
@@ -309,6 +313,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._active_contact_base_z_offset_mm: float = 0.0
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
+        self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
 
     def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         """Build and cache the execution plan for a paint workpiece."""
@@ -363,6 +368,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", self._pickup_contact_motion_config.camera_to_tcp_y_offset)),
         )
         self._contact_motion_strategy = get_execution_plane_strategy(self._contact_motion_config.motion_plane)
+
+    def _refresh_paint_process_config_snapshot(self) -> None:
+        service = self._paint_process_config_service
+        if service is None:
+            self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
+            return
+        try:
+            self._paint_process_config_snapshot = service.get_snapshot()
+        except Exception:
+            _logger.debug("[PAINT_CONFIG] Failed to refresh paint process settings", exc_info=True)
+            self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
+
+    def _paint_process_config(self) -> PaintProcessConfig:
+        return self._paint_process_config_snapshot or PAINT_PROCESS_CONFIG
 
     def _make_runtime_contact_motion_config(self, motion_plane: str) -> PaintSimulationConfig:
         """Build a projection config for a requested execution plane."""
@@ -761,6 +780,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     @timed_step(_logger, "prepare_dropoff_unwind")
     def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:
         """Move to the safe unwind orientation, then relieve Joint 6 before dropoff."""
+        config = self._paint_process_config()
         if self._configured_contact_motion_plane == "xz_y_ry":
             plan = self._last_pickup_plan
             if plan is None:
@@ -768,23 +788,23 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if not self._move_pickup_phase(
                 "Returning to original orientation before dropoff unwind",
                 plan.align_pose,
-                velocity=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
-                acceleration=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
+                velocity=config.dropoff.release_align_vel_percent,
+                acceleration=config.dropoff.release_align_acc_percent,
             ):
                 return False, "Pivot paint finished, but return to original orientation failed before dropoff unwind"
         if self._robot_service is None:
             return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
         _logger.info(
             "[DROPOFF] Unwinding Joint 6 before dropoff strategy vel=%.1f acc=%.1f queue_if_busy=%s",
-            PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
-            PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+            config.navigation_return.unwind_vel_percent,
+            config.navigation_return.unwind_acc_percent,
             PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
         )
         ok = self._robot_service.unwind_joint6(
             blocking=True,
             queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-            vel=PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
-            acc=PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+            vel=config.navigation_return.unwind_vel_percent,
+            acc=config.navigation_return.unwind_acc_percent,
         )
         if not ok:
             return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"
@@ -808,6 +828,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """
         with timing_session("paint_process") as recorder:
             started = perf_counter()
+            self._refresh_paint_process_config_snapshot()
             total_waypoints = 0
             result: tuple[bool, str]
 

@@ -10,6 +10,43 @@ src/robot_systems/paint/processes/paint/config.py
 
 The screen must follow the existing application architecture, use the same visual style as the rest of the platform, support localization from the start, persist values through the established settings system, and update the running Paint process without requiring a full system restart.
 
+## Current Progress
+
+Status as of the first runtime wiring pass:
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Standalone MVC app | Done | `PaintProcessSettings` app package exists with factory, model, view, controller, service interface, stub service, mapper, schema, and standalone runner. |
+| UI preview runner | Done | `example_usage.py` launches the screen with an in-memory stub service. |
+| UI style | Done for first pass | Uses `KeyboardSettingsView`, `SettingGroup`, `SettingField`, and the shared settings view styling. |
+| UI grouping | Done for first pass | Values are grouped into Process, Motion Speeds, Distances & Offsets, Paint Path, Cleanup, and Diagnostics tabs. |
+| Localization structure | Partially done | Schema labels are built through translation helpers and the view handles language change. Real catalog entries still need to be added. |
+| Settings persistence | Done | Added `SettingsID.PAINT_PROCESS_CONFIG`, `PaintProcessConfigSerializer`, and `SettingsSpec(..., "paint/process.json")`. Defaults come from existing `PAINT_PROCESS_CONFIG`. |
+| Service folder wiring | Done | `PaintProcessSettings` is registered in Paint system folder `2` / Service. |
+| Runtime config service | Done | Added `PaintProcessConfigService` as the single runtime access point. UI saves update this service snapshot. |
+| Runtime wiring - motion speeds | Done for first pass | Pickup, cleanup, dropoff release-align, pre-dropoff unwind, and calibration-return speed values read from the runtime settings service. |
+| Runtime wiring - cleanup settings | Done | Cleanup enable flag, second-pass flag, spacing, cleanup Z offset, and second-pass pivot Z offset read from the per-cycle runtime snapshot. |
+| Runtime wiring - distance/offset settings | Mostly done | Pickup contact offset, approach offset, lift clearance, and cleanup offsets read from the per-cycle runtime snapshot. `default_z_mm` is not wired because it was not part of the existing runtime calculation path. |
+| Runtime wiring - diagnostics settings | Done | Pivot debug plot, execution motion trace, and trace sample period read from the per-cycle runtime snapshot. |
+| Runtime wiring - remaining non-speed knobs | Not started | Geometry, mode selection, vacuum, target-point behavior, and queue behavior still use the existing config path. |
+
+Implemented files include:
+
+```text
+src/robot_systems/paint/applications/paint_process_settings/
+src/robot_systems/paint/processes/paint/paint_process_config_serializer.py
+src/robot_systems/paint/processes/paint/paint_process_config_service.py
+```
+
+The current runtime rule is:
+
+```text
+UI save -> PaintProcessConfigService.save(...) -> in-memory snapshot updated
+Paint cycle start -> PaintWorkpiecePathExecutor reads one config snapshot
+Running cycle -> keeps its start snapshot
+Next cycle -> uses newly saved motion speeds, cleanup settings, pickup offsets, and diagnostics settings
+```
+
 ## Application Shape
 
 Application name:
@@ -523,6 +560,118 @@ is created or updated through `SettingsService`.
 - serializer default/load/save round trip
 - mapper flat dict round trip
 - config service reload/update behavior
+
+## Verification Completed
+
+Completed checks so far:
+
+```bash
+python3 -m py_compile ...
+```
+
+Compiled the new app modules, Paint system wiring, runtime config service, navigation service, and affected Paint executors.
+
+Serializer checks completed:
+
+- `PaintProcessConfigSerializer.get_default()` matches the existing `PAINT_PROCESS_CONFIG`
+- serializer round trip preserves the default config
+- partial/older JSON falls back to current dataclass defaults for missing fields
+
+Runtime service checks completed:
+
+- `PaintProcessConfigService.save(...)` updates the in-memory snapshot
+- executor can read a modified runtime snapshot
+- `PaintProcessSettings` remains registered in the Service folder
+
+Manual preview completed:
+
+- standalone runner launched successfully after adding repo-root path setup
+
+## Findings And Potential Issues
+
+### 1. Remaining module-level config use
+
+There are still many valid references to `PAINT_PROCESS_CONFIG`.
+
+The first runtime passes intentionally moved motion-speed values and cleanup behavior first. The following areas still use the existing module-level config and should be wired in later passes:
+
+- process geometry and pivot mode
+- execution target point
+- pixel-to-mm mode
+- vacuum enable flag
+- queue-if-busy behavior
+
+This is intentional for incremental safety, but it means the UI currently exposes more knobs than the runtime consumes live.
+
+### 1a. `default_z_mm` is not currently live
+
+`PickupMotionConfig.default_z_mm` exists in `config.py` and is exposed in the UI, but the existing pickup planner did not use it in the active pickup-Z calculation.
+
+Current runtime behavior calculates pickup Z from:
+
+```text
+robot safety z_min + workpiece height + contact_offset_mm
+```
+
+Wiring `default_z_mm` directly would change current behavior because its existing default is `200.0`. For now it is intentionally left unwired until the expected semantics are clarified:
+
+- use as an absolute pickup Z override
+- use only when no workpiece height is available
+- remove it from the UI if it is obsolete
+- migrate the current calculation into an explicit mode
+
+### 2. Settings UI exposes non-live fields
+
+The screen currently allows editing all planned fields, but only motion speeds, cleanup settings, pickup offsets, and diagnostics settings are wired into runtime behavior.
+
+Until the remaining knobs are wired, the UI should either:
+
+- clearly indicate which fields are live, or
+- temporarily limit operator-facing fields to the Motion Speeds tab.
+
+Otherwise an operator may save a non-speed value and expect it to affect the process immediately.
+
+### 3. Active cycle snapshot behavior is deliberate
+
+The Paint path executor reads one `PaintProcessConfig` snapshot at cycle start. This avoids changing velocities during an active robot sequence.
+
+This means:
+
+```text
+saved during idle      -> next cycle uses new speed values
+saved during a cycle   -> current cycle keeps old speed values
+saved before return    -> current cycle still keeps old speed values
+```
+
+This is the safer behavior, but it should be reflected in operator text.
+
+### 4. Navigation reads live values per action
+
+`PaintNavigationService` reads navigation-return velocity/acceleration from the runtime settings service when return actions run. This is slightly different from the path executor cycle snapshot behavior.
+
+This is acceptable for standalone navigation actions, but if strict cycle-level immutability is required for every return move, navigation return should also receive a per-cycle snapshot from the process instead of reading the service directly.
+
+### 5. Queue behavior intentionally not live yet
+
+`unwind_queue_if_busy` is still treated as existing behavior, not as part of the first live wiring pass.
+
+Reason: the first pass is limited to motion speeds only. Changing queue behavior can affect sequencing semantics and should be reviewed separately.
+
+### 6. Paint process config service is Paint-owned
+
+The runtime service lives under the Paint process package and depends on `SettingsService`. The UI service depends on this Paint-owned runtime service.
+
+This keeps the UI from talking directly to `SettingsService`, but the service interface currently lives with its concrete implementation. If more implementations are needed, the interface may be split into a dedicated interface file.
+
+### 7. Real localization catalogs are still missing
+
+The code structure supports translation, but actual translation keys/catalog entries still need to be added under the Paint system translations folder.
+
+Without catalog entries, the UI will display source English text.
+
+### 8. Documentation follow-up required
+
+This work touches `src/robot_systems/paint`. The robot-system documentation should be reviewed once runtime wiring is complete.
 
 ## Documentation Impact
 

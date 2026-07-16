@@ -37,9 +37,24 @@ class PaintEdgeCleanupExecutor:
         self._active_cleanup_z_offset_mm: float | None = None
         self._last_cleanup_contact_path: list[list[float]] | None = None
 
+    def _cleanup_speed(self) -> tuple[float, float]:
+        cleanup = self._owner._paint_process_config().edge_cleanup
+        return float(cleanup.vel_percent), float(cleanup.acc_percent)
+
+    def _cleanup_config(self):
+        return self._owner._paint_process_config().edge_cleanup
+
+    def _dropoff_speed(self) -> tuple[float, float]:
+        dropoff = self._owner._paint_process_config().dropoff
+        return float(dropoff.release_align_vel_percent), float(dropoff.release_align_acc_percent)
+
+    def _navigation_unwind_speed(self) -> tuple[float, float]:
+        nav = self._owner._paint_process_config().navigation_return
+        return float(nav.unwind_vel_percent), float(nav.unwind_acc_percent)
+
     def should_run_after_xz_ry(self) -> bool:
         """Return whether the configured XZ/RY process should run XY/RZ edge cleanup."""
-        enabled = PAINT_PROCESS_CONFIG.edge_cleanup.enabled_after_xz_ry
+        enabled = self._cleanup_config().enabled_after_xz_ry
         return (
             bool(enabled)
             and self._owner._configured_contact_motion_plane == "xz_y_ry"
@@ -51,11 +66,12 @@ class PaintEdgeCleanupExecutor:
         plan = self._owner._last_pickup_plan
         if plan is None:
             return False, "XZ/RY paint succeeded, but no pickup plan is available for safe edge-cleanup unwind alignment"
+        vel, acc = self._dropoff_speed()
         if not self._owner._move_pickup_phase(
             "Returning to original orientation before edge-cleanup unwind",
             plan.align_pose,
-            velocity=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
+            velocity=vel,
+            acceleration=acc,
         ):
             return False, "XZ/RY paint succeeded, but return to original orientation failed before unwind"
         return True, ""
@@ -65,17 +81,18 @@ class PaintEdgeCleanupExecutor:
         """Unwind Joint 6 before the XY/RZ edge-cleanup pass."""
         if self._owner._robot_service is None:
             return False, "XZ/RY paint succeeded, but robot service is not available for Joint 6 unwind"
+        vel, acc = self._navigation_unwind_speed()
         _logger.info(
             "[EDGE_CLEANUP] Unwinding Joint 6 before XY/RZ cleanup pass vel=%.1f acc=%.1f queue_if_busy=%s",
-            PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
-            PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+            vel,
+            acc,
             PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
         )
         ok = self._owner._robot_service.unwind_joint6(
             blocking=True,
             queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-            vel=PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
-            acc=PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+            vel=vel,
+            acc=acc,
         )
         if not ok:
             if failure_context:
@@ -89,11 +106,12 @@ class PaintEdgeCleanupExecutor:
         ok, msg, approach_pose = self._prepare_xy_rz_cleanup_stage_pose(execution_plan)
         if not ok:
             return False, msg
+        vel, acc = self._cleanup_speed()
         if not self._owner._move_pickup_phase(
             "Moving to XY/RZ Y approach before edge cleanup",
             approach_pose,
-            velocity=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            velocity=vel,
+            acceleration=acc,
         ):
             return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
         return True, ""
@@ -114,11 +132,12 @@ class PaintEdgeCleanupExecutor:
         """Move to an already-computed XY/RZ edge-cleanup Y approach pose."""
         if not approach_pose:
             return False, "XZ/RY paint succeeded, but preplanned XY/RZ edge-cleanup Y approach pose is empty"
+        vel, acc = self._cleanup_speed()
         if not self._owner._move_pickup_phase(
             "Moving to XY/RZ Y approach before edge cleanup",
             list(approach_pose),
-            velocity=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            velocity=vel,
+            acceleration=acc,
         ):
             return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
         return True, ""
@@ -126,7 +145,7 @@ class PaintEdgeCleanupExecutor:
     def _active_z_offset_mm(self) -> float:
         if self._active_cleanup_z_offset_mm is not None:
             return self._active_cleanup_z_offset_mm
-        return float(PAINT_PROCESS_CONFIG.edge_cleanup.z_offset_mm)
+        return float(self._cleanup_config().z_offset_mm)
 
     @staticmethod
     def _safe_float(value, default: float) -> float:
@@ -136,7 +155,7 @@ class PaintEdgeCleanupExecutor:
             return float(default)
 
     def _resolve_cleanup_z_offset_mm(self, execution_plan: WorkpieceExecutionPlan) -> float:
-        default = float(PAINT_PROCESS_CONFIG.edge_cleanup.z_offset_mm)
+        default = float(self._cleanup_config().z_offset_mm)
         jobs = list(getattr(execution_plan, "execution_jobs", []) or [])
         for job in jobs:
             if not isinstance(job, dict):
@@ -172,8 +191,8 @@ class PaintEdgeCleanupExecutor:
         retreat_pose[1] = float(retreat_pose[1]) + _CLEANUP_RETREAT_Y_MM
         return retreat_pose
 
-    @staticmethod
     def _interpolate_y_transition(
+        self,
         start_pose: list[float],
         end_pose: list[float],
         *,
@@ -181,7 +200,7 @@ class PaintEdgeCleanupExecutor:
         include_end: bool,
     ) -> list[list[float]]:
         """Return a Y-only transition with small steps for direct IK continuity."""
-        spacing_mm = max(float(PAINT_PROCESS_CONFIG.edge_cleanup.spacing_mm), 0.5)
+        spacing_mm = max(float(self._cleanup_config().spacing_mm), 0.5)
         start = list(start_pose)
         end = list(end_pose)
         while len(start) < 6:
@@ -284,11 +303,12 @@ class PaintEdgeCleanupExecutor:
         if len(retreat_path) < 2:
             return True, ""
         retreat_pose = retreat_path[-1]
+        vel, acc = self._cleanup_speed()
         if not self._owner._move_pickup_phase(
             "Retreating along Y after edge cleanup",
             retreat_pose,
-            velocity=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            velocity=vel,
+            acceleration=acc,
         ):
             return False, "XY/RZ edge cleanup succeeded, but Y retreat from cleanup contact failed"
         self._owner._last_process_end_pose = list(retreat_pose)
@@ -322,10 +342,11 @@ class PaintEdgeCleanupExecutor:
             )
             return False, msg, 0, []
         collected_paths: list[list[list[float]]] = []
+        vel, acc = self._cleanup_speed()
         ok, msg, total_waypoints = self._owner._paint_contact.execute(
             cleanup_plan,
-            vel_override=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acc_override=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            vel_override=vel,
+            acc_override=acc,
             append_retreat=False,
             retreat_fn=self.add_y_approach_and_retreat_waypoints,
             execute_robot=execute_robot,
@@ -377,10 +398,11 @@ class PaintEdgeCleanupExecutor:
             return False, msg, 0, [], []
 
         collected_paths: list[list[list[float]]] = []
+        vel, acc = self._cleanup_speed()
         ok, msg, total_waypoints = self._owner._paint_contact.execute(
             cleanup_plan,
-            vel_override=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acc_override=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            vel_override=vel,
+            acc_override=acc,
             append_retreat=False,
             retreat_fn=self.add_y_approach_and_retreat_waypoints,
             execute_robot=False,
@@ -426,7 +448,7 @@ class PaintEdgeCleanupExecutor:
         command_path = first_command_path
         if combined_cleanup_enabled:
             second_pass_z_offset = float(
-                PAINT_PROCESS_CONFIG.edge_cleanup.second_pass_pivot_z_offset_mm
+                self._cleanup_config().second_pass_pivot_z_offset_mm
             )
             ok, msg, second_pass_waypoints, reverse_command_path = self._run_reverse_cleanup_pass(
                 started=started,
@@ -495,11 +517,12 @@ class PaintEdgeCleanupExecutor:
             self._owner._last_process_end_pose = list(command_path[-1])
             return True, "", len(command_path), command_path
 
+        vel, acc = self._cleanup_speed()
         if not self._owner._move_pickup_phase(
             "Moving to reverse XY/RZ cleanup Y approach",
             list(command_path[0]),
-            velocity=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acceleration=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            velocity=vel,
+            acceleration=acc,
         ):
             return False, "XY/RZ edge cleanup first pass succeeded, but move to reverse cleanup Y approach failed", 0, command_path
 
@@ -508,11 +531,12 @@ class PaintEdgeCleanupExecutor:
             debug_dump_dir=self._owner._debug_dump_dir,
             pivot_config=self._owner._contact_motion_config,
             command_pivot_path=command_path,
-            vel=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acc=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            vel=vel,
+            acc=acc,
             pivot_pose=None,
             pattern_type="EdgeCleanupReverse",
             stage="edge_cleanup_reverse",
+            paint_process_config=self._owner._paint_process_config(),
         )
         if result not in (0, True, None):
             _logger.info(
@@ -551,11 +575,12 @@ class PaintEdgeCleanupExecutor:
             debug_dump_dir=self._owner._debug_dump_dir,
             pivot_config=self._owner._contact_motion_config,
             command_pivot_path=command_path,
-            vel=PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent,
-            acc=PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent,
+            vel=self._cleanup_speed()[0],
+            acc=self._cleanup_speed()[1],
             pivot_pose=None,
             pattern_type="EdgeCleanupCombined",
             stage="edge_cleanup_combined",
+            paint_process_config=self._owner._paint_process_config(),
         )
         if result not in (0, True, None):
             _logger.info(
@@ -581,10 +606,8 @@ class PaintEdgeCleanupExecutor:
         if not callable(execute_staged):
             return False, "staged trajectory endpoint unavailable", 0
 
-        stage_vel = PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent
-        stage_acc = PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent
-        path_vel = PAINT_PROCESS_CONFIG.edge_cleanup.vel_percent
-        path_acc = PAINT_PROCESS_CONFIG.edge_cleanup.acc_percent
+        stage_vel, stage_acc = self._cleanup_speed()
+        path_vel, path_acc = stage_vel, stage_acc
         _logger.info(
             "[EDGE_CLEANUP] executing staged cleanup trajectory: stage_pose=%s waypoints=%d xyz_len_mm=%.3f stage_vel=%.1f stage_acc=%.1f path_vel=%.1f path_acc=%.1f",
             [round(float(v), 3) for v in stage_approach_pose[:6]],
@@ -634,7 +657,7 @@ class PaintEdgeCleanupExecutor:
                 _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_pre_unwind_align total_elapsed_s=%.3f", elapsed_s(started))
                 return False, msg, 0
             self._owner._set_runtime_contact_motion_config(self._owner._make_runtime_contact_motion_config("xy_z_rz"))
-            combined_cleanup_enabled = bool(PAINT_PROCESS_CONFIG.edge_cleanup.enable_second_pass)
+            combined_cleanup_enabled = bool(self._cleanup_config().enable_second_pass)
             wait_started = perf_counter()
             try:
                 preplan = self._preplan_cleanup_path(

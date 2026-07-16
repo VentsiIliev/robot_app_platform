@@ -255,6 +255,27 @@ class TestVacuumPumpController(unittest.TestCase):
             ],
         )
 
+    def test_turn_on_closes_blow_off_before_pump_on(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(
+                pump_register=128,
+                blow_off_register=129,
+                blow_off_pulse_seconds=0.0,
+            ),
+        )
+
+        self.assertTrue(controller.turn_on())
+
+        self.assertEqual(
+            transport.write_register.call_args_list,
+            [
+                call(129, 0),
+                call(128, 1),
+            ],
+        )
+
     def test_transport_failures_return_false(self) -> None:
         transport = MagicMock()
         transport.write_register.side_effect = RuntimeError("boom")

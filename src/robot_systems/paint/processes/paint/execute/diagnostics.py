@@ -8,6 +8,7 @@ import numpy as np
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
+    PaintProcessConfig,
     PaintSimulationConfig,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
@@ -91,17 +92,19 @@ def execute_paint_trajectory_with_optional_trace(
     pattern_type: str,
     stage: str,
     tcp_to_tool_local_xy: tuple[float, float] | None = None,
+    paint_process_config: PaintProcessConfig | None = None,
 ):
     """Execute a paint trajectory and optionally write commanded-vs-actual samples."""
+    config = paint_process_config or PAINT_PROCESS_CONFIG
     trace = None
     if (
-        bool(getattr(PAINT_PROCESS_CONFIG, "enable_execution_motion_trace", False))
+        bool(getattr(config, "enable_execution_motion_trace", False))
         and robot_service is not None
     ):
         trace = start_robot_motion_trace(
             get_pose=robot_service.get_current_position,
             sample_period_s=float(
-                getattr(PAINT_PROCESS_CONFIG, "execution_motion_trace_sample_period_s", 0.05)
+                getattr(config, "execution_motion_trace_sample_period_s", 0.05)
             ),
         )
     try:
@@ -140,7 +143,9 @@ def write_pivot_job_debug_artifacts(
     source_rotation_deg: float,
     pattern_type: str,
     stage: str,
+    paint_process_config: PaintProcessConfig | None = None,
 ) -> None:
+    config = paint_process_config or PAINT_PROCESS_CONFIG
     write_pivot_debug_dump(
         debug_dump_dir=debug_dump_dir,
         pivot_config=pivot_config,
@@ -153,7 +158,7 @@ def write_pivot_job_debug_artifacts(
         pattern_type=pattern_type,
         stage=stage,
     )
-    if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+    if config.enable_pivot_debug_plot:
         write_pivot_debug_plot(
             debug_dump_dir=debug_dump_dir,
             pivot_config=pivot_config,
@@ -167,5 +172,4 @@ def write_pivot_job_debug_artifacts(
             anchor_xy=anchor_xy,
             source_rotation_deg=source_rotation_deg,
         )
-
 

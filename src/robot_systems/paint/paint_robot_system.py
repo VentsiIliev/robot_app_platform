@@ -27,7 +27,10 @@ from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
-from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+    PaintProcessConfigSerializer,
+)
 from src.robot_systems.paint.service_builders import build_vacuum_pump_service
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
@@ -161,6 +164,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_camera_settings_application),
             ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
                             factory=application_wiring._build_calibration_settings_application),
+            ApplicationSpec(name="PaintProcessSettings", folder_id=2, icon="fa5s.cogs",
+                            factory=application_wiring._build_paint_process_settings_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
                             factory=application_wiring._build_calibration_application),
             ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
@@ -207,6 +212,7 @@ class PaintRobotSystem(BaseRobotSystem):
                      "height_measuring/calibration_data.json"),
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
+        SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
     ]
 
     services = [
@@ -234,12 +240,14 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
         from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        from src.robot_systems.paint.processes.paint.paint_process_config_service import PaintProcessConfigService
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
         self._work_area_service = self.get_service(CommonServiceID.WORK_AREAS)
         self._vision = self.get_optional_service(CommonServiceID.VISION)
+        self._paint_process_config_service = PaintProcessConfigService(self._settings_service)
         self._navigation = PaintNavigationService(_nav_engine, vision=self._vision,
                                                  work_area_service=self._work_area_service,
                                                  robot_service=self._robot,
@@ -251,7 +259,8 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  unwind_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
                                                  unwind_queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
                                                  calibration_move_vel_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_vel_percent,
-                                                 calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_acc_percent)
+                                                 calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_acc_percent,
+                                                 paint_process_config_service=self._paint_process_config_service)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)

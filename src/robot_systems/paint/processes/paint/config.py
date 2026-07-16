@@ -3,6 +3,11 @@ from dataclasses import dataclass, field
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 
 
+# [LIVE SETTINGS] marks defaults that are already read through the paint-process
+# settings service at runtime. Unmarked values are still static defaults or need
+# separate wiring before UI changes can affect the running paint process.
+
+
 @dataclass(frozen=True)
 class PickupMotionConfig:
     """Pickup/staging motion tuning.
@@ -14,53 +19,53 @@ class PickupMotionConfig:
 
     # Heights and clearances.
     default_z_mm: float = 200.0
-    approach_offset_mm: float = 100.0
-    contact_offset_mm: float = 2.0
-    initial_lift_clearance_mm: float = 20.0
+    approach_offset_mm: float = 100.0  # [LIVE SETTINGS]
+    contact_offset_mm: float = 2.0  # [LIVE SETTINGS]
+    initial_lift_clearance_mm: float = 20.0  # [LIVE SETTINGS]
 
     # Move from the current robot pose to the pickup approach pose.
-    approach_vel_percent: float = 60.0
-    approach_acc_percent: float = 50.0
+    approach_vel_percent: float = 60.0  # [LIVE SETTINGS]
+    approach_acc_percent: float = 50.0  # [LIVE SETTINGS]
 
     # Controlled final descent from approach height to pickup contact.
-    descend_vel_percent: float = 60.0
-    descend_acc_percent: float = 40.0
+    descend_vel_percent: float = 60.0  # [LIVE SETTINGS]
+    descend_acc_percent: float = 40.0  # [LIVE SETTINGS]
 
     # Lift away from pickup contact, then align to the paint start orientation.
-    lift_align_vel_percent: float = 80.0
-    lift_align_acc_percent: float = 40.0
+    lift_align_vel_percent: float = 80.0  # [LIVE SETTINGS]
+    lift_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
 
     # Change from pickup/table plane orientation to paint plane orientation.
-    change_plane_vel_percent: float = 80.0
-    change_plane_acc_percent: float = 40.0
+    change_plane_vel_percent: float = 80.0  # [LIVE SETTINGS]
+    change_plane_acc_percent: float = 40.0  # [LIVE SETTINGS]
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
 
     # Optional intermediate staging poses between change-plane and pivot contact.
-    stage_transition_vel_percent: float = 50.0
-    stage_transition_acc_percent: float = 20.0
+    stage_transition_vel_percent: float = 50.0  # [LIVE SETTINGS]
+    stage_transition_acc_percent: float = 20.0  # [LIVE SETTINGS]
 
     # Move into the first pivot contact pose.
-    first_contact_vel_percent: float = 80.0
-    first_contact_acc_percent: float = 30.0
+    first_contact_vel_percent: float = 80.0  # [LIVE SETTINGS]
+    first_contact_acc_percent: float = 30.0  # [LIVE SETTINGS]
 
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
     """Optional XY/RZ cleanup pass tuning used after XZ/RY paint."""
 
     # Run an XY/RZ edge-cleanup pass before releasing the held workpiece.
-    enabled_after_xz_ry: bool = False
+    enabled_after_xz_ry: bool = False  # [LIVE SETTINGS]
     # Replay the cleanup path in reverse with an additional paint-axis/base Z offset.
-    enable_second_pass: bool = False
+    enable_second_pass: bool = False  # [LIVE SETTINGS]
     # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
-    vel_percent: float = 80.0
-    acc_percent: float = 60.0
+    vel_percent: float = 80.0  # [LIVE SETTINGS]
+    acc_percent: float = 60.0  # [LIVE SETTINGS]
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
-    spacing_mm: float = 3.0
+    spacing_mm: float = 3.0  # [LIVE SETTINGS]
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
-    z_offset_mm: float = 0.0
+    z_offset_mm: float = 0.0  # [LIVE SETTINGS]
     # Additional paint-axis/base Z offset for the optional second cleanup pass.
-    second_pass_pivot_z_offset_mm: float = -15.0 # 20mm below the belt !
+    second_pass_pivot_z_offset_mm: float = -15.0  # [LIVE SETTINGS] 20mm below the belt !
 
 
 @dataclass(frozen=True)
@@ -69,8 +74,8 @@ class PaintDropoffConfig:
 
     # Return from pivot completion back to the pickup align pose before release.
     strategy: str = "pickup_origin"
-    release_align_vel_percent: float = 60.0
-    release_align_acc_percent: float = 40.0
+    release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
+    release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)
@@ -78,14 +83,14 @@ class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
     # Joint-6 unwind velocity percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_vel_percent: float = 100.0
+    unwind_vel_percent: float = 100.0  # [LIVE SETTINGS]
     # Joint-6 unwind acceleration percentage sent to the ROS2 /unwind/joint6 endpoint.
-    unwind_acc_percent: float = 60.0
+    unwind_acc_percent: float = 60.0  # [LIVE SETTINGS]
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
     # Move from the post-unwind pose back to the calibration movement group pose.
-    calibration_move_vel_percent: float = 30.0
-    calibration_move_acc_percent: float = 40.0
+    calibration_move_vel_percent: float = 30.0  # [LIVE SETTINGS]
+    calibration_move_acc_percent: float = 40.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)
@@ -173,8 +178,8 @@ class PaintProcessConfig:
     contour_pixel_to_mm_mode: str = PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
     # Sample current robot poses during blocking paint trajectory execution and compare
     # them with the commanded path. Disabled by default because it polls the robot state.
-    enable_execution_motion_trace: bool = False
-    execution_motion_trace_sample_period_s: float = 0.05
+    enable_execution_motion_trace: bool = False  # [LIVE SETTINGS]
+    execution_motion_trace_sample_period_s: float = 0.05  # [LIVE SETTINGS]
     # Selects the active paint plane: "xz_y_ry" pivots in X/Z using robot RY; "xy_z_rz" paints in X/Y using RZ.
     pivot_motion_plane: str = "xz_y_ry"
     # pivot_motion_plane: str = "xy_z_rz"
@@ -189,7 +194,7 @@ class PaintProcessConfig:
     mirror_xz_ry_execution_rotation_value: bool = True
     pickup_axis_alignment_sign_value: float = 1.0
     # Turns the vacuum pump on/off around pickup and release.
-    enable_vacuum_pump: bool = False
+    enable_vacuum_pump: bool = True
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
@@ -201,7 +206,7 @@ class PaintProcessConfig:
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
-    enable_pivot_debug_plot: bool = False
+    enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
 
 
 

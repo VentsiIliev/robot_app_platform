@@ -5,6 +5,7 @@ from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.vision import IVisionService
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 from src.robot_systems.paint.timing import timed_step
+from src.robot_systems.paint.processes.paint.config import PaintNavigationReturnConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class PaintNavigationService:
         unwind_queue_if_busy: bool = True,
         calibration_move_vel_percent: float | None = None,
         calibration_move_acc_percent: float | None = None,
+        paint_process_config_service: object | None = None,
     ):
         self._nav = navigation
         self._vision = vision
@@ -41,11 +43,31 @@ class PaintNavigationService:
         self._calibration_move_acc_percent = (
             None if calibration_move_acc_percent is None else float(calibration_move_acc_percent)
         )
+        self._paint_process_config_service = paint_process_config_service
         self._observed_area_by_group = {
             str(group_id).strip(): str(area_id).strip()
             for group_id, area_id in (observed_area_by_group or {}).items()
             if str(group_id).strip() and str(area_id).strip()
         }
+
+    def _navigation_return_config(self) -> PaintNavigationReturnConfig:
+        service = self._paint_process_config_service
+        if service is not None:
+            try:
+                return service.get_snapshot().navigation_return
+            except Exception:
+                _logger.debug("[NAV] Failed to read live Paint navigation return settings", exc_info=True)
+        return PaintNavigationReturnConfig(
+            unwind_vel_percent=self._unwind_vel_percent,
+            unwind_acc_percent=self._unwind_acc_percent,
+            unwind_queue_if_busy=self._unwind_queue_if_busy,
+            calibration_move_vel_percent=(
+                30.0 if self._calibration_move_vel_percent is None else self._calibration_move_vel_percent
+            ),
+            calibration_move_acc_percent=(
+                40.0 if self._calibration_move_acc_percent is None else self._calibration_move_acc_percent
+            ),
+        )
 
     @property
     def _capture_z_offset(self) -> float:
@@ -136,16 +158,9 @@ class PaintNavigationService:
         z_offset: float,
         wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
-        move_velocity = (
-            self._calibration_move_vel_percent
-            if group_name == self._GROUP_CALIBRATION
-            else None
-        )
-        move_acceleration = (
-            self._calibration_move_acc_percent
-            if group_name == self._GROUP_CALIBRATION
-            else None
-        )
+        nav_return = self._navigation_return_config()
+        move_velocity = nav_return.calibration_move_vel_percent if group_name == self._GROUP_CALIBRATION else None
+        move_acceleration = nav_return.calibration_move_acc_percent if group_name == self._GROUP_CALIBRATION else None
         if group_name == self._GROUP_CALIBRATION:
             _logger.info(
                 "[NAV] Calibration return move override vel=%s acc=%s",
@@ -195,17 +210,18 @@ class PaintNavigationService:
         if self._robot is None:
             _logger.warning("[NAV] Calibration return blocked: robot service unavailable for Joint 6 unwind")
             return False
+        nav_return = self._navigation_return_config()
         _logger.info(
             "[NAV] Unwinding Joint 6 before calibration return vel=%.1f acc=%.1f queue_if_busy=%s",
-            self._unwind_vel_percent,
-            self._unwind_acc_percent,
+            nav_return.unwind_vel_percent,
+            nav_return.unwind_acc_percent,
             self._unwind_queue_if_busy,
         )
         if not self._robot.unwind_joint6(
             blocking=True,
             queue_if_busy=self._unwind_queue_if_busy,
-            vel=self._unwind_vel_percent,
-            acc=self._unwind_acc_percent,
+            vel=nav_return.unwind_vel_percent,
+            acc=nav_return.unwind_acc_percent,
         ):
             _logger.warning("[NAV] Calibration return blocked: Joint 6 unwind failed")
             return False

@@ -187,6 +187,8 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
         kwargs = factory.call_args.kwargs
         self.assertIs(kwargs["modbus_config"], modbus_config)
         self.assertEqual(kwargs["vacuum_config"].pump_register, 128)
+        self.assertEqual(kwargs["vacuum_config"].blow_off_register, 129)
+        self.assertEqual(kwargs["vacuum_config"].blow_off_pulse_seconds, 0.2)
 
     def test_build_vacuum_pump_service_returns_none_on_build_failure(self) -> None:
         ctx = SimpleNamespace(settings=SimpleNamespace(get=MagicMock(side_effect=RuntimeError("bad"))))

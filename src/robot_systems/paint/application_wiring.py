@@ -134,6 +134,7 @@ def _build_paint_path_executor(robot_system):
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+        paint_process_config_service=getattr(robot_system, "_paint_process_config_service", None),
     )
     motion_config = PaintExecutorMotionConfig(
         enable_vacuum_pump=_PAINT_PROCESS.enable_vacuum_pump,
@@ -349,6 +350,23 @@ def _build_paint_contour_editor_application(robot_system):
             messaging=ms,
             jog_service=jog_service,
         )
+    )
+
+
+def _build_paint_process_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_process_settings.paint_process_settings_factory import (
+        PaintProcessSettingsFactory,
+    )
+    from src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service import (
+        PaintProcessSettingsApplicationService,
+    )
+
+    service = PaintProcessSettingsApplicationService(
+        process_config_service=robot_system._paint_process_config_service
+    )
+    return WidgetApplication(
+        widget_factory=lambda _ms: PaintProcessSettingsFactory().build(service)
     )
 
 

@@ -47,6 +47,7 @@ class PickupOriginDropoffStrategy:
     name = "pickup_origin"
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
+        dropoff = owner._paint_process_config().dropoff
         plan = owner._last_pickup_plan
         if plan is None:
             _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")
@@ -54,8 +55,8 @@ class PickupOriginDropoffStrategy:
                 DropoffWaypoint(
                     label="Release at current pose",
                     pose=None,
-                    vel_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
-                    acc_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
                     release_here=True,
                 ),
             )
@@ -64,8 +65,8 @@ class PickupOriginDropoffStrategy:
                 DropoffWaypoint(
                     label="Returning to align pose for release",
                     pose=list(plan.align_pose),
-                    vel_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_vel_percent,
-                    acc_percent=PAINT_PROCESS_CONFIG.dropoff.release_align_acc_percent,
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
                     release_here=True,
                 ),
             )
