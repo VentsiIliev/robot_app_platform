@@ -12,12 +12,11 @@ from src.robot_systems.paint.processes.paint.config import (
 
 _logger = logging.getLogger(__name__)
 _PAINT_PROCESS = PAINT_PROCESS_CONFIG
+_PAINT_EXECUTION_TARGET_POINT = "tool"
 
 
 def _get_paint_execution_target_point_name(robot_system) -> str:
-    target_key = str(_PAINT_PROCESS.execution_target_point or "camera").strip().lower()
-    if target_key not in {"camera", "tool"}:
-        raise ValueError(f"Unsupported paint execution target point: {target_key}")
+    target_key = _PAINT_EXECUTION_TARGET_POINT
     return getattr(robot_system.get_target_point_definition(target_key), "name", "") or target_key
 
 

@@ -17,7 +17,6 @@ class PaintProcessSettingsMapper:
         dropoff = settings.dropoff
         nav = settings.navigation_return
         return {
-            "execution_target_point": settings.execution_target_point,
             "enable_vacuum_pump": settings.enable_vacuum_pump,
             "apply_camera_to_tcp_for_pickup": settings.apply_camera_to_tcp_for_pickup,
             "enable_z_shift_pixel_compensation": settings.enable_z_shift_pixel_compensation,
@@ -31,7 +30,6 @@ class PaintProcessSettingsMapper:
             "mirror_xz_ry_execution_rotation_value": settings.mirror_xz_ry_execution_rotation_value,
             "pickup_axis_alignment_sign_value": settings.pickup_axis_alignment_sign_value,
             "combine_change_plane_with_first_contact": pickup.combine_change_plane_with_first_contact,
-            "pickup_default_z_mm": pickup.default_z_mm,
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
             "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
@@ -71,7 +69,6 @@ class PaintProcessSettingsMapper:
     def from_flat_dict(flat: dict, base: PaintProcessConfig) -> PaintProcessConfig:
         pickup = replace(
             base.pickup_motion,
-            default_z_mm=float(flat.get("pickup_default_z_mm", base.pickup_motion.default_z_mm)),
             approach_offset_mm=float(flat.get("pickup_approach_offset_mm", base.pickup_motion.approach_offset_mm)),
             contact_offset_mm=float(flat.get("pickup_contact_offset_mm", base.pickup_motion.contact_offset_mm)),
             initial_lift_clearance_mm=float(
@@ -144,7 +141,6 @@ class PaintProcessSettingsMapper:
         )
         return replace(
             base,
-            execution_target_point=str(flat.get("execution_target_point", base.execution_target_point)),
             enable_z_shift_pixel_compensation=bool(
                 flat.get("enable_z_shift_pixel_compensation", base.enable_z_shift_pixel_compensation)
             ),

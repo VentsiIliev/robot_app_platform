@@ -51,8 +51,6 @@ def _toggle(key: str, label: str, default: bool = False) -> SettingField:
 def build_process_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("General"), [
-            SettingField("execution_target_point", _t("Execution Target Point"), "combo",
-                         default="tool", choices=["tool", "camera"]),
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
             _toggle("apply_camera_to_tcp_for_pickup", "Apply Camera-to-TCP Pickup Offset", True),
             _toggle("enable_z_shift_pixel_compensation", "Enable Z-Shift Pixel Compensation"),
@@ -64,7 +62,7 @@ def build_process_groups() -> list[SettingGroup]:
                          default=PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
                          choices=[PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR, PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL]),
             SettingField("primary_group_id", _t("Primary Movement Group"), "line_edit", default="PAINTING"),
-            SettingField("secondary_group_id", _t("Secondary Movement Group"), "line_edit", default="PAINTING_NEW"),
+            SettingField("secondary_group_id", _t("Secondary Movement Group"), "line_edit", default="Horizontal Shaft"),
         ]),
     ]
 
@@ -105,7 +103,6 @@ def build_motion_speed_groups() -> list[SettingGroup]:
 def build_distance_offset_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("Pickup Heights"), [
-            _mm_field("pickup_default_z_mm", "Default Pickup Z", min_val=0.0),
             _mm_field("pickup_approach_offset_mm", "Approach Offset", min_val=0.0),
             _mm_field("pickup_contact_offset_mm", "Contact Offset", min_val=0.0),
             _mm_field("pickup_initial_lift_clearance_mm", "Initial Lift Clearance", min_val=0.0),

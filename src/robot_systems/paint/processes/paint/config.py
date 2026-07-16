@@ -18,7 +18,6 @@ class PickupMotionConfig:
     """
 
     # Heights and clearances.
-    default_z_mm: float = 200.0
     approach_offset_mm: float = 100.0  # [LIVE SETTINGS]
     contact_offset_mm: float = 2.0  # [LIVE SETTINGS]
     initial_lift_clearance_mm: float = 20.0  # [LIVE SETTINGS]
@@ -169,8 +168,6 @@ class PaintPivotProfile:
 @dataclass(frozen=True)
 class PaintProcessConfig:
     """Single source of truth for platform-side paint process behavior."""
-    # Target point used when transforming contours and pickup points into robot coordinates.
-    execution_target_point: str = "tool"
     # Apply the legacy camera-height Z compensation during pixel-to-mm conversion.
     enable_z_shift_pixel_compensation: bool = False
     # Controls whether contours are converted with raw PPM geometry or calibrated homography/residuals.
@@ -186,7 +183,7 @@ class PaintProcessConfig:
     # Navigation group used for pickup/camera-table alignment poses.
     primary_group_id: str = "PAINTING"
     # Navigation group used as the paint/pivot reference pose for XZ/RY painting.
-    secondary_group_id: str = "PAINTING_NEW"
+    secondary_group_id: str = "Horizontal Shaft"
     # Main pivot tuning knobs. The lower-level executor flags are derived from these.
     pivot_axis: str = "x"
     pivot_direction: str = "reverse"

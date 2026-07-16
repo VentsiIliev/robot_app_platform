@@ -18,8 +18,8 @@ class TestPaintProcessConfig(unittest.TestCase):
         default_config = PaintProcessConfig()
         xy_config = PaintProcessConfig(pivot_motion_plane="xy_z_rz")
 
-        self.assertEqual(PAINT_PROCESS_CONFIG.paint_base_group_id, "PAINTING_NEW")
-        self.assertEqual(default_config.paint_base_group_id, "PAINTING_NEW")
+        self.assertEqual(PAINT_PROCESS_CONFIG.paint_base_group_id, "Horizontal Shaft")
+        self.assertEqual(default_config.paint_base_group_id, "Horizontal Shaft")
         self.assertEqual(default_config.pickup_base_group_id, "PAINTING")
         self.assertEqual(default_config.pivot_side, "positive")
         self.assertEqual(xy_config.paint_base_group_id, "PAINTING")

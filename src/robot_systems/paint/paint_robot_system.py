@@ -86,11 +86,18 @@ class PaintRobotSystem(BaseRobotSystem):
             has_trajectory_execution=True,
          ),
         MovementGroupDefinition(
-            id="PAINTING_NEW",
-            label="Painting2",
+            id="Horizontal Shaft",
+            label="Horizontal Shaft",
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
+        MovementGroupDefinition(
+            id="Vertical Shaft",
+            label="Vertical Shaft",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+
 
     ]
 

@@ -26,9 +26,9 @@ Status as of the first runtime wiring pass:
 | Runtime config service | Done | Added `PaintProcessConfigService` as the single runtime access point. UI saves update this service snapshot. |
 | Runtime wiring - motion speeds | Done for first pass | Pickup, cleanup, dropoff release-align, pre-dropoff unwind, and calibration-return speed values read from the runtime settings service. |
 | Runtime wiring - cleanup settings | Done | Cleanup enable flag, second-pass flag, spacing, cleanup Z offset, and second-pass pivot Z offset read from the per-cycle runtime snapshot. |
-| Runtime wiring - distance/offset settings | Mostly done | Pickup contact offset, approach offset, lift clearance, and cleanup offsets read from the per-cycle runtime snapshot. `default_z_mm` is not wired because it was not part of the existing runtime calculation path. |
+| Runtime wiring - distance/offset settings | Done for current exposed fields | Pickup contact offset, approach offset, lift clearance, and cleanup offsets read from the per-cycle runtime snapshot. Unused `default_z_mm` was removed from the exposed settings. |
 | Runtime wiring - diagnostics settings | Done | Pivot debug plot, execution motion trace, and trace sample period read from the per-cycle runtime snapshot. |
-| Runtime wiring - remaining non-speed knobs | Not started | Geometry, mode selection, vacuum, target-point behavior, and queue behavior still use the existing config path. |
+| Runtime wiring - remaining non-speed knobs | Not started | Geometry, mode selection, vacuum, and queue behavior still use the existing config path. Execution target point is intentionally no longer configurable. |
 
 Implemented files include:
 
@@ -409,7 +409,6 @@ Group physical distances separately from speeds:
 ```text
 Distances & Offsets
   Pickup Heights
-    Default pickup Z
     Approach offset
     Contact offset
     Initial lift clearance
@@ -426,7 +425,6 @@ High-level choices and feature flags:
 ```text
 Process
   General
-    Execution target point
     Enable vacuum pump
     Apply camera-to-TCP pickup offset
     Enable Z-shift pixel compensation
@@ -499,7 +497,7 @@ The UI should constrain values with field-level min/max/choices where possible:
 - distances: double spin boxes with `mm` suffix
 - trace period: double spin box with seconds suffix
 
-Validation should prevent saving unsupported enum-like values such as unknown motion planes, target points, pivot directions, or pixel-to-mm modes.
+Validation should prevent saving unsupported enum-like values such as unknown motion planes, pivot directions, or pixel-to-mm modes.
 
 ## Save Behavior
 
@@ -582,6 +580,8 @@ Runtime service checks completed:
 - `PaintProcessConfigService.save(...)` updates the in-memory snapshot
 - executor can read a modified runtime snapshot
 - `PaintProcessSettings` remains registered in the Service folder
+- obsolete `execution_target_point` values in older JSON are ignored by the serializer
+- obsolete pickup `default_z_mm` values in older JSON are ignored by the serializer
 
 Manual preview completed:
 
@@ -596,29 +596,29 @@ There are still many valid references to `PAINT_PROCESS_CONFIG`.
 The first runtime passes intentionally moved motion-speed values and cleanup behavior first. The following areas still use the existing module-level config and should be wired in later passes:
 
 - process geometry and pivot mode
-- execution target point
 - pixel-to-mm mode
 - vacuum enable flag
 - queue-if-busy behavior
 
 This is intentional for incremental safety, but it means the UI currently exposes more knobs than the runtime consumes live.
 
-### 1a. `default_z_mm` is not currently live
+### 1b. Execution target point is fixed to `tool`
 
-`PickupMotionConfig.default_z_mm` exists in `config.py` and is exposed in the UI, but the existing pickup planner did not use it in the active pickup-Z calculation.
+`execution_target_point` was removed from `PaintProcessConfig` and the Paint Process Settings UI.
 
-Current runtime behavior calculates pickup Z from:
+The paint path preparation wiring now always resolves the `tool` target point. The previous `camera` option was treated as a testing-only escape hatch and should not be exposed as a production Paint process parameter. Older saved JSON files that still contain `execution_target_point` remain load-compatible because the serializer ignores removed fields.
+
+### 1a. Unused pickup `default_z_mm` was removed
+
+`PickupMotionConfig.default_z_mm` was removed from `config.py` and from the Paint Process Settings UI because the active pickup planner did not use it.
+
+Current runtime behavior still calculates pickup Z from:
 
 ```text
 robot safety z_min + workpiece height + contact_offset_mm
 ```
 
-Wiring `default_z_mm` directly would change current behavior because its existing default is `200.0`. For now it is intentionally left unwired until the expected semantics are clarified:
-
-- use as an absolute pickup Z override
-- use only when no workpiece height is available
-- remove it from the UI if it is obsolete
-- migrate the current calculation into an explicit mode
+Older saved JSON files that still contain `pickup_motion.default_z_mm` remain load-compatible because the serializer ignores removed fields.
 
 ### 2. Settings UI exposes non-live fields
 
