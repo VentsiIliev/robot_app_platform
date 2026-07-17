@@ -12,7 +12,6 @@ from src.engine.geometry.planar import (
     nearest_axis_equivalent_degrees,
     rotate_xy,
 )
-from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
@@ -132,7 +131,7 @@ class PaintExecutorDependencies:
     base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     pickup_base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     cleanup_base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
-    calibration_position_callback: Optional[Callable[[], bool]] = None
+    calibration_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
@@ -225,7 +224,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             base_position_provider=legacy_options.get("base_position_provider"),
             pickup_base_position_provider=legacy_options.get("pickup_base_position_provider"),
             cleanup_base_position_provider=legacy_options.get("cleanup_base_position_provider"),
-            calibration_position_callback=legacy_options.get("calibration_position_callback"),
+            calibration_position_provider=legacy_options.get("calibration_position_provider"),
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
@@ -259,7 +258,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._base_position_provider = dependencies.base_position_provider
         self._pickup_base_position_provider = dependencies.pickup_base_position_provider or dependencies.base_position_provider
         self._cleanup_base_position_provider = dependencies.cleanup_base_position_provider
-        self._calibration_position_callback = dependencies.calibration_position_callback
+        self._calibration_position_provider = dependencies.calibration_position_provider
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
@@ -319,6 +318,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._active_contact_base_z_offset_mm: float = 0.0
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
+        self._dropoff_unwind_prepared: bool = False
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
 
     def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
@@ -684,8 +684,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return ok
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
-    def _move_custom_pickup_sequence(self, label: str, segments: list[MotionSequenceSegment]) -> bool:
-        """Execute an experimental custom pickup sequence with per-segment speed/accel."""
+    def _move_ordered_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
+        """Execute a pickup sequence as ordered linear motion segments."""
         _logger.info(
             "[PICKUP] %s tool=%d user=%d segments=%d",
             label,
@@ -693,16 +693,16 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._pickup_user,
             len(segments),
         )
-        move_sequence = getattr(self._robot_service, "move_custom_sequence", None)
-        if not callable(move_sequence):
-            _logger.info("[PICKUP] Custom motion sequence unavailable")
+        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
+        if not callable(execute_chain):
+            _logger.info("[PICKUP] Ordered motion chain unavailable")
             return False
         return bool(
-            move_sequence(
+            execute_chain(
                 segments=segments,
                 tool=self._pickup_tool,
                 user=self._pickup_user,
-                wait_to_reach=True,
+                blocking=True,
             )
         )
 
@@ -845,6 +845,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     @timed_step(_logger, "prepare_dropoff_unwind")
     def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:
         """Move to the safe unwind orientation, then relieve Joint 6 before dropoff."""
+        if self._dropoff_unwind_prepared:
+            _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
+            return True, ""
         config = self._paint_process_config()
         if self._configured_contact_motion_plane == "xz_y_ry":
             plan = self._last_pickup_plan
@@ -879,19 +882,40 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Return whether XY/RZ pickup must pass through calibration before pivot staging."""
         return self._configured_contact_motion_plane == "xy_z_rz"
 
+    def _calibration_return_speed(self) -> tuple[float, float]:
+        config = self._paint_process_config()
+        return (
+            float(config.navigation_return.calibration_move_vel_percent),
+            float(config.navigation_return.calibration_move_acc_percent),
+        )
+
+    def _resolve_calibration_position(self) -> list[float] | None:
+        if self._calibration_position_provider is None:
+            return None
+        try:
+            position = self._calibration_position_provider()
+        except Exception:
+            _logger.exception("[PICKUP] Failed to resolve calibration position")
+            return None
+        if position is None:
+            return None
+        return list(position)
+
     @timed_step(_logger, "xy_rz_pickup_to_calibration_before_pivot")
     def _return_to_calibration_before_xy_rz_pivot(self) -> tuple[bool, str]:
         """Move the held part to calibration after pickup alignment and before pivot staging."""
         if not self._should_return_to_calibration_between_xy_rz_pickup_and_pivot():
             return True, ""
-        if self._calibration_position_callback is None:
-            return False, "Pickup aligned, but calibration move callback is not configured before XY/RZ pivot"
-        try:
-            moved = bool(self._calibration_position_callback())
-        except Exception:
-            _logger.exception("[PICKUP] Calibration return before XY/RZ pivot failed")
-            return False, "Pickup aligned, but return to calibration failed before XY/RZ pivot"
-        if not moved:
+        position = self._resolve_calibration_position()
+        if position is None:
+            return False, "Pickup aligned, but calibration position is not configured before XY/RZ pivot"
+        velocity, acceleration = self._calibration_return_speed()
+        if not self._move_pickup_phase(
+            "Returning to calibration before XY/RZ pivot",
+            position,
+            velocity=velocity,
+            acceleration=acceleration,
+        ):
             return False, "Pickup aligned, but return to calibration failed before XY/RZ pivot"
         return True, ""
 
@@ -900,19 +924,185 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Move to calibration after XY/RZ paint, then unwind Joint 6 there before cleanup."""
         if self._configured_contact_motion_plane != "xy_z_rz":
             return True, ""
-        if self._calibration_position_callback is None:
-            return False, "XY/RZ paint succeeded, but calibration move callback is not configured before cleanup"
-        try:
-            moved = bool(self._calibration_position_callback())
-        except Exception:
-            _logger.exception("[EDGE_CLEANUP] Calibration return before XY/RZ cleanup failed")
-            return False, "XY/RZ paint succeeded, but return to calibration failed before edge cleanup"
-        if not moved:
+        position = self._resolve_calibration_position()
+        if position is None:
+            return False, "XY/RZ paint succeeded, but calibration position is not configured before cleanup"
+        velocity, acceleration = self._calibration_return_speed()
+        if not self._move_pickup_phase(
+            "Returning to calibration before XY/RZ cleanup unwind",
+            position,
+            velocity=velocity,
+            acceleration=acceleration,
+        ):
             return False, "XY/RZ paint succeeded, but return to calibration failed before edge cleanup"
         ok, msg = self._edge_cleanup.unwind_joint6_before_cleanup(
             failure_context="XY/RZ paint succeeded, but Joint 6 unwind failed at calibration before edge cleanup"
         )
         return ok, msg
+
+    def _ordered_dropoff_preparation_segments(self) -> tuple[list[dict], list[float] | None]:
+        """Return ordered-chain segments that prepare the held part for release."""
+        config = self._paint_process_config()
+        segments: list[dict] = []
+        final_pose: list[float] | None = None
+        if self._configured_contact_motion_plane == "xz_y_ry" and self._last_pickup_plan is not None:
+            final_pose = list(self._last_pickup_plan.align_pose)
+            segments.append(
+                {
+                    "type": "linear",
+                    "label": "prepare_dropoff_align",
+                    "position": final_pose,
+                    "vel": float(config.dropoff.release_align_vel_percent),
+                    "acc": float(config.dropoff.release_align_acc_percent),
+                }
+            )
+        segments.append(
+            {
+                "type": "unwind_joint6",
+                "label": "prepare_dropoff_unwind",
+                "vel": float(config.navigation_return.unwind_vel_percent),
+                "acc": float(config.navigation_return.unwind_acc_percent),
+            }
+        )
+        return segments, final_pose
+
+    @timed_step(_logger, "ordered_paint_motion_chain")
+    def _try_execute_ordered_motion_cycle(
+        self,
+        prepared_workpiece: WorkpieceExecutionPlan,
+        *,
+        started: float,
+    ) -> tuple[bool, str, int] | None:
+        """Execute pickup, paint, optional cleanup, and pre-dropoff motion as one ordered chain."""
+        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
+        if not callable(execute_chain):
+            return None
+
+        pickup_plan = self._pickup.build_plan(prepared_workpiece)
+        if pickup_plan is None:
+            return False, "Could not compute pickup-to-pivot poses", 0
+        self._last_pickup_plan = pickup_plan.motion_plan
+
+        if pickup_plan.vacuum_on_before_moves:
+            ok, msg = self._turn_vacuum_on()
+            if not ok:
+                return False, msg, 0
+
+        if pickup_plan.change_plane_combined_with_first_contact:
+            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
+                _logger.info(
+                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
+                )
+
+        paint_paths: list[list[list[float]]] = []
+        paint_jobs: list[dict] = []
+        ok, msg, total_waypoints = self._paint_contact.execute(
+            prepared_workpiece,
+            execute_robot=False,
+            collected_command_paths=paint_paths,
+            collected_command_jobs=paint_jobs,
+        )
+        if not ok:
+            self._edge_cleanup.cancel_early_preplanning()
+            return False, msg, total_waypoints
+        if not paint_paths:
+            return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
+
+        segments: list[dict] = []
+        calibration_pose: list[float] | None = None
+        calibration_vel, calibration_acc = self._calibration_return_speed()
+        for waypoint in pickup_plan.waypoints:
+            segments.append(
+                {
+                    "type": "linear",
+                    "label": waypoint.label,
+                    "position": list(waypoint.pose),
+                    "vel": float(waypoint.vel_percent),
+                    "acc": float(waypoint.acc_percent),
+                }
+            )
+            if (
+                waypoint.label == "Aligning workpiece to paint axis"
+                and self._should_return_to_calibration_between_xy_rz_pickup_and_pivot()
+            ):
+                calibration_pose = self._resolve_calibration_position()
+                if calibration_pose is None:
+                    return False, "Pickup aligned, but calibration position is not configured before XY/RZ pivot", total_waypoints
+                segments.append(
+                    {
+                        "type": "linear",
+                        "label": "xy_rz_pickup_to_calibration_before_pivot",
+                        "position": list(calibration_pose),
+                        "vel": calibration_vel,
+                        "acc": calibration_acc,
+                    }
+                )
+
+        for path_index, command_path in enumerate(paint_paths):
+            job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
+            segments.append(
+                {
+                    "type": "path",
+                    "label": f"paint_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
+                    "path": command_path,
+                    "vel": float(job.get("vel", 10.0)),
+                    "acc": float(job.get("acc", 30.0)),
+                }
+            )
+
+        final_pose: list[float] | None = list(paint_paths[-1][-1])
+        if self._edge_cleanup.should_run_after_xz_ry():
+            ok, msg, cleanup_waypoints, cleanup_segments, cleanup_final_pose = (
+                self._edge_cleanup.build_ordered_cleanup_chain_extension(
+                    prepared_workpiece,
+                    started=started,
+                )
+            )
+            total_waypoints += cleanup_waypoints
+            if not ok:
+                return False, msg, total_waypoints
+            segments.extend(cleanup_segments)
+            final_pose = cleanup_final_pose
+        elif self._edge_cleanup.should_run_after_xy_rz():
+            calibration_pose = calibration_pose or self._resolve_calibration_position()
+            if calibration_pose is None:
+                return False, "XY/RZ paint succeeded, but calibration position is not configured before cleanup", total_waypoints
+            ok, msg, cleanup_waypoints, cleanup_segments, cleanup_final_pose = (
+                self._edge_cleanup.build_ordered_cleanup_chain_extension(
+                    prepared_workpiece,
+                    started=started,
+                    align_pose=calibration_pose,
+                )
+            )
+            total_waypoints += cleanup_waypoints
+            if not ok:
+                return False, msg, total_waypoints
+            segments.extend(cleanup_segments)
+            final_pose = cleanup_final_pose
+        else:
+            dropoff_segments, dropoff_final_pose = self._ordered_dropoff_preparation_segments()
+            segments.extend(dropoff_segments)
+            final_pose = dropoff_final_pose or final_pose
+
+        _logger.info(
+            "[ORDERED_CHAIN] executing full paint motion chain: segments=%d paint_paths=%d cleanup=%s",
+            len(segments),
+            len(paint_paths),
+            self._edge_cleanup.should_run_after_xz_ry() or self._edge_cleanup.should_run_after_xy_rz(),
+        )
+        result = execute_chain(
+            segments,
+            tool=self._pickup_tool,
+            user=self._pickup_user,
+            blocking=True,
+        )
+        if result not in (0, True, None):
+            return False, f"Ordered paint motion chain failed with code {result}", total_waypoints
+
+        self._dropoff_unwind_prepared = True
+        if final_pose is not None:
+            self._last_process_end_pose = list(final_pose)
+        return True, "", total_waypoints
 
     def execute_paint_process(
         self,
@@ -934,19 +1124,29 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             started = perf_counter()
             self._refresh_paint_process_config_snapshot()
             self._apply_paint_process_contact_config()
+            self._dropoff_unwind_prepared = False
             total_waypoints = 0
             result: tuple[bool, str]
 
-            # Phase 1: pickup, lift, align, change plane, and stage at first contact.
-            ok, msg = self._pickup.execute(prepared_workpiece)
-            if not ok:
-                _logger.info("[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f", elapsed_s(started))
-                result = (False, msg)
+            ordered_result = self._try_execute_ordered_motion_cycle(prepared_workpiece, started=started)
+            if ordered_result is not None:
+                ok, msg, total_waypoints = ordered_result
+                result = (True, "") if ok else (False, msg)
             else:
+                # Phase 1: pickup, lift, align, change plane, and stage at first contact.
+                ok, msg = self._pickup.execute(prepared_workpiece)
+                if not ok:
+                    _logger.info("[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f", elapsed_s(started))
+                    result = (False, msg)
+                else:
+                    result = (True, "")
+
+            if ordered_result is None and result[0]:
                 with timed_block(_logger, "paint_contact_cleanup_dropoff"):
                     # Phase 2: execute the primary paint-contact path.
                     ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece)
                     if not ok:
+                        self._edge_cleanup.cancel_early_preplanning()
                         _logger.info("[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f", elapsed_s(started))
                         result = (False, msg)
                     elif self._edge_cleanup.should_run_after_xz_ry():
@@ -997,6 +1197,53 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                         ))
                 with timed_block(_logger, "return_after_paint_process"):
                     # Phase 6: return the robot to its configured post-process position.
+                    if self._post_execute_callback is None:
+                        _logger.info("[EXECUTE] Post-execute return skipped: callback not configured")
+                    else:
+                        try:
+                            return_started = perf_counter()
+                            moved = bool(self._post_execute_callback())
+                        except Exception:
+                            _logger.exception("[EXECUTE] Post-execute callback failed")
+                            _logger.info(
+                                "[TIMING] paint_process success=false stage=post_return total_elapsed_s=%.3f",
+                                elapsed_s(started),
+                            )
+                            result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
+                                False,
+                                f"{result[1]}; additionally, return-to-calibration failed",
+                            )
+                        else:
+                            if not moved:
+                                _logger.info(
+                                    "[TIMING] paint_process success=false stage=post_return return_elapsed_s=%.3f total_elapsed_s=%.3f",
+                                    elapsed_s(return_started),
+                                    elapsed_s(started),
+                                )
+                                result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
+                                    False,
+                                    f"{result[1]}; additionally, return-to-calibration failed",
+                                )
+
+            if ordered_result is not None:
+                if result[0]:
+                    ok, msg = self._dropoff.execute(prepared_workpiece)
+                    if not ok:
+                        _logger.info("[TIMING] paint_process success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
+                        result = (False, msg)
+
+                if result[0]:
+                    _logger.info(
+                        "[EXECUTE] Paint process completed: jobs=%d total_waypoints=%d",
+                        len(prepared_workpiece.execution_jobs),
+                        total_waypoints,
+                    )
+                    result = (True, (
+                        f"Paint process completed "
+                        f"for {len(prepared_workpiece.execution_jobs)} path(s), {total_waypoints} waypoints"
+                    ))
+
+                with timed_block(_logger, "return_after_paint_process"):
                     if self._post_execute_callback is None:
                         _logger.info("[EXECUTE] Post-execute return skipped: callback not configured")
                     else:

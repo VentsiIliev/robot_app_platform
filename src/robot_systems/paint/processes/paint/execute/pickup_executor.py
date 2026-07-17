@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
 
-from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.timing import timed_block, timed_step
@@ -141,6 +140,9 @@ class PaintPickupExecutor:
         self._owner = owner
         self._strategy = strategy or DefaultPickupStrategy()
 
+    def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
+        return self._strategy.build_plan(self._owner, prepared_workpiece)
+
     @timed_step(_logger, "pickup_to_pivot")
     def execute(self, prepared_workpiece: WorkpieceExecutionPlan) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
@@ -151,7 +153,7 @@ class PaintPickupExecutor:
 
         plan_started = perf_counter()
         with timed_block(_logger, "pickup_to_pivot_prepare", label="build_pickup_transfer_plan"):
-            pickup_plan = self._strategy.build_plan(self._owner, prepared_workpiece)
+            pickup_plan = self.build_plan(prepared_workpiece)
 
         if pickup_plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
@@ -216,27 +218,27 @@ class PaintPickupExecutor:
                     "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
                 )
         segments = [
-            MotionSequenceSegment(
-                position=list(waypoint.pose),
-                velocity=float(waypoint.vel_percent),
-                acceleration=float(waypoint.acc_percent),
-                motion_type="linear",
-                blend_radius=0.0,
-            )
+            {
+                "type": "linear",
+                "label": waypoint.label,
+                "position": list(waypoint.pose),
+                "vel": float(waypoint.vel_percent),
+                "acc": float(waypoint.acc_percent),
+            }
             for waypoint in waypoints
         ]
         _logger.info(
             "[PICKUP] Executing custom pickup sequence labels=%s vel_acc=%s",
             " -> ".join(waypoint.label for waypoint in waypoints),
             [
-                (round(float(segment.velocity), 3), round(float(segment.acceleration), 3))
+                (round(float(segment["vel"]), 3), round(float(segment["acc"]), 3))
                 for segment in segments
             ],
         )
-        move_sequence = getattr(self._owner, "_move_custom_pickup_sequence", None)
+        move_sequence = getattr(self._owner, "_move_ordered_pickup_sequence", None)
         if not callable(move_sequence):
             return False
-        return bool(move_sequence("Custom pickup sequence", segments))
+        return bool(move_sequence("Ordered pickup sequence", segments))
 
     @staticmethod
     def _failure_message_for(label: str) -> str:

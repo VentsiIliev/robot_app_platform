@@ -13,6 +13,12 @@ from src.robot_systems.paint.timing import timed_step
 _logger = logging.getLogger(__name__)
 
 
+def _poses_close(left: list[float] | None, right: list[float] | None, tolerance: float = 1e-3) -> bool:
+    if left is None or right is None or len(left) < 6 or len(right) < 6:
+        return False
+    return all(abs(float(a) - float(b)) <= tolerance for a, b in zip(left[:6], right[:6]))
+
+
 @dataclass(frozen=True)
 class DropoffWaypoint:
     """One dropoff move or release action."""
@@ -110,7 +116,17 @@ class PaintDropoffExecutor:
         for index, waypoint in enumerate(plan.waypoints, start=1):
             waypoint_started = perf_counter()
             if waypoint.pose is not None:
-                if not self._owner._move_pickup_phase(
+                already_at_release_pose = (
+                    bool(getattr(self._owner, "_dropoff_unwind_prepared", False))
+                    and waypoint.release_here
+                    and _poses_close(waypoint.pose, getattr(self._owner, "_last_process_end_pose", None))
+                )
+                if already_at_release_pose:
+                    _logger.info(
+                        "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
+                        waypoint.label,
+                    )
+                elif not self._owner._move_pickup_phase(
                     waypoint.label,
                     list(waypoint.pose),
                     velocity=waypoint.vel_percent,

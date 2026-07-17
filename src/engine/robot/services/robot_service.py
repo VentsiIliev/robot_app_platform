@@ -134,27 +134,17 @@ class RobotService(IRobotService):
             orientation_mode=orientation_mode,
         )
 
-    def execute_staged_trajectory(
+    def execute_ordered_motion_chain(
         self,
-        stage_position,
-        path,
+        segments: list[dict],
         tool: int,
         user: int,
-        stage_vel: float,
-        stage_acc: float,
-        path_vel: float,
-        path_acc: float,
         blocking: bool = False,
     ):
-        return self._robot.execute_staged_trajectory(
-            stage_position,
-            path,
+        return self._robot.execute_ordered_motion_chain(
+            segments,
             tool=tool,
             user=user,
-            stage_vel=stage_vel,
-            stage_acc=stage_acc,
-            path_vel=path_vel,
-            path_acc=path_acc,
             blocking=blocking,
         )
 

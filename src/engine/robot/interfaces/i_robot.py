@@ -95,19 +95,14 @@ class IRobot(ABC):
         """Optional custom queued segmented motion sequence. Returns >=0 on success/queued."""
         return -1
 
-    def execute_staged_trajectory(
+    def execute_ordered_motion_chain(
         self,
-        stage_position,
-        path,
+        segments: list[dict],
         tool: int,
         user: int,
-        stage_vel: float,
-        stage_acc: float,
-        path_vel: float,
-        path_acc: float,
         blocking: bool = False,
     ) -> int:
-        """Optional staged move followed by a preplanned trajectory. Returns 0 on success."""
+        """Optional ordered motion chain with mixed segment types."""
         return -1
 
     @abstractmethod

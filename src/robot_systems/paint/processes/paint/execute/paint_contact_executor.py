@@ -82,6 +82,7 @@ class PaintContactExecutor:
         retreat_fn: Callable[[list[list[float]]], list[list[float]]] | None = None,
         execute_robot: bool = True,
         collected_command_paths: list[list[list[float]]] | None = None,
+        collected_command_jobs: list[dict] | None = None,
     ) -> tuple[bool, str, int]:
         """Execute all projected paint-contact paths in the prepared execution plan."""
         owner = self._owner
@@ -91,6 +92,7 @@ class PaintContactExecutor:
             owner._refresh_runtime_config()
         owner._last_process_start_rz = None
         owner._last_process_end_pose = None
+        total_jobs = len(execution_plan.execution_jobs)
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
             job_started = perf_counter()
@@ -254,6 +256,15 @@ class PaintContactExecutor:
 
             if collected_command_paths is not None:
                 collected_command_paths.append([list(pose) for pose in command_pivot_path])
+            if collected_command_jobs is not None:
+                collected_command_jobs.append(
+                    {
+                        "job_index": job_index,
+                        "pattern_type": pattern_type,
+                        "vel": vel,
+                        "acc": acc,
+                    }
+                )
 
             if not execute_robot:
                 total_waypoints += len(command_pivot_path)
@@ -268,12 +279,19 @@ class PaintContactExecutor:
                 )
                 continue
 
+            paint_pivot_config = owner._contact_motion_config
+            if job_index == total_jobs:
+                edge_cleanup = getattr(owner, "_edge_cleanup", None)
+                start_preplanning = getattr(edge_cleanup, "start_preplanning_during_paint", None)
+                if callable(start_preplanning):
+                    start_preplanning(execution_plan, started=started)
+
             execute_started = perf_counter()
             with timed_block(_logger, "paint_contact_job_robot_execute", label=f"{job_label}:{pattern_type}"):
                 result = execute_paint_trajectory_with_optional_trace(
                     robot_service=owner._robot_service,
                     debug_dump_dir=owner._debug_dump_dir,
-                    pivot_config=owner._contact_motion_config,
+                    pivot_config=paint_pivot_config,
                     command_pivot_path=command_pivot_path,
                     vel=vel,
                     acc=acc,

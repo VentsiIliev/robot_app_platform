@@ -155,9 +155,9 @@ def _build_paint_path_executor(robot_system):
             getattr(robot_system, "_navigation", None).move_to_calibration_position()
             if getattr(robot_system, "_navigation", None) is not None else False
         ),
-        calibration_position_callback=lambda: (
-            getattr(robot_system, "_navigation", None).move_to_calibration_position(unwind_before_move=False)
-            if getattr(robot_system, "_navigation", None) is not None else False
+        calibration_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position("CALIBRATION")
+            if getattr(robot_system, "_navigation", None) is not None else None
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),

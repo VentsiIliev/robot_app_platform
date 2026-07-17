@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
@@ -20,6 +20,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintSimulationConfig,
 )
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
+from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import PaintContactExecutor
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
@@ -166,7 +167,6 @@ class TestPaintProcessConfig(unittest.TestCase):
             )
         )
         cleanup.unwind_joint6_before_cleanup = MagicMock(return_value=(False, "unwind failed"))
-        cleanup._execute_staged_cleanup_path = MagicMock()
         cleanup._move_to_preplanned_xy_rz_stage = MagicMock()
 
         ok, msg, waypoints = cleanup.execute_after_xy_rz_paint(SimpleNamespace(), started=0.0)
@@ -174,8 +174,95 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(msg, "unwind failed")
         self.assertEqual(waypoints, 7)
-        cleanup._execute_staged_cleanup_path.assert_not_called()
         cleanup._move_to_preplanned_xy_rz_stage.assert_not_called()
+
+    def test_edge_cleanup_uses_ordered_chain_generic_segments(self) -> None:
+        config = PaintProcessConfig()
+        robot = SimpleNamespace(
+            execute_ordered_motion_chain=MagicMock(return_value=0),
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _pickup_tool=3,
+            _pickup_user=4,
+            _paint_process_config=lambda: config,
+            _configured_contact_motion_plane="xy_z_rz",
+            _last_pickup_plan=None,
+            _dropoff_unwind_prepared=False,
+            _last_process_end_pose=None,
+        )
+        cleanup = PaintEdgeCleanupExecutor(owner)
+
+        ok, msg, waypoints = cleanup._execute_ordered_cleanup_chain(
+            [0, 1, 2, 3, 4, 5],
+            [1, 2, 3, 4, 5, 6],
+            [[1, 2, 3, 4, 5, 6], [2, 3, 4, 5, 6, 7]],
+            started=0.0,
+        )
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(waypoints, 2)
+        robot.execute_ordered_motion_chain.assert_called_once()
+        segments = robot.execute_ordered_motion_chain.call_args.args[0]
+        self.assertEqual([segment["type"] for segment in segments], ["linear", "unwind_joint6", "linear", "path", "unwind_joint6"])
+
+    def test_paint_contact_starts_cleanup_preplan_before_final_robot_execute(self) -> None:
+        events: list[str] = []
+        robot = SimpleNamespace(
+            execute_trajectory=MagicMock(side_effect=lambda *args, **kwargs: events.append("execute") or 0),
+        )
+        edge_cleanup = SimpleNamespace(
+            start_preplanning_during_paint=MagicMock(
+                side_effect=lambda *args, **kwargs: events.append("preplan")
+            )
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _edge_cleanup=edge_cleanup,
+            _debug_dump_dir=None,
+            _contact_motion_config=PaintSimulationConfig(),
+            _configured_contact_motion_plane="xy_z_rz",
+            _last_pickup_plan=None,
+            _last_process_start_rz=None,
+            _last_process_end_pose=None,
+            _refresh_runtime_config=MagicMock(),
+            _paint_process_config=lambda: PaintProcessConfig(),
+            _resolve_pivot_offset_mm=MagicMock(return_value=0.0),
+            _build_paint_contact_path=MagicMock(
+                return_value=(
+                    [[1.0, 2.0, 3.0, 180.0, 0.0, 0.0]],
+                    [],
+                    [],
+                    [1.0, 2.0, 3.0, 180.0, 0.0, 0.0],
+                )
+            ),
+            _paint_contact_command_path=MagicMock(
+                side_effect=lambda path: [list(pose) for pose in path]
+            ),
+            _append_contact_retreat_waypoint=MagicMock(
+                side_effect=lambda path: [list(pose) for pose in path]
+            ),
+        )
+        execution_plan = SimpleNamespace(
+            execution_jobs=[
+                {
+                    "pivot_source_path": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                    "pattern_type": "Workpiece",
+                    "vel": 10.0,
+                    "acc": 30.0,
+                }
+            ]
+        )
+
+        ok, msg, waypoints = PaintContactExecutor(owner).execute(execution_plan)
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(waypoints, 1)
+        self.assertEqual(events, ["preplan", "execute"])
+        edge_cleanup.start_preplanning_during_paint.assert_called_once_with(
+            execution_plan,
+            started=ANY,
+        )
 
     def test_simulation_config_exposes_plane_specific_indices_and_signs(self) -> None:
         xy = PaintSimulationConfig(

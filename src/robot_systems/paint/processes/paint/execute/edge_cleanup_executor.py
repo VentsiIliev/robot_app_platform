@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -36,6 +37,9 @@ class PaintEdgeCleanupExecutor:
         self._owner = owner
         self._active_cleanup_z_offset_mm: float | None = None
         self._last_cleanup_contact_path: list[list[float]] | None = None
+        self._prepare_executor = ThreadPoolExecutor(max_workers=1)
+        self._early_cleanup_preplan_future: Future | None = None
+        self._early_cleanup_combined_enabled: bool | None = None
 
     def _cleanup_speed(self) -> tuple[float, float]:
         cleanup = self._owner._paint_process_config().edge_cleanup
@@ -67,6 +71,10 @@ class PaintEdgeCleanupExecutor:
             bool(enabled)
             and self._owner._configured_contact_motion_plane == "xy_z_rz"
         )
+
+    def should_run_after_current_paint(self) -> bool:
+        """Return whether the current paint cycle will run a cleanup pass."""
+        return self.should_run_after_xz_ry() or self.should_run_after_xy_rz()
 
     def _use_cleanup_base_provider(self) -> tuple[bool, str, object, object]:
         """Temporarily route XY/RZ projection helpers through the cleanup movement-group pose."""
@@ -497,6 +505,23 @@ class PaintEdgeCleanupExecutor:
         )
         return _CleanupPreplan(True, "", total_waypoints, approach_pose, command_path)
 
+
+    def cancel_early_preplanning(self) -> None:
+        """Cancel or discard an early cleanup preplan after paint failure."""
+        future = self._early_cleanup_preplan_future
+        self._early_cleanup_preplan_future = None
+        self._early_cleanup_combined_enabled = None
+        if future is None:
+            return
+        if not future.done():
+            if future.cancel():
+                return
+        try:
+            future.result(timeout=240.0)
+        except Exception as exc:
+            _logger.warning("[EDGE_CLEANUP] early cleanup preplan could not be canceled cleanly: %s", exc, exc_info=True)
+            return
+
     @staticmethod
     def _z_offset_path(path: list[list[float]], z_offset_mm: float) -> list[list[float]]:
         """Return a copy of path shifted in robot Z."""
@@ -582,90 +607,166 @@ class PaintEdgeCleanupExecutor:
         )
         return True, "", len(command_path), command_path
 
-    @timed_step(_logger, "edge_cleanup_combined_trajectory")
-    def _execute_combined_cleanup_path(
+    def _execute_ordered_cleanup_chain(
         self,
-        command_path: list[list[float]],
-        *,
-        started: float,
-    ) -> tuple[bool, str, int]:
-        """Execute the already-built combined cleanup trajectory in one robot request."""
-        if not command_path:
-            return False, "XY/RZ edge cleanup combined path is empty", 0
-        _logger.info(
-            "[EDGE_CLEANUP] executing combined cleanup trajectory: waypoints=%d xyz_len_mm=%.3f first_pose=%s last_pose=%s",
-            len(command_path),
-            path_length_mm(command_path),
-            [round(float(v), 3) for v in command_path[0][:6]],
-            [round(float(v), 3) for v in command_path[-1][:6]],
-        )
-        result = execute_paint_trajectory_with_optional_trace(
-            robot_service=self._owner._robot_service,
-            debug_dump_dir=self._owner._debug_dump_dir,
-            pivot_config=self._owner._contact_motion_config,
-            command_pivot_path=command_path,
-            vel=self._cleanup_speed()[0],
-            acc=self._cleanup_speed()[1],
-            pivot_pose=None,
-            pattern_type="EdgeCleanupCombined",
-            stage="edge_cleanup_combined",
-            paint_process_config=self._owner._paint_process_config(),
-        )
-        if result not in (0, True, None):
-            _logger.info(
-                "[TIMING] paint_process success=false stage=edge_cleanup_combined_xy_rz total_elapsed_s=%.3f",
-                elapsed_s(started),
-            )
-            return False, f"XY/RZ edge cleanup combined trajectory failed with code {result}", len(command_path)
-        self._owner._last_process_end_pose = list(command_path[-1])
-        return True, "", len(command_path)
-
-    @timed_step(_logger, "edge_cleanup_staged_trajectory")
-    def _execute_staged_cleanup_path(
-        self,
+        align_pose: list[float],
         stage_approach_pose: list[float],
         command_path: list[list[float]],
         *,
         started: float,
     ) -> tuple[bool, str, int]:
-        """Execute stage move and preplanned cleanup trajectory in one ROS2-owned request."""
-        if not command_path:
-            return False, "XY/RZ edge cleanup combined path is empty", 0
-        execute_staged = getattr(self._owner._robot_service, "execute_staged_trajectory", None)
-        if not callable(execute_staged):
-            return False, "staged trajectory endpoint unavailable", 0
+        execute_chain = getattr(self._owner._robot_service, "execute_ordered_motion_chain", None)
+        if not callable(execute_chain):
+            return False, "ordered motion chain endpoint unavailable", 0
+        if not align_pose or not stage_approach_pose or not command_path:
+            return False, "ordered cleanup chain inputs are incomplete", 0
 
-        stage_vel, stage_acc = self._cleanup_speed()
-        path_vel, path_acc = stage_vel, stage_acc
+        segments, final_pose = self.build_ordered_cleanup_segments(
+            align_pose,
+            stage_approach_pose,
+            command_path,
+        )
         _logger.info(
-            "[EDGE_CLEANUP] executing staged cleanup trajectory: stage_pose=%s waypoints=%d xyz_len_mm=%.3f stage_vel=%.1f stage_acc=%.1f path_vel=%.1f path_acc=%.1f",
+            "[EDGE_CLEANUP] executing ordered cleanup chain: align=%s stage=%s waypoints=%d segments=%d",
+            [round(float(v), 3) for v in align_pose[:6]],
             [round(float(v), 3) for v in stage_approach_pose[:6]],
             len(command_path),
-            path_length_mm(command_path),
-            float(stage_vel),
-            float(stage_acc),
-            float(path_vel),
-            float(path_acc),
+            len(segments),
         )
-        result = execute_staged(
-            stage_position=list(stage_approach_pose),
-            path=command_path,
+        result = execute_chain(
+            segments,
             tool=self._owner._pickup_tool,
             user=self._owner._pickup_user,
-            stage_vel=stage_vel,
-            stage_acc=stage_acc,
-            path_vel=path_vel,
-            path_acc=path_acc,
             blocking=True,
         )
         if result not in (0, True, None):
             _logger.info(
-                "[TIMING] paint_process success=false stage=edge_cleanup_staged_xy_rz total_elapsed_s=%.3f",
+                "[TIMING] paint_process success=false stage=edge_cleanup_ordered_chain total_elapsed_s=%.3f",
                 elapsed_s(started),
             )
-            return False, f"XY/RZ edge cleanup staged trajectory failed with code {result}", len(command_path)
-        self._owner._last_process_end_pose = list(command_path[-1])
+            return False, f"XY/RZ ordered cleanup chain failed with code {result}", len(command_path)
+        self._owner._dropoff_unwind_prepared = True
+        self._owner._last_process_end_pose = list(final_pose)
         return True, "", len(command_path)
+
+    def build_ordered_cleanup_segments(
+        self,
+        align_pose: list[float],
+        stage_approach_pose: list[float],
+        command_path: list[list[float]],
+    ) -> tuple[list[dict], list[float]]:
+        """Return ordered-chain segments for cleanup plus pre-dropoff preparation."""
+        align_vel, align_acc = self._dropoff_speed()
+        unwind_vel, unwind_acc = self._navigation_unwind_speed()
+        stage_vel, stage_acc = self._cleanup_speed()
+        config = self._owner._paint_process_config()
+        post_cleanup_align_pose = None
+        if (
+            self._owner._configured_contact_motion_plane == "xz_y_ry"
+            and self._owner._last_pickup_plan is not None
+        ):
+            post_cleanup_align_pose = list(self._owner._last_pickup_plan.align_pose)
+        segments = [
+            {
+                "type": "linear",
+                "label": "edge_cleanup_align",
+                "position": list(align_pose),
+                "vel": align_vel,
+                "acc": align_acc,
+            },
+            {
+                "type": "unwind_joint6",
+                "label": "edge_cleanup_unwind",
+                "vel": unwind_vel,
+                "acc": unwind_acc,
+            },
+            {
+                "type": "linear",
+                "label": "edge_cleanup_stage",
+                "position": list(stage_approach_pose),
+                "vel": stage_vel,
+                "acc": stage_acc,
+            },
+            {
+                "type": "path",
+                "label": "edge_cleanup_follow_path",
+                "path": command_path,
+                "vel": stage_vel,
+                "acc": stage_acc,
+            },
+        ]
+        if post_cleanup_align_pose is not None:
+            segments.append(
+                {
+                    "type": "linear",
+                    "label": "prepare_dropoff_align",
+                    "position": post_cleanup_align_pose,
+                    "vel": float(config.dropoff.release_align_vel_percent),
+                    "acc": float(config.dropoff.release_align_acc_percent),
+                }
+            )
+        segments.append(
+            {
+                "type": "unwind_joint6",
+                "label": "prepare_dropoff_unwind",
+                "vel": float(config.navigation_return.unwind_vel_percent),
+                "acc": float(config.navigation_return.unwind_acc_percent),
+            }
+        )
+        return segments, list(post_cleanup_align_pose or command_path[-1])
+
+    def build_ordered_cleanup_chain_extension(
+        self,
+        execution_plan: WorkpieceExecutionPlan,
+        *,
+        started: float,
+        align_pose: list[float] | None = None,
+    ) -> tuple[bool, str, int, list[dict], list[float] | None]:
+        """Prepare cleanup segments for a larger ordered paint-cycle chain."""
+        original_config = self._owner._contact_motion_config
+        original_strategy = self._owner._contact_motion_strategy
+        original_cleanup_z_offset = self._active_cleanup_z_offset_mm
+        original_contact_base_z_offset = self._owner._active_contact_base_z_offset_mm
+        original_cleanup_contact_path = self._last_cleanup_contact_path
+        cleanup_provider_active = False
+        original_base_provider = None
+        original_pickup_base_provider = None
+        try:
+            self._last_cleanup_contact_path = None
+            pickup_plan = self._owner._last_pickup_plan
+            if pickup_plan is None:
+                return False, "No pickup plan is available for ordered edge-cleanup chain", 0, [], None
+            self._owner._set_runtime_contact_motion_config(
+                self._owner._make_runtime_contact_motion_config("xy_z_rz")
+            )
+            ok, msg, original_base_provider, original_pickup_base_provider = self._use_cleanup_base_provider()
+            if not ok:
+                return False, msg, 0, [], None
+            cleanup_provider_active = True
+            preplan = self._preplan_cleanup_path(
+                execution_plan,
+                started=started,
+                combined_cleanup_enabled=bool(self._cleanup_config().enable_second_pass),
+            )
+            if not preplan.ok:
+                return False, preplan.message, preplan.total_waypoints, [], None
+            segments, final_pose = self.build_ordered_cleanup_segments(
+                list(align_pose or pickup_plan.align_pose),
+                preplan.stage_approach_pose,
+                preplan.command_path,
+            )
+            return True, "", preplan.total_waypoints, segments, final_pose
+        except Exception as exc:
+            _logger.exception("[EDGE_CLEANUP] ordered cleanup chain extension build failed")
+            return False, f"ordered cleanup chain extension failed: {exc}", 0, [], None
+        finally:
+            self._last_cleanup_contact_path = original_cleanup_contact_path
+            self._owner._active_contact_base_z_offset_mm = original_contact_base_z_offset
+            self._active_cleanup_z_offset_mm = original_cleanup_z_offset
+            self._owner._contact_motion_config = original_config
+            self._owner._contact_motion_strategy = original_strategy
+            if cleanup_provider_active:
+                self._restore_base_providers(original_base_provider, original_pickup_base_provider)
 
     @timed_step(_logger, "edge_cleanup_xy_rz_pass")
     def execute_after_unwind(
@@ -681,67 +782,53 @@ class PaintEdgeCleanupExecutor:
         original_cleanup_contact_path = self._last_cleanup_contact_path
         try:
             self._last_cleanup_contact_path = None
-            ok, msg = self.move_to_original_orientation_before_unwind()
-            if not ok:
-                _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_pre_unwind_align total_elapsed_s=%.3f", elapsed_s(started))
-                return False, msg, 0
+            pickup_plan = self._owner._last_pickup_plan
+            if pickup_plan is None:
+                return False, "XZ/RY paint succeeded, but no pickup plan is available for safe edge-cleanup unwind alignment", 0
             self._owner._set_runtime_contact_motion_config(self._owner._make_runtime_contact_motion_config("xy_z_rz"))
             ok, msg, original_base_provider, original_pickup_base_provider = self._use_cleanup_base_provider()
             if not ok:
                 return False, f"XZ/RY paint succeeded, but {msg}", 0
             combined_cleanup_enabled = bool(self._cleanup_config().enable_second_pass)
             wait_started = perf_counter()
-            try:
-                preplan = self._preplan_cleanup_path(
-                    execution_plan,
-                    started=started,
-                    combined_cleanup_enabled=combined_cleanup_enabled,
-                )
-            except Exception as exc:
-                _logger.exception("[EDGE_CLEANUP] preplan failed after unwind")
-                return False, f"XZ/RY paint succeeded, but XY/RZ edge-cleanup preplan failed: {exc}", 0
-            _logger.info(
-                "[TIMING] edge_cleanup_preplan_before_unwind elapsed_s=%.3f success=%s",
-                elapsed_s(wait_started),
-                preplan.ok,
+            early_preplan = self._take_early_cleanup_preplan(
+                started=started,
+                combined_cleanup_enabled=combined_cleanup_enabled,
             )
+            if early_preplan is not None:
+                preplan = early_preplan
+                _logger.info(
+                    "[TIMING] edge_cleanup_preplan_before_unwind source=early elapsed_s=%.3f success=%s",
+                    elapsed_s(wait_started),
+                    preplan.ok,
+                )
+            else:
+                try:
+                    preplan = self._preplan_cleanup_path(
+                        execution_plan,
+                        started=started,
+                        combined_cleanup_enabled=combined_cleanup_enabled,
+                    )
+                except Exception as exc:
+                    _logger.exception("[EDGE_CLEANUP] preplan failed after unwind")
+                    return False, f"XZ/RY paint succeeded, but XY/RZ edge-cleanup preplan failed: {exc}", 0
+                _logger.info(
+                    "[TIMING] edge_cleanup_preplan_before_unwind source=sync elapsed_s=%.3f success=%s",
+                    elapsed_s(wait_started),
+                    preplan.ok,
+                )
             if not preplan.ok:
                 return False, preplan.message, preplan.total_waypoints
 
-            ok, msg = self.unwind_joint6_before_cleanup()
-            if not ok:
-                _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_unwind total_elapsed_s=%.3f", elapsed_s(started))
-                return False, msg, preplan.total_waypoints
-
-            staged_ok, staged_msg, staged_waypoints = self._execute_staged_cleanup_path(
+            ordered_ok, ordered_msg, ordered_waypoints = self._execute_ordered_cleanup_chain(
+                pickup_plan.align_pose,
                 preplan.stage_approach_pose,
                 preplan.command_path,
                 started=started,
             )
-            if staged_ok:
-                return True, "", staged_waypoints
-            if staged_msg != "staged trajectory endpoint unavailable":
-                return False, staged_msg, staged_waypoints
-            _logger.warning(
-                "[EDGE_CLEANUP] staged cleanup endpoint unavailable; falling back to separate stage/path execution: %s",
-                staged_msg,
-            )
-
-            ok, msg = self._move_to_preplanned_xy_rz_stage(preplan.stage_approach_pose)
-            if not ok:
-                _logger.info(
-                    "[TIMING] paint_process success=false stage=edge_cleanup_stage_xy_rz total_elapsed_s=%.3f",
-                    elapsed_s(started),
-                )
-                return False, msg, preplan.total_waypoints
-
-            ok, msg, combined_waypoints = self._execute_combined_cleanup_path(
-                preplan.command_path,
-                started=started,
-            )
-            if not ok:
-                return False, msg, combined_waypoints
-            return True, "", combined_waypoints
+            if ordered_ok:
+                return True, "", ordered_waypoints
+            return False, ordered_msg, preplan.total_waypoints
         finally:
             self._last_cleanup_contact_path = original_cleanup_contact_path
             self._owner._active_contact_base_z_offset_mm = original_contact_base_z_offset
@@ -772,15 +859,30 @@ class PaintEdgeCleanupExecutor:
             if not ok:
                 return False, msg, 0
             combined_cleanup_enabled = bool(self._cleanup_config().enable_second_pass)
-            try:
-                preplan = self._preplan_cleanup_path(
-                    execution_plan,
-                    started=started,
-                    combined_cleanup_enabled=combined_cleanup_enabled,
+            early_preplan = self._take_early_cleanup_preplan(
+                started=started,
+                combined_cleanup_enabled=combined_cleanup_enabled,
+            )
+            if early_preplan is not None:
+                preplan = early_preplan
+                _logger.info(
+                    "[TIMING] edge_cleanup_direct_preplan source=early success=%s",
+                    preplan.ok,
                 )
-            except Exception as exc:
-                _logger.exception("[EDGE_CLEANUP] direct XY/RZ preplan failed")
-                return False, f"XY/RZ paint succeeded, but edge-cleanup preplan failed: {exc}", 0
+            else:
+                try:
+                    preplan = self._preplan_cleanup_path(
+                        execution_plan,
+                        started=started,
+                        combined_cleanup_enabled=combined_cleanup_enabled,
+                    )
+                except Exception as exc:
+                    _logger.exception("[EDGE_CLEANUP] direct XY/RZ preplan failed")
+                    return False, f"XY/RZ paint succeeded, but edge-cleanup preplan failed: {exc}", 0
+                _logger.info(
+                    "[TIMING] edge_cleanup_direct_preplan source=sync success=%s",
+                    preplan.ok,
+                )
             if not preplan.ok:
                 return False, preplan.message, preplan.total_waypoints
 
@@ -795,30 +897,17 @@ class PaintEdgeCleanupExecutor:
                     )
                     return False, msg, preplan.total_waypoints
 
-            staged_ok, staged_msg, staged_waypoints = self._execute_staged_cleanup_path(
+            pickup_plan = self._owner._last_pickup_plan
+            align_pose = pickup_plan.align_pose if pickup_plan is not None else preplan.stage_approach_pose
+            ordered_ok, ordered_msg, ordered_waypoints = self._execute_ordered_cleanup_chain(
+                align_pose,
                 preplan.stage_approach_pose,
                 preplan.command_path,
                 started=started,
             )
-            if staged_ok:
-                return True, "", staged_waypoints
-            if staged_msg != "staged trajectory endpoint unavailable":
-                return False, staged_msg, staged_waypoints
-
-            _logger.warning(
-                "[EDGE_CLEANUP] staged cleanup endpoint unavailable; falling back to separate stage/path execution: %s",
-                staged_msg,
-            )
-            ok, msg = self._move_to_preplanned_xy_rz_stage(preplan.stage_approach_pose)
-            if not ok:
-                return False, msg, preplan.total_waypoints
-            ok, msg, combined_waypoints = self._execute_combined_cleanup_path(
-                preplan.command_path,
-                started=started,
-            )
-            if not ok:
-                return False, msg, combined_waypoints
-            return True, "", combined_waypoints
+            if ordered_ok:
+                return True, "", ordered_waypoints
+            return False, ordered_msg, preplan.total_waypoints
         finally:
             self._last_cleanup_contact_path = original_cleanup_contact_path
             self._owner._active_contact_base_z_offset_mm = original_contact_base_z_offset

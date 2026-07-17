@@ -34,16 +34,11 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     ):
         ...
 
-    def execute_staged_trajectory(
+    def execute_ordered_motion_chain(
         self,
-        stage_position,
-        path,
+        segments: list[dict],
         tool: int,
         user: int,
-        stage_vel: float,
-        stage_acc: float,
-        path_vel: float,
-        path_acc: float,
         blocking: bool = False,
     ):
         return -1
