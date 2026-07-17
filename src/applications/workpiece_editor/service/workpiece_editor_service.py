@@ -180,7 +180,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         form_data   = data.get("form_data", data)
         editor_data = data.get("editor_data")
         merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
-        _logger.debug(f"Execute workpiece: {merged}")
+        # _logger.debug(f"Execute workpiece: {merged}")
         try:
             if self._path_executor is not None:
                 try:
