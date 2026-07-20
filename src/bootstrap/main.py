@@ -23,19 +23,19 @@ from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
 
-
-def _pin_process_to_non_rt_cores() -> None:
-    rt_cores = {14, 15}
-    try:
-        available = sorted(os.sched_getaffinity(0))
-        target = {cpu for cpu in available if cpu not in rt_cores}
-        if target:
-            os.sched_setaffinity(0, target)
-            _LOGGER.warning("Pinned robot_app_platform to CPUs: %s", sorted(target))
-        else:
-            _LOGGER.warning("No non-RT CPUs available; leaving affinity unchanged")
-    except Exception:
-        _LOGGER.exception("Failed to set CPU affinity")
+#
+# def _pin_process_to_non_rt_cores() -> None:
+#     rt_cores = {14, 15}
+#     try:
+#         available = sorted(os.sched_getaffinity(0))
+#         target = {cpu for cpu in available if cpu not in rt_cores}
+#         if target:
+#             os.sched_setaffinity(0, target)
+#             _LOGGER.warning("Pinned robot_app_platform to CPUs: %s", sorted(target))
+#         else:
+#             _LOGGER.warning("No non-RT CPUs available; leaving affinity unchanged")
+#     except Exception:
+#         _LOGGER.exception("Failed to set CPU affinity")
 
 
 _DEV_SKIP_LOGIN = True
@@ -78,7 +78,7 @@ class _FramelessHeaderDrag(QObject):
 
 def main() -> None:
     setup_logging()
-    _pin_process_to_non_rt_cores()
+    # _pin_process_to_non_rt_cores()
 
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
     logging.getLogger("RobotStatePublisher").setLevel(logging.WARNING)

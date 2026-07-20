@@ -86,6 +86,28 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             executor.prepare_workpiece_execution_plan({})
 
+    def test_refresh_process_config_updates_vacuum_pump_flag(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(enable_vacuum_pump=False)
+        vacuum = MagicMock()
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            vacuum_pump=vacuum,
+            paint_process_config_service=config_service,
+            enable_vacuum_pump=True,
+        )
+
+        executor._refresh_paint_process_config_snapshot()
+        on_ok, on_msg = executor._turn_vacuum_on()
+        off_ok, off_msg = executor._turn_vacuum_off()
+
+        self.assertTrue(on_ok)
+        self.assertEqual("", on_msg)
+        self.assertTrue(off_ok)
+        self.assertEqual("", off_msg)
+        vacuum.turn_on.assert_not_called()
+        vacuum.turn_off.assert_not_called()
+
     def test_get_projected_pivot_paths_skips_jobs_without_paths_and_applies_offsets(self):
         executor = PaintWorkpiecePathExecutor(
             robot_service=None,

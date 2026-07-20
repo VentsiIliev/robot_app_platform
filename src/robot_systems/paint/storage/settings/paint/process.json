@@ -3,7 +3,7 @@
   "contour_pixel_to_mm_mode": "homography_residual",
   "enable_execution_motion_trace": false,
   "execution_motion_trace_sample_period_s": 0.05,
-  "pivot_motion_plane": "xz_y_ry",
+  "pivot_motion_plane": "xy_z_rz",
   "primary_group_id": "Vertical Shaft",
   "secondary_group_id": "Horizontal Shaft",
   "cleanup_group_id": "Clean",
@@ -12,7 +12,7 @@
   "pivot_contact_side": "positive",
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
-  "enable_vacuum_pump": true,
+  "enable_vacuum_pump": false,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,
@@ -34,7 +34,7 @@
   },
   "edge_cleanup": {
     "enabled_after_xz_ry": true,
-    "enabled_after_xy_rz": true,
+    "enabled_after_xy_rz": false,
     "enable_second_pass": true,
     "vel_percent": 80.0,
     "acc_percent": 60.0,

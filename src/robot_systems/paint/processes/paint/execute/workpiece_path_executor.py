@@ -384,6 +384,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return
         try:
             self._paint_process_config_snapshot = service.get_snapshot()
+            self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
         except Exception:
             _logger.debug("[PAINT_CONFIG] Failed to refresh paint process settings", exc_info=True)
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
