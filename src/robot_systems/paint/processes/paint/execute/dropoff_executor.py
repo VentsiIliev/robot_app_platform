@@ -58,6 +58,19 @@ class PickupOriginDropoffStrategy:
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         dropoff = owner._paint_process_config().dropoff
+        if getattr(owner, "_should_release_at_current_dropoff_pose", lambda: False)():
+            return DropoffPlan(
+                strategy_name=self.name,
+                waypoints=(
+                    DropoffWaypoint(
+                        label="Release at current dropoff pose",
+                        pose=None,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        release_here=True,
+                    ),
+                ),
+            )
         plan = owner._last_pickup_plan
         if plan is None:
             _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")

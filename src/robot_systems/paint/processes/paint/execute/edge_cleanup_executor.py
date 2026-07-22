@@ -661,7 +661,12 @@ class PaintEdgeCleanupExecutor:
         stage_vel, stage_acc = self._cleanup_speed()
         config = self._owner._paint_process_config()
         post_cleanup_align_pose = None
-        if self._owner._last_pickup_plan is not None:
+        should_align_before_unwind = getattr(
+            self._owner,
+            "_should_prepare_dropoff_align_before_unwind",
+            lambda: False,
+        )
+        if self._owner._last_pickup_plan is not None and should_align_before_unwind():
             make_dropoff_align_pose = getattr(self._owner, "_dropoff_align_pose_near_reference", None)
             if callable(make_dropoff_align_pose):
                 post_cleanup_align_pose = make_dropoff_align_pose(

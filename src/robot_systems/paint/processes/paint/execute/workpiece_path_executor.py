@@ -851,15 +851,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return True, ""
         config = self._paint_process_config()
         plan = self._last_pickup_plan
-        if plan is not None:
+        if plan is not None and self._should_prepare_dropoff_align_before_unwind():
             align_pose = self._dropoff_align_pose_near_reference(plan.align_pose)
             if not self._move_pickup_phase(
-                "Returning to original orientation before dropoff unwind",
+                "Moving to dropoff pose before unwind",
                 align_pose,
                 velocity=config.dropoff.release_align_vel_percent,
                 acceleration=config.dropoff.release_align_acc_percent,
             ):
-                return False, "Pivot paint finished, but return to original orientation failed before dropoff unwind"
+                return False, "Pivot paint finished, but move to dropoff pose failed before unwind"
         elif self._configured_contact_motion_plane == "xz_y_ry":
             return False, "Pivot paint finished, but no pickup plan is available for safe pre-dropoff unwind alignment"
         if self._robot_service is None:
@@ -881,7 +881,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return True, ""
 
     def _should_return_to_calibration_between_xy_rz_pickup_and_pivot(self) -> bool:
-        """Return whether XY/RZ pickup must pass through calibration before pivot staging."""
+        """Return whether pickup must pass through calibration before pivot staging."""
+        return False
+
+    def _should_prepare_dropoff_align_before_unwind(self) -> bool:
+        """Return whether the held part must move to a separate dropoff pose before unwind."""
+        return self._configured_contact_motion_plane == "xz_y_ry"
+
+    def _should_release_at_current_dropoff_pose(self) -> bool:
+        """Return whether release should happen at the current post-paint retreat pose."""
         return self._configured_contact_motion_plane == "xy_z_rz"
 
     def _calibration_return_speed(self) -> tuple[float, float]:
@@ -964,7 +972,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         config = self._paint_process_config()
         segments: list[dict] = []
         final_pose: list[float] | None = None
-        if self._last_pickup_plan is not None:
+        if self._last_pickup_plan is not None and self._should_prepare_dropoff_align_before_unwind():
             final_pose = self._dropoff_align_pose_near_reference(self._last_pickup_plan.align_pose)
             segments.append(
                 {
@@ -1028,8 +1036,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
         segments: list[dict] = []
-        calibration_pose: list[float] | None = None
-        calibration_vel, calibration_acc = self._calibration_return_speed()
         for waypoint in pickup_plan.waypoints:
             segments.append(
                 {
@@ -1040,22 +1046,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     "acc": float(waypoint.acc_percent),
                 }
             )
-            if (
-                waypoint.label == "Aligning workpiece to paint axis"
-                and self._should_return_to_calibration_between_xy_rz_pickup_and_pivot()
-            ):
-                calibration_pose = self._resolve_calibration_position()
-                if calibration_pose is None:
-                    return False, "Pickup aligned, but calibration position is not configured before XY/RZ pivot", total_waypoints
-                segments.append(
-                    {
-                        "type": "linear",
-                        "label": "xy_rz_pickup_to_calibration_before_pivot",
-                        "position": list(calibration_pose),
-                        "vel": calibration_vel,
-                        "acc": calibration_acc,
-                    }
-                )
 
         for path_index, command_path in enumerate(paint_paths):
             job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
@@ -1083,14 +1073,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             segments.extend(cleanup_segments)
             final_pose = cleanup_final_pose
         elif self._edge_cleanup.should_run_after_xy_rz():
-            calibration_pose = calibration_pose or self._resolve_calibration_position()
-            if calibration_pose is None:
-                return False, "XY/RZ paint succeeded, but calibration position is not configured before cleanup", total_waypoints
             ok, msg, cleanup_waypoints, cleanup_segments, cleanup_final_pose = (
                 self._edge_cleanup.build_ordered_cleanup_chain_extension(
                     prepared_workpiece,
                     started=started,
-                    align_pose=calibration_pose,
                 )
             )
             total_waypoints += cleanup_waypoints
@@ -1175,18 +1161,17 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                         result = (False, msg) if not ok else (True, "")
                     elif self._edge_cleanup.should_run_after_xy_rz():
                         # Phase 3: optional edge cleanup in XY/RZ, reprojected at the cleanup station.
-                        ok, msg = self._return_to_calibration_and_unwind_before_xy_rz_cleanup()
+                        ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_xy_rz_paint(
+                            prepared_workpiece,
+                            started,
+                            unwind_before_cleanup=True,
+                        )
+                        total_waypoints += cleanup_waypoints
                         if not ok:
-                            _logger.info("[TIMING] paint_process success=false stage=xy_rz_cleanup_calibration_return total_elapsed_s=%.3f", elapsed_s(started))
+                            _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_xy_rz total_elapsed_s=%.3f", elapsed_s(started))
                             result = (False, msg)
                         else:
-                            ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_xy_rz_paint(
-                                prepared_workpiece,
-                                started,
-                                unwind_before_cleanup=False,
-                            )
-                            total_waypoints += cleanup_waypoints
-                            result = (False, msg) if not ok else (True, "")
+                            result = (True, "")
                     else:
                         result = (True, "")
 
