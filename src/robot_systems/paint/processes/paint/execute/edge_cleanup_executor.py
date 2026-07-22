@@ -661,11 +661,15 @@ class PaintEdgeCleanupExecutor:
         stage_vel, stage_acc = self._cleanup_speed()
         config = self._owner._paint_process_config()
         post_cleanup_align_pose = None
-        if (
-            self._owner._configured_contact_motion_plane == "xz_y_ry"
-            and self._owner._last_pickup_plan is not None
-        ):
-            post_cleanup_align_pose = list(self._owner._last_pickup_plan.align_pose)
+        if self._owner._last_pickup_plan is not None:
+            make_dropoff_align_pose = getattr(self._owner, "_dropoff_align_pose_near_reference", None)
+            if callable(make_dropoff_align_pose):
+                post_cleanup_align_pose = make_dropoff_align_pose(
+                    self._owner._last_pickup_plan.align_pose,
+                    command_path[-1],
+                )
+            else:
+                post_cleanup_align_pose = list(self._owner._last_pickup_plan.align_pose)
         segments = [
             {
                 "type": "linear",

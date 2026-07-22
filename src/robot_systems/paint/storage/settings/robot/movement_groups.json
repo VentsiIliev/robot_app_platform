@@ -14,11 +14,11 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-7.132, 366.722, 99.866, -178.877, 0.001, -0.005]"
+      "position": "[-6.949, 216.694, 97.009, -178.861, -0.009, -0.033]"
     },
     "JOG": {
-      "velocity": 50,
-      "acceleration": 20,
+      "velocity": 10,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": false
@@ -29,7 +29,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-1.549, 697.501, 378.207, -89.947, -0.353, -0.489]"
+      "position": "[-13.236, 397.532, 377.623, -90.010, -0.369, -0.614]"
     },
     "Vertical Shaft": {
       "velocity": 10,
@@ -37,7 +37,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-6.164, 605.408, 235.592, -178.735, -0.015, -0.096]"
+      "position": "[243.271, 416.502, 101.129, -178.852, -0.014, -0.047]"
     },
     "Clean": {
       "velocity": 10,

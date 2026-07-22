@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
 
+from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
@@ -16,7 +17,10 @@ _logger = logging.getLogger(__name__)
 def _poses_close(left: list[float] | None, right: list[float] | None, tolerance: float = 1e-3) -> bool:
     if left is None or right is None or len(left) < 6 or len(right) < 6:
         return False
-    return all(abs(float(a) - float(b)) <= tolerance for a, b in zip(left[:6], right[:6]))
+    if not all(abs(float(a) - float(b)) <= tolerance for a, b in zip(left[:5], right[:5])):
+        return False
+    equivalent_rz = unwrap_degrees(float(right[5]), float(left[5]))
+    return abs(equivalent_rz - float(right[5])) <= tolerance
 
 
 @dataclass(frozen=True)

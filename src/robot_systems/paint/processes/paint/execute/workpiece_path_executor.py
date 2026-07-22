@@ -9,8 +9,8 @@ import numpy as np
 
 from src.engine.geometry.planar import (
     axis_equivalent_shift_degrees,
-    nearest_axis_equivalent_degrees,
     rotate_xy,
+    unwrap_degrees,
 )
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
@@ -850,17 +850,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
             return True, ""
         config = self._paint_process_config()
-        if self._configured_contact_motion_plane == "xz_y_ry":
-            plan = self._last_pickup_plan
-            if plan is None:
-                return False, "Pivot paint finished, but no pickup plan is available for safe pre-dropoff unwind alignment"
+        plan = self._last_pickup_plan
+        if plan is not None:
+            align_pose = self._dropoff_align_pose_near_reference(plan.align_pose)
             if not self._move_pickup_phase(
                 "Returning to original orientation before dropoff unwind",
-                plan.align_pose,
+                align_pose,
                 velocity=config.dropoff.release_align_vel_percent,
                 acceleration=config.dropoff.release_align_acc_percent,
             ):
                 return False, "Pivot paint finished, but return to original orientation failed before dropoff unwind"
+        elif self._configured_contact_motion_plane == "xz_y_ry":
+            return False, "Pivot paint finished, but no pickup plan is available for safe pre-dropoff unwind alignment"
         if self._robot_service is None:
             return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
         _logger.info(
@@ -941,13 +942,30 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         return ok, msg
 
+    def _dropoff_align_pose_near_reference(
+        self,
+        align_pose: list[float],
+        reference_pose: list[float] | None = None,
+    ) -> list[float]:
+        """Return a dropoff align pose without an XY/RZ wrap jump from the previous command."""
+        pose = list(align_pose)
+        reference = reference_pose or self._last_process_end_pose
+        if (
+            self._configured_contact_motion_plane == "xy_z_rz"
+            and reference is not None
+            and len(pose) >= 6
+            and len(reference) >= 6
+        ):
+            pose[5] = unwrap_degrees(float(reference[5]), float(pose[5]))
+        return pose
+
     def _ordered_dropoff_preparation_segments(self) -> tuple[list[dict], list[float] | None]:
         """Return ordered-chain segments that prepare the held part for release."""
         config = self._paint_process_config()
         segments: list[dict] = []
         final_pose: list[float] | None = None
-        if self._configured_contact_motion_plane == "xz_y_ry" and self._last_pickup_plan is not None:
-            final_pose = list(self._last_pickup_plan.align_pose)
+        if self._last_pickup_plan is not None:
+            final_pose = self._dropoff_align_pose_near_reference(self._last_pickup_plan.align_pose)
             segments.append(
                 {
                     "type": "linear",

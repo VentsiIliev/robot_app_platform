@@ -9,6 +9,7 @@ from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG,
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
+from src.robot_systems.paint.processes.paint.execute.dropoff_executor import _poses_close
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     PickupTransferPlan,
@@ -603,6 +604,96 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertTrue(ok, message)
         commanded_positions = [call.kwargs["position"] for call in robot_service.move_ptp.call_args_list]
         self.assertEqual([[10.0, 20.0, 100.0, 180.0, 0.0, 15.0]], commanded_positions)
+
+    def test_xy_rz_pre_dropoff_unwind_moves_to_align_pose_before_unwind(self):
+        events = []
+        robot_service = MagicMock()
+        robot_service.move_ptp.side_effect = lambda **_kwargs: events.append("align") or True
+        robot_service.unwind_joint6.side_effect = lambda **_kwargs: events.append("unwind") or True
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            pivot_motion_plane="xy_z_rz",
+        )
+        executor._last_pickup_plan = PickupTransferPlan(
+            pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
+            lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            align_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 15.0],
+            stage_transition_poses=[],
+            staged_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+            change_plane_pose=[10.0, 20.0, 100.0, 90.0, 0.0, 15.0],
+            paint_pivot_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+        )
+
+        ok, message = executor._prepare_dropoff_joint6_unwind()
+
+        self.assertTrue(ok, message)
+        self.assertEqual(["align", "unwind"], events)
+        robot_service.move_ptp.assert_called_once()
+        self.assertEqual(
+            [10.0, 20.0, 100.0, 180.0, 0.0, 15.0],
+            robot_service.move_ptp.call_args.kwargs["position"],
+        )
+
+    def test_xy_rz_ordered_dropoff_preparation_includes_align_before_unwind(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=MagicMock(),
+            pivot_motion_plane="xy_z_rz",
+        )
+        executor._last_pickup_plan = PickupTransferPlan(
+            pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, 5.0],
+            lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 5.0],
+            align_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 15.0],
+            stage_transition_poses=[],
+            staged_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+            change_plane_pose=[10.0, 20.0, 100.0, 90.0, 0.0, 15.0],
+            paint_pivot_pose=[30.0, 40.0, 110.0, 90.0, 0.0, 15.0],
+        )
+
+        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+
+        self.assertEqual(["linear", "unwind_joint6"], [segment["type"] for segment in segments])
+        self.assertEqual(["prepare_dropoff_align", "prepare_dropoff_unwind"], [segment["label"] for segment in segments])
+        self.assertEqual([10.0, 20.0, 100.0, 180.0, 0.0, 15.0], segments[0]["position"])
+        self.assertEqual([10.0, 20.0, 100.0, 180.0, 0.0, 15.0], final_pose)
+
+    def test_xy_rz_ordered_dropoff_align_avoids_rz_wrap_jump(self):
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=MagicMock(),
+            pivot_motion_plane="xy_z_rz",
+        )
+        executor._configured_contact_motion_plane = "xy_z_rz"
+        executor._last_process_end_pose = [294.527, 403.861, 91.129, -178.852, -0.014, 359.959]
+        executor._last_pickup_plan = PickupTransferPlan(
+            pickup_approach_pose=[10.0, 20.0, 100.0, 180.0, 0.0, -0.270],
+            pickup_pose=[10.0, 20.0, 50.0, 180.0, 0.0, -0.270],
+            lift_pose=[10.0, 20.0, 100.0, 180.0, 0.0, -0.270],
+            align_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 0.0],
+            stage_transition_poses=[],
+            staged_pose=[284.599, 404.100, 101.129, -178.852, -0.014, 0.0],
+            change_plane_pose=[10.0, 20.0, 100.0, 180.0, 0.0, 0.0],
+            paint_pivot_pose=[284.599, 404.100, 101.129, -178.852, -0.014, 0.0],
+        )
+
+        segments, final_pose = executor._ordered_dropoff_preparation_segments()
+
+        self.assertAlmostEqual(360.0, segments[0]["position"][5], places=3)
+        self.assertAlmostEqual(360.0, final_pose[5], places=3)
+
+    def test_dropoff_pose_close_treats_wrapped_xy_rz_as_same_release_pose(self):
+        self.assertTrue(
+            _poses_close(
+                [10.0, 20.0, 100.0, 180.0, 0.0, 0.0],
+                [10.0, 20.0, 100.0, 180.0, 0.0, 360.0],
+            )
+        )
+        self.assertFalse(
+            _poses_close(
+                [10.0, 20.0, 100.0, 180.0, 0.0, 180.0],
+                [10.0, 20.0, 100.0, 180.0, 0.0, 360.0],
+            )
+        )
 
     def test_execute_paint_process_runs_post_execute_return_after_success(self):
         post_execute_callback = MagicMock(return_value=True)
