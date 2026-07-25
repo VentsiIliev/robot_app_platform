@@ -431,10 +431,13 @@ class VisionSystem:
     def stop_system(self) -> None:
         _logger.info("Stopping VisionSystem...")
         self.stop_signal = True
-        self.camera.stop_stream()
-        self.camera.stopCapture()
+        if self.frame_grabber is not None:
+            self.frame_grabber.stop()
         if self.cameraThread is not None:
             self.cameraThread.join()
+            self.cameraThread = None
+        self.camera.stop_stream()
+        self.camera.stopCapture()
 
     def _loop(self) -> None:
         while not self.stop_signal:
