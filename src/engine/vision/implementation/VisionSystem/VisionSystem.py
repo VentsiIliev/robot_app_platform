@@ -1,5 +1,6 @@
 import threading
 import logging
+import os
 from typing import Optional
 
 import cv2
@@ -30,6 +31,7 @@ class VisionSystem:
 
     def __init__(self, storage_path=None, messaging_service=None, service=None,
                  work_area_service: IWorkAreaService | None = None):
+        self._configure_opencv_threads()
         self.optimal_camera_matrix = None
 
         self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
@@ -86,9 +88,40 @@ class VisionSystem:
         self.current_skip_frames = 0
         self.frame_grabber = FrameGrabber(self.camera, maxlen=5)
         self.frame_grabber.start()
+        self._last_processed_frame_sequence = 0
+        self._latest_frame_timestamp_s = 0.0
+        self._latest_contour_frame_sequence = 0
 
         self.stop_signal  = False
         self.cameraThread = None
+
+    @staticmethod
+    def _configure_opencv_threads() -> None:
+        override = os.getenv("ROBOT_APP_OPENCV_THREADS", "").strip()
+        thread_count: int | None = None
+
+        if override:
+            try:
+                thread_count = max(1, int(override))
+            except ValueError:
+                _logger.warning(
+                    "Ignoring invalid ROBOT_APP_OPENCV_THREADS=%r; expected positive integer",
+                    override,
+                )
+                return
+        else:
+            cpu_count = os.cpu_count() or 1
+            if cpu_count <= 4:
+                thread_count = 2
+
+        if thread_count is None:
+            return
+
+        try:
+            cv2.setNumThreads(thread_count)
+            _logger.info("OpenCV worker threads capped at %d", thread_count)
+        except Exception:
+            _logger.exception("Failed to configure OpenCV worker thread count")
 
     # ── Setup ─────────────────────────────────────────────────────────────────
 
@@ -160,7 +193,16 @@ class VisionSystem:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def run(self):
-        self.image = self.frame_grabber.get_latest()
+        snapshot = self.frame_grabber.get_latest_snapshot_since(
+            self._last_processed_frame_sequence,
+            timeout_s=0.25,
+        )
+        if snapshot is None:
+            return None, None, None
+
+        self._last_processed_frame_sequence = snapshot.sequence
+        self._latest_frame_timestamp_s = snapshot.timestamp_s
+        self.image = snapshot.frame
 
         if self.current_skip_frames < self.camera_settings.get_skip_frames():
             self.current_skip_frames += 1
@@ -194,6 +236,7 @@ class VisionSystem:
             # `detect()` returns None when no contours pass the area filter.
             # Guard here so get_latest_contours() never returns None to callers.
             self._latest_contours = contours or []
+            self._latest_contour_frame_sequence = snapshot.sequence
             return contours, self.correctedImage, None
 
         if self.cameraMatrix is None:
@@ -203,6 +246,38 @@ class VisionSystem:
 
         self.correctedImage = self.correctImage(self.image)
         return None, self.correctedImage, None
+
+    def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
+        snapshot = self.frame_grabber.get_latest_snapshot()
+        if snapshot is None or snapshot.frame is None:
+            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+
+        if (
+            self.camera_settings.get_contour_detection()
+            and snapshot.sequence == self._latest_contour_frame_sequence
+        ):
+            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+
+        image = snapshot.frame
+        if self.camera_settings.get_brightness_auto():
+            image = self._brightness_service.adjust(image)
+
+        self.rawImage = image.copy()
+        active_area = self._get_active_area_id()
+        contours, corrected, _ = self._contour_service.detect(
+            image=image,
+            threshold=self._get_thresh_by_area(active_area),
+            is_calibrated=self.cameraMatrix is not None,
+            correct_image_fn=self.correctImage,
+            spray_area_points=self._get_area_points_by_region(active_area),
+            publish_images=False,
+        )
+        self.correctedImage = corrected
+        self._latest_contours = contours or []
+        self._latest_contour_frame_sequence = snapshot.sequence
+
+        frame = corrected if corrected is not None else self.rawImage
+        return frame, list(self._latest_contours)
 
     # ── Image correction ──────────────────────────────────────────────────────
 
@@ -233,6 +308,9 @@ class VisionSystem:
         #     _logger.debug(f"Perspective Matrix: Not applied (None)")
 
         return image
+
+    def get_latest_frame_for_snapshot(self):
+        return self.correctedImage if self.correctedImage is not None else self.rawImage
 
     # ── Calibration ───────────────────────────────────────────────────────────
 

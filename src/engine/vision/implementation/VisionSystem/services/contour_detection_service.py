@@ -34,10 +34,11 @@ class ContourDetectionService:
         correct_image_fn: Callable[[np.ndarray], np.ndarray],
         spray_area_points: Optional[np.ndarray],
         sort: bool = False,
+        publish_images: bool = True,
     ) -> Tuple[Optional[List], Optional[np.ndarray], None]:
         corrected = correct_image_fn(image.copy()) if is_calibrated else self._stamp_uncalibrated(image.copy())
 
-        raw, gray  = self._find_contours(corrected, threshold)
+        raw, gray  = self._find_contours(corrected, threshold, publish_images=publish_images)
         approxed   = self._approx_contours(raw)
         smoothed   = self._smooth_contours(approxed)
         refined    = self._refine_subpixel(smoothed, gray)
@@ -47,7 +48,7 @@ class ContourDetectionService:
             c for c in filtered if self._all_inside(spray_area_points, c)
         ]
         if not inside:
-            if self._publisher:
+            if self._publisher and publish_images:
                 self._publisher.publish_latest_image(corrected)
             return None, corrected, None
 
@@ -56,14 +57,19 @@ class ContourDetectionService:
         if self._settings.get_draw_contours():
             cv2.drawContours(corrected, [c.astype(np.int32) for c in final], -1, (0, 255, 0), 1)
 
-        if self._publisher:
+        if self._publisher and publish_images:
             self._publisher.publish_latest_image(corrected)
 
         return final, corrected, None
 
     # ── private ───────────────────────────────────────────────────────
 
-    def _find_contours(self, image: np.ndarray, threshold: int) -> Tuple[list, np.ndarray]:
+    def _find_contours(
+        self,
+        image: np.ndarray,
+        threshold: int,
+        publish_images: bool = True,
+    ) -> Tuple[list, np.ndarray]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         if self._settings.get_gaussian_blur():
@@ -76,7 +82,7 @@ class ContourDetectionService:
         thresh_type = _THRESHOLD_TYPES.get(self._settings.get_threshold_type(), cv2.THRESH_BINARY_INV)
         _, thresh = cv2.threshold(blur, threshold, 255, thresh_type)
 
-        if self._publisher:
+        if self._publisher and publish_images:
             self._publisher.publish_thresh_image(thresh)
 
         if self._settings.get_dilate_enabled():

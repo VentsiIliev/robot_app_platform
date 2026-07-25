@@ -61,6 +61,10 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
     def get_latest_contours(self) -> list:
         return list(self._vision_system._latest_contours or [])
 
+    def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
+        frame, contours = self._vision_system.compute_contours_for_latest_frame()
+        return frame, list(contours or [])
+
     def get_latest_frame(self) -> np.ndarray:
         corrected = self._vision_system.correctedImage
         return corrected if corrected is not None else self._vision_system.rawImage

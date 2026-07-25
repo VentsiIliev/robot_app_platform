@@ -32,13 +32,17 @@ class CaptureSnapshotService(ICaptureSnapshotService):
 
         if self._vision is not None:
             try:
-                frame = self._vision.get_latest_frame()
+                frame, contours = self._vision.compute_contours_for_latest_frame()
             except Exception:
-                _logger.exception("Failed to capture latest frame for source=%s", source)
-            try:
-                contours = list(self._vision.get_latest_contours())
-            except Exception:
-                _logger.exception("Failed to capture latest contours for source=%s", source)
+                _logger.exception("Failed to capture latest vision snapshot for source=%s", source)
+                try:
+                    frame = self._vision.get_latest_frame()
+                except Exception:
+                    _logger.exception("Failed to capture latest frame fallback for source=%s", source)
+                try:
+                    contours = list(self._vision.get_latest_contours())
+                except Exception:
+                    _logger.exception("Failed to capture latest contours fallback for source=%s", source)
 
         if self._robot is not None:
             try:

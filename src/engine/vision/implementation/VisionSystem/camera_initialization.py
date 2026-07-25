@@ -19,7 +19,7 @@ class CameraInitializer:
                 self._logger.info(f"Attempting camera {camera_index} (attempt {attempt + 1}/{max_retries})")
                 if attempt > 0:
                     time.sleep(retry_delay)
-                test_camera = Camera(camera_index, self.width, self.height)
+                test_camera = Camera(camera_index, self.width, self.height,fps=30)
                 if test_camera.cap.isOpened():
                     ret, frame = test_camera.cap.read()
                     if ret and frame is not None:
@@ -39,7 +39,7 @@ class CameraInitializer:
         for cam_id in range(10):
             try:
                 self._logger.info(f"Testing camera index {cam_id}")
-                test_camera = Camera(cam_id, self.width, self.height)
+                test_camera = Camera(cam_id, self.width, self.height,fps=30)
                 if test_camera.cap.isOpened():
                     ret, frame = test_camera.cap.read()
                     if ret and frame is not None:
@@ -53,7 +53,7 @@ class CameraInitializer:
             try:
                 for cam_id in self.find_first_available_camera():
                     try:
-                        test_camera = Camera(cam_id, self.width, self.height)
+                        test_camera = Camera(cam_id, self.width, self.height,fps=30)
                         if test_camera.cap.isOpened():
                             self._logger.info(f"Found camera at index {cam_id} (Linux detection)")
                             return test_camera, cam_id
@@ -63,7 +63,7 @@ class CameraInitializer:
                 self._logger.error(f"Linux camera detection failed: {e}")
 
         self._logger.warning("No working cameras found — using dummy camera")
-        return Camera(0, self.width, self.height), 0
+        return Camera(0, self.width, self.height,fps=30), 0
 
     def find_first_available_camera(self, max_devices=10):
         import re

@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class FairinoRos2Client:
     _RECONNECT_CHECK_INTERVAL_S = 1.0
+    _HEALTH_ERROR_LOG_INTERVAL_S = 10.0
     _MOTION_ERROR_DRIVE_NOT_ENABLED = -13
     _STOP_STATE_STOPPED = "STOPPED"
     _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
@@ -22,6 +23,8 @@ class FairinoRos2Client:
         self._available = False
         self._last_error = None
         self._last_reconnect_check = 0.0
+        self._last_health_error = None
+        self._last_health_error_logged_at = 0.0
         self._drive_enabled = False
         self._connection_generation = 0
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
@@ -87,13 +90,29 @@ class FairinoRos2Client:
             logger.debug("health_check ← status=%s body=%s", response.status_code, data)
             if data.get("status") == "ok":
                 self._mark_available()
+                self._last_health_error = None
+                self._last_health_error_logged_at = 0.0
             else:
                 self._mark_unavailable(data.get("message") or data)
             return data
         except Exception as e:
-            logger.warning("health_check error: %s", e)
+            self._log_health_check_error(e)
             self._mark_unavailable(e)
             return {"status": "error", "message": str(e)}
+
+    def _log_health_check_error(self, error: Exception) -> None:
+        message = str(error)
+        now = time.monotonic()
+        if (
+            message == self._last_health_error
+            and (now - self._last_health_error_logged_at) < self._HEALTH_ERROR_LOG_INTERVAL_S
+        ):
+            logger.debug("health_check error repeated: %s", message)
+            return
+
+        self._last_health_error = message
+        self._last_health_error_logged_at = now
+        logger.warning("health_check error: %s", message)
 
     # ============ Motion Commands ============
 

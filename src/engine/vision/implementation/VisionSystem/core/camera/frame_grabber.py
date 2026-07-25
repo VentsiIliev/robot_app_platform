@@ -2,9 +2,17 @@ import threading
 import time
 import logging
 from collections import deque
+from dataclasses import dataclass
 
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FrameSnapshot:
+    frame: object
+    timestamp_s: float
+    sequence: int
 
 
 class FrameGrabber:
@@ -33,7 +41,8 @@ class FrameGrabber:
         self.camera = camera
         self.buffer = deque(maxlen=maxlen)
         self.running = False
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self._frame_available = threading.Condition(self.lock)
         self.thread = threading.Thread(target=self._grab_loop, daemon=True)
         self.read_timeout_s = float(read_timeout_s)
         self.restart_after_failures = max(1, int(restart_after_failures))
@@ -43,6 +52,7 @@ class FrameGrabber:
         self._consecutive_failures = 0
         self._last_restart_at = 0.0
         self._last_frame_at = 0.0
+        self._frame_sequence = 0
 
     def start(self):
         self.running = True
@@ -53,9 +63,18 @@ class FrameGrabber:
             frame = self.camera.capture(timeout=self.read_timeout_s)
             if frame is not None:
                 self._consecutive_failures = 0
+                captured_at = time.time()
                 with self.lock:
-                    self.buffer.append(frame)
-                    self._last_frame_at = time.time()
+                    self._frame_sequence += 1
+                    self.buffer.append(
+                        FrameSnapshot(
+                            frame=frame,
+                            timestamp_s=captured_at,
+                            sequence=self._frame_sequence,
+                        )
+                    )
+                    self._last_frame_at = captured_at
+                    self._frame_available.notify_all()
             else:
                 self._consecutive_failures += 1
                 if self._should_restart_stream():
@@ -78,6 +97,7 @@ class FrameGrabber:
         with self.lock:
             self.buffer.clear()
             self._last_frame_at = 0.0
+            self._frame_available.notify_all()
         try:
             self.camera.stop_stream()
         except Exception:
@@ -90,14 +110,35 @@ class FrameGrabber:
         self._consecutive_failures = 0
 
     def get_latest(self):
+        snapshot = self.get_latest_snapshot()
+        return None if snapshot is None else snapshot.frame
+
+    def get_latest_snapshot(self):
         with self.lock:
             if not self.buffer:
                 return None
             if self._last_frame_at and (time.time() - self._last_frame_at) > self.stale_frame_timeout_s:
                 return None
             return self.buffer[-1]
-        return None
+
+    def get_latest_snapshot_since(self, last_sequence: int, timeout_s: float | None = None):
+        deadline = None if timeout_s is None else (time.monotonic() + max(0.0, timeout_s))
+        with self._frame_available:
+            while self.running:
+                snapshot = self.get_latest_snapshot()
+                if snapshot is not None and snapshot.sequence > last_sequence:
+                    return snapshot
+                if timeout_s is None:
+                    self._frame_available.wait()
+                    continue
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                self._frame_available.wait(timeout=remaining)
+            return None
 
     def stop(self):
         self.running = False
+        with self._frame_available:
+            self._frame_available.notify_all()
         self.thread.join()

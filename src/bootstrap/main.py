@@ -29,6 +29,7 @@ _LOGGER = logging.getLogger("main")
 #     try:
 #         available = sorted(os.sched_getaffinity(0))
 #         target = {cpu for cpu in available if cpu not in rt_cores}
+#         target={2}
 #         if target:
 #             os.sched_setaffinity(0, target)
 #             _LOGGER.warning("Pinned robot_app_platform to CPUs: %s", sorted(target))
