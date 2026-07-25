@@ -92,7 +92,7 @@ class CollapsibleGroup(QWidget):
 
 
 class CollapsibleSettingsView(SettingsView):
-    def add_tab(self, title: str, groups: List[SettingGroup]) -> None:
+    def _build_schema_tab_widget(self, groups: List[SettingGroup]) -> QScrollArea:
         content = QWidget()
         content.setStyleSheet(f"background: {BG_COLOR};")
         layout = QVBoxLayout(content)
@@ -111,7 +111,7 @@ class CollapsibleSettingsView(SettingsView):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         scroll.setWidget(content)
-        self._tabs.addTab(scroll, title)
+        return scroll
 
     def _on_group_value_changed(self, key: str, value) -> None:
         self.value_changed_signal.emit(key, value, self._component_name)

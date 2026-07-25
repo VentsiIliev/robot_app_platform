@@ -1,7 +1,7 @@
-from typing import List
+from typing import Callable, List
 
 from PyQt6.QtWidgets import (
-    QWidget, QTabWidget, QVBoxLayout, QScrollArea, QPushButton
+    QLabel, QWidget, QTabWidget, QVBoxLayout, QScrollArea, QPushButton
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
@@ -32,9 +32,12 @@ class SettingsView(QWidget):
         self._component_name = component_name
         self._mapper = mapper
         self._groups: List[GenericSettingGroup] = []
+        self._cached_values: dict = {}
+        self._lazy_tab_builders: dict[int, Callable[[], None]] = {}
 
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(TAB_WIDGET_STYLE)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._save_btn = QPushButton("Save")
         self._save_btn.setStyleSheet(SAVE_BUTTON_STYLE)
@@ -49,6 +52,23 @@ class SettingsView(QWidget):
 
     def add_tab(self, title: str, groups: List[SettingGroup]) -> None:
         """Build a tab from a list of SettingGroup schemas and add it."""
+        if self._tabs.count() == 0:
+            self._insert_schema_tab(self._tabs.count(), title, groups)
+            return
+
+        index = self._tabs.addTab(self._make_lazy_placeholder(title), title)
+        self._lazy_tab_builders[index] = lambda: self._insert_schema_tab(index, title, groups)
+
+    def _insert_schema_tab(self, index: int, title: str, groups: List[SettingGroup]) -> None:
+        scroll = self._build_schema_tab_widget(groups)
+        if index < self._tabs.count():
+            self._tabs.removeTab(index)
+            self._tabs.insertTab(index, scroll, title)
+        else:
+            self._tabs.addTab(scroll, title)
+        self.set_values(self._cached_values)
+
+    def _build_schema_tab_widget(self, groups: List[SettingGroup]) -> QScrollArea:
         content = QWidget()
         content.setStyleSheet(f"background: {BG_COLOR};")
         content_layout = QVBoxLayout(content)
@@ -69,8 +89,7 @@ class SettingsView(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         scroll.setWidget(content)
-
-        self._tabs.addTab(scroll, title)
+        return scroll
 
     def add_raw_tab(self, title: str, widget: QWidget) -> None:
         """Add a tab containing an arbitrary widget (not schema-driven)."""
@@ -87,11 +106,29 @@ class SettingsView(QWidget):
         self.set_values(self._mapper(model))
 
     def set_values(self, flat: dict) -> None:
+        self._cached_values = dict(flat)
         for group in self._groups:
             group.set_values(flat)
 
     def get_values(self) -> dict:
-        result = {}
+        result = dict(self._cached_values)
         for group in self._groups:
             result.update(group.get_values())
         return result
+
+    def _on_tab_changed(self, index: int) -> None:
+        builder = self._lazy_tab_builders.pop(index, None)
+        if builder is not None:
+            builder()
+            self._tabs.setCurrentIndex(index)
+
+    @staticmethod
+    def _make_lazy_placeholder(title: str) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(24, 24, 24, 24)
+        label = QLabel(f"{title} will load when opened.")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        layout.addStretch()
+        return widget

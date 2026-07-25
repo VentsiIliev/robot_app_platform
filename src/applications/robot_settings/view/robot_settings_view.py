@@ -1,5 +1,5 @@
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from src.applications.base.i_application_view import IApplicationView
 from src.shared_contracts.declarations import MovementGroupDefinition
@@ -33,6 +33,12 @@ class RobotSettingsView(IApplicationView):
 
     def __init__(self, movement_group_definitions: list[MovementGroupDefinition] | None = None, parent=None):
         self._movement_group_definitions = list(movement_group_definitions or [])
+        self._cached_flat_config: dict = {}
+        self._cached_movement_groups: dict = {}
+        self._cached_targeting_definitions: dict | None = None
+        self._movement_tab = None
+        self._targeting_tab = None
+        self._settings_view = None
         super().__init__("RobotSettings", parent)
 
     def setup_ui(self) -> None:
@@ -40,16 +46,14 @@ class RobotSettingsView(IApplicationView):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._movement_tab  = MovementGroupsTab()
-        self._targeting_tab = TargetingDefinitionsTab()
         self._settings_view = KeyboardSettingsView(
             component_name="RobotSettings",
             mapper=RobotSettingsMapper.to_flat_dict,
         )
         self._settings_view.add_tab("General",             [ROBOT_INFO_GROUP, GLOBAL_MOTION_GROUP, TCP_STEP_GROUP, OFFSET_DIRECTION_GROUP])
-        self._settings_view.add_tab("Safety",              [SAFETY_LIMITS_GROUP])
-        self._settings_view.add_raw_tab("Movement Groups", self._movement_tab)
-        self._settings_view.add_raw_tab("Targeting", self._targeting_tab)
+        self._settings_view.add_tab("Safety", [SAFETY_LIMITS_GROUP])
+        self._add_lazy_raw_tab("Movement Groups")
+        self._add_lazy_raw_tab("Targeting")
         self._settings_view.add_tab(
             "Calibration",
             [
@@ -63,12 +67,55 @@ class RobotSettingsView(IApplicationView):
 
         self._settings_view.save_requested.connect(self._on_inner_save)
         self._settings_view.value_changed_signal.connect(self._on_inner_value_changed)
+        self._settings_view._tabs.currentChanged.connect(self._on_tab_changed)
+
+    def _add_lazy_raw_tab(self, title: str) -> None:
+        self._settings_view._tabs.addTab(self._make_placeholder(title), title)
+
+    @staticmethod
+    def _make_placeholder(title: str) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(24, 24, 24, 24)
+        label = QLabel(f"{title} will load when opened.")
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        layout.addStretch()
+        return widget
+
+    def _on_tab_changed(self, index: int) -> None:
+        if index == 2 and self._movement_tab is None:
+            self._build_movement_groups_tab()
+        elif index == 3 and self._targeting_tab is None:
+            self._build_targeting_tab()
+
+    def _build_movement_groups_tab(self) -> None:
+        self._movement_tab = MovementGroupsTab()
         self._movement_tab.values_changed.connect(self._on_inner_movement_changed)
         self._movement_tab.remove_group_requested.connect(self.remove_group_requested)
         self._movement_tab.set_current_requested.connect(self.set_current_requested)
         self._movement_tab.move_to_requested.connect(self.move_to_requested)
         self._movement_tab.execute_trajectory_requested.connect(self.execute_requested)
+        self._movement_tab.load(
+            self._cached_movement_groups,
+            definitions=self._movement_group_definitions,
+        )
+        self._replace_tab_with_widget(index=2, title="Movement Groups", widget=self._movement_tab)
+
+    def _build_targeting_tab(self) -> None:
+        self._targeting_tab = TargetingDefinitionsTab()
         self._targeting_tab.definitions_changed.connect(self.targeting_changed)
+        self._targeting_tab.load(self._cached_targeting_definitions)
+        self._replace_tab_with_widget(index=3, title="Targeting", widget=self._targeting_tab)
+
+    def _replace_tab_with_widget(self, index: int, title: str, widget: QWidget) -> None:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setWidget(widget)
+        self._settings_view._tabs.removeTab(index)
+        self._settings_view._tabs.insertTab(index, scroll, title)
+        self._settings_view._tabs.setCurrentIndex(index)
 
     def _on_inner_save(self, values: dict) -> None:
         self.save_requested.emit(values)
@@ -80,6 +127,7 @@ class RobotSettingsView(IApplicationView):
         self.movement_changed.emit(key, value)
 
     def load_config(self, flat: dict) -> None:
+        self._cached_flat_config = dict(flat)
         self._settings_view.set_values(flat)
 
     def load_movement_groups(
@@ -87,27 +135,47 @@ class RobotSettingsView(IApplicationView):
         groups: dict,
         definitions: list[MovementGroupDefinition] | None = None,
     ) -> None:
-        self._movement_tab.load(groups, definitions=definitions or self._movement_group_definitions)
+        self._cached_movement_groups = dict(groups)
+        self._movement_group_definitions = list(definitions or self._movement_group_definitions)
+        if self._movement_tab is not None:
+            self._movement_tab.load(
+                self._cached_movement_groups,
+                definitions=self._movement_group_definitions,
+            )
 
     def load_targeting_definitions(self, data: dict | None) -> None:
-        self._targeting_tab.load(data)
+        self._cached_targeting_definitions = dict(data) if data is not None else None
+        if self._targeting_tab is not None:
+            self._targeting_tab.load(self._cached_targeting_definitions)
 
     def get_values(self) -> dict:
-        return self._settings_view.get_values()
+        values = dict(self._cached_flat_config)
+        values.update(self._settings_view.get_values())
+        return values
 
     def get_movement_groups(self) -> dict:
+        if self._movement_tab is None:
+            return dict(self._cached_movement_groups)
         return self._movement_tab.get_values()
 
     def get_targeting_definitions(self) -> dict:
+        if self._targeting_tab is None:
+            return dict(self._cached_targeting_definitions or {})
         return self._targeting_tab.get_values()
 
     def add_movement_group(self, name: str, defn, group) -> None:
-        self._movement_tab.add_group(name, defn, group)
+        self._cached_movement_groups[name] = group
+        if self._movement_tab is not None:
+            self._movement_tab.add_group(name, defn, group)
 
     def remove_movement_group(self, name: str) -> None:
-        self._movement_tab.remove_group(name)
+        self._cached_movement_groups.pop(name, None)
+        if self._movement_tab is not None:
+            self._movement_tab.remove_group(name)
 
     def get_group_widget(self, group_name: str):
+        if self._movement_tab is None:
+            return None
         return self._movement_tab.get_widget(group_name)
 
     def _on_move_to(self, group_name: str, point_str) -> None:
