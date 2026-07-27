@@ -41,6 +41,20 @@ class FairinoRos2Robot(IRobot):
         logger.debug("stop_motion ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def get_state_snapshot(self) -> dict | None:
+        snapshot = self._client.get_state_snapshot()
+        if not snapshot:
+            return None
+        velocity = snapshot.get("velocity")
+        if velocity is None:
+            snapshot["velocity_magnitude"] = 0.0
+        else:
+            try:
+                snapshot["velocity_magnitude"] = math.sqrt(sum(float(v) ** 2 for v in velocity))
+            except (TypeError, ValueError):
+                snapshot["velocity_magnitude"] = 0.0
+        return snapshot
+
     def get_current_position(self) -> List[float]:
         # logger.debug("get_current_position →")
         result = self._client.get_current_position()

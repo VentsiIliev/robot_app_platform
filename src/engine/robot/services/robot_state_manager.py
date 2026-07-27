@@ -162,14 +162,27 @@ class RobotStateManager(IRobotStateProvider):
             with self._lock:
                 self._connection_was_disconnected = False
 
-        pos = self._robot.get_current_position()
-        vel = self._robot.get_current_velocity()
-        acc = self._robot.get_current_acceleration()
+        snapshot_getter = getattr(self._robot, "get_state_snapshot", None)
+        snapshot = snapshot_getter() if callable(snapshot_getter) else None
+        if snapshot:
+            pos = snapshot.get("position")
+            vel = snapshot.get("velocity_magnitude")
+            if vel is None:
+                velocity_components = snapshot.get("velocity")
+                try:
+                    vel = sum(float(v) ** 2 for v in velocity_components) ** 0.5
+                except (TypeError, ValueError):
+                    vel = None
+            acc = snapshot.get("acceleration")
+        else:
+            pos = self._robot.get_current_position()
+            vel = self._robot.get_current_velocity()
+            acc = self._robot.get_current_acceleration()
 
         with self._lock:
             self._position = pos or self._position
-            self._velocity = vel or self._velocity
-            self._acceleration = acc or self._acceleration
+            self._velocity = vel if vel is not None else self._velocity
+            self._acceleration = acc if acc is not None else self._acceleration
             self._state = connection_state or "idle"
 
         if self._publisher:

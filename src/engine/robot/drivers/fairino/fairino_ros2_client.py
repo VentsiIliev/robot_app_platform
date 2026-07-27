@@ -27,6 +27,7 @@ class FairinoRos2Client:
         self._last_health_error_logged_at = 0.0
         self._drive_enabled = False
         self._connection_generation = 0
+        self._session = requests.Session()
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
         health = self.health_check()
         logger.debug("health_check response: %s", health)
@@ -495,6 +496,32 @@ class FairinoRos2Client:
 
 
     # ============ State Queries ============
+
+    def get_state_snapshot(self):
+        try:
+            response = self._session.get(f"{self.server_url}/state/snapshot", timeout=2)
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                logger.warning(
+                    "get_state_snapshot rejected: http=%s data=%s",
+                    response.status_code,
+                    data,
+                )
+                return None
+            self._mark_available()
+            drive = data.get("drive")
+            if isinstance(drive, dict):
+                if drive.get("motion_allowed_by_drive_enable") is not None:
+                    self._drive_enabled = bool(drive.get("motion_allowed_by_drive_enable"))
+                elif drive.get("actual_enabled") is not None:
+                    self._drive_enabled = bool(drive.get("actual_enabled"))
+                elif drive.get("requested_enabled") is not None:
+                    self._drive_enabled = bool(drive.get("requested_enabled"))
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_state_snapshot error: %s", e, exc_info=True)
+            return None
 
     def get_current_position(self):
         # logger.debug("get_current_position → GET /position/current")

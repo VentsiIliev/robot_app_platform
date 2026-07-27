@@ -1,9 +1,11 @@
 import unittest
 from enum import Enum
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSystem
 from src.engine.vision.vision_service import VisionService
 
 
@@ -129,6 +131,44 @@ class TestVisionServiceFramesAndContours(unittest.TestCase):
         self.assertIs(contours[0], contour)
 
 
+class TestVisionSystemRun(unittest.TestCase):
+
+    def test_run_publishes_corrected_frame_when_contour_detection_is_off(self):
+        system = VisionSystem.__new__(VisionSystem)
+        raw = np.zeros((2, 2, 3), dtype=np.uint8)
+        corrected = np.ones((2, 2, 3), dtype=np.uint8)
+        system.frame_grabber = MagicMock()
+        system.frame_grabber.get_latest_snapshot_since.return_value = SimpleNamespace(
+            frame=raw,
+            sequence=7,
+            timestamp_s=12.0,
+        )
+        system._last_processed_frame_sequence = 0
+        system._latest_frame_timestamp_s = 0.0
+        system.current_skip_frames = 0
+        system.camera_settings = MagicMock()
+        system.camera_settings.get_skip_frames.return_value = 0
+        system.camera_settings.get_brightness_auto.return_value = False
+        system.camera_settings.get_contour_detection.return_value = False
+        system.state_manager = MagicMock()
+        system.rawMode = False
+        system.message_publisher = MagicMock()
+        system.cameraMatrix = np.eye(3)
+        system.correctImage = MagicMock(return_value=corrected)
+        system.image = None
+        system.rawImage = None
+        system.correctedImage = None
+        system._latest_contours = [np.array([[1, 2]], dtype=np.int32)]
+
+        contours, display_image, extra = system.run()
+
+        self.assertIsNone(contours)
+        self.assertIs(display_image, corrected)
+        self.assertIsNone(extra)
+        system.message_publisher.publish_latest_image.assert_called_once_with(corrected)
+        self.assertEqual(system._latest_contours, [])
+
+
 class TestVisionServiceDelegation(unittest.TestCase):
 
     def test_save_work_area_converts_points_to_float32_array(self):
@@ -201,4 +241,3 @@ class TestVisionServiceDelegation(unittest.TestCase):
             result,
             ({"workpieces": [1]}, 1, ["matched-contour"], ["unmatched-contour"]),
         )
-
