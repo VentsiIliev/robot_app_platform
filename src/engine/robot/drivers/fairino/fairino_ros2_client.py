@@ -499,7 +499,7 @@ class FairinoRos2Client:
 
     def get_state_snapshot(self):
         try:
-            response = self._session.get(f"{self.server_url}/state/snapshot", timeout=2)
+            response = self._session.get(f"{self.server_url}/state/kinematics", timeout=2)
             data = response.json()
             if response.status_code >= 400 or data.get("success") is False:
                 logger.warning(
@@ -509,14 +509,6 @@ class FairinoRos2Client:
                 )
                 return None
             self._mark_available()
-            drive = data.get("drive")
-            if isinstance(drive, dict):
-                if drive.get("motion_allowed_by_drive_enable") is not None:
-                    self._drive_enabled = bool(drive.get("motion_allowed_by_drive_enable"))
-                elif drive.get("actual_enabled") is not None:
-                    self._drive_enabled = bool(drive.get("actual_enabled"))
-                elif drive.get("requested_enabled") is not None:
-                    self._drive_enabled = bool(drive.get("requested_enabled"))
             return data
         except Exception as e:
             self._mark_unavailable(e)

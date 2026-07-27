@@ -140,12 +140,12 @@ class VisionSystem:
             width  = self.camera_settings.get_camera_width(),
             height = self.camera_settings.get_camera_height(),
         )
-        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
+        # self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
         # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera = RemoteCamera(url = "http://192.168.222.35:5001/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        self.camera = RemoteCamera(url = "http://192.168.222.11:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
 
@@ -239,13 +239,17 @@ class VisionSystem:
             self._latest_contour_frame_sequence = snapshot.sequence
             return contours, self.correctedImage, None
 
+        self._latest_contours = []
         if self.cameraMatrix is None:
-            if self.message_publisher:
-                self.message_publisher.publish_latest_image(self.image)
-            return None, self.image, None
+            self.correctedImage = None
+            display_image = self.image
+        else:
+            self.correctedImage = self.correctImage(self.image)
+            display_image = self.correctedImage
 
-        self.correctedImage = self.correctImage(self.image)
-        return None, self.correctedImage, None
+        if self.message_publisher:
+            self.message_publisher.publish_latest_image(display_image)
+        return None, display_image, None
 
     def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
         snapshot = self.frame_grabber.get_latest_snapshot()
