@@ -3,8 +3,6 @@ import os
 import sys
 from pathlib import Path
 
-from src.robot_systems.glue.bootstrap_provider import GlueBootstrapProvider
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
@@ -17,8 +15,7 @@ from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
 from src.engine.localization.localization_service import LocalizationService
 from src.robot_systems.system_builder import SystemBuilder
-from src.robot_systems.paint.bootstrap_provider import PaintBootstrapProvider
-from src.robot_systems.welding.bootstrap_provider import WeldingBootstrapProvider
+from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
@@ -40,10 +37,6 @@ _LOGGER = logging.getLogger("main")
 
 
 _DEV_SKIP_LOGIN = True
-# _BOOTSTRAP_PROVIDER = GlueBootstrapProvider()
-_BOOTSTRAP_PROVIDER = PaintBootstrapProvider()
-# _BOOTSTRAP_PROVIDER = WeldingBootstrapProvider()
-
 
 
 class _FramelessHeaderDrag(QObject):
@@ -80,6 +73,7 @@ class _FramelessHeaderDrag(QObject):
 def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
+    bootstrap_provider = load_bootstrap_provider(load_startup_config())
 
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
     logging.getLogger("RobotStatePublisher").setLevel(logging.WARNING)
@@ -96,13 +90,13 @@ def main() -> None:
     # 2 — robot app (settings loaded, services wired)
     robot_app = (
         SystemBuilder()
-        .with_robot(_BOOTSTRAP_PROVIDER.build_robot())
+        .with_robot(bootstrap_provider.build_robot())
         .with_messaging_service(ctx.messaging_service)
-        .build(_BOOTSTRAP_PROVIDER.system_class)
+        .build(bootstrap_provider.system_class)
     )
 
     # 3 — shell folder layout from app metadata
-    ShellConfigurator.configure(_BOOTSTRAP_PROVIDER.system_class)
+    ShellConfigurator.configure(bootstrap_provider.system_class)
 
     # 4 — Qt app + localization
     qt_app = QApplication(sys.argv)
@@ -139,9 +133,9 @@ def main() -> None:
         session = UserSession()
         session.login(_StubUser())
         _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
-        _load_apps_into_shell(shell, session, robot_app, ctx)
+        _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
     else:
-        login_view = _BOOTSTRAP_PROVIDER.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
+        login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
         shell.stacked_widget.addWidget(login_view)          # → index 1
         shell.stacked_widget.setCurrentIndex(1)             # show login in shell content area
 
@@ -155,7 +149,7 @@ def main() -> None:
             session.login(login_view.result_user())
             shell.stacked_widget.removeWidget(login_view)
             login_view.deleteLater()
-            _load_apps_into_shell(shell, session, robot_app, ctx)
+            _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
 
         login_view.accepted.connect(_on_login_accepted)
 
@@ -167,9 +161,9 @@ def main() -> None:
         sys.exit(qt_app.exec())
     finally:
         robot_app.stop()
-def _load_apps_into_shell(shell, session, robot_app, ctx):
+def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
     """Load role-filtered apps and reload the shell's folder page."""
-    auth_svc = _BOOTSTRAP_PROVIDER.build_authorization_service(robot_app)
+    auth_svc = bootstrap_provider.build_authorization_service(robot_app)
     visible_specs = auth_svc.get_visible_apps(session.current_user, robot_app.__class__.shell.applications)
 
     loader = ApplicationLoader(ctx.messaging_service)

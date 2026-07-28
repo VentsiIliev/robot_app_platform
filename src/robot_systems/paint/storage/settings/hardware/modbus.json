@@ -1,0 +1,10 @@
+{
+  "port": "COM5",
+  "baudrate": 115200,
+  "bytesize": 8,
+  "stopbits": 1,
+  "parity": "N",
+  "timeout": 0.01,
+  "slave_address": 10,
+  "max_retries": 30
+}

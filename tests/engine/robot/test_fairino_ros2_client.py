@@ -6,6 +6,7 @@ from src.engine.robot.drivers.fairino.fairino_ros2_client import (
     FakeRos2Client,
     build_fairino_ros2_client,
 )
+from src.engine.robot.drivers.fairino.fairino_ros2_robot import FairinoRos2Robot
 
 
 class TestFairinoRos2Client(unittest.TestCase):
@@ -111,3 +112,13 @@ class TestFairinoRos2Client(unittest.TestCase):
 
         self.assertEqual(client.stop_motion(), 0)
         self.assertFalse(client.get_status()["is_executing"])
+
+    def test_fake_robot_exposes_state_snapshot_for_platform_polling(self):
+        robot = FairinoRos2Robot(server_url="fake://local")
+
+        snapshot = robot.get_state_snapshot()
+
+        self.assertEqual(snapshot["position"], [0.0] * 6)
+        self.assertEqual(snapshot["velocity"], [0.0] * 3)
+        self.assertEqual(snapshot["velocity_magnitude"], 0.0)
+        self.assertEqual(snapshot["acceleration"], 0.0)

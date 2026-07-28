@@ -1041,6 +1041,13 @@ class FakeRos2Client:
     def get_last_stop_response(self):
         return deepcopy(self._last_stop_response)
 
+    def get_state_snapshot(self):
+        return {
+            "position": list(self._current_position),
+            "velocity": list(self._current_velocity_components),
+            "acceleration": 0.0,
+        }
+
     def get_current_position(self):
         return list(self._current_position)
 

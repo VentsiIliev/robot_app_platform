@@ -7,6 +7,7 @@ not full execution.
 """
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 
@@ -35,10 +36,15 @@ class TestMainImport(unittest.TestCase):
 
         self.assertIs(result, localization)
         args = localization_cls.call_args.args
+        shared_translations = (
+            Path(m.__file__).resolve().parent.parent
+            / "applications"
+            / "localization"
+        )
         self.assertEqual(
             args[0],
             [
-                "/home/ilv/Desktop/robot_app_platform/src/applications/localization",
+                str(shared_translations),
                 "/tmp/robot_systems/paint/storage/translations",
             ],
         )
@@ -81,6 +87,12 @@ class TestStartupSequenceOrder(unittest.TestCase):
         fake_spec.name = "TestApp"
 
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        fake_provider = MagicMock()
+        fake_provider.system_class = GlueRobotSystem
+        fake_provider.build_robot.return_value = MagicMock()
+        fake_provider.build_authorization_service.return_value.get_visible_apps.return_value = [
+            fake_spec
+        ]
 
         patches = {
             "src.bootstrap.main.EngineContext.build":       MagicMock(side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
@@ -105,6 +117,9 @@ class TestStartupSequenceOrder(unittest.TestCase):
         with (
             patch("src.bootstrap.main.EngineContext.build",
                   side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
+            patch("src.bootstrap.main.load_startup_config"),
+            patch("src.bootstrap.main.load_bootstrap_provider",
+                  return_value=fake_provider),
             patch("src.bootstrap.main.SystemBuilder",
                   return_value=fake_builder),
             patch("src.bootstrap.main.ShellConfigurator.configure",
@@ -160,6 +175,11 @@ class TestStartupAbortOnFailure(unittest.TestCase):
         qt_called = []
 
         with (
+            patch("src.bootstrap.main.load_startup_config"),
+            patch(
+                "src.bootstrap.main.load_bootstrap_provider",
+                return_value=MagicMock(),
+            ),
             patch("src.bootstrap.main.EngineContext.build",
                   side_effect=RuntimeError("engine init failed")),
             patch("src.bootstrap.main.QApplication",
