@@ -1,2 +1,3 @@
-# Build-time only. PyInstaller bundles the runtime interpreter and dependencies.
+# Build environment: application dependencies plus build-only tooling.
+-r ../requirements.txt
 PyInstaller==6.15.0

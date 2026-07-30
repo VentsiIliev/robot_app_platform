@@ -72,6 +72,20 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
     exit 1
 fi
 
+MISSING_TOOLS=()
+if ! "$PYTHON_BIN" -c "import PyInstaller" 2>/dev/null; then
+    MISSING_TOOLS+=("PyInstaller")
+fi
+if [[ "$SKIP_TESTS" == false ]] && ! "$PYTHON_BIN" -c "import coverage" 2>/dev/null; then
+    MISSING_TOOLS+=("coverage")
+fi
+if ((${#MISSING_TOOLS[@]})); then
+    echo "Missing release tooling: ${MISSING_TOOLS[*]}" >&2
+    echo "Install it with:" >&2
+    echo "  $PYTHON_BIN -m pip install -r packaging/requirements-build.txt" >&2
+    exit 1
+fi
+
 cd "$PROJECT_ROOT"
 
 CURRENT_BRANCH="$(git branch --show-current)"

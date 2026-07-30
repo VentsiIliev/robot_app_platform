@@ -24,6 +24,10 @@ Build on the same Linux distribution and CPU architecture as the target:
 ./packaging/build_paint.sh
 ```
 
+The requirements file contains build and release tooling, including PyInstaller
+and the coverage package used by the repository test harness. These tools are
+needed only on the build machine, not on machines running the bundle.
+
 The output is `dist/paint-robot/`. Test it with:
 
 ```bash
