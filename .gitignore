@@ -19,7 +19,6 @@ capture_poses.json
 # Test / coverage output
 .coverage
 .coverage.*
-.coveragerc
 .pytest_cache/
 htmlcov/
 
