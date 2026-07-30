@@ -23,6 +23,10 @@ capture_poses.json
 .pytest_cache/
 htmlcov/
 
+# Standalone application builds
+build/pyinstaller/
+dist/
+
 # IDE files
 .idea/
 *.iml

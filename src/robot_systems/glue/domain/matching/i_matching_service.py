@@ -1,17 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
+from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 
 
-class IMatchingService(ABC):
-    @abstractmethod
-    def can_match_saved_workpieces(self) -> bool:
-        ...
-
-    @abstractmethod
-    def match_saved_workpieces(self, contour) -> Tuple[bool, dict | None, str]:
-        ...
+class IMatchingService(IWorkpieceMatcher, ABC):
+    """Glue matching workflow, extending the editor's narrow matching port."""
 
     @abstractmethod
     def run_matching(self) -> Tuple[dict, int, List, List]:

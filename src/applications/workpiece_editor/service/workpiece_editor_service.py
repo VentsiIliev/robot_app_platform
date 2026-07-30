@@ -22,7 +22,7 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
 )
-from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
+from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class WorkpieceEditorServices:
     transformer_getter: Optional[Callable[[], Optional[ICoordinateTransformer]]] = None
     path_executor: Optional[IWorkpiecePathExecutor] = None
     path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
-    matching_service: Optional[IMatchingService] = None
+    matching_service: Optional[IWorkpieceMatcher] = None
     workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
 
 

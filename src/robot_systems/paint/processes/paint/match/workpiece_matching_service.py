@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Callable, Optional
 
+from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
-from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
 from src.robot_systems.paint.processes.paint.match.matchable_workpiece import MatchableWorkpiece
 
 _logger = logging.getLogger(__name__)
 
-class PaintWorkpieceMatchingService(IMatchingService):
+class PaintWorkpieceMatchingService(IWorkpieceMatcher):
     """Adapt paint workpiece storage to the shared contour-matching interface."""
     def __init__(
         self,
