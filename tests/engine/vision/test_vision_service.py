@@ -1,5 +1,6 @@
 import unittest
 from enum import Enum
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -230,10 +231,13 @@ class TestVisionServiceDelegation(unittest.TestCase):
         unmatched = MagicMock()
         unmatched.get.return_value = "unmatched-contour"
 
-        with patch(
-            "src.engine.vision.implementation.VisionSystem.features.contour_matching.find_matching_workpieces",
-            return_value=({"workpieces": [1]}, [unmatched], [matched]),
-        ) as matching:
+        matching = MagicMock(return_value=({"workpieces": [1]}, [unmatched], [matched]))
+        fake_module = SimpleNamespace(find_matching_workpieces=matching)
+        module_name = (
+            "src.engine.vision.implementation.VisionSystem.features."
+            "contour_matching"
+        )
+        with patch.dict(sys.modules, {module_name: fake_module}):
             result = service.run_matching(["wp"], ["contour"])
 
         matching.assert_called_once_with(["wp"], ["contour"])

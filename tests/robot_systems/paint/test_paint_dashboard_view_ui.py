@@ -5,15 +5,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 
 from pl_gui.dashboard.config import CardConfig
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
 from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import (
     PaintCardFactory,
 )
-from src.robot_systems.paint.applications.dashboard.ui.paint_status_card import (
-    PaintStatusCard,
+from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
+    PaintInfoCard,
 )
 from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view import (
     PaintDashboardView,
@@ -72,7 +72,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         cls._app = QApplication.instance() or QApplication([])
 
-    def test_card_factory_builds_status_cards_with_layout_coordinates(self) -> None:
+    def test_card_factory_builds_info_cards_with_layout_coordinates(self) -> None:
         cards = PaintCardFactory().build_cards(
             [
                 CardConfig(card_id=3, label="Paint", row=1, col=2),
@@ -81,17 +81,17 @@ class TestPaintDashboardUi(unittest.TestCase):
         )
 
         self.assertEqual(len(cards), 2)
-        self.assertIsInstance(cards[0][0], PaintStatusCard)
+        self.assertIsInstance(cards[0][0], PaintInfoCard)
         self.assertEqual(cards[0][1:], (3, 1, 2))
         self.assertEqual(cards[1][1:], (4, None, None))
 
-    def test_status_card_updates_state_label(self) -> None:
-        card = PaintStatusCard("Paint")
+    def test_info_card_displays_configured_placeholder_content(self) -> None:
+        card = PaintInfoCard("Paint", "Running", "Current state")
 
-        card.set_state("running")
-
-        self.assertEqual(card._title.text(), "Paint")
-        self.assertEqual(card._state.text(), "State: running")
+        self.assertEqual(
+            [label.text() for label in card.findChildren(QLabel)],
+            ["Paint", "Running", "Current state"],
+        )
 
     def test_dashboard_view_wires_inner_dashboard_and_applies_state(self) -> None:
         state = DashboardState(
@@ -137,7 +137,6 @@ class TestPaintDashboardUi(unittest.TestCase):
         view._dashboard.action_requested.emit("custom")
         view._dashboard.action_requested.emit("reset_errors")
 
-        self.assertEqual(view._state_label.text(), "State: idle")
         start_cb.assert_called_once_with()
         stop_cb.assert_called_once_with()
         pause_cb.assert_called_once_with()
@@ -152,28 +151,9 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIn(("stop", True), view._dashboard.calls)
         self.assertIn(("pause", True), view._dashboard.calls)
         self.assertIn(("pause_text", "Resume"), view._dashboard.calls)
-        self.assertEqual(view._state_label.text(), "State: running")
-        self.assertEqual(view._mode_label.text(), "Mode: Paint Mode")
-        self.assertEqual(view._job_label.text(), "Job: Job 12")
-        self.assertEqual(view._notes.toPlainText(), "one\ntwo")
-
-    def test_inject_aux_widget_falls_back_to_dashboard_parent_on_layout_failure(self) -> None:
-        with patch(
-            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
-            _FakeDashboardWidget,
-        ):
-            view = PaintDashboardView(
-                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
-                action_buttons=[],
-                cards=[],
-            )
-
-        widget = QWidget()
-        view._inject_aux_widget(widget)
-        self.assertIs(widget.parent(), view._dashboard)
         self.assertIsNone(view.clean_up())
 
-    def test_inject_aux_widget_uses_preview_aux_grid_when_layout_available(self) -> None:
+    def test_view_initialization_tolerates_missing_dashboard_layout(self) -> None:
         with patch(
             "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
             _FakeDashboardWidget,
@@ -184,27 +164,7 @@ class TestPaintDashboardUi(unittest.TestCase):
                 cards=[],
             )
 
-        aux_layout = MagicMock()
-        aux_grid = SimpleNamespace(layout=MagicMock(return_value=aux_layout))
-        preview_container = SimpleNamespace(
-            layout=MagicMock(
-                return_value=SimpleNamespace(
-                    itemAt=MagicMock(return_value=SimpleNamespace(widget=MagicMock(return_value=aux_grid)))
-                )
-            )
-        )
-        top_section = SimpleNamespace(
-            itemAt=MagicMock(return_value=SimpleNamespace(widget=MagicMock(return_value=preview_container)))
-        )
-        main_layout = SimpleNamespace(
-            itemAt=MagicMock(return_value=SimpleNamespace(layout=MagicMock(return_value=top_section)))
-        )
-        view._dashboard.layout_manager = SimpleNamespace(main_layout=main_layout)
-
-        widget = QWidget()
-        view._inject_aux_widget(widget)
-
-        aux_layout.addWidget.assert_called_once_with(widget, 0, 0, 2, 3)
+        self.assertIsInstance(view._dashboard, _FakeDashboardWidget)
 
 
 if __name__ == "__main__":

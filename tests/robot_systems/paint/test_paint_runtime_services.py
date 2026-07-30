@@ -74,33 +74,10 @@ class TestPaintDashboardService(unittest.TestCase):
         process.resume.assert_called_once_with()
         process.reset_errors.assert_called_once_with()
 
-    def test_transform_debug_uses_calibrated_transformer_not_raw_ppm(self) -> None:
-        transformer = MagicMock()
-        transformer.is_available.return_value = True
-        transformer.transform.side_effect = lambda x, y: (x + 100.0, y + 200.0)
-        transformer._model = SimpleNamespace(
-            homography_matrix=np.array(
-                [
-                    [2.0, 0.0, 0.0],
-                    [0.0, 3.0, 0.0],
-                    [0.0, 0.0, 1.0],
-                ],
-                dtype=float,
-            )
-        )
-        resolver = SimpleNamespace(_base=transformer)
-        service = PaintDashboardService(
-            MagicMock(process_id="paint"),
-            resolver_getter=lambda: resolver,
-        )
+    def test_dashboard_service_does_not_expose_legacy_transform_debug_helper(self) -> None:
+        service = PaintDashboardService(MagicMock(process_id="paint"))
 
-        raw_pixels, transformed, homography_only = service._transform_like_pick_target(
-            np.array([[[10.0, 20.0]], [[30.0, 40.0]]], dtype=np.float32)
-        )
-
-        self.assertEqual(raw_pixels, [[10.0, 20.0], [30.0, 40.0]])
-        self.assertEqual([point[:2] for point in transformed], [[110.0, 220.0], [130.0, 240.0]])
-        self.assertEqual([point[:2] for point in homography_only], [[20.0, 60.0], [60.0, 120.0]])
+        self.assertFalse(hasattr(service, "_transform_like_pick_target"))
 
 
 class TestPaintCalibrationCoordinator(unittest.TestCase):
@@ -298,14 +275,14 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
         transport = ModbusVacuumPumpTransport(
             port="/dev/null",
             slave_address=1,
-            no_response_retry_delay_s=0.0,
+            write_retry_delay_s=0.0,
         )
-        transport._session = MagicMock(return_value=session)
+        transport._raw_send = MagicMock(side_effect=NoResponseError("no answer"))
 
-        transport.write_register(128, 1)
+        with self.assertRaises(RuntimeError):
+            transport.write_register(128, 1)
 
-        self.assertEqual(inst.write_bits.call_count, 3)
-        inst.write_bits.assert_called_with(128, [1])
+        self.assertEqual(transport._raw_send.call_count, 3)
 
     def test_no_response_write_returns_after_successful_retry(self) -> None:
         class NoResponseError(Exception):
@@ -319,14 +296,13 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
         transport = ModbusVacuumPumpTransport(
             port="/dev/null",
             slave_address=1,
-            no_response_retry_delay_s=0.0,
+            write_retry_delay_s=0.0,
         )
-        transport._session = MagicMock(return_value=session)
+        transport._raw_send = MagicMock(side_effect=[NoResponseError("no answer"), None])
 
         transport.write_register(128, 0)
 
-        self.assertEqual(inst.write_bits.call_count, 2)
-        inst.write_bits.assert_called_with(128, [0])
+        self.assertEqual(transport._raw_send.call_count, 2)
 
     def test_other_write_errors_still_raise(self) -> None:
         inst = MagicMock()

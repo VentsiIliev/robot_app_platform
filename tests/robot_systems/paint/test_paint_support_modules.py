@@ -68,7 +68,7 @@ class TestPaintBootstrapProvider(unittest.TestCase):
         ) as robot_cls:
             self.assertEqual(provider.build_robot(), "robot")
 
-        robot_cls.assert_called_once_with(server_url="fake://local")
+        robot_cls.assert_called_once_with(server_url="http://localhost:5000")
 
     def test_build_login_view_wires_auth_and_login_service(self) -> None:
         provider = PaintBootstrapProvider()
@@ -157,7 +157,7 @@ class TestPaintIdentifiersAndExports(unittest.TestCase):
         self.assertEqual(ServiceID.VACUUM_PUMP.value, "vacuum_pump")
         self.assertEqual(ProcessID.MAIN_PROCESS.value, "main_process")
         self.assertEqual(ProcessID.ROBOT_CALIBRATION.value, "robot_calibration")
-        self.assertEqual(list(SettingsID), [])
+        self.assertEqual(list(SettingsID), [SettingsID.PAINT_PROCESS_CONFIG])
 
     def test_package_exports_are_stable(self) -> None:
         self.assertIs(ApplicationsDashboardFactory, PaintDashboardFactory)
@@ -214,7 +214,7 @@ class TestPaintDashboardSupport(unittest.TestCase):
         state = DashboardState()
 
         self.assertFalse(config.show_placeholders)
-        self.assertEqual(PAINT_DASHBOARD_CARDS[0].label, "Paint Process")
+        self.assertEqual(PAINT_DASHBOARD_CARDS[0].label, "Mock")
         self.assertEqual(PAINT_DASHBOARD_ACTIONS[0].action_id, "reset_errors")
         self.assertEqual(state.process_state, "idle")
         self.assertEqual(state.mode_label, "Paint Mode")

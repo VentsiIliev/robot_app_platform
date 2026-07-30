@@ -10,9 +10,11 @@ class TestRobotStateManager(unittest.TestCase):
 
     def _make(self, publisher=None, active_tool_getter=None):
         robot = MagicMock()
-        robot.get_current_position.return_value = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
-        robot.get_current_velocity.return_value = 10.0
-        robot.get_current_acceleration.return_value = 5.0
+        robot.get_state_snapshot.return_value = {
+            "position": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            "velocity_magnitude": 10.0,
+            "acceleration": 5.0,
+        }
         return RobotStateManager(robot, publisher=publisher, active_tool_getter=active_tool_getter), robot
 
     def test_initial_state(self):
@@ -125,14 +127,16 @@ class TestRobotStateManager(unittest.TestCase):
         robot = MagicMock()
         calls = []
         robot.set_active_tool.side_effect = lambda tool: calls.append(("set_active_tool", tool)) or True
-        robot.get_current_position.side_effect = lambda: calls.append(("get_current_position", None)) or [1, 2, 3, 0, 0, 0]
-        robot.get_current_velocity.return_value = 0.0
-        robot.get_current_acceleration.return_value = 0.0
+        robot.get_state_snapshot.side_effect = lambda: calls.append(("get_state_snapshot", None)) or {
+            "position": [1, 2, 3, 0, 0, 0],
+            "velocity_magnitude": 0.0,
+            "acceleration": 0.0,
+        }
         mgr = RobotStateManager(robot, active_tool_getter=lambda: 1)
 
         mgr.refresh_once()
 
-        self.assertEqual(calls[:2], [("set_active_tool", 1), ("get_current_position", None)])
+        self.assertEqual(calls[:2], [("set_active_tool", 1), ("get_state_snapshot", None)])
         self.assertEqual(mgr.position, [1, 2, 3, 0, 0, 0])
 
     def test_refresh_does_not_publish_position_when_tool_sync_fails(self):
@@ -152,9 +156,11 @@ class TestRobotStateManager(unittest.TestCase):
     def test_refresh_retries_tool_sync_until_success(self):
         robot = MagicMock()
         robot.set_active_tool.side_effect = [False, True]
-        robot.get_current_position.return_value = [1, 2, 3, 0, 0, 0]
-        robot.get_current_velocity.return_value = 0.0
-        robot.get_current_acceleration.return_value = 0.0
+        robot.get_state_snapshot.return_value = {
+            "position": [1, 2, 3, 0, 0, 0],
+            "velocity_magnitude": 0.0,
+            "acceleration": 0.0,
+        }
         mgr = RobotStateManager(robot, active_tool_getter=lambda: 1)
 
         mgr.refresh_once()

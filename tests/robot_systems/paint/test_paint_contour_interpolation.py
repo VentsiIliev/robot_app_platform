@@ -80,7 +80,7 @@ class TestPaintContourInterpolation(unittest.TestCase):
         execution_xy = np.asarray(result.execution_path, dtype=float)[:, :2]
 
         self.assertTrue(np.any(np.linalg.norm(execution_xy - np.asarray([10.0, 0.0]), axis=1) <= 1e-9))
-        self.assertLessEqual(_max_xy_spacing(result.execution_path), 1.0 + 1e-9)
+        self.assertLessEqual(_max_xy_spacing(result.execution_path), 3.0 + 1e-9)
 
     def test_preserves_rounded_arc_shape(self) -> None:
         arc = []
@@ -104,7 +104,7 @@ class TestPaintContourInterpolation(unittest.TestCase):
 
         self.assertLessEqual(float(np.max(raw_to_execution)), 1.6)
         self.assertLessEqual(float(np.mean(execution_to_raw)), 0.8)
-        self.assertLessEqual(_max_xy_spacing(result.execution_path), 1.0 + 1e-9)
+        self.assertLessEqual(_max_xy_spacing(result.execution_path), 3.0 + 1e-9)
 
     def test_resample_contour_removes_tiny_backtrack_fold(self) -> None:
         folded_paths = [

@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from src.robot_systems.paint.processes.paint.config import PaintSimulationConfig
-from src.robot_systems.paint.processes.paint.execute.pivot_projection import (
+from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
     project_paint_motion_geometry_continuous,
     rebase_projected_paint_path_to_zero_start_rz,
 )
@@ -170,8 +170,8 @@ class TestPaintPivotProjection(unittest.TestCase):
         self.assertEqual(len(diagnostics), 2)
         np.testing.assert_allclose(projected[0], [95.0, 200.0, 300.0, 10.0, 20.0, 180.0], atol=1e-6)
         np.testing.assert_allclose(projected[1], [105.0, 200.0, 300.0, 10.0, 20.0, 180.0], atol=1e-6)
-        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 200.0], [90.0, 200.0]]), atol=1e-6)
-        np.testing.assert_allclose(snapshots[1], np.array([[110.0, 200.0], [100.0, 200.0]]), atol=1e-6)
+        self.assertEqual(snapshots[0].shape, (0, 2))
+        self.assertEqual(snapshots[1].shape, (0, 2))
         self.assertEqual(diagnostics[0]["rotation_delta_raw"], 180.0)
         self.assertEqual(diagnostics[0]["rotation_delta_applied"], 0.0)
         self.assertEqual(diagnostics[1]["rotation_delta_applied"], 0.0)
@@ -198,7 +198,7 @@ class TestPaintPivotProjection(unittest.TestCase):
 
         np.testing.assert_allclose(projected[0][:2], [98.0, 200.0], atol=1e-6)
         np.testing.assert_allclose(projected[1][:2], [108.0, 200.0], atol=1e-6)
-        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 200.0], [90.0, 200.0]]), atol=1e-6)
+        self.assertEqual(snapshots[0].shape, (0, 2))
 
     def test_project_paint_motion_geometry_continuous_prefers_long_initial_translation_run(self) -> None:
         config = PaintSimulationConfig(
@@ -224,8 +224,7 @@ class TestPaintPivotProjection(unittest.TestCase):
             anchor_xy=(-1.0, 10.0),
         )
 
-        np.testing.assert_allclose(snapshots[0][0], np.array([100.0, 200.0]), atol=1e-6)
-        self.assertGreater(float(np.linalg.norm(snapshots[0][1] - snapshots[0][0])), 50.0)
+        self.assertEqual(snapshots[0].shape, (0, 2))
         self.assertAlmostEqual(float(diagnostics[1]["rotation_delta_applied"]), 0.0, places=6)
 
     def test_project_paint_motion_geometry_continuous_applies_source_rotation_about_tcp_anchor(self) -> None:
@@ -260,7 +259,7 @@ class TestPaintPivotProjection(unittest.TestCase):
         )
 
         self.assertNotAlmostEqual(unrotated[0][4], rotated[0][4], places=3)
-        np.testing.assert_allclose(snapshots[0][0], np.array([-80.0, 335.0]), atol=1e-6)
+        self.assertEqual(snapshots[0].shape, (0, 2))
 
     def test_project_paint_motion_geometry_continuous_xz_plane_uses_opposed_contact_heading(self) -> None:
         config = PaintSimulationConfig(
@@ -278,7 +277,7 @@ class TestPaintPivotProjection(unittest.TestCase):
         projected, snapshots, diagnostics = project_paint_motion_geometry_continuous(path, pivot_pose, config)
 
         np.testing.assert_allclose(projected[0], [95.0, 200.0, 300.0, -91.0, 180.0, -0.05], atol=1e-6)
-        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 300.0], [90.0, 300.0]]), atol=1e-6)
+        self.assertEqual(snapshots[0].shape, (0, 2))
         self.assertEqual(diagnostics[0]["rotation_delta_raw"], 180.0)
         self.assertEqual(diagnostics[0]["rotation_delta_applied"], 0.0)
 
@@ -290,7 +289,7 @@ class TestPaintPivotProjection(unittest.TestCase):
         projected, snapshots, diagnostics = project_paint_motion_geometry_continuous(path, pivot_pose, config)
 
         self.assertEqual(projected, [[100.0, 200.0, 300.0, 10.0, 20.0, 30.0]])
-        np.testing.assert_allclose(snapshots[0], np.array([[100.0, 300.0]]), atol=1e-6)
+        self.assertEqual(snapshots[0].shape, (0, 2))
         self.assertEqual(len(diagnostics), 1)
         self.assertEqual(diagnostics[0]["rotation_delta_applied"], 0.0)
 

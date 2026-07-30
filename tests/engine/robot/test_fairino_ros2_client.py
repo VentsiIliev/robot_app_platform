@@ -81,18 +81,22 @@ class TestFairinoRos2Client(unittest.TestCase):
         active_response = MagicMock()
         active_response.status_code = 200
         active_response.json.return_value = {"success": True, "tool_name": "TOOL_1"}
+        enable_response = MagicMock()
+        enable_response.status_code = 200
+        enable_response.json.return_value = {"success": True, "result": 0}
         move_response = MagicMock()
         move_response.status_code = 200
         move_response.text = '{"success": true, "result": 0}'
         move_response.json.return_value = {"success": True, "result": 0}
-        post_mock.side_effect = [active_response, move_response]
+        post_mock.side_effect = [active_response, enable_response, move_response]
 
         client = FairinoRos2Client(server_url="http://localhost:5000")
 
         self.assertEqual(client.move_liner([1, 2, 3, 4, 5, 6], tool=1), 0)
         self.assertEqual(post_mock.call_args_list[0].args[0], "http://localhost:5000/tool/active")
         self.assertEqual(post_mock.call_args_list[0].kwargs["json"], {"tool_id": 1})
-        self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:5000/move/linear")
+        self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:5000/drive/enable")
+        self.assertEqual(post_mock.call_args_list[2].args[0], "http://localhost:5000/move/linear")
 
     def test_fake_client_factory_selects_fake_backend(self):
         client = build_fairino_ros2_client(server_url="fake://local")

@@ -38,7 +38,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         execution_plan = {"plan": 1}
         service._workpiece_preparation.prepare_workpiece.return_value = (raw_workpiece, "Prepared workpiece")
         service._path_preparation_service.build_execution_plan.return_value = execution_plan
-        service._path_executor.execute_pickup_and_paint.return_value = (True, "Paint completed")
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
 
         ok, msg = service.run_once()
 
@@ -49,7 +49,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertTrue(np.array_equal(prepared_contour, large))
         self.assertEqual(prepared_frame, "frame")
         service._path_preparation_service.build_execution_plan.assert_called_once_with(raw_workpiece)
-        service._path_executor.execute_pickup_and_paint.assert_called_once_with(execution_plan)
+        service._path_executor.execute_paint_process.assert_called_once_with(execution_plan)
 
     def test_run_once_returns_no_contour_before_preparation(self):
         service = self._make_service()
@@ -81,7 +81,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertEqual(msg, "Plan generation failed: bad plan")
-        service._path_executor.execute_pickup_and_paint.assert_not_called()
+        service._path_executor.execute_paint_process.assert_not_called()
 
     def test_run_once_honors_stop_requests_and_execution_failure(self):
         service = self._make_service()
@@ -93,7 +93,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         )
         service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
         service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
-        service._path_executor.execute_pickup_and_paint.return_value = (False, "pump fault")
+        service._path_executor.execute_paint_process.return_value = (False, "pump fault")
 
         stopped, stopped_msg = service.run_once(stop_requested=lambda: True)
         failed, failed_msg = service.run_once(stop_requested=lambda: False)

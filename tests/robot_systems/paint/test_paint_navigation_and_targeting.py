@@ -36,6 +36,8 @@ class TestPaintNavigationService(unittest.TestCase):
             [1.0, 2.0, 15.5, 4.0, 5.0, 6.0],
             "HOME",
             wait_cancelled=None,
+            velocity=None,
+            acceleration=None,
         )
         work_area_service.set_active_area_id.assert_called_once_with("pickup")
 
@@ -78,7 +80,12 @@ class TestPaintNavigationService(unittest.TestCase):
             vel=100.0,
             acc=100.0,
         )
-        navigation.move_to_group.assert_called_once_with("CALIBRATION", wait_cancelled=None)
+        navigation.move_to_group.assert_called_once_with(
+            "CALIBRATION",
+            wait_cancelled=None,
+            velocity=30.0,
+            acceleration=40.0,
+        )
         work_area_service.set_active_area_id.assert_called_once_with("paint")
 
     def test_move_to_calibration_position_blocks_when_joint6_unwind_fails(self):
@@ -175,7 +182,13 @@ class TestPaintNavigationService(unittest.TestCase):
 
         self.assertTrue(service.move_to("A", z_offset=2.5))
         self.assertEqual(service.get_group_names(), ["A", "B"])
-        navigation.move_to_position.assert_called_once_with([1.0, 2.0, 5.5], "A", wait_cancelled=None)
+        navigation.move_to_position.assert_called_once_with(
+            [1.0, 2.0, 5.5],
+            "A",
+            wait_cancelled=None,
+            velocity=None,
+            acceleration=None,
+        )
 
     def test_set_area_falls_back_to_vision_when_work_area_service_missing(self):
         navigation = MagicMock()

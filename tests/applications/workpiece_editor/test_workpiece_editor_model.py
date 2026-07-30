@@ -60,7 +60,7 @@ class TestWorkpieceEditorModelDelegation(unittest.TestCase):
     def test_execute_workpiece_delegates_with_data(self):
         data = {"form_data": {}}
         ok, msg = self._model.execute_workpiece(data)
-        self._svc.execute_workpiece.assert_called_once_with(data)
+        self._svc.execute_workpiece.assert_called_once_with(data, skip_debug_plot=False)
         self.assertTrue(ok)
 
     def test_execute_workpiece_returns_service_result(self):
