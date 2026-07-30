@@ -33,6 +33,29 @@ The output is `dist/paint-robot/`. Test it with:
 The ROS 2 Fairino bridge is not bundled. With the current configuration, it
 must be reachable at `http://localhost:5000`.
 
+## Release
+
+The release helper uses system-specific tags such as `paint-v1.0.0`, keeping
+paint releases distinct from glue and welding releases in this repository.
+The version must match `PaintRobotSystem.metadata.version`, the current branch
+must be `work`, and the working tree must be clean.
+
+Prepare and test a local release archive without changing Git or GitHub:
+
+```bash
+./packaging/release_paint.sh 1.0.0
+```
+
+After testing the generated bundle, publish the annotated tag, archive,
+SHA-256 checksum, and GitHub release:
+
+```bash
+./packaging/release_paint.sh 1.0.0 --publish
+```
+
+The publish step also checks that local `work` exactly matches `origin/work`.
+Use `--skip-tests` only when the same commit has already passed the test suite.
+
 ## Runtime data
 
 This first build preserves the application's current storage behavior and
