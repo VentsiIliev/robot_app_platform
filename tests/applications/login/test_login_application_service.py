@@ -172,9 +172,9 @@ class TestMoveToLoginPos(unittest.TestCase):
         args = robot.move_ptp.call_args[0]
         self.assertEqual(args[0], position)
 
-    def test_does_nothing_when_no_robot_service(self):
+    def test_move_to_login_pos_without_robot_service_returns_none(self):
         svc = _make_service(robot=None)
-        svc.move_to_login_pos()   # must not raise
+        self.assertIsNone(svc.move_to_login_pos())
 
     def test_does_nothing_when_no_position_configured(self):
         robot = MagicMock(spec=IRobotService)
@@ -233,8 +233,8 @@ class TestStubLoginApplicationService(unittest.TestCase):
         success, _ = self.stub.create_first_admin("1", "A", "B", "pw")
         self.assertTrue(success)
 
-    def test_move_to_login_pos_does_not_raise(self):
-        self.stub.move_to_login_pos()  # must not raise
+    def test_move_to_login_pos_returns_none(self):
+        self.assertIsNone(self.stub.move_to_login_pos())
 
     def test_try_qr_login_returns_none_by_default(self):
         self.assertIsNone(self.stub.try_qr_login())

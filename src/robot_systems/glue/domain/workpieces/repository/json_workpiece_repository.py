@@ -7,9 +7,11 @@ from typing import List, Optional
 
 import numpy as np
 
+from src.applications.workpiece_library.workpiece_thumbnail import (
+    generate_thumbnail_bytes,
+)
 from src.robot_systems.glue.domain.workpieces.model.glue_workpiece import GlueWorkpiece
 from src.robot_systems.glue.domain.workpieces.repository.i_workpiece_repository import IWorkpieceRepository
-from src.robot_systems.glue.domain.workpieces.workpiece_thumbnail import generate_thumbnail_bytes
 
 _logger = logging.getLogger(__name__)
 

@@ -33,14 +33,8 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
     _MAIN_SETTING_KEYS = (
         "velocity",
         "acceleration",
-        "rz_angle",
         "offset",
-        "preprocess_min_spacing_mm",
-        "interpolation_spacing_mm",
-        "dense_sampling_factor",
-        "execution_spacing_mm",
-        "path_tangent_lookahead_mm",
-        "path_tangent_deadband_deg",
+        "edge_cleanup_z_offset_mm",
     )
 
     def from_workpiece(self, workpiece) -> ContourEditorData:
@@ -78,12 +72,14 @@ class PaintWorkpieceEditorAdapter(IWorkpieceDataAdapter):
         )
 
         if workpiece_layer and len(workpiece_layer.segments) > 0:
-            result["contour"] = segments_to_contour_array(workpiece_layer.segments)
+            main_settings = ensure_complete_settings(
+                workpiece_layer.segments[0].settings
+                if hasattr(workpiece_layer.segments[0], "settings") else None
+            )
+            raw_contour = segments_to_contour_array(workpiece_layer.segments)
+            result["contour"] = raw_contour
             result.update(
-                ensure_complete_settings(
-                    workpiece_layer.segments[0].settings
-                    if hasattr(workpiece_layer.segments[0], "settings") else None
-                )
+                main_settings
             )
         else:
             result["contour"] = []

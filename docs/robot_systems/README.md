@@ -7,6 +7,11 @@ For new robot-system development, start from:
 - [ROBOT_SYSTEM_GUIDE.MD](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD)
 - [settings/README.md](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/settings/README.md)
 
+Concrete system docs in this tree:
+
+- [glue/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/glue/README.md)
+- [paint/README.md](/home/ilv/Desktop/robot_app_platform/docs/robot_systems/paint/README.md)
+
 Reusability rule:
 - new shared robot-system features should be proven in [ROBOT_SYSTEM_BLUEPRINT](/home/ilv/Desktop/robot_app_platform/src/robot_systems/ROBOT_SYSTEM_BLUEPRINT) first
 - if a feature cannot be demonstrated cleanly in the blueprint demo, it is not yet standardized enough for platform-level reuse
@@ -100,7 +105,7 @@ The intended split is:
 | `ServiceSpec` | `name`, `service_type`, `required`, `description`, `builder` | Declares one service contract; optional `builder` overrides the default registry builder |
 | `ShellSetup` | `folders: List[FolderSpec]`, `applications: List[ApplicationSpec]` | GUI shell structure |
 | `FolderSpec` | `folder_id`, `name`, `display_name`, `translation_key` | One navigation folder in the shell |
-| `ApplicationSpec` | `name`, `folder_id`, `icon`, `factory` | One application registered to a folder; `factory(robot_system) → IApplication` |
+| `ApplicationSpec` | `name`, `folder_id`, `icon`, `factory` | One application registered to a folder; its metadata feeds the shell at login and `factory(robot_system) → IApplication` is invoked on first open |
 | `RemoteTcpDefinition` | `name`, `display_name` | Declares a named remote TCP that the system exposes |
 | `DispenseChannelDefinition` | `id`, `label`, `weight_cell_id`, `pump_motor_address`, `default_glue_type` | Declares one logical dispense lane composed of one scale and one pump |
 | `ToolDefinition` | `id`, `name` | Declares one tool/gripper identity exposed by the system |
@@ -244,7 +249,7 @@ app   = (
 ## Design Notes
 
 - **Class-level specs**: `metadata`, `services`, `settings_specs`, and `shell` are `ClassVar` — they describe the *type*, not any instance. This allows `SystemBuilder` to inspect them before instantiation.
-- **`translations_root` is robot-system owned**: The engine localization service is generic, but the actual catalogs live with the robot system. Bootstrap resolves the active robot system's translation directory from `metadata.translations_root`.
+- **`translations_root` is robot-system owned, but not the only catalog source**: The engine localization service is generic. Bootstrap now loads shared catalogs first from `src/applications/localization/`, then loads the active robot system's translation directory from `metadata.translations_root` as an override layer.
 - **Language persistence uses robot-system storage**: Bootstrap also stores the selected language under the active robot system's `settings_root`, so localization state follows the robot system instead of using a hardcoded global file.
 - **Bootstrap stays generic**: startup-specific composition such as concrete robot driver selection, login/auth wiring, and authorization/permissions wiring should live in a robot-system bootstrap provider, not directly in `src/bootstrap/main.py`.
 - **`SystemBuilder.register()`**: Allows overriding or extending the default service registry at the call site. Use when a service requires dependencies not available in the standard context.

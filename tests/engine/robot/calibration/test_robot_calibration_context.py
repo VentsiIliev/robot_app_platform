@@ -43,10 +43,11 @@ class TestRobotCalibrationContextFlushCamera(unittest.TestCase):
         ctx.flush_camera_buffer()
         self.assertEqual(ctx.vision_service.get_latest_frame.call_count, 5)
 
-    def test_flush_camera_buffer_with_no_vision_service_does_not_raise(self):
+    def test_flush_camera_buffer_without_vision_service_preserves_none(self):
         ctx = RobotCalibrationContext()
         ctx.vision_service = None
-        ctx.flush_camera_buffer()   # must not raise
+        ctx.flush_camera_buffer()
+        self.assertIsNone(ctx.vision_service)
 
     def test_flush_uses_min_camera_flush_value(self):
         ctx = RobotCalibrationContext()

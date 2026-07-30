@@ -4,7 +4,7 @@ import logging
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
-from src.robot_systems.paint.processes.paint.workpiece_matching_service import pick_largest_contour
+from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
 _logger = logging.getLogger(__name__)
 
@@ -52,7 +52,10 @@ class PaintProductionService:
         if should_stop():
             return False, "Paint process stopped"
 
-        ok, msg = self._path_executor.execute_pickup_and_paint(execution_plan)
+        execute_process = getattr(self._path_executor, "execute_paint_process", None)
+        if execute_process is None:
+            execute_process = self._path_executor.execute_pickup_and_paint
+        ok, msg = execute_process(execution_plan)
         if not ok:
             return False, f"{description}: {msg}"
 

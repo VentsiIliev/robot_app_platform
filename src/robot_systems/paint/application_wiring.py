@@ -3,33 +3,89 @@ import logging
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
-from src.robot_systems.paint.processes.paint.workpiece_alignment import (
-    DXF_ALIGNMENT_STRATEGY_REFERENCE_SMOOTH
+from src.robot_systems.paint.processes.paint.config import (
+    PAINT_PROCESS_CONFIG,
+    PAINT_PROJECTION_RULES,
+    PaintPivotProfile,
 )
 
 
 _logger = logging.getLogger(__name__)
 _PAINT_PROCESS = PAINT_PROCESS_CONFIG
+_PAINT_EXECUTION_TARGET_POINT = "tool"
+
+
+def _get_paint_process_config(robot_system=None):
+    service = getattr(robot_system, "_paint_process_config_service", None) if robot_system is not None else None
+    if service is not None:
+        try:
+            return service.get_snapshot()
+        except Exception:
+            _logger.debug("[PAINT_CONFIG] Failed to read live Paint process settings", exc_info=True)
+    return _PAINT_PROCESS
 
 
 def _get_paint_execution_target_point_name(robot_system) -> str:
-    target_key = str(_PAINT_PROCESS.execution_target_point or "camera").strip().lower()
-    if target_key not in {"camera", "tool"}:
-        raise ValueError(f"Unsupported paint execution target point: {target_key}")
+    target_key = _PAINT_EXECUTION_TARGET_POINT
     return getattr(robot_system.get_target_point_definition(target_key), "name", "") or target_key
 
 
-def _get_paint_base_group_id() -> str:
-    return _PAINT_PROCESS.paint_base_group_id
+def _get_paint_base_group_id(robot_system=None) -> str:
+    config = _get_paint_process_config(robot_system)
+    if config.pivot_motion_plane == "xz_y_ry":
+        return config.secondary_group_id
+    return config.primary_group_id
 
 
-def _get_pickup_base_group_id() -> str:
-    return _PAINT_PROCESS.pickup_base_group_id
+def _get_pickup_base_group_id(robot_system=None) -> str:
+    return _get_paint_process_config(robot_system).primary_group_id
 
 
-def _get_paint_pivot_side() -> str:
-    return _PAINT_PROCESS.pivot_side
+def _get_cleanup_base_group_id(robot_system=None) -> str:
+    return _get_paint_process_config(robot_system).cleanup_group_id
+
+
+def _get_pickup_axis_alignment_sign(robot_system=None) -> float:
+    config = _get_paint_process_config(robot_system)
+    return -1.0 if float(config.pickup_axis_alignment_sign_value) < 0.0 else 1.0
+
+
+def _get_pivot_side(robot_system=None) -> str:
+    config = _get_paint_process_config(robot_system)
+    side = str(config.pivot_contact_side or "positive").strip().lower()
+    if side in PAINT_PROJECTION_RULES.side_signs:
+        return side
+    return PAINT_PROJECTION_RULES.default_paint_side
+
+
+def _get_pivot_translation_direction(robot_system=None) -> str:
+    config = _get_paint_process_config(robot_system)
+    direction = str(config.pivot_direction or "forward").strip().lower()
+    if direction in {"positive", "+", "forward"}:
+        return "forward"
+    if direction in {"negative", "-", "reverse"}:
+        return "reverse"
+    return PAINT_PROJECTION_RULES.default_translation_direction
+
+
+def _get_pivot_profile(robot_system=None) -> PaintPivotProfile:
+    config = _get_paint_process_config(robot_system)
+    return PaintPivotProfile(
+        motion_plane=config.pivot_motion_plane,
+        translation_axis=str(config.pivot_axis or "x").strip().lower(),
+        translation_direction=_get_pivot_translation_direction(robot_system),
+        paint_side=_get_pivot_side(robot_system),
+        mirror_execution_rotation=(
+            config.pivot_motion_plane == "xz_y_ry"
+            and bool(config.mirror_xz_ry_execution_rotation_value)
+        ),
+        mirror_pickup_handoff=False,
+        pickup_axis_alignment_sign=_get_pickup_axis_alignment_sign(robot_system),
+    )
+
+
+def _get_paint_pivot_side(robot_system=None) -> str:
+    return _get_pivot_profile(robot_system).paint_side
 
 
 def _build_dashboard_application(robot_system):
@@ -68,51 +124,118 @@ def _build_paint_path_debug_dump_dir():
 
 
 def _build_paint_path_executor(robot_system):
-    from src.robot_systems.paint.processes.paint.workpiece_path_executor import PaintWorkpiecePathExecutor
+    from src.robot_systems.paint.processes.paint.execute import (
+        PaintExecutorDependencies,
+        PaintExecutorContactMotionConfig,
+        PaintExecutorMotionConfig,
+        PaintWorkpiecePathExecutor,
+    )
 
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
     robot_config = getattr(robot_system, "_robot_config", None)
     debug_dump_dir = _build_paint_path_debug_dump_dir()
-    return PaintWorkpiecePathExecutor(
+    paint_config = _get_paint_process_config(robot_system)
+    pivot_profile = _get_pivot_profile(robot_system)
+    dependencies = PaintExecutorDependencies(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
         pickup_base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
+            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id(robot_system))
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
+        cleanup_base_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position(_get_cleanup_base_group_id(robot_system))
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
         base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position(_get_paint_base_group_id())
+            getattr(robot_system, "_navigation", None).get_group_position(_get_paint_base_group_id(robot_system))
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
         post_execute_callback=lambda: (
             getattr(robot_system, "_navigation", None).move_to_calibration_position()
             if getattr(robot_system, "_navigation", None) is not None else False
         ),
+        calibration_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position("CALIBRATION")
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
-        enable_vacuum_pump=_PAINT_PROCESS.enable_vacuum_pump,
+        paint_process_config_service=getattr(robot_system, "_paint_process_config_service", None),
+    )
+    motion_config = PaintExecutorMotionConfig(
+        enable_vacuum_pump=paint_config.enable_vacuum_pump,
         pickup_tool=int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0,
         pickup_user=int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0,
         debug_dump_dir=debug_dump_dir,
-        pivot_motion_plane=_PAINT_PROCESS.pivot_motion_plane,
-        pivot_translation_axis=_PAINT_PROCESS.pivot_translation_axis,
-        pivot_side=_get_paint_pivot_side(),
-        pivot_translation_direction=_PAINT_PROCESS.pivot_translation_direction,
-        flip_xz_ry_execution_rotation_direction=_PAINT_PROCESS.flip_xz_ry_execution_rotation_direction,
-        enable_xz_ry_preflight=_PAINT_PROCESS.enable_xz_ry_preflight,
-        xz_ry_preflight_max_checks=_PAINT_PROCESS.xz_ry_preflight_max_checks,
-        apply_camera_to_tcp_for_pickup=_PAINT_PROCESS.apply_camera_to_tcp_for_pickup,
+    )
+    contact_motion_config = PaintExecutorContactMotionConfig(
+        motion_plane=pivot_profile.motion_plane,
+        translation_axis=pivot_profile.translation_axis,
+        paint_side=pivot_profile.paint_side,
+        translation_direction=pivot_profile.translation_direction,
+        flip_xz_ry_execution_rotation_direction=pivot_profile.mirror_execution_rotation,
+        mirror_xz_ry_pickup_handoff=pivot_profile.mirror_pickup_handoff,
+        apply_camera_to_tcp_for_pickup=paint_config.apply_camera_to_tcp_for_pickup,
         camera_to_tcp_x_offset=float(getattr(robot_config, "camera_to_tcp_x_offset", 0.0)) if robot_config is not None else 0.0,
         camera_to_tcp_y_offset=float(getattr(robot_config, "camera_to_tcp_y_offset", 0.0)) if robot_config is not None else 0.0,
+    )
+    return PaintWorkpiecePathExecutor(
+        dependencies=dependencies,
+        motion_config=motion_config,
+        contact_motion_config=contact_motion_config,
     )
 
 
 def _build_paint_path_preparation_service(robot_system):
+    import numpy as np
+
     from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
     from src.engine.robot.path_preparation import DefaultWorkpiecePathPreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
+    from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
+        PaintContourInterpolation,
+        PaintContourInterpolationConfig,
+        resample_contour_xy,
+    )
 
-    transformer, resolver = robot_system.get_shared_vision_resolver()
+    def _pose_path_from_xy(xy_points):
+        return [[float(point[0]), float(point[1]), 0.0, 0.0, 0.0, 0.0] for point in xy_points]
+
+    def _apply_process_interpolation_settings(settings):
+        interpolation = _get_paint_process_config(robot_system).interpolation
+        settings["path_tangent_lookahead_mm"] = float(interpolation.path_tangent_lookahead_mm)
+        settings["path_tangent_deadband_deg"] = float(interpolation.path_tangent_deadband_deg)
+        return settings
+
+    def _paint_source_contour_processor(pts_px, settings):
+        _apply_process_interpolation_settings(settings)
+        result = PaintContourInterpolation(
+            PaintContourInterpolationConfig(
+                units="px",
+                fit_sample_spacing=1.0,
+                output_spacing=1.0,
+            )
+        ).build(_pose_path_from_xy(pts_px))
+        return [point[:2] for point in result.execution_path]
+
+    def _paint_mm_contour_processor(path_pts, settings):
+        _apply_process_interpolation_settings(settings)
+        resampled_xy = resample_contour_xy(
+            np.asarray(path_pts, dtype=float)[:, :2],
+            spacing=1.0,
+            closed=True,
+        )
+        return {
+            "method": "paint_mm_1mm_resample",
+            "prepared_xy": resampled_xy.tolist(),
+            "curve_xy": resampled_xy.tolist(),
+        }
+
+    def _paint_contour_processor(path_pts, settings):
+        """Backward-compatible name for the mm-only contour processor."""
+        return _paint_mm_contour_processor(path_pts, settings)
+
     robot_config = getattr(robot_system, "_robot_config", None)
     execution_target_point_name = _get_paint_execution_target_point_name(robot_system)
     calibration_frame_name = (
@@ -125,6 +248,7 @@ def _build_paint_path_preparation_service(robot_system):
         except Exception:
             z_min = 0.0
     segment_config = SegmentEditorConfig(schema=build_paint_segment_settings_schema())
+    debug_dump_dir = _build_paint_path_debug_dump_dir()
     if _PAINT_PROCESS.enable_z_shift_pixel_compensation:
         pixel_height_compensation_fn = (
             lambda height_mm: (
@@ -138,8 +262,10 @@ def _build_paint_path_preparation_service(robot_system):
     return DefaultWorkpiecePathPreparationService(
         logger=_logger,
         segment_config=segment_config,
-        transformer=transformer,
-        resolver=resolver,
+        transformer=None,
+        resolver=None,
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         z_min=z_min,
         rz_mode="path_tangent",
         execute_from_workpiece_layer=True,
@@ -147,15 +273,20 @@ def _build_paint_path_preparation_service(robot_system):
         pickup_target_point_name=execution_target_point_name,
         calibration_frame_name=calibration_frame_name,
         pixel_height_compensation_fn=pixel_height_compensation_fn,
+        pickup_axis_alignment_sign=_get_pickup_axis_alignment_sign(robot_system),
+        pixel_to_mm_mode=_PAINT_PROCESS.contour_pixel_to_mm_mode,
+        debug_plot_dir=debug_dump_dir,
         base_position_provider=lambda: (
-            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id())
+            getattr(robot_system, "_navigation", None).get_group_position(_get_pickup_base_group_id(robot_system))
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
+        source_contour_processor=_paint_source_contour_processor,
+        contour_processor=_paint_contour_processor,
     )
 
 
 def _build_paint_matching_service(robot_system, workpiece_service=None, capture_snapshot_service=None):
-    from src.robot_systems.paint.processes.paint.workpiece_matching_service import PaintWorkpieceMatchingService
+    from src.robot_systems.paint.processes.paint.match.workpiece_matching_service import PaintWorkpieceMatchingService
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     return PaintWorkpieceMatchingService(
@@ -167,14 +298,15 @@ def _build_paint_matching_service(robot_system, workpiece_service=None, capture_
 
 
 def _build_paint_workpiece_preparation_service(robot_system):
-    from src.robot_systems.paint.processes.paint.workpiece_preparation_service import PaintWorkpiecePreparationService
+    from src.robot_systems.paint.processes.paint.plan import PaintWorkpiecePreparationService
+    from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
 
     return PaintWorkpiecePreparationService(
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
-        transformer=robot_system.get_shared_vision_resolver()[0],
-        dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
-        dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
+        default_settings=build_paint_segment_settings_schema().get_defaults(),
+        transformer=None,
+        transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
     )
 
 
@@ -194,7 +326,6 @@ def _build_paint_workpiece_editor_service(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    transformer, resolver = robot_system.get_shared_vision_resolver()
     segment_config = build_paint_segment_settings_schema()
     workpiece_service = _build_paint_workpiece_service(robot_system)
     matching_service = _build_paint_matching_service(
@@ -225,7 +356,8 @@ def _build_paint_workpiece_editor_service(robot_system):
             vision_service=vision_service,
             capture_snapshot_service=capture_snapshot_service,
             robot_service=robot_service,
-            transformer=transformer,
+            transformer=None,
+            transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
             path_executor=path_executor,
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
@@ -235,32 +367,16 @@ def _build_paint_workpiece_editor_service(robot_system):
         segment_config=SegmentEditorConfig(schema=segment_config),
         options=WorkpieceEditorOptions(
             debug_dump_dir=debug_dump_dir,
-            enable_dxf_import_test=True,
         ),
     )
 
 
 def _build_paint_contour_editor_application(robot_system):
-    from contour_editor import AdditionalFormBehaviorProvider
-
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.workpiece_editor.workpiece_editor_factory import WorkpieceEditorFactory
-    from src.robot_systems.paint.domain.dxf_path_form_behavior import PaintDxfPathFormBehavior
-    from src.engine.cad import import_dxf_to_workpiece_data
 
     service = _build_paint_workpiece_editor_service(robot_system)
-
-    AdditionalFormBehaviorProvider.get().set_behaviors(
-        [
-            PaintDxfPathFormBehavior(
-                prepare_dxf_raw_for_image=service.prepare_dxf_test_raw_for_image,
-                dxf_importer=import_dxf_to_workpiece_data,
-                dxf_alignment_strategy=_PAINT_PROCESS.dxf_alignment_strategy,
-                dxf_max_scale_deviation=_PAINT_PROCESS.dxf_max_scale_deviation,
-            )
-        ]
-    )
 
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -269,6 +385,23 @@ def _build_paint_contour_editor_application(robot_system):
             messaging=ms,
             jog_service=jog_service,
         )
+    )
+
+
+def _build_paint_process_settings_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_process_settings.paint_process_settings_factory import (
+        PaintProcessSettingsFactory,
+    )
+    from src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service import (
+        PaintProcessSettingsApplicationService,
+    )
+
+    service = PaintProcessSettingsApplicationService(
+        process_config_service=robot_system._paint_process_config_service
+    )
+    return WidgetApplication(
+        widget_factory=lambda _ms: PaintProcessSettingsFactory().build(service)
     )
 
 
@@ -290,6 +423,32 @@ def _build_workpiece_library_application(robot_system):
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: WorkpieceLibraryFactory().build(service, ms, jog_service=jog_service)
+    )
+
+
+def _build_paint_motion_plane_setup_application(robot_system):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_motion_plane_setup import PaintMotionPlaneSetupFactory
+    from src.robot_systems.paint.applications.paint_motion_plane_setup.service.paint_motion_plane_setup_service import (
+        PaintMotionPlaneSetupService,
+    )
+
+    service = PaintMotionPlaneSetupService(
+        robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        navigation_service=getattr(robot_system, "_navigation", None),
+        paint_group_ids=[
+            _get_paint_process_config(robot_system).primary_group_id,
+            _get_paint_process_config(robot_system).secondary_group_id,
+        ],
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: PaintMotionPlaneSetupFactory().build(
+            service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
     )
 
 
@@ -366,7 +525,10 @@ def _build_calibration_settings_application(robot_system):
         CalibrationSettingsFactory,
     )
 
-    service = CalibrationSettingsApplicationService(robot_system._settings_service)
+    service = CalibrationSettingsApplicationService(
+        robot_system._settings_service,
+        vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+    )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
         widget_factory=lambda ms: CalibrationSettingsFactory().build(
@@ -416,6 +578,8 @@ def _build_calibration_application(robot_system):
         CameraZShiftCalibrationService,
     )
     from src.engine.robot.calibration.calibration_navigation_service import CalibrationNavigationService
+    from src.engine.robot.calibration.ros_tool_registry_client import RosToolRegistryClient
+    from src.engine.robot.calibration.tool_tcp_calibration_service import ToolTcpCalibrationService
     from src.engine.vision.homography_residual_transformer import HomographyResidualTransformer
 
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
@@ -447,6 +611,7 @@ def _build_calibration_application(robot_system):
             calibration_settings=robot_system._robot_calibration,
             robot_tool=robot_system._robot_config.robot_tool,
             robot_user=robot_system._robot_config.robot_user,
+            on_offsets_saved=robot_system.invalidate_shared_vision_resolver,
         )
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
@@ -492,6 +657,12 @@ def _build_calibration_application(robot_system):
         if vision_service is not None and robot_service is not None and robot_config is not None else None
     )
 
+    ros_tool_registry_client = RosToolRegistryClient()
+    tool_tcp_calibrator = ToolTcpCalibrationService(
+        robot_service=robot_service,
+        tool_registry_client=ros_tool_registry_client,
+    )
+
     def _observer_position(group_id: str):
         navigation = getattr(robot_system, "_navigation", None)
         return navigation.get_group_position(group_id) if navigation is not None else None
@@ -509,6 +680,7 @@ def _build_calibration_application(robot_system):
         camera_z_shift_calibrator=camera_z_shift_calibrator,
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
+        tool_tcp_calibrator=tool_tcp_calibrator,
         calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
@@ -640,29 +812,26 @@ def _build_pick_target_application(robot_system):
     vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
     capture_snapshot_service = _build_capture_snapshot_service(robot_system)
     robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
-    _, resolver = robot_system.get_shared_vision_resolver()
     height_service = getattr(robot_system, "_height_measuring_service", None)
     default_target_name = (
         robot_system.get_targeting_provider().get_default_target_name()
         if robot_system.get_targeting_provider() is not None else ""
     )
     calibration_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("spray"), "name", "") or ""
-    )
-    pickup_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("pickup"), "name", "") or ""
+        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
     )
     service = PickTargetApplicationService(
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
         robot_service=robot_service,
-        resolver=resolver,
+        resolver=None,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         robot_config=robot_system._robot_config,
         navigation=robot_system._navigation,
         height_measuring=height_service,
         default_target_name=default_target_name,
         calibration_frame_name=calibration_frame_name,
-        pickup_frame_name=pickup_frame_name,
+        pickup_frame_name="",
     )
     jog_service = build_robot_system_jog_service(
         robot_system,

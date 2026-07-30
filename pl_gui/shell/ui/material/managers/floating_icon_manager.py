@@ -38,6 +38,10 @@ class FloatingIconManager:
         """Safer cleanup"""
         if self.floating_icon:
             try:
+                self.floating_icon.animation_manager.cleanup()
+            except Exception:
+                pass
+            try:
                 self.floating_icon.clicked_signal.disconnect()
             except Exception:
                 pass

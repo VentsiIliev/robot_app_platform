@@ -1,0 +1,288 @@
+------------------------------------------------------------------------------------------------------------------------------------------------
+--  This material is property of FANUC Robotics Europe and must be returned to  FANUC Robotics Europe  
+--  immediately upon request.  This material  and the  information  illustrated or contained herein may not be 
+--  reproduced, copied, used, or transmitted in whole or in part in any way without the prior written consent 
+--  of FANUC Robotics Europe.
+--  
+--           								All Rights Reserved
+--           								Copyright (C)   2011
+--           							 FANUC Robotics Europe
+--  
+--  Module: img2pt.kl
+--  
+--  Description:
+--  Example code for Image to Points (J912) Application
+--
+--  Author: M. Ferrari 
+--          FANUC Robotics Europe
+--          Zone Industrielle
+--          L-6468 Echternach
+--          Luxembourg
+--  
+--  Modification history:
+--  01-JUN-2011  M. Ferrari  Initial version.
+--  02-JUN-2011  M. Ferrari  Bug fixes 
+--							 Merge delete, snap and intesect routines.
+--  06-JUN-2011  M. Ferrari  Add specs comments.
+--  07-JUN-2011  M. Ferrari  Add Points to Path and Motion sections.
+-- 16-JAN-2014 BoL RTCP transofrmation added
+-- 31-JAN-2014 BoL Coordinates for rotational movement  added in the position register instead of p,r coordinates
+-- 03-MAR-2014 BoL Offset changed
+-- 12-MAR-2014 BoL Offset X for pressing by painting from R[181]
+-- 10-APR-2014 BoL Position registers of the robot increased to 200, numeric registers - to 999
+-- 18-APR-2014 BoL Angle of the cup calculated in the transformation
+-- 25-JUL-2014 BoL Ofset Y for adjusting the painting tip from R[960]
+-- 22-DEC-2015 BoL Polar Offset for rotating of the result contour from R[959]
+-- 29-MAR-2016 BoL Config data of the position registers changed because of the  frame configuration
+-- 04-JUL-2016   BoL Config data of the position registers changed because of the  frame configuration
+-- 06-JUL-2016   BoL ofset of the painting tip changed due to new calibration
+------------------------------------------------------------------------------------------------------------------------------------------------
+PROGRAM img2pt_RTCP
+------------------------------------------------------------------------------------------------------------------------------------------------
+%PRIORITY = 1
+%COMMENT='v0.2.11_160706'
+%NOLOCKGROUP
+%RWACCESS
+%ENVIRONMENT cvis -- For iRVision Built-Ins
+%ENVIRONMENT pathop -- For PATH variable handling capabilities
+%ENVIRONMENT regope -- For GET_POS_REG Built-In
+%INCLUDE vitptyps -- To use pre-defined VLINES_T and POINTS_T PATH vars
+------------------------------------------------------------------------------------------------------------------------------------------------
+VAR
+  -- Image to Points
+	view_lines : VLINES_T
+	z_3d_points : POINTS_T
+	vpname IN CMOS : STRING[20]
+	viewnum IN CMOS : INTEGER
+	imregnum IN CMOS : INTEGER
+	plane IN CMOS : POSITION
+	STATUS, entry, l : INTEGER
+	b: BOOLEAN
+	-- Points to Path
+	pr_pos : XYZWPR		--position of the current point (i)
+	prPosNext: XYZWPR		--position of the next point (i+1)
+	prPosRot:XYZWPR		--position of the rotated point (result)
+	prOffs  : XYZWPR		--position of the weight centre of the part
+	prWork: XYZWPR		-- work variable
+	arprPosTemp: ARRAY [197] OF XYZWPR --array with the points to be rotated
+	rLength: REAL			--length of the line between the current point and the next one (Li,i+1)
+	rWork: REAL			--work variable
+	rAngleY: REAL			--angle between the line i,i+1 and the Y axis
+	rAngleYOld: REAL		-- angle between the previous line and the Y axis
+	rXRot: REAL			-- X coordinate of the rotated weight centre
+	rYRot: REAL			-- Y coordinate of the rotated weight centre
+	rCosAngleY: REAL		-- cosine of the rAngleY
+	rCosAngleY2: REAL		-- cosine of the half rAngleY
+	rSinAngleY: REAL		-- sine of the rAngleY
+	rSinAngleY2: REAL		-- sine of the half rAngle Y
+	rTransY:	REAL			-- Translation of the current point for the actual painting
+	rStatOffsX: REAL			-- static X offset of the first point to the RTCP
+	rStatOffsY: REAL			-- static Y offset of the first point to the RTCP
+	rPressX:REAL			-- Offset in X direction of the TCP - defines the pressure by painting
+	rOffsTCPY:REAL			-- Offset in Y direction of the TCP - adjusting the painter's tip position
+	rOffsAngle:REAL			-- polar offset of the input contour
+	i, j,  pr_maxnum, iTime : INTEGER
+------------------------------------------------------------------------------------------------------------------------------------------------
+BEGIN
+	CONNECT TIMER TO iTime;
+	iTime = 0      -- debug
+--BoL 13012014  Copy the weight centre of the part from PR[198] to prOffs
+	prOffs = GET_POS_REG(198,STATUS,1)
+	IF STATUS <> 0 THEN
+		POST_ERR(STATUS,'',0,0)
+	ENDIF
+	
+--	prOffs.CONFIG_DATA.CFG_FLIP = FALSE		-- set the flip config field - because of the user frame configuration
+	SET_POS_REG(195, prOffs, STATUS,1)		--dummy for test
+	SET_POS_REG(198, prOffs, STATUS,1)
+
+	-- Delete all nodes of POINTS_T 
+	l = PATH_LEN(z_3d_points)
+	WHILE l > 0 DO
+		DELETE_NODE(z_3d_points, l, STATUS)
+		IF STATUS <> 0 THEN
+			POST_ERR(STATUS,'',0,0)
+		ENDIF
+		l = l-1
+	ENDWHILE
+	
+	-- Delete all nodes of VLINES_T 
+	l = PATH_LEN(view_lines)
+	WHILE l > 0 DO
+		DELETE_NODE(view_lines, l, STATUS)
+		IF STATUS <> 0 THEN
+			POST_ERR(STATUS,'',0,0)
+		ENDIF
+		l = l-1
+	ENDWHILE
+	
+	-- Snap VPIP vision process by new KAREL Built-In:	
+	-- V_FIND_VLINE(vp_name, view_num, imreg_num, vlines, status)
+	
+	-- vp_name : STRING [IN]  = Vision process name. 
+	-- view_num : INTEGER [IN] = View Number
+	-- imreg_num : INTEGER [IN] = Image register number. When >= 1, the VP uses the image in the specified 
+	--								image register instead of snapping a new image. In this case you need 
+	--								to snap an image with the existing V_SNAP_VIEW Built-In ROUTINE beforehand.
+	--								When <1, the VP snaps a new image as usual.
+	-- vlines : PATH [OUT] = Found view lines. When this built-in routine is used multiple times with the same PATH variable, 
+	--						the last results are erased before the new results are stored. Specifically, there is no limit to the 
+	--						number of found view lines (beside the free space of the temporary memory pool). 
+	--						The view lines are represented in the Application UF specified by camera calibration data.
+	-- status : INTEGER [OUT] = Status. Same specs of all the other KAREL Built-Ins.
+	
+	-- NOTE: in this example all the Arguments are hardcoded in the KAREL source code. 
+	--		FREU suggest to use GET_TPE_PRM or GET_STR_REG Built-In to specify them by TP's AR[ ] values or SR[ ].
+	
+	V_FIND_VLINE('IMAGE2POINTS_BOL', 1, 0, view_lines, STATUS)
+
+	SET_INT_REG(976, iTime, STATUS) -- dummy for test
+	iTime = 0      -- debug
+
+	IF STATUS <> 0 THEN
+		POST_ERR(STATUS,'',0,0)
+	ENDIF
+	
+	-- Set the reference plane. For example this can be the Appl_UF.z=0 plane.
+	-- In this case Application UF is placed on top of workpiece so $NILPOS matches its origin.
+	
+	GET_VAR(entry, '*SYSTEM*', '$MOR_GRP[1].$NILPOS', plane, STATUS)
+	IF STATUS <> 0 THEN
+		POST_ERR(STATUS,'',0,0)
+	ENDIF
+		
+	-- Calculate intersection points of view lines and a plane by new KAREL Built-In:	
+	-- INTSCT_VL_PL(vlines, frame, points, status)
+	-- vlines : PATH [IN] = View lines snapped by V_FIND_VLINE.
+	-- frame : POSITION [IN] = XY plane of the frame which intersection points should be calculated with. 
+	--							The frame must be represented in the same UF as the view lines. The intersection points of the
+	--							XY plane and the specified view lines are calculated.
+	-- points : PATH [OUT] = Calculated 3D-points with edge polarity vectors.
+	--						  View line, 3D-point and the edge polarity vectors are represented in the same UF as the view lines.
+	-- status : INTEGER [OUT] = Status. Same specs of all the other KAREL Built-Ins.
+	-- NOTE: If this Built-In routine is called multiple times with the same variable, new 3D points are appended to the PATH variable. 
+	-- 		  To clear PATH variable, use DELETE_NODE Built-In as above.
+	--		  If UF number of new view lines is different from the one of 3D-points already in the PATH variable, status fails.
+	
+	INTSCT_VL_PL(view_lines, plane, z_3d_points, STATUS)
+	IF STATUS <> 0 THEN
+		POST_ERR(STATUS,'',0,0)
+	ENDIF
+	
+	-- Now Robot is ready to move along the 3D points found and calculated above.
+	-- FREU_VPIP3 Vision Process uses Selected Edge Pts. Loc. Tool which finds only the specified edges (4 for a rectangle)
+	-- and 5 points (start and end overlap). Selected Edge Pts. Loc. Tool works like a filter to output only the necessary points
+	-- not simply all points belonging to the edges. This is helpful to avoid exceeding available PR[ ].
+	
+	GET_VAR(entry, '*POSREG*', '$MAXPREGNUM', pr_maxnum, STATUS) -- Get max number of PR[ ] available
+	IF STATUS <> 0 THEN
+		POST_ERR(STATUS,'',0,0)
+	ENDIF
+	l = PATH_LEN(z_3d_points)
+	IF (l>pr_maxnum) THEN 
+	      WRITE TPERROR(CHR(128), 'Array Length exceeds PR max_num!', CR)
+	      ABORT
+	ENDIF 
+
+
+	SET_INT_REG(989, l, STATUS) -- R[989: path_node_num]
+
+	SET_INT_REG(980, iTime, STATUS) -- dummy for test
+	iTime = 0      -- debug
+	
+	GET_REG(959,b,i, rOffsAngle, STATUS)
+	IF NOT b THEN
+		rOffsAngle = i
+	ENDIF
+		rSinAngleY	= SIN(rOffsAngle)
+		rCosAngleY	= COS(rOffsAngle)
+	FOR i=1 TO l DO
+--		SET_POS_REG(i, CURPOS(0,0,1), STATUS, 1) 
+		arprPosTemp[i] = CURPOS(0,0,1) --GET_POS_REG(i, STATUS, 1)
+		-- Modify XYZ with Node's data and keep Nominal Orientations
+		-- calculates the X coordinate of the rotated around weight centre point
+		arprPosTemp[i] .x	= prOffs.x + (( z_3d_points[i].POS.x - prOffs.x)*rCosAngleY - (z_3d_points[i].POS.y - prOffs.y)*rSinAngleY)
+		-- calculates the Ycoordinate of the rotated around weight centre point
+		arprPosTemp[i] .y = prOffs.y + (( z_3d_points[i].POS.x - prOffs.x)*rSinAngleY + (z_3d_points[i].POS.y - prOffs.y)*rCosAngleY)
+--		arprPosTemp[i] .x = z_3d_points[i].POS.x
+--		arprPosTemp[i] .y = z_3d_points[i].POS.y
+		arprPosTemp[i] .z = z_3d_points[i].POS.z
+		-- Overwrite existing PR[R[1]]
+--		SET_POS_REG(i, pr_pos, STATUS, 1)
+	ENDFOR
+
+	SET_INT_REG(978, iTime, STATUS) -- dummy for test
+	iTime = 0      -- debug
+
+	rAngleY 		= prOffs.r
+	rAngleYOld	= rAngleY
+	GET_REG(981,b,i, rPressX, STATUS)
+	IF NOT b THEN
+		rPressX = i
+	ENDIF
+	GET_REG(960,b,i, rOffsTCPY, STATUS)
+	IF NOT b THEN
+		rOffsTCPY = i
+	ENDIF
+	rStatOffsX	= arprPosTemp[1].x - rPressX - (-15.681) -- (-15.681) is the X coordinate OF the RTCP according UFRAME 2, UTOOL 1 - vacuum cup
+	rStatOffsY	= arprPosTemp[1].y - rOffsTCPY - (61.525) -- (61.525) is the Y coordinate OF the RTCP according UFRAME 2, UTOOL1 - vacuum cup
+-- RTCP transformation
+	
+	FOR i=1 TO l-1 DO -- calculate the current point - whole transformation
+
+	iTime = 0      -- debug
+
+		pr_pos = arprPosTemp[i]
+		prPosNext 	= arprPosTemp[i+1]
+		-- calculates the lengt of the path between the current and the next point
+		rWork		= prPosNext.y - pr_pos.y
+		rLength 		= SQRT(rWork*rWork+(prPosNext.x - pr_pos.x)*(prPosNext.x - pr_pos.x))
+		-- calculates the angle of the line relative to the Y axis
+		rWork		= rWork / rLength
+		rAngleY		= ACOS(rWork)
+		rWork		= prPosNext.x - pr_pos.x
+		IF rWork < 0 THEN
+			rAngleY = -rAngleY -- 180
+		ENDIF
+		-- calculates the sine and cosine of the rAngleY
+		rSinAngleY	= SIN(rAngleY)
+		rSinAngleY2	= SIN(rAngleY/2)
+		rCosAngleY	= COS(rAngleY)
+		rCosAngleY2	= COS(rAngleY/2)
+		-- calculates the X coordinate of the rotated weight centre
+		rXRot 		= pr_pos.x + ((prOffs.x - pr_pos.x)*rCosAngleY - (prOffs.y - pr_pos.y)*rSinAngleY)
+		-- calculates the Y coordinate of the rotated weight centre, translated along Y for painting
+		rYRot 		= pr_pos.y +((prOffs.x - pr_pos.x)*rSinAngleY + (prOffs.y - pr_pos.y)*rCosAngleY) - rLength	
+		-- calculates the X coordinate of the rotated weight centre - half angle. Auxiliary variable for circular motion
+		-- the result is stored in the W variable of the position register - normally it isn't used
+		prOffs.w		= pr_pos.x + ((prOffs.x - pr_pos.x)*rCosAngleY2 - (prOffs.y - pr_pos.y)*rSinAngleY2) - rStatOffsX
+		-- calculates the Y coordinate of the rotated weight centre - half angle. Auxiliary variable for circular motion
+		-- the result is stored in the P variable of the position register - normally it isn't used
+		prOffs.p 		= pr_pos.y +((prOffs.x - pr_pos.x)*rSinAngleY2 + (prOffs.y - pr_pos.y)*rCosAngleY2)  - rStatOffsY
+		prOffs.x 		= rXrot - rStatOffsX		-- set the x coordinate of the weight centre after rotation
+		rTransY		= rYrot - rStatOffsY		-- set the y coordinate of the weight centre after translation for painting
+		prOffs.y		= rYrot + rLength 	- rStatOffsY	-- set the y coordinate of the weight centre after rotation and before translation for painting
+		rAngleYOld	= rAngleY + rAngleYOld 		-- integrate the angle of the weight centre and store it for the next iteration
+		prOffs.r		= rAngleYOld			-- store the angle in the position register
+--		prOffs.CONFIG_DATA.CFG_FLIP = TRUE		-- set the flip config field - because of the user frame configuration
+		SET_POS_REG(i, prOffs, STATUS, 1)
+		prOffs.y		= rYrot				-- prepare the correct value of the weight centre for the next iteration
+		prOffs.x		= rXrot				-- prepare the correct value of the weight centre for the next iteration
+		SET_REAL_REG(i, rTransY, STATUS)
+		SET_REAL_REG(200+i, rAngleYOld - rAngleY/2, STATUS)
+
+	SET_INT_REG(977, iTime, STATUS) -- dummy for test
+
+		FOR j= i TO l DO	--rotate and translate all other points in order to prepare the next iteration
+			-- calculates the X coordinate of the rotated next point
+			rWork		= arprPosTemp[j].x
+			arprPosTemp[j].x 	= pr_pos.x + ((rWork - pr_pos.x)*rCosAngleY - (arprPosTemp[j].y - pr_pos.y)*rSinAngleY)
+			-- calculates the Y coordinate of the rotated next point, translated along Y
+			arprPosTemp[j].y 	= pr_pos.y +((rWork - pr_pos.x)*rSinAngleY + (arprPosTemp[j].y - pr_pos.y)*rCosAngleY) - rLength	
+		ENDFOR
+	ENDFOR
+	SET_INT_REG(979, iTime, STATUS) -- dummy for test
+	
+------------------------------------------------------------------------------------------------------------------------------------------------
+END img2pt_RTCP
+------------------------------------------------------------------------------------------------------------------------------------------------

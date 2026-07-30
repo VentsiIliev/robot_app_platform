@@ -1,10 +1,11 @@
 import logging
 from typing import Optional
 
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QCoreApplication
+from PyQt6.QtCore import Qt, QCoreApplication, QRect, QSize, QTimer
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QHBoxLayout, QVBoxLayout,
     QLabel, QLineEdit, QComboBox, QPushButton,
+    QScrollArea, QWidget,
 )
 from PyQt6.QtGui import QPixmap
 
@@ -13,6 +14,7 @@ from src.applications.user_management.domain.user_schema import UserRecord, User
 from src.applications.user_management.model.user_management_model import UserManagementModel
 from src.applications.user_management.view.user_management_view import UserManagementView
 from src.applications.base.styled_message_box import show_warning, show_info, ask_yes_no
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 
 _logger = logging.getLogger(__name__)
 
@@ -22,30 +24,20 @@ def _t(text: str) -> str:
     return translated or text
 
 
-class _Bridge(QObject):
-    retranslate = pyqtSignal()
-
-
 class UserManagementController(IApplicationController):
 
     def __init__(self, model: UserManagementModel, view: UserManagementView, messaging=None):
         self._model     = model
         self._view      = view
         self._messaging = messaging
-        self._bridge    = _Bridge()
-        self._bridge.retranslate.connect(self._retranslate)
 
     def load(self) -> None:
         self._connect_signals()
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.subscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
+        self._view.language_changed.connect(self._retranslate)
         self._refresh()
 
     def stop(self) -> None:
-        if self._messaging:
-            from src.shared_contracts.events.localization_events import LocalizationTopics
-            self._messaging.unsubscribe(LocalizationTopics.LANGUAGE_CHANGED, self._on_language_changed_raw)
+        self._view.language_changed.disconnect(self._retranslate)
 
     def _connect_signals(self) -> None:
         self._view.add_requested.connect(self._on_add)
@@ -54,9 +46,6 @@ class UserManagementController(IApplicationController):
         self._view.qr_requested.connect(self._on_qr)
         self._view.refresh_requested.connect(self._refresh)
         self._view.filter_changed.connect(self._on_filter)
-
-    def _on_language_changed_raw(self, _payload) -> None:
-        self._bridge.retranslate.emit()
 
     def _retranslate(self) -> None:
         self._view.retranslateUi()
@@ -138,24 +127,82 @@ class _UserDialog(QDialog):
         self._schema  = schema
         self._record  = record
         self._widgets = {}
+        self._keyboard_scroll_area = None
+        self._keyboard_scroll_max_height: Optional[int] = None
+        self._keyboard_dialog_max_height: Optional[int] = None
+        self._keyboard_dialog_size: Optional[QSize] = None
+        self._keyboard_bottom_spacer = None
         self.setWindowTitle(_t("Edit User") if record else _t("Add User"))
         self.setModal(True)
         self.setMinimumWidth(420)
+        self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
         self._build_ui()
         if record:
             self._populate(record)
 
     def _build_ui(self) -> None:
-        layout = QFormLayout(self)
+        root = QVBoxLayout(self)
+        form_host = QWidget(self)
+        layout = QFormLayout(form_host)
         for fd in self._schema.fields:
             widget = self._make_widget(fd)
             self._widgets[fd.key] = widget
             layout.addRow(f"{fd.label}:", widget)
+
+        self._keyboard_bottom_spacer = QWidget(form_host)
+        self._keyboard_bottom_spacer.setFixedHeight(0)
+        layout.addRow("", self._keyboard_bottom_spacer)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumHeight(80)
+        scroll.setWidget(form_host)
+        self._keyboard_scroll_area = scroll
+        root.addWidget(scroll)
+
         btns       = QHBoxLayout()
         btn_save   = QPushButton(_t("Save"));   btn_save.clicked.connect(self.accept)
         btn_cancel = QPushButton(_t("Cancel")); btn_cancel.clicked.connect(self.reject)
         btns.addWidget(btn_save); btns.addWidget(btn_cancel)
-        layout.addRow(btns)
+        root.addLayout(btns)
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect: QRect) -> None:
+        if self._keyboard_scroll_area is None:
+            return
+
+        if self._keyboard_scroll_max_height is None:
+            self._keyboard_scroll_max_height = self._keyboard_scroll_area.maximumHeight()
+            self._keyboard_dialog_max_height = self.maximumHeight()
+            self._keyboard_dialog_size = self.size()
+
+        viewport = self._keyboard_scroll_area.viewport()
+        overlap = viewport.mapToGlobal(viewport.rect().bottomLeft()).y() - keyboard_rect.top() + 24
+        bottom_reserve = max(0, overlap)
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(bottom_reserve)
+
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(
+                0,
+                lambda: self._keyboard_scroll_area.ensureWidgetVisible(focused, 12, 12),
+            )
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        if self._keyboard_scroll_area is not None and self._keyboard_scroll_max_height is not None:
+            self._keyboard_scroll_area.setMaximumHeight(self._keyboard_scroll_max_height)
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(0)
+        if self._keyboard_dialog_max_height is not None:
+            self.setMaximumHeight(self._keyboard_dialog_max_height)
+        if self._keyboard_dialog_size is not None:
+            self.resize(self._keyboard_dialog_size)
+
+        self._keyboard_scroll_max_height = None
+        self._keyboard_dialog_max_height = None
+        self._keyboard_dialog_size = None
 
     @staticmethod
     def _make_widget(fd: FieldDescriptor):
@@ -163,7 +210,7 @@ class _UserDialog(QDialog):
             w = QComboBox()
             w.addItems(fd.options)
             return w
-        w = QLineEdit()
+        w = KeyboardLineEdit()
         if fd.widget == "password":
             w.setEchoMode(QLineEdit.EchoMode.Password)
         if fd.widget == "email":

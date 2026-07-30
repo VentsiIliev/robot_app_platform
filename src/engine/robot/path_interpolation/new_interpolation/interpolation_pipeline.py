@@ -9,11 +9,6 @@ import numpy as np
 from scipy.interpolate import PchipInterpolator
 from scipy.signal import savgol_filter
 
-try:
-    from ruckig import InputParameter, OutputParameter, Result, Ruckig
-    HAS_RUCKIG = True
-except Exception:
-    HAS_RUCKIG = False
 
 
 CurveMethod = Literal["linear", "pchip",]
@@ -40,22 +35,11 @@ class InterpolationConfig:
 
 
 @dataclass(slots=True)
-class RuckigConfig:
-    enabled: bool = False
-    dt: float = 0.01
-    max_velocity: float = 200.0
-    max_acceleration: float = 500.0
-    max_jerk: float = 2000.0
-
-
-@dataclass(slots=True)
 class PipelineResult:
     raw: np.ndarray
     prepared: np.ndarray
     curve: np.ndarray
     sampled: np.ndarray
-    profiles: dict[str, np.ndarray]
-    ruckig: dict[str, np.ndarray] | None = None
 
 
 def contour_to_xy(contour: np.ndarray) -> np.ndarray:
@@ -277,100 +261,6 @@ def arc_length_resample(points: np.ndarray, spacing: float) -> np.ndarray:
     return out
 
 
-def compute_profiles(points: np.ndarray) -> dict[str, np.ndarray]:
-    """Compute position, velocity, acceleration, and jerk-like XY profiles over arc length."""
-    pts = remove_duplicate_consecutive(points)
-    if len(pts) < 2:
-        z = np.zeros(1)
-        return {"t": z, "x": z, "y": z, "vx": z, "vy": z, "ax": z, "ay": z, "jx": z, "jy": z}
-
-    t = path_lengths(pts)
-    x = pts[:, 0]
-    y = pts[:, 1]
-    vx = np.gradient(x, t, edge_order=1)
-    vy = np.gradient(y, t, edge_order=1)
-    ax = np.gradient(vx, t, edge_order=1)
-    ay = np.gradient(vy, t, edge_order=1)
-    jx = np.gradient(ax, t, edge_order=1)
-    jy = np.gradient(ay, t, edge_order=1)
-
-    return {"t": t, "x": x, "y": y, "vx": vx, "vy": vy, "ax": ax, "ay": ay, "jx": jx, "jy": jy}
-
-
-def apply_ruckig(points: np.ndarray, config: RuckigConfig) -> dict[str, np.ndarray]:
-    """Run simple segment-by-segment Ruckig post-processing on XY points."""
-    if not config.enabled:
-        raise ValueError("Ruckig is disabled.")
-    if not HAS_RUCKIG:
-        raise RuntimeError("Ruckig not installed. Run: pip install ruckig")
-
-    pts = remove_duplicate_consecutive(points)
-    if len(pts) < 2:
-        z = np.zeros(1)
-        return {"points": pts.copy(), "t": z, "x": z, "y": z, "vx": z, "vy": z, "ax": z, "ay": z, "jx": z, "jy": z}
-
-    otg = Ruckig(2, float(config.dt))
-    inp = InputParameter(2)
-    out = OutputParameter(2)
-
-    inp.current_position = pts[0].tolist()
-    inp.current_velocity = [0.0, 0.0]
-    inp.current_acceleration = [0.0, 0.0]
-    inp.max_velocity = [float(config.max_velocity), float(config.max_velocity)]
-    inp.max_acceleration = [float(config.max_acceleration), float(config.max_acceleration)]
-    inp.max_jerk = [float(config.max_jerk), float(config.max_jerk)]
-
-    pos_list = [np.array(inp.current_position, dtype=float)]
-    vel_list = [np.array(inp.current_velocity, dtype=float)]
-    acc_list = [np.array(inp.current_acceleration, dtype=float)]
-    time_list = [0.0]
-
-    for waypoint in pts[1:]:
-        inp.target_position = [float(waypoint[0]), float(waypoint[1])]
-        inp.target_velocity = [0.0, 0.0]
-        inp.target_acceleration = [0.0, 0.0]
-
-        steps = 0
-        while True:
-            result = otg.update(inp, out)
-            if result == Result.ErrorInvalidInput:
-                raise RuntimeError("Ruckig rejected the target state.")
-            if result not in (Result.Working, Result.Finished):
-                raise RuntimeError(f"Ruckig failed with result {result}")
-
-            pos_list.append(np.array(out.new_position, dtype=float))
-            vel_list.append(np.array(out.new_velocity, dtype=float))
-            acc_list.append(np.array(out.new_acceleration, dtype=float))
-            time_list.append(time_list[-1] + float(config.dt))
-            out.pass_to_input(inp)
-
-            steps += 1
-            if result == Result.Finished:
-                break
-            if steps > 200000:
-                raise RuntimeError("Ruckig exceeded step budget.")
-
-    pos = np.asarray(pos_list, dtype=float)
-    vel = np.asarray(vel_list, dtype=float)
-    acc = np.asarray(acc_list, dtype=float)
-    t = np.asarray(time_list, dtype=float)
-    jx = np.gradient(acc[:, 0], t, edge_order=1) if len(t) >= 2 else np.zeros(len(pos))
-    jy = np.gradient(acc[:, 1], t, edge_order=1) if len(t) >= 2 else np.zeros(len(pos))
-
-    return {
-        "points": pos,
-        "t": t,
-        "x": pos[:, 0],
-        "y": pos[:, 1],
-        "vx": vel[:, 0],
-        "vy": vel[:, 1],
-        "ax": acc[:, 0],
-        "ay": acc[:, 1],
-        "jx": jx,
-        "jy": jy,
-    }
-
-
 class ContourPathPipeline:
     """Clean contour-to-path pipeline for vision contours."""
 
@@ -378,11 +268,9 @@ class ContourPathPipeline:
         self,
         preprocess: PreprocessConfig | None = None,
         interpolation: InterpolationConfig | None = None,
-        ruckig: RuckigConfig | None = None,
     ) -> None:
         self.preprocess = preprocess or PreprocessConfig()
         self.interpolation = interpolation or InterpolationConfig()
-        self.ruckig = ruckig or RuckigConfig()
 
     def prepare(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Normalize and preprocess raw contour points."""
@@ -404,13 +292,9 @@ class ContourPathPipeline:
         raw, prepared = self.prepare(points)
         curve = fit_curve(prepared, self.interpolation)
         sampled = arc_length_resample(curve, self.interpolation.output_spacing)
-        profiles = compute_profiles(sampled)
-        ruckig_result = apply_ruckig(sampled, self.ruckig) if self.ruckig.enabled else None
         return PipelineResult(
             raw=raw,
             prepared=prepared,
             curve=curve,
             sampled=sampled,
-            profiles=profiles,
-            ruckig=ruckig_result,
         )

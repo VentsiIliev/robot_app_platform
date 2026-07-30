@@ -7,6 +7,7 @@ from ..interfaces.i_motion_service import IMotionService
 from ..interfaces.i_robot import IRobot
 from ..interfaces.i_safety_checker import ISafetyChecker
 from ..enums.axis import RobotAxis, Direction
+from ..motion_sequence import MotionSequenceSegment
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
@@ -54,13 +55,21 @@ class MotionService(IMotionService):
             wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         self._last_jog_target = []
+        started = time.perf_counter()
+        safety_started = time.perf_counter()
         violations = self._safety.get_violations(position)
+        self._logger.info(
+            "[TIMING] move_ptp_safety_check elapsed_s=%.3f violations=%d",
+            time.perf_counter() - safety_started,
+            len(violations),
+        )
         if violations:
             self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
             return False
         try:
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
                                acceleration)
+            driver_started = time.perf_counter()
             ret = self._robot.move_linear(
                 position,
                 tool,
@@ -70,9 +79,23 @@ class MotionService(IMotionService):
                 0,
                 blocking=wait_to_reach,
             )
+            driver_elapsed = time.perf_counter() - driver_started
             success = ret >= 0
+            wait_elapsed = 0.0
             if wait_to_reach and success:
+                wait_started = time.perf_counter()
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
+                wait_elapsed = time.perf_counter() - wait_started
+            self._logger.info(
+                "[TIMING] move_ptp_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f pos=%s vel=%s acc=%s",
+                success,
+                driver_elapsed,
+                wait_elapsed,
+                time.perf_counter() - started,
+                [round(float(v), 3) for v in position[:6]] if position and len(position) >= 6 else position,
+                velocity,
+                acceleration,
+            )
             self._logger.debug("move_ptp ← success=%s", success)
             return success
         except Exception:
@@ -116,8 +139,146 @@ class MotionService(IMotionService):
             self._logger.exception("move_linear failed")
             return False
 
-    def start_jog(self, axis: RobotAxis, direction: Direction, step: float) -> int:
-        self._logger.debug("start_jog → axis=%s direction=%s step=%s", axis, direction, step)
+    def move_sequence(
+            self,
+            segments: List[MotionSequenceSegment],
+            tool: int,
+            user: int,
+            wait_to_reach=False,
+            wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        self._last_jog_target = []
+        started = time.perf_counter()
+        if not segments:
+            self._logger.warning("move_sequence rejected: empty sequence")
+            return False
+
+        safety_started = time.perf_counter()
+        for index, segment in enumerate(segments):
+            violations = self._safety.get_violations(segment.position)
+            if violations:
+                self._logger.warning(
+                    "move_sequence blocked by safety limits at segment %d: %s",
+                    index,
+                    ", ".join(violations),
+                )
+                return False
+        self._logger.info(
+            "[TIMING] move_sequence_safety_check elapsed_s=%.3f segments=%d",
+            time.perf_counter() - safety_started,
+            len(segments),
+        )
+
+        try:
+            if not self._robot.set_active_tool(tool):
+                self._logger.warning("move_sequence rejected: failed to set active tool=%s", tool)
+                return False
+            driver_started = time.perf_counter()
+            ret = self._robot.execute_motion_sequence(
+                segments,
+                tool=tool,
+                user=user,
+                blocking=wait_to_reach,
+            )
+            driver_elapsed = time.perf_counter() - driver_started
+            success = ret >= 0
+            wait_elapsed = 0.0
+            if wait_to_reach and success:
+                wait_started = time.perf_counter()
+                success = self._wait_for_position(segments[-1].position, cancelled=wait_cancelled)
+                wait_elapsed = time.perf_counter() - wait_started
+            self._logger.info(
+                "[TIMING] move_sequence_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f segments=%d",
+                success,
+                driver_elapsed,
+                wait_elapsed,
+                time.perf_counter() - started,
+                len(segments),
+            )
+            return bool(success)
+        except Exception:
+            self._logger.exception("move_sequence failed")
+            return False
+
+    def move_custom_sequence(
+            self,
+            segments: List[MotionSequenceSegment],
+            tool: int,
+            user: int,
+            wait_to_reach=False,
+            wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        self._last_jog_target = []
+        started = time.perf_counter()
+        if not segments:
+            self._logger.warning("move_custom_sequence rejected: empty sequence")
+            return False
+
+        safety_started = time.perf_counter()
+        for index, segment in enumerate(segments):
+            violations = self._safety.get_violations(segment.position)
+            if violations:
+                self._logger.warning(
+                    "move_custom_sequence blocked by safety limits at segment %d: %s",
+                    index,
+                    ", ".join(violations),
+                )
+                return False
+        self._logger.info(
+            "[TIMING] move_custom_sequence_safety_check elapsed_s=%.3f segments=%d",
+            time.perf_counter() - safety_started,
+            len(segments),
+        )
+
+        try:
+            if not self._robot.set_active_tool(tool):
+                self._logger.warning("move_custom_sequence rejected: failed to set active tool=%s", tool)
+                return False
+            driver_started = time.perf_counter()
+            ret = self._robot.execute_custom_motion_sequence(
+                segments,
+                tool=tool,
+                user=user,
+                blocking=wait_to_reach,
+            )
+            driver_elapsed = time.perf_counter() - driver_started
+            success = ret >= 0
+            wait_elapsed = 0.0
+            if wait_to_reach and success:
+                wait_started = time.perf_counter()
+                success = self._wait_for_position(segments[-1].position, cancelled=wait_cancelled)
+                wait_elapsed = time.perf_counter() - wait_started
+            self._logger.info(
+                "[TIMING] move_custom_sequence_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f segments=%d",
+                success,
+                driver_elapsed,
+                wait_elapsed,
+                time.perf_counter() - started,
+                len(segments),
+            )
+            return bool(success)
+        except Exception:
+            self._logger.exception("move_custom_sequence failed")
+            return False
+
+    def start_jog(
+            self,
+            axis: RobotAxis,
+            direction: Direction,
+            step: float,
+            velocity: float | None = None,
+            acceleration: float | None = None,
+    ) -> int:
+        jog_velocity = self._jog_vel if velocity is None else float(velocity)
+        jog_acceleration = self._jog_acc if acceleration is None else float(acceleration)
+        self._logger.debug(
+            "start_jog → axis=%s direction=%s step=%s vel=%s acc=%s",
+            axis,
+            direction,
+            step,
+            jog_velocity,
+            jog_acceleration,
+        )
         try:
             current = self._robot.get_current_position()
             self._logger.info(f"Current -> {current}")
@@ -146,7 +307,7 @@ class MotionService(IMotionService):
             else:
                 target = []
 
-            ret = self._robot.start_jog(axis, direction, step, self._jog_vel, self._jog_acc)
+            ret = self._robot.start_jog(axis, direction, step, jog_velocity, jog_acceleration)
             if ret == 0 and target:
                 self._last_jog_target = list(target)
             self._logger.debug("start_jog ← ret=%s", ret)

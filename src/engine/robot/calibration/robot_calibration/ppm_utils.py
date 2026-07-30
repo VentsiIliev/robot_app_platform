@@ -27,7 +27,10 @@ Noise guards
 * probe_err > 8 px       — previous error must be significant (≥ ~1.8 mm)
                            to prevent near-convergence noise from dirtying
                            the estimate
-* outlier band [0.33×, 3×] current estimate
+* outlier band [0.55×, 2.5×] current estimate
+* observed reduction must be at least 40% of the reduction predicted by the
+  current PPM estimate; otherwise a sideways/poorly-correlated move can look
+  like a much lower PPM and destabilize the next correction.
 """
 
 import logging
@@ -37,17 +40,18 @@ import math
 _logger = logging.getLogger(__name__)
 
 # ── Adaptive wait constants (same formula in both callers) ────────────────────
-_MIN_SETTLE_S   = 0.10   # absolute minimum wait after any move
+_MIN_SETTLE_S   = 0.5   # absolute minimum wait after any move
 _MAX_ERR_REF_MM = 10.0   # errors ≥ this use the full configured wait
 
 # ── PPM learning thresholds ───────────────────────────────────────────────────
 _MIN_ROBOT_DELTA_MM  = 0.5   # robot must have moved at least this far
 _MIN_PIXEL_REDUCTION = 3.0   # pixel error must have dropped at least this much
 _MIN_PROBE_ERR_PX    = 8.0   # previous error must be above this (signal > noise)
-_PPM_OUTLIER_LO      = 0.33  # reject if < 33 % of current estimate
-_PPM_OUTLIER_HI      = 3.00  # reject if > 300 % of current estimate
-_ALPHA_MIN           = 0.30  # EMA weight for small / noisy moves
-_ALPHA_MAX           = 0.70  # EMA weight for large / high-SNR moves
+_PPM_OUTLIER_LO      = 0.55  # reject if < 55 % of current estimate
+_PPM_OUTLIER_HI      = 2.50  # reject if > 250 % of current estimate
+_MIN_REDUCTION_RATIO = 0.40  # reject if observed Δpx is too small vs expected
+_ALPHA_MIN           = 0.15  # EMA weight for small / noisy moves
+_ALPHA_MAX           = 0.35  # EMA weight for large / high-SNR moves
 _ALPHA_RAMP_LO_MM    = 0.5   # robot delta at which α = _ALPHA_MIN
 _ALPHA_RAMP_HI_MM    = 5.0   # robot delta at which α = _ALPHA_MAX
 
@@ -103,18 +107,60 @@ def try_refine_ppm(
         and pixel_reduction > _MIN_PIXEL_REDUCTION
         and probe_err       > _MIN_PROBE_ERR_PX
     ):
-        ppm_obs = pixel_reduction / robot_delta_mm
-        if _PPM_OUTLIER_LO * context.ppm_working < ppm_obs < _PPM_OUTLIER_HI * context.ppm_working:
-            ppm_prev   = context.ppm_working
-            confidence = min(1.0, max(0.0, (robot_delta_mm - _ALPHA_RAMP_LO_MM) / (_ALPHA_RAMP_HI_MM - _ALPHA_RAMP_LO_MM)))
-            alpha      = _ALPHA_MIN + (_ALPHA_MAX - _ALPHA_MIN) * confidence
-            context.ppm_working = (1.0 - alpha) * context.ppm_working + alpha * ppm_obs
+        expected_reduction_px = robot_delta_mm * context.ppm_working
+        reduction_ratio = (
+            pixel_reduction / expected_reduction_px
+            if expected_reduction_px > 1e-9
+            else 0.0
+        )
+        if reduction_ratio < _MIN_REDUCTION_RATIO:
             _logger.info(
-                "PPM refined — %s: robot_move=%.3f mm  Δpx=%.1f  "
-                "ppm_obs=%.3f  α=%.2f  ppm_working %.3f → %.3f",
-                label, robot_delta_mm, pixel_reduction,
-                ppm_obs, alpha, ppm_prev, context.ppm_working,
+                "PPM refinement rejected — %s: robot_move=%.3f mm  Δpx=%.1f  "
+                "expected_Δpx=%.1f  ratio=%.2f < %.2f  ppm_working=%.3f",
+                label,
+                robot_delta_mm,
+                pixel_reduction,
+                expected_reduction_px,
+                reduction_ratio,
+                _MIN_REDUCTION_RATIO,
+                context.ppm_working,
             )
+            return context.ppm_working
+
+        ppm_obs = pixel_reduction / robot_delta_mm
+        ppm_lower = _PPM_OUTLIER_LO * context.ppm_working
+        ppm_upper = _PPM_OUTLIER_HI * context.ppm_working
+        if not ppm_lower < ppm_obs < ppm_upper:
+            _logger.info(
+                "PPM refinement rejected — %s: robot_move=%.3f mm  Δpx=%.1f  "
+                "ppm_obs=%.3f outside [%.3f, %.3f]  ppm_working=%.3f",
+                label,
+                robot_delta_mm,
+                pixel_reduction,
+                ppm_obs,
+                ppm_lower,
+                ppm_upper,
+                context.ppm_working,
+            )
+            return context.ppm_working
+
+        ppm_prev   = context.ppm_working
+        confidence = min(1.0, max(0.0, (robot_delta_mm - _ALPHA_RAMP_LO_MM) / (_ALPHA_RAMP_HI_MM - _ALPHA_RAMP_LO_MM)))
+        alpha      = _ALPHA_MIN + (_ALPHA_MAX - _ALPHA_MIN) * confidence
+        context.ppm_working = (1.0 - alpha) * context.ppm_working + alpha * ppm_obs
+        _logger.info(
+            "PPM refined — %s: robot_move=%.3f mm  Δpx=%.1f  "
+            "expected_Δpx=%.1f  ratio=%.2f  ppm_obs=%.3f  α=%.2f  ppm_working %.3f → %.3f",
+            label,
+            robot_delta_mm,
+            pixel_reduction,
+            expected_reduction_px,
+            reduction_ratio,
+            ppm_obs,
+            alpha,
+            ppm_prev,
+            context.ppm_working,
+        )
 
     return context.ppm_working
 

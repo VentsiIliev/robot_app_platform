@@ -1,10 +1,15 @@
 import logging
 import requests
+import time
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
 
 class FairinoRos2Client:
+    _RECONNECT_CHECK_INTERVAL_S = 1.0
+    _HEALTH_ERROR_LOG_INTERVAL_S = 10.0
+    _MOTION_ERROR_DRIVE_NOT_ENABLED = -13
     _STOP_STATE_STOPPED = "STOPPED"
     _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
     _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
@@ -17,6 +22,12 @@ class FairinoRos2Client:
         self._last_stop_response = None
         self._available = False
         self._last_error = None
+        self._last_reconnect_check = 0.0
+        self._last_health_error = None
+        self._last_health_error_logged_at = 0.0
+        self._drive_enabled = False
+        self._connection_generation = 0
+        self._session = requests.Session()
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
         health = self.health_check()
         logger.debug("health_check response: %s", health)
@@ -32,10 +43,28 @@ class FairinoRos2Client:
         self._last_error = None
 
     def _mark_unavailable(self, message):
+        was_available = self._available
         self._available = False
         self._last_error = str(message) if message else "unknown bridge error"
+        self._drive_enabled = False
+        if was_available:
+            self._connection_generation += 1
+
+    def reconnect(self):
+        health = self.health_check()
+        return health.get("status") == "ok"
+
+    def _probe_reconnect_if_needed(self):
+        if self._available:
+            return
+        now = time.monotonic()
+        if now - self._last_reconnect_check < self._RECONNECT_CHECK_INTERVAL_S:
+            return
+        self._last_reconnect_check = now
+        self.reconnect()
 
     def get_connection_state(self):
+        self._probe_reconnect_if_needed()
         return "idle" if self._available else "disconnected"
 
     def get_connection_details(self):
@@ -43,6 +72,8 @@ class FairinoRos2Client:
             "server_url": self.server_url,
             "state": self.get_connection_state(),
             "last_error": self._last_error,
+            "drive_enabled": bool(self._drive_enabled),
+            "connection_generation": self._connection_generation,
         }
 
     # AFTER
@@ -60,17 +91,72 @@ class FairinoRos2Client:
             logger.debug("health_check ← status=%s body=%s", response.status_code, data)
             if data.get("status") == "ok":
                 self._mark_available()
+                self._last_health_error = None
+                self._last_health_error_logged_at = 0.0
             else:
                 self._mark_unavailable(data.get("message") or data)
             return data
         except Exception as e:
-            logger.warning("health_check error: %s", e)
+            self._log_health_check_error(e)
             self._mark_unavailable(e)
             return {"status": "error", "message": str(e)}
 
+    def _log_health_check_error(self, error: Exception) -> None:
+        message = str(error)
+        now = time.monotonic()
+        if (
+            message == self._last_health_error
+            and (now - self._last_health_error_logged_at) < self._HEALTH_ERROR_LOG_INTERVAL_S
+        ):
+            logger.debug("health_check error repeated: %s", message)
+            return
+
+        self._last_health_error = message
+        self._last_health_error_logged_at = now
+        logger.warning("health_check error: %s", message)
+
     # ============ Motion Commands ============
 
+    def _motion_preflight_error(self, label: str):
+        if not self._available:
+            self._probe_reconnect_if_needed()
+        if not self._available:
+            logger.warning("%s rejected: ROS2 bridge is disconnected", label)
+            return -1
+        status = self.get_drive_status()
+        if status.get("motion_allowed_by_drive_enable") is not None:
+            self._drive_enabled = bool(status.get("motion_allowed_by_drive_enable"))
+        elif status.get("actual_enabled") is not None:
+            self._drive_enabled = bool(status.get("actual_enabled"))
+        elif status.get("requested_enabled") is not None:
+            self._drive_enabled = bool(status.get("requested_enabled"))
+        if not self._drive_enabled:
+            logger.info("%s drive is not operation_enabled; requesting enable", label)
+            if self.enable() != 0:
+                logger.warning("%s rejected: drive operation is not enabled; call enable() first", label)
+                return self._MOTION_ERROR_DRIVE_NOT_ENABLED
+            for _ in range(10):
+                status = self.get_drive_status()
+                if status.get("motion_allowed_by_drive_enable") is not None:
+                    self._drive_enabled = bool(status.get("motion_allowed_by_drive_enable"))
+                elif status.get("actual_enabled") is not None:
+                    self._drive_enabled = bool(status.get("actual_enabled"))
+                if self._drive_enabled:
+                    break
+                time.sleep(0.1)
+            if not self._drive_enabled:
+                logger.warning("%s rejected: drive enable requested but drives are not operation_enabled", label)
+                return self._MOTION_ERROR_DRIVE_NOT_ENABLED
+        return None
+
     def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_cartesian")
+        if preflight_error is not None:
+            return preflight_error
         payload = {"position": self._to_float_list(position), "tool": tool, "user": user, "vel": vel, "acc": acc}
         logger.debug("move_cartesian → POST /move/cartesian payload=%s", payload)
         try:
@@ -89,6 +175,13 @@ class FairinoRos2Client:
             return -1
 
     def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_liner")
+        if preflight_error is not None:
+            return preflight_error
         payload = {
             "position": self._to_float_list(position),
             "tool": tool,
@@ -118,6 +211,13 @@ class FairinoRos2Client:
             return -1
 
     def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("move_ptp")
+        if preflight_error is not None:
+            return preflight_error
         payload = {
             "position": self._to_float_list(position),
             "tool": tool,
@@ -152,9 +252,14 @@ class FairinoRos2Client:
         vel=0.6,
         acc=0.4,
         blocking=False,
-        trajectory_optimizer="RUCKIG",
+        trajectory_optimizer=None,
         orientation_mode="constant",
     ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_path")
+        if preflight_error is not None:
+            return preflight_error
         sanitized_path = [self._to_float_list(p) for p in path] if path else path
         payload = {
             "path": sanitized_path,
@@ -164,9 +269,10 @@ class FairinoRos2Client:
             "vel": vel,
             "acc": acc,
             "blocking": blocking,
-            "trajectory_optimizer": trajectory_optimizer,
             "orientation_mode": orientation_mode,
         }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
         logger.debug(
             "execute_path → POST /execute/path waypoints=%d blocking=%s vel=%s acc=%s optimizer=%s orientation_mode=%s",
             len(path) if path else 0,
@@ -202,7 +308,109 @@ class FairinoRos2Client:
     def get_last_execute_path_response(self):
         return self._last_execute_path_response
 
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        payload_segments = []
+        for segment in segments or []:
+            payload_segments.append(
+                {
+                    "position": self._to_float_list(segment.position),
+                    "vel": float(segment.velocity),
+                    "acc": float(segment.acceleration),
+                    "motion_type": str(segment.motion_type),
+                    "blend_radius": float(segment.blend_radius),
+                }
+            )
+        payload = {
+            "segments": payload_segments,
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        logger.debug(
+            "execute_sequence → POST /execute/sequence segments=%d blocking=%s",
+            len(payload_segments),
+            blocking,
+        )
+        try:
+            response = requests.post(f"{self.server_url}/execute/sequence", json=payload, timeout=120)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
+            logger.debug(
+                "execute_sequence ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_sequence error: %s", e, exc_info=True)
+            return -1
+
+    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG"):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("execute_ordered_motion_chain")
+        if preflight_error is not None:
+            return preflight_error
+        payload = {
+            "segments": segments or [],
+            "tool": int(tool),
+            "user": int(user),
+            "blocking": bool(blocking),
+        }
+        if trajectory_optimizer:
+            payload["trajectory_optimizer"] = trajectory_optimizer
+        logger.debug(
+            "execute_ordered_motion_chain → POST /execute/ordered_motion_chain segments=%d blocking=%s",
+            len(payload["segments"]),
+            blocking,
+        )
+        try:
+            response = requests.post(f"{self.server_url}/execute/ordered_motion_chain", json=payload, timeout=300)
+            raw = response.json()
+            self._mark_available()
+            result_code = self._parse_result(raw)
+            self._last_execute_path_response = {
+                "http_status": response.status_code,
+                "result_code": result_code,
+                "task_id": raw.get("task_id"),
+                "queued": bool(raw.get("queued", False)),
+                "queue_position": raw.get("queue_position"),
+                "raw": raw,
+            }
+            logger.debug(
+                "execute_ordered_motion_chain ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("execute_ordered_motion_chain error: %s", e, exc_info=True)
+            return -1
+
     def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("unwind_joint6")
+        if preflight_error is not None:
+            return preflight_error
         payload = {
             "blocking": bool(blocking),
             "queue_if_busy": bool(queue_if_busy),
@@ -228,6 +436,11 @@ class FairinoRos2Client:
             return -1
 
     def start_jog(self, axis, direction, step, vel, acc):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_jog")
+        if preflight_error is not None:
+            return preflight_error
         axis_val = axis.value if hasattr(axis, 'value') else axis
         dir_val = direction.value if hasattr(direction, 'value') else direction
         payload = {"axis": axis_val, "direction": dir_val, "step": step, "vel": vel, "acc": acc}
@@ -284,6 +497,24 @@ class FairinoRos2Client:
 
     # ============ State Queries ============
 
+    def get_state_snapshot(self):
+        try:
+            response = self._session.get(f"{self.server_url}/state/kinematics", timeout=2)
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                logger.warning(
+                    "get_state_snapshot rejected: http=%s data=%s",
+                    response.status_code,
+                    data,
+                )
+                return None
+            self._mark_available()
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_state_snapshot error: %s", e, exc_info=True)
+            return None
+
     def get_current_position(self):
         # logger.debug("get_current_position → GET /position/current")
         try:
@@ -303,6 +534,41 @@ class FairinoRos2Client:
             self._mark_unavailable(e)
             logger.error("get_current_position error: %s", e, exc_info=True)
             return None
+
+    def get_current_flange_position(self):
+        try:
+            response = requests.get(f"{self.server_url}/position/flange", timeout=2)
+            data = response.json()
+            self._mark_available()
+            position = data.get("position")
+            if response.status_code >= 400 or data.get("success") is False or position is None:
+                logger.warning("get_current_flange_position rejected: http=%s data=%s", response.status_code, data)
+                return None
+            return [float(v) for v in position]
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_flange_position error: %s", e, exc_info=True)
+            return None
+
+    def set_active_tool(self, tool: int) -> bool:
+        try:
+            tool_id = int(tool)
+            response = requests.post(
+                f"{self.server_url}/tool/active",
+                json={"tool_id": tool_id},
+                timeout=5,
+            )
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                logger.warning("set_active_tool rejected: tool=%s http=%s data=%s", tool, response.status_code, data)
+                return False
+            self._mark_available()
+            logger.info("Active ROS2 tool set to %s (%s)", tool_id, data.get("tool_name"))
+            return True
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("set_active_tool error: %s", e, exc_info=True)
+            return False
 
     def GetActualTCPPose(self):
         position = self.get_current_position()
@@ -333,6 +599,24 @@ class FairinoRos2Client:
             self._mark_unavailable(e)
             logger.error("get_safety_walls_status error: %s", e, exc_info=True)
             return {"supported": False, "enabled": None, "error": str(e)}
+
+    def get_drive_status(self):
+        try:
+            response = requests.get(f"{self.server_url}/drive/status", timeout=2)
+            data = response.json()
+            self._mark_available()
+            if data.get("motion_allowed_by_drive_enable") is not None:
+                self._drive_enabled = bool(data.get("motion_allowed_by_drive_enable"))
+            elif data.get("actual_enabled") is not None:
+                self._drive_enabled = bool(data.get("actual_enabled"))
+            elif data.get("requested_enabled") is not None:
+                self._drive_enabled = bool(data.get("requested_enabled"))
+            logger.debug("get_drive_status ← http=%s raw=%s", response.status_code, data)
+            return data
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_drive_status error: %s", e, exc_info=True)
+            return {"success": False, "requested_enabled": None, "error": str(e)}
 
     def validate_pose(
         self,
@@ -432,15 +716,43 @@ class FairinoRos2Client:
     # ============ Configuration & Control ============
 
     def enable(self):
-        logger.info("enable called (ROS2 robot is always enabled)")
-        return 0
+        logger.info("enable → POST /drive/enable")
+        try:
+            response = requests.post(f"{self.server_url}/drive/enable", timeout=5)
+            raw = response.json()
+            if response.status_code >= 400 or raw.get("success") is False:
+                logger.warning("enable rejected: http=%s raw=%s", response.status_code, raw)
+                return -1
+            self._mark_available()
+            self._drive_enabled = bool(
+                raw.get("motion_allowed_by_drive_enable", raw.get("actual_enabled", raw.get("requested_enabled", True)))
+            )
+            logger.info("enable ← http=%s raw=%s", response.status_code, raw)
+            return 0
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("enable error: %s", e, exc_info=True)
+            return -1
 
     def RobotEnable(self, state):
         return self.enable() if state == 1 else self.disable()
 
     def disable(self):
-        logger.info("disable called (use stop_motion for ROS2)")
-        return 0
+        logger.info("disable → POST /drive/disable")
+        try:
+            response = requests.post(f"{self.server_url}/drive/disable", timeout=5)
+            raw = response.json()
+            if response.status_code >= 400 or raw.get("success") is False:
+                logger.warning("disable rejected: http=%s raw=%s", response.status_code, raw)
+                return -1
+            self._mark_available()
+            self._drive_enabled = bool(raw.get("requested_enabled", False))
+            logger.info("disable ← http=%s raw=%s", response.status_code, raw)
+            return 0
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("disable error: %s", e, exc_info=True)
+            return -1
 
 
     def setDigitalOutput(self, portId, value):
@@ -492,3 +804,356 @@ class FairinoRos2Client:
     @staticmethod
     def _to_float_list(position):
         return [float(v) for v in position]
+
+
+class FakeRos2Client:
+    _MOTION_ERROR_DRIVE_NOT_ENABLED = -13
+    _STOP_STATE_STOPPED = "STOPPED"
+    _STOP_STATE_NO_ACTIVE_MOTION = "NO_ACTIVE_MOTION"
+    _STOP_STATE_STOP_REQUESTED_BUT_UNCONFIRMED = "STOP_REQUESTED_BUT_UNCONFIRMED"
+    _STOP_STATE_ERROR = "ERROR"
+
+    def __init__(self, server_url="fake://fairino", ip=None):
+        self.server_url = server_url.rstrip("/")
+        self.ip = ip or "fake_ros2_bridge"
+        self._available = True
+        self._last_error = None
+        self._last_execute_path_response = None
+        self._last_stop_response = None
+        self._current_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._motion_active = False
+        self._queue_size = 0
+        self._task_counter = 0
+        self._safety_walls_enabled = True
+        self._digital_outputs = {}
+        self._workobject = None
+        self._active_tool = 0
+        self._drive_enabled = False
+        self._connection_generation = 0
+        logger.info("Using fake Fairino ROS2 client at %s", self.server_url)
+
+    def _next_task_id(self) -> int:
+        self._task_counter += 1
+        return self._task_counter
+
+    def _accept_motion(self, position, *, blocking):
+        self._current_position = self._to_float_list(position)
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._motion_active = not bool(blocking)
+        self._queue_size = 1 if self._motion_active else 0
+        return 0
+
+    def _set_path_result(self, path, *, blocking):
+        task_id = self._next_task_id()
+        last_position = path[-1] if path else self._current_position
+        self._accept_motion(last_position, blocking=blocking)
+        self._last_execute_path_response = {
+            "http_status": 200,
+            "result_code": 0,
+            "task_id": task_id,
+            "queued": not bool(blocking),
+            "queue_position": 0 if blocking else 1,
+            "raw": {
+                "success": True,
+                "result": 0,
+                "task_id": task_id,
+                "queued": not bool(blocking),
+                "queue_position": 0 if blocking else 1,
+            },
+        }
+        return 0
+
+    def health_check(self):
+        return {"status": "ok", "message": "Running fake ROS2 client"}
+
+    def get_connection_state(self):
+        return "idle" if self._available else "disconnected"
+
+    def get_connection_details(self):
+        return {
+            "server_url": self.server_url,
+            "state": self.get_connection_state(),
+            "last_error": self._last_error,
+            "drive_enabled": bool(self._drive_enabled),
+            "connection_generation": self._connection_generation,
+            "mode": "fake",
+        }
+
+    def _motion_preflight_error(self, label: str):
+        if not self._drive_enabled:
+            logger.warning("%s rejected: fake drive operation is not enabled; call enable() first", label)
+            return self._MOTION_ERROR_DRIVE_NOT_ENABLED
+        return None
+
+    def move_cartesian(self, position, tool=0, user=0, vel=30, acc=30, blendR=0):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.move_cartesian")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug("FakeRos2Client.move_cartesian position=%s", position)
+        return self._accept_motion(position, blocking=True)
+
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.move_liner")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug("FakeRos2Client.move_liner position=%s blocking=%s", position, blocking)
+        return self._accept_motion(position, blocking=blocking)
+
+    def move_ptp(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.move_ptp")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug("FakeRos2Client.move_ptp position=%s blocking=%s", position, blocking)
+        return self._accept_motion(position, blocking=blocking)
+
+    def set_active_tool(self, tool: int) -> bool:
+        self._active_tool = int(tool)
+        return True
+
+    def execute_path(
+        self,
+        path,
+        rx=None,
+        ry=None,
+        rz=None,
+        vel=0.6,
+        acc=0.4,
+        blocking=False,
+        trajectory_optimizer=None,
+        orientation_mode="constant",
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_path")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.execute_path waypoints=%s blocking=%s optimizer=%s orientation_mode=%s",
+            len(path) if path else 0,
+            blocking,
+            trajectory_optimizer,
+            orientation_mode,
+        )
+        sanitized_path = [self._to_float_list(p) for p in path] if path else []
+        return self._set_path_result(sanitized_path, blocking=blocking)
+
+    def get_last_execute_path_response(self):
+        return deepcopy(self._last_execute_path_response)
+
+    def execute_sequence(self, segments, tool=0, user=0, blocking=False):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_sequence")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.execute_sequence segments=%s blocking=%s",
+            len(segments) if segments else 0,
+            blocking,
+        )
+        path = [self._to_float_list(segment.position) for segment in segments or []]
+        return self._set_path_result(path, blocking=blocking)
+
+    def execute_ordered_motion_chain(self, segments, tool=0, user=0, blocking=False, trajectory_optimizer="TOTG"):
+        if not self.set_active_tool(tool):
+            return -1
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.execute_ordered_motion_chain")
+        if preflight_error is not None:
+            return preflight_error
+        path = []
+        for segment in segments or []:
+            segment_type = str(segment.get("type") or segment.get("kind") or "linear").strip().lower()
+            if segment_type == "linear" and segment.get("position") is not None:
+                path.append(self._to_float_list(segment["position"]))
+            elif segment_type == "path":
+                path.extend(self._to_float_list(point) for point in segment.get("path") or [])
+        return self._set_path_result(path, blocking=blocking)
+
+    def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.unwind_joint6")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug("FakeRos2Client.unwind_joint6 blocking=%s queue_if_busy=%s", blocking, queue_if_busy)
+        task_id = self._next_task_id()
+        self._motion_active = not bool(blocking)
+        self._queue_size = 1 if self._motion_active else 0
+        self._last_execute_path_response = {
+            "http_status": 200,
+            "result_code": 0,
+            "task_id": task_id,
+            "queued": not bool(blocking),
+            "queue_position": 0 if blocking else 1,
+            "raw": {"success": True, "result": 0, "task_id": task_id, "queued": not bool(blocking)},
+        }
+        return 0
+
+    def start_jog(self, axis, direction, step, vel, acc):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRos2Client.start_jog")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRos2Client.start_jog axis=%s direction=%s step=%s vel=%s acc=%s",
+            axis,
+            direction,
+            step,
+            vel,
+            acc,
+        )
+        self._motion_active = True
+        self._queue_size = 1
+        return 0
+
+    def stop_motion(self):
+        logger.debug("FakeRos2Client.stop_motion")
+        stop_state = self._STOP_STATE_STOPPED if self._motion_active else self._STOP_STATE_NO_ACTIVE_MOTION
+        self._motion_active = False
+        self._queue_size = 0
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        self._last_stop_response = {
+            "success": True,
+            "result": 0,
+            "stop_state": stop_state,
+            "stopped": True,
+        }
+        return 0
+
+    def get_last_stop_response(self):
+        return deepcopy(self._last_stop_response)
+
+    def get_state_snapshot(self):
+        return {
+            "position": list(self._current_position),
+            "velocity": list(self._current_velocity_components),
+            "acceleration": 0.0,
+        }
+
+    def get_current_position(self):
+        return list(self._current_position)
+
+    def get_current_flange_position(self):
+        return list(self._current_position)
+
+    def GetActualTCPPose(self):
+        return (0, self.get_current_position())
+
+    def get_status(self):
+        return {
+            "success": True,
+            "mode": "fake",
+            "is_executing": self._motion_active,
+            "queue_size": self._queue_size,
+            "current_position": self.get_current_position(),
+        }
+
+    def get_safety_walls_status(self):
+        return {
+            "supported": True,
+            "enabled": self._safety_walls_enabled,
+            "success": True,
+            "mode": "fake",
+        }
+
+    def get_drive_status(self):
+        return {
+            "success": True,
+            "requested_enabled": bool(self._drive_enabled),
+            "motion_allowed_by_drive_enable": bool(self._drive_enabled),
+            "state": "ENABLE_REQUESTED" if self._drive_enabled else "DISABLED",
+            "mode": "fake",
+        }
+
+    def validate_pose(
+        self,
+        start_position,
+        target_position,
+        tool=0,
+        user=0,
+        start_joint_state: dict | None = None,
+    ) -> dict:
+        return {
+            "success": True,
+            "supported": True,
+            "reachable": True,
+            "start_position": self._to_float_list(start_position),
+            "target_position": self._to_float_list(target_position),
+            "mode": "fake",
+        }
+
+    def are_safety_walls_enabled(self):
+        return self._safety_walls_enabled
+
+    def enable_safety_walls(self) -> bool:
+        self._safety_walls_enabled = True
+        return True
+
+    def disable_safety_walls(self) -> bool:
+        self._safety_walls_enabled = False
+        return True
+
+    def get_current_velocity(self):
+        return (0, list(self._current_velocity_components))
+
+    def enable(self):
+        logger.info("FakeRos2Client.enable")
+        self._drive_enabled = True
+        return 0
+
+    def RobotEnable(self, state):
+        return self.enable() if state == 1 else self.disable()
+
+    def disable(self):
+        logger.info("FakeRos2Client.disable")
+        self._drive_enabled = False
+        return 0
+
+    def setDigitalOutput(self, portId, value):
+        self._digital_outputs[int(portId)] = int(value)
+        return 0
+
+    def resetAllErrors(self):
+        return 0
+
+    def ResetAllError(self):
+        return self.resetAllErrors()
+
+    def set_workobject(self, origin, user_id=0):
+        self._workobject = {"origin": self._to_float_list(origin), "user_id": int(user_id)}
+        return 0
+
+    @staticmethod
+    def _to_float_list(position):
+        return [float(v) for v in position]
+
+
+def should_use_fake_ros2_client(server_url: str | None) -> bool:
+    normalized = str(server_url or "").strip().lower()
+    return normalized in {"fake", "mock", "test", "sim"} or normalized.startswith(
+        ("fake://", "mock://", "test://", "sim://")
+    )
+
+
+def build_fairino_ros2_client(server_url="http://localhost:5000", ip=None):
+    if should_use_fake_ros2_client(server_url):
+        return FakeRos2Client(server_url=server_url, ip=ip)
+    return FairinoRos2Client(server_url=server_url, ip=ip)

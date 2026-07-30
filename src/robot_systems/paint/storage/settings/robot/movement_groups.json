@@ -6,38 +6,46 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[142.929, 280.025, 316.323, -0.081, -0.223, -11.314]"
+      "position": "[-7.120, 366.715, 99.870, -178.876, 0.003, -0.008]"
     },
     "CALIBRATION": {
-      "velocity": 50,
-      "acceleration": 20,
-      "iterations": 1,
-      "has_iterations": false,
-      "has_trajectory_execution": true,
-      "position": "[-26.864, -283.033, 359.907, 179.995, 0.022, -0.012]"
-    },
-    "JOG": {
-      "velocity": 0,
-      "acceleration": 0,
-      "iterations": 1,
-      "has_iterations": false,
-      "has_trajectory_execution": false
-    },
-    "PAINTING": {
       "velocity": 10,
       "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[40.337, -449.745, 151.603, 180.000, 0.095, -0.053]"
+      "position": "[-96.039, 560.555, 100.433, -178.785, -0.012, -0.049]"
     },
-    "PAINTING_NEW": {
+    "JOG": {
       "velocity": 10,
-      "acceleration": 50,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": false
+    },
+    "Horizontal Shaft": {
+      "velocity": 10,
+      "acceleration": 10,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-29.247, -388.072, 325.775, 90.449, 0.089, -0.167]"
+      "position": "[-13.236, 397.532, 377.623, -90.010, -0.369, -0.614]"
+    },
+    "Vertical Shaft": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[243.271, 416.502, 101.129, -178.852, -0.014, -0.047]"
+    },
+    "Clean": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
     }
   }
 }

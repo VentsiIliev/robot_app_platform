@@ -298,6 +298,12 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
         context.vision_service.get_camera_width() // 2,
         context.vision_service.get_camera_height() // 2,
     )
+    cfg = context.camera_tcp_offset_config
+    alignment_threshold_mm = float(
+        getattr(cfg, "recenter_alignment_threshold_mm", context.alignment_threshold_mm)
+    )
+    max_step_mm = max(0.0, float(getattr(cfg, "recenter_max_step_mm", 15.0)))
+    correction_gain = min(1.0, max(0.05, float(getattr(cfg, "recenter_correction_gain", 0.6))))
 
     for iteration in range(1, max_iterations + 1):
         if context.stop_event.is_set():
@@ -328,7 +334,7 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
         ppm = get_working_ppm(context)
 
         current_error_mm = current_error_px / ppm
-        if current_error_mm <= context.alignment_threshold_mm:
+        if current_error_mm <= alignment_threshold_mm:
             return context.calibration_robot_controller.get_current_position()
 
         offset_x_mm = offset_x_px / ppm
@@ -351,12 +357,12 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
         else:
             mapped_x_mm, mapped_y_mm = context.image_to_robot_mapping.map(offset_x_mm, offset_y_mm)
         try:
-            iterative_position = context.calibration_robot_controller.get_iterative_align_position(
-                current_error_mm,
+            iterative_position, move_x_mm, move_y_mm = _tcp_recenter_position(
+                context,
                 mapped_x_mm,
                 mapped_y_mm,
-                context.alignment_threshold_mm,
-                preserve_current_orientation=True,
+                max_step_mm=max_step_mm,
+                correction_gain=correction_gain,
             )
         except RuntimeError as exc:
             set_calibration_error(context, str(exc))
@@ -372,8 +378,18 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
         _tcp_max_wait = float(getattr(context.camera_tcp_offset_config, "recenter_stability_wait_s", 0.4))
         _scaled_wait = min(_raw_wait, _tcp_max_wait)
         _logger.info(
-            "TCP recenter [marker %d iter %d]: error=%.3fmm wait=%.2fs (cap=%.2fs align_max=%.1fs)",
-            marker_id, iteration, current_error_mm, _scaled_wait, _tcp_max_wait, context.fast_iteration_wait,
+            "TCP recenter [marker %d iter %d]: error=%.3fmm threshold=%.3fmm move=(%.3f, %.3f) max_step=%.3fmm gain=%.3f wait=%.2fs (cap=%.2fs align_max=%.1fs)",
+            marker_id,
+            iteration,
+            current_error_mm,
+            alignment_threshold_mm,
+            move_x_mm,
+            move_y_mm,
+            max_step_mm,
+            correction_gain,
+            _scaled_wait,
+            _tcp_max_wait,
+            context.fast_iteration_wait,
         )
         if context.interruptible_sleep(_scaled_wait):
             set_calibration_error(context, "TCP offset capture cancelled during recenter wait", log_level="warning")
@@ -386,6 +402,35 @@ def _align_marker_to_center(context, marker_id: int, max_iterations: int, camera
         log_level="warning",
     )
     return None
+
+
+def _tcp_recenter_position(
+    context,
+    offset_x_mm: float,
+    offset_y_mm: float,
+    *,
+    max_step_mm: float,
+    correction_gain: float,
+):
+    raw = context.calibration_robot_controller.get_current_position()
+    if not raw or len(raw) < 6:
+        raise RuntimeError(
+            f"Robot position unavailable in tcp-offset recenter: got {raw!r}. "
+            "Is the robot connected and ready?"
+        )
+
+    move_x_mm = float(offset_x_mm)
+    move_y_mm = float(offset_y_mm)
+    magnitude = float(math.hypot(move_x_mm, move_y_mm))
+    if max_step_mm > 0.0 and magnitude > max_step_mm:
+        scale = max_step_mm / magnitude
+        move_x_mm *= scale
+        move_y_mm *= scale
+    move_x_mm *= correction_gain
+    move_y_mm *= correction_gain
+
+    x, y, z, rx, ry, rz = [float(value) for value in raw[:6]]
+    return [x + move_x_mm, y + move_y_mm, z, rx, ry, rz], move_x_mm, move_y_mm
 
 
 def _move_to_pose(context, pose, label: str, velocity=None, acceleration=None):

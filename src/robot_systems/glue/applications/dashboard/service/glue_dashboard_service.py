@@ -27,6 +27,7 @@ class GlueDashboardService(IGlueDashboardService):
         messaging_service: IMessagingService | None = None,
         robot_service = None,
         preview_transformer = None,
+        preview_transformer_getter = None,
     ):
         self._runner   = runner
         self._settings = settings_service
@@ -35,6 +36,7 @@ class GlueDashboardService(IGlueDashboardService):
         self._messaging = messaging_service
         self._robot = robot_service
         self._preview_transformer = preview_transformer
+        self._preview_transformer_getter = preview_transformer_getter
         self._logger   = logging.getLogger(self.__class__.__name__)
 
     # ── Commands — delegated to GlueOperationCoordinator ─────────────
@@ -119,16 +121,25 @@ class GlueDashboardService(IGlueDashboardService):
             return None
 
     def get_current_robot_image_position(self) -> Optional[tuple[float, float]]:
-        if self._robot is None or self._preview_transformer is None:
+        preview_transformer = self._current_preview_transformer()
+        if self._robot is None or preview_transformer is None:
             return None
         try:
             position = self._robot.get_current_position()
             if not position or len(position) < 2:
                 return None
-            return self._preview_transformer.inverse_transform(float(position[0]), float(position[1]))
+            return preview_transformer.inverse_transform(float(position[0]), float(position[1]))
         except Exception:
             self._logger.debug("get_current_robot_image_position failed", exc_info=True)
             return None
+
+    def _current_preview_transformer(self):
+        if self._preview_transformer_getter is not None:
+            try:
+                return self._preview_transformer_getter()
+            except Exception:
+                self._logger.debug("preview transformer lookup failed", exc_info=True)
+        return self._preview_transformer
 
     def get_cell_connection_state(self, cell_id: int) -> str:
         if self._weight is None:

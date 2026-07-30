@@ -49,3 +49,7 @@ class MyRobotSystemBootstrapProvider(RobotSystemBootstrapProvider):
             ),
             protected_app_role_values=role_policy.protected_app_role_values,
         )
+
+
+def create_bootstrap_provider() -> RobotSystemBootstrapProvider:
+    return MyRobotSystemBootstrapProvider()

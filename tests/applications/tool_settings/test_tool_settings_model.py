@@ -35,11 +35,11 @@ class TestToolSettingsModelLoad(unittest.TestCase):
 
 class TestToolSettingsModelSave(unittest.TestCase):
 
-    def test_save_with_no_args_does_not_raise(self):
-        ToolSettingsModel(_make_service()).save()
+    def test_save_with_no_args_returns_none(self):
+        self.assertIsNone(ToolSettingsModel(_make_service()).save())
 
-    def test_save_with_arbitrary_args_does_not_raise(self):
-        ToolSettingsModel(_make_service()).save(1, 2, x=3)
+    def test_save_with_arbitrary_args_returns_none(self):
+        self.assertIsNone(ToolSettingsModel(_make_service()).save(1, 2, x=3))
 
 
 class TestToolSettingsModelDelegation(unittest.TestCase):

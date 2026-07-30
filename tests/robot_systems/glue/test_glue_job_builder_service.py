@@ -196,6 +196,15 @@ class TestGlueJobBuilderService(unittest.TestCase):
         with self.assertRaises(GlueJobBuildError):
             service.build_job([_workpiece()])
 
+    def test_build_job_uses_live_resolver_getter(self):
+        resolver = _make_resolver(offset_x=300.0, offset_y=400.0)
+        service = GlueJobBuilderService(resolver=None, resolver_getter=lambda: resolver, z_min=50.0)
+
+        job = service.build_job([_workpiece()])
+
+        self.assertEqual(job.segments[0].points[0], [301.0, 402.0, 70.0, 180.0, 0.0, 0.0])
+        resolver.registry.by_name.assert_called()
+
     def test_build_job_uses_rz_from_segment_settings(self):
         service, _ = self._service()
         workpiece = _workpiece()

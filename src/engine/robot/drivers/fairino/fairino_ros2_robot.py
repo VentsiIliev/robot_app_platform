@@ -4,7 +4,8 @@ from typing import List
 
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
-from .fairino_ros2_client import FairinoRos2Client
+from src.engine.robot.motion_sequence import MotionSequenceSegment
+from .fairino_ros2_client import build_fairino_ros2_client
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ class FairinoRos2Robot(IRobot):
 
     def __init__(self, server_url: str):
         logger.info("FairinoRos2Robot init — server_url=%s", server_url)
-        self._client = FairinoRos2Client(server_url=server_url)
+        self._client = build_fairino_ros2_client(server_url=server_url)
         logger.info("FairinoRos2Robot ready")
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
@@ -40,12 +41,32 @@ class FairinoRos2Robot(IRobot):
         logger.debug("stop_motion ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def get_state_snapshot(self) -> dict | None:
+        snapshot = self._client.get_state_snapshot()
+        if not snapshot:
+            return None
+        velocity = snapshot.get("velocity")
+        if velocity is None:
+            snapshot["velocity_magnitude"] = 0.0
+        else:
+            try:
+                snapshot["velocity_magnitude"] = math.sqrt(sum(float(v) ** 2 for v in velocity))
+            except (TypeError, ValueError):
+                snapshot["velocity_magnitude"] = 0.0
+        return snapshot
+
     def get_current_position(self) -> List[float]:
         # logger.debug("get_current_position →")
         result = self._client.get_current_position()
         position = result if result is not None else []
         # logger.debug("get_current_position ← raw=%s resolved=%s", result, position)
         return position
+
+    def get_current_flange_position(self) -> List[float] | None:
+        return self._client.get_current_flange_position()
+
+    def set_active_tool(self, tool: int) -> bool:
+        return self._client.set_active_tool(tool)
 
     def get_current_velocity(self) -> float:
         # logger.debug("get_current_velocity →")
@@ -114,6 +135,9 @@ class FairinoRos2Robot(IRobot):
     def get_safety_walls_status(self) -> dict:
         return self._client.get_safety_walls_status()
 
+    def get_drive_status(self) -> dict:
+        return self._client.get_drive_status()
+
     def validate_pose(
         self,
         start_position,
@@ -165,6 +189,85 @@ class FairinoRos2Robot(IRobot):
             orientation_mode=orientation_mode,
         )
         logger.debug("execute_trajectory ← result=%s", result)
+        return result
+
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_motion_sequence → segments=%d tool=%s user=%s blocking=%s",
+            len(segments),
+            tool,
+            user,
+            blocking,
+        )
+        result = self._client.execute_sequence(
+            segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
+        )
+        logger.debug("execute_motion_sequence ← result=%s", result)
+        return result
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_custom_motion_sequence → segments=%d tool=%s user=%s blocking=%s",
+            len(segments),
+            tool,
+            user,
+            blocking,
+        )
+        ordered_segments = [
+            {
+                "type": str(segment.motion_type or "linear"),
+                "position": list(segment.position),
+                "vel": float(segment.velocity),
+                "acc": float(segment.acceleration),
+                "blend_radius": float(segment.blend_radius),
+            }
+            for segment in (segments or [])
+        ]
+        result = self._client.execute_ordered_motion_chain(
+            ordered_segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
+        )
+        logger.debug("execute_custom_motion_sequence ← result=%s", result)
+        return result
+
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[dict],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        logger.debug(
+            "execute_ordered_motion_chain → segments=%d tool=%s user=%s blocking=%s",
+            len(segments) if segments else 0,
+            tool,
+            user,
+            blocking,
+        )
+        result = self._client.execute_ordered_motion_chain(
+            segments=segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
+        )
+        logger.debug("execute_ordered_motion_chain ← result=%s", result)
         return result
 
     def reset_all_errors(self) -> int:

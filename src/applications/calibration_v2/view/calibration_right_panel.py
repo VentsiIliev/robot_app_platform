@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from src.applications.base.collapsible_settings_view import CollapsibleGroup
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
 from src.applications.base.app_styles import (
     divider,
     section_hint,
@@ -413,7 +414,7 @@ class _AreaGridPanel(QWidget):
             col = QVBoxLayout()
             col.setSpacing(4)
             col.addWidget(_label(label_text))
-            spin = QSpinBox()
+            spin = KeyboardSpinBox()
             spin.setRange(2, 50)
             spin.setValue(default)
             spin.setStyleSheet(_COMBO_SPIN_STYLE)
@@ -760,4 +761,3 @@ class CalibrationRightPanel(QWidget):
             for p in [self._camera_pane, self._robot_pane, self._laser_pane, self.height_pane]
             if hasattr(p, "save_btn")
         ]
-

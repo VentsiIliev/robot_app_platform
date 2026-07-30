@@ -50,6 +50,10 @@ class ExpandedViewManager:
     def _cleanup(self):
         if self.expanded_view:
             try:
+                self.expanded_view.animation_manager.cleanup()
+                if self.expanded_view._close_button_animation is not None:
+                    self.expanded_view._close_button_animation.stop()
+                    self.expanded_view._close_button_animation = None
                 self.expanded_view.close_requested.disconnect()
                 self.expanded_view.app_selected.disconnect()
                 self.expanded_view.minimize_requested.disconnect()

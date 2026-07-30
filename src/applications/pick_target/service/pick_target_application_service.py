@@ -1,5 +1,9 @@
 import logging
+import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
+from datetime import datetime
+
+import cv2
 
 if TYPE_CHECKING:
     from src.engine.robot.height_measuring.i_height_correction_service import IHeightCorrectionService
@@ -17,6 +21,9 @@ from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
 _logger = logging.getLogger(__name__)
 
 _Z = 300.0
+_DEBUG_CAPTURE_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "bootstrap", "debug_plots")
+)
 
 
 class PickTargetApplicationService(IPickTargetService):
@@ -27,6 +34,7 @@ class PickTargetApplicationService(IPickTargetService):
         capture_snapshot_service: Optional[ICaptureSnapshotService],
         robot_service:   Optional[IRobotService],
         resolver:        Optional[VisionTargetResolver],
+        resolver_getter=None,
         robot_config=None,
         navigation=None,
         height_measuring: Optional[IHeightMeasuringService] = None,
@@ -38,6 +46,7 @@ class PickTargetApplicationService(IPickTargetService):
         self._capture_snapshot_service = capture_snapshot_service
         self._robot         = robot_service
         self._resolver      = resolver
+        self._resolver_getter = resolver_getter
         self._robot_config  = robot_config
         self._navigation    = navigation
         self._height_measuring  = height_measuring
@@ -47,17 +56,34 @@ class PickTargetApplicationService(IPickTargetService):
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
         self._pickup_frame_name = str(pickup_frame_name or "").strip().lower()
 
-        self._registry = resolver.registry if resolver is not None else None
-        self._target_point = (
-            self._registry.by_name(self._default_target_name)
-            if self._registry is not None and self._default_target_name
-            else None
-        )
-        pickup_frame = resolver.get_frame(self._pickup_frame_name) if resolver is not None and self._pickup_frame_name else None
-        self._pickup_mapper = pickup_frame.mapper if pickup_frame is not None else None
+        self._registry = None
+        self._target_point = self._resolve_target_point(self._default_target_name)
+
+    def _current_resolver(self) -> Optional[VisionTargetResolver]:
+        if self._resolver_getter is not None:
+            return self._resolver_getter()
+        return self._resolver
+
+    def _current_registry(self):
+        resolver = self._current_resolver()
+        return resolver.registry if resolver is not None else None
+
+    def _resolve_target_point(self, target_name: str):
+        registry = self._current_registry()
+        self._registry = registry
+        if registry is None or not target_name:
+            return None
+        return registry.by_name(target_name)
+
+    def _current_pickup_mapper(self):
+        resolver = self._current_resolver()
+        if resolver is None or not self._pickup_frame_name:
+            return None
+        pickup_frame = resolver.get_frame(self._pickup_frame_name)
+        return pickup_frame.mapper if pickup_frame is not None else None
 
     def set_target(self, target: str) -> None:
-        self._target_point = self._registry.by_name(target)
+        self._target_point = self._resolve_target_point(target)
 
     def set_use_pickup_plane(self, enabled: bool) -> None:
         self._use_pickup_plane = enabled
@@ -76,24 +102,48 @@ class PickTargetApplicationService(IPickTargetService):
         return self._pickup_frame_name if self._use_pickup_plane else self._calibration_frame_name
 
     def get_jog_reference_rz(self) -> float:
-        if self._active_frame == self._pickup_frame_name and self._pickup_mapper is not None:
-            return float(self._pickup_mapper.target_pose.rz)
+        pickup_mapper = self._current_pickup_mapper()
+        if self._active_frame == self._pickup_frame_name and pickup_mapper is not None:
+            return float(pickup_mapper.target_pose.rz)
         return 0.0
 
-    def _pose_target(self, px: float, py: float, z_mm: float = 0.0) -> VisionPoseRequest:
+    def _current_capture_orientation(self) -> Tuple[float, float]:
+        if self._robot is None:
+            return 180.0, 0.0
+        try:
+            current_pose = self._robot.get_current_position()
+        except Exception:
+            _logger.exception("Failed to read robot pose for pick-target capture orientation")
+            return 180.0, 0.0
+        if current_pose is None or len(current_pose) < 5:
+            _logger.warning(
+                "Robot pose unavailable for pick-target capture orientation; using default rx/ry"
+            )
+            return 180.0, 0.0
+        return float(current_pose[3]), float(current_pose[4])
+
+    def _pose_target(
+        self,
+        px: float,
+        py: float,
+        z_mm: float = 0.0,
+        rx_degrees: float = 180.0,
+        ry_degrees: float = 0.0,
+    ) -> VisionPoseRequest:
         return VisionPoseRequest(
             x_pixels=px,
             y_pixels=py,
             z_mm=z_mm,
             rz_degrees=self._pickup_plane_rz,
-            rx_degrees=180.0,
-            ry_degrees=0.0,
+            rx_degrees=rx_degrees,
+            ry_degrees=ry_degrees,
         )
 
     def _transform_point(self, px: float, py: float) -> Tuple[float, float]:
-        if self._resolver is None:
+        resolver = self._current_resolver()
+        if resolver is None:
             raise RuntimeError("Coordinate transformer is not available")
-        return self._resolver.resolve(
+        return resolver.resolve(
             self._pose_target(px, py), self._target_point, frame=self._active_frame
         ).final_xy
 
@@ -102,8 +152,15 @@ class PickTargetApplicationService(IPickTargetService):
             _logger.warning("Capture snapshot service not available")
             return None, [], []
 
+        capture_rx, capture_ry = self._current_capture_orientation()
+        _logger.info(
+            "[PICK_TARGET_CAPTURE_ORIENTATION] rx=%.3f ry=%.3f",
+            float(capture_rx),
+            float(capture_ry),
+        )
         snapshot = self._capture_snapshot_service.capture_snapshot(source="pick_target.capture")
         frame = snapshot.frame
+        self._save_debug_capture(frame)
         raw_contours = snapshot.contours
 
         from src.applications.pick_target.service.i_pick_target_service import RobotPose
@@ -115,15 +172,36 @@ class PickTargetApplicationService(IPickTargetService):
                 cnt = Contour(raw)
                 px, py = cnt.getCentroid()
                 pixel_centroids.append((px, py))
-                if self._resolver is not None:
-                    result = self._resolver.resolve(
-                        self._pose_target(px, py, z_mm=_Z), self._target_point, frame=self._active_frame,
+                resolver = self._current_resolver()
+                if resolver is not None:
+                    result = resolver.resolve(
+                        self._pose_target(
+                            px,
+                            py,
+                            z_mm=_Z,
+                            rx_degrees=capture_rx,
+                            ry_degrees=capture_ry,
+                        ),
+                        self._target_point,
+                        frame=self._active_frame,
                     )
                     robot_targets.append(result.robot_pose())
             except Exception:
                 _logger.exception("Failed to process contour centroid")
 
         return frame, pixel_centroids, robot_targets
+
+    def _save_debug_capture(self, frame: Optional[np.ndarray]) -> None:
+        if frame is None:
+            return
+        try:
+            os.makedirs(_DEBUG_CAPTURE_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            path = os.path.join(_DEBUG_CAPTURE_DIR, f"debug_{timestamp}.png")
+            if cv2.imwrite(path, frame):
+                _logger.info("Saved pick-target debug capture to %s", path)
+        except Exception:
+            _logger.exception("Failed to save pick-target debug capture")
 
     def move_to(self, x: float, y: float, z: float, rx: float, ry: float, rz: float) -> bool:
         if self._robot is None:
@@ -227,7 +305,14 @@ class PickTargetApplicationService(IPickTargetService):
                     rx, ry = self._transform_point(float(px), float(py))
                     robot_pts.append((rx, ry))
                 if robot_pts:
-                    result.append(np.array(robot_pts, dtype=np.float32))
+                    robot_arr = np.array(robot_pts, dtype=np.float32)
+                    result.append(robot_arr)
+                    _logger.info(
+                        "[PICK_TARGET_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                        len(result),
+                        len(robot_arr),
+                        self._describe_robot_contour_size(robot_arr),
+                    )
             except Exception:
                 _logger.exception("Failed to transform contour for trajectory")
         return result
@@ -247,12 +332,19 @@ class PickTargetApplicationService(IPickTargetService):
         if not contour_robot_pts:
             return False, "No contour waypoints to execute"
         try:
-            rx, ry, rz = 180.0, 0.0, self._pickup_plane_rz
+            rx, ry = self._current_capture_orientation()
+            rz = self._pickup_plane_rz
             total_pts = 0
-            for pts in contour_robot_pts:
+            for index, pts in enumerate(contour_robot_pts):
                 path = [[float(x), float(y), float(z)] for x, y in pts]
                 if not path:
                     continue
+                _logger.info(
+                    "[PICK_TARGET_EXECUTE_TRAJECTORY_MEASURE] index=%d points=%d %s",
+                    index + 1,
+                    len(path),
+                    self._describe_robot_contour_size(np.asarray(pts, dtype=np.float32)),
+                )
                 result_code = exec_fn(path, rx=rx, ry=ry, rz=rz, vel=vel, acc=acc, blocking=True)
                 if result_code not in (0, True, None):
                     return False, f"Trajectory failed with code {result_code}"
@@ -261,3 +353,22 @@ class PickTargetApplicationService(IPickTargetService):
         except Exception:
             _logger.exception("execute_contour_trajectory failed")
             return False, "Trajectory error — see log"
+
+    @staticmethod
+    def _describe_robot_contour_size(points: np.ndarray) -> str:
+        arr = np.asarray(points, dtype=np.float32)
+        if arr.ndim != 2 or arr.shape[0] < 3 or arr.shape[1] < 2:
+            return "min_rect=unavailable bbox=unavailable"
+
+        xy = np.ascontiguousarray(arr[:, :2].reshape(-1, 1, 2), dtype=np.float32)
+        (_center, size, angle_deg) = cv2.minAreaRect(xy)
+        length_mm = max(float(size[0]), float(size[1]))
+        width_mm = min(float(size[0]), float(size[1]))
+        x_min = float(np.min(arr[:, 0]))
+        x_max = float(np.max(arr[:, 0]))
+        y_min = float(np.min(arr[:, 1]))
+        y_max = float(np.max(arr[:, 1]))
+        return (
+            f"min_rect=({length_mm:.3f} x {width_mm:.3f} mm angle={float(angle_deg):.3f}) "
+            f"bbox=({x_max - x_min:.3f} x {y_max - y_min:.3f} mm)"
+        )

@@ -19,6 +19,7 @@ PICK_AND_SPRAY mode) is implemented inside ProcessSequence and is tested
 separately in tests/engine/process/test_process_sequence.y_pixels.
 """
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src.engine.process.process_requirements import ProcessRequirements
@@ -173,22 +174,26 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 
     def test_start_transitions_to_running(self):
         p = self._make()
-        p.start()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
     def test_stop_from_running_transitions_to_stopped(self):
         p = self._make()
-        p.start(); p.stop()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.stop()
         self.assertEqual(p.state, ProcessState.STOPPED)
 
     def test_pause_from_running_transitions_to_paused(self):
         p = self._make()
-        p.start(); p.pause()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.pause()
         self.assertEqual(p.state, ProcessState.PAUSED)
 
     def test_resume_from_paused_transitions_to_running(self):
         p = self._make()
-        p.start(); p.pause(); p.resume()
+        with patch.object(PickAndPlaceProcess, "_run_workflow", return_value=None):
+            p.start(); p.pause(); p.resume()
         self.assertEqual(p.state, ProcessState.RUNNING)
 
     def test_stop_from_idle_is_blocked(self):
@@ -236,6 +241,40 @@ class TestPickAndPlaceProcessStateTransitions(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "must be running"):
             p.step_once()
+
+    def test_run_workflow_uses_live_resolver_getter(self):
+        messaging = _ms()
+        matching = MagicMock()
+        tools = MagicMock()
+        height = MagicMock()
+        vacuum = MagicMock()
+        robot = _robot()
+        navigation = _navigation_service()
+        resolver = MagicMock()
+
+        p = PickAndPlaceProcess(
+            robot_service=robot,
+            messaging=messaging,
+            navigation_service=navigation,
+            matching_service=matching,
+            tool_service=tools,
+            height_service=height,
+            resolver=None,
+            resolver_getter=lambda: resolver,
+            vacuum_pump=vacuum,
+        )
+
+        workflow = MagicMock()
+        workflow.run.return_value = SimpleNamespace(state=ProcessState.STOPPED, message="done")
+
+        with patch(
+            "src.robot_systems.glue.processes.pick_and_place_process.PickAndPlaceWorkflow",
+            return_value=workflow,
+        ) as workflow_cls, patch.object(p, "stop") as stop_mock:
+            p._run_workflow()
+
+        self.assertIs(workflow_cls.call_args.kwargs["resolver"], resolver)
+        stop_mock.assert_called_once_with()
 
 
 
@@ -500,9 +539,10 @@ class TestGlueOperationCoordinatorStop(unittest.TestCase):
         runner.stop()
         spray_seq.stop.assert_called_once()
 
-    def test_stop_when_no_active_does_not_raise(self):
+    def test_stop_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
-        runner.stop()   # _active is None
+        runner.stop()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -517,9 +557,10 @@ class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
         runner.pause()
         spray_seq.pause.assert_called_once()
 
-    def test_pause_when_no_active_does_not_raise(self):
+    def test_pause_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
         runner.pause()
+        self.assertIsNone(runner._active)
 
     def test_pause_cancels_pending_spray_only_preparation(self):
         execution_service = MagicMock()
@@ -539,9 +580,10 @@ class TestGlueOperationCoordinatorPauseResume(unittest.TestCase):
         runner.resume()
         spray_seq.start.assert_called_once()
 
-    def test_resume_when_no_active_does_not_raise(self):
+    def test_resume_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
         runner.resume()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -586,9 +628,10 @@ class TestGlueOperationCoordinatorResetErrors(unittest.TestCase):
         runner.reset_errors()
         spray_seq.reset_errors.assert_called_once()
 
-    def test_reset_errors_when_no_active_does_not_raise(self):
+    def test_reset_errors_when_no_active_preserves_idle_coordinator(self):
         runner, *_ = _make_runner_mocks()
-        runner.reset_errors()   # _active is None
+        runner.reset_errors()
+        self.assertIsNone(runner._active)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -827,10 +870,11 @@ class TestGlueOperationCoordinatorCalibration(unittest.TestCase):
         runner.stop_calibration()
         self.assertIsNone(runner._active_process)
 
-    def test_stop_calibration_when_not_active_does_not_raise(self):
+    def test_stop_calibration_when_not_active_preserves_no_active_process(self):
         runner, calib = self._make_with_calib()
-        runner.stop_calibration()   # never started — must not raise
+        runner.stop_calibration()
         calib.stop.assert_not_called()
+        self.assertIsNone(runner._active_process)
 
 
 if __name__ == "__main__":

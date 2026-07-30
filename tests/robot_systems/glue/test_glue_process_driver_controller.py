@@ -124,10 +124,13 @@ class TestGlueProcessDriverController(unittest.TestCase):
             {"process_state": "running", "dispensing": {"current_path_index": 1}}
         )
 
-    def test_stop_does_not_raise(self):
+    def test_stop_is_idempotent_and_clears_subscriptions(self):
         ctrl, _, _, _ = self._make()
+        ctrl.load()
         ctrl.stop()
         ctrl.stop()
+        self.assertFalse(ctrl._active)
+        self.assertEqual(ctrl._subs, [])
 
     def test_view_destroyed_stops_controller(self):
         ctrl, _, _, broker = self._make()

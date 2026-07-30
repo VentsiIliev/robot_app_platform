@@ -75,15 +75,8 @@ try:
 except ImportError:
     from PyQt6.QtWidgets import QWidget as Drawer
 
-from PyQt6.QtWidgets import QLineEdit
-
-
 from contour_editor.models.interfaces import IAdditionalDataForm
-
-
-class FocusLineEdit(QLineEdit):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+from contour_editor.persistence.providers.widget_provider import WidgetProvider
 
 
 @dataclass
@@ -468,7 +461,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         icon_label = self.create_icon_label(field_config.icon)
         row_layout.addWidget(icon_label)
 
-        input_field = FocusLineEdit(parent=self._parent)
+        input_field = WidgetProvider.get().create_lineedit(parent=self._parent)
         input_field.setStyleSheet(get_input_field_styles())
         input_field.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
 

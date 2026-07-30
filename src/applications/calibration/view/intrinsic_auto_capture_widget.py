@@ -18,6 +18,10 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
 from src.applications.base.app_styles import APP_DANGER_BUTTON_STYLE, APP_PRIMARY_BUTTON_STYLE
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardSpinBox,
+)
 from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import (
     ARUCO_DICT_OPTIONS,
     IntrinsicCaptureConfig,
@@ -52,17 +56,17 @@ class IntrinsicAutoCaptureWidget(QWidget):
         board_type_row.addStretch(1)
         form.addRow("Board type:", board_type_row)
 
-        self._board_cols = QSpinBox()
+        self._board_cols = KeyboardSpinBox()
         self._board_cols.setRange(0, 50)
         self._board_cols.setSpecialValueText("auto")
         form.addRow("Board cols:", self._board_cols)
 
-        self._board_rows = QSpinBox()
+        self._board_rows = KeyboardSpinBox()
         self._board_rows.setRange(0, 50)
         self._board_rows.setSpecialValueText("auto")
         form.addRow("Board rows:", self._board_rows)
 
-        self._square_size = QDoubleSpinBox()
+        self._square_size = KeyboardDoubleSpinBox()
         self._square_size.setRange(0.0, 200.0)
         self._square_size.setSuffix(" mm")
         self._square_size.setSpecialValueText("auto")
@@ -75,56 +79,56 @@ class IntrinsicAutoCaptureWidget(QWidget):
         form.addRow(self._charuco_dict_label, self._charuco_dict)
 
         self._marker_size_label = QLabel("Marker size:")
-        self._marker_size_mm = QDoubleSpinBox()
+        self._marker_size_mm = KeyboardDoubleSpinBox()
         self._marker_size_mm.setRange(0.0, 200.0)
         self._marker_size_mm.setSuffix(" mm")
         self._marker_size_mm.setSpecialValueText("auto")
         form.addRow(self._marker_size_label, self._marker_size_mm)
 
-        self._grid_rows = QSpinBox()
+        self._grid_rows = KeyboardSpinBox()
         self._grid_rows.setRange(1, 10)
         self._grid_rows.setValue(3)
         form.addRow("Grid rows:", self._grid_rows)
 
-        self._grid_cols = QSpinBox()
+        self._grid_cols = KeyboardSpinBox()
         self._grid_cols.setRange(1, 10)
         self._grid_cols.setValue(3)
         form.addRow("Grid cols:", self._grid_cols)
 
-        self._tilt_deg = QDoubleSpinBox()
+        self._tilt_deg = KeyboardDoubleSpinBox()
         self._tilt_deg.setRange(0.0, 30.0)
         self._tilt_deg.setValue(5.0)
         self._tilt_deg.setSuffix(" °")
         form.addRow("Tilt angle:", self._tilt_deg)
 
-        self._z_delta_mm = QDoubleSpinBox()
+        self._z_delta_mm = KeyboardDoubleSpinBox()
         self._z_delta_mm.setRange(0.0, 200.0)
         self._z_delta_mm.setValue(40.0)
         self._z_delta_mm.setSuffix(" mm")
         form.addRow("Z delta:", self._z_delta_mm)
 
         self._sweep_x_label = QLabel("Sweep X half-range:")
-        self._sweep_x_mm = QDoubleSpinBox()
+        self._sweep_x_mm = KeyboardDoubleSpinBox()
         self._sweep_x_mm.setRange(10.0, 500.0)
         self._sweep_x_mm.setValue(100.0)
         self._sweep_x_mm.setSuffix(" mm")
         form.addRow(self._sweep_x_label, self._sweep_x_mm)
 
         self._sweep_y_label = QLabel("Sweep Y half-range:")
-        self._sweep_y_mm = QDoubleSpinBox()
+        self._sweep_y_mm = KeyboardDoubleSpinBox()
         self._sweep_y_mm.setRange(10.0, 500.0)
         self._sweep_y_mm.setValue(100.0)
         self._sweep_y_mm.setSuffix(" mm")
         form.addRow(self._sweep_y_label, self._sweep_y_mm)
 
         self._min_corners_label = QLabel("Min corners/frame:")
-        self._min_corners = QSpinBox()
+        self._min_corners = KeyboardSpinBox()
         self._min_corners.setRange(4, 100)
         self._min_corners.setValue(6)
         form.addRow(self._min_corners_label, self._min_corners)
 
         self._rz_deg_label = QLabel("RZ yaw variants (±):")
-        self._rz_deg = QDoubleSpinBox()
+        self._rz_deg = KeyboardDoubleSpinBox()
         self._rz_deg.setRange(0.0, 45.0)
         self._rz_deg.setValue(15.0)
         self._rz_deg.setSuffix(" °")
@@ -135,20 +139,20 @@ class IntrinsicAutoCaptureWidget(QWidget):
         self._compute_hand_eye.setChecked(True)
         form.addRow(self._compute_hand_eye_label, self._compute_hand_eye)
 
-        self._stabilization_delay = QDoubleSpinBox()
+        self._stabilization_delay = KeyboardDoubleSpinBox()
         self._stabilization_delay.setRange(0.0, 5.0)
         self._stabilization_delay.setSingleStep(0.1)
         self._stabilization_delay.setValue(0.5)
         self._stabilization_delay.setSuffix(" s")
         form.addRow("Stabilization delay:", self._stabilization_delay)
 
-        self._velocity = QSpinBox()
+        self._velocity = KeyboardSpinBox()
         self._velocity.setRange(1, 100)
         self._velocity.setValue(20)
         self._velocity.setSuffix(" %")
         form.addRow("Velocity:", self._velocity)
 
-        self._acceleration = QSpinBox()
+        self._acceleration = KeyboardSpinBox()
         self._acceleration.setRange(1, 100)
         self._acceleration.setValue(10)
         self._acceleration.setSuffix(" %")

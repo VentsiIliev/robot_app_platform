@@ -2,7 +2,7 @@ from __future__ import annotations
 from functools import partial
 from typing import List
 
-from PyQt6.QtCore import pyqtSignal, QEvent, Qt
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QWidget,
 )
@@ -171,11 +171,6 @@ class DeviceControlView(IApplicationView):
     def set_device_active(self, key: str, active: bool) -> None:
         if key in self._dots:
             self._dots[key].setStyleSheet(_DOT_ON if active else _DOT_OFF)
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

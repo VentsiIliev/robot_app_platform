@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -22,6 +23,7 @@ from PyQt6.QtWidgets import (
 from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, GHOST_BTN_STYLE, GROUP_STYLE, LABEL_STYLE
 from src.applications.base.app_dialog import AppDialog, DIALOG_CHECKBOX_STYLE, DIALOG_INPUT_STYLE
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 
 
 class TargetingDefinitionsTab(QWidget):
@@ -290,12 +292,16 @@ class _PointDialog(AppDialog):
         super().__init__("Target Point", min_width=420, parent=parent)
         data = data or {}
         self._protected_name = bool(protected_name)
+        self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
+        self._keyboard_scroll_area: QScrollArea | None = None
+        self._keyboard_bottom_spacer: QWidget | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(16)
 
-        form = QFormLayout()
+        form_host = QWidget(self)
+        form = QFormLayout(form_host)
         form.setSpacing(12)
         self._name = self._line_edit(str(data.get("name", "")))
         self._display_name = self._line_edit(str(data.get("display_name", data.get("name", ""))))
@@ -308,8 +314,41 @@ class _PointDialog(AppDialog):
         form.addRow(self._label("Label"), self._display_name)
         form.addRow(self._label("X (mm)"), self._x)
         form.addRow(self._label("Y (mm)"), self._y)
-        root.addLayout(form)
+        self._keyboard_bottom_spacer = QWidget(form_host)
+        self._keyboard_bottom_spacer.setFixedHeight(0)
+        form.addRow("", self._keyboard_bottom_spacer)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(form_host)
+        self._keyboard_scroll_area = scroll
+        root.addWidget(scroll)
         root.addWidget(self._build_button_row(ok_label="Save"))
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect) -> None:
+        self._reserve_keyboard_space(keyboard_rect)
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(0)
+
+    def _reserve_keyboard_space(self, keyboard_rect) -> None:
+        if self._keyboard_scroll_area is None:
+            return
+
+        viewport = self._keyboard_scroll_area.viewport()
+        overlap = viewport.mapToGlobal(viewport.rect().bottomLeft()).y() - keyboard_rect.top() + 24
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(max(0, overlap))
+
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(
+                0,
+                lambda: self._keyboard_scroll_area.ensureWidgetVisible(focused, 12, 12),
+            )
 
     def get_values(self) -> dict:
         return {
@@ -339,7 +378,7 @@ class _PointDialog(AppDialog):
 
     @staticmethod
     def _line_edit(value: str) -> QLineEdit:
-        edit = QLineEdit(value)
+        edit = KeyboardLineEdit(value)
         edit.setStyleSheet(DIALOG_INPUT_STYLE)
         return edit
 
@@ -348,12 +387,16 @@ class _FrameDialog(AppDialog):
     def __init__(self, data: dict | None = None, parent=None):
         super().__init__("Target Frame", min_width=440, parent=parent)
         data = data or {}
+        self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
+        self._keyboard_scroll_area: QScrollArea | None = None
+        self._keyboard_bottom_spacer: QWidget | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(16)
 
-        form = QFormLayout()
+        form_host = QWidget(self)
+        form = QFormLayout(form_host)
         form.setSpacing(12)
         self._name = self._line_edit(str(data.get("name", "")))
         self._source = self._line_edit(str(data.get("source_navigation_group", "")))
@@ -365,8 +408,41 @@ class _FrameDialog(AppDialog):
         form.addRow(self._label("Source Group"), self._source)
         form.addRow(self._label("Target Group"), self._target)
         form.addRow(QLabel(""), self._height)
-        root.addLayout(form)
+        self._keyboard_bottom_spacer = QWidget(form_host)
+        self._keyboard_bottom_spacer.setFixedHeight(0)
+        form.addRow("", self._keyboard_bottom_spacer)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(form_host)
+        self._keyboard_scroll_area = scroll
+        root.addWidget(scroll)
         root.addWidget(self._build_button_row(ok_label="Save"))
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect) -> None:
+        self._reserve_keyboard_space(keyboard_rect)
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(0)
+
+    def _reserve_keyboard_space(self, keyboard_rect) -> None:
+        if self._keyboard_scroll_area is None:
+            return
+
+        viewport = self._keyboard_scroll_area.viewport()
+        overlap = viewport.mapToGlobal(viewport.rect().bottomLeft()).y() - keyboard_rect.top() + 24
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(max(0, overlap))
+
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(
+                0,
+                lambda: self._keyboard_scroll_area.ensureWidgetVisible(focused, 12, 12),
+            )
 
     def get_values(self) -> dict:
         return {
@@ -390,6 +466,6 @@ class _FrameDialog(AppDialog):
 
     @staticmethod
     def _line_edit(value: str) -> QLineEdit:
-        edit = QLineEdit(value)
+        edit = KeyboardLineEdit(value)
         edit.setStyleSheet(DIALOG_INPUT_STYLE)
         return edit

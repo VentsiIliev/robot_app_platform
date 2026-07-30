@@ -7,7 +7,9 @@ from typing import List, Optional
 
 import numpy as np
 
-from src.robot_systems.glue.domain.workpieces.workpiece_thumbnail import generate_thumbnail_bytes
+from src.applications.workpiece_library.workpiece_thumbnail import (
+    generate_thumbnail_bytes,
+)
 
 _logger = logging.getLogger(__name__)
 

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
+from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.engine.robot.services.robot_service import RobotService
 
 
@@ -31,10 +32,25 @@ class TestRobotService(unittest.TestCase):
         self.motion.move_linear.assert_called_once()
         self.assertTrue(result)
 
+    def test_move_sequence_delegates_to_motion(self):
+        self.motion.move_sequence.return_value = True
+        segments = [MotionSequenceSegment([1, 2, 3, 0, 0, 0], 30, 40)]
+
+        result = self.service.move_sequence(segments, 1, 0)
+
+        self.motion.move_sequence.assert_called_once_with(segments, 1, 0, False)
+        self.assertTrue(result)
+
     def test_start_jog_delegates_to_motion(self):
         self.motion.start_jog.return_value = 0
         self.service.start_jog(RobotAxis.Z, Direction.PLUS, 5.0)
-        self.motion.start_jog.assert_called_once_with(RobotAxis.Z, Direction.PLUS, 5.0)
+        self.motion.start_jog.assert_called_once_with(
+            RobotAxis.Z,
+            Direction.PLUS,
+            5.0,
+            velocity=None,
+            acceleration=None,
+        )
 
     def test_stop_motion_delegates_to_motion(self):
         self.motion.stop_motion.return_value = True
@@ -43,6 +59,21 @@ class TestRobotService(unittest.TestCase):
     def test_get_current_position_delegates_to_motion(self):
         self.state.position = [1, 2, 3, 0, 0, 0]
         self.assertEqual(self.service.get_current_position(), [1, 2, 3, 0, 0, 0])
+
+    def test_set_active_tool_delegates_and_refreshes_state(self):
+        self.robot.set_active_tool.return_value = True
+
+        self.assertTrue(self.service.set_active_tool(1))
+
+        self.robot.set_active_tool.assert_called_once_with(1)
+        self.state.refresh_once.assert_called_once()
+
+    def test_set_active_tool_does_not_refresh_when_driver_rejects(self):
+        self.robot.set_active_tool.return_value = False
+
+        self.assertFalse(self.service.set_active_tool(1))
+
+        self.state.refresh_once.assert_not_called()
 
     # --- lifecycle delegation ---
 

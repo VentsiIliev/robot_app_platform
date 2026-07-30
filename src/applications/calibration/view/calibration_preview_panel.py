@@ -29,6 +29,7 @@ from src.applications.base.app_styles import (
     section_hint,
     section_label,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
 from src.shared_contracts.declarations import WorkAreaDefinition
 
 _GRID_POINT_COLOR = QColor("#FF7043")
@@ -189,10 +190,10 @@ class CalibrationAreaGridPanel(QWidget):
         self.work_area_combo = QComboBox()
         for definition in self._work_area_definitions:
             self.work_area_combo.addItem(definition.label, definition.id)
-        self.grid_rows_spin = QSpinBox()
+        self.grid_rows_spin = KeyboardSpinBox()
         self.grid_rows_spin.setRange(2, 50)
         self.grid_rows_spin.setValue(5)
-        self.grid_cols_spin = QSpinBox()
+        self.grid_cols_spin = KeyboardSpinBox()
         self.grid_cols_spin.setRange(2, 50)
         self.grid_cols_spin.setValue(4)
         form.addRow("Area:", self.work_area_combo)

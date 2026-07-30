@@ -25,6 +25,11 @@ def _make_service(**overrides):
     svc.calibrate_camera.return_value            = overrides.get("camera",   (True,  "cam ok"))
     svc.calibrate_robot.return_value             = overrides.get("robot",    (False, "not impl"))
     svc.calibrate_camera_and_robot.return_value  = overrides.get("sequence", (True,  "all ok"))
+    svc.start_tool_tcp_calibration.return_value  = overrides.get("tool_start", (True, "tool start"))
+    svc.capture_tool_tcp_sample.return_value     = overrides.get("tool_capture", (True, "tool capture"))
+    svc.solve_tool_tcp_calibration.return_value  = overrides.get("tool_solve", (True, "tool solve", {}))
+    svc.save_tool_tcp_calibration.return_value   = overrides.get("tool_save", (True, "tool save"))
+    svc.clear_tool_tcp_calibration.return_value  = overrides.get("tool_clear", (True, "tool clear"))
     return svc
 
 
@@ -94,6 +99,28 @@ class TestCalibrationModelDelegation(unittest.TestCase):
         svc = _make_service()
         CalibrationModel(svc).save_calibration_settings(settings)
         svc.save_calibration_settings.assert_called_once_with(settings)
+
+    def test_tool_tcp_methods_delegate_to_service(self):
+        svc = _make_service(
+            tool_start=(True, "started"),
+            tool_capture=(True, "captured"),
+            tool_solve=(True, "solved", {"sample_count": 6}),
+            tool_save=(True, "saved"),
+            tool_clear=(True, "cleared"),
+        )
+        model = CalibrationModel(svc)
+
+        self.assertEqual(model.start_tool_tcp_calibration(2), (True, "started"))
+        self.assertEqual(model.capture_tool_tcp_sample(), (True, "captured"))
+        self.assertEqual(model.solve_tool_tcp_calibration(), (True, "solved", {"sample_count": 6}))
+        self.assertEqual(model.save_tool_tcp_calibration(), (True, "saved"))
+        self.assertEqual(model.clear_tool_tcp_calibration(), (True, "cleared"))
+
+        svc.start_tool_tcp_calibration.assert_called_once_with(2)
+        svc.capture_tool_tcp_sample.assert_called_once()
+        svc.solve_tool_tcp_calibration.assert_called_once()
+        svc.save_tool_tcp_calibration.assert_called_once()
+        svc.clear_tool_tcp_calibration.assert_called_once()
 
 
 if __name__ == "__main__":

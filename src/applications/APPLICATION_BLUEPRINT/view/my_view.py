@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout
 
 from src.applications.base.i_application_view import IApplicationView
@@ -40,12 +40,8 @@ class MyView(IApplicationView):
     def _on_inner_save(self, value: str) -> None:
         self.save_requested.emit(value)
 
-    # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
+    def retranslateUi(self) -> None:
+        self._label.setText(self.tr("Value: —"))
 
     def clean_up(self) -> None:
         pass

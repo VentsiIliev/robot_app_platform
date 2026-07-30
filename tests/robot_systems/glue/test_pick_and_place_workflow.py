@@ -120,6 +120,9 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
+        vacuum_pump = MagicMock()
+        vacuum_pump.turn_on.return_value = True
+        vacuum_pump.turn_off.return_value = True
         transformer = _make_resolver(10.0, 20.0)
         run_allowed = threading.Event()
         run_allowed.set()
@@ -131,6 +134,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             tools=tools,
             height=None,
             resolver=transformer,
+            vacuum_pump=vacuum_pump,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             on_diagnostics=lambda snapshot: diagnostics.append(snapshot),
@@ -158,6 +162,9 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
+        vacuum_pump = MagicMock()
+        vacuum_pump.turn_on.return_value = True
+        vacuum_pump.turn_off.return_value = True
         transformer = _make_resolver(10.0, 20.0)
         config = PickAndPlaceConfig()
         run_allowed = threading.Event()
@@ -170,6 +177,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             tools=tools,
             height=None,
             resolver=transformer,
+            vacuum_pump=vacuum_pump,
             config=config,
             logger=logging.getLogger("pick-and-place-test"),
         )
@@ -197,6 +205,9 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         tools.current_gripper = None
         tools.drop_off_gripper.return_value = (True, "")
         tools.pickup_gripper.return_value = (True, "")
+        vacuum_pump = MagicMock()
+        vacuum_pump.turn_on.return_value = True
+        vacuum_pump.turn_off.return_value = True
         transformer = _make_resolver(10.0, 20.0)
         run_allowed = threading.Event()
         run_allowed.set()
@@ -208,6 +219,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             tools=tools,
             height=None,
             resolver=transformer,
+            vacuum_pump=vacuum_pump,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             step_gate=lambda name, _snapshot: checkpoints.append(name) or True,
@@ -244,6 +256,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
         matching = MagicMock()
         tools = MagicMock()
         transformer = MagicMock()
+        vacuum_pump = MagicMock()
         run_allowed = threading.Event()
         run_allowed.set()
 
@@ -254,6 +267,7 @@ class TestPickAndPlaceWorkflow(unittest.TestCase):
             tools=tools,
             height=None,
             resolver=transformer,
+            vacuum_pump=vacuum_pump,
             config=PickAndPlaceConfig(),
             logger=logging.getLogger("pick-and-place-test"),
             step_gate=lambda _name, _snapshot: False,

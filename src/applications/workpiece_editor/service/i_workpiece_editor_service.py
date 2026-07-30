@@ -25,13 +25,19 @@ class IWorkpieceEditorService(ABC):
     def save_workpiece(self, data: dict) -> tuple[bool, str]: ...
 
     @abstractmethod
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]: ...
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]: ...
 
     @abstractmethod
     def get_last_sampled_preview_paths(self) -> list: ...
 
     @abstractmethod
     def get_last_raw_preview_paths(self) -> list: ...
+
+    @abstractmethod
+    def get_last_raw_pixel_preview_paths(self) -> list: ...
+
+    @abstractmethod
+    def get_last_raw_homography_preview_paths(self) -> list: ...
 
     @abstractmethod
     def get_last_prepared_preview_paths(self) -> list: ...
@@ -41,6 +47,9 @@ class IWorkpieceEditorService(ABC):
 
     @abstractmethod
     def get_last_execution_preview_paths(self) -> list: ...
+
+    @abstractmethod
+    def get_last_camera_preview_paths(self) -> dict[str, list]: ...
 
     @abstractmethod
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]: ...
@@ -53,17 +62,6 @@ class IWorkpieceEditorService(ABC):
 
     @abstractmethod
     def execute_process_action(self, action_id: str) -> tuple[bool, str]: ...
-
-    @abstractmethod
-    def can_import_dxf_test(self) -> bool: ...
-
-    @abstractmethod
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict: ...
 
     @abstractmethod
     def set_editing(self, storage_id: Optional[str]) -> None:

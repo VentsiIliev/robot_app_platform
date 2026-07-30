@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 
 from ..enums.axis import RobotAxis, Direction
+from ..motion_sequence import MotionSequenceSegment
 
 
 class IRobot(ABC):
@@ -74,6 +75,36 @@ class IRobot(ABC):
     ) -> None:
         ...
 
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional explicit segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional custom queued segmented motion sequence. Returns >=0 on success/queued."""
+        return -1
+
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[dict],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        """Optional ordered motion chain with mixed segment types."""
+        return -1
+
     @abstractmethod
     def enable(self) -> None:
         ...
@@ -142,6 +173,10 @@ class IRobot(ABC):
     ) -> dict:
         """Optional remote pose reachability validation."""
         return {"supported": False, "reachable": False}
+
+    def set_active_tool(self, tool: int) -> bool:
+        """Optional remote active TCP selection for status/current-pose reporting."""
+        return False
 
     def prefers_incremental_jog(self) -> bool:
         """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""

@@ -33,6 +33,7 @@ class ExpandedFolderView(QFrame):
         self._current_app_name = None
 
         self.close_app_button = None
+        self._close_button_animation = None
 
         self.setup_ui()
         self.animation_manager = AnimationManager(self)
@@ -216,11 +217,17 @@ class ExpandedFolderView(QFrame):
 
             # Material Design fade-in
             self.close_app_button.setWindowOpacity(0.0)
-            button_animation = QPropertyAnimation(self.close_app_button, b"windowOpacity")
+            if self._close_button_animation is not None:
+                self._close_button_animation.stop()
+            button_animation = QPropertyAnimation(self)
+            button_animation.setTargetObject(self.close_app_button)
+            button_animation.setPropertyName(b"windowOpacity")
             button_animation.setDuration(200)
             button_animation.setStartValue(0.0)
             button_animation.setEndValue(1.0)
             button_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+            button_animation.finished.connect(self._clear_close_button_animation)
+            self._close_button_animation = button_animation
             button_animation.start()
 
     def hide_close_app_button(self):
@@ -253,6 +260,9 @@ class ExpandedFolderView(QFrame):
     def _on_animation_finished(self, animation_id: str):
         """Handle specific animation completion"""
         pass
+
+    def _clear_close_button_animation(self):
+        self._close_button_animation = None
 
     def safe_hide(self):
         """Safe hide with Material Design cleanup"""

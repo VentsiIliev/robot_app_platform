@@ -1,10 +1,10 @@
 from typing import Callable, Dict, List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
-    QVBoxLayout, QWidget, QFrame,
+    QScrollArea, QVBoxLayout, QWidget, QFrame,
 )
 
 from src.engine.robot.configuration import MovementGroup
@@ -15,8 +15,9 @@ from src.shared_contracts.declarations import (
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE,
-    GROUP_STYLE, LABEL_STYLE, PRIMARY_DARK, PRIMARY_LIGHT,
+    GROUP_STYLE, LABEL_STYLE, PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox
 from pl_gui.utils.utils_widgets.touch_spinbox import TouchSpinBox
 
 
@@ -51,6 +52,21 @@ QLineEdit {{
 }}
 """
 
+_COORDINATE_SPIN_STYLE = f"""
+QDoubleSpinBox {{
+    background: white;
+    color: #333333;
+    border: 2px solid {BORDER};
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 11pt;
+    min-height: 56px;
+}}
+QDoubleSpinBox:focus {{
+    border-color: {PRIMARY};
+}}
+"""
+
 
 # ── Position editor dialog ────────────────────────────────────────────────────
 
@@ -59,7 +75,7 @@ class PositionEditorDialog(QDialog):
     Touch-friendly 6-DOF position editor.
 
     Layout: two columns — X / Y / Z on the left, RX / RY / RZ on the right.
-    Each coordinate gets a TouchSpinBox with appropriate range and step pills.
+    Each coordinate gets a keyboard-aware spin box with the configured range.
     """
 
     # (label, min, max, decimals, suffix, step, step_options)
@@ -78,9 +94,12 @@ class PositionEditorDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(720)
         self.setStyleSheet(f"background: {BG_COLOR};")
+        self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
+        self._keyboard_bottom_spacer: Optional[QWidget] = None
+        self._keyboard_scroll_area: Optional[QScrollArea] = None
 
         values = self._parse(position_str)
-        self._spinboxes: List[TouchSpinBox] = []
+        self._spinboxes: List[KeyboardDoubleSpinBox] = []
 
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 24, 24, 24)
@@ -95,7 +114,7 @@ class PositionEditorDialog(QDialog):
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
-        for i, (lbl_text, mn, mx, dec, sfx, stp, opts) in enumerate(self._COORDS):
+        for i, (lbl_text, mn, mx, dec, sfx, stp, _opts) in enumerate(self._COORDS):
             col = 0 if i < 3 else 1
             row = i % 3
 
@@ -109,16 +128,29 @@ class PositionEditorDialog(QDialog):
             lbl.setStyleSheet(LABEL_STYLE)
             cell_layout.addWidget(lbl)
 
-            spin = TouchSpinBox(
-                min_val=mn, max_val=mx, initial=values[i],
-                step=stp, decimals=dec, suffix=sfx, step_options=opts,
-            )
+            spin = KeyboardDoubleSpinBox()
+            spin.setRange(mn, mx)
+            spin.setDecimals(dec)
+            spin.setSingleStep(stp)
+            spin.setSuffix(sfx)
+            spin.setValue(values[i])
+            spin.setStyleSheet(_COORDINATE_SPIN_STYLE)
             cell_layout.addWidget(spin)
             self._spinboxes.append(spin)
 
             grid.addWidget(cell, row, col)
 
-        root.addWidget(grid_widget)
+        self._keyboard_bottom_spacer = QWidget(grid_widget)
+        self._keyboard_bottom_spacer.setFixedHeight(0)
+        grid.addWidget(self._keyboard_bottom_spacer, 3, 0, 1, 2)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(grid_widget)
+        self._keyboard_scroll_area = scroll
+        root.addWidget(scroll)
 
         # ── Cancel / OK buttons ───────────────────────────────────────────
         btn_row = QWidget()
@@ -143,6 +175,26 @@ class PositionEditorDialog(QDialog):
         btn_layout.addWidget(ok_btn)
 
         root.addWidget(btn_row)
+
+    def _on_virtual_keyboard_shown(self, keyboard_rect) -> None:
+        if self._keyboard_scroll_area is None:
+            return
+
+        viewport = self._keyboard_scroll_area.viewport()
+        overlap = viewport.mapToGlobal(viewport.rect().bottomLeft()).y() - keyboard_rect.top() + 24
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(max(0, overlap))
+
+        focused = self.focusWidget()
+        if focused is not None:
+            QTimer.singleShot(
+                0,
+                lambda: self._keyboard_scroll_area.ensureWidgetVisible(focused, 12, 12),
+            )
+
+    def _on_virtual_keyboard_hidden(self) -> None:
+        if self._keyboard_bottom_spacer is not None:
+            self._keyboard_bottom_spacer.setFixedHeight(0)
 
     # ── Helpers ───────────────────────────────────────────────────────────
 

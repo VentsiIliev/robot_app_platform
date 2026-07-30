@@ -24,48 +24,58 @@ It does not depend on any specific robot system.
 ## Architecture
 
 ```text
-robot_system metadata.translations_root
+shared catalog root + robot-system metadata.translations_root
         ↓
 bootstrap/main.py
         ↓
 LocalizationService
-        ├─ discovers available languages from *.json
-        ├─ merges fallback language + selected language
+        ├─ discovers available languages from all *.json roots
+        ├─ merges default-language catalogs across roots
+        ├─ overlays selected-language catalogs across roots
         ├─ installs one live QTranslator into Qt
         └─ publishes LocalizationTopics.LANGUAGE_CHANGED
         ↓
 Qt widgets
         ├─ self.tr("...")
-        └─ changeEvent(LanguageChange) → retranslateUi() / on_language_changed()
+        └─ IApplicationView.on_language_changed() → retranslateUi() + language_changed
 ```
 
 ---
 
 ## Key Design Decisions
 
-### 1. Catalogs live per robot system
+### 1. Catalogs are layered
 
-Translations belong to the robot system domain, not the engine.
+Translations are now loaded from two roots:
+
+- shared application catalogs under `src/applications/localization/`
+- robot-system-specific catalogs under `src/robot_systems/<system>/storage/translations/`
 
 Example:
 
 ```text
+src/applications/localization/
+  en.json
+  bg.json
 src/robot_systems/glue/storage/translations/
   en.json
   bg.json
 ```
 
-The engine service reads the directory declared by:
+Bootstrap resolves the active robot-system directory from:
 - [SystemMetadata.translations_root](/home/ilv/Desktop/robot_app_platform/src/robot_systems/base_robot_system.py)
+
+Shared catalogs load first. Robot-system catalogs load second and can override shared wording when needed.
 
 ### 2. Fallback language is merged, not chained
 
-The service loads the default language catalog first, then overlays the selected language on top of it into one merged translator.
+The service loads all default-language catalogs first, then overlays the selected language on top of that merged base.
 
 Why:
 - widget `self.tr(...)` fallback stays predictable
 - partial translations work
 - missing Bulgarian strings still show English instead of raw source text when English has an explicit catalog entry
+- shared application strings can be reused by `paint`, `glue`, and `welding` without duplicating the same entries per system
 
 ### 3. Language changes are also published on the broker
 
@@ -78,7 +88,7 @@ This is useful for non-widget consumers later, such as presenters or controller-
 
 The service stores the active language in a small JSON state file.
 
-For the active robot system, bootstrap currently resolves it to:
+For the active robot system, bootstrap currently resolves the persisted state to:
 
 ```text
 <robot_system module>/<metadata.settings_root>/localization.json
@@ -107,6 +117,15 @@ self._save_btn.setText(self.tr("Save"))
 
 This keeps translation native to Qt and works with `LanguageChange` events.
 
+For standard shell applications that inherit `IApplicationView`, the default localization flow is now:
+
+- Qt posts `QEvent.LanguageChange`
+- `AppWidget.changeEvent(...)` calls `on_language_changed()`
+- `IApplicationView.on_language_changed()` calls `retranslateUi()`
+- `IApplicationView` emits `language_changed` for controllers that own dynamic text
+
+That removes the need for most per-view `changeEvent(...)` boilerplate.
+
 ### 6. Controllers can use `QCoreApplication.translate(...)`
 
 For dynamic controller text, use a stable context:
@@ -116,6 +135,14 @@ QCoreApplication.translate("GlueDashboard", "Reset Errors")
 ```
 
 That is how the dashboard controller currently re-translates action labels and pause/resume text.
+
+For `IApplicationView`-based applications, prefer connecting controller retranslation to the base view signal:
+
+```python
+self._view.language_changed.connect(self._retranslate)
+```
+
+Use the broker `LocalizationTopics.LANGUAGE_CHANGED` event only when a non-Qt consumer needs to react.
 
 ### 7. Initial render and runtime retranslation are separate concerns
 
@@ -191,14 +218,16 @@ Rules:
 Bootstrap now does this:
 
 1. create `QApplication`
-2. build `LocalizationService` from the active robot system's `translations_root`
+2. build `LocalizationService` from:
+   - `src/applications/localization`
+   - the active robot system's `translations_root`
 3. set default language (`en`)
    or the persisted language if one was previously selected
 4. pass `available_languages()` into `AppShell`
 5. connect shell language selector to `localization_service.set_language`
 6. synchronize the selector widget to `localization_service.get_language()`
 
-The shell's `LanguageSelectorWidget` already posts `QEvent.LanguageChange` to top-level widgets, so normal Qt retranslation works without custom event plumbing in most views.
+`LanguageSelectorWidget` now posts `QEvent.LanguageChange` to top-level widgets and all descendant `QWidget`s. That matters because application views such as `UserManagementView` live inside the shell's stacked widget and are not top-level windows themselves.
 
 ---
 
@@ -206,7 +235,13 @@ The shell's `LanguageSelectorWidget` already posts `QEvent.LanguageChange` to to
 
 ### Add a new language
 
-1. Create a new file in the robot system catalog directory:
+1. Create a new file in a catalog root:
+
+```text
+src/applications/localization/de.json
+```
+
+or:
 
 ```text
 src/robot_systems/<system>/storage/translations/de.json
@@ -222,7 +257,7 @@ src/robot_systems/<system>/storage/translations/de.json
 
 4. Restart the app.
 
-The new language appears automatically in the shell selector because `LocalizationService.available_languages()` scans `*.json`.
+The new language appears automatically in the shell selector because `LocalizationService.available_languages()` scans `*.json` across all configured roots.
 
 ### Add a new translatable string
 

@@ -191,9 +191,13 @@ class TestProcessSequenceStop(unittest.TestCase):
         unsubscribed = [c.args[0] for c in ms.unsubscribe.call_args_list]
         self.assertIn(ProcessTopics.state("a"), unsubscribed)
 
-    def test_stop_when_no_active_does_not_raise(self):
-        seq = ProcessSequence([_make_proc("a")], _ms())
-        seq.stop()   # _current is None — must not raise
+    def test_stop_when_no_active_does_not_call_process_or_unsubscribe(self):
+        ms = _ms()
+        proc = _make_proc("a")
+        seq = ProcessSequence([proc], ms)
+        seq.stop()
+        proc.stop.assert_not_called()
+        ms.unsubscribe.assert_not_called()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -209,9 +213,11 @@ class TestProcessSequencePause(unittest.TestCase):
         seq.pause()
         proc.pause.assert_called_once()
 
-    def test_pause_when_no_active_does_not_raise(self):
-        seq = ProcessSequence([_make_proc("a")], _ms())
+    def test_pause_when_no_active_does_not_call_process_pause(self):
+        proc = _make_proc("a")
+        seq = ProcessSequence([proc], _ms())
         seq.pause()
+        proc.pause.assert_not_called()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -252,9 +258,15 @@ class TestProcessSequenceResetErrors(unittest.TestCase):
         unsubscribed = [c.args[0] for c in ms.unsubscribe.call_args_list]
         self.assertIn(ProcessTopics.state("a"), unsubscribed)
 
-    def test_reset_errors_when_no_active_does_not_raise(self):
-        seq = ProcessSequence([_make_proc("a")], _ms())
+    def test_reset_errors_when_no_active_preserves_idle_sequence_state(self):
+        ms = _ms()
+        proc = _make_proc("a")
+        seq = ProcessSequence([proc], ms)
         seq.reset_errors()
+        self.assertIsNone(seq._current)
+        self.assertEqual(seq._current_index, 0)
+        proc.reset_errors.assert_not_called()
+        ms.unsubscribe.assert_not_called()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

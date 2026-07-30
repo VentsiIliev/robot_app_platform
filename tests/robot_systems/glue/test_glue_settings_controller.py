@@ -213,9 +213,9 @@ class TestGlueSettingsControllerGlueTypes(unittest.TestCase):
         model.remove_glue_type.side_effect = KeyError("bad-id")
         ctrl._on_remove_type("bad-id")   # must not raise
 
-    def test_stop_does_not_raise(self):
+    def test_stop_returns_none(self):
         ctrl, _, _ = _make_controller()
-        ctrl.stop()
+        self.assertIsNone(ctrl.stop())
 
 
 # ---------------------------------------------------------------------------

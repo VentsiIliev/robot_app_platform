@@ -8,12 +8,14 @@ from src.engine.robot.services.robot_state_snapshot import RobotStateSnapshot
 
 class TestRobotStateManager(unittest.TestCase):
 
-    def _make(self, publisher=None):
+    def _make(self, publisher=None, active_tool_getter=None):
         robot = MagicMock()
-        robot.get_current_position.return_value = [1.0, 2.0, 3.0, 0.0, 0.0, 0.0]
-        robot.get_current_velocity.return_value = 10.0
-        robot.get_current_acceleration.return_value = 5.0
-        return RobotStateManager(robot, publisher=publisher), robot
+        robot.get_state_snapshot.return_value = {
+            "position": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            "velocity_magnitude": 10.0,
+            "acceleration": 5.0,
+        }
+        return RobotStateManager(robot, publisher=publisher, active_tool_getter=active_tool_getter), robot
 
     def test_initial_state(self):
         mgr, _ = self._make()
@@ -32,7 +34,7 @@ class TestRobotStateManager(unittest.TestCase):
         self.assertEqual(mgr.state_topic, "custom/topic")
 
     def test_polling_updates_state(self):
-        mgr, _ = self._make()
+        mgr, _ = self._make(active_tool_getter=lambda: 0)
         mgr._POLL_INTERVAL_S = 0.05
         mgr.start_monitoring()
         time.sleep(0.2)
@@ -82,7 +84,7 @@ class TestRobotStateManager(unittest.TestCase):
         mgr.stop_monitoring()  # should not raise
 
     def test_build_snapshot_returns_current_state(self):
-        mgr, _ = self._make()
+        mgr, _ = self._make(active_tool_getter=lambda: 0)
         mgr._POLL_INTERVAL_S = 0.05
         mgr.start_monitoring()
         time.sleep(0.2)
@@ -120,3 +122,49 @@ class TestRobotStateManager(unittest.TestCase):
         time.sleep(0.2)
         self.assertTrue(mgr._running)
         mgr.stop_monitoring()
+
+    def test_refresh_syncs_configured_tool_before_reading_position(self):
+        robot = MagicMock()
+        calls = []
+        robot.set_active_tool.side_effect = lambda tool: calls.append(("set_active_tool", tool)) or True
+        robot.get_state_snapshot.side_effect = lambda: calls.append(("get_state_snapshot", None)) or {
+            "position": [1, 2, 3, 0, 0, 0],
+            "velocity_magnitude": 0.0,
+            "acceleration": 0.0,
+        }
+        mgr = RobotStateManager(robot, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+
+        self.assertEqual(calls[:2], [("set_active_tool", 1), ("get_state_snapshot", None)])
+        self.assertEqual(mgr.position, [1, 2, 3, 0, 0, 0])
+
+    def test_refresh_does_not_publish_position_when_tool_sync_fails(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.set_active_tool.return_value = False
+        robot.get_current_position.return_value = [1, 2, 3, 0, 0, 0]
+        mgr = RobotStateManager(robot, publisher=publisher, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+
+        self.assertEqual(mgr.state, "tool_mismatch")
+        self.assertEqual(mgr.position, [])
+        robot.get_current_position.assert_not_called()
+        publisher.publish.assert_called()
+
+    def test_refresh_retries_tool_sync_until_success(self):
+        robot = MagicMock()
+        robot.set_active_tool.side_effect = [False, True]
+        robot.get_state_snapshot.return_value = {
+            "position": [1, 2, 3, 0, 0, 0],
+            "velocity_magnitude": 0.0,
+            "acceleration": 0.0,
+        }
+        mgr = RobotStateManager(robot, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+        mgr.refresh_once()
+
+        self.assertEqual(robot.set_active_tool.call_count, 2)
+        self.assertEqual(mgr.position, [1, 2, 3, 0, 0, 0])

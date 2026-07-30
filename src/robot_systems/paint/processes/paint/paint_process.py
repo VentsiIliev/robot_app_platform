@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.core.i_messaging_service import IMessagingService
+from src.engine.robot.interfaces.i_robot_service import IRobotService
 from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.system.i_system_manager import ISystemManager
@@ -17,6 +18,7 @@ class PaintProcess(BaseProcess):
         self,
         production_service,
         messaging: IMessagingService,
+        robot_service: Optional[IRobotService] = None,
         vacuum_pump: Optional[IVacuumPumpController] = None,
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
@@ -31,8 +33,10 @@ class PaintProcess(BaseProcess):
             service_checker=service_checker,
         )
         self._production_service = production_service
+        self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
         self._thread: Optional[threading.Thread] = None
+        self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
 
     def _on_start(self) -> None:
@@ -46,8 +50,30 @@ class PaintProcess(BaseProcess):
         self._thread.start()
 
     def _on_stop(self) -> None:
-        """Signal the background worker to stop at the next safe checkpoint."""
+        """Signal stop and request hardware halt without blocking the process lock."""
         self._stopping = True
+        self._request_hardware_stop()
+
+    def _request_hardware_stop(self) -> None:
+        thread = threading.Thread(
+            target=self._stop_hardware,
+            daemon=True,
+            name="PaintProcessStop",
+        )
+        self._stop_thread = thread
+        thread.start()
+
+    def _stop_hardware(self) -> None:
+        if self._robot_service is not None:
+            try:
+                self._robot_service.stop_motion()
+            except Exception:
+                self._logger.exception("Paint stop failed to stop robot motion")
+        if self._vacuum_pump is not None:
+            try:
+                self._vacuum_pump.turn_off()
+            except Exception:
+                self._logger.exception("Paint stop failed to turn vacuum pump off")
 
     def _on_pause(self) -> None:
         """Ignore pause because the paint process currently has no resumable checkpoint model."""

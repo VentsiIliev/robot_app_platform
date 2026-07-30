@@ -7,6 +7,7 @@ from ..interfaces.i_robot_service import IRobotService
 from ..interfaces.i_robot_state_provider import IRobotStateProvider
 from ..interfaces.i_tool_service import IToolService
 from ..enums.axis import RobotAxis, Direction
+from ..motion_sequence import MotionSequenceSegment
 
 
 class RobotService(IRobotService):
@@ -36,14 +37,57 @@ class RobotService(IRobotService):
     def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
         return self._motion.move_linear(position, tool, user, velocity, acceleration, blendR, wait_to_reach)
 
-    def start_jog(self, axis: RobotAxis, direction: Direction, step: float) -> int:
-        return self._motion.start_jog(axis, direction, step)
+    def move_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        wait_to_reach=False,
+    ) -> bool:
+        return self._motion.move_sequence(segments, tool, user, wait_to_reach)
+
+    def move_custom_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        wait_to_reach=False,
+    ) -> bool:
+        return self._motion.move_custom_sequence(segments, tool, user, wait_to_reach)
+
+    def start_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> int:
+        return self._motion.start_jog(axis, direction, step, velocity=velocity, acceleration=acceleration)
 
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
 
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
+
+    def get_current_flange_position(self) -> List[float]:
+        return self._robot.get_current_flange_position()
+
+    def set_active_tool(self, tool: int) -> bool:
+        try:
+            ok = bool(self._robot.set_active_tool(int(tool)))
+        except Exception:
+            self._logger.exception("set_active_tool failed for tool=%s", tool)
+            return False
+        if ok:
+            refresh = getattr(self._state, "refresh_once", None)
+            if callable(refresh):
+                try:
+                    refresh()
+                except Exception:
+                    self._logger.warning("State refresh after set_active_tool failed", exc_info=True)
+        return ok
 
     # --- IRobotLifecycle ---
 
@@ -88,6 +132,20 @@ class RobotService(IRobotService):
             acc=acc,
             blocking=blocking,
             orientation_mode=orientation_mode,
+        )
+
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[dict],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ):
+        return self._robot.execute_ordered_motion_chain(
+            segments,
+            tool=tool,
+            user=user,
+            blocking=blocking,
         )
 
     def get_execution_status(self):

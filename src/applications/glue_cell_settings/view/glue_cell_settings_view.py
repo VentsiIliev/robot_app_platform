@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout, QTabWidget
 
 from pl_gui.settings.settings_view.styles import TAB_WIDGET_STYLE, BG_COLOR
@@ -52,11 +52,6 @@ class GlueCellSettingsView(IApplicationView):
         tab = self._tabs.get(cell_id)
         if tab:
             tab.set_state(state)
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

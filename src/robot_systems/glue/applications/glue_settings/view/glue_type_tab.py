@@ -25,6 +25,7 @@ from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE,
     GROUP_STYLE, LABEL_STYLE, PRIMARY,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 
 
 _TABLE_STYLE = f"""
@@ -163,13 +164,13 @@ class GlueTypeTab(QWidget):
 
         name_lbl = QLabel("Name")
         name_lbl.setStyleSheet(LABEL_STYLE)
-        self._input_name = QLineEdit()
+        self._input_name = KeyboardLineEdit()
         self._input_name.setStyleSheet(_INPUT_STYLE)
         self._input_name.setPlaceholderText("e.g. Epoxy 2024")
 
         desc_lbl = QLabel("Description")
         desc_lbl.setStyleSheet(LABEL_STYLE)
-        self._input_desc = QLineEdit()
+        self._input_desc = KeyboardLineEdit()
         self._input_desc.setStyleSheet(_INPUT_STYLE)
         self._input_desc.setPlaceholderText("Optional description")
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from PyQt6.QtCore import pyqtSignal, QEvent, Qt, QSize
+from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtWidgets import QVBoxLayout, QSizePolicy
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from src.robot_systems.glue.applications.dashboard.ui.system_status_widget import SystemStatusWidget
@@ -15,8 +15,6 @@ class GlueDashboardView(IApplicationView):
     pause_requested  = pyqtSignal()
     stop_requested   = pyqtSignal()
     action_requested = pyqtSignal(str)
-    language_changed = pyqtSignal()
-
     def __init__(self, config, action_buttons: list, cards: list, parent=None):
         self._config         = config
         self._action_buttons = action_buttons
@@ -128,11 +126,6 @@ class GlueDashboardView(IApplicationView):
     def set_action_button_text(self, action_id: str, text: str) -> None: self._dashboard.set_action_button_text(action_id, text)
     def set_action_button_enabled(self, action_id: str, enabled: bool):  self._dashboard.set_action_button_enabled(action_id, enabled)
     def get_card(self, card_id: int):                                     return self._dashboard._cards.get(card_id)
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.language_changed.emit()
-        super().changeEvent(event)
 
     def minimumSizeHint(self) -> QSize:
         return QSize(0, 0)

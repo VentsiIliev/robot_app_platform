@@ -2,6 +2,7 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
 from src.engine.robot.configuration import (
@@ -26,7 +27,10 @@ from src.robot_systems.base_robot_system import BaseRobotSystem
 from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
-from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
+    PaintProcessConfigSerializer,
+)
 from src.robot_systems.paint.service_builders import build_vacuum_pump_service
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
@@ -75,18 +79,26 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.VELOCITY_ONLY,
         ),
 
+
         MovementGroupDefinition(
-            id="PAINTING",
-            label="Painting",
-            group_type=MovementGroupType.SINGLE_POSITION,
-            has_trajectory_execution=True,
-         ),
-        MovementGroupDefinition(
-            id="PAINTING_NEW",
-            label="Painting2",
+            id="Horizontal Shaft",
+            label="Horizontal Shaft",
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
+        MovementGroupDefinition(
+            id="Vertical Shaft",
+            label="Vertical Shaft",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+        MovementGroupDefinition(
+            id="Clean",
+            label="Clean",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+
 
     ]
 
@@ -148,9 +160,9 @@ class PaintRobotSystem(BaseRobotSystem):
         applications=[
             ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
                             factory=application_wiring._build_dashboard_application),
-            ApplicationSpec(name="WorkpieceLibrary", folder_id=4, icon="fa5s.shapes",
+            ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.shapes",
                             factory=application_wiring._build_workpiece_library_application),
-            ApplicationSpec(name="WorkpieceEditor", folder_id=4, icon="fa5s.draw-polygon",
+            ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",
                             factory=application_wiring._build_paint_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                             factory=application_wiring._build_robot_settings_application),
@@ -160,18 +172,22 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_camera_settings_application),
             ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
                             factory=application_wiring._build_calibration_settings_application),
+            ApplicationSpec(name="PaintProcessSettings", folder_id=2, icon="fa5s.cogs",
+                            factory=application_wiring._build_paint_process_settings_application),
             ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
                             factory=application_wiring._build_calibration_application),
             ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
                             factory=application_wiring._build_broker_debug_application),
             ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
                             factory=application_wiring._build_user_management_application),
-            ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
-                            factory=application_wiring._build_intrinsic_capture_application),
-            ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
-                            factory=application_wiring._build_hand_eye_calibration_application),
+            # ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
+            #                 factory=application_wiring._build_intrinsic_capture_application),
+            # ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
+            #                 factory=application_wiring._build_hand_eye_calibration_application),
             ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
                             factory=application_wiring._build_pick_target_application),
+            ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
+                            factory=application_wiring._build_paint_motion_plane_setup_application),
         ],
     )
 
@@ -203,6 +219,8 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(CommonSettingsID.HEIGHT_MEASURING_CALIBRATION, LaserCalibrationDataSerializer(),
                      "height_measuring/calibration_data.json"),
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
+        SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
+        SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
     ]
 
     services = [
@@ -229,19 +247,28 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         from src.robot_systems.paint.navigation import PaintNavigationService
         from src.robot_systems.paint.processes import PaintProcess
+        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        from src.robot_systems.paint.processes.paint.paint_process_config_service import PaintProcessConfigService
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
         self._work_area_service = self.get_service(CommonServiceID.WORK_AREAS)
         self._vision = self.get_optional_service(CommonServiceID.VISION)
+        self._paint_process_config_service = PaintProcessConfigService(self._settings_service)
         self._navigation = PaintNavigationService(_nav_engine, vision=self._vision,
                                                  work_area_service=self._work_area_service,
                                                  robot_service=self._robot,
                                                  observed_area_by_group={
                                                      binding.movement_group_id: binding.area_id
                                                      for binding in self.get_work_area_observer_bindings()
-                                                 })
+                                                 },
+                                                 unwind_vel_percent=PAINT_PROCESS_CONFIG.navigation_return.unwind_vel_percent,
+                                                 unwind_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.unwind_acc_percent,
+                                                 unwind_queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+                                                 calibration_move_vel_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_vel_percent,
+                                                 calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_acc_percent,
+                                                 paint_process_config_service=self._paint_process_config_service)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
@@ -295,13 +322,21 @@ class PaintRobotSystem(BaseRobotSystem):
         )
         self._main_process = PaintProcess(
             production_service=self._paint_production_service,
+            robot_service=self._robot,
             vacuum_pump=self._vacuum_pump,
             messaging=self._messaging_service,
             system_manager=self._system_manager,
             service_checker=self.health_registry.check,
         )
         self.register_managed_resource(self._main_process)
-        self._dashboard_service = PaintDashboardService(self._main_process)
+        self._dashboard_service = PaintDashboardService(
+            self._main_process,
+            capture_snapshot_service=self._paint_capture_snapshot_service,
+            path_preparation_service=self._paint_path_preparation_service,
+            resolver_getter=lambda: self.get_shared_vision_resolver()[1],
+            target_point_name="camera",
+            frame_name="calibration",
+        )
 
         self._robot.enable_robot()
 

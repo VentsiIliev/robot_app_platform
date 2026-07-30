@@ -21,7 +21,8 @@ class GlueBootstrapProvider(RobotSystemBootstrapProvider):
 
     def build_robot(self):
         # TODO: Move concrete robot driver selection into persisted startup config.
-        return FairinoRos2Robot(server_url="http://localhost:5000")
+        # return FairinoRos2Robot(server_url="http://localhost:5000")
+        return FairinoRos2Robot(server_url="fake://local")
 
     def build_login_view(self, robot_system, messaging_service):
         role_policy = robot_system.__class__.role_policy
@@ -48,3 +49,7 @@ class GlueBootstrapProvider(RobotSystemBootstrapProvider):
             ),
             protected_app_role_values=role_policy.protected_app_role_values,
         )
+
+
+def create_bootstrap_provider() -> RobotSystemBootstrapProvider:
+    return GlueBootstrapProvider()

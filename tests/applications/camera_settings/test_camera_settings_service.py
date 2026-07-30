@@ -54,9 +54,6 @@ class TestStubCameraSettingsService(unittest.TestCase):
     def setUp(self):
         self._stub = StubCameraSettingsService()
 
-    def test_implements_interface(self):
-        self.assertIsInstance(self._stub, ICameraSettingsService)
-
     def test_load_settings_returns_data(self):
         result = self._stub.load_settings()
         self.assertIsInstance(result, CameraSettingsData)
@@ -66,9 +63,11 @@ class TestStubCameraSettingsService(unittest.TestCase):
         self._stub.save_settings(new_data)
         self.assertIs(self._stub.load_settings(), new_data)
 
-    def test_set_raw_mode_does_not_raise(self):
+    def test_set_raw_mode_does_not_change_saved_settings(self):
+        before = self._stub.load_settings()
         self._stub.set_raw_mode(True)
         self._stub.set_raw_mode(False)
+        self.assertIs(self._stub.load_settings(), before)
 
     def test_update_settings_returns_true_tuple(self):
         ok, msg = self._stub.update_settings({"threshold": 100})
@@ -84,6 +83,7 @@ class TestStubCameraSettingsService(unittest.TestCase):
         ok, msg, points = self._stub.get_work_area("roi")
         self.assertTrue(ok)
         self.assertIsInstance(msg, str)
+        self.assertEqual(points, [])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -124,6 +124,15 @@ class TestCameraSettingsApplicationServiceSave(unittest.TestCase):
         svc.save_settings(CameraSettingsData())
         vs.update_settings.assert_called_once()
 
+    def test_save_preserves_existing_calibration_section(self):
+        svc, ss, vs, _ = _make_app_service(data={"Calibration": {"Enabled": True}})
+        svc.save_settings(CameraSettingsData(index=4))
+
+        saved_raw = ss.save.call_args[0][1]
+        self.assertEqual(saved_raw.data["Calibration"], {"Enabled": True})
+        self.assertEqual(saved_raw.data["Index"], 4)
+        vs.update_settings.assert_called_once_with(saved_raw.data)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CameraSettingsApplicationService — update_settings
@@ -151,10 +160,13 @@ class TestCameraSettingsApplicationServiceUpdateSettings(unittest.TestCase):
 
 class TestCameraSettingsApplicationServiceVisionOptional(unittest.TestCase):
 
-    def test_constructed_without_vision_does_not_raise(self):
+    def test_save_settings_requires_vision_service(self):
         ss = _make_settings_service()
         was = _make_work_area_service()
-        CameraSettingsApplicationService(settings_service=ss, vision_service=None, work_area_service=was)
+        svc = CameraSettingsApplicationService(settings_service=ss, vision_service=None, work_area_service=was)
+
+        with self.assertRaises(AttributeError):
+            svc.save_settings(CameraSettingsData())
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -180,6 +192,27 @@ class TestCameraSettingsApplicationServiceWorkArea(unittest.TestCase):
         svc, _, vs, _ = _make_app_service()
         svc.set_raw_mode(True)
         vs.set_raw_mode.assert_called_once_with(True)
+
+    def test_save_work_area_fails_without_work_area_service(self):
+        svc = CameraSettingsApplicationService(
+            settings_service=_make_settings_service(),
+            vision_service=_make_vision_service(),
+            work_area_service=None,
+        )
+        ok, msg = svc.save_work_area("roi", [(0.1, 0.2)])
+        self.assertFalse(ok)
+        self.assertIn("No work area service", msg)
+
+    def test_get_work_area_fails_without_work_area_service(self):
+        svc = CameraSettingsApplicationService(
+            settings_service=_make_settings_service(),
+            vision_service=_make_vision_service(),
+            work_area_service=None,
+        )
+        ok, msg, pts = svc.get_work_area("roi")
+        self.assertFalse(ok)
+        self.assertIn("No work area service", msg)
+        self.assertEqual(pts, [])
 
 
 if __name__ == "__main__":

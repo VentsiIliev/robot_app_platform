@@ -154,9 +154,13 @@ class TestCalibrationControllerStop(unittest.TestCase):
         ctrl.stop()
         self.assertEqual(ctrl._subs, [])
 
-    def test_stop_without_load_does_not_raise(self):
+    def test_stop_without_load_clears_runtime_state(self):
         ctrl, _, _, _ = _make_ctrl()
-        ctrl.stop()  # must not raise
+        ctrl.stop()
+        self.assertFalse(ctrl._running)
+        self.assertFalse(ctrl._active)
+        self.assertEqual(ctrl._subs, [])
+        self.assertEqual(ctrl._threads, [])
 
 
 class TestCalibrationControllerHandlers(unittest.TestCase):

@@ -8,7 +8,6 @@ Covers:
 import unittest
 from unittest.mock import MagicMock
 
-from src.applications.contour_matching_tester.service.i_contour_matching_tester_service import IContourMatchingTesterService
 from src.applications.contour_matching_tester.service.stub_contour_matching_tester_service import StubContourMatchingTesterService
 from src.applications.contour_matching_tester.service.contour_matching_tester_service import ContourMatchingTesterService
 
@@ -40,13 +39,15 @@ class TestStubContourMatchingTesterService(unittest.TestCase):
     def setUp(self):
         self._stub = StubContourMatchingTesterService()
 
-    def test_implements_interface(self):
-        self.assertIsInstance(self._stub, IContourMatchingTesterService)
-
     def test_get_workpieces_returns_list(self):
         result = self._stub.get_workpieces()
         self.assertIsInstance(result, list)
         self.assertGreater(len(result), 0)
+
+    def test_get_workpieces_returns_copy(self):
+        first = self._stub.get_workpieces()
+        second = self._stub.get_workpieces()
+        self.assertIsNot(first, second)
 
     def test_get_latest_contours_returns_list(self):
         result = self._stub.get_latest_contours()

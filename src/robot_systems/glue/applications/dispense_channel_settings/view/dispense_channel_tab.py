@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
-from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
+from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, BG_COLOR, BORDER, LABEL_STYLE, TEXT_COLOR
 from src.applications.glue_cell_settings.view.cell_monitor_widget import CellMonitorWidget
 from src.robot_systems.glue.applications.dispense_channel_settings.view.dispense_channel_schema import (
     CALIBRATION_GROUP,
@@ -43,7 +43,7 @@ class DispenseChannelTab(QWidget):
         meta = QLabel(
             f"Cell {self._definition.weight_cell_id} | Pump {self._definition.pump_motor_address}"
         )
-        meta.setStyleSheet("QLabel { color: #666666; font-size: 10pt; background: transparent; }")
+        meta.setStyleSheet(f"QLabel {{ color: {TEXT_COLOR}; font-size: 10pt; background: transparent; }}")
         monitor_row.addWidget(meta)
 
         self._monitor = CellMonitorWidget()
@@ -51,16 +51,19 @@ class DispenseChannelTab(QWidget):
 
         tare_btn = QPushButton("Tare")
         tare_btn.setStyleSheet(ACTION_BTN_STYLE)
+        tare_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         tare_btn.clicked.connect(self._on_tare_clicked)
         monitor_row.addWidget(tare_btn)
 
         pump_on_btn = QPushButton("Pump On")
         pump_on_btn.setStyleSheet(ACTION_BTN_STYLE)
+        pump_on_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         pump_on_btn.clicked.connect(self._on_pump_on_clicked)
         monitor_row.addWidget(pump_on_btn)
 
         pump_off_btn = QPushButton("Pump Off")
         pump_off_btn.setStyleSheet(ACTION_BTN_STYLE)
+        pump_off_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         pump_off_btn.clicked.connect(self._on_pump_off_clicked)
         monitor_row.addWidget(pump_off_btn)
 
@@ -72,7 +75,7 @@ class DispenseChannelTab(QWidget):
         monitor_bar.setFixedHeight(56)
         root.addWidget(monitor_bar)
 
-        self._settings_view = CollapsibleSettingsView(
+        self._settings_view = KeyboardSettingsView(
             component_name=f"DispenseChannelSettings_{self._definition.id}",
             mapper=lambda cfg: cfg,
         )

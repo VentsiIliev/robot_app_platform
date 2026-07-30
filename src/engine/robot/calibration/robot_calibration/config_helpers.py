@@ -77,6 +77,7 @@ class RobotCalibrationConfig:
                  run_height_measurement: bool = True,
                  settings_service=None,
                  calibration_settings_key: str | None = None,
+                 vision_calibration_settings_key: str | None = None,
                  robot_config=None,
                  robot_config_key: str | None = None,
                  camera_tcp_offset_config=None,
@@ -103,6 +104,7 @@ class RobotCalibrationConfig:
         self.run_height_measurement = run_height_measurement
         self.settings_service = settings_service
         self.calibration_settings_key = calibration_settings_key
+        self.vision_calibration_settings_key = vision_calibration_settings_key
         self.robot_config = robot_config
         self.robot_config_key = robot_config_key
         self.camera_tcp_offset_config = camera_tcp_offset_config

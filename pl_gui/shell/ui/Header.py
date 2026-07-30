@@ -102,7 +102,7 @@ class Header(QFrame):
         from PyQt6.QtWidgets import QLabel
         self.fps_label = QLabel("FPS: --")
         self.fps_label.setStyleSheet("font-size: 14px; color: black;")
-        self.header_layout.addWidget(self.fps_label)
+        # self.header_layout.addWidget(self.fps_label)
 
 
         self.setMinimumHeight(int(self.screen_height * 0.08))

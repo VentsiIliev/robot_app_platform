@@ -227,7 +227,7 @@ class GlueRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=1, name="PRODUCTION", display_name="Production"),
             FolderSpec(folder_id=2, name="SERVICE", display_name="Service"),
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
-            FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
+            # FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
         ],
         applications=[
             ApplicationSpec(name="GlueDashboard", folder_id=1, icon="fa5s.tachometer-alt",
@@ -458,7 +458,6 @@ class GlueRobotSystem(BaseRobotSystem):
             vision_service=vision_service,
             robot_service=self._robot,
         )
-        transformer, glue_resolver = self.get_shared_vision_resolver()
         matching_service = MatchingService(
             vision_service=vision_service,
             workpiece_service=WorkpieceService(JsonWorkpieceRepository(self.workpieces_storage_path())),
@@ -490,8 +489,9 @@ class GlueRobotSystem(BaseRobotSystem):
             GlueJobExecutionService(
                 matching_service=matching_service,
                 job_builder=GlueJobBuilderService(
-                    transformer=transformer,
-                    resolver=glue_resolver,
+                    transformer=None,
+                    resolver=None,
+                    resolver_getter=lambda: self.get_shared_vision_resolver()[1],
                     z_min=float(self._robot_config.safety_limits.z_min),
                     target_point_name=getattr(self.get_target_point_definition("tool"), "name", "") or "",
                 ),
@@ -513,7 +513,8 @@ class GlueRobotSystem(BaseRobotSystem):
                 matching_service=matching_service,
                 tool_service=tool_service,
                 height_service=height_service,
-                resolver=glue_resolver,
+                resolver=None,
+                resolver_getter=lambda: self.get_shared_vision_resolver()[1],
                 vacuum_pump=self._vacuum_pump,
                 config=PickAndPlaceConfig(
                     camera_to_tcp_x_offset=float(self._robot_config.camera_to_tcp_x_offset),

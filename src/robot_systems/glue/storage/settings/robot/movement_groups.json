@@ -8,7 +8,7 @@
       "has_trajectory_execution": true
     },
     "HOME": {
-      "velocity": 50,
+      "velocity": 10,
       "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,
@@ -16,7 +16,7 @@
       "position": "[-232.343, -93.902, 710.546, 180.000, 0.000, 90.000]"
     },
     "CALIBRATION": {
-      "velocity": 50,
+      "velocity": 10,
       "acceleration": 20,
       "iterations": 1,
       "has_iterations": false,

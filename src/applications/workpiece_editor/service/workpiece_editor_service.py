@@ -22,8 +22,7 @@ from src.applications.workpiece_editor.service.i_workpiece_path_executor import 
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
 )
-from src.robot_systems.glue.domain.matching.i_matching_service import IMatchingService
-from src.robot_systems.paint.processes.paint.dxf_image_placement import map_raw_workpiece_mm_to_image
+from src.applications.workpiece_editor.i_workpiece_matcher import IWorkpieceMatcher
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 
 _logger = logging.getLogger(__name__)
@@ -43,16 +42,16 @@ class WorkpieceEditorServices:
     capture_snapshot_service: Optional[ICaptureSnapshotService] = None
     robot_service: object = None
     transformer: Optional[ICoordinateTransformer] = None
+    transformer_getter: Optional[Callable[[], Optional[ICoordinateTransformer]]] = None
     path_executor: Optional[IWorkpiecePathExecutor] = None
     path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
-    matching_service: Optional[IMatchingService] = None
+    matching_service: Optional[IWorkpieceMatcher] = None
     workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
 
 
 @dataclass(frozen=True)
 class WorkpieceEditorOptions:
     debug_dump_dir: Optional[str] = None
-    enable_dxf_import_test: bool = False
 
 
 class WorkpieceEditorService(IWorkpieceEditorService):
@@ -75,10 +74,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._form_schema = form_schema
         self._segment_config = segment_config
         self._transformer = services.transformer
+        self._transformer_getter = services.transformer_getter
         self._debug_dump_dir = options.debug_dump_dir
         self._path_executor = services.path_executor
         self._path_preparation_service = services.path_preparation_service
-        self._enable_dxf_import_test = bool(options.enable_dxf_import_test)
         self._matching_service = services.matching_service
         self._workpiece_data_adapter = services.workpiece_data_adapter
         self._editing_storage_id = None
@@ -116,35 +115,21 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def get_segment_config(self) -> SegmentEditorConfig:
         return self._segment_config
 
-    def can_import_dxf_test(self) -> bool:
-        return self._enable_dxf_import_test
-
     def can_match_saved_workpieces(self) -> bool:
         return bool(self._matching_service is not None and self._matching_service.can_match_saved_workpieces())
+
+    def _current_transformer(self) -> Optional[ICoordinateTransformer]:
+        if self._transformer_getter is not None:
+            try:
+                return self._transformer_getter()
+            except Exception:
+                _logger.debug("Workpiece editor transformer lookup failed", exc_info=True)
+        return self._transformer
 
     def match_saved_workpieces(self, contour) -> tuple[bool, dict | None, str]:
         if self._matching_service is None:
             return False, None, "Matching is not available in this editor."
         return self._matching_service.match_saved_workpieces(contour)
-
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict:
-        placed = map_raw_workpiece_mm_to_image(
-            raw,
-            float(image_width),
-            float(image_height),
-            self._transformer,
-        )
-        _logger.info(
-            "Prepared DXF test workpiece for image placement: image=(%.1f, %.1f)",
-            float(image_width),
-            float(image_height),
-        )
-        return placed
 
     def get_contours(self) -> list:
         if self._capture_snapshot_service is None and self._vision is None:
@@ -190,37 +175,38 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             _logger.exception("save_workpiece failed")
             return False, str(exc)
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
         self._last_execution_plan = None
         form_data   = data.get("form_data", data)
         editor_data = data.get("editor_data")
         merged      = self._merge(form_data, editor_data) if editor_data else dict(form_data)
-        _logger.debug(f"Execute workpiece: {merged}")
+        # _logger.debug(f"Execute workpiece: {merged}")
         try:
             if self._path_executor is not None:
                 try:
-                    execution_plan = self._path_executor.prepare_workpiece_preview(merged)
+                    execution_plan = self._path_executor.prepare_workpiece_execution_plan(merged, skip_debug_plot=skip_debug_plot)
                 except NotImplementedError:
                     if self._path_preparation_service is None:
                         return False, "Path preparation service is not available"
-                    execution_plan = self._path_preparation_service.build_execution_plan(merged)
+                    execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
             else:
                 if self._path_preparation_service is None:
                     return False, "Path preparation service is not available"
-                execution_plan = self._path_preparation_service.build_execution_plan(merged)
+                execution_plan = self._path_preparation_service.build_execution_plan(merged, skip_debug_plot=skip_debug_plot)
         except Exception as exc:
             _logger.exception("[EXECUTE] Failed to build preview package")
             return False, str(exc)
 
         if self._executor_process_plan() is None:
             self._last_execution_plan = execution_plan
-        self._write_debug_path_dump(
-            raw_paths=execution_plan.raw_paths,
-            prepared_paths=execution_plan.prepared_paths,
-            curve_paths=execution_plan.curve_paths,
-            sampled_paths=execution_plan.sampled_paths,
-            execution_paths=execution_plan.execution_paths(),
-        )
+        if not skip_debug_plot:
+            self._write_debug_path_dump(
+                raw_paths=execution_plan.raw_paths,
+                prepared_paths=execution_plan.prepared_paths,
+                curve_paths=execution_plan.curve_paths,
+                sampled_paths=execution_plan.sampled_paths,
+                execution_paths=execution_plan.execution_paths(),
+            )
         _logger.info("[EXECUTE] Done — %d path(s), %d total spline waypoints",
                      len(execution_plan.execution_jobs), execution_plan.total_spline_pts)
         return True, f"Prepared process: {len(execution_plan.execution_jobs)} path(s), {execution_plan.total_spline_pts} interpolated waypoints"
@@ -244,6 +230,18 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return []
         return self._clone_paths(execution_plan.raw_paths)
 
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_pixel_paths)
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return self._clone_paths(execution_plan.raw_homography_paths)
+
     def get_last_prepared_preview_paths(self) -> list:
         execution_plan = self._active_process_plan()
         if execution_plan is None:
@@ -262,13 +260,45 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return []
         return execution_plan.execution_paths()
 
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        execution_plan = self._active_process_plan()
+        transformer = self._current_transformer()
+        if execution_plan is None or transformer is None or not hasattr(transformer, "inverse_transform"):
+            return {}
+
+        return {
+            "raw": self._inverse_transform_paths(execution_plan.raw_paths, transformer),
+            "prepared": self._inverse_transform_paths(execution_plan.prepared_paths, transformer),
+            "curve": self._inverse_transform_paths(execution_plan.curve_paths, transformer),
+            "sampled": self._inverse_transform_paths(execution_plan.sampled_paths, transformer),
+            "execution": self._inverse_transform_paths(execution_plan.execution_paths(), transformer),
+        }
+
+    @staticmethod
+    def _inverse_transform_paths(paths: list[list[list[float]]], transformer) -> list[list[list[float]]]:
+        inverse_paths: list[list[list[float]]] = []
+        for path in paths:
+            inverse_path: list[list[float]] = []
+            for point in path:
+                if len(point) < 2:
+                    continue
+                try:
+                    px, py = transformer.inverse_transform(float(point[0]), float(point[1]))
+                except Exception:
+                    continue
+                inverse_point = [float(px), float(py)]
+                inverse_point.extend(float(value) for value in point[2:])
+                inverse_path.append(inverse_point)
+            inverse_paths.append(inverse_path)
+        return inverse_paths
+
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         if self._path_executor is None:
             return [], None
         execution_plan = self._active_process_plan()
         if execution_plan is None:
             return [], None
-        return self._path_executor.get_pivot_preview_paths(execution_plan)
+        return self._path_executor.get_projected_pivot_paths(execution_plan)
 
     def get_last_pivot_motion_preview(self):
         if self._path_executor is None:
@@ -276,7 +306,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         execution_plan = self._active_process_plan()
         if execution_plan is None:
             return [], None
-        return self._path_executor.get_pivot_motion_preview(execution_plan)
+        return self._path_executor.get_pivot_motion_snapshots(execution_plan)
 
     def get_process_actions(self) -> tuple[WorkpieceProcessAction, ...]:
         if self._path_executor is not None:

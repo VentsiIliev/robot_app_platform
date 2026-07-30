@@ -168,6 +168,12 @@ class Camera:
         except Exception:
             pass
 
+        # Prefer latest-frame behavior over deep driver buffering when supported.
+        try:
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+
         # Set fps if requested
         if self.requested_fps is not None:
             try:

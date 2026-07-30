@@ -1,5 +1,6 @@
 import logging
 import os
+from time import perf_counter
 from typing import List, Tuple, Callable
 import copy
 from datetime import datetime
@@ -9,7 +10,7 @@ import cv2
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QFileDialog
+from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
 
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.workpiece_editor.model import WorkpieceEditorModel
@@ -21,6 +22,7 @@ from src.applications.base.styled_message_box import show_warning, show_info, sh
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
 
 _DEFAULT_WORKPIECE_HEIGHT_MM = 0.0
+_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW = True
 
 
 class _Bridge(QObject):
@@ -43,8 +45,6 @@ class WorkpieceEditorController(IApplicationController):
         self._preview_dialog = None
         self._latest_frame_shape = None
         self._latest_frame_bgr = None
-        self._dxf_test_button = None
-        self._current_dxf_path = ""
         self._captured_pickup_point = None
         self._loaded_raw_workpiece = None
 
@@ -109,7 +109,6 @@ class WorkpieceEditorController(IApplicationController):
 
         # Stop live camera feed so the captured frame stays visible
         self._camera_active = False
-        self._current_dxf_path = ""
         self._captured_pickup_point = self._compute_contour_centroid(largest)
         self._save_pickup_debug_image(largest, self._captured_pickup_point)
         self._clear_verification_overlay()
@@ -121,7 +120,7 @@ class WorkpieceEditorController(IApplicationController):
                 self._view._editor.set_verification_contours([self._normalize_contour_points(largest)])
                 return [largest]
             except Exception:
-                self._logger.exception("Capture: failed to load matched DXF workpiece")
+                self._logger.exception("Capture: failed to load matched workpiece")
 
         try:
             self._load_capture_contour_into_editor(largest)
@@ -214,34 +213,18 @@ class WorkpieceEditorController(IApplicationController):
                 overlays.extend(self._build_pickup_point_overlay(pickup_point))
             self._view._editor.set_verification_contours(overlays)
         except Exception:
-            self._logger.debug("Failed to set DXF verification overlay", exc_info=True)
+            self._logger.debug("Failed to set verification overlay", exc_info=True)
 
     def _resolve_image_size(self) -> tuple[float, float]:
         if self._latest_frame_shape is not None and len(self._latest_frame_shape) >= 2:
             return float(self._latest_frame_shape[1]), float(self._latest_frame_shape[0])
         return 1280.0, 720.0
 
-    def _preview_aligned_dxf_from_path(self, dxf_path: str, captured_contour) -> bool:
-        if not dxf_path:
-            return False
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, captured_contour)
-            self._set_verification_overlay_from_raw(aligned)
-            return True
-        except Exception:
-            self._logger.exception("Failed to prepare aligned DXF overlay from %s", dxf_path)
-            return False
-
     def _clear_verification_overlay(self) -> None:
         try:
             self._view._editor.clear_verification_contours()
         except Exception:
-            self._logger.debug("Failed to clear DXF verification overlay", exc_info=True)
+            self._logger.debug("Failed to clear verification overlay", exc_info=True)
 
     def _set_pickup_point_overlay(self) -> None:
         try:
@@ -295,81 +278,15 @@ class WorkpieceEditorController(IApplicationController):
             self._logger.debug("Failed to save pickup centroid debug image", exc_info=True)
 
     def _install_optional_actions(self) -> None:
-        if not self._model.can_import_dxf_test():
-            return
         layout = self._view.layout()
         if layout is None:
             return
         row = QHBoxLayout()
         row.addStretch(1)
-        load_button = QPushButton("Load DXF Test")
-        load_button.clicked.connect(self._on_load_dxf_test)
-        row.addWidget(load_button)
-        align_button = QPushButton("Capture + Align DXF Test")
-        align_button.clicked.connect(self._on_capture_align_dxf_test)
-        row.addWidget(align_button)
         match_button = QPushButton("Match Workpiece Test")
         match_button.clicked.connect(self._on_match_workpiece_test)
-        row.addWidget(match_button)
+        # row.addWidget(match_button)
         layout.insertLayout(0, row)
-        self._dxf_test_button = load_button
-
-    def _on_load_dxf_test(self) -> None:
-        dxf_path, _ = QFileDialog.getOpenFileName(
-            self._view,
-            "Load DXF Test",
-            "",
-            "DXF Files (*.dxf)",
-        )
-        if not dxf_path:
-            return
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            placed["dxfPath"] = str(dxf_path)
-            self._current_dxf_path = str(dxf_path)
-            self._clear_verification_overlay()
-            self._on_load_workpiece_raw({"raw": placed, "storage_id": None})
-            show_info(self._view, "DXF Loaded", f"Loaded test DXF:\n{dxf_path}")
-        except Exception as exc:
-            self._logger.exception("Failed to load DXF test file: %s", exc)
-            show_warning(self._view, "DXF Load Failed", str(exc))
-
-    def _on_capture_align_dxf_test(self) -> None:
-        contours = self._model.get_contours()
-        largest = self._pick_largest(contours)
-        if largest is None:
-            show_warning(self._view, "Capture", "No contour detected.")
-            return
-
-        dxf_path, _ = QFileDialog.getOpenFileName(
-            self._view,
-            "Capture + Align DXF Test",
-            "",
-            "DXF Files (*.dxf)",
-        )
-        if not dxf_path:
-            return
-
-        try:
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            raw = import_dxf_to_workpiece_data(dxf_path)
-            image_w, image_h = self._resolve_image_size()
-            placed = self._model.prepare_dxf_test_raw_for_image(raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, largest)
-            aligned["dxfPath"] = str(dxf_path)
-            self._current_dxf_path = str(dxf_path)
-            self._camera_active = False
-            self._clear_verification_overlay()
-            self._on_load_workpiece_raw({"raw": aligned, "storage_id": None})
-            show_info(self._view, "DXF Aligned", f"Captured contour and aligned DXF:\n{dxf_path}")
-        except Exception as exc:
-            self._logger.exception("Failed to capture and align DXF test file: %s", exc)
-            show_warning(self._view, "DXF Align Failed", str(exc))
 
     def _on_match_workpiece_test(self) -> None:
         contours = self._model.get_contours()
@@ -391,10 +308,6 @@ class WorkpieceEditorController(IApplicationController):
             self._camera_active = False
             self._clear_verification_overlay()
             self._on_load_workpiece_raw({"raw": payload["raw"], "storage_id": payload.get("storage_id")})
-            dxf_overlay_loaded = self._preview_aligned_dxf_from_path(
-                str((payload.get("raw") or {}).get("dxfPath", "") or ""),
-                largest,
-            )
             show_info(
                 self._view,
                 "Matched Workpiece",
@@ -406,17 +319,69 @@ class WorkpieceEditorController(IApplicationController):
                     else ""
                 )
                 + f"\nSaved workpieces checked: {payload.get('candidate_count', 0)}"
-                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}"
-                + ("\nDXF overlay: aligned and shown" if dxf_overlay_loaded else "\nDXF overlay: unavailable"),
+                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}",
             )
         except Exception as exc:
             self._logger.exception("Failed to match saved workpieces: %s", exc)
             show_warning(self._view, "Match Workpiece Failed", str(exc))
 
-    def _align_raw_workpiece_to_contour(self, raw: dict, captured_contour) -> dict:
-        from src.robot_systems.paint.processes.paint.workpiece_alignment import align_raw_workpiece_to_contour
+    def _align_raw_workpiece_to_contour(
+        self,
+        raw: dict,
+        captured_contour,
+        **kwargs,
+    ) -> dict:
+        from src.robot_systems.paint.processes.paint.align import align_raw_workpiece_to_contour
 
-        return align_raw_workpiece_to_contour(raw, captured_contour)
+        return align_raw_workpiece_to_contour(raw, captured_contour, **kwargs)
+
+    def _get_current_editor_workpiece_contour(self) -> np.ndarray:
+        try:
+            workpiece_manager = self._view._editor.contourEditor.editor_with_rulers.editor.workpiece_manager
+            contours_by_layer = workpiece_manager.get_contours() or {}
+        except Exception:
+            return np.empty((0, 2), dtype=np.float64)
+
+        main_layer = contours_by_layer.get("Main") or contours_by_layer.get("Workpiece") or []
+        if isinstance(main_layer, dict):
+            main_layer = main_layer.get("contours") or []
+        if not main_layer:
+            return np.empty((0, 2), dtype=np.float64)
+        return self._normalize_contour_points(main_layer[0])
+
+    def _capture_editor_snapshot(self) -> dict | None:
+        try:
+            form = getattr(self._view._editor, "additional_data_form", None)
+            form_data = copy.deepcopy(form.get_data()) if form is not None and hasattr(form, "get_data") else {}
+            inner = self._view._editor.contourEditor.editor_with_rulers.editor
+            editor_data = copy.deepcopy(inner.workpiece_manager.export_editor_data())
+            return {
+                "form_data": form_data,
+                "editor_data": editor_data,
+                "loaded_raw_workpiece": copy.deepcopy(self._loaded_raw_workpiece),
+            }
+        except Exception:
+            self._logger.debug("Failed to capture editor snapshot", exc_info=True)
+            return None
+
+    def _restore_editor_snapshot(self, snapshot: dict) -> None:
+        inner = self._view._editor.contourEditor.editor_with_rulers.editor
+        editor_data = snapshot.get("editor_data")
+        if editor_data is not None:
+            inner.workpiece_manager.clear_workpiece()
+            inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
+        form = getattr(self._view._editor, "additional_data_form", None)
+        form_data = snapshot.get("form_data") or {}
+        if form is not None:
+            for key, value in form_data.items():
+                if hasattr(form, "set_field_value"):
+                    form.set_field_value(key, value)
+        self._loaded_raw_workpiece = copy.deepcopy(snapshot.get("loaded_raw_workpiece"))
+        try:
+            self._view._editor.pointManagerWidget.refresh_points()
+            inner.update()
+        except Exception:
+            self._logger.debug("Failed to refresh editor after restoring snapshot", exc_info=True)
 
     def _save_workpiece_alignment_debug_plot(self, original_raw: dict, aligned_raw: dict) -> None:
         try:
@@ -666,44 +631,77 @@ class WorkpieceEditorController(IApplicationController):
             except Exception:
                 self._logger.debug("Failed to inspect editor_data stats during execute", exc_info=True)
         payload = {"form_data": form_data, "editor_data": editor_data}
-        ok, msg = self._model.execute_workpiece(payload)
+        ok, msg = self._model.execute_workpiece(payload, skip_debug_plot=_TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW)
         self._logger.info("Execute workpiece: %s — %s", ok, msg)
         if ok:
             try:
                 raw_paths = self._model.get_last_raw_preview_paths()
+                raw_pixel_paths = self._model.get_last_raw_pixel_preview_paths()
+                raw_homography_paths = self._model.get_last_raw_homography_preview_paths()
                 prepared_paths = self._model.get_last_prepared_preview_paths()
                 curve_paths = self._model.get_last_curve_preview_paths()
                 sampled_paths = self._model.get_last_sampled_preview_paths()
                 execution_paths = self._model.get_last_execution_preview_paths()
+                camera_preview_paths: dict[str, list] | None = None
+                if not _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                    camera_preview_paths = self._model.get_last_camera_preview_paths()
                 if raw_paths or sampled_paths:
-                    self._show_interpolation_plot(
-                        raw_paths,
-                        prepared_paths,
-                        curve_paths,
-                        sampled_paths,
-                        execution_paths,
-                    )
+                    if _TEMPORARILY_SKIP_PREPARED_PROCESS_PREVIEW:
+                        self._continue_with_process_action_after_prepare()
+                    else:
+                        self._show_interpolation_plot(
+                            raw_paths,
+                            raw_pixel_paths,
+                            raw_homography_paths,
+                            prepared_paths,
+                            curve_paths,
+                            sampled_paths,
+                            execution_paths,
+                            camera_preview_paths,
+                        )
             except Exception:
                 self._logger.debug("Failed to show interpolation preview", exc_info=True)
+
+    def _continue_with_process_action_after_prepare(self) -> None:
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            return
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process preview bypass selected first process action out of %d: %s",
+                len(actions),
+                actions[0].action_id,
+            )
+        self._preview_dialog = None
+        self._on_execute_process_confirmed(actions[0])
 
     def _show_interpolation_plot(
             self,
             raw_paths: list[list[list[float]]],
+            raw_pixel_paths: list[list[list[float]]],
+            raw_homography_paths: list[list[list[float]]],
             prepared_paths: list[list[list[float]]],
             curve_paths: list[list[list[float]]],
             sampled_paths: list[list[list[float]]],
             execution_paths: list[list[list[float]]],
+            camera_preview_paths: dict[str, list] | None = None,
     ) -> None:
-        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_trajectory_debug
+        from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import (
+            plot_pixel_to_mm_debug,
+            plot_trajectory_debug,
+        )
 
-        image_path = plot_trajectory_debug(
+        raw_mm_image_path = plot_pixel_to_mm_debug(raw_paths, raw_pixel_paths, raw_homography_paths)
+        prepared_image_path = plot_trajectory_debug(
             raw_paths,
             curve_paths,
             sampled_paths,
             execution_paths,
             prepared_paths=prepared_paths,
+            camera_preview_paths=camera_preview_paths,
         )
-        if not image_path:
+        if not raw_mm_image_path and not prepared_image_path:
             return
 
         dialog = QDialog(self._view)
@@ -711,53 +709,77 @@ class WorkpieceEditorController(IApplicationController):
         dialog.resize(1100, 800)
 
         layout = QVBoxLayout(dialog)
-        scroll = QScrollArea(dialog)
-        image_label = QLabel(scroll)
-        pixmap = QPixmap(image_path)
-        image_label.setPixmap(pixmap)
-        image_label.setScaledContents(False)
-        scroll.setWidget(image_label)
-        scroll.setWidgetResizable(True)
-        layout.addWidget(scroll)
+        tabs = QTabWidget(dialog)
+
+        def _add_image_tab(title: str, image_path: str | None) -> None:
+            if not image_path:
+                return
+            scroll = QScrollArea(tabs)
+            image_label = QLabel(scroll)
+            pixmap = QPixmap(image_path)
+            image_label.setPixmap(pixmap)
+            image_label.setScaledContents(False)
+            scroll.setWidget(image_label)
+            scroll.setWidgetResizable(True)
+            tabs.addTab(scroll, title)
+
+        _add_image_tab("Pixel to mm only", raw_mm_image_path)
+        _add_image_tab("Prepared paths", prepared_image_path)
+        layout.addWidget(tabs)
+
+        actions = tuple(self._model.get_process_actions())
+        if not actions:
+            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            return
+        action = actions[0]
+        if len(actions) > 1:
+            self._logger.info(
+                "Prepared process dialog selected first process action out of %d: %s",
+                len(actions),
+                action.action_id,
+            )
 
         button_row = QHBoxLayout()
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(dialog.reject)
         button_row.addWidget(cancel_button)
         button_row.addStretch(1)
-        for action in self._model.get_process_actions():
-            button = QPushButton(action.label)
-            button.clicked.connect(
-                lambda _checked=False, selected_action=action: self._on_execute_process_confirmed(selected_action)
-            )
-            button_row.addWidget(button)
+        approve_button = QPushButton(action.label)
+        approve_button.clicked.connect(lambda _checked=False: self._on_execute_process_confirmed(action))
+        button_row.addWidget(approve_button)
         layout.addLayout(button_row)
 
         self._preview_dialog = dialog
         dialog.show()
 
     def _on_execute_process_confirmed(self, action: WorkpieceProcessAction) -> None:
+        _t0 = perf_counter()
         self._restore_live_feed()
         if action.requires_projected_path_plot:
-            try:
-                source_paths = self._model.get_last_execution_preview_paths()
-                pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
-                motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
-                # if source_paths and pivot_paths:
-                #     approved = self._show_pivot_path_plot(
-                #         source_paths,
-                #         pivot_paths,
-                #         pivot_pose,
-                #         motion_snapshots,
-                #         approve_label=action.label,
-                #     )
-                #     if not approved:
-                #         self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
-                #         return
-            except Exception:
-                self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
-                return
+            from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+            if PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+                try:
+                    source_paths = self._model.get_last_execution_preview_paths()
+                    pivot_paths, pivot_pose = self._model.get_last_pivot_preview_paths()
+                    motion_snapshots, _ = self._model.get_last_pivot_motion_preview()
+                    if source_paths and pivot_paths:
+                        approved = self._show_pivot_path_plot(
+                            source_paths,
+                            pivot_paths,
+                            pivot_pose,
+                            motion_snapshots,
+                            approve_label=action.label,
+                        )
+                        if not approved:
+                            self._logger.info("Process action cancelled from prepared process dialog: %s", action.action_id)
+                            return
+                except Exception:
+                    self._logger.debug("Failed to show projected path plot before process execution", exc_info=True)
+                    return
+        self._logger.info("[TIMING] controller pre-execute elapsed_s=%.3f", perf_counter() - _t0)
+        _t1 = perf_counter()
         ok, msg = self._model.execute_process_action(action.action_id)
+        self._logger.info("[TIMING] controller execute_process_action elapsed_s=%.3f", perf_counter() - _t1)
         self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:
             show_info(self._preview_dialog or self._view, "Process Started", msg)
@@ -772,6 +794,9 @@ class WorkpieceEditorController(IApplicationController):
             motion_snapshots=None,
             approve_label: str = "Approve",
     ) -> bool:
+        from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+        if not PAINT_PROCESS_CONFIG.enable_pivot_debug_plot:
+            return True
         from src.engine.robot.path_interpolation.new_interpolation.debug_plotting import plot_pivot_path_debug
 
         image_path = plot_pivot_path_debug(source_paths, pivot_paths, pivot_pose, motion_snapshots=motion_snapshots)
@@ -829,8 +854,6 @@ class WorkpieceEditorController(IApplicationController):
 
     def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
         enriched = dict(form_data or {})
-        if self._current_dxf_path and not str(enriched.get("dxfPath", "")).strip():
-            enriched["dxfPath"] = self._current_dxf_path
         if self._captured_pickup_point is not None and not enriched.get("pickupPoint"):
             enriched[
                 "pickupPoint"] = f"{float(self._captured_pickup_point[0]):.3f},{float(self._captured_pickup_point[1]):.3f}"
@@ -863,7 +886,6 @@ class WorkpieceEditorController(IApplicationController):
         inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
         self._view._editor.contourEditor.data = raw
         self._model.set_editing(storage_id)
-        self._current_dxf_path = str(raw.get("dxfPath", "") or "")
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
 
@@ -952,36 +974,12 @@ class WorkpieceEditorController(IApplicationController):
                 return None
 
             matched_raw = copy.deepcopy(payload.get("raw") or {})
-            dxf_path = str(matched_raw.get("dxfPath", "") or "").strip()
-            if not dxf_path:
-                if not matched_raw.get("contour"):
-                    return None
-                aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
-                self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
-                self._logger.info(
-                    "Capture: recognized known workpiece %s and loaded aligned saved contour",
-                    payload.get("workpieceId") or "(no id)",
-                )
-                return aligned
-
-            from src.engine.cad import import_dxf_to_workpiece_data
-
-            image_w, image_h = self._resolve_image_size()
-            dxf_raw = import_dxf_to_workpiece_data(dxf_path)
-            placed = self._model.prepare_dxf_test_raw_for_image(dxf_raw, image_w, image_h)
-            aligned = self._align_raw_workpiece_to_contour(placed, captured_contour)
-            self._save_workpiece_alignment_debug_plot(placed, aligned)
-
-            # Preserve saved metadata while replacing geometry with the aligned DXF.
-            for key, value in matched_raw.items():
-                if key in {"contour", "sprayPattern"}:
-                    continue
-                aligned[key] = copy.deepcopy(value)
-            aligned["dxfPath"] = dxf_path
-            aligned.setdefault("sprayPattern", {"Contour": [], "Fill": []})
-
+            if not matched_raw.get("contour"):
+                return None
+            aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
+            self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
             self._logger.info(
-                "Capture: recognized known workpiece %s and loaded aligned DXF",
+                "Capture: recognized known workpiece %s and loaded aligned saved contour",
                 payload.get("workpieceId") or "(no id)",
             )
             return aligned

@@ -35,11 +35,9 @@ class FloatingFolderIcon(QPushButton):
             }}
             QPushButton:hover {{
                 background: {PRIMARY_HOVER};
-                transform: scale(1.05);
             }}
             QPushButton:pressed {{
                 background: {PRIMARY_DARK};
-                transform: scale(0.95);
             }}
         """)
 

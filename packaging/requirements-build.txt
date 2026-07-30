@@ -1,0 +1,3 @@
+# Build environment: application dependencies plus build-only tooling.
+-r ../requirements.txt
+PyInstaller==6.15.0

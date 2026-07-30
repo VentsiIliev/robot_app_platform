@@ -159,9 +159,9 @@ class TestModbusSettingsControllerStop(unittest.TestCase):
         ctrl.stop()
         self.assertEqual(ctrl._active, [])
 
-    def test_stop_does_not_raise_when_empty(self):
+    def test_stop_returns_none_when_empty(self):
         ctrl, _, _ = _make_controller()
-        ctrl.stop()   # must not raise
+        self.assertIsNone(ctrl.stop())
 
 
 # ---------------------------------------------------------------------------

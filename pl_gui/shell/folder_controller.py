@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from PyQt6.QtCore import pyqtSignal, QTimer, QObject
+from PyQt6.QtCore import pyqtSignal, QObject
 from pl_gui.shell.ui.styles import OVERLAY_BG, OVERLAY_LIGHT, OVERLAY_SUBTLE, OVERLAY_FAINT
 
 
@@ -134,7 +134,6 @@ class FolderController(QObject):
         self.expanded_view_manager.show_close_button()
         self.overlay_manager.set_style(f"background-color: {OVERLAY_SUBTLE};")
         self.overlay_manager.hide_overlay()
-        QTimer.singleShot(300, self.minimize_to_floating_icon)
 
     def handle_close_app(self):
         # ── veto check BEFORE any state mutation ──

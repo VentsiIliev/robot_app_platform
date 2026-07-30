@@ -148,3 +148,56 @@ class TestLocalizationService(unittest.TestCase):
         service = LocalizationService(str(self._dir), state_file=str(self._state_file))
 
         self.assertEqual(service.get_language(), "bg")
+
+    def test_merges_multiple_catalog_roots_with_later_root_override(self):
+        shared_dir = self._dir / "shared"
+        system_dir = self._dir / "system"
+        shared_dir.mkdir()
+        system_dir.mkdir()
+        (shared_dir / "en.json").write_text(
+            json.dumps(
+                {
+                    "__meta__": {"display_name": "English"},
+                    "Shell": {
+                        "folder.admin": "Administration",
+                        "folder.service": "Service",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (shared_dir / "bg.json").write_text(
+            json.dumps(
+                {
+                    "__meta__": {"display_name": "Български"},
+                    "Shell": {
+                        "folder.admin": "Администрация",
+                        "folder.service": "Сервиз",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        (system_dir / "bg.json").write_text(
+            json.dumps(
+                {
+                    "__meta__": {"display_name": "Български"},
+                    "Shell": {
+                        "folder.admin": "Админ Override",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        service = LocalizationService(
+            [str(shared_dir), str(system_dir)],
+            state_file=str(self._state_file),
+        )
+
+        self.assertEqual(service.available_languages(), [("en", "English"), ("bg", "Български")])
+
+        service.set_language("bg")
+
+        self.assertEqual(QCoreApplication.translate("Shell", "folder.admin"), "Админ Override")
+        self.assertEqual(QCoreApplication.translate("Shell", "folder.service"), "Сервиз")

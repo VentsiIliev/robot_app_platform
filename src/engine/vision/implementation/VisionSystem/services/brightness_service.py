@@ -20,6 +20,8 @@ class BrightnessService:
         self._settings = camera_settings
         self._area_points_provider = area_points_provider
         self._locked_area_points: np.ndarray | None = None
+        self._resolved_area_cache_key: tuple | None = None
+        self._resolved_area_cache_points: np.ndarray | None = None
         self._adjustment_locked = False
         self._adjustment = 0.0
         self.brightness_controller = BrightnessController(
@@ -67,10 +69,12 @@ class BrightnessService:
         if area is None:
             return False
         self._locked_area_points = np.array(area, dtype=np.float32)
+        self._invalidate_area_cache()
         return True
 
     def unlock_area(self) -> None:
         self._locked_area_points = None
+        self._invalidate_area_cache()
 
     def lock_adjustment(self) -> None:
         self._adjustment_locked = True
@@ -83,23 +87,38 @@ class BrightnessService:
     def _get_area_points(self) -> np.ndarray:
         if self._locked_area_points is not None:
             return self._locked_area_points
+
         area = self._read_area_points()
         if area is not None:
-            return area
-        return np.array(_FALLBACK_AREA, dtype=np.float32)
+            return self._cache_resolved_area_points(area)
+
+        return self._cache_resolved_area_points(_FALLBACK_AREA)
 
     def _read_area_points(self) -> np.ndarray | None:
         if self._area_points_provider is not None:
             try:
                 points = self._area_points_provider()
                 if points is not None and len(points) == 4:
-                    return np.array(points, dtype=np.float32)
+                    return np.asarray(points, dtype=np.float32)
             except Exception as exc:
                 _logger.error("Error reading dynamic brightness area, using settings fallback: %s", exc)
         try:
             pts = self._settings.get_brightness_area_points()
             if pts and len(pts) == 4:
-                return np.array([tuple(p) for p in pts], dtype=np.float32)
+                return np.asarray([tuple(p) for p in pts], dtype=np.float32)
         except Exception as exc:
             _logger.error("Error reading brightness area from settings, using fallback: %s", exc)
         return None
+
+    def _cache_resolved_area_points(self, points) -> np.ndarray:
+        area = np.asarray(points, dtype=np.float32).reshape(-1, 2)
+        key = tuple((float(x), float(y)) for x, y in area.tolist())
+        if key == self._resolved_area_cache_key and self._resolved_area_cache_points is not None:
+            return self._resolved_area_cache_points
+        self._resolved_area_cache_key = key
+        self._resolved_area_cache_points = area
+        return area
+
+    def _invalidate_area_cache(self) -> None:
+        self._resolved_area_cache_key = None
+        self._resolved_area_cache_points = None

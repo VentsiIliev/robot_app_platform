@@ -8,8 +8,13 @@ from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema 
 )
 from src.applications.workpiece_editor.editor_core.handlers.SaveWorkpieceHandler import SaveWorkpieceHandler
 from src.applications.workpiece_editor.service.workpiece_editor_service import (
-    WorkpieceEditorService, _has_valid_contour,
+    WorkpieceEditorOptions,
+    WorkpieceEditorService,
+    WorkpieceEditorServices,
+    WorkpieceEditorStorage,
 )
+from src.engine.robot.path_preparation.default_workpiece_path_preparation_service import WorkpieceExecutionPlan
+from src.engine.robot.path_preparation.geometry import has_valid_contour
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -22,13 +27,18 @@ def _schema(*required_keys):
 
 def _make_svc(vision=None, save_fn=None, update_fn=None, schema=None, id_exists_fn=None):
     return WorkpieceEditorService(
-        vision_service=vision,
-        capture_snapshot_service=None,
-        save_fn=save_fn   or (lambda d: (True, "saved")),
-        update_fn=update_fn or (lambda sid, d: (True, "updated")),
+        storage=WorkpieceEditorStorage(
+            save_fn=save_fn or (lambda d: (True, "saved")),
+            update_fn=update_fn or (lambda sid, d: (True, "updated")),
+            id_exists_fn=id_exists_fn,
+        ),
+        services=WorkpieceEditorServices(
+            vision_service=vision,
+            capture_snapshot_service=None,
+        ),
         form_schema=schema if schema is not None else _schema(),
         segment_config=MagicMock(),
-        id_exists_fn=id_exists_fn,
+        options=WorkpieceEditorOptions(),
     )
 
 
@@ -41,23 +51,23 @@ _VALID = {"form_data": {"workpieceId": "wp001", "contour": [1, 2, 3]}}
 class TestHasValidContour(unittest.TestCase):
 
     def test_none_returns_false(self):
-        self.assertFalse(_has_valid_contour(None))
+        self.assertFalse(has_valid_contour(None))
 
     def test_numpy_one_point_returns_false(self):
-        self.assertFalse(_has_valid_contour(np.array([[1, 2]])))  # size == 2
+        self.assertFalse(has_valid_contour(np.array([[1, 2]])))  # size == 2
 
     def test_numpy_three_points_returns_true(self):
-        self.assertTrue(_has_valid_contour(np.array([[1, 2], [3, 4], [5, 6]])))  # size == 6
+        self.assertTrue(has_valid_contour(np.array([[1, 2], [3, 4], [5, 6]])))  # size == 6
 
     def test_list_two_elements_returns_false(self):
-        self.assertFalse(_has_valid_contour([1, 2]))
+        self.assertFalse(has_valid_contour([1, 2]))
 
     def test_list_three_elements_returns_true(self):
-        self.assertTrue(_has_valid_contour([1, 2, 3]))
+        self.assertTrue(has_valid_contour([1, 2, 3]))
 
     def test_other_type_returns_false(self):
-        self.assertFalse(_has_valid_contour("a contour string"))
-        self.assertFalse(_has_valid_contour(42))
+        self.assertFalse(has_valid_contour("a contour string"))
+        self.assertFalse(has_valid_contour(42))
 
 
 # ── SaveWorkpieceHandler ──────────────────────────────────────────────────────
@@ -105,10 +115,14 @@ class TestWorkpieceEditorServiceGetters(unittest.TestCase):
     def test_get_segment_config_returns_stored_config(self):
         cfg = MagicMock()
         svc = WorkpieceEditorService(
-            vision_service=None,
-            capture_snapshot_service=None,
-            save_fn=lambda d: (True, ""),
-            update_fn=lambda s, d: (True, ""),
+            storage=WorkpieceEditorStorage(
+                save_fn=lambda d: (True, ""),
+                update_fn=lambda s, d: (True, ""),
+            ),
+            services=WorkpieceEditorServices(
+                vision_service=None,
+                capture_snapshot_service=None,
+            ),
             form_schema=_schema(),
             segment_config=cfg,
         )
@@ -226,14 +240,33 @@ class TestWorkpieceEditorServiceSave(unittest.TestCase):
 class TestWorkpieceEditorServiceExecute(unittest.TestCase):
 
     def test_returns_true_with_success_message(self):
+        execution_plan = WorkpieceExecutionPlan(
+            workpiece={},
+            raw_paths=[],
+            prepared_paths=[],
+            curve_paths=[],
+            sampled_paths=[],
+            execution_jobs=[],
+            total_spline_pts=0,
+        )
+        path_preparation_service = MagicMock()
+        path_preparation_service.build_execution_plan.return_value = execution_plan
+        service = WorkpieceEditorService(
+            storage=WorkpieceEditorStorage(
+                save_fn=lambda d: (True, ""),
+                update_fn=lambda s, d: (True, ""),
+            ),
+            services=WorkpieceEditorServices(path_preparation_service=path_preparation_service),
+            form_schema=_schema(),
+            segment_config=MagicMock(),
+        )
         data = {"form_data": {"sprayPattern": {"Contour": [
             {"contour": [[0, 0], [100, 0], [100, 100]], "settings": {}}
         ]}}}
-        ok, msg = _make_svc().execute_workpiece(data)
+        ok, msg = service.execute_workpiece(data)
         self.assertTrue(ok)
         self.assertIsNotNone(msg)
 
 
 if __name__ == "__main__":
     unittest.main()
-

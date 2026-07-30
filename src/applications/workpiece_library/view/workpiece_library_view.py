@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from pl_gui.utils.utils_widgets.table_helpers import make_table
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
 from src.applications.workpiece_library.domain.workpiece_schema import WorkpieceSchema, WorkpieceRecord
 
 _logger = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ class WorkpieceLibraryView(IApplicationView):
                     row_layout.addWidget(combo, stretch=1)
                     self._edit_widgets[fd.key] = combo
                 else:
-                    edit = QLineEdit(str(record.get(fd.key, "")))
+                    edit = KeyboardLineEdit(str(record.get(fd.key, "")))
                     edit.setStyleSheet(
                         f"border: 1px solid {_ACCENT}; border-radius: 4px; padding: 2px 6px;"
                     )
@@ -211,7 +212,7 @@ class WorkpieceLibraryView(IApplicationView):
         search_icon.setPixmap(qta.icon("fa5s.search", color=_MUTED).pixmap(QSize(16, 16)))
         layout.addWidget(search_icon)
 
-        self._search = QLineEdit()
+        self._search = KeyboardLineEdit()
         self._search.setPlaceholderText("Search by name or ID…")
         self._search.setMinimumHeight(36)
         self._search.textChanged.connect(self.search_changed)

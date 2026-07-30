@@ -1,7 +1,7 @@
-from PyQt6.QtCore import pyqtSignal, QEvent
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QVBoxLayout
 
-from src.applications.base.collapsible_settings_view import CollapsibleSettingsView
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.base.i_application_view import IApplicationView
 from src.robot_systems.glue.applications.glue_settings.model.mapper import GlueSettingsMapper
 from src.robot_systems.glue.applications.glue_settings.view.glue_settings_schema import (
@@ -31,7 +31,7 @@ class GlueSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         self._glue_type_tab = GlueTypeTab()
-        self._settings_view = CollapsibleSettingsView(
+        self._settings_view = KeyboardSettingsView(
             component_name="GlueSettings",
             mapper=GlueSettingsMapper.to_flat_dict,
         )
@@ -72,11 +72,6 @@ class GlueSettingsView(IApplicationView):
         return self._settings_view.get_values()
 
     # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

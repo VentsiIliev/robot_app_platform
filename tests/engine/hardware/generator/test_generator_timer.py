@@ -37,16 +37,19 @@ class TestGeneratorTimerElapsed(unittest.TestCase):
 
 
 class TestGeneratorTimerStop(unittest.TestCase):
-    def test_stop_without_start_does_not_raise(self):
+    def test_stop_without_start_records_stop_time_without_thread(self):
         timer = GeneratorTimer(timeout_minutes=1.0, on_timeout=lambda: None)
-        timer.stop()  # should not raise
+        timer.stop()
+        self.assertIsNone(timer._thread)
+        self.assertIsNotNone(timer._stop_time)
 
     def test_double_start_does_not_create_extra_threads(self):
         timer = GeneratorTimer(timeout_minutes=1.0, on_timeout=lambda: None)
         timer.start()
-        timer.start()  # second start — thread already alive
+        first_thread = timer._thread
+        timer.start()
         try:
-            self.assertIsNotNone(timer._thread)
+            self.assertIs(timer._thread, first_thread)
         finally:
             timer.stop()
 
@@ -73,4 +76,3 @@ class TestGeneratorTimerTimeout(unittest.TestCase):
         timer.stop()
         fired.wait(timeout=0.1)
         self.assertFalse(fired.is_set())
-

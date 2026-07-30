@@ -32,6 +32,7 @@ class PickAndPlaceProcess(BaseProcess):
         tool_service: Optional[IToolService] = None,
         height_service: Optional[IHeightMeasuringService] = None,
         resolver: Optional[VisionTargetResolver] = None,
+        resolver_getter: Optional[Callable[[], Optional[VisionTargetResolver]]] = None,
         vacuum_pump: Optional[IVacuumPumpController] = None,
         config: Optional[PickAndPlaceConfig] = None,
         system_manager: Optional[ISystemManager] = None,
@@ -51,6 +52,7 @@ class PickAndPlaceProcess(BaseProcess):
         self._tools      = tool_service
         self._height     = height_service
         self._resolver   = resolver
+        self._resolver_getter = resolver_getter
         self._vacuum     = vacuum_pump
         self._config     = config or PickAndPlaceConfig()
 
@@ -158,7 +160,8 @@ class PickAndPlaceProcess(BaseProcess):
     # ── Worker ────────────────────────────────────────────────────────
 
     def _run_workflow(self) -> None:
-        if not all([self._matching, self._tools, self._height, self._resolver, self._vacuum]):
+        resolver = self._current_resolver()
+        if not all([self._matching, self._tools, self._height, resolver, self._vacuum]):
             self._logger.error("Pick-and-place not fully configured")
             self.set_error("Required services not configured")
             return
@@ -217,7 +220,7 @@ class PickAndPlaceProcess(BaseProcess):
                 matching=self._matching,
                 tools=self._tools,
                 height=self._height,
-                resolver=self._resolver,
+                resolver=resolver,
                 vacuum_pump=self._vacuum,
                 config=self._config,
                 logger=self._logger,
@@ -248,6 +251,11 @@ class PickAndPlaceProcess(BaseProcess):
         except Exception:
             self._logger.exception("Pick-and-place workflow error")
             self.set_error("Unexpected error in pick-and-place workflow")
+
+    def _current_resolver(self) -> Optional[VisionTargetResolver]:
+        if self._resolver_getter is not None:
+            return self._resolver_getter()
+        return self._resolver
 
     def _publish_diagnostics(self, snapshot: dict) -> None:
         payload = dict(snapshot)

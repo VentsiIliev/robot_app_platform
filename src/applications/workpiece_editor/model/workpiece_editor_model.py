@@ -25,14 +25,20 @@ class WorkpieceEditorModel(IApplicationModel):
     def save_workpiece(self, data: dict) -> tuple[bool, str]:
         return self._service.save_workpiece(data)
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
-        return self._service.execute_workpiece(data)
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
+        return self._service.execute_workpiece(data, skip_debug_plot=skip_debug_plot)
 
     def get_last_sampled_preview_paths(self) -> list:
         return self._service.get_last_sampled_preview_paths()
 
     def get_last_raw_preview_paths(self) -> list:
         return self._service.get_last_raw_preview_paths()
+
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        return self._service.get_last_raw_pixel_preview_paths()
+
+    def get_last_raw_homography_preview_paths(self) -> list:
+        return self._service.get_last_raw_homography_preview_paths()
 
     def get_last_prepared_preview_paths(self) -> list:
         return self._service.get_last_prepared_preview_paths()
@@ -42,6 +48,9 @@ class WorkpieceEditorModel(IApplicationModel):
 
     def get_last_execution_preview_paths(self) -> list:
         return self._service.get_last_execution_preview_paths()
+
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        return self._service.get_last_camera_preview_paths()
 
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         return self._service.get_last_pivot_preview_paths()
@@ -54,17 +63,6 @@ class WorkpieceEditorModel(IApplicationModel):
 
     def execute_process_action(self, action_id: str) -> tuple[bool, str]:
         return self._service.execute_process_action(action_id)
-
-    def can_import_dxf_test(self) -> bool:
-        return self._service.can_import_dxf_test()
-
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict:
-        return self._service.prepare_dxf_test_raw_for_image(raw, image_width, image_height)
 
     def set_editing(self, storage_id) -> None:
         self._service.set_editing(storage_id)

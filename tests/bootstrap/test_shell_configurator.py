@@ -105,7 +105,7 @@ class TestShellConfiguratorGlueApp(unittest.TestCase):
         from pl_gui.shell.shell_config import ShellConfig
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         ShellConfigurator.configure(GlueRobotSystem)
-        self.assertEqual(len(ShellConfig.get_folders()), 4)
+        self.assertEqual(len(ShellConfig.get_folders()), 3)
 
     def test_glue_app_registers_production_folder(self):
         from pl_gui.shell.shell_config import ShellConfig
@@ -133,7 +133,7 @@ class TestShellConfiguratorGlueApp(unittest.TestCase):
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
         ShellConfigurator.configure(GlueRobotSystem)
         ShellConfigurator.configure(GlueRobotSystem)
-        self.assertEqual(len(ShellConfig.get_folders()), 4)
+        self.assertEqual(len(ShellConfig.get_folders()), 3)
 
 
 if __name__ == "__main__":

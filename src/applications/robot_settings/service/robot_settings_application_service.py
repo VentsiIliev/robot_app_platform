@@ -13,6 +13,11 @@ from src.applications.robot_settings.service.i_robot_settings_service import IRo
 from src.applications.robot_settings.service.i_robot_settings_navigation import IRobotSettingsNavigation
 from src.engine.robot.enums.axis import RobotAxis, Direction
 
+_JOG_GROUP_ID = "JOG"
+_DEFAULT_JOG_VELOCITY = 10.0
+_DEFAULT_JOG_ACCELERATION = 10.0
+
+
 class RobotSettingsApplicationService(IRobotSettingsService):
 
     def __init__(
@@ -165,9 +170,24 @@ class RobotSettingsApplicationService(IRobotSettingsService):
                 RobotAxis.get_by_string(axis),
                 Direction.get_by_string(direction),
                 step,
+                velocity=self._jog_group_value("velocity", _DEFAULT_JOG_VELOCITY),
+                acceleration=self._jog_group_value("acceleration", _DEFAULT_JOG_ACCELERATION),
             )
         except Exception:
             pass
+
+    def _jog_group_value(self, name: str, default: float) -> float:
+        try:
+            group = self.load_movement_groups().movement_groups.get(_JOG_GROUP_ID)
+        except Exception:
+            return default
+        if group is None:
+            return default
+        try:
+            value = float(getattr(group, name))
+        except (AttributeError, TypeError, ValueError):
+            return default
+        return value if value > 0 else default
 
     def stop_jog(self) -> None:
         if self._robot is None:

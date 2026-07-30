@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from src.applications.base.collapsible_settings_view import CollapsibleGroup
 from src.applications.base.app_styles import (
@@ -13,6 +13,15 @@ from src.applications.base.app_styles import (
     section_label,
 )
 from pl_gui.utils.utils_widgets.MaterialButton import MaterialButton
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+
+
+def _keyboard_collapsible_group(schema) -> CollapsibleGroup:
+    group_holder: list[CollapsibleGroup] = []
+    build_with_keyboard_setting_handlers(
+        lambda: group_holder.append(CollapsibleGroup(schema))
+    )
+    return group_holder[0]
 
 
 class _BaseCalibrationTab(QWidget):
@@ -49,7 +58,7 @@ class _BaseCalibrationTab(QWidget):
         for schema in schemas:
             single_column_schema = deepcopy(schema)
             single_column_schema.columns = 1
-            group = CollapsibleGroup(single_column_schema)
+            group = _keyboard_collapsible_group(single_column_schema)
             self._settings_groups.append(group)
             self._card_layout.addWidget(group)
 
@@ -136,6 +145,44 @@ class RobotCalibrationTab(_BaseCalibrationTab):
         self.add_widget(test_btn)
         self.add_settings_groups(settings_schemas)
         self.add_save_button()
+
+
+class ToolTcpCalibrationTab(_BaseCalibrationTab):
+    def __init__(
+        self,
+        tool_spin: QSpinBox,
+        start_btn: QWidget,
+        capture_btn: QWidget,
+        solve_btn: QWidget,
+        save_btn: QWidget,
+        clear_btn: QWidget,
+        result_label: QLabel,
+        parent=None,
+    ):
+        super().__init__(
+            "Tool TCP Calibration",
+            "Touch the physical TCP to a fixed pivot point, capture flange poses at varied wrist orientations, then solve and save the flange-to-TCP offset.",
+            parent=parent,
+        )
+        tool_row = QHBoxLayout()
+        tool_row.setSpacing(8)
+        tool_row.addWidget(QLabel("Tool ID"))
+        tool_row.addWidget(tool_spin)
+        self.add_layout(tool_row)
+        self.add_divider()
+        tool_btn_row_1 = QHBoxLayout()
+        tool_btn_row_1.setSpacing(8)
+        tool_btn_row_1.addWidget(start_btn)
+        tool_btn_row_1.addWidget(capture_btn)
+        self.add_layout(tool_btn_row_1)
+        tool_btn_row_2 = QHBoxLayout()
+        tool_btn_row_2.setSpacing(8)
+        tool_btn_row_2.addWidget(solve_btn)
+        tool_btn_row_2.addWidget(save_btn)
+        tool_btn_row_2.addWidget(clear_btn)
+        self.add_layout(tool_btn_row_2)
+        self.add_divider()
+        self.add_widget(result_label)
 
 
 class LaserCalibrationTab(_BaseCalibrationTab):

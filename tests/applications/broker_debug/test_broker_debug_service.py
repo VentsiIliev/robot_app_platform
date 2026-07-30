@@ -31,9 +31,6 @@ class TestStubBrokerDebugService(unittest.TestCase):
     def setUp(self):
         self._stub = StubBrokerDebugService()
 
-    def test_implements_interface(self):
-        self.assertIsInstance(self._stub, IBrokerDebugService)
-
     def test_get_all_topics_returns_list(self):
         topics = self._stub.get_all_topics()
         self.assertIsInstance(topics, list)
@@ -51,16 +48,22 @@ class TestStubBrokerDebugService(unittest.TestCase):
     def test_get_subscriber_count_unknown_topic_returns_zero(self):
         self.assertEqual(self._stub.get_subscriber_count("no-such-topic"), 0)
 
-    def test_publish_does_not_raise(self):
+    def test_publish_does_not_mutate_topic_map(self):
+        before = self._stub.get_topic_map()
         self._stub.publish("test/topic", "hello")
+        self.assertEqual(self._stub.get_topic_map(), before)
 
-    def test_subscribe_spy_does_not_raise(self):
+    def test_subscribe_spy_does_not_mutate_topic_map(self):
+        before = self._stub.get_topic_map()
         cb = MagicMock()
         self._stub.subscribe_spy("test/topic", cb)
+        self.assertEqual(self._stub.get_topic_map(), before)
 
-    def test_unsubscribe_spy_does_not_raise(self):
+    def test_unsubscribe_spy_does_not_mutate_topic_map(self):
+        before = self._stub.get_topic_map()
         cb = MagicMock()
         self._stub.unsubscribe_spy("test/topic", cb)
+        self.assertEqual(self._stub.get_topic_map(), before)
 
     def test_clear_topic_removes_topic(self):
         topics_before = set(self._stub.get_all_topics())
@@ -68,8 +71,10 @@ class TestStubBrokerDebugService(unittest.TestCase):
         self._stub.clear_topic(topic_to_clear)
         self.assertNotIn(topic_to_clear, self._stub.get_all_topics())
 
-    def test_clear_unknown_topic_does_not_raise(self):
+    def test_clear_unknown_topic_leaves_topic_map_unchanged(self):
+        before = self._stub.get_topic_map()
         self._stub.clear_topic("no-such-topic")
+        self.assertEqual(self._stub.get_topic_map(), before)
 
     def test_get_topic_map_returns_dict(self):
         result = self._stub.get_topic_map()

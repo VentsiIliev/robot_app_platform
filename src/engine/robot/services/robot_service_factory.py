@@ -22,7 +22,11 @@ def create_robot_service(
     safety = SafetyChecker(robot_settings_key, settings_service)
     motion = MotionService(robot, safety, messaging_service=messaging_service)
     publisher = RobotStatePublisher(messaging_service)  # ← no fallback
-    state = RobotStateManager(robot, publisher=publisher)
+    active_tool_getter = None
+    if settings_service is not None:
+        active_tool_getter = lambda: int(getattr(settings_service.get_robot_config(), "robot_tool", 0))
+    state = RobotStateManager(robot, publisher=publisher, active_tool_getter=active_tool_getter)
+    state.refresh_once()
     state.start_monitoring()
 
     tool_service: Optional[IToolService] = None

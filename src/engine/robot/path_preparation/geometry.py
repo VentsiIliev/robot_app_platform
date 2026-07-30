@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-
-from src.engine.geometry.planar import normalize_degrees, unwrap_degrees
+import logging
+from src.engine.geometry.planar import nearest_axis_equivalent_degrees, normalize_degrees, unwrap_degrees
 
 PATH_TANGENT_HEADING_SMOOTHING_WINDOW = 5
 PATH_TANGENT_LOOKAHEAD_DISTANCE_MM = 15.0
 PATH_TANGENT_HEADING_DEADBAND_DEG = 5.0
 
+_logger = logging.getLogger(__name__)
 
 def has_valid_contour(contour) -> bool:
     if contour is None:
@@ -133,6 +134,7 @@ def compute_path_aligned_rz_degrees(
     base_rz_offset_degrees: float = 0.0,
     lookahead_distance_mm: float = PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     heading_deadband_deg: float = PATH_TANGENT_HEADING_DEADBAND_DEG,
+    boundary_xy_points: np.ndarray | None = None,
 ) -> list[float]:
     if not robot_xy_points:
         return []
@@ -158,7 +160,38 @@ def compute_path_aligned_rz_degrees(
                     heading_deg += 360.0
         segment_headings.append(heading_deg)
 
-    if len(segment_headings) >= 3:
+    boundary_indices: set[int] = set()
+    if boundary_xy_points is not None:
+        try:
+            boundary_xy = np.asarray(boundary_xy_points, dtype=float).reshape(-1, 2)
+        except (TypeError, ValueError):
+            boundary_xy = np.empty((0, 2), dtype=float)
+        for index, point in enumerate(robot_xy_points):
+            if len(boundary_xy) and bool(np.any(np.linalg.norm(boundary_xy - np.asarray(point, dtype=float), axis=1) <= 1e-6)):
+                boundary_indices.add(index)
+
+    if len(segment_headings) >= 3 and boundary_indices:
+        smoothed_headings = list(segment_headings)
+        split_points = sorted(index for index in boundary_indices if 0 < index < len(segment_headings))
+        span_starts = [0, *split_points]
+        span_ends = [index - 1 for index in split_points]
+        span_ends.append(len(segment_headings) - 1)
+        for start, end in zip(span_starts, span_ends):
+            span = segment_headings[start:end + 1]
+            if len(span) < 3:
+                continue
+            window = min(PATH_TANGENT_HEADING_SMOOTHING_WINDOW, len(span))
+            if window % 2 == 0:
+                window -= 1
+            if window < 3:
+                continue
+            radius = window // 2
+            padded = np.pad(np.asarray(span, dtype=float), (radius, radius), mode="edge")
+            for offset in range(len(span)):
+                smoothed_headings[start + offset] = float(np.mean(padded[offset:offset + window]))
+        segment_headings = smoothed_headings
+
+    if len(segment_headings) >= 3 and not boundary_indices:
         window = min(PATH_TANGENT_HEADING_SMOOTHING_WINDOW, len(segment_headings))
         if window % 2 == 0:
             window -= 1
@@ -180,6 +213,8 @@ def compute_path_aligned_rz_degrees(
         target_distance = start_distance + lookahead_distance_mm
         lookahead_index = index
         while lookahead_index + 1 < len(segment_headings) and point_distances[lookahead_index + 1] < target_distance:
+            if lookahead_index + 1 in boundary_indices and lookahead_index + 1 != index:
+                break
             lookahead_index += 1
         lookahead_headings.append(float(segment_headings[lookahead_index]))
 
@@ -229,6 +264,159 @@ def compute_pickup_rz_from_robot_path(
         return 0.0
     heading_from_x_deg = float(np.degrees(np.arctan2(dy, dx)))
     return normalize_degrees(heading_from_x_deg)
+
+
+def compute_pickup_rz_from_stable_paint_segment(
+    path: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+) -> float:
+    """
+    Select a pickup orientation from a stable segment of the prepared paint path.
+
+    Closed workpiece contours do not always have a useful whole-shape axis:
+    asymmetry can pull moment/PCA orientation away from the edge frame that will
+    be painted. This selector instead scans the final execution contour and
+    favors segments that are locally straight and require the smallest
+    axis-equivalent rotation from the pickup reference orientation.
+    """
+    points = np.asarray(path, dtype=float)
+    if points.ndim != 2 or points.shape[1] < 2 or len(points) < 2:
+        return 0.0
+    points = points[:, :2]
+
+    vectors = points[1:] - points[:-1]
+    lengths = np.linalg.norm(vectors, axis=1)
+    valid_indices = [int(index) for index, length in enumerate(lengths) if float(length) > 1e-6]
+    if not valid_indices:
+        return 0.0
+
+    headings = np.asarray(
+        [
+            normalize_degrees(float(np.degrees(np.arctan2(vector[1], vector[0]))))
+            if float(lengths[index]) > 1e-6 else 0.0
+            for index, vector in enumerate(vectors)
+        ],
+        dtype=float,
+    )
+
+    reference = float(reference_rz)
+    best_index = valid_indices[0]
+    best_key: tuple[float, float, float, int] | None = None
+    window = 5
+
+    for index in valid_indices:
+        heading = float(headings[index])
+        selected_heading = nearest_axis_equivalent_degrees(reference, heading)
+        rotation_cost = abs(unwrap_degrees(reference, selected_heading) - reference)
+
+        neighbor_errors: list[float] = []
+        straight_run_length = float(lengths[index])
+        for neighbor in range(max(0, index - window), min(len(headings), index + window + 1)):
+            if neighbor == index or float(lengths[neighbor]) <= 1e-6:
+                continue
+            error = abs(unwrap_degrees(heading, float(headings[neighbor])) - heading)
+            neighbor_errors.append(error)
+            if error <= 5.0:
+                straight_run_length += float(lengths[neighbor])
+
+        straightness_cost = float(np.mean(neighbor_errors)) if neighbor_errors else 0.0
+        straight_bonus = -min(straight_run_length, 25.0)
+        key = (rotation_cost, straightness_cost, straight_bonus, index)
+        if best_key is None or key < best_key:
+            best_key = key
+            best_index = index
+
+    return nearest_axis_equivalent_degrees(reference, float(headings[best_index]))
+
+
+def compute_pickup_rz_from_initial_paint_segment(
+    path: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+    *,
+    max_run_mm: float = 25.0,
+    heading_tolerance_deg: float = 5.0,
+) -> float:
+    """Return pickup RZ from the first stable run of the prepared paint path.
+
+    The workpiece is picked before the paint handoff. To align the selected
+    start of the contour with the paint axis, pickup RZ must follow the initial
+    directed segment instead of whichever later segment happens to be closest
+    to zero rotation.
+    """
+    points = np.asarray(path, dtype=float)
+    if points.ndim != 2 or points.shape[1] < 2 or len(points) < 2:
+        return 0.0
+    points = points[:, :2]
+
+    vectors = points[1:] - points[:-1]
+    lengths = np.linalg.norm(vectors, axis=1)
+    valid_indices = [int(index) for index, length in enumerate(lengths) if float(length) > 1e-6]
+    if not valid_indices:
+        return 0.0
+
+    first_index = valid_indices[0]
+    first_heading = normalize_degrees(
+        float(np.degrees(np.arctan2(vectors[first_index][1], vectors[first_index][0])))
+    )
+    run_vector = np.zeros(2, dtype=float)
+    run_length = 0.0
+    max_run_mm = max(0.0, float(max_run_mm))
+    heading_tolerance_deg = max(0.0, float(heading_tolerance_deg))
+
+    for index in valid_indices:
+        heading = normalize_degrees(
+            float(np.degrees(np.arctan2(vectors[index][1], vectors[index][0])))
+        )
+        heading_error = abs(unwrap_degrees(first_heading, heading) - first_heading)
+        if index != first_index and heading_error > heading_tolerance_deg:
+            break
+        run_vector += vectors[index]
+        run_length += float(lengths[index])
+        if max_run_mm > 0.0 and run_length >= max_run_mm:
+            break
+
+    if float(np.linalg.norm(run_vector)) <= 1e-9:
+        selected_heading = first_heading
+    else:
+        selected_heading = normalize_degrees(
+            float(np.degrees(np.arctan2(run_vector[1], run_vector[0])))
+        )
+    return unwrap_degrees(float(reference_rz), selected_heading)
+
+
+def compute_pickup_rz_from_min_rect_long_axis(
+    points: list[list[float]] | np.ndarray,
+    reference_rz: float = 0.0,
+) -> float:
+    """Return pickup RZ from the long axis of the contour minimum-area rectangle."""
+    contour = np.asarray(points, dtype=float)
+    if contour.ndim != 2 or contour.shape[1] < 2 or len(contour) < 2:
+        return 0.0
+    contour = contour[:, :2]
+    if len(contour) < 3:
+        return 0.0
+
+    rect = cv2.minAreaRect(contour.astype(np.float32).reshape(-1, 1, 2))
+    box = cv2.boxPoints(rect).astype(float)
+    if len(box) < 4:
+        return 0.0
+
+    best_vector: np.ndarray | None = None
+    best_length = 0.0
+    for index in range(4):
+        vector = box[(index + 1) % 4] - box[index]
+        length = float(np.linalg.norm(vector))
+        if length > best_length:
+            best_length = length
+            best_vector = vector
+
+    if best_vector is None or best_length <= 1e-9:
+        return 0.0
+
+    heading = normalize_degrees(
+        float(np.degrees(np.arctan2(float(best_vector[1]), float(best_vector[0]))))
+    )
+    return nearest_axis_equivalent_degrees(float(reference_rz), heading)
 
 
 def _first_directed_heading_from_x(path: list[list[float]]) -> float | None:
@@ -283,6 +471,7 @@ def compute_pickup_rz_from_robot_contour_with_direction(
     ambiguity using the directed execution path ordering.
     """
     contour_rz = compute_pickup_rz_from_robot_contour(contour_points)
+    _logger.debug(f"compute_pickup_rz_from_robot_contour_with_direction: {contour_rz}")
     path_heading_rz = _first_directed_heading_from_x(
         [list(p) for p in np.asarray(path_points, dtype=float)]
     )
@@ -290,10 +479,15 @@ def compute_pickup_rz_from_robot_contour_with_direction(
         return contour_rz
 
     alternate_rz = normalize_degrees(contour_rz + 180.0)
+    _logger.debug(f"alternate_rz: {alternate_rz}")
+
     if abs(unwrap_degrees(path_heading_rz, contour_rz) - path_heading_rz) <= abs(
         unwrap_degrees(path_heading_rz, alternate_rz) - path_heading_rz
     ):
+        _logger.debug(f"Returning raw rz: {contour_rz}")
         return contour_rz
+
+    _logger.debug(f"Redurning alternate rz: {alternate_rz}")
     return alternate_rz
 
 
@@ -303,6 +497,7 @@ def rebuild_pose_path_from_xy(
     rz_mode: str,
     tangent_lookahead_distance_mm: float = PATH_TANGENT_LOOKAHEAD_DISTANCE_MM,
     tangent_heading_deadband_deg: float = PATH_TANGENT_HEADING_DEADBAND_DEG,
+    tangent_boundary_xy: np.ndarray | None = None,
 ) -> list[list[float]]:
     if len(xy_points) == 0 or not prototype_path:
         return []
@@ -318,6 +513,7 @@ def rebuild_pose_path_from_xy(
             base_rz_offset_degrees=base_rz,
             lookahead_distance_mm=tangent_lookahead_distance_mm,
             heading_deadband_deg=tangent_heading_deadband_deg,
+            boundary_xy_points=tangent_boundary_xy,
         )
     else:
         rz_values = [base_rz for _ in robot_xy_points]

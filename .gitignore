@@ -5,12 +5,26 @@ __pycache__/
 # Virtual environments
 .venv/
 
+# png
+*.png
+trajectory_points*.txt
+pivot_trajectory_execute*.txt
+cameraToRobotMatrix_camera_center_validation_homography.json
+cameraToRobotMatrix_camera_center_triangulation.json
+cameraToRobotMatrix_camera_center_model_report.json
+cameraToRobotMatrix_camera_center_homography_residual.json
+camera_z_shift_marker*.json
+capture_poses.json
+
 # Test / coverage output
 .coverage
 .coverage.*
-.coveragerc
 .pytest_cache/
 htmlcov/
+
+# Standalone application builds
+build/pyinstaller/
+dist/
 
 # IDE files
 .idea/

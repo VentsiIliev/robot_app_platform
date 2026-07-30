@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from PyQt6.QtCore import QEvent, pyqtSignal
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QTabWidget, QVBoxLayout
 
 from pl_gui.settings.settings_view.styles import BG_COLOR, TAB_WIDGET_STYLE
@@ -59,11 +59,6 @@ class DispenseChannelSettingsView(IApplicationView):
         tab = self._tabs.get(channel_id)
         if tab is not None:
             tab.set_state(state)
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

@@ -2,6 +2,8 @@ from typing import List
 import logging
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
+from src.engine.robot.motion_sequence import MotionSequenceSegment
+from .fairino_ros2_client import FakeRos2Client
 
 _logger = logging.getLogger(__name__)
 
@@ -85,6 +87,26 @@ class TestRobotWrapper(IRobot):
 
     def execute_path(self, path, rx, ry, rz, vel, acc, blocking):
         pass
+
+    def execute_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        _logger.debug("TestRobot: execute_motion_sequence called with %d segments", len(segments))
+        return 0
+
+    def execute_custom_motion_sequence(
+        self,
+        segments: List[MotionSequenceSegment],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ) -> int:
+        _logger.debug("TestRobot: execute_custom_motion_sequence called with %d segments", len(segments))
+        return 0
 
     def GetSDKVersion(self):
         return "TestRobot SDK v1.0"

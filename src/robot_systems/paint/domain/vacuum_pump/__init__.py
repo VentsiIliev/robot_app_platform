@@ -1,2 +1,0 @@
-from .relay_vacuum_pump_controller import RelayVacuumPumpController
-

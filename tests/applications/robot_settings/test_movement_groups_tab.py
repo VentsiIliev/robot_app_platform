@@ -278,9 +278,10 @@ class TestMovementGroupsTab(unittest.TestCase):
         tab.remove_group("HOME")
         self.assertIsNone(tab.get_widget("HOME"))
 
-    def test_remove_nonexistent_group_does_not_raise(self):
+    def test_remove_nonexistent_group_preserves_empty_widget_map(self):
         tab = MovementGroupsTab()
-        tab.remove_group("GHOST")   # must not raise
+        tab.remove_group("GHOST")
+        self.assertEqual(tab._widgets, {})
 
     def test_set_current_forwarded_from_widget(self):
         tab = MovementGroupsTab()

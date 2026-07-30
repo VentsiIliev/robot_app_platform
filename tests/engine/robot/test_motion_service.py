@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
+from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.engine.robot.services.motion_service import MotionService
 
 
@@ -18,19 +19,19 @@ class TestMotionService(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_move_ptp_success(self):
-        self.robot.move_ptp.return_value = 0
+        self.robot.move_linear.return_value = 0
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertTrue(result)
-        self.robot.move_ptp.assert_called_once()
+        self.robot.move_linear.assert_called_once()
 
     def test_move_ptp_uses_non_blocking_robot_call_when_not_waiting(self):
-        self.robot.move_ptp.return_value = 0
+        self.robot.move_linear.return_value = 0
         self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30, wait_to_reach=False)
-        _, kwargs = self.robot.move_ptp.call_args
+        _, kwargs = self.robot.move_linear.call_args
         self.assertEqual(kwargs.get("blocking"), False)
 
     def test_move_ptp_accepts_queued_result(self):
-        self.robot.move_ptp.return_value = 2
+        self.robot.move_linear.return_value = 2
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertTrue(result)
 
@@ -38,15 +39,15 @@ class TestMotionService(unittest.TestCase):
         self.safety.get_violations.return_value = ["out of bounds"]
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
-        self.robot.move_ptp.assert_not_called()
+        self.robot.move_linear.assert_not_called()
 
     def test_move_ptp_robot_error_code_returns_false(self):
-        self.robot.move_ptp.return_value = -1
+        self.robot.move_linear.return_value = -1
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
 
     def test_move_ptp_exception_returns_false(self):
-        self.robot.move_ptp.side_effect = RuntimeError("connection lost")
+        self.robot.move_linear.side_effect = RuntimeError("connection lost")
         result = self.service.move_ptp([100, 0, 300, 0, 0, 0], 0, 0, 30, 30)
         self.assertFalse(result)
 
@@ -86,6 +87,41 @@ class TestMotionService(unittest.TestCase):
         self.robot.move_linear.side_effect = ConnectionError
         result = self.service.move_linear([100, 0, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)
+
+    # ------------------------------------------------------------------
+    # move_sequence
+    # ------------------------------------------------------------------
+
+    def test_move_sequence_success(self):
+        self.robot.set_active_tool.return_value = True
+        self.robot.execute_motion_sequence.return_value = 0
+        segments = [
+            MotionSequenceSegment([100, 0, 300, 0, 0, 0], 30, 40),
+            MotionSequenceSegment([120, 0, 300, 0, 0, 10], 50, 20),
+        ]
+
+        result = self.service.move_sequence(segments, 1, 0, wait_to_reach=False)
+
+        self.assertTrue(result)
+        self.robot.set_active_tool.assert_called_once_with(1)
+        self.robot.execute_motion_sequence.assert_called_once_with(
+            segments,
+            tool=1,
+            user=0,
+            blocking=False,
+        )
+
+    def test_move_sequence_blocks_on_safety_violation(self):
+        self.safety.get_violations.side_effect = [[], ["out of bounds"]]
+        segments = [
+            MotionSequenceSegment([100, 0, 300, 0, 0, 0], 30, 40),
+            MotionSequenceSegment([999, 0, 300, 0, 0, 0], 50, 20),
+        ]
+
+        result = self.service.move_sequence(segments, 1, 0)
+
+        self.assertFalse(result)
+        self.robot.execute_motion_sequence.assert_not_called()
 
     # ------------------------------------------------------------------
     # start_jog

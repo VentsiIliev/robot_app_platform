@@ -30,10 +30,7 @@ class CalibrationNavigationService:
 
     def move_to_calibration_position(self, wait_cancelled=None) -> bool:
         if self._before_move is not None:
-            try:
-                self._before_move()
-            except Exception:
-                pass
+            self._before_move()
         return self._navigation.move_to_group(
             self._calibration_group,
             wait_cancelled=wait_cancelled,

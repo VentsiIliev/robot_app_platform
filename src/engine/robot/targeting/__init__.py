@@ -7,10 +7,14 @@ from src.engine.robot.targeting.robot_system_targeting_provider import RobotSyst
 from src.engine.robot.targeting.target_frame import TargetFrame
 from src.engine.robot.targeting.target_frame_settings import TargetFrameSettings
 from src.engine.robot.targeting.target_point_geometry import (
+    command_xyz_from_selected_xyz,
     command_xy_from_selected_xy,
     rotate_offset_xy,
+    rotate_offset_xyz,
+    selected_xyz_from_command_xyz,
     selected_xy_from_command_xy,
     tcp_delta_xy,
+    tcp_delta_xyz,
 )
 from src.engine.robot.targeting.targeting_settings import TargetingSettings, TargetingSettingsSerializer
 from src.engine.robot.targeting.vision_target_resolver import VisionTargetResolver, TargetTransformResult
@@ -28,9 +32,13 @@ __all__ = [
     "TargetFrameDefinition",
     "TargetFrameSettings",
     "rotate_offset_xy",
+    "rotate_offset_xyz",
     "tcp_delta_xy",
+    "tcp_delta_xyz",
     "selected_xy_from_command_xy",
+    "selected_xyz_from_command_xyz",
     "command_xy_from_selected_xy",
+    "command_xyz_from_selected_xyz",
     "TargetingSettings",
     "TargetingSettingsSerializer",
     "VisionTargetResolver",

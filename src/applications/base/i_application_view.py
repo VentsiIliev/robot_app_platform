@@ -27,6 +27,7 @@ class IApplicationView(AppWidget):
     jog_requested = pyqtSignal(str, str, str, float)
     jog_started = pyqtSignal(str)
     jog_stopped = pyqtSignal(str)
+    language_changed = pyqtSignal()
 
     def __init__(self, title: str, parent=None):
         self._drawer: Optional[DrawerToggle] = None
@@ -77,6 +78,15 @@ class IApplicationView(AppWidget):
         if self._jog_widget is None:
             return ""
         return self._jog_widget.get_frame()
+
+    def retranslateUi(self) -> None:
+        """Override in subclasses to refresh widget-owned text."""
+        pass
+
+    def on_language_changed(self) -> None:
+        """Default localization hook for all application views."""
+        self.retranslateUi()
+        self.language_changed.emit()
 
     @abstractmethod
     def setup_ui(self) -> None: ...

@@ -7,6 +7,7 @@ not full execution.
 """
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 
@@ -16,11 +17,38 @@ from unittest.mock import MagicMock, patch, call
 
 class TestMainImport(unittest.TestCase):
 
-    def test_main_module_imports_without_error(self):
-        """Importing main.y_pixels (not calling main()) must not raise."""
-        import importlib
+    def test_localization_service_uses_robot_system_storage_paths(self):
         import src.bootstrap.main as m
-        self.assertTrue(callable(m.main))
+
+        robot_app = MagicMock()
+        robot_app.metadata.translations_root = "storage/translations"
+        robot_app.metadata.settings_root = "storage/settings"
+        fake_module = MagicMock()
+        fake_module.__file__ = "/tmp/robot_systems/paint/paint_robot_system.py"
+
+        with (
+            patch.dict("sys.modules", {robot_app.__class__.__module__: fake_module}),
+            patch("src.bootstrap.main.LocalizationService") as localization_cls,
+        ):
+            localization = MagicMock()
+            localization_cls.return_value = localization
+            result = m._build_localization_service(robot_app, messaging_service=MagicMock())
+
+        self.assertIs(result, localization)
+        args = localization_cls.call_args.args
+        shared_translations = (
+            Path(m.__file__).resolve().parent.parent
+            / "applications"
+            / "localization"
+        )
+        self.assertEqual(
+            args[0],
+            [
+                str(shared_translations),
+                "/tmp/robot_systems/paint/storage/translations",
+            ],
+        )
+        self.assertEqual(localization_cls.call_args.kwargs["state_file"], "/tmp/robot_systems/paint/storage/settings/localization.json")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -59,6 +87,12 @@ class TestStartupSequenceOrder(unittest.TestCase):
         fake_spec.name = "TestApp"
 
         from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
+        fake_provider = MagicMock()
+        fake_provider.system_class = GlueRobotSystem
+        fake_provider.build_robot.return_value = MagicMock()
+        fake_provider.build_authorization_service.return_value.get_visible_apps.return_value = [
+            fake_spec
+        ]
 
         patches = {
             "src.bootstrap.main.EngineContext.build":       MagicMock(side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
@@ -83,6 +117,9 @@ class TestStartupSequenceOrder(unittest.TestCase):
         with (
             patch("src.bootstrap.main.EngineContext.build",
                   side_effect=lambda: (call_order.append("engine"), fake_ctx)[1]),
+            patch("src.bootstrap.main.load_startup_config"),
+            patch("src.bootstrap.main.load_bootstrap_provider",
+                  return_value=fake_provider),
             patch("src.bootstrap.main.SystemBuilder",
                   return_value=fake_builder),
             patch("src.bootstrap.main.ShellConfigurator.configure",
@@ -138,6 +175,11 @@ class TestStartupAbortOnFailure(unittest.TestCase):
         qt_called = []
 
         with (
+            patch("src.bootstrap.main.load_startup_config"),
+            patch(
+                "src.bootstrap.main.load_bootstrap_provider",
+                return_value=MagicMock(),
+            ),
             patch("src.bootstrap.main.EngineContext.build",
                   side_effect=RuntimeError("engine init failed")),
             patch("src.bootstrap.main.QApplication",

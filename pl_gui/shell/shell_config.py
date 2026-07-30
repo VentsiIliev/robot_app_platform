@@ -5,6 +5,7 @@ Provides centralized folder structure definition and dynamic management API.
 """
 from dataclasses import dataclass
 from typing import Callable, Optional
+from PyQt6.QtCore import QCoreApplication
 
 
 @dataclass
@@ -17,9 +18,7 @@ class FolderDefinition:
 
     def get_translate_fn(self) -> Callable[[str], str]:
         """Return a translate function for this folder."""
-        # For now, returns the display name
-        # In future, this can integrate with real translation vision_service
-        return lambda key: self.display_name
+        return lambda _key: QCoreApplication.translate("Shell", self.translation_key) or self.display_name
 
 
 class ShellConfig:

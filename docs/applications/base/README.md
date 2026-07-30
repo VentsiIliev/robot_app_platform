@@ -43,8 +43,8 @@ class IApplication(ABC):
 ```
 
 Called by the bootstrap in two phases:
-1. `register(messaging_service)` — called at startup; store the broker reference here
-2. `create_widget()` — called lazily when the user opens the application's folder; must return the root widget
+1. `register(messaging_service)` — called when the application is first resolved for opening; store the broker reference here
+2. `create_widget()` — called when the user opens the application's folder; must return the root widget
 
 ---
 
@@ -59,7 +59,7 @@ class WidgetApplication(IApplication):
     def create_widget(self) -> AppWidget: ...
 ```
 
-Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messaging_service` in `create_widget()`. The `messaging_service` is captured in `register()`.
+Generic `IApplication` adapter. Stores `widget_factory` and calls it with `messaging_service` in `create_widget()`. The `messaging_service` is captured in `register()`. In the current bootstrap flow, both happen lazily on first open rather than during shell startup.
 
 ```python
 # Application does not need broker:
@@ -264,6 +264,78 @@ This sits above the lower-level `pl_gui.settings.settings_view.styles` palette:
 - `src/applications/base/app_styles.py` is the shared application-facing composition layer
 
 Views should prefer importing shared application styles from `src/applications/base/app_styles.py` instead of creating new per-application style modules for common patterns.
+
+---
+
+### Virtual Keyboard
+
+**Files:**
+- `widgets/custom_virtual_keyboard.py`
+- `widgets/virtual_keyboard_widget_factory.py`
+- `keyboard_settings_view.py`
+- `config/virtual_keyboard_config.py`
+
+The platform provides one shared virtual keyboard path for touch-oriented forms. Applications should not implement local keyboard popups.
+
+Use cases:
+- direct text/numeric fields: `KeyboardLineEdit`, `KeyboardSpinBox`, `KeyboardDoubleSpinBox`
+- schema-driven settings tabs: `KeyboardSettingsView`
+- direct `CollapsibleGroup` / `GenericSettingGroup` construction: `build_with_keyboard_setting_handlers(...)`
+- editor builders with widget-factory seams: `VirtualKeyboardWidgetFactory()`
+
+Behavior:
+- the keyboard docks to the active application/window, not to arbitrary child widgets
+- the nearest scroll area is padded while the keyboard is visible
+- the focused field is scrolled above the keyboard
+- scroll padding and original scroll position are restored when the keyboard hides
+- only one keyboard owner is active at a time
+
+Direct field example:
+
+```python
+from src.applications.base.widgets.custom_virtual_keyboard import (
+    KeyboardDoubleSpinBox,
+    KeyboardLineEdit,
+    KeyboardSpinBox,
+)
+
+name_edit = KeyboardLineEdit()
+count_spin = KeyboardSpinBox()
+offset_spin = KeyboardDoubleSpinBox()
+```
+
+Schema settings example:
+
+```python
+from src.applications.base.keyboard_settings_view import KeyboardSettingsView
+
+settings_view = KeyboardSettingsView(component_name="MySettings")
+settings_view.add_tab("General", [GENERAL_GROUP])
+```
+
+Raw group example:
+
+```python
+from src.applications.base.collapsible_settings_view import CollapsibleGroup
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
+
+holder = []
+build_with_keyboard_setting_handlers(lambda: holder.append(CollapsibleGroup(MY_GROUP)))
+group = holder[0]
+```
+
+Dialog guidance:
+- pass the real parent widget when constructing a dialog so keyboard docking can resolve the application window
+- use keyboard field classes inside dialogs
+- wrap tall dialog forms in `QScrollArea`
+- when a dialog needs custom keyboard spacing, implement `_on_virtual_keyboard_shown(keyboard_rect)` and `_on_virtual_keyboard_hidden()` on the dialog or a parent form widget
+- keep hide handling symmetrical: any spacer, margin, or scroll adjustment added on show must be removed on hide
+
+Validation checklist:
+- compile touched UI modules with `python3 -m py_compile`
+- test a field near the top and near the bottom of the view
+- test keyboard close/hide restores scroll position and layout
+- test dialogs separately from full-page forms
 
 ---
 

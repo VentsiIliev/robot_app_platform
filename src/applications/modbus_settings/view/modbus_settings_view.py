@@ -1,4 +1,4 @@
-from PyQt6.QtCore import pyqtSignal, QEvent, Qt
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QLabel,
@@ -12,6 +12,7 @@ from pl_gui.settings.settings_view.styles import (
     PRIMARY, PRIMARY_DARK, LABEL_STYLE, TAB_WIDGET_STYLE, SAVE_BUTTON_STYLE,
 )
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
 from src.applications.modbus_settings.model.mapper import ModbusSettingsMapper
 from src.applications.modbus_settings.view.modbus_settings_schema import CONNECTION_GROUP, DEVICE_GROUP
 
@@ -83,8 +84,7 @@ class ModbusSettingsView(IApplicationView):
         layout.setSpacing(0)
 
         # Groups — owned here, not by SettingsView
-        self._connection_group = GenericSettingGroup(CONNECTION_GROUP)
-        self._device_group     = GenericSettingGroup(DEVICE_GROUP)
+        build_with_keyboard_setting_handlers(self._build_setting_groups)
 
         # Tab widget — built manually so we control QScrollArea policies
         self._tabs = QTabWidget()
@@ -109,6 +109,10 @@ class ModbusSettingsView(IApplicationView):
 
         layout.addWidget(content)
         layout.addWidget(self._build_action_bar())
+
+    def _build_setting_groups(self) -> None:
+        self._connection_group = GenericSettingGroup(CONNECTION_GROUP)
+        self._device_group     = GenericSettingGroup(DEVICE_GROUP)
 
     # ── Tab content builders ──────────────────────────────────────────────
 
@@ -251,11 +255,6 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setText("Working…")
 
     # ── AppWidget hooks ───────────────────────────────────────────────────
-
-    def changeEvent(self, event) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

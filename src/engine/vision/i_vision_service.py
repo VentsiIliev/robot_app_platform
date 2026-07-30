@@ -31,6 +31,9 @@ class IVisionService(ABC):
     def get_latest_contours(self) -> list: ...
 
     @abstractmethod
+    def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]: ...
+
+    @abstractmethod
     def get_work_area(self, area_type: str) -> tuple[bool, str, any]: ...
 
     @abstractmethod

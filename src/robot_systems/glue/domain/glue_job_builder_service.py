@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.targeting import VisionPoseRequest, VisionTargetResolver
@@ -43,13 +43,20 @@ class GlueJobBuilderService:
         self,
         transformer: ICoordinateTransformer | None = None,
         resolver: VisionTargetResolver | None = None,
+        resolver_getter: Callable[[], VisionTargetResolver | None] | None = None,
         z_min: float = 0.0,
         target_point_name: str = "",
     ) -> None:
         self._transformer = transformer
         self._resolver = resolver
+        self._resolver_getter = resolver_getter
         self._z_min = float(z_min)
         self._target_point_name = str(target_point_name or "").strip().lower()
+
+    def _current_resolver(self) -> VisionTargetResolver | None:
+        if self._resolver_getter is not None:
+            return self._resolver_getter()
+        return self._resolver
 
     def build_job(self, matched_workpieces: list[dict[str, Any]]) -> GlueJob:
         segments: list[GlueJobSegment] = []
@@ -104,10 +111,11 @@ class GlueJobBuilderService:
 
             px, py = float(point[0]), float(point[1])
 
-            if self._resolver is not None:
-                result = self._resolver.resolve(
+            resolver = self._current_resolver()
+            if resolver is not None:
+                result = resolver.resolve(
                     VisionPoseRequest(x_pixels=px, y_pixels=py, z_mm=base_z, rz_degrees=rz, rx_degrees=self._RX, ry_degrees=self._RY),
-                    self._resolver.registry.by_name(self._target_point_name),
+                    resolver.registry.by_name(self._target_point_name),
                 )
                 x, y, z, _, _, final_rz = result.robot_pose()
             else:

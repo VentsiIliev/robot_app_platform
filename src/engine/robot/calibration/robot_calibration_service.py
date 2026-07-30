@@ -174,6 +174,26 @@ class RobotCalibrationService(IRobotCalibrationService):
                 self._config.axis_mapping_config = live_calibration.axis_mapping
                 self._adaptive_config = live_calibration.adaptive_movement
 
+        vision_calibration_key = getattr(self._config, "vision_calibration_settings_key", None)
+        if vision_calibration_key is not None:
+            live_vision_calibration = settings.get(vision_calibration_key)
+            if live_vision_calibration is not None:
+                self._config.reference_board_mode = str(
+                    getattr(live_vision_calibration, "reference_board_mode", "auto") or "auto"
+                )
+                self._config.charuco_board_width = getattr(
+                    live_vision_calibration, "charuco_board_width", None
+                )
+                self._config.charuco_board_height = getattr(
+                    live_vision_calibration, "charuco_board_height", None
+                )
+                self._config.charuco_square_size_mm = getattr(
+                    live_vision_calibration, "charuco_square_size_mm", None
+                )
+                self._config.charuco_marker_size_mm = getattr(
+                    live_vision_calibration, "charuco_marker_size_mm", None
+                )
+
         robot_config_key = getattr(self._config, "robot_config_key", None)
         if robot_config_key is not None:
             live_robot_config = settings.get(robot_config_key)

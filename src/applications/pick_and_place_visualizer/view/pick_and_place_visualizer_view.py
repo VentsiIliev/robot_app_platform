@@ -2,7 +2,7 @@ from typing import List, Optional
 
 import cv2
 import numpy as np
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QColor
 from PyQt6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
@@ -426,11 +426,6 @@ class PickAndPlaceVisualizerView(IApplicationView):
 
     def _on_crosshair_toggled(self, checked: bool) -> None:
         self._crosshair_enabled = checked
-
-    def changeEvent(self, event: QEvent) -> None:
-        if event.type() == QEvent.Type.LanguageChange:
-            self.on_language_changed()
-        super().changeEvent(event)
 
     def clean_up(self) -> None:
         pass

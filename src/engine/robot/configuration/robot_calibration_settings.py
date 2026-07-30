@@ -101,6 +101,8 @@ class CameraTcpOffsetCalibrationConfig:
     detection_attempts: int = 20
     retry_delay_s: float = 0.1
     recenter_max_iterations: int = 20
+    recenter_max_step_mm: float = 15.0
+    recenter_correction_gain: float = 0.6
     recenter_stability_wait_s: float = 0.4
     recenter_alignment_threshold_mm: float = 0.5
     min_samples: int = 3
@@ -124,6 +126,8 @@ class CameraTcpOffsetCalibrationConfig:
             detection_attempts=int(data.get("detection_attempts", 20)),
             retry_delay_s=float(data.get("retry_delay_s", 0.1)),
             recenter_max_iterations=int(data.get("recenter_max_iterations", 20)),
+            recenter_max_step_mm=float(data.get("recenter_max_step_mm", 15.0)),
+            recenter_correction_gain=float(data.get("recenter_correction_gain", 0.6)),
             recenter_stability_wait_s=float(data.get("recenter_stability_wait_s", 0.4)),
             recenter_alignment_threshold_mm=float(data.get("recenter_alignment_threshold_mm", 0.5)),
             min_samples=int(data.get("min_samples", 3)),
@@ -147,6 +151,8 @@ class CameraTcpOffsetCalibrationConfig:
             "detection_attempts": self.detection_attempts,
             "retry_delay_s": self.retry_delay_s,
             "recenter_max_iterations": self.recenter_max_iterations,
+            "recenter_max_step_mm": self.recenter_max_step_mm,
+            "recenter_correction_gain": self.recenter_correction_gain,
             "recenter_stability_wait_s": self.recenter_stability_wait_s,
             "recenter_alignment_threshold_mm": self.recenter_alignment_threshold_mm,
             "min_samples": self.min_samples,
@@ -178,6 +184,7 @@ class RobotCalibrationSettings:
     travel_acceleration: int = 10
     iterative_velocity: int = 30
     iterative_acceleration: int = 10
+    initial_ppm: float | None = None
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'RobotCalibrationSettings':
@@ -213,6 +220,7 @@ class RobotCalibrationSettings:
             travel_acceleration=int(data.get("travel_acceleration", acceleration)),
             iterative_velocity=int(data.get("iterative_velocity", velocity)),
             iterative_acceleration=int(data.get("iterative_acceleration", acceleration)),
+            initial_ppm=data.get("initial_ppm"),
         )
 
     def to_dict(self) -> Dict:
@@ -239,6 +247,7 @@ class RobotCalibrationSettings:
             "travel_acceleration": self.travel_acceleration,
             "iterative_velocity": self.iterative_velocity,
             "iterative_acceleration": self.iterative_acceleration,
+            "initial_ppm": self.initial_ppm,
         }
 
 

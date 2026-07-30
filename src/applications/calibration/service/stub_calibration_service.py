@@ -1,7 +1,11 @@
 import logging
 from typing import Callable, Sequence
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
-from src.applications.calibration.service.i_calibration_service import ICalibrationService
+from src.applications.calibration.service.i_calibration_service import (
+    ICalibrationService,
+    RobotCalibrationPreview,
+)
+from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_service import IntrinsicCaptureConfig
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
@@ -11,6 +15,22 @@ _logger = logging.getLogger(__name__)
 
 
 class StubCalibrationService(ICalibrationService):
+    def get_intrinsic_capture_config(self) -> IntrinsicCaptureConfig:
+        return IntrinsicCaptureConfig()
+
+    def save_intrinsic_capture_config(self, config: IntrinsicCaptureConfig) -> None:
+        _logger.info("Stub: save_intrinsic_capture_config %s", config)
+
+    def start_intrinsic_auto_capture(self) -> tuple[bool, str]:
+        _logger.info("Stub: start_intrinsic_auto_capture")
+        return True, "Stub: intrinsic auto capture started"
+
+    def stop_intrinsic_auto_capture(self) -> None:
+        _logger.info("Stub: stop_intrinsic_auto_capture")
+
+    def is_intrinsic_auto_capture_running(self) -> bool:
+        return False
+
     def load_calibration_settings(self) -> CalibrationSettingsData | None:
         return CalibrationSettingsData(
             vision=CalibrationVisionSettings(),
@@ -32,6 +52,9 @@ class StubCalibrationService(ICalibrationService):
     def calibrate_robot(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_robot")
         return True, "Stub: robot calibrated"
+
+    def preview_robot_calibration(self) -> RobotCalibrationPreview:
+        return RobotCalibrationPreview(ok=True, message="Stub: robot calibration preview")
 
     def calibrate_camera_and_robot(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_camera_and_robot")
@@ -56,6 +79,32 @@ class StubCalibrationService(ICalibrationService):
             f"Stub: camera Z shift calibrated for marker {marker_id} "
             f"(samples={samples}, z_step={z_step_mm}, settle={settle_time_s})"
         )
+
+    def start_tool_tcp_calibration(self, tool_id: int) -> tuple[bool, str]:
+        _logger.info("Stub: start_tool_tcp_calibration tool_id=%s", tool_id)
+        return True, f"Stub: Tool TCP calibration started for tool {tool_id}"
+
+    def capture_tool_tcp_sample(self) -> tuple[bool, str]:
+        _logger.info("Stub: capture_tool_tcp_sample")
+        return True, "Stub: Tool TCP sample captured"
+
+    def solve_tool_tcp_calibration(self) -> tuple[bool, str, dict]:
+        _logger.info("Stub: solve_tool_tcp_calibration")
+        return True, "Stub: Tool TCP solved", {
+            "tool_offset": [1.0, 2.0, 3.0, 0.0, 0.0, 0.0],
+            "pivot_point": [10.0, 20.0, 30.0],
+            "residual_rms_mm": 0.1,
+            "residual_max_mm": 0.2,
+            "sample_count": 6,
+        }
+
+    def save_tool_tcp_calibration(self) -> tuple[bool, str]:
+        _logger.info("Stub: save_tool_tcp_calibration")
+        return True, "Stub: Tool TCP saved"
+
+    def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
+        _logger.info("Stub: clear_tool_tcp_calibration")
+        return True, "Stub: Tool TCP samples cleared"
 
     def calibrate_laser(self) -> tuple[bool, str]:
         _logger.info("Stub: calibrate_laser")

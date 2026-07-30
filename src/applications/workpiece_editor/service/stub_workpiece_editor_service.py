@@ -1,5 +1,4 @@
 import logging
-import copy
 from contour_editor.persistence.data.editor_data_model import ContourEditorData
 from src.applications.workpiece_editor.service import IWorkpieceEditorService
 from src.applications.workpiece_editor.editor_core.adapters.i_workpiece_data_adapter import IWorkpieceDataAdapter
@@ -48,7 +47,7 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: save_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece saved"
 
-    def execute_workpiece(self, data: dict) -> tuple[bool, str]:
+    def execute_workpiece(self, data: dict, skip_debug_plot: bool = False) -> tuple[bool, str]:
         _logger.info("Stub: execute_workpiece keys=%s", list(data.keys()))
         return True, "Stub: workpiece executed"
 
@@ -64,26 +63,16 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
         _logger.info("Stub: execute_process_action action_id=%s", action_id)
         return True, f"Stub: executed process action {action_id}"
 
-    def can_import_dxf_test(self) -> bool:
-        return False
-
-    def prepare_dxf_test_raw_for_image(
-        self,
-        raw: dict,
-        image_width: float,
-        image_height: float,
-    ) -> dict:
-        _logger.info(
-            "Stub: prepare_dxf_test_raw_for_image image_width=%s image_height=%s",
-            image_width,
-            image_height,
-        )
-        return copy.deepcopy(raw)
-
     def get_last_sampled_preview_paths(self) -> list:
         return []
 
     def get_last_raw_preview_paths(self) -> list:
+        return []
+
+    def get_last_raw_pixel_preview_paths(self) -> list:
+        return []
+
+    def get_last_raw_homography_preview_paths(self) -> list:
         return []
 
     def get_last_prepared_preview_paths(self) -> list:
@@ -94,6 +83,9 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
 
     def get_last_execution_preview_paths(self) -> list:
         return []
+
+    def get_last_camera_preview_paths(self) -> dict[str, list]:
+        return {}
 
     def get_last_pivot_preview_paths(self) -> tuple[list[list[list[float]]], list[float] | None]:
         return [], None

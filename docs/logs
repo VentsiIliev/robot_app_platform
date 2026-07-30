@@ -1,0 +1,521 @@
+[INFO] [taskset-16]: process started with pid [1080841]
+[taskset-16] [INFO] [1784294286.046302851] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] Watching 0x603F/0x1001/0x1003 for 6 slaves via ethercat_manager/get_sdo
+[taskset-16] [WARN] [1784294296.068764904] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 0: no active drive error, but error_register=0x01 (generic error), history_count=4, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294296.116820122] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 1: no active drive error, but error_register=0x01 (generic error), history_count=6, latest_history=0x00008400 (0x8400: velocity error exceeds the limit value), target_position_0x607A=2834, actual_position_0x6064=2831, target_minus_actual=3
+[taskset-16] [WARN] [1784294296.148586985] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 2: no active drive error, but error_register=0x01 (generic error), history_count=4, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294296.180633745] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 3: no active drive error, but error_register=0x01 (generic error), history_count=4, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294296.212655216] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 4: no active drive error, but error_register=0x01 (generic error), history_count=4, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294296.260727383] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 5: no active drive error, but error_register=0x01 (generic error), history_count=4, latest_history=0x00008400 (0x8400: velocity error exceeds the limit value), target_position_0x607A=-18501, actual_position_0x6064=-18503, target_minus_actual=2
+[taskset-13] [INFO] [1784294304.489503832] [velocity_monitor]: Executing ordered motion chain with 12 segments
+[taskset-13] [INFO] [1784294304.489955018] [velocity_monitor]: [OrderedChain] Executing ordered motion chain with 12 segments
+[taskset-13] [INFO] [1784294304.505032986] [velocity_monitor]: [SegmentPlan] Planning segment 1: label='Moving to pickup approach pose' vel=60.0% acc=50.0% delta_mm=91.261 start_seed=planned
+[taskset-2] [INFO] [1784294304.505408920] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294304.505505279] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.015210 m and jump threshold 0.000000 (in global reference frame)
+[taskset-2] [INFO] [1784294304.667528564] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 9 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294304.670945095] [velocity_monitor]: [TIMING] segment_plan segment=1 label='Moving to pickup approach pose' fraction=1.0000 points=8 elapsed_s=0.177
+[taskset-13] [INFO] [1784294304.674945957] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294304.676765377] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294304.679721838] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.6, acc=0.5)
+[taskset-11] [INFO] [1784294304.680148000] [ruckig_helper]: 📥 Received Ruckig request with 8 points
+[taskset-11] [INFO] [1784294304.680271636] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.60, acc_scale=0.50
+[taskset-11] [ERROR] [1784294304.681913912] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294304.681972742] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294304.682022776] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=0.615s, output_duration=5.991s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294304.682042714] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294304.682053195] [ruckig_helper]:    Worst output gap: segment [3 -> 4], t=[0.300 -> 5.776], dt=5.476s
+[taskset-11] [ERROR] [1784294304.682069482] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0057 Joint_2=-0.0577 Joint_3=+0.0792 Joint_4=-0.0205 Joint_5=-0.0003 Joint_6=+0.0182
+[taskset-11] [ERROR] [1784294304.682080205] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294304.682094743] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0012 Joint_2=-0.0133 Joint_3=+0.0194 Joint_4=-0.0058 Joint_5=-0.0001 Joint_6=+0.0044
+[taskset-11] [WARN] [1784294304.682105173] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294304.685638213] [velocity_monitor]: [Ruckig] ✓ Generated 8 points
+[taskset-13] [INFO] [1784294304.690573385] [velocity_monitor]: [SegmentPlan] Planning segment 2: label='Descending to pickup pose' vel=60.0% acc=40.0% delta_mm=100.000 start_seed=planned
+[taskset-2] [INFO] [1784294304.690880419] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-13] [INFO] [1784294304.690960071] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=1 wait_before_execute_s=0.191
+[taskset-2] [INFO] [1784294304.690942832] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.016667 m and jump threshold 0.000000 (in global reference frame)
+[taskset-13] [INFO] [1784294304.691288153] [velocity_monitor]: [OrderedChain] Sending planned segment 1/12 label='Moving to pickup approach pose' type=linear points=8 duration_s=0.615 controller_goal_tolerance_s=8.000 wait_timeout_s=10.615 plan_s=0.193
+[taskset-13] [INFO] [1784294304.694809016] [velocity_monitor]: [Controller] Trajectory duration: 0.61s, timeout: 8.0s
+[taskset-13] [INFO] [1784294304.695533128] [velocity_monitor]: [Controller] First point positions: [1.631619, -0.033939, -2.154804, 0.636184, -1.566425, -0.221733]
+[taskset-13] [INFO] [1784294304.696569903] [velocity_monitor]: [Controller] Last point positions: [1.609483, -0.245864, -1.871518, 0.568353, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294304.697247547] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294304.700185116] [velocity_monitor]: [Controller] Last point time: 0.615s
+[taskset-13] [INFO] [1784294304.702664329] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.070, Joint_2=0.674, Joint_3=0.903, Joint_4=0.217, Joint_5=0.004, Joint_6=0.207
+[taskset-2] [INFO] [1784294304.852294895] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 9 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294304.861829742] [velocity_monitor]: [TIMING] segment_plan segment=2 label='Descending to pickup pose' fraction=1.0000 points=8 elapsed_s=0.170
+[taskset-13] [INFO] [1784294304.871614606] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294304.874201869] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294304.874824717] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.0913m duration=0.615s avg_vel=0.1485m/s peak_vel=0.2509m/s peak_acc=1.0113m/s^2
+[taskset-13] [INFO] [1784294304.875720352] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.6, acc=0.4)
+[taskset-11] [INFO] [1784294304.875950445] [ruckig_helper]: 📥 Received Ruckig request with 8 points
+[taskset-13] [INFO] [1784294304.875987065] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-11] [INFO] [1784294304.876033815] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.60, acc_scale=0.40
+[taskset-13] [INFO] [1784294304.876485436] [velocity_monitor]: [Controller]   Point[3] t=0.300s pos=[1.619554, -0.140115, -2.019782, 0.609085, -1.566975, -0.190874]
+[taskset-11] [ERROR] [1784294304.877406648] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294304.877456882] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294304.877468972] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=0.639s, output_duration=6.015s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294304.877477624] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294304.877480765] [ruckig_helper]:    Worst output gap: segment [3 -> 4], t=[0.300 -> 5.776], dt=5.476s
+[taskset-11] [ERROR] [1784294304.877487443] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0000 Joint_2=-0.0553 Joint_3=-0.0356 Joint_4=+0.0910 Joint_5=+0.0000 Joint_6=-0.0000
+[taskset-11] [ERROR] [1784294304.877490811] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294304.877496515] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0000 Joint_2=-0.0199 Joint_3=-0.0085 Joint_4=+0.0284 Joint_5=+0.0000 Joint_6=-0.0000
+[taskset-11] [WARN] [1784294304.877499773] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294304.878945938] [velocity_monitor]: [Controller]   Point[4] t=0.400s pos=[1.613824, -0.197816, -1.940578, 0.588553, -1.567323, -0.1727]
+[taskset-13] [INFO] [1784294304.879494084] [velocity_monitor]: [Controller]   Point[5] t=0.500s pos=[1.610674, -0.232327, -1.891208, 0.574278, -1.567545, -0.161416]
+[taskset-13] [INFO] [1784294304.880195235] [velocity_monitor]: [Ruckig] ✓ Generated 8 points
+[taskset-13] [INFO] [1784294304.881358276] [velocity_monitor]: [Controller]   Point[6] t=0.600s pos=[1.609502, -0.245645, -1.871836, 0.56845, -1.567633, -0.157002]
+[taskset-13] [INFO] [1784294304.884653185] [velocity_monitor]: [Controller]   Point[7] t=0.615s pos=[1.609483, -0.245864, -1.871518, 0.568353, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294304.886204039] [velocity_monitor]: [SegmentPlan] Planning segment 3: label='Lifting from pickup pose' vel=80.0% acc=40.0% delta_mm=20.000 start_seed=planned
+[taskset-2] [INFO] [1784294304.886584395] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294304.886667557] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.010000 m and jump threshold 0.000000 (in global reference frame)
+[taskset-13] [INFO] [1784294304.887057765] [velocity_monitor]: [Controller] Sending 8 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294304.888711098] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294304.888766767] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294304.889965526] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-2] [INFO] [1784294304.967468463] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 5 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294304.970651763] [velocity_monitor]: [TIMING] segment_plan segment=3 label='Lifting from pickup pose' fraction=1.0000 points=4 elapsed_s=0.089
+[taskset-13] [INFO] [1784294304.970959285] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294304.971302544] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294304.971597746] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.8, acc=0.4)
+[taskset-11] [INFO] [1784294304.971766377] [ruckig_helper]: 📥 Received Ruckig request with 4 points
+[taskset-11] [INFO] [1784294304.971815299] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.80, acc_scale=0.40
+[taskset-11] [INFO] [1784294304.972025309] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [INFO] [1784294304.972034119] [ruckig_helper]: 🔍 Trajectory: 4 points, duration: 0.28s
+[taskset-11] [INFO] [1784294304.972042545] [ruckig_helper]: ✅ Trajectory validated successfully
+[taskset-11] [INFO] [1784294304.972045028] [ruckig_helper]: 📤 Returning 4 jerk-limited points
+[taskset-13] [INFO] [1784294304.974502419] [velocity_monitor]: [Ruckig] ✓ Generated 4 points
+[taskset-13] [INFO] [1784294304.976729369] [velocity_monitor]: [SegmentPlan] Planning segment 4: label='Aligning workpiece to paint axis' vel=80.0% acc=40.0% delta_mm=80.001 start_seed=planned
+[taskset-2] [INFO] [1784294304.976994077] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294304.977059967] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.013333 m and jump threshold 0.000000 (in global reference frame)
+[taskset-2] [INFO] [1784294305.138801257] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 9 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294305.141737499] [velocity_monitor]: [TIMING] segment_plan segment=4 label='Aligning workpiece to paint axis' fraction=1.0000 points=7 elapsed_s=0.165
+[taskset-13] [INFO] [1784294305.143386835] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294305.143919726] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294305.146377867] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.8, acc=0.4)
+[taskset-11] [INFO] [1784294305.146576067] [ruckig_helper]: 📥 Received Ruckig request with 7 points
+[taskset-11] [INFO] [1784294305.146635598] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.80, acc_scale=0.40
+[taskset-11] [ERROR] [1784294305.147528587] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294305.147571242] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294305.147580372] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=0.572s, output_duration=5.949s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294305.147588054] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294305.147591369] [ruckig_helper]:    Worst output gap: segment [3 -> 4], t=[0.300 -> 5.776], dt=5.476s
+[taskset-11] [ERROR] [1784294305.147597897] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0003 Joint_2=+0.0376 Joint_3=+0.0334 Joint_4=-0.0711 Joint_5=+0.0005 Joint_6=-0.0239
+[taskset-11] [ERROR] [1784294305.147601460] [ruckig_helper]:    Largest seeded gap: segment [2 -> 3], t=[0.200 -> 0.300], dt=0.100s
+[taskset-11] [ERROR] [1784294305.147607151] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0003 Joint_2=+0.0462 Joint_3=+0.0331 Joint_4=-0.0794 Joint_5=+0.0006 Joint_6=-0.0267
+[taskset-11] [WARN] [1784294305.147610741] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294305.149733047] [velocity_monitor]: [Ruckig] ✓ Generated 7 points
+[taskset-13] [INFO] [1784294305.155475757] [velocity_monitor]: [SegmentPlan] Planning segment 5: label='Moving to staging offset before first pivot contact pose' vel=80.0% acc=30.0% delta_mm=119.639 start_seed=planned
+[taskset-2] [INFO] [1784294305.155739670] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294305.155816990] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.019940 m and jump threshold 0.000000 (in global reference frame)
+[ros2_control_node-3] [INFO] [1784294305.501934405] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294305.506550860] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294305.506864582] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294305.509851844] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=1 label='Moving to pickup approach pose' type=linear result=0 elapsed_s=0.817
+[taskset-13] [INFO] [1784294305.510640921] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=2 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294305.511266099] [velocity_monitor]: [OrderedChain] Sending planned segment 2/12 label='Descending to pickup pose' type=linear points=8 duration_s=0.639 controller_goal_tolerance_s=8.000 wait_timeout_s=10.639 plan_s=0.195
+[taskset-13] [INFO] [1784294305.517891367] [velocity_monitor]: [Controller] Trajectory duration: 0.64s, timeout: 8.0s
+[taskset-13] [INFO] [1784294305.519387672] [velocity_monitor]: [Controller] First point positions: [1.609437, -0.246468, -1.871328, 0.568329, -1.567612, -0.156958]
+[taskset-13] [INFO] [1784294305.520083533] [velocity_monitor]: [Controller] Last point positions: [1.609483, -0.438228, -2.005193, 0.894393, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.525275799] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294305.525792241] [velocity_monitor]: [Controller] Last point time: 0.639s
+[taskset-13] [INFO] [1784294305.526199085] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.000, Joint_2=0.553, Joint_3=0.404, Joint_4=0.956, Joint_5=0.000, Joint_6=0.000
+[taskset-2] [INFO] [1784294305.640424057] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 25 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294305.649659241] [velocity_monitor]: [TIMING] segment_plan segment=5 label='Moving to staging offset before first pivot contact pose' fraction=1.0000 points=18 elapsed_s=0.493
+[taskset-13] [INFO] [1784294305.651200882] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294305.651585245] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294305.651863372] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.8, acc=0.3)
+[taskset-11] [INFO] [1784294305.652093947] [ruckig_helper]: 📥 Received Ruckig request with 18 points
+[taskset-11] [INFO] [1784294305.652167758] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.80, acc_scale=0.30
+[taskset-11] [ERROR] [1784294305.654385444] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294305.654438824] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294305.654457911] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=1.625s, output_duration=7.001s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294305.654473084] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294305.654476782] [ruckig_helper]:    Worst output gap: segment [5 -> 6], t=[0.500 -> 5.976], dt=5.476s
+[taskset-11] [ERROR] [1784294305.654483968] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0039 Joint_2=-0.0167 Joint_3=+0.0016 Joint_4=+0.1320 Joint_5=+0.0299 Joint_6=+0.0069
+[taskset-11] [ERROR] [1784294305.654487597] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294305.654493572] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0039 Joint_2=-0.0167 Joint_3=+0.0016 Joint_4=+0.1320 Joint_5=+0.0299 Joint_6=+0.0069
+[taskset-11] [WARN] [1784294305.654496876] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294305.656150669] [velocity_monitor]: [Ruckig] ✓ Generated 18 points
+[taskset-13] [INFO] [1784294305.726372333] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.0998m duration=0.639s avg_vel=0.1563m/s peak_vel=0.2783m/s peak_acc=0.9990m/s^2
+[taskset-13] [INFO] [1784294305.726865929] [velocity_monitor]: [OrderedChain] Planning path segment 'paint_contact_1:Workpiece' from previous target: start_gap_mm=14.142 path_waypoints=605 planning_waypoints=606
+[taskset-13] [INFO] [1784294305.736507838] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294305.800414837] [velocity_monitor]: [Controller]   Point[3] t=0.300s pos=[1.609483, -0.321087, -1.940227, 0.712286, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.810564897] [velocity_monitor]: [Controller]   Point[4] t=0.400s pos=[1.609483, -0.376434, -1.975838, 0.803244, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.810936664] [velocity_monitor]: [Controller]   Point[5] t=0.500s pos=[1.609483, -0.416693, -1.995961, 0.863625, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.811224037] [velocity_monitor]: [Controller]   Point[6] t=0.600s pos=[1.609483, -0.436544, -2.004486, 0.892001, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.811470345] [velocity_monitor]: [Controller]   Point[7] t=0.639s pos=[1.609483, -0.438228, -2.005193, 0.894393, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294305.816249717] [velocity_monitor]: [Controller] Sending 8 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294305.817715170] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294305.817752595] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294305.820735078] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[ros2_control_node-3] [INFO] [1784294306.456941546] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294306.459102271] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294306.459479274] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294306.462628006] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=2 label='Descending to pickup pose' type=linear result=0 elapsed_s=0.949
+[taskset-13] [INFO] [1784294306.464310246] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=3 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294306.466942764] [velocity_monitor]: [OrderedChain] Sending planned segment 3/12 label='Lifting from pickup pose' type=linear points=4 duration_s=0.284 controller_goal_tolerance_s=8.000 wait_timeout_s=10.284 plan_s=0.094
+[taskset-13] [INFO] [1784294306.471338306] [velocity_monitor]: [Controller] Trajectory duration: 0.28s, timeout: 8.0s
+[taskset-13] [INFO] [1784294306.472181123] [velocity_monitor]: [Controller] First point positions: [1.609568, -0.436311, -2.004174, 0.895523, -1.5676, -0.15691]
+[taskset-13] [INFO] [1784294306.477327236] [velocity_monitor]: [Controller] Last point positions: [1.609483, -0.393248, -1.985598, 0.829818, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294306.482729779] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294306.490479926] [velocity_monitor]: [Controller] Last point time: 0.284s
+[taskset-13] [INFO] [1784294306.491853828] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.001, Joint_2=0.259, Joint_3=0.114, Joint_4=0.373, Joint_5=0.000, Joint_6=0.000
+[taskset-13] [INFO] [1784294306.506764323] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.0188m duration=0.284s avg_vel=0.0661m/s peak_vel=0.1154m/s peak_acc=0.8010m/s^2
+[taskset-13] [INFO] [1784294306.510027241] [velocity_monitor]: [Controller] Final 4 commanded points:
+[taskset-13] [INFO] [1784294306.510341443] [velocity_monitor]: [Controller]   Point[0] t=0.000s pos=[1.609568, -0.436311, -2.004174, 0.895523, -1.5676, -0.15691]
+[taskset-13] [INFO] [1784294306.510605354] [velocity_monitor]: [Controller]   Point[1] t=0.100s pos=[1.609483, -0.426844, -2.000577, 0.878393, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294306.510972332] [velocity_monitor]: [Controller]   Point[2] t=0.200s pos=[1.609483, -0.400952, -1.989214, 0.841138, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294306.511353131] [velocity_monitor]: [Controller]   Point[3] t=0.284s pos=[1.609483, -0.393248, -1.985598, 0.829818, -1.567634, -0.156929]
+[taskset-13] [INFO] [1784294306.512215966] [velocity_monitor]: [Controller] Sending 4 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294306.513715994] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294306.513754382] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294306.516556675] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-12] [INFO] [1784294306.765922467] [contour_ik_helper]: Contour IK smoothing accepted 1083 point updates: max_adjust=0.00153rad fk_max=0.0495mm/0.0946deg
+[taskset-12] [INFO] [1784294306.766270324] [contour_ik_helper]: Contour IK solved 606 poses in 0.962s: fk_max=0.0495mm/0.0946deg max_step=0.0332 span=6.4455 endpoint=6.2807 curvature=0.03116->0.03118 smoothing_updates=1083 smoothing_s=0.001 timings{ik=0.956 candidate_eval=0.957 per_point_fk=0.001 smoothing_candidate=0.000 smoothing_fk=0.001 final_validate=0.000 response_pack=0.000 candidates=612/612 smoothing_checks=1190/1208 fast_points=603 full_points=3 rollbacks=0}
+[ros2_control_node-3] [INFO] [1784294306.796941514] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294306.806614621] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294306.807916444] [velocity_monitor]: [CONTOUR_IK] accepted points=606 fast_failures=0 retries=0 fk_max_mm=0.0495 ori_max_deg=0.0946 max_joint_step=0.0332 max_joint_span=6.4455 max_endpoint_delta=6.2807 state_validity_checks=0
+[taskset-13] [INFO] [1784294306.808040442] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294306.825326488] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=3 label='Lifting from pickup pose' type=linear result=0 elapsed_s=0.343
+[taskset-13] [INFO] [1784294306.826124268] [velocity_monitor]: [TIMING] contour_ik batch_solve_s=0.962 total_before_optimizer_s=1.072
+[taskset-13] [INFO] [1784294306.826819274] [velocity_monitor]: [TOTG] Checking if IPP service is available...
+[taskset-13] [INFO] [1784294306.830079299] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=4 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294306.830726783] [velocity_monitor]: [TOTG] ✓ IPP service is available
+[taskset-13] [INFO] [1784294306.831196082] [velocity_monitor]: [OrderedChain] Sending planned segment 4/12 label='Aligning workpiece to paint axis' type=linear points=7 duration_s=0.572 controller_goal_tolerance_s=8.000 wait_timeout_s=10.572 plan_s=0.175
+[taskset-13] [INFO] [1784294306.835912345] [velocity_monitor]: [Controller] Trajectory duration: 0.57s, timeout: 8.0s
+[taskset-13] [INFO] [1784294306.836388401] [velocity_monitor]: [TOTG] Requesting time-optimal parameterization (vel=1.0, acc=1.0)
+[taskset-10] [INFO] [1784294306.837682561] [ipp_helper]: 📥 Received TOTG request with 606 points
+[taskset-10] [INFO] [1784294306.839330544] [ipp_helper]: ⚙️  Applying TOTG with vel_scale=1.00, acc_scale=1.00
+[taskset-13] [INFO] [1784294306.841643539] [velocity_monitor]: [Controller] First point positions: [1.609413, -0.393671, -1.986113, 0.829298, -1.567623, -0.156898]
+[taskset-13] [INFO] [1784294306.846241661] [velocity_monitor]: [Controller] Last point positions: [1.608499, -0.245844, -1.871427, 0.56788, -1.565732, -0.244989]
+[taskset-13] [INFO] [1784294306.846844562] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294306.850441042] [velocity_monitor]: [Controller] Last point time: 0.572s
+[taskset-13] [INFO] [1784294306.850841918] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.003, Joint_2=0.482, Joint_3=0.387, Joint_4=0.870, Joint_5=0.006, Joint_6=0.292
+[taskset-13] [INFO] [1784294306.871582676] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.0804m duration=0.572s avg_vel=0.1405m/s peak_vel=0.2420m/s peak_acc=0.9776m/s^2
+[taskset-13] [INFO] [1784294306.874474466] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294306.874947819] [velocity_monitor]: [Controller]   Point[2] t=0.200s pos=[1.609242, -0.352571, -1.962348, 0.765817, -1.567165, -0.178517]
+[taskset-13] [INFO] [1784294306.875254048] [velocity_monitor]: [Controller]   Point[3] t=0.300s pos=[1.608943, -0.306401, -1.929249, 0.686442, -1.566588, -0.205183]
+[taskset-13] [INFO] [1784294306.875529950] [velocity_monitor]: [Controller]   Point[4] t=0.400s pos=[1.608677, -0.268808, -1.895839, 0.615334, -1.566074, -0.229048]
+[taskset-13] [INFO] [1784294306.875917565] [velocity_monitor]: [Controller]   Point[5] t=0.500s pos=[1.60853, -0.249796, -1.875806, 0.576224, -1.565792, -0.242185]
+[taskset-13] [INFO] [1784294306.876192388] [velocity_monitor]: [Controller]   Point[6] t=0.572s pos=[1.608499, -0.245844, -1.871427, 0.56788, -1.565732, -0.244989]
+[taskset-13] [INFO] [1784294306.876946412] [velocity_monitor]: [Controller] Sending 7 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294306.877409397] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294306.877443590] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294306.879821519] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-10] [INFO] [1784294306.988279757] [ipp_helper]: ✅ TOTG Time Parameterization succeeded
+[taskset-10] [INFO] [1784294306.988621357] [ipp_helper]: 🔍 response->trajectory has 66 points
+[taskset-10] [INFO] [1784294306.988632929] [ipp_helper]: 📤 Returning 66 points, total time: 6.43s
+[taskset-13] [INFO] [1784294306.990178756] [velocity_monitor]: [TOTG] ✓ Generated 66 points
+[taskset-13] [INFO] [1784294306.995571264] [velocity_monitor]: [TIMING] follow_path_plan method=direct_contour_ik waypoints=606 optimize_s=0.165 elapsed_s=1.264
+[taskset-13] [INFO] [1784294306.996564528] [velocity_monitor]: [SegmentPlan] Planning segment 7: label='edge_cleanup_align' vel=60.0% acc=40.0% delta_mm=119.329 start_seed=planned
+[taskset-2] [INFO] [1784294306.996939979] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294306.997024525] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.019888 m and jump threshold 0.000000 (in global reference frame)
+[ros2_control_node-3] [INFO] [1784294307.451937587] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294307.454754474] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294307.455275334] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294307.456592522] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=4 label='Aligning workpiece to paint axis' type=linear result=0 elapsed_s=0.626
+[taskset-13] [INFO] [1784294307.459068487] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=5 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294307.459360619] [velocity_monitor]: [OrderedChain] Sending planned segment 5/12 label='Moving to staging offset before first pivot contact pose' type=linear points=18 duration_s=1.625 controller_goal_tolerance_s=8.000 wait_timeout_s=11.625 plan_s=0.506
+[taskset-13] [INFO] [1784294307.465614175] [velocity_monitor]: [Controller] Trajectory duration: 1.62s, timeout: 8.0s
+[taskset-13] [INFO] [1784294307.468271930] [velocity_monitor]: [Controller] First point positions: [1.608466, -0.245557, -1.871352, 0.567586, -1.565754, -0.245294]
+[taskset-13] [INFO] [1784294307.474839042] [velocity_monitor]: [Controller] Last point positions: [1.576185, -0.603527, -1.547701, 2.152193, -1.293442, -1.5e-05]
+[taskset-13] [INFO] [1784294307.475733921] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294307.476817259] [velocity_monitor]: [Controller] Last point time: 1.625s
+[taskset-13] [INFO] [1784294307.479669558] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.045, Joint_2=0.453, Joint_3=0.507, Joint_4=1.921, Joint_5=0.383, Joint_6=0.343
+[taskset-2] [INFO] [1784294307.481167148] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 25 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294307.486597380] [velocity_monitor]: [TIMING] segment_plan segment=7 label='edge_cleanup_align' fraction=1.0000 points=16 elapsed_s=0.489
+[taskset-13] [INFO] [1784294307.489371033] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294307.489906109] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294307.491570944] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.6, acc=0.4)
+[taskset-11] [INFO] [1784294307.491864583] [ruckig_helper]: 📥 Received Ruckig request with 16 points
+[taskset-11] [INFO] [1784294307.491919891] [ruckig_helper]: 🧹 Removed 1 duplicate/near-duplicate joint waypoints before timing
+[taskset-11] [INFO] [1784294307.491985722] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.60, acc_scale=0.40
+[taskset-11] [ERROR] [1784294307.494156688] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294307.494210369] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294307.494232273] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=1.407s, output_duration=6.784s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294307.494245591] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294307.494251208] [ruckig_helper]:    Worst output gap: segment [4 -> 5], t=[0.400 -> 5.876], dt=5.476s
+[taskset-11] [ERROR] [1784294307.494262669] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=+0.0012 Joint_2=+0.0476 Joint_3=-0.0578 Joint_4=-0.1440 Joint_5=-0.0155 Joint_6=-0.0379
+[taskset-11] [ERROR] [1784294307.494268605] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294307.494277834] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=+0.0024 Joint_2=+0.0515 Joint_3=-0.0520 Joint_4=-0.1761 Joint_5=-0.0252 Joint_6=-0.0392
+[taskset-11] [WARN] [1784294307.494283240] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294307.495313776] [velocity_monitor]: [Ruckig] ✓ Generated 16 points
+[taskset-13] [INFO] [1784294307.504841193] [velocity_monitor]: [UNWIND_J6] Planning ordered-chain rotational unwind: Joint_6 -6.528 -> -0.245 rad delta=6.283 rad cart_axis=5 cart_delta=-360.000deg segments=2 max_segment=180.0deg vel=100.0% acc=60.0%
+[taskset-13] [INFO] [1784294307.510599748] [velocity_monitor]: [UNWIND_J6] Planning ordered unwind segment 1/2: -6.528 -> -0.245 rad, cart_delta=-180.000deg
+[taskset-13] [INFO] [1784294307.536214120] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.1196m duration=1.625s avg_vel=0.0736m/s peak_vel=0.1350m/s peak_acc=0.2253m/s^2
+[taskset-13] [INFO] [1784294307.536720180] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294307.540456618] [velocity_monitor]: [Controller]   Point[13] t=1.300s pos=[1.576202, -0.551804, -1.630375, 2.025475, -1.297131, -0.042947]
+[taskset-13] [INFO] [1784294307.544442157] [velocity_monitor]: [Controller]   Point[14] t=1.400s pos=[1.5761, -0.578078, -1.589569, 2.091465, -1.294417, -0.021104]
+[taskset-13] [INFO] [1784294307.544842080] [velocity_monitor]: [Controller]   Point[15] t=1.500s pos=[1.576147, -0.595588, -1.560915, 2.133456, -1.293638, -0.006587]
+[taskset-13] [INFO] [1784294307.545201965] [velocity_monitor]: [Controller]   Point[16] t=1.600s pos=[1.576184, -0.60321, -1.548229, 2.151446, -1.293449, -0.000277]
+[taskset-13] [INFO] [1784294307.545438694] [velocity_monitor]: [Controller]   Point[17] t=1.625s pos=[1.576185, -0.603527, -1.547701, 2.152193, -1.293442, -1.5e-05]
+[taskset-13] [INFO] [1784294307.546316499] [velocity_monitor]: [Controller] Sending 18 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294307.547761755] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294307.547801148] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294307.549337604] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-12] [INFO] [1784294307.595329265] [contour_ik_helper]: Contour IK smoothing accepted 86 point updates: max_adjust=0.00003rad fk_max=0.0079mm/0.0027deg
+[taskset-12] [INFO] [1784294307.595422584] [contour_ik_helper]: Contour IK solved 45 poses in 0.081s: fk_max=0.0079mm/0.0027deg max_step=0.0706 span=3.0769 endpoint=3.0769 curvature=0.00016->0.00016 smoothing_updates=86 smoothing_s=0.000 timings{ik=0.080 candidate_eval=0.080 per_point_fk=0.000 smoothing_candidate=0.000 smoothing_fk=0.000 final_validate=0.000 response_pack=0.000 candidates=49/51 smoothing_checks=86/86 fast_points=42 full_points=3 rollbacks=0}
+[taskset-13] [INFO] [1784294307.606065921] [velocity_monitor]: [CONTOUR_IK] accepted points=45 fast_failures=0 retries=0 fk_max_mm=0.0079 ori_max_deg=0.0027 max_joint_step=0.0706 max_joint_span=3.0769 max_endpoint_delta=3.0769 state_validity_checks=0
+[taskset-13] [INFO] [1784294307.606540747] [velocity_monitor]: [TIMING] contour_ik batch_solve_s=0.081 total_before_optimizer_s=0.086
+[taskset-13] [INFO] [1784294307.606810498] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294307.610789945] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294307.611126274] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=1.0, acc=0.6)
+[taskset-11] [INFO] [1784294307.611413918] [ruckig_helper]: 📥 Received Ruckig request with 45 points
+[taskset-11] [INFO] [1784294307.611515922] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=1.00, acc_scale=0.60
+[taskset-11] [ERROR] [1784294307.613472233] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294307.613517678] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294307.613545046] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=1.432s, output_duration=6.809s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294307.613554922] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294307.613559540] [ruckig_helper]:    Worst output gap: segment [3 -> 4], t=[0.300 -> 5.776], dt=5.476s
+[taskset-11] [ERROR] [1784294307.613569692] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=+0.0024 Joint_2=-0.0008 Joint_3=+0.0014 Joint_4=-0.0016 Joint_5=-0.0045 Joint_6=+0.2100
+[taskset-11] [ERROR] [1784294307.613574969] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294307.613583113] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=+0.0028 Joint_2=-0.0026 Joint_3=+0.0051 Joint_4=-0.0074 Joint_5=-0.0053 Joint_6=+0.3300
+[taskset-11] [WARN] [1784294307.613600671] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294307.616232482] [velocity_monitor]: [Ruckig] ✓ Generated 16 points
+[taskset-13] [INFO] [1784294307.625507370] [velocity_monitor]: [TIMING] ordered_chain_unwind_plan_piece waypoints=45 points=16 optimize_s=0.010 elapsed_s=0.106
+[taskset-13] [INFO] [1784294307.626765317] [velocity_monitor]: [UNWIND_J6] Planning ordered unwind segment 2/2: -3.381 -> -0.245 rad, cart_delta=-179.662deg
+[taskset-12] [INFO] [1784294307.713879436] [contour_ik_helper]: Contour IK smoothing accepted 86 point updates: max_adjust=0.00003rad fk_max=0.0079mm/0.0026deg
+[taskset-12] [INFO] [1784294307.714005021] [contour_ik_helper]: Contour IK solved 45 poses in 0.080s: fk_max=0.0079mm/0.0026deg max_step=0.0704 span=3.0608 endpoint=3.0608 curvature=0.00015->0.00015 smoothing_updates=86 smoothing_s=0.000 timings{ik=0.079 candidate_eval=0.079 per_point_fk=0.000 smoothing_candidate=0.000 smoothing_fk=0.000 final_validate=0.000 response_pack=0.000 candidates=49/51 smoothing_checks=86/86 fast_points=42 full_points=3 rollbacks=0}
+[taskset-13] [INFO] [1784294307.716800032] [velocity_monitor]: [CONTOUR_IK] accepted points=45 fast_failures=0 retries=0 fk_max_mm=0.0079 ori_max_deg=0.0026 max_joint_step=0.0704 max_joint_span=3.0608 max_endpoint_delta=3.0608 state_validity_checks=0
+[taskset-13] [INFO] [1784294307.719929132] [velocity_monitor]: [TIMING] contour_ik batch_solve_s=0.080 total_before_optimizer_s=0.090
+[taskset-13] [INFO] [1784294307.721366656] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294307.725184424] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294307.725605200] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=1.0, acc=0.6)
+[taskset-11] [INFO] [1784294307.725936444] [ruckig_helper]: 📥 Received Ruckig request with 45 points
+[taskset-11] [INFO] [1784294307.726081464] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=1.00, acc_scale=0.60
+[taskset-11] [ERROR] [1784294307.728436394] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294307.728476257] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294307.728491292] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=1.428s, output_duration=6.805s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294307.728499021] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294307.728502259] [ruckig_helper]:    Worst output gap: segment [3 -> 4], t=[0.300 -> 5.776], dt=5.476s
+[taskset-11] [ERROR] [1784294307.728508748] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0024 Joint_2=+0.0009 Joint_3=-0.0015 Joint_4=+0.0016 Joint_5=+0.0045 Joint_6=+0.2100
+[taskset-11] [ERROR] [1784294307.728511996] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294307.728517372] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0028 Joint_2=+0.0028 Joint_3=-0.0053 Joint_4=+0.0075 Joint_5=+0.0052 Joint_6=+0.3300
+[taskset-11] [WARN] [1784294307.728520515] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294307.729850071] [velocity_monitor]: [Ruckig] ✓ Generated 16 points
+[taskset-13] [INFO] [1784294307.730653266] [velocity_monitor]: [TIMING] ordered_chain_unwind_plan_piece waypoints=45 points=16 optimize_s=0.010 elapsed_s=0.103
+[taskset-13] [INFO] [1784294307.734345038] [velocity_monitor]: [SegmentPlan] Planning segment 9: label='edge_cleanup_stage' vel=100.0% acc=90.0% delta_mm=302.540 start_seed=planned
+[taskset-2] [INFO] [1784294307.734568032] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294307.734629260] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.025000 m and jump threshold 0.000000 (in global reference frame)
+[taskset-2] [INFO] [1784294308.017139378] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 15 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294308.032296684] [velocity_monitor]: [TIMING] segment_plan segment=9 label='edge_cleanup_stage' fraction=1.0000 points=9 elapsed_s=0.292
+[taskset-13] [INFO] [1784294308.035209355] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294308.035575678] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294308.035921657] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=1.0, acc=0.9)
+[taskset-11] [INFO] [1784294308.036171679] [ruckig_helper]: 📥 Received Ruckig request with 9 points
+[taskset-11] [INFO] [1784294308.036226354] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=1.00, acc_scale=0.90
+[taskset-11] [ERROR] [1784294308.037582765] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294308.037928035] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294308.037942070] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=0.798s, output_duration=6.175s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294308.037953081] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294308.037958119] [ruckig_helper]:    Worst output gap: segment [2 -> 3], t=[0.200 -> 5.676], dt=5.476s
+[taskset-11] [ERROR] [1784294308.037968735] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=-0.0909 Joint_2=-0.0567 Joint_3=+0.1323 Joint_4=-0.0762 Joint_5=+0.0016 Joint_6=-0.0898
+[taskset-11] [ERROR] [1784294308.037973884] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294308.037982811] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=-0.0358 Joint_2=-0.0652 Joint_3=+0.1342 Joint_4=-0.0693 Joint_5=+0.0005 Joint_6=-0.0351
+[taskset-11] [WARN] [1784294308.037988195] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294308.039408348] [velocity_monitor]: [Ruckig] ✓ Generated 9 points
+[taskset-13] [INFO] [1784294308.170086970] [velocity_monitor]: [OrderedChain] Planning path segment 'edge_cleanup_follow_path' from previous target: start_gap_mm=0.000 path_waypoints=1228 planning_waypoints=1229
+[ros2_control_node-3] [INFO] [1784294309.171941131] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294309.175757986] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294309.176208115] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294309.181610258] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=5 label='Moving to staging offset before first pivot contact pose' type=linear result=0 elapsed_s=1.722
+[taskset-13] [INFO] [1784294309.185405589] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=6 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294309.185699189] [velocity_monitor]: [OrderedChain] Sending planned segment 6/12 label='paint_contact_1:Workpiece' type=path points=66 duration_s=6.432 controller_goal_tolerance_s=12.864 wait_timeout_s=21.296 plan_s=1.339
+[taskset-13] [INFO] [1784294309.189650453] [velocity_monitor]: [Controller] Trajectory duration: 6.43s, timeout: 12.9s
+[taskset-13] [INFO] [1784294309.190205007] [velocity_monitor]: [Controller] First point positions: [1.57612, -0.603838, -1.547562, 2.152503, -1.293448, -2.4e-05]
+[taskset-13] [INFO] [1784294309.190701563] [velocity_monitor]: [Controller] Last point positions: [1.580226, -0.603258, -1.548528, 2.152748, -1.30602, -6.280722]
+[taskset-13] [INFO] [1784294309.191189939] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294309.191691739] [velocity_monitor]: [Controller] Last point time: 6.432s
+[taskset-13] [INFO] [1784294309.192160200] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.557, Joint_2=0.202, Joint_3=0.138, Joint_4=0.336, Joint_5=0.557, Joint_6=3.806
+[taskset-13] [INFO] [1784294309.368987233] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.5825m duration=6.432s avg_vel=0.0906m/s peak_vel=0.2629m/s peak_acc=1.8814m/s^2
+[taskset-13] [INFO] [1784294309.370808259] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294309.371416387] [velocity_monitor]: [Controller]   Point[61] t=6.100s pos=[1.575349, -0.593857, -1.53984, 2.134657, -1.301211, -6.206737]
+[taskset-13] [INFO] [1784294309.371839845] [velocity_monitor]: [Controller]   Point[62] t=6.200s pos=[1.582967, -0.590574, -1.539199, 2.130734, -1.308797, -6.242193]
+[taskset-13] [INFO] [1784294309.372319179] [velocity_monitor]: [Controller]   Point[63] t=6.300s pos=[1.599646, -0.586799, -1.539937, 2.127693, -1.325441, -6.278677]
+[taskset-13] [INFO] [1784294309.372742603] [velocity_monitor]: [Controller]   Point[64] t=6.400s pos=[1.583295, -0.600789, -1.54727, 2.14902, -1.309089, -6.280725]
+[taskset-13] [INFO] [1784294309.375457330] [velocity_monitor]: [Controller]   Point[65] t=6.432s pos=[1.580226, -0.603258, -1.548528, 2.152748, -1.30602, -6.280722]
+[taskset-13] [INFO] [1784294309.376907660] [velocity_monitor]: [Controller] Sending 66 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=12.9s)
+[ros2_control_node-3] [INFO] [1784294309.378234372] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294309.378279428] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294309.381067971] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-12] [INFO] [1784294310.248336124] [contour_ik_helper]: Contour IK smoothing accepted 2171 point updates: max_adjust=0.00159rad fk_max=0.0495mm/0.0946deg
+[taskset-12] [INFO] [1784294310.249015802] [contour_ik_helper]: Contour IK solved 1229 poses in 1.935s: fk_max=0.0495mm/0.0946deg max_step=0.0742 span=6.5642 endpoint=0.0744 curvature=0.11196->0.11196 smoothing_updates=2171 smoothing_s=0.002 timings{ik=1.925 candidate_eval=1.926 per_point_fk=0.002 smoothing_candidate=0.000 smoothing_fk=0.001 final_validate=0.001 response_pack=0.000 candidates=1235/1235 smoothing_checks=2421/2454 fast_points=1226 full_points=3 rollbacks=0}
+[taskset-13] [INFO] [1784294310.275098852] [velocity_monitor]: [CONTOUR_IK] accepted points=1229 fast_failures=0 retries=0 fk_max_mm=0.0495 ori_max_deg=0.0946 max_joint_step=0.0742 max_joint_span=6.5642 max_endpoint_delta=0.0744 state_validity_checks=0
+[taskset-13] [INFO] [1784294310.275403586] [velocity_monitor]: [TIMING] contour_ik batch_solve_s=1.935 total_before_optimizer_s=2.093
+[taskset-13] [INFO] [1784294310.275612224] [velocity_monitor]: [TOTG] Checking if IPP service is available...
+[taskset-13] [INFO] [1784294310.275929339] [velocity_monitor]: [TOTG] ✓ IPP service is available
+[taskset-13] [INFO] [1784294310.276238665] [velocity_monitor]: [TOTG] Requesting time-optimal parameterization (vel=1.0, acc=0.9)
+[taskset-10] [INFO] [1784294310.278379517] [ipp_helper]: 📥 Received TOTG request with 1229 points
+[taskset-10] [INFO] [1784294310.279699361] [ipp_helper]: ⚙️  Applying TOTG with vel_scale=1.00, acc_scale=0.90
+[taskset-10] [INFO] [1784294311.430500747] [ipp_helper]: ✅ TOTG Time Parameterization succeeded
+[taskset-10] [INFO] [1784294311.431210329] [ipp_helper]: 🔍 response->trajectory has 156 points
+[taskset-10] [INFO] [1784294311.431229810] [ipp_helper]: 📤 Returning 156 points, total time: 15.46s
+[taskset-13] [INFO] [1784294311.433663371] [velocity_monitor]: [TOTG] ✓ Generated 156 points
+[taskset-13] [INFO] [1784294311.436512320] [velocity_monitor]: [TIMING] follow_path_plan method=direct_contour_ik waypoints=1229 optimize_s=1.159 elapsed_s=3.264
+[taskset-13] [INFO] [1784294311.443782323] [velocity_monitor]: [SegmentPlan] Planning segment 11: label='prepare_dropoff_align' vel=60.0% acc=40.0% delta_mm=297.453 start_seed=planned
+[taskset-2] [INFO] [1784294311.444056728] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294311.444123864] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.025000 m and jump threshold 0.000000 (in global reference frame)
+[taskset-2] [INFO] [1784294311.706606919] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 14 points (followed 100.000000% of requested trajectory)
+[taskset-13] [INFO] [1784294311.711740049] [velocity_monitor]: [TIMING] segment_plan segment=11 label='prepare_dropoff_align' fraction=1.0000 points=13 elapsed_s=0.274
+[taskset-13] [INFO] [1784294311.715368987] [velocity_monitor]: [Ruckig] Checking if Ruckig service is available...
+[taskset-13] [INFO] [1784294311.715725131] [velocity_monitor]: [Ruckig] ✓ Ruckig service is available
+[taskset-13] [INFO] [1784294311.715980129] [velocity_monitor]: [Ruckig] Requesting jerk-limited smoothing (vel=0.6, acc=0.4)
+[taskset-11] [INFO] [1784294311.716175762] [ruckig_helper]: 📥 Received Ruckig request with 13 points
+[taskset-11] [INFO] [1784294311.716254926] [ruckig_helper]: ⚙️  Applying Ruckig smoothing with vel_scale=0.60, acc_scale=0.40
+[taskset-11] [ERROR] [1784294311.717760939] [ruckig_helper.moveit.core.ruckig_traj_smoothing]: Ruckig extended the trajectory duration to its maximum and still did not find a solution
+[taskset-11] [INFO] [1784294311.717798026] [ruckig_helper]: ✅ Ruckig Smoothing returned success
+[taskset-11] [ERROR] [1784294311.717810425] [ruckig_helper]: ❌ Ruckig output is implausible vs seeded trajectory: excessive local time gap detected (seeded_duration=1.162s, output_duration=6.538s, max_output_dt=5.476s, allowed_gap=0.600s)
+[taskset-11] [ERROR] [1784294311.717817285] [ruckig_helper]:    Ruckig silently stretched one segment far beyond the seeded trajectory cadence
+[taskset-11] [ERROR] [1784294311.717821070] [ruckig_helper]:    Worst output gap: segment [4 -> 5], t=[0.400 -> 5.876], dt=5.476s
+[taskset-11] [ERROR] [1784294311.717838513] [ruckig_helper]:    Output joint deltas across worst gap: Joint_1=+0.0360 Joint_2=+0.0558 Joint_3=-0.1080 Joint_4=+0.0525 Joint_5=-0.0007 Joint_6=+0.0353
+[taskset-11] [ERROR] [1784294311.717842172] [ruckig_helper]:    Largest seeded gap: segment [5 -> 6], t=[0.500 -> 0.600], dt=0.100s
+[taskset-11] [ERROR] [1784294311.717847794] [ruckig_helper]:    Seeded joint deltas across largest gap: Joint_1=+0.0540 Joint_2=+0.0674 Joint_3=-0.1299 Joint_4=+0.0631 Joint_5=-0.0010 Joint_6=+0.0530
+[taskset-11] [WARN] [1784294311.717851052] [ruckig_helper]: ⚠️ Ruckig output deemed implausible - falling back to seeded TOTG trajectory
+[taskset-13] [INFO] [1784294311.718796954] [velocity_monitor]: [Ruckig] ✓ Generated 13 points
+[taskset-13] [INFO] [1784294311.719987207] [velocity_monitor]: [UNWIND_J6] Ordered-chain unwind skipped - no unwind needed
+[taskset-13] [ERROR] [1784294311.731715015] [velocity_monitor]: [Controller] Active trajectory cancelled: Joint_6 left operation_enabled during active trajectory at drive_monitor: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[ros2_control_node-3] [INFO] [1784294311.732717706] [manipulator_controller]: Got request to cancel goal
+[ros2_control_node-3] [INFO] [1784294311.732750427] [manipulator_controller]: Canceling active action goal because cancel callback received.
+[taskset-13] [INFO] [1784294311.734957254] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [ERROR] [1784294311.735411443] [velocity_monitor]: [Controller] Motion queue drain suppressed after active trajectory cancellation: Joint_6 left operation_enabled during active trajectory at drive_monitor: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[taskset-13] [INFO] [1784294311.736352905] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=6 label='paint_contact_1:Workpiece' type=path result=0 elapsed_s=2.550
+[taskset-13] [INFO] [1784294311.736724624] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=7 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294311.736979367] [velocity_monitor]: [OrderedChain] Sending planned segment 7/12 label='edge_cleanup_align' type=linear points=16 duration_s=1.407 controller_goal_tolerance_s=8.000 wait_timeout_s=11.407 plan_s=0.500
+[taskset-13] [INFO] [1784294311.739796825] [velocity_monitor]: [Controller] Unwrapped Joint_6 continuity for execution (max wrap adjustment 6.2832 rad)
+[taskset-13] [INFO] [1784294311.744930894] [velocity_monitor]: [Controller] Trajectory duration: 1.41s, timeout: 8.0s
+[taskset-13] [INFO] [1784294311.745437196] [velocity_monitor]: [Controller] First point positions: [1.681989, -0.677374, -1.600868, 2.278014, -1.406256, -1.410905]
+[taskset-13] [INFO] [1784294311.745907861] [velocity_monitor]: [Controller] Last point positions: [1.608497, -0.245848, -1.871432, 0.567969, -1.565712, -0.244991]
+[taskset-13] [INFO] [1784294311.746358440] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294311.746921018] [velocity_monitor]: [Controller] Last point time: 1.407s
+[taskset-13] [INFO] [1784294311.750351834] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=1.018, Joint_2=0.809, Joint_3=0.585, Joint_4=2.242, Joint_5=1.002, Joint_6=14.079
+[taskset-13] [INFO] [1784294311.790686964] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.1850m duration=1.407s avg_vel=0.1315m/s peak_vel=0.6716m/s peak_acc=6.9859m/s^2
+[taskset-13] [INFO] [1784294311.791090277] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294311.791349972] [velocity_monitor]: [Controller]   Point[11] t=1.100s pos=[1.604065, -0.254239, -1.879023, 0.719179, -1.531817, -0.245316]
+[taskset-13] [INFO] [1784294311.791568359] [velocity_monitor]: [Controller]   Point[12] t=1.200s pos=[1.606465, -0.249024, -1.875351, 0.636805, -1.550301, -0.245664]
+[taskset-13] [INFO] [1784294311.793716754] [velocity_monitor]: [Controller]   Point[13] t=1.300s pos=[1.60795, -0.246643, -1.872523, 0.586431, -1.561581, -0.245217]
+[taskset-13] [INFO] [1784294311.794006650] [velocity_monitor]: [Controller]   Point[14] t=1.400s pos=[1.608494, -0.245852, -1.871438, 0.568057, -1.565692, -0.244992]
+[taskset-13] [INFO] [1784294311.794239264] [velocity_monitor]: [Controller]   Point[15] t=1.407s pos=[1.608497, -0.245848, -1.871432, 0.567969, -1.565712, -0.244991]
+[taskset-13] [INFO] [1784294311.794731086] [velocity_monitor]: [Controller] Sending 16 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294311.796211215] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294311.796249615] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294311.796939440] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-13] [ERROR] [1784294311.797221472] [velocity_monitor]: [Controller] Active trajectory cancelled: Joint_1 left operation_enabled during active trajectory at accepted: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[ros2_control_node-3] [INFO] [1784294311.798046318] [manipulator_controller]: Got request to cancel goal
+[ros2_control_node-3] [INFO] [1784294311.798072022] [manipulator_controller]: Canceling active action goal because cancel callback received.
+[taskset-13] [INFO] [1784294311.803997726] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [ERROR] [1784294311.804491232] [velocity_monitor]: [Controller] Motion queue drain suppressed after active trajectory cancellation: Joint_1 left operation_enabled during active trajectory at accepted: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[taskset-13] [INFO] [1784294311.805455681] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=7 label='edge_cleanup_align' type=linear result=0 elapsed_s=0.068
+[taskset-13] [INFO] [1784294311.805819356] [velocity_monitor]: [TIMING] ordered_motion_chain_plan_ready index=8 wait_before_execute_s=0.000
+[taskset-13] [INFO] [1784294311.806124207] [velocity_monitor]: [OrderedChain] Sending planned unwind 1/2 points=16 duration_s=1.432 controller_goal_tolerance_s=8.000 wait_timeout_s=11.432
+[taskset-13] [INFO] [1784294311.806804507] [velocity_monitor]: [Controller] Unwrapped Joint_6 continuity for execution (max wrap adjustment 6.2832 rad)
+[taskset-13] [INFO] [1784294311.810194882] [velocity_monitor]: [Controller] Trajectory duration: 1.43s, timeout: 8.0s
+[taskset-13] [INFO] [1784294311.810671585] [velocity_monitor]: [Controller] First point positions: [1.675062, -0.677062, -1.600976, 2.278277, -1.397974, -1.410882]
+[taskset-13] [INFO] [1784294311.811205166] [velocity_monitor]: [Controller] Last point positions: [1.614397, -0.265954, -1.830617, 0.50434, -1.575735, 2.9025]
+[taskset-13] [INFO] [1784294311.811701676] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294311.815138294] [velocity_monitor]: [Controller] Last point time: 1.432s
+[taskset-13] [INFO] [1784294311.815490871] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.654, Joint_2=4.312, Joint_3=2.705, Joint_4=17.099, Joint_5=1.699, Joint_6=12.665
+[taskset-13] [INFO] [1784294311.855761393] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.1054m duration=1.432s avg_vel=0.0736m/s peak_vel=0.9405m/s peak_acc=9.4180m/s^2
+[taskset-13] [INFO] [1784294311.856075252] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294311.856403892] [velocity_monitor]: [Controller]   Point[11] t=1.100s pos=[1.617818, -0.265274, -1.83244, 0.508301, -1.582405, 2.571372]
+[taskset-13] [INFO] [1784294311.856635883] [velocity_monitor]: [Controller]   Point[12] t=1.200s pos=[1.616129, -0.265746, -1.83126, 0.505903, -1.579101, 2.740709]
+[taskset-13] [INFO] [1784294311.859140893] [velocity_monitor]: [Controller]   Point[13] t=1.300s pos=[1.614966, -0.265905, -1.830789, 0.504791, -1.576839, 2.850047]
+[taskset-13] [INFO] [1784294311.859384250] [velocity_monitor]: [Controller]   Point[14] t=1.400s pos=[1.614431, -0.265952, -1.830627, 0.504366, -1.5758, 2.899384]
+[taskset-13] [INFO] [1784294311.859597393] [velocity_monitor]: [Controller]   Point[15] t=1.432s pos=[1.614397, -0.265954, -1.830617, 0.50434, -1.575735, 2.9025]
+[taskset-13] [INFO] [1784294311.860080211] [velocity_monitor]: [Controller] Sending 16 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294311.860364832] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294311.860401260] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294311.861203153] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[ros2_control_node-3] [ERROR] [1784294311.896902218] [tolerances]: State tolerances failed for joint 3:
+[ros2_control_node-3] [ERROR] [1784294311.896945384] [tolerances]: Position Error: -0.398313, Position Tolerance: 0.350000
+[ros2_control_node-3] [WARN] [1784294311.897714962] [manipulator_controller]: Aborted due to state tolerance violation
+[taskset-13] [ERROR] [1784294311.903739893] [velocity_monitor]: [Controller] Trajectory execution failed with error: -4
+[taskset-13] [ERROR] [1784294311.904176901] [velocity_monitor]: [Controller] Actual final joint state: [1.669909, -0.665665, -1.629043, 2.275425, -1.398082, -1.407358]
+[taskset-13] [ERROR] [1784294311.904459818] [velocity_monitor]: [Controller] Expected final joint state: [1.614397, -0.265954, -1.830617, 0.50434, -1.575735, 2.9025]
+[taskset-13] [ERROR] [1784294311.904718510] [velocity_monitor]: [Controller] Final joint error (actual - expected): [0.055512, -0.399711, 0.201574, 1.771086, 0.177652, -4.309858]
+[taskset-13] [ERROR] [1784294311.905103814] [velocity_monitor]: [Controller] Mapping controller error -4 to motion result -14
+[taskset-13] [INFO] [1784294311.905402789] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294311.911622216] [velocity_monitor]: [TIMING] ordered_motion_chain_segment index=8 label='edge_cleanup_unwind' type=unwind_joint6 result=-14 elapsed_s=0.105
+[taskset-13] [WARN] [1784294311.923757665] [velocity_monitor]: [HoldPosition] Sending hold trajectory for drive enable: positions=[1.663306, -0.664898, -1.669058, 2.276624, -1.398094, -1.407394]
+[taskset-13] [INFO] [1784294311.924509108] [velocity_monitor]: [Controller] Trajectory duration: 0.20s, timeout: 8.0s
+[taskset-13] [INFO] [1784294311.924965499] [velocity_monitor]: [Controller] First point positions: [1.663246, -0.665282, -1.672905, 2.27636, -1.397974, -1.407406]
+[taskset-13] [INFO] [1784294311.925410431] [velocity_monitor]: [Controller] Last point positions: [1.663306, -0.664898, -1.669058, 2.276624, -1.398094, -1.407394]
+[taskset-13] [INFO] [1784294311.925863943] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294311.926403284] [velocity_monitor]: [Controller] Last point time: 0.200s
+[taskset-13] [INFO] [1784294311.926652805] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.000, Joint_2=0.002, Joint_3=0.019, Joint_4=0.001, Joint_5=0.001, Joint_6=0.000
+[taskset-13] [INFO] [1784294311.931694376] [velocity_monitor]: [TRAJ_METRICS] tcp_linear path=0.0014m duration=0.200s avg_vel=0.0070m/s peak_vel=0.0070m/s peak_acc=0.0000m/s^2
+[taskset-13] [INFO] [1784294311.932094649] [velocity_monitor]: [Controller] Final 2 commanded points:
+[taskset-13] [INFO] [1784294311.934740366] [velocity_monitor]: [Controller]   Point[0] t=0.000s pos=[1.663246, -0.665282, -1.672905, 2.27636, -1.397974, -1.407406]
+[taskset-13] [INFO] [1784294311.935037342] [velocity_monitor]: [Controller]   Point[1] t=0.200s pos=[1.663306, -0.664898, -1.669058, 2.276624, -1.398094, -1.407394]
+[taskset-13] [INFO] [1784294311.935576537] [velocity_monitor]: [Controller] Sending 2 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294311.935848169] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294311.935883571] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294311.936468664] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[taskset-13] [ERROR] [1784294311.936756552] [velocity_monitor]: [Controller] Active trajectory cancelled: Joint_1 left operation_enabled during active trajectory at accepted: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[ros2_control_node-3] [INFO] [1784294311.937103561] [manipulator_controller]: Got request to cancel goal
+[ros2_control_node-3] [INFO] [1784294311.937127936] [manipulator_controller]: Canceling active action goal because cancel callback received.
+[taskset-13] [INFO] [1784294311.943553716] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294311.943923350] [velocity_monitor]: [Controller] Skipping post-motion unwind after effectively no-op move (duration=0.200s, max_joint_delta=0.0038 rad)
+[taskset-13] [ERROR] [1784294311.944403340] [velocity_monitor]: [Controller] Motion queue drain suppressed after active trajectory cancellation: Joint_1 left operation_enabled during active trajectory at accepted: statusword=4787 state=switched_on bits=rtso+so+ve+qs+w+rm
+[taskset-13] [INFO] [1784294312.239502694] [velocity_monitor]: [DriveEnable] Enable operation requested via enable_set/disable_set
+[taskset-13] [INFO] [1784294312.245868419] [velocity_monitor]: [UNWIND_J6] Rotational-path unwind skipped - no unwind needed
+[taskset-13] [INFO] [1784294312.250126332] [velocity_monitor]: Switched active tool to TOOL_1
+[taskset-2] [WARN] [1784294312.255144588] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_z_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.255182663] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_y_min', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.255191341] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_x_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.255198810] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_z_min', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.255206730] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_y_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.255214143] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_x_min', but it does not exist in this scene.
+[taskset-13] [INFO] [1784294312.255635370] [velocity_monitor]: [SafetyWallManager] Cleared safety walls from planning scene and RViz
+[taskset-13] [INFO] [1784294312.306080484] [velocity_monitor]: [MOVE] [-186.3, 661.2, 280.8, RZ=35.1°] → [-109.2, 350.2, 99.9, RZ=16.2°]
+[taskset-13] [INFO] [1784294312.306299717] [velocity_monitor]: [MOVE] MoveIt collision checking disabled for this request
+[taskset-13] [INFO] [1784294312.306499121] [velocity_monitor]: [Single Point] 2 waypoints (Δ=368.027mm, 1 segments, structural_waypoints=False)
+[taskset-13] [INFO] [1784294312.309404080] [velocity_monitor]: [Single Point] Skipping IK-synchronized start state for Cartesian planning
+[taskset-2] [INFO] [1784294312.309738813] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Received request to compute Cartesian path
+[taskset-2] [INFO] [1784294312.309803752] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Attempting to follow 2 waypoints for link 'ee_link' using a step of 0.025000 m and jump threshold 0.000000 (in global reference frame)
+[taskset-13] [INFO] [1784294312.309938063] [velocity_monitor]: [TIMING] backend_move_linear submitted blocking=True result=0 elapsed_s=0.055
+[taskset-2] [INFO] [1784294312.793958740] [move_group.moveit.moveit.ros.move_group.cartesian_path_service_capability]: Computed Cartesian path with 25 points (followed 100.000000% of requested trajectory)
+[taskset-2] [WARN] [1784294312.795107072] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_z_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.795136825] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_y_min', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.795143132] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_x_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.795148820] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_z_min', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.795153961] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_y_max', but it does not exist in this scene.
+[taskset-2] [WARN] [1784294312.795161762] [move_group.moveit.moveit.core.planning_scene]: Tried to remove world object 'wall_x_min', but it does not exist in this scene.
+[taskset-13] [INFO] [1784294312.795613827] [velocity_monitor]: [SafetyWallManager] Cleared safety walls from planning scene and RViz
+[taskset-13] [INFO] [1784294312.846299272] [velocity_monitor]: [TIMING] cartesian_plan kind=single_target waypoints=2 fraction=1.0000 traj_points=16 elapsed_s=0.536
+[taskset-13] [INFO] [1784294312.846553711] [velocity_monitor]: [Cartesian Path] Path computed: 100.0% successful
+[taskset-13] [INFO] [1784294312.846878410] [velocity_monitor]: [Cartesian Path] Computed trajectory has 16 points
+[taskset-13] [INFO] [1784294312.847634263] [velocity_monitor]: [Cartesian Path] Joint_6 stats before optimization: start=-1.4074, end=-0.2218, min=-1.4074, max=-0.2218, span=1.1857, endpoint_delta=1.1857, max_step=0.1552, points=16
+[taskset-13] [INFO] [1784294312.847836898] [velocity_monitor]: [TOTG] Checking if IPP service is available...
+[taskset-13] [INFO] [1784294312.848121688] [velocity_monitor]: [TOTG] ✓ IPP service is available
+[taskset-13] [INFO] [1784294312.848339717] [velocity_monitor]: [TOTG] Requesting time-optimal parameterization (vel=0.3, acc=0.4)
+[taskset-10] [INFO] [1784294312.848521913] [ipp_helper]: 📥 Received TOTG request with 16 points
+[taskset-10] [INFO] [1784294312.848599815] [ipp_helper]: ⚙️  Applying TOTG with vel_scale=0.30, acc_scale=0.40
+[taskset-10] [INFO] [1784294312.849342986] [ipp_helper]: ✅ TOTG Time Parameterization succeeded
+[taskset-10] [INFO] [1784294312.849383016] [ipp_helper]: 🔍 response->trajectory has 16 points
+[taskset-10] [INFO] [1784294312.849387402] [ipp_helper]: 📤 Returning 16 points, total time: 1.48s
+[taskset-13] [INFO] [1784294312.853040335] [velocity_monitor]: [TOTG] ✓ Generated 16 points
+[taskset-13] [INFO] [1784294312.853350694] [velocity_monitor]: [TIMING] optimizer kind=single_target optimizer=TOTG success=true traj_points=16 elapsed_s=0.005 total_from_request_s=0.544
+[taskset-13] [WARN] [1784294312.853713566] [velocity_monitor]: [Single Point] Stretched trajectory timing by 1.27x to respect Joint_6 rate limit (peak 1.526 rad/s > 1.200 rad/s); new duration 1.885s
+[taskset-13] [INFO] [1784294312.854648709] [velocity_monitor]: [Controller] Trajectory duration: 1.88s, timeout: 8.0s
+[taskset-13] [INFO] [1784294312.855085074] [velocity_monitor]: [Controller] First point positions: [1.661208, -0.667355, -1.672653, 2.275653, -1.398262, -1.407406]
+[taskset-13] [INFO] [1784294312.855505627] [velocity_monitor]: [Controller] Last point positions: [1.631658, -0.033956, -2.155119, 0.6374, -1.566468, -0.221753]
+[taskset-13] [INFO] [1784294312.855937604] [velocity_monitor]: [Controller] First point time: 0.000s
+[taskset-13] [INFO] [1784294312.856367350] [velocity_monitor]: [Controller] Last point time: 1.885s
+[taskset-13] [INFO] [1784294312.856703096] [velocity_monitor]: [TRAJ_METRICS] joint_peak_rad_s: Joint_1=0.079, Joint_2=0.625, Joint_3=0.566, Joint_4=1.716, Joint_5=0.573, Joint_6=1.200
+[taskset-13] [WARN] [1784294313.109215898] [velocity_monitor]: [TRAJ_METRICS] TCP metrics unavailable: /compute_fk timed out
+[taskset-13] [INFO] [1784294313.109468041] [velocity_monitor]: [Controller] Final 5 commanded points:
+[taskset-13] [INFO] [1784294313.109689935] [velocity_monitor]: [Controller]   Point[11] t=1.399s pos=[1.654125, -0.094915, -2.143626, 0.871122, -1.651428, -0.347701]
+[taskset-13] [INFO] [1784294313.109912754] [velocity_monitor]: [Controller]   Point[12] t=1.526s pos=[1.644791, -0.066301, -2.149351, 0.764818, -1.615871, -0.288816]
+[taskset-13] [INFO] [1784294313.110126823] [velocity_monitor]: [Controller]   Point[13] t=1.653s pos=[1.637365, -0.047218, -2.152808, 0.690514, -1.587832, -0.24929]
+[taskset-13] [INFO] [1784294313.110324052] [velocity_monitor]: [Controller]   Point[14] t=1.780s pos=[1.632831, -0.036645, -2.154652, 0.64821, -1.570851, -0.227338]
+[taskset-13] [INFO] [1784294313.110522222] [velocity_monitor]: [Controller]   Point[15] t=1.885s pos=[1.631658, -0.033956, -2.155119, 0.6374, -1.566468, -0.221753]
+[taskset-13] [INFO] [1784294313.111011009] [velocity_monitor]: [Controller] Sending 16 points directly to controller (spline interpolation, path_tolerance=0.350rad, goal_time_tolerance=8.0s)
+[ros2_control_node-3] [INFO] [1784294313.111325643] [manipulator_controller]: Received new action goal
+[ros2_control_node-3] [INFO] [1784294313.111360149] [manipulator_controller]: Accepted new action goal
+[taskset-13] [INFO] [1784294313.115050000] [velocity_monitor]: [Controller] Trajectory accepted by manipulator_controller
+[ros2_control_node-3] [INFO] [1784294314.991935096] [manipulator_controller]: Goal reached, success!
+[taskset-13] [INFO] [1784294314.997513421] [velocity_monitor]: [Controller] ✓ Trajectory execution succeeded!
+[taskset-13] [INFO] [1784294314.997913078] [velocity_monitor]: [Queue] No more queued tasks
+[taskset-13] [INFO] [1784294315.024913567] [velocity_monitor]: [TIMING] backend_move_linear blocking_wait elapsed_s=2.711 total_elapsed_s=2.767
+[taskset-16] [WARN] [1784294316.100683419] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 1: no active drive error, but error_register=0x03 (generic error, current error), history_count=7, latest_history=0x00008400 (0x8400: velocity error exceeds the limit value), target_position_0x607A=2833, actual_position_0x6064=2830, target_minus_actual=3
+[taskset-16] [WARN] [1784294316.148935446] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 3: no active drive error, but error_register=0x03 (generic error, current error), history_count=5, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294316.180847778] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 4: no active drive error, but error_register=0x03 (generic error, current error), history_count=7, latest_history=0x0000A000 (0xA000: master station offline / EtherCAT communication abnormal)
+[taskset-16] [WARN] [1784294316.228647715] [zeroerr_error_monitor]: [ZeroErrErrorMonitor] slave 5: no active drive error, but error_register=0x03 (generic error, current error), history_count=6, latest_history=0x00008400 (0x8400: velocity error exceeds the limit value), target_position_0x607A=-18503, actual_position_0x6064=-18503, target_minus_actual=0

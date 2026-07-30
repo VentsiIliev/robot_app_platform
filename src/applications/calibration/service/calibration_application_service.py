@@ -138,6 +138,17 @@ class _ICameraZShiftCalibrator(Protocol):
     def stop(self) -> None: ...
 
 
+class _IToolTcpCalibrator(Protocol):
+    @property
+    def active_tool_id(self) -> int | None: ...
+    def start(self, tool_id: int) -> None: ...
+    def capture_sample(self): ...
+    def clear_samples(self) -> None: ...
+    def solve(self): ...
+    def save(self, result=None) -> tuple[bool, str]: ...
+    def stop(self) -> None: ...
+
+
 class _IMarkerHeightMappingService(Protocol):
     def measure_marker_heights(self) -> tuple[bool, str]: ...
     def generate_area_grid(
@@ -191,6 +202,7 @@ class CalibrationApplicationService(ICalibrationService):
                  work_area_service: Optional[IWorkAreaService] = None,
                  camera_tcp_offset_calibrator: Optional[_ICameraTcpOffsetCalibrator] = None,
                  camera_z_shift_calibrator: Optional[_ICameraZShiftCalibrator] = None,
+                 tool_tcp_calibrator: Optional[_IToolTcpCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
                  calibration_settings_service: Optional[ICalibrationSettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
@@ -210,6 +222,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._work_area_service   = work_area_service
         self._camera_tcp_offset_calibrator = camera_tcp_offset_calibrator
         self._camera_z_shift_calibrator = camera_z_shift_calibrator
+        self._tool_tcp_calibrator = tool_tcp_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
         self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
         self._laser_calibration_service = laser_calibration_service
@@ -930,6 +943,51 @@ class CalibrationApplicationService(ICalibrationService):
             settle_time_s,
         )
 
+    def start_tool_tcp_calibration(self, tool_id: int) -> tuple[bool, str]:
+        if self._tool_tcp_calibrator is None:
+            return False, "Tool TCP calibration is not configured"
+        try:
+            self._tool_tcp_calibrator.start(tool_id)
+            return True, f"Tool TCP calibration started for tool {int(tool_id)}"
+        except Exception as exc:
+            _logger.error("Tool TCP calibration start error: %s", exc)
+            return False, f"Tool TCP calibration start error: {exc}"
+
+    def capture_tool_tcp_sample(self) -> tuple[bool, str]:
+        if self._tool_tcp_calibrator is None:
+            return False, "Tool TCP calibration is not configured"
+        try:
+            sample = self._tool_tcp_calibrator.capture_sample()
+            return True, f"Captured Tool TCP sample: {[round(float(v), 3) for v in sample.flange_pose]}"
+        except Exception as exc:
+            _logger.error("Tool TCP sample capture error: %s", exc)
+            return False, f"Tool TCP sample capture error: {exc}"
+
+    def solve_tool_tcp_calibration(self) -> tuple[bool, str, dict]:
+        if self._tool_tcp_calibrator is None:
+            return False, "Tool TCP calibration is not configured", {}
+        try:
+            result = self._tool_tcp_calibrator.solve()
+            return True, (
+                "Tool TCP solved: "
+                f"offset=({result.tool_offset[0]:.3f}, {result.tool_offset[1]:.3f}, {result.tool_offset[2]:.3f}) mm, "
+                f"rms={result.residual_rms_mm:.3f} mm"
+            ), result.to_dict()
+        except Exception as exc:
+            _logger.error("Tool TCP solve error: %s", exc)
+            return False, f"Tool TCP solve error: {exc}", {}
+
+    def save_tool_tcp_calibration(self) -> tuple[bool, str]:
+        if self._tool_tcp_calibrator is None:
+            return False, "Tool TCP calibration is not configured"
+        return self._tool_tcp_calibrator.save()
+
+    def clear_tool_tcp_calibration(self) -> tuple[bool, str]:
+        if self._tool_tcp_calibrator is None:
+            return False, "Tool TCP calibration is not configured"
+        self._tool_tcp_calibrator.clear_samples()
+        return True, "Tool TCP samples cleared"
+
     def calibrate_laser(self) -> tuple[bool, str]:
         if self._laser_calibration_service is None:
             return False, "Laser calibration is not configured"
@@ -981,6 +1039,8 @@ class CalibrationApplicationService(ICalibrationService):
             self._camera_tcp_offset_calibrator.stop()
         if self._camera_z_shift_calibrator is not None:
             self._camera_z_shift_calibrator.stop()
+        if self._tool_tcp_calibrator is not None:
+            self._tool_tcp_calibrator.stop()
         if self._marker_height_mapping_service is not None:
             self._marker_height_mapping_service.stop()
 

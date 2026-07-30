@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,11 +74,30 @@ def save_homography_residual_artifact(homography_residual_artifact: dict, path: 
         json.dump(_to_json_ready(homography_residual_artifact), f, indent=2)
 
 
+def save_geometry_scale_artifact(payload: dict, path: str) -> None:
+    current_payload = {}
+    artifact_path = Path(path)
+    if artifact_path.exists():
+        try:
+            with open(artifact_path, "r", encoding="utf-8") as f:
+                current_payload = json.load(f) or {}
+        except Exception:
+            current_payload = {}
+
+    merged = dict(current_payload)
+    merged.update(payload or {})
+    merged["updated_at"] = datetime.now(timezone.utc).isoformat()
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(artifact_path, "w", encoding="utf-8") as f:
+        json.dump(_to_json_ready(merged), f, indent=2)
+
+
 def derive_calibration_artifact_paths(matrix_path: str) -> dict:
     base = Path(matrix_path)
     stem = base.stem
     return {
         "homography_residual_path": str(base.with_name(f"{stem}_homography_residual.json")),
+        "geometry_scale_path": str(base.with_name(f"{stem}_geometry_scale.json")),
         "report_path": str(base.with_name(f"{stem}_model_report.json")),
     }
 

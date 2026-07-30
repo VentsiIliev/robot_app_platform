@@ -1,0 +1,8 @@
+{
+  "robot_system": "paint",
+  "supported_robot_systems": [
+    "glue",
+    "paint",
+    "welding"
+  ]
+}

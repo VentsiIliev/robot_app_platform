@@ -11,8 +11,8 @@ class WorkpieceAdapter(PaintWorkpieceEditorAdapter):
     """Legacy compatibility shim.
 
     New code should inject a system-specific ``IWorkpieceDataAdapter`` instead of
-    importing a global adapter. This alias remains only for older DXF/editor
-    entry points that still expect ``WorkpieceAdapter``.
+    importing a global adapter. This alias remains only for older editor entry
+    points that still expect ``WorkpieceAdapter``.
     """
 
     def __init__(self):

@@ -88,7 +88,7 @@ class TestUserSessionLogout(unittest.TestCase):
 
 class TestUserSessionThreadSafety(unittest.TestCase):
 
-    def test_concurrent_login_logout_does_not_raise(self):
+    def test_concurrent_login_logout_leaves_session_consistent(self):
         session = UserSession()
         errors  = []
 
@@ -110,6 +110,9 @@ class TestUserSessionThreadSafety(unittest.TestCase):
             t.join()
 
         self.assertEqual(errors, [])
+        self.assertFalse(session.is_authenticated())
+        self.assertIsNone(session.current_user)
+        self.assertIsNone(session.current_role)
 
 
 if __name__ == "__main__":

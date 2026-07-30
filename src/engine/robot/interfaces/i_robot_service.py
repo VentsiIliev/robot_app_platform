@@ -34,6 +34,15 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     ):
         ...
 
+    def execute_ordered_motion_chain(
+        self,
+        segments: list[dict],
+        tool: int,
+        user: int,
+        blocking: bool = False,
+    ):
+        return -1
+
     def get_execution_status(self):
         return None
 
@@ -70,6 +79,9 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
         user: int = 0,
         start_joint_state: dict | None = None,
     ) -> dict: ...
+
+    @abstractmethod
+    def set_active_tool(self, tool: int) -> bool: ...
 
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""

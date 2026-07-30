@@ -1,13 +1,18 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.engine.robot.drivers.fairino.fairino_ros2_client import FairinoRos2Client
+from src.engine.robot.drivers.fairino.fairino_ros2_client import (
+    FairinoRos2Client,
+    FakeRos2Client,
+    build_fairino_ros2_client,
+)
+from src.engine.robot.drivers.fairino.fairino_ros2_robot import FairinoRos2Robot
 
 
 class TestFairinoRos2Client(unittest.TestCase):
 
     @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.get")
-    def test_init_does_not_raise_when_bridge_is_unavailable(self, get_mock):
+    def test_init_sets_disconnected_state_when_bridge_is_unavailable(self, get_mock):
         get_mock.side_effect = ConnectionError("bridge down")
 
         client = FairinoRos2Client(server_url="http://localhost:5000")
@@ -66,3 +71,58 @@ class TestFairinoRos2Client(unittest.TestCase):
 
         self.assertEqual(client.stop_motion(), -2)
         self.assertEqual(client.get_last_stop_response()["stop_state"], "STOP_REQUESTED_BUT_UNCONFIRMED")
+
+    @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.post")
+    @patch("src.engine.robot.drivers.fairino.fairino_ros2_client.requests.get")
+    def test_move_linear_sets_active_tool_before_motion(self, get_mock, post_mock):
+        health = MagicMock()
+        health.json.return_value = {"status": "ok"}
+        get_mock.return_value = health
+        active_response = MagicMock()
+        active_response.status_code = 200
+        active_response.json.return_value = {"success": True, "tool_name": "TOOL_1"}
+        enable_response = MagicMock()
+        enable_response.status_code = 200
+        enable_response.json.return_value = {"success": True, "result": 0}
+        move_response = MagicMock()
+        move_response.status_code = 200
+        move_response.text = '{"success": true, "result": 0}'
+        move_response.json.return_value = {"success": True, "result": 0}
+        post_mock.side_effect = [active_response, enable_response, move_response]
+
+        client = FairinoRos2Client(server_url="http://localhost:5000")
+
+        self.assertEqual(client.move_liner([1, 2, 3, 4, 5, 6], tool=1), 0)
+        self.assertEqual(post_mock.call_args_list[0].args[0], "http://localhost:5000/tool/active")
+        self.assertEqual(post_mock.call_args_list[0].kwargs["json"], {"tool_id": 1})
+        self.assertEqual(post_mock.call_args_list[1].args[0], "http://localhost:5000/drive/enable")
+        self.assertEqual(post_mock.call_args_list[2].args[0], "http://localhost:5000/move/linear")
+
+    def test_fake_client_factory_selects_fake_backend(self):
+        client = build_fairino_ros2_client(server_url="fake://local")
+
+        self.assertIsInstance(client, FakeRos2Client)
+        self.assertEqual(client.get_connection_state(), "idle")
+
+    def test_fake_client_updates_position_and_reports_execution_info(self):
+        client = build_fairino_ros2_client(server_url="fake://local")
+
+        self.assertEqual(client.move_liner([1, 2, 3, 4, 5, 6], blocking=True), 0)
+        self.assertEqual(client.get_current_position(), [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+        self.assertEqual(client.execute_path([[1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12]], blocking=False), 0)
+        self.assertEqual(client.get_last_execute_path_response()["task_id"], 1)
+        self.assertTrue(client.get_status()["is_executing"])
+
+        self.assertEqual(client.stop_motion(), 0)
+        self.assertFalse(client.get_status()["is_executing"])
+
+    def test_fake_robot_exposes_state_snapshot_for_platform_polling(self):
+        robot = FairinoRos2Robot(server_url="fake://local")
+
+        snapshot = robot.get_state_snapshot()
+
+        self.assertEqual(snapshot["position"], [0.0] * 6)
+        self.assertEqual(snapshot["velocity"], [0.0] * 3)
+        self.assertEqual(snapshot["velocity_magnitude"], 0.0)
+        self.assertEqual(snapshot["acceleration"], 0.0)
