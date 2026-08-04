@@ -97,7 +97,11 @@ class WorkpieceEditorController(IApplicationController):
     def _on_capture(self) -> list:
         """Called by the editor's capture button. Picks the largest contour,
         stops the live feed and loads the contour into the Workpiece layer."""
-        contours = self._model.get_contours()
+        try:
+            contours = self._model.get_contours()
+        except RuntimeError as exc:
+            show_warning(self._view, "Capture", str(exc))
+            return []
         self._logger.debug("Capture: got %d contours from vision", len(contours))
         largest = self._pick_largest(contours)
         if largest is None:

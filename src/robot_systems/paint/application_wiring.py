@@ -45,6 +45,142 @@ def _get_cleanup_base_group_id(robot_system=None) -> str:
     return _get_paint_process_config(robot_system).cleanup_group_id
 
 
+def _get_dropoff_group_id(robot_system=None) -> str:
+    return "Dropoff"
+
+
+def _get_active_work_area_id(robot_system=None) -> str:
+    service = getattr(robot_system, "_work_area_service", None) if robot_system is not None else None
+    if service is not None:
+        try:
+            return str(service.get_active_area_id() or "").strip()
+        except Exception:
+            _logger.debug("[TARGETING] Failed to read active work area", exc_info=True)
+    return "paint"
+
+
+def _get_target_frame_name_for_work_area(robot_system=None, work_area_id: str = "paint") -> str:
+    frame = (
+        robot_system.get_target_frame_for_work_area(work_area_id)
+        if robot_system is not None and str(work_area_id or "").strip()
+        else None
+    )
+    return str(getattr(frame, "name", "") or "").strip().lower()
+
+
+def _get_active_target_frame_name(robot_system=None) -> str:
+    active_area_id = _get_active_work_area_id(robot_system)
+    return (
+        _get_target_frame_name_for_work_area(robot_system, active_area_id)
+        or _get_target_frame_name_for_work_area(robot_system, "paint")
+        or "calibration"
+    )
+
+
+def _get_capture_group_for_work_area(robot_system=None, work_area_id: str = "paint") -> str:
+    area_id = str(work_area_id or "").strip()
+    frame = (
+        robot_system.get_target_frame_for_work_area(area_id)
+        if robot_system is not None and area_id
+        else None
+    )
+    group_name = (
+        str(getattr(frame, "target_navigation_group", "") or "").strip()
+        or str(getattr(frame, "source_navigation_group", "") or "").strip()
+    )
+    if group_name:
+        return group_name
+    return "CALIBRATION" if area_id == "paint" else ""
+
+
+def _get_active_capture_group(robot_system=None) -> str:
+    active_area_id = _get_active_work_area_id(robot_system)
+    return (
+        _get_capture_group_for_work_area(robot_system, active_area_id)
+        or _get_capture_group_for_work_area(robot_system, "paint")
+        or "CALIBRATION"
+    )
+
+
+def _angle_delta_degrees(a: float, b: float) -> float:
+    return abs((float(a) - float(b) + 180.0) % 360.0 - 180.0)
+
+
+def _validate_active_capture_area(robot_system, area_id: str, robot_pose) -> tuple[bool, str]:
+    area_id = str(area_id or "").strip()
+    if not area_id:
+        return False, "Active work area is unknown. Move to Calibration or Magazine before capturing."
+
+    group_name = _get_capture_group_for_work_area(robot_system, area_id)
+    if not group_name:
+        return False, f"Active work area '{area_id}' has no declared capture movement group."
+
+    if robot_pose is None or len(robot_pose) < 6:
+        return False, f"Cannot verify robot pose for active work area '{area_id}'."
+
+    navigation = getattr(robot_system, "_navigation", None) if robot_system is not None else None
+    expected = navigation.get_group_position(group_name) if navigation is not None else None
+    if expected is None or len(expected) < 6:
+        return False, f"Movement group '{group_name}' has no configured capture position."
+
+    expected = [float(v) for v in expected[:6]]
+    pose = [float(v) for v in robot_pose[:6]]
+    if group_name.upper() == "CALIBRATION":
+        vision = robot_system.get_optional_service(CommonServiceID.VISION) if robot_system is not None else None
+        if vision is not None:
+            try:
+                expected[2] += float(vision.get_capture_pos_offset() or 0.0)
+            except Exception:
+                _logger.debug("[VISION_GUARD] Failed to read calibration capture Z offset", exc_info=True)
+
+    xyz_tolerance_mm = 10.0
+    angle_tolerance_deg = 5.0
+    axis_labels = ("X", "Y", "Z")
+    for index, label in enumerate(axis_labels):
+        delta = abs(pose[index] - expected[index])
+        if delta > xyz_tolerance_mm:
+            return (
+                False,
+                f"Robot is not at {group_name} for active work area '{area_id}': "
+                f"{label} differs by {delta:.1f} mm.",
+            )
+    for index, label in ((3, "RX"), (4, "RY"), (5, "RZ")):
+        delta = _angle_delta_degrees(pose[index], expected[index])
+        if delta > angle_tolerance_deg:
+            return (
+                False,
+                f"Robot is not at {group_name} for active work area '{area_id}': "
+                f"{label} differs by {delta:.1f} deg.",
+            )
+
+    return True, ""
+
+
+def _validate_current_capture_state(robot_system) -> tuple[bool, str]:
+    work_area_service = getattr(robot_system, "_work_area_service", None) if robot_system is not None else None
+    if work_area_service is None:
+        return False, "Work area service is not available."
+    area_id = str(work_area_service.get_active_area_id() or "").strip()
+    if not area_id:
+        return False, "Active work area is unknown. Move to Calibration or Magazine before starting."
+    is_verified = getattr(work_area_service, "is_active_area_verified", None)
+    if callable(is_verified) and not bool(is_verified()):
+        return (
+            False,
+            f"Active work area '{area_id}' is not verified. "
+            "Move the robot to the capture position from the platform before starting.",
+        )
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT) if robot_system is not None else None
+    if robot_service is None:
+        return False, "Robot service is not available."
+    try:
+        robot_pose = list(robot_service.get_current_position())
+    except Exception:
+        _logger.exception("[VISION_GUARD] Failed to read robot pose before process execution")
+        return False, "Cannot verify robot pose before starting."
+    return _validate_active_capture_area(robot_system, area_id, robot_pose)
+
+
 def _get_pickup_axis_alignment_sign(robot_system=None) -> float:
     config = _get_paint_process_config(robot_system)
     return -1.0 if float(config.pickup_axis_alignment_sign_value) < 0.0 else 1.0
@@ -106,6 +242,12 @@ def _build_capture_snapshot_service(robot_system):
     return CaptureSnapshotService(
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
+        work_area_service=getattr(robot_system, "_work_area_service", None),
+        active_work_area_validator=lambda area_id, robot_pose: _validate_active_capture_area(
+            robot_system,
+            area_id,
+            robot_pose,
+        ),
     )
 
 
@@ -147,14 +289,15 @@ def _build_paint_path_executor(robot_system):
             getattr(robot_system, "_navigation", None).get_group_position(_get_cleanup_base_group_id(robot_system))
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
+        dropoff_position_provider=lambda: (
+            getattr(robot_system, "_navigation", None).get_group_position(_get_dropoff_group_id(robot_system))
+            if getattr(robot_system, "_navigation", None) is not None else None
+        ),
         base_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position(_get_paint_base_group_id(robot_system))
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
-        post_execute_callback=lambda: (
-            getattr(robot_system, "_navigation", None).move_to_calibration_position()
-            if getattr(robot_system, "_navigation", None) is not None else False
-        ),
+        post_execute_callback=None,
         calibration_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position("CALIBRATION")
             if getattr(robot_system, "_navigation", None) is not None else None
@@ -238,9 +381,7 @@ def _build_paint_path_preparation_service(robot_system):
 
     robot_config = getattr(robot_system, "_robot_config", None)
     execution_target_point_name = _get_paint_execution_target_point_name(robot_system)
-    calibration_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
-    )
+    calibration_frame_name = _get_active_target_frame_name(robot_system)
     z_min = 0.0
     if robot_config is not None:
         try:
@@ -272,6 +413,7 @@ def _build_paint_path_preparation_service(robot_system):
         target_point_name=execution_target_point_name,
         pickup_target_point_name=execution_target_point_name,
         calibration_frame_name=calibration_frame_name,
+        calibration_frame_name_getter=lambda: _get_active_target_frame_name(robot_system),
         pixel_height_compensation_fn=pixel_height_compensation_fn,
         pickup_axis_alignment_sign=_get_pickup_axis_alignment_sign(robot_system),
         pixel_to_mm_mode=_PAINT_PROCESS.contour_pixel_to_mm_mode,
@@ -307,6 +449,23 @@ def _build_paint_workpiece_preparation_service(robot_system):
         default_settings=build_paint_segment_settings_schema().get_defaults(),
         transformer=None,
         transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
+    )
+
+
+def _build_paint_magazine_load_service(robot_system):
+    from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+
+    return PaintMagazineLoadService(
+        navigation=robot_system._navigation,
+        capture_snapshot_service=robot_system._paint_capture_snapshot_service,
+        path_executor=robot_system._paint_path_executor,
+        resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
+        work_area_service=getattr(robot_system, "_work_area_service", None),
+        target_point_name=_get_paint_execution_target_point_name(robot_system),
+        camera_point_name="camera",
+        frame_name="magazine",
+        release_work_area_id="paint",
+        release_frame_name="calibration",
     )
 
 
@@ -362,6 +521,7 @@ def _build_paint_workpiece_editor_service(robot_system):
             path_preparation_service=path_preparation_service,
             matching_service=matching_service,
             workpiece_data_adapter=PaintWorkpieceEditorAdapter(),
+            process_execution_validator=lambda: _validate_current_capture_state(robot_system),
         ),
         form_schema=build_paint_contour_form_schema(),
         segment_config=SegmentEditorConfig(schema=segment_config),
@@ -390,6 +550,7 @@ def _build_paint_contour_editor_application(robot_system):
 
 def _build_paint_process_settings_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.robot_systems.paint.applications.paint_process_settings.paint_process_settings_factory import (
         PaintProcessSettingsFactory,
     )
@@ -398,10 +559,46 @@ def _build_paint_process_settings_application(robot_system):
     )
 
     service = PaintProcessSettingsApplicationService(
-        process_config_service=robot_system._paint_process_config_service
+        process_config_service=robot_system._paint_process_config_service,
+        dropoff_group_provider=lambda: (
+            robot_system._settings_service.get(CommonSettingsID.MOVEMENT_GROUPS).movement_groups.get("Dropoff")
+        ),
+        current_position_provider=lambda: (
+            robot_system.get_optional_service(CommonServiceID.ROBOT).get_current_position()
+            if robot_system.get_optional_service(CommonServiceID.ROBOT) is not None
+            else None
+        ),
+    )
+    jog_service = build_robot_system_jog_service(robot_system)
+    return WidgetApplication(
+        widget_factory=lambda ms: PaintProcessSettingsFactory().build(service, messaging=ms, jog_service=jog_service)
+    )
+
+
+def _build_paint_motion_recipe_application(robot_system):
+    import os
+
+    from src.applications.base.widget_application import WidgetApplication
+    from src.robot_systems.paint.applications.paint_motion_recipe import PaintMotionRecipeFactory
+    from src.robot_systems.paint.applications.paint_motion_recipe.service import PaintMotionRecipeService
+
+    recipe_path = os.path.join(
+        os.path.dirname(__file__),
+        "storage",
+        "settings",
+        "paint",
+        "dev_motion_recipe.json",
+    )
+    service = PaintMotionRecipeService(
+        recipe_path=recipe_path,
+        group_ids=[
+            definition.id
+            for definition in robot_system.get_movement_group_definitions()
+        ],
+        navigation_service=getattr(robot_system, "_navigation", None),
     )
     return WidgetApplication(
-        widget_factory=lambda _ms: PaintProcessSettingsFactory().build(service)
+        widget_factory=lambda _ms: PaintMotionRecipeFactory().build(service)
     )
 
 
@@ -758,6 +955,28 @@ def _build_robot_settings_application(robot_app):
     )
 
 
+def _build_modbus_settings_application(robot_app):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.modbus_settings import ModbusSettingsApplicationService, ModbusSettingsFactory
+    from src.engine.hardware.communication.modbus.modbus_action_service import ModbusActionService
+
+    settings_service = ModbusSettingsApplicationService(
+        robot_app._settings_service,
+        config_key=CommonSettingsID.MODBUS_CONFIG,
+    )
+    action_service = ModbusActionService()
+    jog_service = build_robot_system_jog_service(robot_app)
+    return WidgetApplication(
+        widget_factory=lambda ms: ModbusSettingsFactory().build(
+            settings_service,
+            action_service,
+            messaging=ms,
+            jog_service=jog_service,
+        )
+    )
+
+
 def _build_intrinsic_capture_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.intrinsic_calibration_capture.service.intrinsic_capture_service import (
@@ -782,15 +1001,11 @@ def _build_intrinsic_capture_application(robot_system):
 
 def _build_hand_eye_calibration_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
-    from src.engine.vision.capture_snapshot_service import CaptureSnapshotService
     from src.applications.hand_eye_calibration.service.hand_eye_service import HandEyeCalibrationService
     from src.applications.hand_eye_calibration.hand_eye_calibration_factory import HandEyeCalibrationFactory
 
     def _factory(ms):
-        snapshot_svc = CaptureSnapshotService(
-            vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
-            robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
-        )
+        snapshot_svc = _build_capture_snapshot_service(robot_system)
         service = HandEyeCalibrationService(
             snapshot_service=snapshot_svc,
             robot_service=robot_system.get_optional_service(CommonServiceID.ROBOT),
@@ -817,9 +1032,7 @@ def _build_pick_target_application(robot_system):
         robot_system.get_targeting_provider().get_default_target_name()
         if robot_system.get_targeting_provider() is not None else ""
     )
-    calibration_frame_name = (
-        getattr(robot_system.get_target_frame_for_work_area("paint"), "name", "") or "calibration"
-    )
+    calibration_frame_name = _get_active_target_frame_name(robot_system)
     service = PickTargetApplicationService(
         vision_service=vision_service,
         capture_snapshot_service=capture_snapshot_service,
@@ -832,6 +1045,8 @@ def _build_pick_target_application(robot_system):
         default_target_name=default_target_name,
         calibration_frame_name=calibration_frame_name,
         pickup_frame_name="",
+        active_frame_name_getter=lambda: _get_active_target_frame_name(robot_system),
+        active_capture_group_getter=lambda: _get_active_capture_group(robot_system),
     )
     jog_service = build_robot_system_jog_service(
         robot_system,

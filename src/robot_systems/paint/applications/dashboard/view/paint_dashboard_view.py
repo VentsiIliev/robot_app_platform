@@ -5,11 +5,12 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QLabel,
-    QMessageBox,
     QScrollArea,
     QVBoxLayout,
 )
 
+from src.applications.base.styled_message_box import show_info as show_styled_info
+from src.applications.base.styled_message_box import show_warning as show_styled_warning
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import BG_COLOR
@@ -132,10 +133,10 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.set_action_button_enabled(action_id, enabled)
 
     def show_info(self, title: str, message: str) -> None:
-        QMessageBox.information(self, title, message)
+        show_styled_info(self, title, message)
 
     def show_warning(self, title: str, message: str) -> None:
-        QMessageBox.warning(self, title, message)
+        show_styled_warning(self, title, message)
 
     def show_debug_plot(self, title: str, image_path: str, message: str = "") -> None:
         pixmap = QPixmap(image_path)

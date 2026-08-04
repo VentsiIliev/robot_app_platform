@@ -7,7 +7,6 @@ from typing import Protocol
 
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
-from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.timing import timed_step
 
@@ -96,6 +95,32 @@ class PickupOriginDropoffStrategy:
         return DropoffPlan(strategy_name=self.name, waypoints=waypoints)
 
 
+class MovementGroupDropoffStrategy:
+    """Release the held workpiece at the configured dropoff movement group."""
+
+    name = "movement_group"
+
+    def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
+        dropoff = owner._paint_process_config().dropoff
+        group_id = "Dropoff"
+        pose = owner._resolve_dropoff_align_pose()
+        if pose is None:
+            _logger.info("[DROPOFF] movement_group has no configured pose for group '%s'", group_id)
+            return DropoffPlan(strategy_name=self.name, waypoints=())
+        return DropoffPlan(
+            strategy_name=self.name,
+            waypoints=(
+                DropoffWaypoint(
+                    label=f"Moving to dropoff group '{group_id}' for release",
+                    pose=pose,
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    release_here=True,
+                ),
+            ),
+        )
+
+
 class PaintDropoffExecutor:
     """Execute the configured paint dropoff strategy."""
 
@@ -104,12 +129,13 @@ class PaintDropoffExecutor:
         self._strategy_override = strategy
         self._strategies: dict[str, PaintDropoffStrategy] = {
             PickupOriginDropoffStrategy.name: PickupOriginDropoffStrategy(),
+            MovementGroupDropoffStrategy.name: MovementGroupDropoffStrategy(),
         }
 
     def _resolve_strategy(self) -> PaintDropoffStrategy | None:
         if self._strategy_override is not None:
             return self._strategy_override
-        strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "pickup_origin").strip().lower()
+        strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
         return self._strategies.get(strategy_name)
 
     @timed_step(_logger, "pre_release_dropoff")
@@ -118,11 +144,13 @@ class PaintDropoffExecutor:
         started = perf_counter()
         strategy = self._resolve_strategy()
         if strategy is None:
-            strategy_name = str(PAINT_PROCESS_CONFIG.dropoff.strategy or "").strip()
+            strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "").strip()
             return False, f"Unknown paint dropoff strategy '{strategy_name}'"
         plan = strategy.build_plan(self._owner, execution_plan)
         release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
         if release_count != 1:
+            if plan.strategy_name == MovementGroupDropoffStrategy.name:
+                return False, "Dropoff movement group 'Dropoff' is not configured"
             return False, f"Dropoff strategy '{plan.strategy_name}' must define exactly one release waypoint"
 
         _logger.info(

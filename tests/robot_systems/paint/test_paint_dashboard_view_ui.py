@@ -166,6 +166,31 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertIsInstance(view._dashboard, _FakeDashboardWidget)
 
+    def test_info_and_warning_use_styled_message_boxes(self) -> None:
+        with (
+            patch(
+                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+                _FakeDashboardWidget,
+            ),
+            patch(
+                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_info"
+            ) as info,
+            patch(
+                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_warning"
+            ) as warning,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+            )
+
+            view.show_info("Info", "ok")
+            view.show_warning("Warning", "blocked")
+
+        info.assert_called_once_with(view, "Info", "ok")
+        warning.assert_called_once_with(view, "Warning", "blocked")
+
 
 if __name__ == "__main__":
     unittest.main()

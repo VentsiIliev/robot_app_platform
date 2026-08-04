@@ -37,7 +37,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[243.271, 416.502, 101.129, -178.852, -0.014, -0.047]"
+      "position": "[223.694, 562.174, 234.878, -178.804, -0.044, -0.100]"
     },
     "Clean": {
       "velocity": 10,
@@ -46,6 +46,22 @@
       "has_iterations": false,
       "has_trajectory_execution": true,
       "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
+    },
+    "Dropoff": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-26.042, 311.744, 35.857, -178.770, -0.015, -0.061]"
+    },
+    "Magazine": {
+      "velocity": 10,
+      "acceleration": 10,
+      "iterations": 1,
+      "has_iterations": false,
+      "has_trajectory_execution": true,
+      "position": "[-186.163, 290.663, 94.833, -178.758, -0.007, -0.061]"
     }
   }
 }

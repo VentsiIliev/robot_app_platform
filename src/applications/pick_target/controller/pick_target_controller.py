@@ -9,6 +9,7 @@ import numpy as np
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.styled_message_box import show_warning
 from src.applications.pick_target.model.pick_target_model import PickTargetModel
 from src.applications.pick_target.view.pick_target_view import PickTargetView
 from src.engine.core.i_messaging_service import IMessagingService
@@ -264,7 +265,9 @@ class PickTargetController(IApplicationController):
         try:
             frame, pixel_centroids, robot_coords = self._model.capture()
         except Exception as exc:
-            self._view.append_log(f"[ERROR] Capture failed: {exc}")
+            message = str(exc)
+            self._view.append_log(f"[ERROR] Capture failed: {message}")
+            show_warning(self._view, "Capture Blocked", message)
             return
 
         self._captured_coords = robot_coords

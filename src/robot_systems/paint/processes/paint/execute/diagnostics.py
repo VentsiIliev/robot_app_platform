@@ -146,19 +146,19 @@ def write_pivot_job_debug_artifacts(
     paint_process_config: PaintProcessConfig | None = None,
 ) -> None:
     config = paint_process_config or PAINT_PROCESS_CONFIG
-    write_pivot_debug_dump(
-        debug_dump_dir=debug_dump_dir,
-        pivot_config=pivot_config,
-        source_path=source_path,
-        pivot_path=command_pivot_path,
-        diagnostics=diagnostics,
-        pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
-        anchor_xy=anchor_xy,
-        source_rotation_deg=source_rotation_deg,
-        pattern_type=pattern_type,
-        stage=stage,
-    )
     if config.enable_pivot_debug_plot:
+        write_pivot_debug_dump(
+            debug_dump_dir=debug_dump_dir,
+            pivot_config=pivot_config,
+            source_path=source_path,
+            pivot_path=command_pivot_path,
+            diagnostics=diagnostics,
+            pivot_pose=list(pivot_pose) if pivot_pose is not None else None,
+            anchor_xy=anchor_xy,
+            source_rotation_deg=source_rotation_deg,
+            pattern_type=pattern_type,
+            stage=stage,
+        )
         write_pivot_debug_plot(
             debug_dump_dir=debug_dump_dir,
             pivot_config=pivot_config,
@@ -172,4 +172,3 @@ def write_pivot_job_debug_artifacts(
             anchor_xy=anchor_xy,
             source_rotation_deg=source_rotation_deg,
         )
-

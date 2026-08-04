@@ -19,7 +19,7 @@ class PickupMotionConfig:
 
     # Heights and clearances.
     approach_offset_mm: float = 100.0  # [LIVE SETTINGS]
-    contact_offset_mm: float = 2.0  # [LIVE SETTINGS]
+    contact_offset_mm: float = 5.0  # [LIVE SETTINGS]
     initial_lift_clearance_mm: float = 20.0  # [LIVE SETTINGS]
 
     # Move from the current robot pose to the pickup approach pose.
@@ -80,6 +80,38 @@ class PaintDropoffConfig:
 
 
 @dataclass(frozen=True)
+class PaintMagazineLoadConfig:
+    """Optional pre-run transfer from magazine capture station to calibration table."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    magazine_group_id: str = "Magazine"
+    calibration_group_id: str = "CALIBRATION"
+    move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]
+    move_to_magazine_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    transfer_to_calibration_vel_percent: float = 30.0  # [LIVE SETTINGS]
+    transfer_to_calibration_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    camera_settle_s: float = 0.5
+    release_settle_s: float = 0.5
+
+
+@dataclass(frozen=True)
+class PaintSafeTravelConfig:
+    """Optional safe waypoint used while carrying the workpiece from calibration to paint."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    position: list[float] = field(default_factory=list)
+    movement_group_id: str = ""
+
+
+@dataclass(frozen=True)
+class PaintToDropoffSafeTravelConfig:
+    """Optional safe waypoint used while carrying the workpiece from paint to dropoff."""
+
+    enabled: bool = False  # [LIVE SETTINGS]
+    position: list[float] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class PaintNavigationReturnConfig:
     """Navigation-return motion tuning for paint-system cleanup moves."""
 
@@ -89,7 +121,7 @@ class PaintNavigationReturnConfig:
     unwind_acc_percent: float = 60.0  # [LIVE SETTINGS]
     # Queue the unwind request if ROS2 is still finishing the previous motion.
     unwind_queue_if_busy: bool = True
-    # Move from the post-unwind pose back to the calibration movement group pose.
+    # Explicit navigation move to the calibration movement group pose.
     calibration_move_vel_percent: float = 30.0  # [LIVE SETTINGS]
     calibration_move_acc_percent: float = 40.0  # [LIVE SETTINGS]
 
@@ -213,12 +245,20 @@ class PaintProcessConfig:
     edge_cleanup: PaintEdgeCleanupConfig = field(default_factory=PaintEdgeCleanupConfig)
     # Dropoff/release motion tuning.
     dropoff: PaintDropoffConfig = field(default_factory=PaintDropoffConfig)
+    # Optional magazine pickup before the normal paint run.
+    magazine_load: PaintMagazineLoadConfig = field(default_factory=PaintMagazineLoadConfig)
+    # Optional carried-workpiece waypoint before entering the paint contact area.
+    safe_travel: PaintSafeTravelConfig = field(default_factory=PaintSafeTravelConfig)
+    # Optional carried-workpiece waypoint before entering the dropoff area.
+    dropoff_safe_travel: PaintToDropoffSafeTravelConfig = field(default_factory=PaintToDropoffSafeTravelConfig)
     # Cleanup return motion used before moving back to calibration.
     navigation_return: PaintNavigationReturnConfig = field(default_factory=PaintNavigationReturnConfig)
     # Interpolation and heading reconstruction tuning.
     interpolation: PaintInterpolationConfig = field(default_factory=PaintInterpolationConfig)
     # Enables the matplotlib debug plot generated after pivot path computation.
     enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
+    # Enables path-preparation diagnostic plots such as contour canonicalization and trajectory comparison.
+    enable_path_debug_plots: bool = False  # [LIVE SETTINGS]
 
 
 

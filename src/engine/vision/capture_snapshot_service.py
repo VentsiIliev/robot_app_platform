@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from src.engine.robot.interfaces.i_robot_service import IRobotService
+from src.engine.work_areas.i_work_area_service import IWorkAreaService
 from src.engine.vision.i_capture_snapshot_service import (
     ICaptureSnapshotService,
     VisionCaptureSnapshot,
 )
-from src.engine.vision.i_vision_service import IVisionService
+from src.engine.vision.i_vision_service import IVisionService, VisionFrameUnavailableError
 
 _logger = logging.getLogger(__name__)
+
+
+class ActiveWorkAreaVerificationError(RuntimeError):
+    """Raised when a vision capture is blocked by unverified work-area state."""
 
 
 class CaptureSnapshotService(ICaptureSnapshotService):
@@ -21,18 +26,29 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         self,
         vision_service: Optional[IVisionService],
         robot_service: Optional[IRobotService],
+        work_area_service: Optional[IWorkAreaService] = None,
+        active_work_area_validator: Optional[
+            Callable[[str, Optional[list[float]]], tuple[bool, str]]
+        ] = None,
     ) -> None:
         self._vision = vision_service
         self._robot = robot_service
+        self._work_area_service = work_area_service
+        self._active_work_area_validator = active_work_area_validator
 
     def capture_snapshot(self, source: str = "") -> VisionCaptureSnapshot:
         frame = None
         contours = []
-        robot_pose = None
+        robot_pose = self._capture_robot_pose(source)
+
+        self._validate_active_work_area(source, robot_pose)
 
         if self._vision is not None:
             try:
                 frame, contours = self._vision.compute_contours_for_latest_frame()
+            except VisionFrameUnavailableError:
+                _logger.error("Fresh vision frame unavailable for source=%s", source, exc_info=True)
+                raise
             except Exception:
                 _logger.exception("Failed to capture latest vision snapshot for source=%s", source)
                 try:
@@ -44,12 +60,6 @@ class CaptureSnapshotService(ICaptureSnapshotService):
                 except Exception:
                     _logger.exception("Failed to capture latest contours fallback for source=%s", source)
 
-        if self._robot is not None:
-            try:
-                robot_pose = list(self._robot.get_current_position())
-            except Exception:
-                _logger.exception("Failed to capture robot pose for source=%s", source)
-
         return VisionCaptureSnapshot(
             frame=frame,
             contours=contours,
@@ -57,3 +67,42 @@ class CaptureSnapshotService(ICaptureSnapshotService):
             timestamp_s=time.time(),
             source=source,
         )
+
+    def _capture_robot_pose(self, source: str) -> Optional[list[float]]:
+        if self._robot is None:
+            return None
+        try:
+            return list(self._robot.get_current_position())
+        except Exception:
+            _logger.exception("Failed to capture robot pose for source=%s", source)
+            return None
+
+    def _validate_active_work_area(
+        self,
+        source: str,
+        robot_pose: Optional[list[float]],
+    ) -> None:
+        if self._work_area_service is None or self._active_work_area_validator is None:
+            return
+        try:
+            active_area_id = str(self._work_area_service.get_active_area_id() or "").strip()
+        except Exception as exc:
+            raise ActiveWorkAreaVerificationError(
+                "Cannot verify active work area before vision capture."
+            ) from exc
+        if not active_area_id:
+            raise ActiveWorkAreaVerificationError(
+                "Active work area is unknown. Move the robot to a declared capture position before capturing."
+            )
+        is_verified = getattr(self._work_area_service, "is_active_area_verified", None)
+        if callable(is_verified) and not bool(is_verified()):
+            raise ActiveWorkAreaVerificationError(
+                f"Active work area '{active_area_id}' is not verified. "
+                "Move the robot to the capture position from the platform before capturing."
+            )
+        ok, message = self._active_work_area_validator(active_area_id, robot_pose)
+        if not ok:
+            detail = message or f"Robot is not verified at active work area '{active_area_id}'."
+            raise ActiveWorkAreaVerificationError(
+                f"Vision capture blocked for {source or 'unknown source'}: {detail}"
+            )

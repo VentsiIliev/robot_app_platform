@@ -1,11 +1,15 @@
 import threading
 import unittest
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import ANY, MagicMock
 
 import numpy as np
 
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.paint.component_ids import ProcessID
+from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
@@ -48,8 +52,40 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         prepared_contour, prepared_frame = service._workpiece_preparation.prepare_workpiece.call_args.args
         self.assertTrue(np.array_equal(prepared_contour, large))
         self.assertEqual(prepared_frame, "frame")
-        service._path_preparation_service.build_execution_plan.assert_called_once_with(raw_workpiece)
+        service._path_preparation_service.build_execution_plan.assert_called_once_with(
+            raw_workpiece,
+            skip_debug_plot=True,
+        )
         service._path_executor.execute_paint_process.assert_called_once_with(execution_plan)
+
+    def test_run_once_enables_path_debug_plots_from_live_settings(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(enable_path_debug_plots=True)
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+        )
+        contour = _square(2.0)
+        raw_workpiece = {"id": "wp-1"}
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[contour],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = (raw_workpiece, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        service._path_preparation_service.build_execution_plan.assert_called_once_with(
+            raw_workpiece,
+            skip_debug_plot=False,
+        )
 
     def test_run_once_returns_no_contour_before_preparation(self):
         service = self._make_service()
@@ -102,6 +138,230 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual(stopped_msg, "Paint process stopped")
         self.assertFalse(failed)
         self.assertEqual(failed_msg, "Prepared workpiece: pump fault")
+
+    def test_run_once_skips_magazine_load_when_disabled(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(enabled=False)
+        )
+        magazine_load = MagicMock()
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+        )
+        contour = _square(2.0)
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[contour],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        magazine_load.load_to_calibration.assert_not_called()
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(source="paint_process")
+
+    def test_run_once_executes_magazine_load_before_normal_paint_capture_when_enabled(self):
+        config = PaintMagazineLoadConfig(enabled=True, camera_settle_s=0.0, release_settle_s=0.0)
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(magazine_load=config)
+        magazine_load = MagicMock()
+        magazine_load.load_to_calibration.side_effect = [
+            (True, "Loaded"),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+        ]
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+        )
+        contour = _square(2.0)
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[contour],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual("Magazine empty after 1 paint cycle(s)", msg)
+        self.assertEqual(2, magazine_load.load_to_calibration.call_count)
+        self.assertIs(config, magazine_load.load_to_calibration.call_args_list[0].args[0])
+        service._capture_snapshot_service.capture_snapshot.assert_called_once_with(source="paint_process")
+
+    def test_run_once_loops_magazine_cycles_until_empty(self):
+        config = PaintMagazineLoadConfig(enabled=True, camera_settle_s=0.0, release_settle_s=0.0)
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(magazine_load=config)
+        magazine_load = MagicMock()
+        magazine_load.load_to_calibration.side_effect = [
+            (True, "Loaded first"),
+            (True, "Loaded second"),
+            (False, NO_WORKPIECE_AT_MAGAZINE),
+        ]
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+        )
+        contour = _square(2.0)
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[contour],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual("Magazine empty after 2 paint cycle(s)", msg)
+        self.assertEqual(3, magazine_load.load_to_calibration.call_count)
+        self.assertEqual(2, service._capture_snapshot_service.capture_snapshot.call_count)
+        self.assertEqual(2, service._path_executor.execute_paint_process.call_count)
+
+    def test_run_once_exits_cleanly_when_magazine_is_empty_before_first_cycle(self):
+        config = PaintMagazineLoadConfig(enabled=True, camera_settle_s=0.0, release_settle_s=0.0)
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(magazine_load=config)
+        magazine_load = MagicMock()
+        magazine_load.load_to_calibration.return_value = (False, NO_WORKPIECE_AT_MAGAZINE)
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+        )
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, msg)
+        magazine_load.load_to_calibration.assert_called_once()
+        service._capture_snapshot_service.capture_snapshot.assert_not_called()
+
+    def test_run_once_aborts_when_magazine_load_fails(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(enabled=True)
+        )
+        magazine_load = MagicMock()
+        magazine_load.load_to_calibration.return_value = (False, "No usable magazine contour detected")
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+        )
+
+        ok, msg = service.run_once()
+
+        self.assertFalse(ok)
+        self.assertEqual("No usable magazine contour detected", msg)
+        service._capture_snapshot_service.capture_snapshot.assert_not_called()
+
+
+class TestPaintMagazineLoadService(unittest.TestCase):
+    def test_load_to_calibration_uses_simple_contour_center_without_full_paint_planning(self):
+        navigation = MagicMock()
+        navigation.move_to_group.return_value = True
+        navigation.get_group_position.side_effect = lambda group: {
+            "Magazine": [0, 0, 30, 180, 0, 0],
+            "CALIBRATION": [10, 20, 30, 180, 0, 0],
+        }[group]
+        work_area_service = MagicMock()
+        work_area_service.get_work_area.return_value = [
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.75, 0.75],
+            [0.25, 0.75],
+        ]
+        capture = MagicMock()
+        capture.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame=np.zeros((20, 40, 3), dtype=np.uint8),
+            contours=[_square(3.0)],
+            source="paint_magazine_load",
+        )
+        preparation = MagicMock()
+        path_preparation = MagicMock()
+        executor = MagicMock()
+        executor.execute_pickup_target_and_release_at_position.return_value = (
+            True,
+            "Workpiece transferred to paint work area center",
+        )
+        resolver = MagicMock()
+        resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
+        resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
+            final_xy=(float(request.x_pixels), float(request.y_pixels))
+        )
+        service = PaintMagazineLoadService(
+            navigation=navigation,
+            capture_snapshot_service=capture,
+            path_executor=executor,
+            resolver_getter=lambda: resolver,
+            work_area_service=work_area_service,
+        )
+
+        ok, msg = service.load_to_calibration(
+            PaintMagazineLoadConfig(
+                enabled=True,
+                move_to_magazine_vel_percent=17.0,
+                move_to_magazine_acc_percent=18.0,
+                camera_settle_s=0.0,
+                release_settle_s=0.0,
+            ),
+            stop_requested=lambda: False,
+        )
+
+        self.assertTrue(ok, msg)
+        self.assertEqual("Magazine contour: Workpiece transferred to paint work area center", msg)
+        self.assertEqual(2, navigation.move_to_group.call_count)
+        navigation.move_to_group.assert_any_call(
+            "Magazine", wait_cancelled=ANY, velocity=17.0, acceleration=18.0
+        )
+        navigation.move_to_group.assert_any_call(
+            "CALIBRATION", wait_cancelled=ANY, velocity=30.0, acceleration=30.0
+        )
+        capture.capture_snapshot.assert_called_once_with(source="paint_magazine_load")
+        work_area_service.get_work_area.assert_called_once_with("paint")
+        preparation.prepare_workpiece.assert_not_called()
+        path_preparation.build_execution_plan.assert_not_called()
+        executor.execute_pickup_target_and_release_at_position.assert_called_once_with(
+            pickup_xy=ANY,
+            pickup_rz=ANY,
+            pickup_base_pose=[0, 0, 30, 180, 0, 0],
+            release_pose=[20.0, 10.0, 30, 180, 0, 0],
+            workpiece_height_mm=0.0,
+            release_label="paint work area center",
+        )
+        pickup_xy = executor.execute_pickup_target_and_release_at_position.call_args.kwargs["pickup_xy"]
+        self.assertAlmostEqual(1.5, pickup_xy[0])
+        self.assertAlmostEqual(1.5, pickup_xy[1])
+        navigation.mark_group_observed_area_verified.assert_called_once_with("CALIBRATION")
 
 
 class TestPaintProcessIntegration(unittest.TestCase):
@@ -185,11 +445,14 @@ class TestPaintProcessIntegration(unittest.TestCase):
     def test_stop_requests_robot_motion_stop_and_vacuum_off(self):
         robot = MagicMock()
         vacuum = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(enable_vacuum_pump=True)
         process = PaintProcess(
             production_service=MagicMock(),
             messaging=MagicMock(),
             robot_service=robot,
             vacuum_pump=vacuum,
+            paint_process_config_service=config_service,
         )
 
         process._on_stop()
@@ -198,6 +461,26 @@ class TestPaintProcessIntegration(unittest.TestCase):
         self.assertTrue(process._stopping)
         robot.stop_motion.assert_called_once_with()
         vacuum.turn_off.assert_called_once_with()
+
+    def test_stop_does_not_turn_vacuum_off_when_vacuum_is_disabled(self):
+        robot = MagicMock()
+        vacuum = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(enable_vacuum_pump=False)
+        process = PaintProcess(
+            production_service=MagicMock(),
+            messaging=MagicMock(),
+            robot_service=robot,
+            vacuum_pump=vacuum,
+            paint_process_config_service=config_service,
+        )
+
+        process._on_stop()
+        process._stop_thread.join(timeout=1.0)
+
+        self.assertTrue(process._stopping)
+        robot.stop_motion.assert_called_once_with()
+        vacuum.turn_off.assert_not_called()
 
 
 if __name__ == "__main__":

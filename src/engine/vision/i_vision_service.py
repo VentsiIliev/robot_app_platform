@@ -4,6 +4,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 
+class VisionFrameUnavailableError(RuntimeError):
+    """Raised when a fresh camera frame is required but unavailable."""
+
+
 class IVisionService(ABC):
 
     @abstractmethod

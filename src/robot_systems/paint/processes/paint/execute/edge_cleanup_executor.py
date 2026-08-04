@@ -666,15 +666,10 @@ class PaintEdgeCleanupExecutor:
             "_should_prepare_dropoff_align_before_unwind",
             lambda: False,
         )
-        if self._owner._last_pickup_plan is not None and should_align_before_unwind():
-            make_dropoff_align_pose = getattr(self._owner, "_dropoff_align_pose_near_reference", None)
+        if should_align_before_unwind():
+            make_dropoff_align_pose = getattr(self._owner, "_resolve_dropoff_align_pose", None)
             if callable(make_dropoff_align_pose):
-                post_cleanup_align_pose = make_dropoff_align_pose(
-                    self._owner._last_pickup_plan.align_pose,
-                    command_path[-1],
-                )
-            else:
-                post_cleanup_align_pose = list(self._owner._last_pickup_plan.align_pose)
+                post_cleanup_align_pose = make_dropoff_align_pose(command_path[-1])
         segments = [
             {
                 "type": "linear",
@@ -705,6 +700,24 @@ class PaintEdgeCleanupExecutor:
             },
         ]
         if post_cleanup_align_pose is not None:
+            safe_travel_pose = None
+            resolve_dropoff_safe_travel = getattr(
+                self._owner,
+                "_resolve_dropoff_safe_travel_position",
+                None,
+            )
+            if callable(resolve_dropoff_safe_travel):
+                safe_travel_pose = resolve_dropoff_safe_travel()
+            if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_pose is not None:
+                segments.append(
+                    {
+                        "type": "linear",
+                        "label": "prepare_dropoff_safe_travel",
+                        "position": safe_travel_pose,
+                        "vel": float(config.dropoff.release_align_vel_percent),
+                        "acc": float(config.dropoff.release_align_acc_percent),
+                    }
+                )
             segments.append(
                 {
                     "type": "linear",
@@ -714,6 +727,24 @@ class PaintEdgeCleanupExecutor:
                     "acc": float(config.dropoff.release_align_acc_percent),
                 }
             )
+        elif bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)):
+            resolve_dropoff_safe_travel = getattr(
+                self._owner,
+                "_resolve_dropoff_safe_travel_position",
+                None,
+            )
+            safe_travel_pose = resolve_dropoff_safe_travel() if callable(resolve_dropoff_safe_travel) else None
+            if safe_travel_pose is not None:
+                segments.append(
+                    {
+                        "type": "linear",
+                        "label": "prepare_dropoff_safe_travel",
+                        "position": safe_travel_pose,
+                        "vel": float(config.dropoff.release_align_vel_percent),
+                        "acc": float(config.dropoff.release_align_acc_percent),
+                    }
+                )
+                post_cleanup_align_pose = safe_travel_pose
         segments.append(
             {
                 "type": "unwind_joint6",

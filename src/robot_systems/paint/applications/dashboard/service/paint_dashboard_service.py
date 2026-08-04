@@ -45,7 +45,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._logger = logging.getLogger(__name__)
 
     def get_process_id(self) -> str:
-        return str(self._process.process_id)
+        return str(getattr(self._process.process_id, "value", self._process.process_id))
 
     def load_state(self) -> DashboardState:
         process_state = self._process.state.value

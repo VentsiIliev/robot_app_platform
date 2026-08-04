@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -27,6 +27,7 @@ class PickupTransferPlan:
     staged_pose: list[float]
     change_plane_pose: list[float]
     paint_pivot_pose: list[float]
+    safe_travel_poses: list[list[float]] = field(default_factory=list)
     source_rotation_deg: float = 0.0
     projected_source_path: list[list[float]] | None = None
     projected_pivot_path: list[list[float]] | None = None
@@ -53,6 +54,9 @@ class PaintPickupTransferPlanner:
 
         owner = self._owner
         jobs = prepared_workpiece.execution_jobs
+        with timed_block(_logger, "pickup_plan_build", label="refresh_process_config"):
+            owner._refresh_paint_process_config_snapshot()
+            owner._apply_paint_process_contact_config()
         with timed_block(_logger, "pickup_plan_build", label="refresh_runtime_config"):
             owner._refresh_runtime_config()
         if not jobs:
@@ -220,6 +224,15 @@ class PaintPickupTransferPlanner:
             align_ry=pickup_ry,
             align_rz=align_rz,
         )
+        safe_travel_pose = owner._resolve_safe_travel_position()
+        if bool(owner._paint_process_config().safe_travel.enabled) and safe_travel_pose is None:
+            return None
+        safe_travel_poses = [safe_travel_pose] if safe_travel_pose is not None else []
+        if safe_travel_poses:
+            _logger.info(
+                "[PICKUP] safe travel waypoint configured: pose=%s",
+                [round(float(v), 3) for v in safe_travel_pose[:6]],
+            )
 
         return PickupTransferPlan(
             pickup_approach_pose=pickup_approach_pose,
@@ -230,6 +243,7 @@ class PaintPickupTransferPlanner:
             stage_transition_poses=[],
             staged_pose=staged_pose,
             paint_pivot_pose=list(paint_pivot_pose),
+            safe_travel_poses=safe_travel_poses,
             source_rotation_deg=source_rotation_deg,
             projected_source_path=source_path,
             projected_pivot_path=projected_pivot_path,

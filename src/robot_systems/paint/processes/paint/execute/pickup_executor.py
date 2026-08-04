@@ -91,6 +91,16 @@ class DefaultPickupStrategy:
                 )
             )
 
+        for waypoint_index, safe_travel_pose in enumerate(motion_plan.safe_travel_poses, start=1):
+            waypoints.append(
+                PickupWaypoint(
+                    f"Safe travel waypoint {waypoint_index}",
+                    list(safe_travel_pose),
+                    pickup_motion.stage_transition_vel_percent,
+                    pickup_motion.stage_transition_acc_percent,
+                )
+            )
+
         for transition_index, transition_pose in enumerate(motion_plan.stage_transition_poses, start=1):
             waypoints.append(
                 PickupWaypoint(
@@ -157,7 +167,7 @@ class PaintPickupExecutor:
 
         if pickup_plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
-            return False, "Could not compute pickup-to-pivot poses"
+            return False, getattr(self._owner, "_last_safe_travel_error", "") or "Could not compute pickup-to-pivot poses"
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 

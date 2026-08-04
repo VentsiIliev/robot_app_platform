@@ -10,6 +10,7 @@ from src.engine.process.base_process import BaseProcess
 from src.engine.process.process_requirements import ProcessRequirements
 from src.engine.system.i_system_manager import ISystemManager
 from src.robot_systems.paint.component_ids import ProcessID
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 
 
 class PaintProcess(BaseProcess):
@@ -20,6 +21,7 @@ class PaintProcess(BaseProcess):
         messaging: IMessagingService,
         robot_service: Optional[IRobotService] = None,
         vacuum_pump: Optional[IVacuumPumpController] = None,
+        paint_process_config_service=None,
         system_manager: Optional[ISystemManager] = None,
         requirements: Optional[ProcessRequirements] = None,
         service_checker: Optional[Callable[[str], bool]] = None,
@@ -35,6 +37,7 @@ class PaintProcess(BaseProcess):
         self._production_service = production_service
         self._robot_service = robot_service
         self._vacuum_pump = vacuum_pump
+        self._paint_process_config_service = paint_process_config_service
         self._thread: Optional[threading.Thread] = None
         self._stop_thread: Optional[threading.Thread] = None
         self._stopping = False
@@ -69,11 +72,21 @@ class PaintProcess(BaseProcess):
                 self._robot_service.stop_motion()
             except Exception:
                 self._logger.exception("Paint stop failed to stop robot motion")
-        if self._vacuum_pump is not None:
+        if self._vacuum_pump is not None and self._is_vacuum_enabled():
             try:
                 self._vacuum_pump.turn_off()
             except Exception:
                 self._logger.exception("Paint stop failed to turn vacuum pump off")
+
+    def _is_vacuum_enabled(self) -> bool:
+        service = self._paint_process_config_service
+        if service is None:
+            return bool(PAINT_PROCESS_CONFIG.enable_vacuum_pump)
+        try:
+            return bool(service.get_snapshot().enable_vacuum_pump)
+        except Exception:
+            self._logger.exception("Paint stop failed to read vacuum pump setting")
+            return bool(PAINT_PROCESS_CONFIG.enable_vacuum_pump)
 
     def _on_pause(self) -> None:
         """Ignore pause because the paint process currently has no resumable checkpoint model."""
@@ -104,4 +117,5 @@ class PaintProcess(BaseProcess):
             self._logger.info("Paint process completed: %s", msg)
             self.stop()
         else:
+            self._logger.error("Paint process failed: %s", msg)
             self.set_error(msg)

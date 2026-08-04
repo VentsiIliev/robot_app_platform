@@ -118,11 +118,25 @@ class PaintNavigationService:
             self._set_observed_area_for_group(group_name)
         return ok
 
-    def move_to_group(self, group_name: str, wait_cancelled: Callable[[], bool] | None = None) -> bool:
-        ok = self._nav.move_to_group(group_name, wait_cancelled=wait_cancelled)
+    def move_to_group(
+        self,
+        group_name: str,
+        wait_cancelled: Callable[[], bool] | None = None,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> bool:
+        ok = self._nav.move_to_group(
+            group_name,
+            wait_cancelled=wait_cancelled,
+            velocity=velocity,
+            acceleration=acceleration,
+        )
         if ok:
             self._set_observed_area_for_group(group_name)
         return ok
+
+    def mark_group_observed_area_verified(self, group_name: str) -> None:
+        self._set_observed_area_for_group(group_name)
 
     def move_linear_group(self, group_name: str) -> bool:
         ok = self._nav.move_linear_group(group_name)
@@ -198,6 +212,9 @@ class PaintNavigationService:
     def _set_area(self, area: str) -> None:
         if self._work_area_service is not None:
             self._work_area_service.set_active_area_id(area)
+            mark_verified = getattr(self._work_area_service, "mark_active_area_verified", None)
+            if callable(mark_verified):
+                mark_verified(area)
         elif self._vision is not None:
             self._vision.set_active_work_area(area)
 

@@ -6,14 +6,100 @@ from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.targeting import TargetFrameDefinition
 from src.shared_contracts.declarations import WorkAreaDefinition
+from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.navigation import PaintNavigationService
+from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 from src.robot_systems.paint.targeting.frames import build_paint_target_frames
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.robot_systems.paint.targeting.registry import build_paint_point_registry
 
 
 class TestPaintNavigationService(unittest.TestCase):
+    def test_paint_system_starts_with_unknown_active_work_area(self):
+        self.assertEqual("", PaintRobotSystem.default_active_work_area_id)
+
+    def test_paint_system_declares_magazine_group_area_and_observer_binding(self):
+        movement_group_ids = {definition.id for definition in PaintRobotSystem.movement_groups}
+        work_area_ids = {definition.id for definition in PaintRobotSystem.work_areas}
+        target_frames = {
+            definition.work_area_id: definition
+            for definition in PaintRobotSystem.target_frames
+        }
+        observer_bindings = {
+            binding.movement_group_id: binding.area_id
+            for binding in PaintRobotSystem.work_area_observers
+        }
+
+        self.assertIn("Magazine", movement_group_ids)
+        self.assertIn("magazine", work_area_ids)
+        self.assertEqual("magazine", observer_bindings.get("Magazine"))
+        self.assertIn("magazine", target_frames)
+        self.assertEqual("CALIBRATION", target_frames["magazine"].source_navigation_group)
+        self.assertEqual("Magazine", target_frames["magazine"].target_navigation_group)
+
+    def test_validate_active_capture_area_accepts_robot_at_declared_group(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [104.0, 198.0, 302.0, 181.0, 1.0, 88.0],
+        )
+
+        self.assertTrue(ok, message)
+
+    def test_validate_active_capture_area_defaults_paint_area_to_calibration_group(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 0.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(
+                    target_navigation_group="",
+                    source_navigation_group="",
+                )
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "paint",
+            [100.0, 200.0, 300.0, 180.0, 0.0, 0.0],
+        )
+
+        self.assertTrue(ok, message)
+        navigation.get_group_position.assert_called_once_with("CALIBRATION")
+
+    def test_validate_active_capture_area_rejects_stale_robot_pose(self):
+        navigation = MagicMock()
+        navigation.get_group_position.return_value = [100.0, 200.0, 300.0, 180.0, 0.0, 90.0]
+        robot_system = SimpleNamespace(
+            _navigation=navigation,
+            get_target_frame_for_work_area=MagicMock(
+                return_value=SimpleNamespace(target_navigation_group="Magazine")
+            ),
+            get_optional_service=MagicMock(return_value=None),
+        )
+
+        ok, message = application_wiring._validate_active_capture_area(
+            robot_system,
+            "magazine",
+            [140.0, 200.0, 300.0, 180.0, 0.0, 90.0],
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("X differs by 40.0 mm", message)
+
     def test_move_home_uses_capture_offset_and_sets_pickup_area(self):
         navigation = MagicMock()
         vision = MagicMock()

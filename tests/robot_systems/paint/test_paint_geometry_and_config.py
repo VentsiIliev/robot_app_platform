@@ -16,9 +16,12 @@ from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintEdgeCleanupConfig,
+    PaintMagazineLoadConfig,
     PaintProcessConfig,
+    PaintSafeTravelConfig,
     PaintSimulationConfig,
 )
+from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
 from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import PaintContactExecutor
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
@@ -37,6 +40,18 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(default_config.secondary_group_id, "Horizontal Shaft")
         self.assertEqual(default_config.cleanup_group_id, "Clean")
         self.assertEqual(default_config.pivot_contact_side, "positive")
+        self.assertFalse(default_config.magazine_load.enabled)
+        self.assertEqual(default_config.magazine_load.magazine_group_id, "Magazine")
+        self.assertEqual(default_config.magazine_load.calibration_group_id, "CALIBRATION")
+        self.assertEqual(default_config.magazine_load.move_to_magazine_vel_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.move_to_magazine_acc_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.transfer_to_calibration_vel_percent, 30.0)
+        self.assertEqual(default_config.magazine_load.transfer_to_calibration_acc_percent, 30.0)
+        self.assertFalse(default_config.safe_travel.enabled)
+        self.assertEqual(default_config.safe_travel.position, [])
+        self.assertFalse(default_config.dropoff_safe_travel.enabled)
+        self.assertEqual(default_config.dropoff_safe_travel.position, [])
+        self.assertFalse(default_config.enable_path_debug_plots)
 
         original = application_wiring._PAINT_PROCESS
         try:
@@ -53,7 +68,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         default_config = PaintProcessConfig()
 
         self.assertEqual(default_config.pickup_motion.approach_offset_mm, 100.0)
-        self.assertEqual(default_config.pickup_motion.contact_offset_mm, 2.0)
+        self.assertEqual(default_config.pickup_motion.contact_offset_mm, 5.0)
         self.assertEqual(default_config.pickup_motion.initial_lift_clearance_mm, 20.0)
         self.assertEqual(default_config.pickup_motion.approach_vel_percent, 60.0)
         self.assertEqual(default_config.pickup_motion.approach_acc_percent, 50.0)
@@ -89,12 +104,185 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(restored.interpolation.path_tangent_lookahead_mm, 22.5)
         self.assertEqual(restored.interpolation.path_tangent_deadband_deg, 3.5)
 
+    def test_process_settings_mapper_roundtrips_magazine_load_settings(self) -> None:
+        base = PaintProcessConfig(magazine_load=PaintMagazineLoadConfig(enabled=False))
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["magazine_load_enabled"])
+        self.assertEqual(0.5, flat["magazine_camera_settle_s"])
+        self.assertEqual(0.5, flat["magazine_release_settle_s"])
+        self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
+        self.assertEqual(30.0, flat["magazine_move_to_magazine_acc_percent"])
+        self.assertEqual(30.0, flat["magazine_transfer_to_calibration_vel_percent"])
+        self.assertEqual(30.0, flat["magazine_transfer_to_calibration_acc_percent"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "magazine_load_enabled": True,
+                "magazine_camera_settle_s": 0.25,
+                "magazine_release_settle_s": 0.75,
+                "magazine_move_to_magazine_vel_percent": 11.0,
+                "magazine_move_to_magazine_acc_percent": 12.0,
+                "magazine_transfer_to_calibration_vel_percent": 13.0,
+                "magazine_transfer_to_calibration_acc_percent": 14.0,
+            },
+            base,
+        )
+
+        self.assertTrue(restored.magazine_load.enabled)
+        self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
+        self.assertEqual(0.75, restored.magazine_load.release_settle_s)
+        self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
+        self.assertEqual(12.0, restored.magazine_load.move_to_magazine_acc_percent)
+        self.assertEqual(13.0, restored.magazine_load.transfer_to_calibration_vel_percent)
+        self.assertEqual(14.0, restored.magazine_load.transfer_to_calibration_acc_percent)
+
+    def test_process_settings_mapper_roundtrips_safe_travel_settings(self) -> None:
+        base = PaintProcessConfig(safe_travel=PaintSafeTravelConfig(enabled=False))
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["safe_travel_enabled"])
+        self.assertEqual("", flat["safe_travel_position"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "safe_travel_enabled": True,
+                "safe_travel_position": "1, 2, 3, 4, 5, 6",
+            },
+            base,
+        )
+
+        self.assertTrue(restored.safe_travel.enabled)
+        self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], restored.safe_travel.position)
+
+    def test_process_settings_mapper_roundtrips_dropoff_safe_travel_settings(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["dropoff_safe_travel_enabled"])
+        self.assertEqual("", flat["dropoff_safe_travel_position"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "dropoff_safe_travel_enabled": True,
+                "dropoff_safe_travel_position": "7, 8, 9, 10, 11, 12",
+            },
+            base,
+        )
+
+        self.assertTrue(restored.dropoff_safe_travel.enabled)
+        self.assertEqual([7.0, 8.0, 9.0, 10.0, 11.0, 12.0], restored.dropoff_safe_travel.position)
+
+    def test_process_settings_mapper_roundtrips_diagnostics_settings(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertFalse(flat["enable_path_debug_plots"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {**flat, "enable_path_debug_plots": True},
+            base,
+        )
+
+        self.assertTrue(restored.enable_path_debug_plots)
+
+    def test_process_config_serializer_roundtrips_magazine_load_section(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        config = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(
+                enabled=True,
+                magazine_group_id="Magazine",
+                calibration_group_id="CALIBRATION",
+                move_to_magazine_vel_percent=21.0,
+                move_to_magazine_acc_percent=22.0,
+                transfer_to_calibration_vel_percent=23.0,
+                transfer_to_calibration_acc_percent=24.0,
+                camera_settle_s=1.25,
+                release_settle_s=0.75,
+            )
+        )
+
+        restored = serializer.from_dict(serializer.to_dict(config))
+
+        self.assertTrue(restored.magazine_load.enabled)
+        self.assertEqual("Magazine", restored.magazine_load.magazine_group_id)
+        self.assertEqual("CALIBRATION", restored.magazine_load.calibration_group_id)
+        self.assertEqual(21.0, restored.magazine_load.move_to_magazine_vel_percent)
+        self.assertEqual(22.0, restored.magazine_load.move_to_magazine_acc_percent)
+        self.assertEqual(23.0, restored.magazine_load.transfer_to_calibration_vel_percent)
+        self.assertEqual(24.0, restored.magazine_load.transfer_to_calibration_acc_percent)
+        self.assertEqual(1.25, restored.magazine_load.camera_settle_s)
+        self.assertEqual(0.75, restored.magazine_load.release_settle_s)
+
+    def test_process_config_serializer_roundtrips_safe_travel_section(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        config = PaintProcessConfig(
+            safe_travel=PaintSafeTravelConfig(enabled=True, position=[1, 2, 3, 4, 5, 6])
+        )
+
+        restored = serializer.from_dict(serializer.to_dict(config))
+
+        self.assertTrue(restored.safe_travel.enabled)
+        self.assertEqual([1, 2, 3, 4, 5, 6], restored.safe_travel.position)
+
     def test_process_settings_schema_has_interpolation_tab(self) -> None:
         tabs = build_paint_process_settings_tabs()
         interpolation = dict(tabs)["Interpolation"]
         keys = [field.key for group in interpolation for field in group.fields]
 
         self.assertEqual(keys, ["path_tangent_lookahead_mm", "path_tangent_deadband_deg"])
+
+    def test_process_settings_schema_has_magazine_load_motion_speed_controls(self) -> None:
+        tabs = build_paint_process_settings_tabs()
+        motion_speeds = dict(tabs)["Motion Speeds"]
+        magazine_groups = [group for group in motion_speeds if group.title == "Magazine Load"]
+
+        self.assertEqual(1, len(magazine_groups))
+        self.assertEqual(
+            [
+                "magazine_move_to_magazine_vel_percent",
+                "magazine_move_to_magazine_acc_percent",
+                "magazine_transfer_to_calibration_vel_percent",
+                "magazine_transfer_to_calibration_acc_percent",
+            ],
+            [field.key for field in magazine_groups[0].fields],
+        )
+
+    def test_process_settings_schema_has_process_tab_controls(self) -> None:
+        tabs = build_paint_process_settings_tabs()
+        process = dict(tabs)["Process"]
+        keys = [field.key for group in process for field in group.fields]
+        safe_travel_groups = [group for group in process if group.title == "Safe Travel"]
+
+        self.assertIn("magazine_load_enabled", keys)
+        self.assertIn("magazine_camera_settle_s", keys)
+        self.assertIn("magazine_release_settle_s", keys)
+        self.assertIn("safe_travel_enabled", keys)
+        self.assertIn("safe_travel_position", keys)
+        self.assertIn("safe_travel_set_current", keys)
+        self.assertIn("dropoff_safe_travel_enabled", keys)
+        self.assertIn("dropoff_safe_travel_position", keys)
+        self.assertIn("dropoff_safe_travel_set_current", keys)
+        self.assertNotIn("safe_travel_group_id", keys)
+        self.assertEqual(1, len(safe_travel_groups))
+        self.assertEqual(
+            [
+                "safe_travel_enabled",
+                "safe_travel_position",
+                "safe_travel_set_current",
+                "dropoff_safe_travel_enabled",
+                "dropoff_safe_travel_position",
+                "dropoff_safe_travel_set_current",
+            ],
+            [field.key for field in safe_travel_groups[0].fields],
+        )
+
+        diagnostics = dict(tabs)["Diagnostics"]
+        diagnostics_keys = [field.key for group in diagnostics for field in group.fields]
+        self.assertIn("enable_path_debug_plots", diagnostics_keys)
 
     def test_executor_contact_motion_plane_refreshes_from_config_service(self) -> None:
         service = type(

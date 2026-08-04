@@ -19,6 +19,7 @@ from src.engine.vision.implementation.plvision.PLVision import ImageProcessing
 from src.engine.vision.implementation.VisionSystem.services import (
     ContourDetectionService, CalibrationService, ArucoDetectionService, BrightnessService, QrDetectionService,
 )
+from src.engine.vision.i_vision_service import VisionFrameUnavailableError
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
 
 
@@ -140,13 +141,13 @@ class VisionSystem:
             width  = self.camera_settings.get_camera_width(),
             height = self.camera_settings.get_camera_height(),
         )
-        # self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
+        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
         # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera = RemoteCamera(url = "http://192.168.222.11:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
 
@@ -255,7 +256,9 @@ class VisionSystem:
     def compute_contours_for_latest_frame(self) -> tuple[np.ndarray | None, list]:
         snapshot = self.frame_grabber.get_latest_snapshot()
         if snapshot is None or snapshot.frame is None:
-            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+            raise VisionFrameUnavailableError(
+                "No fresh camera frame is available. Check the camera stream before capturing."
+            )
 
         if (
             self.camera_settings.get_contour_detection()

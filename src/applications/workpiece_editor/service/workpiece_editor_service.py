@@ -18,6 +18,7 @@ from src.engine.robot.path_preparation.geometry import (
     has_valid_contour,
 )
 from src.engine.vision.i_capture_snapshot_service import ICaptureSnapshotService
+from src.engine.vision.capture_snapshot_service import ActiveWorkAreaVerificationError
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
     WorkpieceProcessAction,
@@ -47,6 +48,7 @@ class WorkpieceEditorServices:
     path_preparation_service: Optional[IWorkpiecePathPreparationService] = None
     matching_service: Optional[IWorkpieceMatcher] = None
     workpiece_data_adapter: Optional[IWorkpieceDataAdapter] = None
+    process_execution_validator: Optional[Callable[[], tuple[bool, str]]] = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,7 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         self._path_executor = services.path_executor
         self._path_preparation_service = services.path_preparation_service
         self._matching_service = services.matching_service
+        self._process_execution_validator = services.process_execution_validator
         self._workpiece_data_adapter = services.workpiece_data_adapter
         self._editing_storage_id = None
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
@@ -140,6 +143,8 @@ class WorkpieceEditorService(IWorkpieceEditorService):
                 return self._capture_snapshot_service.capture_snapshot(source="workpiece_editor").contours
             return self._vision.get_latest_contours()
         except Exception as exc:
+            if isinstance(exc, ActiveWorkAreaVerificationError):
+                raise
             _logger.error("get_contours failed: %s", exc)
             return []
 
@@ -319,6 +324,10 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return False, "No prepared process paths available to execute"
         if self._path_executor is None:
             return False, "No process executor is configured for this workpiece editor"
+        if self._process_execution_validator is not None:
+            ok, message = self._process_execution_validator()
+            if not ok:
+                return False, message or "Robot capture position is not verified."
         return self._path_executor.execute_process_action(
             execution_plan,
             action_id=action_id,

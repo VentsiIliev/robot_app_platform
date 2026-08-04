@@ -26,3 +26,6 @@ class PaintProcessSettingsFactory(ApplicationFactory):
         view: PaintProcessSettingsView,
     ) -> PaintProcessSettingsController:
         return PaintProcessSettingsController(model, view)
+
+    def build(self, service: IPaintProcessSettingsService, messaging=None, jog_service=None):
+        return super().build(service, messaging=messaging, jog_service=jog_service)

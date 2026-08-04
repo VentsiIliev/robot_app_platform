@@ -33,6 +33,25 @@ class TestWorkAreaService(unittest.TestCase):
         )
         self.assertEqual(service.get_active_area_id(), "spray")
 
+    def test_empty_default_leaves_active_area_unknown(self):
+        service = WorkAreaService(
+            settings_service=self._make_settings(),
+            definitions=[WorkAreaDefinition(id="spray", label="Spray", color="#f80")],
+        )
+        self.assertIsNone(service.get_active_area_id())
+
+    def test_active_area_requires_explicit_verification_after_set(self):
+        service = WorkAreaService(
+            settings_service=self._make_settings(),
+            definitions=[WorkAreaDefinition(id="spray", label="Spray", color="#f80")],
+        )
+
+        service.set_active_area_id("spray")
+        self.assertFalse(service.is_active_area_verified())
+
+        service.mark_active_area_verified("spray")
+        self.assertTrue(service.is_active_area_verified())
+
     def test_set_invalid_active_area_raises(self):
         service = WorkAreaService(
             settings_service=self._make_settings(),

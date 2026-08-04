@@ -4,7 +4,7 @@
   "Height": 720,
   "Skip frames": 30,
   "Capture position offset": -5.0,
-  "Contour detection": false,
+  "Contour detection": true,
   "Draw contours": true,
   "Threshold": 128,
   "Threshold pickup area": 150,

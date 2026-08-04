@@ -17,6 +17,14 @@ class IWorkAreaService(ABC):
         ...
 
     @abstractmethod
+    def is_active_area_verified(self) -> bool:
+        ...
+
+    @abstractmethod
+    def mark_active_area_verified(self, area_id: str | None = None) -> None:
+        ...
+
+    @abstractmethod
     def get_area_config(self, area_id: str) -> WorkAreaConfig | None:
         ...
 

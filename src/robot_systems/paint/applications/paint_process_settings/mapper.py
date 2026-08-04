@@ -11,10 +11,42 @@ from src.robot_systems.paint.processes.paint.config import (
 
 class PaintProcessSettingsMapper:
     @staticmethod
+    def _pose_to_text(position: object) -> str:
+        if not position:
+            return ""
+        try:
+            values = [float(value) for value in list(position)[:6]]
+        except (TypeError, ValueError):
+            return ""
+        if len(values) < 6:
+            return ""
+        return ", ".join(f"{value:.3f}" for value in values)
+
+    @staticmethod
+    def _pose_from_value(value: object, fallback: list[float]) -> list[float]:
+        if isinstance(value, str):
+            raw_values = [part.strip() for part in value.replace("[", "").replace("]", "").split(",")]
+        else:
+            try:
+                raw_values = list(value)
+            except TypeError:
+                return list(fallback)
+        try:
+            values = [float(item) for item in raw_values[:6]]
+        except (TypeError, ValueError):
+            return list(fallback)
+        if len(values) < 6:
+            return list(fallback)
+        return values
+
+    @staticmethod
     def to_flat_dict(settings: PaintProcessConfig) -> dict:
         pickup = settings.pickup_motion
         cleanup = settings.edge_cleanup
         dropoff = settings.dropoff
+        magazine = settings.magazine_load
+        safe_travel = settings.safe_travel
+        dropoff_safe_travel = settings.dropoff_safe_travel
         nav = settings.navigation_return
         interpolation = settings.interpolation
         return {
@@ -58,6 +90,17 @@ class PaintProcessSettingsMapper:
             "dropoff_strategy": dropoff.strategy,
             "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
             "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
+            "magazine_load_enabled": magazine.enabled,
+            "magazine_camera_settle_s": magazine.camera_settle_s,
+            "magazine_release_settle_s": magazine.release_settle_s,
+            "magazine_move_to_magazine_vel_percent": magazine.move_to_magazine_vel_percent,
+            "magazine_move_to_magazine_acc_percent": magazine.move_to_magazine_acc_percent,
+            "magazine_transfer_to_calibration_vel_percent": magazine.transfer_to_calibration_vel_percent,
+            "magazine_transfer_to_calibration_acc_percent": magazine.transfer_to_calibration_acc_percent,
+            "safe_travel_enabled": safe_travel.enabled,
+            "safe_travel_position": PaintProcessSettingsMapper._pose_to_text(safe_travel.position),
+            "dropoff_safe_travel_enabled": dropoff_safe_travel.enabled,
+            "dropoff_safe_travel_position": PaintProcessSettingsMapper._pose_to_text(dropoff_safe_travel.position),
             "nav_unwind_vel_percent": nav.unwind_vel_percent,
             "nav_unwind_acc_percent": nav.unwind_acc_percent,
             "nav_unwind_queue_if_busy": nav.unwind_queue_if_busy,
@@ -66,6 +109,7 @@ class PaintProcessSettingsMapper:
             "path_tangent_lookahead_mm": interpolation.path_tangent_lookahead_mm,
             "path_tangent_deadband_deg": interpolation.path_tangent_deadband_deg,
             "enable_pivot_debug_plot": settings.enable_pivot_debug_plot,
+            "enable_path_debug_plots": settings.enable_path_debug_plots,
             "enable_execution_motion_trace": settings.enable_execution_motion_trace,
             "execution_motion_trace_sample_period_s": settings.execution_motion_trace_sample_period_s,
         }
@@ -133,6 +177,52 @@ class PaintProcessSettingsMapper:
                 flat.get("dropoff_release_align_acc_percent", base.dropoff.release_align_acc_percent)
             ),
         )
+        magazine = replace(
+            base.magazine_load,
+            enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
+            camera_settle_s=float(flat.get("magazine_camera_settle_s", base.magazine_load.camera_settle_s)),
+            release_settle_s=float(flat.get("magazine_release_settle_s", base.magazine_load.release_settle_s)),
+            move_to_magazine_vel_percent=float(
+                flat.get(
+                    "magazine_move_to_magazine_vel_percent",
+                    base.magazine_load.move_to_magazine_vel_percent,
+                )
+            ),
+            move_to_magazine_acc_percent=float(
+                flat.get(
+                    "magazine_move_to_magazine_acc_percent",
+                    base.magazine_load.move_to_magazine_acc_percent,
+                )
+            ),
+            transfer_to_calibration_vel_percent=float(
+                flat.get(
+                    "magazine_transfer_to_calibration_vel_percent",
+                    base.magazine_load.transfer_to_calibration_vel_percent,
+                )
+            ),
+            transfer_to_calibration_acc_percent=float(
+                flat.get(
+                    "magazine_transfer_to_calibration_acc_percent",
+                    base.magazine_load.transfer_to_calibration_acc_percent,
+                )
+            ),
+        )
+        safe_travel = replace(
+            base.safe_travel,
+            enabled=bool(flat.get("safe_travel_enabled", base.safe_travel.enabled)),
+            position=PaintProcessSettingsMapper._pose_from_value(
+                flat.get("safe_travel_position", base.safe_travel.position),
+                base.safe_travel.position,
+            ),
+        )
+        dropoff_safe_travel = replace(
+            base.dropoff_safe_travel,
+            enabled=bool(flat.get("dropoff_safe_travel_enabled", base.dropoff_safe_travel.enabled)),
+            position=PaintProcessSettingsMapper._pose_from_value(
+                flat.get("dropoff_safe_travel_position", base.dropoff_safe_travel.position),
+                base.dropoff_safe_travel.position,
+            ),
+        )
         nav = replace(
             base.navigation_return,
             unwind_vel_percent=float(flat.get("nav_unwind_vel_percent", base.navigation_return.unwind_vel_percent)),
@@ -189,7 +279,11 @@ class PaintProcessSettingsMapper:
             pickup_motion=pickup,
             edge_cleanup=cleanup,
             dropoff=dropoff,
+            magazine_load=magazine,
+            safe_travel=safe_travel,
+            dropoff_safe_travel=dropoff_safe_travel,
             navigation_return=nav,
             interpolation=interpolation,
             enable_pivot_debug_plot=bool(flat.get("enable_pivot_debug_plot", base.enable_pivot_debug_plot)),
+            enable_path_debug_plots=bool(flat.get("enable_path_debug_plots", base.enable_path_debug_plots)),
         )

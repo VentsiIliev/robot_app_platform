@@ -98,6 +98,18 @@ class PaintRobotSystem(BaseRobotSystem):
             group_type=MovementGroupType.SINGLE_POSITION,
             has_trajectory_execution=True,
         ),
+        MovementGroupDefinition(
+            id="Dropoff",
+            label="Dropoff",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
+        MovementGroupDefinition(
+            id="Magazine",
+            label="Magazine",
+            group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
+        ),
 
 
     ]
@@ -120,6 +132,13 @@ class PaintRobotSystem(BaseRobotSystem):
             work_area_id="paint",
             use_height_correction=True,
         ),
+        TargetFrameDefinition(
+            name="magazine",
+            work_area_id="magazine",
+            source_navigation_group="CALIBRATION",
+            target_navigation_group="Magazine",
+            use_height_correction=True,
+        ),
 
     ]
 
@@ -134,12 +153,22 @@ class PaintRobotSystem(BaseRobotSystem):
             supports_brightness_roi=True,
             supports_height_mapping=True,
         ),
+        WorkAreaDefinition(
+            id="magazine",
+            label="Magazine",
+            color="#4A90E2",
+            threshold_profile="default",
+            supports_detection_roi=True,
+            supports_brightness_roi=True,
+            supports_height_mapping=True,
+        ),
     ]
     work_area_observers = [
         WorkAreaObserverBinding(area_id="paint", movement_group_id="CALIBRATION"),
+        WorkAreaObserverBinding(area_id="magazine", movement_group_id="Magazine"),
     ]
 
-    default_active_work_area_id = "paint"
+    default_active_work_area_id = ""
 
     role_policy = RolePolicy(
         role_values=["Admin", "Operator", "Viewer", "Developer"],
@@ -147,6 +176,7 @@ class PaintRobotSystem(BaseRobotSystem):
         default_permission_role_values=["Admin"],
         protected_app_role_values={
             "user_management": ["Admin"],
+            "paintmotionrecipe": ["Admin", "Developer"],
         },
     )
 
@@ -166,6 +196,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_paint_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                             factory=application_wiring._build_robot_settings_application),
+            ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
+                            factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
                             factory=application_wiring._build_work_area_settings_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
@@ -188,6 +220,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_pick_target_application),
             ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
                             factory=application_wiring._build_paint_motion_plane_setup_application),
+            ApplicationSpec(name="PaintMotionRecipe", folder_id=4, icon="fa5s.route",
+                            factory=application_wiring._build_paint_motion_recipe_application),
         ],
     )
 
@@ -313,17 +347,21 @@ class PaintRobotSystem(BaseRobotSystem):
             capture_snapshot_service=self._paint_capture_snapshot_service,
         )
         self._paint_workpiece_preparation_service = application_wiring._build_paint_workpiece_preparation_service(self)
+        self._paint_magazine_load_service = application_wiring._build_paint_magazine_load_service(self)
         self._paint_production_service = PaintProductionService(
             workpiece_preparation_service=self._paint_workpiece_preparation_service,
             capture_snapshot_service=self._paint_capture_snapshot_service,
             path_preparation_service=self._paint_path_preparation_service,
             path_executor=self._paint_path_executor,
             vacuum_pump=self._vacuum_pump,
+            paint_process_config_service=self._paint_process_config_service,
+            magazine_load_service=self._paint_magazine_load_service,
         )
         self._main_process = PaintProcess(
             production_service=self._paint_production_service,
             robot_service=self._robot,
             vacuum_pump=self._vacuum_pump,
+            paint_process_config_service=self._paint_process_config_service,
             messaging=self._messaging_service,
             system_manager=self._system_manager,
             service_checker=self.health_registry.check,

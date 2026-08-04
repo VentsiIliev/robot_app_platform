@@ -1,0 +1,23 @@
+order,step,label,success,exception,elapsed_s,start_offset_s,end_offset_s
+1,paint_process,,true,false,41.782094,0.000002,41.782096
+2,ordered_paint_motion_chain,,true,false,34.411630,0.000034,34.411664
+3,pickup_plan_build,refresh_runtime_config,true,false,0.000019,0.000046,0.000065
+4,pickup_plan_build,resolve_pickup_base_position,true,false,0.000015,0.000073,0.000088
+5,pickup_plan_build,resolve_paint_base_position,true,false,0.000011,0.000135,0.000146
+6,pickup_plan_build,project_initial_pivot_path,true,false,0.619538,0.000179,0.619717
+7,pickup_plan_build,project_carried_rotation_path,true,false,0.750795,0.619934,1.370729
+8,vacuum_on,,true,false,0.000051,1.371234,1.371284
+9,pickup_phase,Changing plane combined with first pivot contact pose,true,false,0.000030,1.371300,1.371329
+10,execute_paint_contact_paths,,true,false,0.101095,1.371339,1.472434
+11,paint_contact_prepare,refresh_runtime_config,true,false,0.000054,1.371345,1.371399
+12,paint_contact_job_prepare,job_1:build_execution_path,true,false,0.059425,1.371443,1.430868
+13,paint_contact_job_prepare,job_1:build_command_path,true,false,0.000329,1.430928,1.431257
+14,paint_contact_job_debug,job_1:build_diagnostics,true,false,0.000180,1.434680,1.434860
+15,paint_contact_job_debug,job_1:write_debug_dump,true,false,0.037242,1.434872,1.472114
+16,pre_release_dropoff,,true,false,3.983816,34.411674,38.395491
+17,pickup_phase,Moving to dropoff group 'Dropoff' for release,true,false,3.983651,34.411749,38.395399
+18,vacuum_off,,true,false,0.000041,38.395414,38.395455
+19,return_after_paint_process,,true,false,3.386564,38.395527,41.782091
+20,move_to_calibration_position,,true,false,3.386554,38.395531,41.782086
+21,unwind_joint6_before_calibration_return,,true,false,0.003587,38.395533,38.399120
+22,move_with_z_offset,CALIBRATION,true,false,3.382927,38.399143,41.782070

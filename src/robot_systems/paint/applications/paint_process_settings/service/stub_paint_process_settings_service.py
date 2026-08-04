@@ -5,8 +5,15 @@ from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG,
 
 
 class StubPaintProcessSettingsService(IPaintProcessSettingsService):
-    def __init__(self, initial_settings: PaintProcessConfig | None = None):
+    def __init__(
+        self,
+        initial_settings: PaintProcessConfig | None = None,
+        dropoff_movement_group_configured: bool = True,
+        current_position: list[float] | None = None,
+    ):
         self._settings = initial_settings or PAINT_PROCESS_CONFIG
+        self._dropoff_movement_group_configured = bool(dropoff_movement_group_configured)
+        self._current_position = list(current_position or [0.0, 0.0, 200.0, 180.0, 0.0, 0.0])
 
     def load_settings(self) -> PaintProcessConfig:
         return self._settings
@@ -14,3 +21,14 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
     def save_settings(self, settings: PaintProcessConfig) -> None:
         self._settings = settings
         print("Stub: Paint process settings saved")
+
+    def is_dropoff_movement_group_configured(self) -> bool:
+        return self._dropoff_movement_group_configured
+
+    def dropoff_movement_group_configuration_error(self) -> str:
+        if self._dropoff_movement_group_configured:
+            return ""
+        return "Dropoff movement group position, velocity, or acceleration is not configured."
+
+    def get_current_robot_position(self) -> list[float] | None:
+        return list(self._current_position)

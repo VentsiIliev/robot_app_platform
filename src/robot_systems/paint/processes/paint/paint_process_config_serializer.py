@@ -7,8 +7,11 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
     PaintInterpolationConfig,
+    PaintMagazineLoadConfig,
     PaintNavigationReturnConfig,
     PaintProcessConfig,
+    PaintSafeTravelConfig,
+    PaintToDropoffSafeTravelConfig,
     PickupMotionConfig,
 )
 
@@ -48,6 +51,9 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
                 "pickup_motion",
                 "edge_cleanup",
                 "dropoff",
+                "magazine_load",
+                "safe_travel",
+                "dropoff_safe_travel",
                 "navigation_return",
                 "interpolation",
             }
@@ -66,6 +72,21 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             PaintDropoffConfig,
             _section(raw, "dropoff"),
             default.dropoff,
+        )
+        values["magazine_load"] = _build_dataclass(
+            PaintMagazineLoadConfig,
+            _section(raw, "magazine_load"),
+            default.magazine_load,
+        )
+        values["safe_travel"] = _build_dataclass(
+            PaintSafeTravelConfig,
+            _section(raw, "safe_travel"),
+            default.safe_travel,
+        )
+        values["dropoff_safe_travel"] = _build_dataclass(
+            PaintToDropoffSafeTravelConfig,
+            _section(raw, "dropoff_safe_travel"),
+            default.dropoff_safe_travel,
         )
         values["navigation_return"] = _build_dataclass(
             PaintNavigationReturnConfig,

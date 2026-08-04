@@ -59,6 +59,21 @@ def _deg_field(key: str, label: str, default: float = 0.0, min_val: float = 0.0)
     )
 
 
+def _seconds_field(key: str, label: str, default: float = 0.0) -> SettingField:
+    return SettingField(
+        key,
+        _t(label),
+        "double_spinbox",
+        default=default,
+        min_val=0.0,
+        max_val=10.0,
+        step=0.1,
+        decimals=2,
+        suffix=" s",
+        step_options=[0.1, 0.5, 1.0],
+    )
+
+
 def _toggle(key: str, label: str, default: bool = False) -> SettingField:
     return SettingField(key, _t(label), "toggle", default=default)
 
@@ -80,6 +95,43 @@ def build_process_groups() -> list[SettingGroup]:
             SettingField("secondary_group_id", _t("Secondary Movement Group"), "line_edit", default="Horizontal Shaft"),
             SettingField("cleanup_group_id", _t("Cleanup Movement Group"), "line_edit", default="Clean"),
         ]),
+        SettingGroup(_t("Dropoff Strategy"), [
+            SettingField("dropoff_strategy", _t("Strategy"), "combo",
+                         default="pickup_origin", choices=["pickup_origin", "movement_group"]),
+        ]),
+        SettingGroup(_t("Magazine Load"), [
+            _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
+            _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
+            _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
+        ]),
+        SettingGroup(_t("Safe Travel"), [
+            _toggle("safe_travel_enabled", "Use Waypoint Between Calibration and Paint"),
+            SettingField(
+                "safe_travel_position",
+                _t("Calibration to Paint Pose"),
+                "paint_pose_display",
+                default=_t("Not set"),
+            ),
+            SettingField(
+                "safe_travel_set_current",
+                _t("Calibration to Paint"),
+                "paint_action_button",
+                default=_t("Set Current Calibration-to-Paint Pose"),
+            ),
+            _toggle("dropoff_safe_travel_enabled", "Use Waypoint Between Paint and Dropoff"),
+            SettingField(
+                "dropoff_safe_travel_position",
+                _t("Paint to Dropoff Pose"),
+                "paint_pose_display",
+                default=_t("Not set"),
+            ),
+            SettingField(
+                "dropoff_safe_travel_set_current",
+                _t("Paint to Dropoff"),
+                "paint_action_button",
+                default=_t("Set Current Paint-to-Dropoff Pose"),
+            ),
+        ]),
     ]
 
 
@@ -99,6 +151,12 @@ def build_motion_speed_groups() -> list[SettingGroup]:
             _percent_field("pickup_first_contact_vel_percent", "First-Contact Velocity"),
             _percent_field("pickup_first_contact_acc_percent", "First-Contact Acceleration"),
         ]),
+        SettingGroup(_t("Magazine Load"), [
+            _percent_field("magazine_move_to_magazine_vel_percent", "Move to Magazine Velocity", 30.0),
+            _percent_field("magazine_move_to_magazine_acc_percent", "Move to Magazine Acceleration", 30.0),
+            _percent_field("magazine_transfer_to_calibration_vel_percent", "Magazine to Calibration Velocity", 30.0),
+            _percent_field("magazine_transfer_to_calibration_acc_percent", "Magazine to Calibration Acceleration", 30.0),
+        ]),
         SettingGroup(_t("Cleanup"), [
             _percent_field("cleanup_vel_percent", "Cleanup Velocity"),
             _percent_field("cleanup_acc_percent", "Cleanup Acceleration"),
@@ -107,11 +165,11 @@ def build_motion_speed_groups() -> list[SettingGroup]:
             _percent_field("dropoff_release_align_vel_percent", "Release-Align Velocity"),
             _percent_field("dropoff_release_align_acc_percent", "Release-Align Acceleration"),
         ]),
-        SettingGroup(_t("Return"), [
+        SettingGroup(_t("Navigation"), [
             _percent_field("nav_unwind_vel_percent", "Joint 6 Unwind Velocity"),
             _percent_field("nav_unwind_acc_percent", "Joint 6 Unwind Acceleration"),
-            _percent_field("nav_calibration_move_vel_percent", "Calibration-Return Velocity"),
-            _percent_field("nav_calibration_move_acc_percent", "Calibration-Return Acceleration"),
+            _percent_field("nav_calibration_move_vel_percent", "Move to Calibration Velocity"),
+            _percent_field("nav_calibration_move_acc_percent", "Move to Calibration Acceleration"),
         ]),
     ]
 
@@ -171,6 +229,7 @@ def build_interpolation_groups() -> list[SettingGroup]:
 def build_diagnostics_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("Debug"), [
+            _toggle("enable_path_debug_plots", "Enable Path Debug Plots"),
             _toggle("enable_pivot_debug_plot", "Enable Pivot Debug Plot"),
             _toggle("enable_execution_motion_trace", "Enable Execution Motion Trace"),
             SettingField("execution_motion_trace_sample_period_s", _t("Motion Trace Sample Period"), "double_spinbox",

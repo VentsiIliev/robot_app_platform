@@ -208,6 +208,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             target_point_name: str = "",
             pickup_target_point_name: str = "",
             calibration_frame_name: str = "",
+            calibration_frame_name_getter: Optional[Callable[[], str]] = None,
             pixel_height_compensation_fn: Optional[Callable[[float], tuple[float, float]]] = None,
             base_position_provider: Optional[Callable[[], Optional[list[float]]]] = None,
             pickup_axis_alignment_sign: float = 1.0,
@@ -236,6 +237,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         self._target_point_name = str(target_point_name or "").strip().lower()
         self._pickup_target_point_name = str(pickup_target_point_name or self._target_point_name or "").strip().lower()
         self._calibration_frame_name = str(calibration_frame_name or "").strip().lower()
+        self._calibration_frame_name_getter = calibration_frame_name_getter
         self._pixel_height_compensation_fn = pixel_height_compensation_fn
         self._base_position_provider = base_position_provider
         self._debug_plot_dir = str(debug_plot_dir) if debug_plot_dir else ""
@@ -280,6 +282,17 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
             except Exception:
                 self._logger.debug("Path preparation resolver lookup failed", exc_info=True)
         return self._resolver
+
+    def _current_calibration_frame_name(self) -> str:
+        """Return the active target frame name, resolving lazily if a getter is set."""
+        if self._calibration_frame_name_getter is not None:
+            try:
+                frame_name = str(self._calibration_frame_name_getter() or "").strip().lower()
+                if frame_name:
+                    return frame_name
+            except Exception:
+                self._logger.debug("Path preparation target-frame lookup failed", exc_info=True)
+        return self._calibration_frame_name
 
     def _save_contour_pipeline_debug_plot(
             self,
@@ -411,11 +424,12 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         spray_pattern = merged.get("sprayPattern", {})
         workpiece_height_mm = _safe_float(merged.get("height_mm"), config._DEFAULT_WORKPIECE_HEIGHT_MM)
         default_pivot_offset_mm = _safe_float(merged.get("offset"), 0.0)
+        calibration_frame_name = self._current_calibration_frame_name()
         execution_target_name, execution_target_offset_x, execution_target_offset_y, execution_reference_rz = (
-            self._resolve_target_point_metadata(self._target_point_name, self._calibration_frame_name)
+            self._resolve_target_point_metadata(self._target_point_name, calibration_frame_name)
         )
         pickup_target_name, pickup_target_offset_x, pickup_target_offset_y, pickup_reference_rz = (
-            self._resolve_target_point_metadata(self._pickup_target_point_name, self._calibration_frame_name)
+            self._resolve_target_point_metadata(self._pickup_target_point_name, calibration_frame_name)
         )
         use_workpiece_layer = False
         self._logger.debug(f"SPRAY PATTERN: {spray_pattern}")
@@ -627,7 +641,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._target_point_name,
-                    frame_name=self._calibration_frame_name,
+                    frame_name=calibration_frame_name,
                 )
 
                 if use_workpiece_layer and len(prepared_xy) >= 3:
@@ -680,7 +694,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     float(pickup_px[0]), float(pickup_px[1]),
                     {"height_mm": workpiece_height_mm, **merged},
                     target_point_name=self._pickup_target_point_name,
-                    frame_name=self._calibration_frame_name,
+                    frame_name=calibration_frame_name,
                     rz_override=pickup_rz,
                 )
 
@@ -829,6 +843,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
 
         resolver = self._current_resolver()
         transformer = self._current_transformer()
+        calibration_frame_name = self._current_calibration_frame_name()
 
         if resolver is not None:
             context = PixelToMmContext(
@@ -837,7 +852,7 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 rx=rx,
                 ry=ry,
                 target_point_name=self._target_point_name,
-                calibration_frame_name=self._calibration_frame_name,
+                calibration_frame_name=calibration_frame_name,
                 mode_name=self._pixel_to_mm_mode,
                 logger=self._logger,
                 geometry_scale_cache=self._geometry_scale_cache,

@@ -56,6 +56,9 @@ class TestPaintDashboardService(unittest.TestCase):
         process.state = ProcessState.ERROR
         error = service.load_state()
         self.assertEqual(error.active_job_label, "Paint job error")
+        self.assertFalse(error.can_start)
+        self.assertFalse(error.can_stop)
+        self.assertFalse(error.can_pause)
 
     def test_control_methods_delegate_to_process(self) -> None:
         process = MagicMock(process_id="paint")
@@ -73,6 +76,12 @@ class TestPaintDashboardService(unittest.TestCase):
         process.pause.assert_called_once_with()
         process.resume.assert_called_once_with()
         process.reset_errors.assert_called_once_with()
+
+    def test_get_process_id_uses_enum_value(self) -> None:
+        process = MagicMock(process_id=ProcessID.MAIN_PROCESS)
+        service = PaintDashboardService(process)
+
+        self.assertEqual(service.get_process_id(), "main_process")
 
     def test_dashboard_service_does_not_expose_legacy_transform_debug_helper(self) -> None:
         service = PaintDashboardService(MagicMock(process_id="paint"))
