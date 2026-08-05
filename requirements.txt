@@ -29,6 +29,7 @@ pyserial==3.5
 pyzbar==0.1.9
 qrcode==8.2
 requests==2.32.5
+websockets==16.0
 scikit-image==0.26.0
 scikit-learn==1.8.0
 scipy==1.17.1

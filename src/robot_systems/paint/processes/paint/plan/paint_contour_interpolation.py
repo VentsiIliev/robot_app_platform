@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
+from time import perf_counter
 
 import cv2
 import numpy as np
@@ -78,6 +80,7 @@ class PaintContourInterpolation:
         self._config = config or PaintContourInterpolationConfig()
 
     def build(self, robot_path: list[list[float]]) -> PaintContourInterpolationResult:
+        total_start = perf_counter()
         raw_path = [list(point) for point in robot_path]
         if len(raw_path) < 2:
             return PaintContourInterpolationResult(
@@ -89,7 +92,9 @@ class PaintContourInterpolation:
                 anchor_xy=[list(point[:2]) for point in raw_path],
             )
 
+        stage_start = perf_counter()
         raw_xy = _clean_xy(np.asarray(raw_path, dtype=float)[:, :2])
+        _log_interpolation_timing("clean_xy", stage_start, input_points=len(raw_path), output_points=len(raw_xy))
         if len(raw_xy) < 2:
             return PaintContourInterpolationResult(
                 units=self._config.units,
@@ -100,16 +105,41 @@ class PaintContourInterpolation:
                 anchor_xy=[list(point[:2]) for point in raw_path[:1]],
             )
 
+        stage_start = perf_counter()
         dense_xy = _resample_closed_xy(raw_xy, self._config.fit_sample_spacing)
+        _log_interpolation_timing(
+            "fit_resample_closed_xy",
+            stage_start,
+            input_points=len(raw_xy),
+            output_points=len(dense_xy),
+        )
+
+        stage_start = perf_counter()
         prepared_xy, corner_indices = _smooth_closed_xy_with_beziers(dense_xy, self._config)
+        _log_interpolation_timing(
+            "smooth_closed_xy_with_beziers",
+            stage_start,
+            input_points=len(dense_xy),
+            output_points=len(prepared_xy),
+            corners=len(corner_indices),
+        )
         cleaned_anchor_xy = dense_xy
+
+        stage_start = perf_counter()
         sharp_boundary_xy = _sharp_tangent_boundary_xy(
             prepared_xy,
             threshold_deg=self._config.sharp_boundary_deg,
         )
+        _log_interpolation_timing(
+            "sharp_tangent_boundary_xy",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(sharp_boundary_xy),
+        )
         corner_xy = prepared_xy[np.asarray(corner_indices, dtype=int)] if corner_indices else np.empty((0, 2))
         preserve_xy = _merge_unique_xy_points(corner_xy, sharp_boundary_xy)
 
+        stage_start = perf_counter()
         prepared_path = rebuild_pose_path_from_xy(
             prepared_xy,
             raw_path,
@@ -118,16 +148,39 @@ class PaintContourInterpolation:
             tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
             tangent_boundary_xy=sharp_boundary_xy,
         )
+        _log_interpolation_timing(
+            "rebuild_prepared_pose_path",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(prepared_path),
+        )
+
+        stage_start = perf_counter()
         execution_xy = resample_contour_xy(
             prepared_xy,
             spacing=self._config.output_spacing,
             closed=True,
         )
+        _log_interpolation_timing(
+            "execution_resample_contour_xy",
+            stage_start,
+            input_points=len(prepared_xy),
+            output_points=len(execution_xy),
+        )
+
+        stage_start = perf_counter()
         execution_xy = _fair_resampled_contour_xy(
             execution_xy,
             spacing=self._config.output_spacing,
             closed=True,
         )
+        _log_interpolation_timing(
+            "fair_resampled_contour_xy",
+            stage_start,
+            output_points=len(execution_xy),
+        )
+
+        stage_start = perf_counter()
         execution_path = rebuild_pose_path_from_xy(
             execution_xy,
             raw_path,
@@ -135,6 +188,18 @@ class PaintContourInterpolation:
             tangent_lookahead_distance_mm=self._config.tangent_lookahead_distance_mm,
             tangent_heading_deadband_deg=self._config.tangent_heading_deadband_deg,
             tangent_boundary_xy=sharp_boundary_xy,
+        )
+        _log_interpolation_timing(
+            "rebuild_execution_pose_path",
+            stage_start,
+            input_points=len(execution_xy),
+            output_points=len(execution_path),
+        )
+        _log_interpolation_timing(
+            "paint_contour_interpolation_total",
+            total_start,
+            input_points=len(raw_path),
+            output_points=len(execution_path),
         )
 
         return PaintContourInterpolationResult(
@@ -147,6 +212,13 @@ class PaintContourInterpolation:
             cleaned_anchor_xy=cleaned_anchor_xy.tolist(),
             sharp_boundary_xy=sharp_boundary_xy.tolist(),
         )
+
+
+def _log_interpolation_timing(label: str, started_at: float, **fields: object) -> None:
+    suffix = " ".join(f"{key}={value}" for key, value in fields.items())
+    if suffix:
+        suffix = " " + suffix
+    _logger.info("[PATH_PREP_TIMING] stage=%s elapsed_s=%.3f%s", label, perf_counter() - started_at, suffix)
 
 
 def resample_contour_xy(
@@ -577,46 +649,54 @@ def _fair_resampled_contour_xy(
     max_local_segment = spacing * 2.5
     min_improvement_ratio = 0.35
 
+    count = len(points)
+    active = np.ones(count, dtype=bool)
+    prev_indices = np.arange(count, dtype=int) - 1
+    next_indices = np.arange(count, dtype=int) + 1
+    if closed:
+        prev_indices[0] = count - 1
+        next_indices[-1] = 0
+        candidates = deque(range(count))
+    else:
+        candidates = deque(range(1, count - 1))
+
+    active_count = count
     removed = 0
     max_bridge_error = 0.0
-    changed = True
-    while changed and len(points) >= 5:
-        changed = False
-        candidate_range = range(len(points)) if closed else range(1, len(points) - 1)
-        for index in candidate_range:
-            prev_index = (index - 1) % len(points)
-            next_index = (index + 1) % len(points)
-            if not closed and (prev_index < 0 or next_index >= len(points)):
-                continue
+    while candidates and active_count >= 5:
+        index = candidates.popleft()
+        if not active[index]:
+            continue
+        if not closed and (prev_indices[index] < 0 or next_indices[index] >= count):
+            continue
 
-            prev_point = points[prev_index]
-            point = points[index]
-            next_point = points[next_index]
-            incoming_len = float(np.linalg.norm(point - prev_point))
-            outgoing_len = float(np.linalg.norm(next_point - point))
-            if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
-                continue
-            if incoming_len > max_local_segment or outgoing_len > max_local_segment:
-                continue
+        prev_index = prev_indices[index]
+        next_index = next_indices[index]
+        if not active[prev_index] or not active[next_index]:
+            continue
 
-            bridge_error = _point_to_segment_distance(point, prev_point, next_point)
-            if bridge_error > tolerance:
-                continue
+        bridge_error = _fairing_bridge_error_if_removable(
+            points,
+            prev_index,
+            index,
+            next_index,
+            max_local_segment=max_local_segment,
+            tolerance=tolerance,
+            min_improvement_ratio=min_improvement_ratio,
+        )
+        if bridge_error is None:
+            continue
 
-            local_curvature = float(np.linalg.norm(next_point - 2.0 * point + prev_point))
-            bridge_len = float(np.linalg.norm(next_point - prev_point))
-            path_len = incoming_len + outgoing_len
-            if path_len <= 1e-9:
-                continue
-            bridge_curvature = abs(path_len - bridge_len)
-            if bridge_curvature > local_curvature * (1.0 - min_improvement_ratio):
-                continue
+        active[index] = False
+        next_indices[prev_index] = next_index
+        prev_indices[next_index] = prev_index
+        active_count -= 1
+        removed += 1
+        max_bridge_error = max(max_bridge_error, bridge_error)
 
-            points = np.delete(points, index, axis=0)
-            removed += 1
-            max_bridge_error = max(max_bridge_error, bridge_error)
-            changed = True
-            break
+        for candidate in (prev_indices[prev_index], prev_index, next_index, next_indices[next_index]):
+            if active[candidate] and (closed or 0 < candidate < count - 1):
+                candidates.append(candidate)
 
     if removed:
         _logger.info(
@@ -624,7 +704,65 @@ def _fair_resampled_contour_xy(
             f"{removed} resampling wiggle sample(s); "
             f"max_bridge_error={max_bridge_error:.4f}mm tolerance={tolerance:.4f}mm"
         )
-    return _close_if_needed(points, closed)
+    return _close_if_needed(_active_points_in_order(points, active, next_indices, closed), closed)
+
+
+def _fairing_bridge_error_if_removable(
+    points: np.ndarray,
+    prev_index: int,
+    index: int,
+    next_index: int,
+    *,
+    max_local_segment: float,
+    tolerance: float,
+    min_improvement_ratio: float,
+) -> float | None:
+    prev_point = points[prev_index]
+    point = points[index]
+    next_point = points[next_index]
+    incoming_len = float(np.linalg.norm(point - prev_point))
+    outgoing_len = float(np.linalg.norm(next_point - point))
+    if incoming_len <= 1e-9 or outgoing_len <= 1e-9:
+        return None
+    if incoming_len > max_local_segment or outgoing_len > max_local_segment:
+        return None
+
+    bridge_error = _point_to_segment_distance(point, prev_point, next_point)
+    if bridge_error > tolerance:
+        return None
+
+    local_curvature = float(np.linalg.norm(next_point - 2.0 * point + prev_point))
+    bridge_len = float(np.linalg.norm(next_point - prev_point))
+    path_len = incoming_len + outgoing_len
+    if path_len <= 1e-9:
+        return None
+    bridge_curvature = abs(path_len - bridge_len)
+    if bridge_curvature > local_curvature * (1.0 - min_improvement_ratio):
+        return None
+    return bridge_error
+
+
+def _active_points_in_order(
+    points: np.ndarray,
+    active: np.ndarray,
+    next_indices: np.ndarray,
+    closed: bool,
+) -> np.ndarray:
+    active_indices = np.flatnonzero(active)
+    if len(active_indices) == 0:
+        return np.empty((0, 2), dtype=float)
+    if not closed:
+        return points[active]
+
+    ordered = []
+    start = int(active_indices[0])
+    index = start
+    for _ in range(len(active_indices)):
+        ordered.append(points[index])
+        index = int(next_indices[index])
+        if index == start:
+            break
+    return np.asarray(ordered, dtype=float)
 
 
 def _removal_turn_score(points: np.ndarray, remove_index: int, *, closed: bool) -> float:

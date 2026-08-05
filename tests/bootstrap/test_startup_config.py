@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from src.bootstrap.startup_config import (
+    RosBackendConfig,
     StartupConfig,
     load_bootstrap_provider,
     load_startup_config,
@@ -54,6 +55,44 @@ class TestStartupConfig(unittest.TestCase):
                 supported_robot_systems=("glue", "paint", "welding"),
             ),
         )
+
+    def test_loads_ros_backend_config(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ros_backend": {
+                            "auto_launch": False,
+                            "auto_stop": False,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_startup_config(config_path)
+
+        self.assertEqual(config.ros_backend, RosBackendConfig(auto_launch=False, auto_stop=False))
+
+    def test_rejects_invalid_ros_backend_bool(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ros_backend": {"auto_launch": "false"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "ros_backend.auto_launch"):
+                load_startup_config(config_path)
 
     def test_rejects_dotted_module_path(self):
         with TemporaryDirectory() as tmp_dir:

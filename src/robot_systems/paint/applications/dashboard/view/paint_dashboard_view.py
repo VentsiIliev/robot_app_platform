@@ -28,7 +28,20 @@ class PaintDashboardView(IApplicationView):
         self._config = config
         self._action_buttons = action_buttons
         self._cards_input = cards
+        self._cards_by_id = self._index_cards_by_id(cards)
+        self._last_card_states = {}
+        self._last_state_signature = None
         super().__init__("PaintDashboard", parent)
+
+    @staticmethod
+    def _index_cards_by_id(cards: list) -> dict[int, object]:
+        indexed = {}
+        for item in cards or []:
+            if not isinstance(item, tuple) or len(item) < 2:
+                continue
+            widget, card_id = item[0], item[1]
+            indexed[card_id] = widget
+        return indexed
 
     def setup_ui(self) -> None:
         self.setStyleSheet(f"background-color: {BG_COLOR};")
@@ -166,14 +179,59 @@ class PaintDashboardView(IApplicationView):
         dialog.exec()
 
     def apply_dashboard_state(self, state) -> None:
+        signature = self._state_signature(state)
+        if self._last_state_signature == signature:
+            return
+        self._last_state_signature = signature
         self.set_state(state.process_state)
         self.set_mode(state.mode_label)
         self.set_active_job(state.active_job_label)
         self.set_notes(state.status_lines)
+        self._apply_card_states(getattr(state, "card_states", {}))
         self.set_start_enabled(state.can_start)
         self.set_stop_enabled(state.can_stop)
         self.set_pause_enabled(state.can_pause)
         self.set_pause_label(state.pause_label)
+
+    @staticmethod
+    def _state_signature(state) -> tuple:
+        card_states = getattr(state, "card_states", {}) or {}
+        return (
+            getattr(state, "process_state", None),
+            getattr(state, "mode_label", None),
+            getattr(state, "active_job_label", None),
+            tuple(getattr(state, "status_lines", []) or []),
+            tuple(
+                sorted(
+                    (
+                        card_id,
+                        getattr(card_state, "title", ""),
+                        getattr(card_state, "value", ""),
+                        getattr(card_state, "note", ""),
+                    )
+                    for card_id, card_state in card_states.items()
+                )
+            ),
+            getattr(state, "can_start", None),
+            getattr(state, "can_stop", None),
+            getattr(state, "can_pause", None),
+            getattr(state, "pause_label", None),
+        )
+
+    def _apply_card_states(self, card_states: dict) -> None:
+        for card_id, card_state in (card_states or {}).items():
+            if self._last_card_states.get(card_id) == card_state:
+                continue
+            card = self._cards_by_id.get(card_id)
+            set_content = getattr(card, "set_content", None)
+            if not callable(set_content):
+                continue
+            set_content(
+                getattr(card_state, "title", ""),
+                getattr(card_state, "value", ""),
+                getattr(card_state, "note", ""),
+            )
+            self._last_card_states[card_id] = card_state
 
     def clean_up(self) -> None:
         pass

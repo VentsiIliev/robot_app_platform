@@ -326,6 +326,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
         self._active_execution_control = None
+        self._ordered_chain_resume_start_index: int | None = None
+        self._ordered_chain_interrupted_by_pause: bool = False
 
     def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         """Build and cache the execution plan for a paint workpiece."""
@@ -521,11 +523,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, "Could not compute pickup poses"
         self._last_pickup_plan = pickup_plan.motion_plan
 
-        if pickup_plan.vacuum_on_before_moves:
-            ok, msg = self._turn_vacuum_on()
-            if not ok:
-                return False, msg
-
         transfer_waypoints = (
             (
                 "Moving to magazine pickup approach pose",
@@ -566,18 +563,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             }
             for label, pose, velocity, acceleration in transfer_waypoints
         ]
-        if not self._move_ordered_pickup_sequence("Ordered magazine pickup-to-release sequence", ordered_segments):
-            execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-            if callable(execute_chain):
-                return False, f"Move to {release_label} release pose failed"
-            for label, pose, velocity, acceleration in transfer_waypoints:
-                if not self._move_pickup_phase(
-                    label,
-                    pose,
-                    velocity=velocity,
-                    acceleration=acceleration,
-                ):
-                    return False, f"{label} failed"
+        ok, msg = self._execute_pickup_transfer_sequence(
+            "Ordered magazine pickup-to-release sequence",
+            ordered_segments,
+            transfer_waypoints,
+            turn_vacuum_on=bool(pickup_plan.vacuum_on_before_moves),
+        )
+        if not ok:
+            return False, msg or f"Move to {release_label} release pose failed"
 
         ok, msg = self._turn_vacuum_off()
         if not ok:
@@ -652,10 +645,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._pickup_safety_z_min_mm,
         )
 
-        ok, msg = self._turn_vacuum_on()
-        if not ok:
-            return False, msg
-
         transfer_waypoints = (
             (
                 "Moving to magazine pickup approach pose",
@@ -710,18 +699,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
         if not ordered_segments:
             _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
-        elif not self._move_ordered_pickup_sequence("Ordered magazine pickup-to-release sequence", ordered_segments):
-            execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-            if callable(execute_chain):
-                return False, f"Move to {release_label} release pose failed"
-            for label, pose, velocity, acceleration in transfer_waypoints:
-                if not self._move_pickup_phase(
-                    label,
-                    pose,
-                    velocity=velocity,
-                    acceleration=acceleration,
-                ):
-                    return False, f"{label} failed"
+        else:
+            ok, msg = self._execute_pickup_transfer_sequence(
+                "Ordered magazine pickup-to-release sequence",
+                ordered_segments,
+                transfer_waypoints,
+                turn_vacuum_on=True,
+            )
+            if not ok:
+                return False, msg or f"Move to {release_label} release pose failed"
 
         ok, msg = self._turn_vacuum_off()
         if not ok:
@@ -1074,10 +1060,52 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             active_segments = self._trim_ordered_pickup_segments_from_current_pose(active_segments)
         return True
 
+    def _execute_pickup_transfer_sequence(
+        self,
+        ordered_label: str,
+        ordered_segments: list[dict],
+        transfer_waypoints: tuple[tuple[str, list[float], float, float], ...],
+        *,
+        turn_vacuum_on: bool,
+    ) -> tuple[bool, str]:
+        """Turn vacuum on, then execute the ordered pickup transfer."""
+        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
+        if not callable(execute_chain):
+            return False, "Ordered motion chain is unavailable"
+
+        if turn_vacuum_on:
+            ok, msg = self._turn_vacuum_on()
+            if not ok:
+                return False, msg
+        if not self._move_ordered_pickup_sequence(ordered_label, ordered_segments):
+            return False, f"{ordered_label} failed"
+        return True, ""
+
+    def _execute_ordered_segments_with_pickup_vacuum_boundary(
+        self,
+        ordered_label: str,
+        segments: list[dict],
+        *,
+        turn_vacuum_on: bool,
+    ) -> bool:
+        if turn_vacuum_on:
+            ok, _msg = self._turn_vacuum_on()
+            if not ok:
+                return False
+        if not self._move_ordered_pickup_sequence(ordered_label, segments):
+            return False
+        return True
+
     def pause_current_execution(self) -> None:
         control = self._active_execution_control
         if control is not None and getattr(control, "in_protected_phase", lambda: False)():
             return
+        ordered_status = self._read_ordered_motion_chain_status()
+        if self._ordered_motion_chain_segment_is_protected(ordered_status):
+            _logger.info("[EXECUTE] Paint pause requested during protected ordered segment; deferring stop")
+            return
+        self._ordered_chain_resume_start_index = self._ordered_motion_chain_resume_index(ordered_status)
+        self._ordered_chain_interrupted_by_pause = True
         stop_motion = getattr(self._robot_service, "stop_motion", None)
         if callable(stop_motion):
             try:
@@ -1085,10 +1113,47 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             except Exception:
                 _logger.exception("[EXECUTE] Failed to stop robot motion during paint pause")
 
+    def _read_ordered_motion_chain_status(self) -> dict | None:
+        get_status = getattr(self._robot_service, "get_execution_status", None)
+        if not callable(get_status):
+            return None
+        try:
+            status = get_status()
+        except Exception:
+            _logger.exception("[EXECUTE] Failed to read ordered motion status during paint pause")
+            return None
+        if not isinstance(status, dict):
+            return None
+        ordered = status.get("ordered_motion_chain")
+        if not isinstance(ordered, dict):
+            return None
+        return ordered
+
+    @staticmethod
+    def _ordered_motion_chain_segment_is_protected(ordered: dict | None) -> bool:
+        if not isinstance(ordered, dict):
+            return False
+        return bool(
+            ordered.get("active")
+            and ordered.get("phase") == "executing"
+            and ordered.get("current_segment_protected")
+        )
+
+    @staticmethod
+    def _ordered_motion_chain_resume_index(ordered: dict | None) -> int:
+        if not isinstance(ordered, dict) or not ordered.get("active"):
+            return 0
+        try:
+            index = int(ordered.get("current_segment_index"))
+        except (TypeError, ValueError):
+            return 0
+        return max(0, index)
+
     def _resume_after_interrupted_non_contact_motion(self, label: str) -> bool:
         control = self._active_execution_control
         pause_requested = getattr(control, "pause_requested", None)
-        if not callable(pause_requested) or not pause_requested():
+        interrupted_by_pause = self._ordered_chain_interrupted_by_pause
+        if (not callable(pause_requested) or not pause_requested()) and not interrupted_by_pause:
             return False
         _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
         return self._wait_for_paint_resume(control)
@@ -1462,11 +1527,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, "Could not compute pickup-to-pivot poses", 0
         self._last_pickup_plan = pickup_plan.motion_plan
 
-        if pickup_plan.vacuum_on_before_moves:
-            ok, msg = self._turn_vacuum_on()
-            if not ok:
-                return False, msg, 0
-
         if pickup_plan.change_plane_combined_with_first_contact:
             with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
                 _logger.info(
@@ -1508,6 +1568,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     "path": command_path,
                     "vel": float(job.get("vel", 10.0)),
                     "acc": float(job.get("acc", 30.0)),
+                    "protected": True,
                 }
             )
 
@@ -1554,16 +1615,136 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             len(paint_paths),
             self._edge_cleanup.should_run_after_xz_ry() or self._edge_cleanup.should_run_after_xy_rz(),
         )
-        result = execute_chain(
+        if not self._execute_ordered_segments_with_pickup_vacuum_boundary(
+            "Ordered paint motion chain",
             segments,
-            tool=self._pickup_tool,
-            user=self._pickup_user,
-            blocking=True,
-        )
-        if result not in (0, True, None):
-            return False, f"Ordered paint motion chain failed with code {result}", total_waypoints
+            turn_vacuum_on=bool(pickup_plan.vacuum_on_before_moves),
+        ):
+            return False, "Ordered paint motion chain failed", total_waypoints
 
         self._dropoff_unwind_prepared = True
+        if final_pose is not None:
+            self._last_process_end_pose = list(final_pose)
+        return True, "", total_waypoints
+
+    @timed_step(_logger, "ordered_pickup_paint_contact_chain")
+    def _try_execute_ordered_pickup_and_paint_contact(
+        self,
+        prepared_workpiece: WorkpieceExecutionPlan,
+        *,
+        control,
+    ) -> tuple[bool, str, int] | None:
+        """Execute pickup/staging and primary paint contact as one preplanned ordered chain."""
+        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
+        if not callable(execute_chain):
+            return None
+
+        pickup_plan = self._pickup.build_plan(prepared_workpiece)
+        if pickup_plan is None:
+            return False, "Could not compute pickup-to-pivot poses", 0
+        self._last_pickup_plan = pickup_plan.motion_plan
+
+        if pickup_plan.change_plane_combined_with_first_contact:
+            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
+                _logger.info(
+                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
+                )
+
+        paint_paths: list[list[list[float]]] = []
+        paint_jobs: list[dict] = []
+        ok, msg, total_waypoints = self._paint_contact.execute(
+            prepared_workpiece,
+            execute_robot=False,
+            collected_command_paths=paint_paths,
+            collected_command_jobs=paint_jobs,
+        )
+        if not ok:
+            self._edge_cleanup.cancel_early_preplanning()
+            return False, msg, total_waypoints
+        if not paint_paths:
+            return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
+
+        segments: list[dict] = [
+            {
+                "type": "linear",
+                "label": waypoint.label,
+                "position": list(waypoint.pose),
+                "vel": float(waypoint.vel_percent),
+                "acc": float(waypoint.acc_percent),
+            }
+            for waypoint in pickup_plan.waypoints
+        ]
+        for path_index, command_path in enumerate(paint_paths):
+            job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
+            segments.append(
+                {
+                    "type": "path",
+                    "label": f"paint_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
+                    "path": command_path,
+                    "vel": float(job.get("vel", 10.0)),
+                    "acc": float(job.get("acc", 30.0)),
+                    "protected": True,
+                }
+            )
+
+        dropoff_prepared_in_chain = False
+        final_pose: list[float] | None = list(paint_paths[-1][-1])
+        if not self._edge_cleanup.should_run_after_xz_ry() and not self._edge_cleanup.should_run_after_xy_rz():
+            config = self._paint_process_config()
+            if bool(config.dropoff_safe_travel.enabled) and self._resolve_dropoff_safe_travel_position() is None:
+                return (
+                    False,
+                    "Pivot paint finished, but paint-to-dropoff safe travel pose is not configured",
+                    total_waypoints,
+                )
+            dropoff_segments, dropoff_final_pose = self._ordered_dropoff_preparation_segments()
+            if not dropoff_segments:
+                return (
+                    False,
+                    "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment",
+                    total_waypoints,
+                )
+            segments.extend(dropoff_segments)
+            dropoff_prepared_in_chain = True
+            final_pose = dropoff_final_pose or final_pose
+
+        if pickup_plan.vacuum_on_before_moves:
+            ok, msg = self._turn_vacuum_on()
+            if not ok:
+                return False, msg, total_waypoints
+
+        active_segments = list(segments)
+        chain_completed = False
+        while active_segments:
+            _logger.info(
+                "[ORDERED_CHAIN] executing pickup plus paint contact chain: segments=%d paint_paths=%d dropoff_prep=%s",
+                len(active_segments),
+                len(paint_paths),
+                dropoff_prepared_in_chain,
+            )
+            self._ordered_chain_interrupted_by_pause = False
+            result = execute_chain(
+                active_segments,
+                tool=self._pickup_tool,
+                user=self._pickup_user,
+                blocking=True,
+            )
+            if result in (0, True, None):
+                chain_completed = True
+                break
+            if not self._resume_after_interrupted_non_contact_motion("Ordered pickup plus paint contact chain"):
+                return False, f"Ordered pickup and paint contact chain failed with code {result}", total_waypoints
+            start_index = self._ordered_chain_resume_start_index
+            if start_index is None:
+                start_index = self._ordered_motion_chain_resume_index(self._read_ordered_motion_chain_status())
+            self._ordered_chain_resume_start_index = None
+            self._ordered_chain_interrupted_by_pause = False
+            active_segments = active_segments[max(0, min(start_index, len(active_segments))):]
+        if not chain_completed:
+            return True, "", total_waypoints
+
+        if dropoff_prepared_in_chain:
+            self._dropoff_unwind_prepared = True
         if final_pose is not None:
             self._last_process_end_pose = list(final_pose)
         return True, "", total_waypoints
@@ -1595,19 +1776,21 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._dropoff_unwind_prepared = False
             total_waypoints = 0
             result: tuple[bool, str] = (True, "")
+            contact_executed_in_ordered_chain = False
 
             if not self._wait_for_paint_resume(control):
                 ordered_result = None
                 result = (False, "Paint process stopped")
             else:
                 ordered_result = (
-                    None
+                    self._try_execute_ordered_pickup_and_paint_contact(prepared_workpiece, control=control)
                     if control is not None
                     else self._try_execute_ordered_motion_cycle(prepared_workpiece, started=started)
                 )
             if ordered_result is not None:
                 ok, msg, total_waypoints = ordered_result
                 result = (True, "") if ok else (False, msg)
+                contact_executed_in_ordered_chain = bool(control is not None and ok)
             elif result[0]:
                 # Phase 1: pickup, lift, align, change plane, and stage at first contact.
                 ok, msg = self._pickup.execute(prepared_workpiece)
@@ -1620,22 +1803,23 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             if ordered_result is None and result[0]:
                 if not self._wait_for_paint_resume(control):
                     result = (False, "Paint process stopped")
-            if ordered_result is None and result[0]:
+            if (ordered_result is None or contact_executed_in_ordered_chain) and result[0]:
                 with timed_block(_logger, "paint_contact_cleanup_dropoff"):
                     # Phase 2: execute the primary paint-contact path.
-                    ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece, control=control)
-                    if not ok:
-                        self._edge_cleanup.cancel_early_preplanning()
-                        _logger.info("[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f", elapsed_s(started))
-                        result = (False, msg)
-                    elif not self._wait_for_paint_resume(control):
+                    if not contact_executed_in_ordered_chain:
+                        ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece, control=control)
+                        if not ok:
+                            self._edge_cleanup.cancel_early_preplanning()
+                            _logger.info("[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f", elapsed_s(started))
+                            result = (False, msg)
+                    if result[0] and not self._wait_for_paint_resume(control):
                         result = (False, "Paint process stopped")
-                    elif self._edge_cleanup.should_run_after_xz_ry():
+                    if result[0] and self._edge_cleanup.should_run_after_xz_ry():
                         # Phase 3: optional edge cleanup in XY/RZ after safe cleanup unwind.
                         ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_unwind(prepared_workpiece, started)
                         total_waypoints += cleanup_waypoints
                         result = (False, msg) if not ok else (True, "")
-                    elif self._edge_cleanup.should_run_after_xy_rz():
+                    elif result[0] and self._edge_cleanup.should_run_after_xy_rz():
                         # Phase 3: optional edge cleanup in XY/RZ, reprojected at the cleanup station.
                         ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_xy_rz_paint(
                             prepared_workpiece,
@@ -1648,7 +1832,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                             result = (False, msg)
                         else:
                             result = (True, "")
-                    else:
+                    elif result[0]:
                         result = (True, "")
 
                     if result[0] and not self._wait_for_paint_resume(control):
@@ -1714,7 +1898,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                                     f"{result[1]}; additionally, return-to-calibration failed",
                                 )
 
-            if ordered_result is not None:
+            if ordered_result is not None and not contact_executed_in_ordered_chain:
                 if result[0]:
                     ok, msg = self._dropoff.execute(prepared_workpiece)
                     if not ok:

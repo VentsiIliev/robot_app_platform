@@ -18,9 +18,9 @@ class PaintDashboardConfig(DashboardConfig):
 
 
 PAINT_DASHBOARD_CARDS: list[CardConfig] = [
-    CardConfig(card_id=1, label="Mock"),
-    CardConfig(card_id=2, label="Mock"),
-    CardConfig(card_id=3, label="Mock"),
+    CardConfig(card_id=1, label="Robot Status"),
+    CardConfig(card_id=2, label="Vision Status"),
+    CardConfig(card_id=3, label="Process Status"),
 ]
 
 

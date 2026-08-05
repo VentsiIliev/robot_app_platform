@@ -11,6 +11,7 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model import (
     PaintDashboardModel,
 )
+from src.shared_contracts.events.robot_events import RobotTopics
 
 
 def _signal() -> MagicMock:
@@ -94,6 +95,7 @@ class TestPaintDashboardController(unittest.TestCase):
             patch.object(PaintDashboardController, "_init_dashboard_process_state"),
             patch.object(PaintDashboardController, "_subscribe_dashboard_camera_feed") as sub_camera,
             patch.object(PaintDashboardController, "_subscribe_dashboard_process_state") as sub_process,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_robot_state") as sub_robot,
             patch.object(PaintDashboardController, "_unsubscribe_all") as unsub_all,
         ):
             controller = PaintDashboardController(model, view, MagicMock())
@@ -102,6 +104,7 @@ class TestPaintDashboardController(unittest.TestCase):
             self.assertTrue(controller._active)
             sub_camera.assert_called_once_with()
             sub_process.assert_called_once_with()
+            sub_robot.assert_called_once_with()
             view.apply_dashboard_state.assert_called_once_with(state)
             view.destroyed.connect.assert_called_once_with(controller.stop)
 
@@ -160,6 +163,95 @@ class TestPaintDashboardController(unittest.TestCase):
 
         view.isVisible.side_effect = RuntimeError("deleted")
         self.assertFalse(controller._view_ok())
+
+    def test_status_refresh_updates_even_when_view_reports_not_visible(self) -> None:
+        state = DashboardState(process_state="idle")
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        view.isVisible.return_value = False
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._active = True
+        controller._refresh_dashboard_status()
+
+        view.apply_dashboard_state.assert_called_once_with(state)
+
+    def test_robot_state_event_refreshes_dashboard_state(self) -> None:
+        state = DashboardState(
+            process_state="idle",
+            card_states={
+                1: SimpleNamespace(title="Robot Status", value="IDLE", note="Robot service healthy")
+            },
+        )
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+        controller._dashboard_process_bridge = MagicMock()
+
+        controller._active = True
+        controller._on_dashboard_robot_state_raw(
+            SimpleNamespace(
+                state="disconnected",
+                extra={
+                    "last_error": "HTTPConnectionPool: Failed to establish a new connection: Connection refused"
+                },
+            )
+        )
+
+        controller._dashboard_process_bridge.state_ready.emit.assert_called_once_with(state)
+        self.assertEqual(state.card_states[1].value, "DISCONNECTED")
+        self.assertEqual(state.card_states[1].note, "ROS2 bridge is not reachable")
+
+    def test_robot_state_event_reports_starting_state(self) -> None:
+        state = DashboardState(
+            process_state="idle",
+            card_states={
+                1: SimpleNamespace(title="Robot Status", value="IDLE", note="Robot service healthy")
+            },
+        )
+        model = MagicMock()
+        model.load.return_value = state
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+        controller._dashboard_process_bridge = MagicMock()
+
+        controller._active = True
+        controller._on_dashboard_robot_state_raw(
+            SimpleNamespace(
+                state="starting",
+                extra={"startup": {"message": "ROS runtime is initializing"}},
+            )
+        )
+
+        controller._dashboard_process_bridge.state_ready.emit.assert_called_once_with(state)
+        self.assertEqual(state.card_states[1].value, "STARTING")
+        self.assertEqual(state.card_states[1].note, "ROS runtime is initializing")
+
+    def test_subscribe_dashboard_robot_state_uses_robot_state_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_robot_state()
+
+        controller._subscribe.assert_called_once_with(RobotTopics.STATE, controller._on_dashboard_robot_state_raw)
 
 
 if __name__ == "__main__":

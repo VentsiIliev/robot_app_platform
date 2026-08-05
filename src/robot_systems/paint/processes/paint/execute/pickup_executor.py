@@ -171,20 +171,21 @@ class PaintPickupExecutor:
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
+        insert_calibration_return = self._owner._should_return_to_calibration_between_xy_rz_pickup_and_pivot()
+        if not insert_calibration_return and self._execute_custom_pickup_sequence(pickup_plan):
+            return True, "Pickup completed and robot is positioned before the first pivot contact pose"
+        if not insert_calibration_return:
+            _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
+            return False, "Ordered pickup sequence failed"
+
+        if insert_calibration_return:
+            _logger.info("[PICKUP] XY/RZ pickup will return to calibration after alignment before pivot staging")
         if pickup_plan.vacuum_on_before_moves:
             ok, msg = self._owner._turn_vacuum_on()
             if not ok:
                 _logger.info("[TIMING] pickup_to_pivot success=false stage=vacuum_on total_elapsed_s=%.3f", elapsed_s(started))
                 return False, msg
 
-        insert_calibration_return = self._owner._should_return_to_calibration_between_xy_rz_pickup_and_pivot()
-        if not insert_calibration_return and self._execute_custom_pickup_sequence(pickup_plan):
-            return True, "Pickup completed and robot is positioned before the first pivot contact pose"
-
-        if insert_calibration_return:
-            _logger.info("[PICKUP] XY/RZ pickup will return to calibration after alignment before pivot staging")
-        else:
-            _logger.warning("[PICKUP] Custom pickup sequence unavailable or failed; falling back to individual moves")
         for waypoint in pickup_plan.waypoints:
             if (
                 pickup_plan.change_plane_combined_with_first_contact
@@ -227,6 +228,24 @@ class PaintPickupExecutor:
                 _logger.info(
                     "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
                 )
+        move_sequence = getattr(self._owner, "_move_ordered_pickup_sequence", None)
+        if not callable(move_sequence):
+            return False
+
+        if pickup_plan.vacuum_on_before_moves:
+            ok, _msg = self._owner._turn_vacuum_on()
+            if not ok:
+                return False
+
+        if not self._move_waypoint_sequence(
+            move_sequence,
+            "Ordered pickup sequence",
+            waypoints,
+        ):
+            return False
+        return True
+
+    def _move_waypoint_sequence(self, move_sequence, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = [
             {
                 "type": "linear",
@@ -245,10 +264,7 @@ class PaintPickupExecutor:
                 for segment in segments
             ],
         )
-        move_sequence = getattr(self._owner, "_move_ordered_pickup_sequence", None)
-        if not callable(move_sequence):
-            return False
-        return bool(move_sequence("Ordered pickup sequence", segments))
+        return bool(move_sequence(label, segments))
 
     @staticmethod
     def _failure_message_for(label: str) -> str:

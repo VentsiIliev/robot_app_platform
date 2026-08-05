@@ -85,7 +85,19 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
 
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
-        return self.get_state() not in ("error", "disconnected", "fault")
+        return self.get_connection_state() not in ("disconnected", "starting", "error", "fault")
+
+    def get_connection_state(self) -> str:
+        """Optional lifecycle/availability state for the underlying transport."""
+        return self.get_state()
+
+    def get_connection_details(self) -> dict:
+        """Optional diagnostic details about the underlying transport state."""
+        return {}
+
+    def get_drive_status(self) -> dict:
+        """Optional drive/fieldbus status from the underlying robot transport."""
+        return {}
 
     @abstractmethod
     def set_digital_output(self, port_id: int, value: bool) -> bool: ...

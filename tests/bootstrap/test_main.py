@@ -120,6 +120,8 @@ class TestStartupSequenceOrder(unittest.TestCase):
             patch("src.bootstrap.main.load_startup_config"),
             patch("src.bootstrap.main.load_bootstrap_provider",
                   return_value=fake_provider),
+            patch("src.bootstrap.main.build_ros_backend_launcher_from_env",
+                  return_value=MagicMock(start=MagicMock(side_effect=lambda: call_order.append("backend_start")))),
             patch("src.bootstrap.main.SystemBuilder",
                   return_value=fake_builder),
             patch("src.bootstrap.main.ShellConfigurator.configure",
@@ -140,6 +142,7 @@ class TestStartupSequenceOrder(unittest.TestCase):
                 pass   # sys.exit or Qt errors expected in test environment
 
         self.assertIn("engine",      call_order)
+        self.assertIn("backend_start", call_order)
         self.assertIn("system_build", call_order)
         self.assertIn("shell_cfg",   call_order)
         self.assertIn("qt",          call_order)
@@ -147,6 +150,10 @@ class TestStartupSequenceOrder(unittest.TestCase):
         # engine must come before system_build
         self.assertLess(
             call_order.index("engine"),
+            call_order.index("backend_start"),
+        )
+        self.assertLess(
+            call_order.index("backend_start"),
             call_order.index("system_build"),
         )
         # system_build must come before shell_cfg
@@ -182,6 +189,7 @@ class TestStartupAbortOnFailure(unittest.TestCase):
             ),
             patch("src.bootstrap.main.EngineContext.build",
                   side_effect=RuntimeError("engine init failed")),
+            patch("src.bootstrap.main.build_ros_backend_launcher_from_env") as backend_launcher,
             patch("src.bootstrap.main.QApplication",
                   side_effect=lambda _: qt_called.append("qt")),
         ):
@@ -190,6 +198,7 @@ class TestStartupAbortOnFailure(unittest.TestCase):
                 m.main()
 
         self.assertEqual(qt_called, [], "QApplication must not be called after engine failure")
+        backend_launcher.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import logging
+from time import perf_counter
 
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
@@ -352,6 +353,7 @@ def _build_paint_path_preparation_service(robot_system):
         return settings
 
     def _paint_source_contour_processor(pts_px, settings):
+        started_at = perf_counter()
         _apply_process_interpolation_settings(settings)
         result = PaintContourInterpolation(
             PaintContourInterpolationConfig(
@@ -360,14 +362,38 @@ def _build_paint_path_preparation_service(robot_system):
                 output_spacing=1.0,
             )
         ).build(_pose_path_from_xy(pts_px))
-        return [point[:2] for point in result.execution_path]
+        output = [point[:2] for point in result.execution_path]
+        _logger.info(
+            "[PATH_PREP_TIMING] stage=paint_source_contour_processor "
+            "elapsed_s=%.3f input_points=%d output_points=%d",
+            perf_counter() - started_at,
+            len(pts_px),
+            len(output),
+        )
+        return output
 
     def _paint_mm_contour_processor(path_pts, settings):
+        started_at = perf_counter()
         _apply_process_interpolation_settings(settings)
+        resample_start = perf_counter()
         resampled_xy = resample_contour_xy(
             np.asarray(path_pts, dtype=float)[:, :2],
             spacing=1.0,
             closed=True,
+        )
+        _logger.info(
+            "[PATH_PREP_TIMING] stage=paint_mm_resample_contour_xy "
+            "elapsed_s=%.3f input_points=%d output_points=%d",
+            perf_counter() - resample_start,
+            len(path_pts),
+            len(resampled_xy),
+        )
+        _logger.info(
+            "[PATH_PREP_TIMING] stage=paint_mm_contour_processor "
+            "elapsed_s=%.3f input_points=%d output_points=%d",
+            perf_counter() - started_at,
+            len(path_pts),
+            len(resampled_xy),
         )
         return {
             "method": "paint_mm_1mm_resample",
@@ -974,6 +1000,17 @@ def _build_modbus_settings_application(robot_app):
             messaging=ms,
             jog_service=jog_service,
         )
+    )
+
+
+def _build_ethercat_diagnostics_application(robot_app):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.ethercat_diagnostics import EthercatDiagnosticsFactory
+    from src.applications.ethercat_diagnostics.service import IghEthercatDiagnosticsService
+
+    service = IghEthercatDiagnosticsService()
+    return WidgetApplication(
+        widget_factory=lambda ms: EthercatDiagnosticsFactory().build(service, messaging=ms)
     )
 
 

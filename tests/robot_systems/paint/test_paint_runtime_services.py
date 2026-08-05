@@ -30,12 +30,22 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 class TestPaintDashboardService(unittest.TestCase):
     def test_load_state_maps_process_state_into_dashboard_contract(self) -> None:
         process = MagicMock(process_id="paint")
-        service = PaintDashboardService(process)
+        robot = MagicMock()
+        robot.get_state.return_value = "idle"
+        robot.is_healthy.return_value = True
+        vision = MagicMock()
+        vision.is_healthy.return_value = True
+        service = PaintDashboardService(process, robot_service=robot, vision_service=vision)
 
         process.state = ProcessState.IDLE
         idle = service.load_state()
         self.assertEqual(idle.process_state, ProcessState.IDLE.value)
         self.assertEqual(idle.active_job_label, "No active job")
+        self.assertEqual(idle.card_states[1].title, "Robot Status")
+        self.assertEqual(idle.card_states[1].value, "IDLE")
+        self.assertEqual(idle.card_states[2].title, "Vision Status")
+        self.assertEqual(idle.card_states[2].value, "ONLINE")
+        self.assertEqual(idle.card_states[3].title, "Process Status")
         self.assertTrue(idle.can_start)
         self.assertFalse(idle.can_stop)
         self.assertEqual(idle.pause_label, "Pause")
@@ -62,6 +72,141 @@ class TestPaintDashboardService(unittest.TestCase):
         self.assertFalse(error.can_start)
         self.assertFalse(error.can_stop)
         self.assertFalse(error.can_pause)
+
+    def test_load_state_reports_unavailable_or_unhealthy_status_cards(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_state.return_value = "disconnected"
+        robot.is_healthy.return_value = False
+        robot.get_connection_details.return_value = {
+            "state": "disconnected",
+            "last_error": "bridge down",
+        }
+
+        state = PaintDashboardService(process, robot_service=robot, vision_service=None).load_state()
+
+        self.assertEqual(state.card_states[1].value, "DISCONNECTED")
+        self.assertEqual(state.card_states[1].note, "Robot bridge is disconnected")
+        self.assertEqual(state.card_states[2].value, "UNAVAILABLE")
+
+    def test_load_state_prefers_robot_connection_details_over_stale_idle_state(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_state.return_value = "idle"
+        robot.is_healthy.return_value = True
+        robot.get_connection_state.return_value = "disconnected"
+        robot.get_connection_details.return_value = {
+            "state": "disconnected",
+            "last_error": "HTTPConnectionPool: Failed to establish a new connection: Connection refused",
+        }
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "DISCONNECTED")
+        self.assertEqual(state.card_states[1].note, "ROS2 bridge is not reachable")
+
+    def test_load_state_prefers_live_robot_connection_state_over_stale_connection_details(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_state.return_value = "idle"
+        robot.is_healthy.return_value = False
+        robot.get_connection_state.return_value = "disconnected"
+        robot.get_connection_details.return_value = {
+            "state": "idle",
+            "last_error": "Connection refused",
+        }
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "DISCONNECTED")
+        self.assertEqual(state.card_states[1].note, "ROS2 bridge is not reachable")
+
+    def test_load_state_sanitizes_robot_connection_exceptions(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_connection_details.side_effect = RuntimeError(
+            "HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health "
+            "(Caused by NewConnectionError: Failed to establish a new connection: [Errno 111] Connection refused)"
+        )
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "ERROR")
+        self.assertEqual(state.card_states[1].note, "ROS2 bridge is not reachable")
+        self.assertNotIn("HTTPConnectionPool", state.card_states[1].note)
+
+    def test_load_state_reports_robot_runtime_starting(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_connection_details.return_value = {
+            "state": "starting",
+            "startup": {
+                "phase": "initializing_runtime",
+                "message": "ROS runtime is initializing",
+            },
+        }
+        robot.get_connection_state.return_value = "starting"
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "STARTING")
+        self.assertEqual(state.card_states[1].note, "ROS runtime is initializing")
+        robot.get_drive_status.assert_not_called()
+
+    def test_load_state_reports_drive_not_ready_when_bridge_is_online(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_connection_details.return_value = {"state": "idle"}
+        robot.get_connection_state.return_value = "idle"
+        robot.get_drive_status.return_value = {
+            "success": True,
+            "requested_enabled": True,
+            "actual_enabled": False,
+            "motion_allowed_by_drive_enable": False,
+            "status_state": ["operation_enabled", "switch_on_disabled"],
+        }
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "DRIVE NOT READY")
+        self.assertEqual(state.card_states[1].note, "Drive state: operation_enabled, switch_on_disabled")
+
+    def test_load_state_reports_ethercat_drive_status_error(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        robot = MagicMock()
+        robot.get_connection_details.return_value = {"state": "idle"}
+        robot.get_connection_state.return_value = "idle"
+        robot.get_drive_status.return_value = {
+            "success": False,
+            "error": "Failed to upload SDO: Invalid argument",
+        }
+
+        state = PaintDashboardService(process, robot_service=robot).load_state()
+
+        self.assertEqual(state.card_states[1].value, "DRIVE NOT READY")
+        self.assertEqual(state.card_states[1].note, "EtherCAT communication error")
+
+    def test_load_state_uses_vision_health_details_for_offline_camera(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        vision = MagicMock()
+        vision.is_healthy.return_value = True
+        vision.get_health_details.return_value = {
+            "healthy": False,
+            "message": "No fresh camera frame available",
+        }
+
+        state = PaintDashboardService(process, vision_service=vision).load_state()
+
+        self.assertEqual(state.card_states[2].value, "OFFLINE")
+        self.assertEqual(state.card_states[2].note, "No fresh camera frame available")
 
     def test_control_methods_delegate_to_process(self) -> None:
         process = MagicMock(process_id="paint")

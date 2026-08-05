@@ -24,6 +24,7 @@ class PaintProductionService:
         vacuum_pump: Optional[IVacuumPumpController] = None,
         paint_process_config_service=None,
         magazine_load_service=None,
+        navigation_service=None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
@@ -33,6 +34,7 @@ class PaintProductionService:
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
+        self._navigation_service = navigation_service
         self._paint_control = PaintExecutionControl()
 
     def pause_current_phase(self) -> None:
@@ -57,16 +59,76 @@ class PaintProductionService:
         self._paint_control.request_stop()
 
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
-        """Run production once, or repeat from magazine until the magazine is empty."""
+        """Run production once, or repeat from the active source until no workpiece is found."""
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
-        magazine_config_result = self._get_magazine_load_config()
-        if not magazine_config_result[0]:
-            return False, magazine_config_result[1]
-        magazine_config = magazine_config_result[2]
+        process_config_result = self._get_process_config()
+        if not process_config_result[0]:
+            return False, process_config_result[1]
+        process_config = process_config_result[2]
+        magazine_config = process_config.magazine_load if process_config is not None else None
+        run_while_found = bool(getattr(process_config, "run_while_workpiece_found", False))
+
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
-            return self._run_magazine_loop(magazine_config, should_stop)
+            if run_while_found:
+                return self._run_magazine_loop(magazine_config, should_stop)
+            ok, msg = self._run_single_cycle(should_stop, magazine_config=magazine_config, cycle_index=1)
+            if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
+                return True, NO_WORKPIECE_AT_MAGAZINE
+            return ok, msg
+        if run_while_found and magazine_config is not None:
+            return self._run_manual_loop(magazine_config, should_stop)
+        if magazine_config is not None:
+            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
+            if not ok:
+                return False, msg
         return self._run_single_cycle(should_stop, magazine_config=None, cycle_index=1)
+
+    def _run_manual_loop(self, magazine_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
+        total_start = perf_counter()
+        completed_cycles = 0
+        while not should_stop():
+            ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
+            if not ok:
+                self._log_phase_timing(
+                    "manual_loop_total",
+                    total_start,
+                    success=False,
+                    completed_cycles=completed_cycles,
+                )
+                return False, msg
+            ok, msg = self._run_single_cycle(
+                should_stop,
+                magazine_config=None,
+                cycle_index=completed_cycles + 1,
+            )
+            if not ok and msg == "No usable contour detected":
+                self._log_phase_timing(
+                    "manual_loop_total",
+                    total_start,
+                    success=True,
+                    completed_cycles=completed_cycles,
+                )
+                if completed_cycles == 0:
+                    return True, "No usable contour detected"
+                return True, f"No workpiece detected after {completed_cycles} paint cycle(s)"
+            if not ok:
+                self._log_phase_timing(
+                    "manual_loop_total",
+                    total_start,
+                    success=False,
+                    completed_cycles=completed_cycles,
+                )
+                return False, msg
+            completed_cycles += 1
+        self._log_phase_timing(
+            "manual_loop_total",
+            total_start,
+            success=False,
+            stopped=True,
+            completed_cycles=completed_cycles,
+        )
+        return False, "Paint process stopped"
 
     def _run_magazine_loop(self, magazine_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
         total_start = perf_counter()
@@ -168,16 +230,38 @@ class PaintProductionService:
         self._log_phase_timing("run_once_total", total_start, success=True, cycle=cycle_index)
         return True, f"{description}: {msg}"
 
-    def _get_magazine_load_config(self) -> tuple[bool, str, object | None]:
+    def _get_process_config(self) -> tuple[bool, str, object | None]:
         config_service = self._paint_process_config_service
         if config_service is None:
             return True, "", None
         try:
-            config = config_service.get_snapshot().magazine_load
+            config = config_service.get_snapshot()
         except Exception:
-            _logger.exception("Failed to read magazine load settings")
-            return False, "Failed to read magazine load settings", None
+            _logger.exception("Failed to read paint process settings")
+            return False, "Failed to read paint process settings", None
         return True, "", config
+
+    def _move_to_calibration_before_manual_cycle(
+        self,
+        magazine_config,
+        should_stop: Callable[[], bool],
+    ) -> tuple[bool, str]:
+        navigation = self._navigation_service
+        if navigation is None:
+            return False, "Navigation service unavailable for calibration move"
+        move_to_calibration = getattr(navigation, "move_to_calibration_position", None)
+        if not callable(move_to_calibration):
+            return False, "Navigation service does not support calibration move"
+
+        phase_start = perf_counter()
+        ok = bool(move_to_calibration(wait_cancelled=should_stop))
+        self._log_phase_timing("move_to_calibration", phase_start, success=ok, cycle=1)
+        if should_stop():
+            return False, "Paint process stopped"
+        if not ok:
+            group_id = getattr(magazine_config, "calibration_group_id", "CALIBRATION")
+            return False, f"Failed to move to calibration position '{group_id}'"
+        return True, ""
 
     def _path_debug_plots_enabled(self) -> bool:
         config_service = self._paint_process_config_service

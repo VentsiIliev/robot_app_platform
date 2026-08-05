@@ -196,6 +196,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_paint_contour_editor_application),
             ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
                             factory=application_wiring._build_robot_settings_application),
+            ApplicationSpec(name="EthercatDiagnostics", folder_id=2, icon="fa5s.network-wired",
+                            factory=application_wiring._build_ethercat_diagnostics_application),
             ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
                             factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
@@ -286,6 +288,7 @@ class PaintRobotSystem(BaseRobotSystem):
         from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
 
         self._robot = self.get_service(CommonServiceID.ROBOT)
+        self.register_managed_resource(self._robot)
         _nav_engine = self.get_service(CommonServiceID.NAVIGATION)
         self._work_area_service = self.get_service(CommonServiceID.WORK_AREAS)
         self._vision = self.get_optional_service(CommonServiceID.VISION)
@@ -356,6 +359,7 @@ class PaintRobotSystem(BaseRobotSystem):
             vacuum_pump=self._vacuum_pump,
             paint_process_config_service=self._paint_process_config_service,
             magazine_load_service=self._paint_magazine_load_service,
+            navigation_service=self._navigation,
         )
         self._main_process = PaintProcess(
             production_service=self._paint_production_service,
@@ -372,6 +376,8 @@ class PaintRobotSystem(BaseRobotSystem):
             capture_snapshot_service=self._paint_capture_snapshot_service,
             path_preparation_service=self._paint_path_preparation_service,
             resolver_getter=lambda: self.get_shared_vision_resolver()[1],
+            robot_service=self._robot,
+            vision_service=self._vision,
             target_point_name="camera",
             frame_name="calibration",
         )

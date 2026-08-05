@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 
@@ -17,9 +17,16 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "platform
 
 
 @dataclass(frozen=True)
+class RosBackendConfig:
+    auto_launch: bool = True
+    auto_stop: bool = True
+
+
+@dataclass(frozen=True)
 class StartupConfig:
     robot_system: str
     supported_robot_systems: tuple[str, ...]
+    ros_backend: RosBackendConfig = field(default_factory=RosBackendConfig)
 
 
 def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfig:
@@ -55,7 +62,26 @@ def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfi
     return StartupConfig(
         robot_system=robot_system,
         supported_robot_systems=supported_robot_systems,
+        ros_backend=_load_ros_backend_config(payload.get("ros_backend")),
     )
+
+
+def _load_ros_backend_config(raw_config: object) -> RosBackendConfig:
+    if raw_config is None:
+        return RosBackendConfig()
+    if not isinstance(raw_config, dict):
+        raise RuntimeError("'ros_backend' must be a JSON object")
+    return RosBackendConfig(
+        auto_launch=_read_bool(raw_config, "auto_launch", default=True),
+        auto_stop=_read_bool(raw_config, "auto_stop", default=True),
+    )
+
+
+def _read_bool(payload: dict, field_name: str, *, default: bool) -> bool:
+    value = payload.get(field_name, default)
+    if not isinstance(value, bool):
+        raise RuntimeError(f"'ros_backend.{field_name}' must be a boolean")
+    return value
 
 
 def _validate_system_name(value: object, field_name: str) -> str:

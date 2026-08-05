@@ -9,8 +9,8 @@
       "position": "[-7.120, 366.715, 99.870, -178.876, 0.003, -0.008]"
     },
     "CALIBRATION": {
-      "velocity": 10,
-      "acceleration": 10,
+      "velocity": 90,
+      "acceleration": 50,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -56,8 +56,8 @@
       "position": "[-26.042, 311.744, 35.857, -178.770, -0.015, -0.061]"
     },
     "Magazine": {
-      "velocity": 10,
-      "acceleration": 40,
+      "velocity": 90,
+      "acceleration": 50,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,

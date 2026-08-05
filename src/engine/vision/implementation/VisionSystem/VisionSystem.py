@@ -92,6 +92,7 @@ class VisionSystem:
         self._last_processed_frame_sequence = 0
         self._latest_frame_timestamp_s = 0.0
         self._latest_contour_frame_sequence = 0
+        self._latest_contour_area_id = ""
 
         self.stop_signal  = False
         self.cameraThread = None
@@ -239,6 +240,7 @@ class VisionSystem:
             # Guard here so get_latest_contours() never returns None to callers.
             self._latest_contours = contours or []
             self._latest_contour_frame_sequence = snapshot.sequence
+            self._latest_contour_area_id = active_area
             return contours, self.correctedImage, None
 
         self._latest_contours = []
@@ -260,18 +262,17 @@ class VisionSystem:
                 "No fresh camera frame is available. Check the camera stream before capturing."
             )
 
-        if (
-            self.camera_settings.get_contour_detection()
-            and snapshot.sequence == self._latest_contour_frame_sequence
-        ):
-            return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
+        active_area = self._get_active_area_id()
+        if self.camera_settings.get_contour_detection():
+            cached_area = getattr(self, "_latest_contour_area_id", "")
+            if snapshot.sequence == self._latest_contour_frame_sequence and active_area == cached_area:
+                return self.get_latest_frame_for_snapshot(), list(self._latest_contours or [])
 
         image = snapshot.frame
         if self.camera_settings.get_brightness_auto():
             image = self._brightness_service.adjust(image)
 
         self.rawImage = image.copy()
-        active_area = self._get_active_area_id()
         contours, corrected, _ = self._contour_service.detect(
             image=image,
             threshold=self._get_thresh_by_area(active_area),
@@ -283,6 +284,7 @@ class VisionSystem:
         self.correctedImage = corrected
         self._latest_contours = contours or []
         self._latest_contour_frame_sequence = snapshot.sequence
+        self._latest_contour_area_id = active_area
 
         frame = corrected if corrected is not None else self.rawImage
         return frame, list(self._latest_contours)
@@ -408,6 +410,7 @@ class VisionSystem:
 
     def on_threshold_update(self, message) -> None:
         self._active_area_id = str(message.get("region", "") or "")
+        self._latest_contour_area_id = ""
         if self._work_area_service is None:
             return
         try:

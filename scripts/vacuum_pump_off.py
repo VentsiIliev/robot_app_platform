@@ -7,6 +7,21 @@ import sys
 import time
 from pathlib import Path
 
+
+# MODBUS CONFIG FOR THE XINJE/PUMP
+
+
+# {
+#     "port": "/dev/ttyUSB0",
+#     "baudrate": 57600,
+#     "bytesize": 8,
+#     "stopbits": 1,
+#     "parity": "E",
+#     "timeout": 0.001,
+#     "slave_address": 1,
+#     "max_retries": 30
+# }
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

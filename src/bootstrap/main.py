@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
+from PyQt6.QtCore import QObject, QEvent, QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -15,9 +15,12 @@ from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
 from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.applications.base.robot_connection_notifier import RobotConnectionNotifier
+from src.applications.base.widgets.startup_splash_view import StartupSplashView
 from src.engine.localization.localization_service import LocalizationService
+from src.shared_contracts.events.robot_events import RobotTopics
 from src.robot_systems.system_builder import SystemBuilder
 from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
+from src.bootstrap.ros_backend_launcher import build_ros_backend_launcher_from_env
 from pl_gui.shell.AppShell import AppShell
 
 _LOGGER = logging.getLogger("main")
@@ -72,10 +75,89 @@ class _FramelessHeaderDrag(QObject):
 
         return False
 
+
+class _StartupSplashBridge(QObject):
+    state_ready = pyqtSignal(object)
+
+
+def _startup_splash_stage_text(snapshot) -> str:
+    extra = getattr(snapshot, "extra", {}) or {}
+    readiness_state = str(extra.get("readiness_state") or getattr(snapshot, "state", "") or "").strip().lower()
+    note = str(extra.get("readiness_note") or "").strip().lower()
+
+    if readiness_state == "disconnected":
+        return "Connecting to robot runtime"
+    if readiness_state == "starting":
+        return "Starting robot runtime"
+    if readiness_state == "drive_not_ready":
+        if "ethercat" in note or "sdo" in note:
+            return "Checking EtherCAT communication"
+        if "disabled" in note or "not motion-ready" in note or "not operation" in note:
+            return "Enabling robot drives"
+        return "Preparing robot drives"
+    if readiness_state == "tool_mismatch":
+        return "Configuring robot tool"
+    if readiness_state in {"error", "fault"}:
+        return "Checking robot status"
+    return "Waiting for robot readiness"
+
+
+class _StartupSplashCoordinator:
+    def __init__(self, shell: AppShell, splash: StartupSplashView, messaging_service) -> None:
+        self._shell = shell
+        self._splash = splash
+        self._messaging = messaging_service
+        self._bridge = _StartupSplashBridge()
+        self._bridge.state_ready.connect(self._apply_robot_state)
+        self._active = False
+        self._finished = False
+
+    def start(self) -> None:
+        if self._active:
+            return
+        self._messaging.subscribe(RobotTopics.STATE, self._on_robot_state)
+        self._active = True
+
+    def stop(self) -> None:
+        if not self._active:
+            return
+        try:
+            self._messaging.unsubscribe(RobotTopics.STATE, self._on_robot_state)
+        finally:
+            self._active = False
+
+    def _on_robot_state(self, snapshot) -> None:
+        self._bridge.state_ready.emit(snapshot)
+
+    def _apply_robot_state(self, snapshot) -> None:
+        if self._finished:
+            return
+        extra = getattr(snapshot, "extra", {}) or {}
+        readiness_state = str(extra.get("readiness_state") or getattr(snapshot, "state", "") or "").strip().lower()
+        robot_ready = extra.get("robot_ready") is True or readiness_state == "idle"
+
+        if robot_ready:
+            self._finished = True
+            self._splash.set_active_step(3)
+            self._splash.mark_complete()
+            QTimer.singleShot(350, self._hide_splash)
+            return
+
+        self._splash.set_active_step(3)
+        self._splash.set_message(_startup_splash_stage_text(snapshot))
+
+    def _hide_splash(self) -> None:
+        self.stop()
+        if self._shell.stacked_widget.currentWidget() is self._splash:
+            self._shell.stacked_widget.setCurrentWidget(self._shell.folders_page)
+        self._shell.stacked_widget.removeWidget(self._splash)
+        self._splash.deleteLater()
+
 def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
-    bootstrap_provider = load_bootstrap_provider(load_startup_config())
+    startup_config = load_startup_config()
+    bootstrap_provider = load_bootstrap_provider(startup_config)
 
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
     logging.getLogger("RobotStatePublisher").setLevel(logging.WARNING)
@@ -89,13 +171,20 @@ def main() -> None:
     # 1 — engine singletons
     ctx = EngineContext.build()
 
+    ros_backend = build_ros_backend_launcher_from_env(startup_config.ros_backend)
+    ros_backend.start()
+
     # 2 — robot app (settings loaded, services wired)
-    robot_app = (
-        SystemBuilder()
-        .with_robot(bootstrap_provider.build_robot())
-        .with_messaging_service(ctx.messaging_service)
-        .build(bootstrap_provider.system_class)
-    )
+    try:
+        robot_app = (
+            SystemBuilder()
+            .with_robot(bootstrap_provider.build_robot())
+            .with_messaging_service(ctx.messaging_service)
+            .build(bootstrap_provider.system_class)
+        )
+    except Exception:
+        ros_backend.stop()
+        raise
 
     # 3 — shell folder layout from app metadata
     ShellConfigurator.configure(bootstrap_provider.system_class)
@@ -116,14 +205,22 @@ def main() -> None:
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
+    startup_splash = StartupSplashView(shell)
+    startup_splash.set_active_step(2)
+    startup_splash.set_message("Loading applications")
+    shell.stacked_widget.addWidget(startup_splash)
+    shell.stacked_widget.setCurrentWidget(startup_splash)
+    startup_splash_coordinator = _StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
     notification_presenter = UserNotificationPresenter(
         shell,
         ctx.messaging_service,
         translate=lambda key: localization_svc.translate("Notifications", key),
     )
-    robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service)
+    robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service, suppress_until_ready=True)
     shell._notification_presenter = notification_presenter
     shell._robot_connection_notifier = robot_connection_notifier
+    shell._startup_splash = startup_splash
+    shell._startup_splash_coordinator = startup_splash_coordinator
 
     # Wire broker → shell navigation
     # Used to automatically open the workpiece editor when the "open in editor"
@@ -146,10 +243,14 @@ def main() -> None:
         session.login(_StubUser())
         _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
         _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
+        startup_splash.set_active_step(3)
+        startup_splash.set_message("Waiting for robot readiness")
+        shell.stacked_widget.setCurrentWidget(startup_splash)
+        startup_splash_coordinator.start()
     else:
         login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
-        shell.stacked_widget.addWidget(login_view)          # → index 1
-        shell.stacked_widget.setCurrentIndex(1)             # show login in shell content area
+        shell.stacked_widget.addWidget(login_view)
+        shell.stacked_widget.setCurrentWidget(login_view)   # show login in shell content area
 
         # LanguageChange events only reach top-level windows; wire retranslation directly.
         shell.header.language_selector.languageChanged.connect(login_view.retranslateUi)
@@ -162,6 +263,10 @@ def main() -> None:
             shell.stacked_widget.removeWidget(login_view)
             login_view.deleteLater()
             _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
+            startup_splash.set_active_step(3)
+            startup_splash.set_message("Waiting for robot readiness")
+            shell.stacked_widget.setCurrentWidget(startup_splash)
+            startup_splash_coordinator.start()
 
         login_view.accepted.connect(_on_login_accepted)
 
@@ -172,9 +277,11 @@ def main() -> None:
     try:
         sys.exit(qt_app.exec())
     finally:
+        startup_splash_coordinator.stop()
         robot_connection_notifier.stop()
         notification_presenter.stop()
         robot_app.stop()
+        ros_backend.stop()
 def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
     """Load role-filtered apps and reload the shell's folder page."""
     auth_svc = bootstrap_provider.build_authorization_service(robot_app)

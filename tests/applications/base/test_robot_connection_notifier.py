@@ -90,6 +90,74 @@ class TestRobotConnectionNotifier(unittest.TestCase):
         self.assertEqual(broker.published[1][1].dedupe_key, "robot.connection.disconnected:0")
         self.assertEqual(broker.published[2][1].dedupe_key, "robot.connection.disconnected:1")
 
+    def test_drive_not_ready_state_publishes_readiness_warning_until_idle(self):
+        broker = _Broker()
+        notifier = RobotConnectionNotifier(broker)
+        notifier.start()
+        callback = broker.subscriptions[RobotTopics.STATE]
+
+        callback(
+            self._snapshot("idle").with_extra(
+                robot_ready=False,
+                readiness_state="drive_not_ready",
+                readiness_note="EtherCAT communication error",
+            )
+        )
+        callback(
+            self._snapshot("idle").with_extra(
+                robot_ready=False,
+                readiness_state="drive_not_ready",
+                readiness_note="EtherCAT communication error",
+            )
+        )
+        callback(
+            self._snapshot("idle").with_extra(
+                robot_ready=True,
+                readiness_state="idle",
+                readiness_note="Robot service healthy",
+            )
+        )
+
+        self.assertEqual(len(broker.published), 2)
+        warning = broker.published[0][1]
+        self.assertEqual(broker.published[0][0], NotificationTopics.USER)
+        self.assertEqual(warning.fallback_title, "Robot Not Ready")
+        self.assertEqual(warning.fallback_message, "EtherCAT communication error")
+        self.assertEqual(warning.dedupe_key, "robot.readiness.unavailable:0:drive_not_ready")
+        self.assertIsInstance(broker.published[1][1], DismissNotificationEvent)
+        self.assertEqual(broker.published[1][1].dedupe_key, "robot.readiness.unavailable:0:drive_not_ready")
+
+    def test_startup_suppression_ignores_initial_not_ready_until_first_ready(self):
+        broker = _Broker()
+        notifier = RobotConnectionNotifier(broker, suppress_until_ready=True)
+        notifier.start()
+        callback = broker.subscriptions[RobotTopics.STATE]
+
+        callback(
+            self._snapshot("starting").with_extra(
+                robot_ready=False,
+                readiness_state="starting",
+                readiness_note="Robot runtime is starting",
+            )
+        )
+        callback(
+            self._snapshot("idle").with_extra(
+                robot_ready=True,
+                readiness_state="idle",
+                readiness_note="Robot service healthy",
+            )
+        )
+        callback(
+            self._snapshot("idle").with_extra(
+                robot_ready=False,
+                readiness_state="drive_not_ready",
+                readiness_note="EtherCAT communication error",
+            )
+        )
+
+        self.assertEqual(len(broker.published), 1)
+        self.assertEqual(broker.published[0][1].fallback_title, "Robot Not Ready")
+
 
 if __name__ == "__main__":
     unittest.main()

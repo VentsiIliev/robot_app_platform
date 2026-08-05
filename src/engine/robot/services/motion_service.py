@@ -336,6 +336,12 @@ class MotionService(IMotionService):
     def get_current_position(self) -> List[float]:
         return self._robot.get_current_position()
 
+    def get_execution_status(self):
+        get_status = getattr(self._robot, "get_execution_status", None)
+        if callable(get_status):
+            return get_status()
+        return None
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

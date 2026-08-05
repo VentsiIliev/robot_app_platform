@@ -4,5 +4,9 @@
     "glue",
     "paint",
     "welding"
-  ]
+  ],
+  "ros_backend": {
+    "auto_launch": true,
+    "auto_stop": true
+  }
 }

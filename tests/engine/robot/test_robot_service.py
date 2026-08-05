@@ -96,6 +96,34 @@ class TestRobotService(unittest.TestCase):
     def test_get_state_from_state(self):
         self.assertEqual(self.service.get_state(), "idle")
 
+    def test_connection_state_prefers_driver_transport_state(self):
+        self.robot.get_connection_state.return_value = "disconnected"
+
+        self.assertEqual(self.service.get_connection_state(), "disconnected")
+        self.assertFalse(self.service.is_healthy())
+
+    def test_connection_details_delegate_to_driver(self):
+        self.robot.get_connection_details.return_value = {
+            "state": "disconnected",
+            "last_error": "bridge down",
+        }
+
+        self.assertEqual(
+            self.service.get_connection_details(),
+            {"state": "disconnected", "last_error": "bridge down"},
+        )
+
+    def test_drive_status_delegates_to_driver(self):
+        self.robot.get_drive_status.return_value = {
+            "success": True,
+            "motion_allowed_by_drive_enable": False,
+        }
+
+        self.assertEqual(
+            self.service.get_drive_status(),
+            {"success": True, "motion_allowed_by_drive_enable": False},
+        )
+
     def test_get_state_topic_from_state(self):
         self.assertEqual(self.service.get_state_topic(), "robot/state")
 
@@ -108,3 +136,8 @@ class TestRobotService(unittest.TestCase):
         tool_service = MagicMock()
         svc = RobotService(self.motion, self.robot, self.state, tool_service=tool_service)
         self.assertIs(svc.tools, tool_service)
+
+    def test_stop_stops_state_monitoring(self):
+        self.service.stop()
+
+        self.state.stop_monitoring.assert_called_once_with()

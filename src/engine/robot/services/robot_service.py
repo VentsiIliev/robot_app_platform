@@ -29,6 +29,11 @@ class RobotService(IRobotService):
     def tools(self) -> Optional[IToolService]:
         return self._tools
 
+    def stop(self) -> None:
+        stop_monitoring = getattr(self._state, "stop_monitoring", None)
+        if callable(stop_monitoring):
+            stop_monitoring()
+
     # --- IMotionService ---
 
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
@@ -107,6 +112,38 @@ class RobotService(IRobotService):
 
     def get_state(self) -> str:
         return self._state.state
+
+    def get_connection_state(self) -> str:
+        getter = getattr(self._robot, "get_connection_state", None)
+        if callable(getter):
+            try:
+                return str(getter() or self.get_state())
+            except Exception:
+                self._logger.debug("get_connection_state failed", exc_info=True)
+                return "disconnected"
+        return self.get_state()
+
+    def get_connection_details(self) -> dict:
+        getter = getattr(self._robot, "get_connection_details", None)
+        if callable(getter):
+            try:
+                details = getter() or {}
+            except Exception:
+                self._logger.debug("get_connection_details failed", exc_info=True)
+                return {"state": "disconnected"}
+            return dict(details) if isinstance(details, dict) else {}
+        return {}
+
+    def get_drive_status(self) -> dict:
+        getter = getattr(self._robot, "get_drive_status", None)
+        if callable(getter):
+            try:
+                status = getter() or {}
+            except Exception:
+                self._logger.debug("get_drive_status failed", exc_info=True)
+                return {"success": False}
+            return dict(status) if isinstance(status, dict) else {}
+        return {}
 
     def get_state_topic(self) -> str:
         return self._state.state_topic

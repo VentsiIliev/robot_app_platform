@@ -109,6 +109,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
 
         self.assertFalse(flat["magazine_load_enabled"])
+        self.assertTrue(flat["run_while_workpiece_found"])
         self.assertEqual(0.5, flat["magazine_camera_settle_s"])
         self.assertEqual(0.5, flat["magazine_release_settle_s"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
@@ -120,6 +121,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             {
                 **flat,
                 "magazine_load_enabled": True,
+                "run_while_workpiece_found": False,
                 "magazine_camera_settle_s": 0.25,
                 "magazine_release_settle_s": 0.75,
                 "magazine_move_to_magazine_vel_percent": 11.0,
@@ -131,6 +133,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         )
 
         self.assertTrue(restored.magazine_load.enabled)
+        self.assertFalse(restored.run_while_workpiece_found)
         self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
         self.assertEqual(0.75, restored.magazine_load.release_settle_s)
         self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
@@ -192,6 +195,7 @@ class TestPaintProcessConfig(unittest.TestCase):
     def test_process_config_serializer_roundtrips_magazine_load_section(self) -> None:
         serializer = PaintProcessConfigSerializer()
         config = PaintProcessConfig(
+            run_while_workpiece_found=False,
             magazine_load=PaintMagazineLoadConfig(
                 enabled=True,
                 magazine_group_id="Magazine",
@@ -208,6 +212,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         restored = serializer.from_dict(serializer.to_dict(config))
 
         self.assertTrue(restored.magazine_load.enabled)
+        self.assertFalse(restored.run_while_workpiece_found)
         self.assertEqual("Magazine", restored.magazine_load.magazine_group_id)
         self.assertEqual("CALIBRATION", restored.magazine_load.calibration_group_id)
         self.assertEqual(21.0, restored.magazine_load.move_to_magazine_vel_percent)
@@ -257,6 +262,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         keys = [field.key for group in process for field in group.fields]
         safe_travel_groups = [group for group in process if group.title == "Safe Travel"]
 
+        self.assertIn("run_while_workpiece_found", keys)
         self.assertIn("magazine_load_enabled", keys)
         self.assertIn("magazine_camera_settle_s", keys)
         self.assertIn("magazine_release_settle_s", keys)

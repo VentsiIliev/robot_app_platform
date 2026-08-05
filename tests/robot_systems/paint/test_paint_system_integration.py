@@ -784,9 +784,15 @@ class TestPaintRobotSystemStart(unittest.TestCase):
             patch("src.robot_systems.paint.paint_robot_system.build_robot_system_calibration_service", return_value=MagicMock()),
             patch("src.engine.robot.calibration.robot_calibration_process.RobotCalibrationProcess", return_value=calibration_process),
             patch("src.robot_systems.paint.calibration.coordinator.PaintCalibrationCoordinator", return_value=MagicMock()),
-            patch("src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService", return_value=production_service),
+            patch(
+                "src.robot_systems.paint.processes.paint.paint_production_service.PaintProductionService",
+                return_value=production_service,
+            ) as production_cls,
             patch("src.robot_systems.paint.processes.PaintProcess", return_value=main_process),
-            patch("src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service.PaintDashboardService", return_value=dashboard_service),
+            patch(
+                "src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service.PaintDashboardService",
+                return_value=dashboard_service,
+            ) as dashboard_cls,
             patch("src.robot_systems.paint.application_wiring._build_paint_workpiece_editor_service", return_value=MagicMock()),
             patch("src.robot_systems.paint.application_wiring._build_capture_snapshot_service", return_value=MagicMock()),
             patch("src.robot_systems.paint.application_wiring._build_paint_path_preparation_service", return_value=MagicMock()),
@@ -803,12 +809,16 @@ class TestPaintRobotSystemStart(unittest.TestCase):
         self.assertEqual(nav_cls.call_args.kwargs["vision"], vision)
         self.assertEqual(nav_cls.call_args.kwargs["work_area_service"], work_area_service)
         self.assertEqual(nav_cls.call_args.kwargs["robot_service"], robot)
+        self.assertIs(production_cls.call_args.kwargs["navigation_service"], navigation)
+        self.assertIs(dashboard_cls.call_args.kwargs["robot_service"], robot)
+        self.assertIs(dashboard_cls.call_args.kwargs["vision_service"], vision)
         self.assertEqual(
             nav_cls.call_args.kwargs["observed_area_by_group"],
             {"CALIBRATION": "paint", "Magazine": "magazine"},
         )
         self.assertIs(system._navigation, navigation)
         self.assertIs(system._dashboard_service, dashboard_service)
+        system.register_managed_resource.assert_any_call(robot)
         system.register_managed_resource.assert_any_call(vision)
         system.register_managed_resource.assert_any_call(calibration_process)
         system.register_managed_resource.assert_any_call(main_process)

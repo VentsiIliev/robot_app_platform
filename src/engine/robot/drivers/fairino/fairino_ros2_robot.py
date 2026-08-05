@@ -19,13 +19,15 @@ class FairinoRos2Robot(IRobot):
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
-        ret = self._client.move_ptp(position, tool, user, vel, acc, blendR=0.0, blocking=blocking) or 0
+        ret = self._client.move_ptp(position, tool, user, vel, acc, blendR=0.0, blocking=blocking)
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("move_ptp ← raw_ret=%s normalised=%s accepted=%s", ret, ret, ret >= 0)
         return ret
 
     def move_linear(self, position: List[float], tool: int, user: int, vel: float, acc: float, blend_radius: float = 0.0, blocking: bool = True) -> int:
         logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blend=%s", position, tool, user, vel, acc, blend_radius)
-        ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius, blocking=blocking) or 0
+        ret = self._client.move_liner(position, tool, user, vel, acc, blend_radius, blocking=blocking)
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("move_linear ← raw_ret=%s accepted=%s", ret, ret >= 0)
         return ret
 
@@ -37,7 +39,8 @@ class FairinoRos2Robot(IRobot):
 
     def stop_motion(self) -> int:
         logger.debug("stop_motion →")
-        ret = self._client.stop_motion() or 0
+        ret = self._client.stop_motion()
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("stop_motion ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
@@ -45,19 +48,23 @@ class FairinoRos2Robot(IRobot):
         snapshot = self._client.get_state_snapshot()
         if not snapshot:
             return None
-        velocity = snapshot.get("velocity")
-        if velocity is None:
-            snapshot["velocity_magnitude"] = 0.0
-        else:
-            try:
-                snapshot["velocity_magnitude"] = math.sqrt(sum(float(v) ** 2 for v in velocity))
-            except (TypeError, ValueError):
-                snapshot["velocity_magnitude"] = 0.0
+        snapshot["velocity_magnitude"] = self._vector_magnitude(snapshot.get("velocity"))
+        snapshot["acceleration_magnitude"] = self._vector_magnitude(snapshot.get("acceleration"))
         return snapshot
+
+    @staticmethod
+    def _vector_magnitude(values) -> float | None:
+        if values is None:
+            return None
+        try:
+            return math.sqrt(sum(float(v) ** 2 for v in values))
+        except (TypeError, ValueError):
+            return None
 
     def get_current_position(self) -> List[float]:
         # logger.debug("get_current_position →")
-        result = self._client.get_current_position()
+        snapshot = self.get_state_snapshot()
+        result = snapshot.get("position") if snapshot else self._client.get_current_position()
         position = result if result is not None else []
         # logger.debug("get_current_position ← raw=%s resolved=%s", result, position)
         return position
@@ -70,6 +77,9 @@ class FairinoRos2Robot(IRobot):
 
     def get_current_velocity(self) -> float:
         # logger.debug("get_current_velocity →")
+        snapshot = self.get_state_snapshot()
+        if snapshot and snapshot.get("velocity_magnitude") is not None:
+            return snapshot["velocity_magnitude"]
         result = self._client.get_current_velocity()
         if result is None:
             logger.debug("get_current_velocity ← no data, returning 0.0")
@@ -80,10 +90,16 @@ class FairinoRos2Robot(IRobot):
         return magnitude
 
     def get_current_acceleration(self) -> float:
+        snapshot = self.get_state_snapshot()
+        if snapshot and snapshot.get("acceleration_magnitude") is not None:
+            return snapshot["acceleration_magnitude"]
         return 0.0
 
     def get_execution_status(self):
         return self._client.get_status()
+
+    def get_ordered_motion_chain_status(self):
+        return self._client.get_ordered_motion_chain_status()
 
     def get_last_trajectory_command_info(self):
         return self._client.get_last_execute_path_response()
@@ -107,7 +123,8 @@ class FairinoRos2Robot(IRobot):
             queue_if_busy=queue_if_busy,
             vel=vel,
             acc=acc,
-        ) or 0
+        )
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("unwind_joint6 ← raw_ret=%s success=%s", ret, ret >= 0)
         return ret
 
@@ -272,7 +289,8 @@ class FairinoRos2Robot(IRobot):
 
     def reset_all_errors(self) -> int:
         logger.info("reset_all_errors →")
-        ret = self._client.resetAllErrors() or 0
+        ret = self._client.resetAllErrors()
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.info("reset_all_errors ← ret=%s", ret)
         return ret
 

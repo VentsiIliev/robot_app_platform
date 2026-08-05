@@ -237,6 +237,8 @@ class PaintProcessConfig:
     pickup_axis_alignment_sign_value: float = 1.0
     # Turns the vacuum pump on/off around pickup and release.
     enable_vacuum_pump: bool = True
+    # Repeat production cycles until the active source no longer yields a workpiece.
+    run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.

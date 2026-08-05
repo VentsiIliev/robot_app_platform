@@ -63,6 +63,7 @@ class PaintProcessSettingsMapper:
             "pivot_contact_side": settings.pivot_contact_side,
             "mirror_xz_ry_execution_rotation_value": settings.mirror_xz_ry_execution_rotation_value,
             "pickup_axis_alignment_sign_value": settings.pickup_axis_alignment_sign_value,
+            "run_while_workpiece_found": settings.run_while_workpiece_found,
             "combine_change_plane_with_first_contact": pickup.combine_change_plane_with_first_contact,
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
@@ -273,6 +274,9 @@ class PaintProcessSettingsMapper:
                 flat.get("pickup_axis_alignment_sign_value", base.pickup_axis_alignment_sign_value)
             ),
             enable_vacuum_pump=bool(flat.get("enable_vacuum_pump", base.enable_vacuum_pump)),
+            run_while_workpiece_found=bool(
+                flat.get("run_while_workpiece_found", base.run_while_workpiece_found)
+            ),
             apply_camera_to_tcp_for_pickup=bool(
                 flat.get("apply_camera_to_tcp_for_pickup", base.apply_camera_to_tcp_for_pickup)
             ),

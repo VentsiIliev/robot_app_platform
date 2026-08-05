@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget
 
 from pl_gui.dashboard.config import CardConfig
-from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import (
     PaintCardFactory,
 )
@@ -93,6 +93,16 @@ class TestPaintDashboardUi(unittest.TestCase):
             ["Paint", "Running", "Current state"],
         )
 
+    def test_info_card_content_can_be_updated(self) -> None:
+        card = PaintInfoCard("Paint", "Running", "Current state")
+
+        card.set_content("Robot Status", "IDLE", "Robot service healthy")
+
+        self.assertEqual(
+            [label.text() for label in card.findChildren(QLabel)],
+            ["Robot Status", "IDLE", "Robot service healthy"],
+        )
+
     def test_dashboard_view_wires_inner_dashboard_and_applies_state(self) -> None:
         state = DashboardState(
             process_state="running",
@@ -151,7 +161,42 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertIn(("stop", True), view._dashboard.calls)
         self.assertIn(("pause", True), view._dashboard.calls)
         self.assertIn(("pause_text", "Resume"), view._dashboard.calls)
+        calls_after_first_apply = list(view._dashboard.calls)
+
+        view.apply_dashboard_state(state)
+
+        self.assertEqual(view._dashboard.calls, calls_after_first_apply)
         self.assertIsNone(view.clean_up())
+
+    def test_dashboard_view_updates_status_cards_from_state(self) -> None:
+        robot_card = MagicMock()
+        vision_card = MagicMock()
+        state = DashboardState(
+            card_states={
+                1: DashboardCardState("Robot Status", "IDLE", "Robot service healthy"),
+                2: DashboardCardState("Vision Status", "ONLINE", "Vision service healthy"),
+            }
+        )
+
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[(robot_card, 1, 0, 0), (vision_card, 2, 1, 0)],
+            )
+
+        view.apply_dashboard_state(state)
+
+        robot_card.set_content.assert_called_once_with("Robot Status", "IDLE", "Robot service healthy")
+        vision_card.set_content.assert_called_once_with("Vision Status", "ONLINE", "Vision service healthy")
+
+        view.apply_dashboard_state(state)
+
+        robot_card.set_content.assert_called_once()
+        vision_card.set_content.assert_called_once()
 
     def test_view_initialization_tolerates_missing_dashboard_layout(self) -> None:
         with patch(

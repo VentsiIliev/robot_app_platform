@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
 
 from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
 from src.applications.base.dashboard_process_state_mixin import DashboardProcessStateMixin
@@ -13,6 +13,8 @@ from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model 
 from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view import (
     PaintDashboardView,
 )
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
+from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class _Worker(QObject):
@@ -39,6 +41,10 @@ class PaintDashboardController(
         self._broker = broker
         self._active = False
         self._workers: list[tuple[QThread, _Worker]] = []
+        timer_parent = self._view if isinstance(self._view, QObject) else None
+        self._status_timer = QTimer(timer_parent)
+        self._status_timer.setInterval(1000)
+        self._status_timer.timeout.connect(self._refresh_dashboard_status)
         self._init_dashboard_camera_feed()
         self._init_dashboard_process_state()
         self._view.start_requested.connect(self._on_start)
@@ -51,11 +57,15 @@ class PaintDashboardController(
         self._active = True
         self._subscribe_dashboard_camera_feed()
         self._subscribe_dashboard_process_state()
+        self._subscribe_dashboard_robot_state()
         self._view.apply_dashboard_state(self._model.load())
+        if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
+            self._status_timer.start()
         self._view.destroyed.connect(self.stop)
 
     def stop(self) -> None:
         self._active = False
+        self._status_timer.stop()
         self._unsubscribe_all()
         for thread, _worker in list(self._workers):
             thread.quit()
@@ -73,6 +83,72 @@ class PaintDashboardController(
 
     def _on_reset(self) -> None:
         self._view.apply_dashboard_state(self._model.reset_errors())
+
+    def _subscribe_dashboard_robot_state(self) -> None:
+        self._subscribe(RobotTopics.STATE, self._on_dashboard_robot_state_raw)
+
+    def _on_dashboard_robot_state_raw(self, _event: object) -> None:
+        if not self._active:
+            return
+        state = self._model.load()
+        event_state = str(getattr(_event, "state", "") or "").lower()
+        if event_state == "disconnected":
+            extra = getattr(_event, "extra", {}) or {}
+            last_error = extra.get("last_error") if isinstance(extra, dict) else None
+            state.card_states[1] = DashboardCardState(
+                "Robot Status",
+                "DISCONNECTED",
+                self._robot_connection_note(last_error),
+            )
+        elif event_state == "starting":
+            extra = getattr(_event, "extra", {}) or {}
+            startup = extra.get("startup") if isinstance(extra, dict) else {}
+            state.card_states[1] = DashboardCardState(
+                "Robot Status",
+                "STARTING",
+                self._robot_startup_note(startup if isinstance(startup, dict) else {}),
+            )
+        elif event_state in {"error", "fault"}:
+            extra = getattr(_event, "extra", {}) or {}
+            last_error = extra.get("last_error") if isinstance(extra, dict) else None
+            state.card_states[1] = DashboardCardState(
+                "Robot Status",
+                "ERROR",
+                self._robot_connection_note(last_error),
+            )
+        self._dashboard_process_bridge.state_ready.emit(state)
+
+    @staticmethod
+    def _robot_connection_note(last_error: object) -> str:
+        message = str(last_error or "").strip()
+        if not message:
+            return "Robot bridge is disconnected"
+        lowered = message.lower()
+        if "connection refused" in lowered or "failed to establish a new connection" in lowered:
+            return "ROS2 bridge is not reachable"
+        if "timed out" in lowered or "timeout" in lowered:
+            return "ROS2 bridge health check timed out"
+        if "max retries exceeded" in lowered:
+            return "ROS2 bridge is not responding"
+        return "Robot bridge is disconnected"
+
+    @staticmethod
+    def _robot_startup_note(startup: dict) -> str:
+        message = str(startup.get("message") or "").strip()
+        if message:
+            return message
+        phase = str(startup.get("phase") or "").strip()
+        if phase:
+            return f"Runtime startup phase: {phase}"
+        return "Robot runtime is starting"
+
+    def _refresh_dashboard_status(self) -> None:
+        if not self._active:
+            return
+        try:
+            self._view.apply_dashboard_state(self._model.load())
+        except RuntimeError:
+            self.stop()
 
     def _on_action(self, action_id: str) -> None:
         if action_id != "debug_contour_transform":

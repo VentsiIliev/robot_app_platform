@@ -14,7 +14,7 @@ from src.engine.robot.path_preparation.pixel_to_mm import (
     PixelToMmContext,
 )
 from src.shared_contracts.events.process_events import ProcessState
-from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardState
+from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
     IPaintDashboardService,
@@ -30,6 +30,8 @@ class PaintDashboardService(IPaintDashboardService):
         capture_snapshot_service=None,
         path_preparation_service=None,
         resolver_getter=None,
+        robot_service=None,
+        vision_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
     ) -> None:
@@ -37,6 +39,8 @@ class PaintDashboardService(IPaintDashboardService):
         self._capture_snapshot_service = capture_snapshot_service
         self._path_preparation_service = path_preparation_service
         self._resolver_getter = resolver_getter
+        self._robot_service = robot_service
+        self._vision_service = vision_service
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
         self._geometry_scale_cache = GeometryScaleCache()
@@ -55,6 +59,11 @@ class PaintDashboardService(IPaintDashboardService):
             mode_label="Paint Mode",
             active_job_label=self._active_job_label(process_state),
             status_lines=self._status_lines(process_state),
+            card_states={
+                1: self._robot_status_card(),
+                2: self._vision_status_card(),
+                3: self._process_status_card(process_state),
+            },
             can_start=process_state in (ProcessState.IDLE.value, ProcessState.STOPPED.value),
             can_stop=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
             can_pause=process_state in (ProcessState.RUNNING.value, ProcessState.PAUSED.value),
@@ -75,6 +84,144 @@ class PaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         self._process.reset_errors()
+
+    def _robot_status_card(self) -> DashboardCardState:
+        robot = self._robot_service
+        if robot is None:
+            return DashboardCardState("Robot Status", "UNAVAILABLE", "Robot service is not registered")
+        try:
+            details_getter = getattr(robot, "get_connection_details", None)
+            details = details_getter() if callable(details_getter) else {}
+            details = details if isinstance(details, dict) else {}
+            connection_state_getter = getattr(robot, "get_connection_state", None)
+            connection_state = str(details.get("state") or "").lower()
+            if callable(connection_state_getter):
+                live_connection_state = connection_state_getter()
+                if isinstance(live_connection_state, str) and live_connection_state.strip():
+                    connection_state = live_connection_state.strip().lower()
+            if connection_state == "disconnected":
+                note = self._robot_connection_note(details.get("last_error"))
+                return DashboardCardState("Robot Status", "DISCONNECTED", note)
+            if connection_state == "starting":
+                startup = details.get("startup")
+                note = self._robot_startup_note(startup if isinstance(startup, dict) else {})
+                return DashboardCardState("Robot Status", "STARTING", note)
+            if connection_state in {"error", "fault"}:
+                note = self._robot_connection_note(details.get("last_error"))
+                return DashboardCardState("Robot Status", "ERROR", note)
+
+            drive_status_getter = getattr(robot, "get_drive_status", None)
+            drive_status = drive_status_getter() if callable(drive_status_getter) else {}
+            drive_status = drive_status if isinstance(drive_status, dict) else {}
+            drive_warning = self._robot_drive_warning(drive_status)
+            if drive_warning:
+                return DashboardCardState("Robot Status", "DRIVE NOT READY", drive_warning)
+
+            state_getter = getattr(robot, "get_state", None)
+            state = str(connection_state or (state_getter() if callable(state_getter) else "unknown"))
+            healthy_getter = getattr(robot, "is_healthy", None)
+            healthy = bool(healthy_getter()) if callable(healthy_getter) else state not in {
+                "disconnected",
+                "error",
+                "fault",
+            }
+        except Exception as exc:
+            return DashboardCardState("Robot Status", "ERROR", self._robot_connection_note(exc))
+        value = state.upper() if state else "UNKNOWN"
+        note = "Robot service healthy" if healthy else "Robot needs attention"
+        return DashboardCardState("Robot Status", value, note)
+
+    @staticmethod
+    def _robot_connection_note(last_error: object) -> str:
+        message = str(last_error or "").strip()
+        if not message:
+            return "Robot bridge is disconnected"
+        lowered = message.lower()
+        if "connection refused" in lowered or "failed to establish a new connection" in lowered:
+            return "ROS2 bridge is not reachable"
+        if "timed out" in lowered or "timeout" in lowered:
+            return "ROS2 bridge health check timed out"
+        if "max retries exceeded" in lowered:
+            return "ROS2 bridge is not responding"
+        return "Robot bridge is disconnected"
+
+    @staticmethod
+    def _robot_startup_note(startup: dict) -> str:
+        message = str(startup.get("message") or "").strip()
+        if message:
+            return message
+        phase = str(startup.get("phase") or "").strip()
+        if phase:
+            return f"Runtime startup phase: {phase}"
+        return "Robot runtime is starting"
+
+    @staticmethod
+    def _robot_drive_warning(drive_status: dict) -> str:
+        if not drive_status:
+            return ""
+        if drive_status.get("success") is False:
+            return PaintDashboardService._robot_drive_error_note(drive_status.get("error"))
+
+        motion_allowed = drive_status.get("motion_allowed_by_drive_enable")
+        actual_enabled = drive_status.get("actual_enabled")
+        requested_enabled = drive_status.get("requested_enabled")
+        if motion_allowed is False:
+            if requested_enabled is False:
+                return "Robot drives are disabled"
+            if actual_enabled is False:
+                return PaintDashboardService._robot_drive_status_note(drive_status)
+            return "Robot drives are not motion-ready"
+        return ""
+
+    @staticmethod
+    def _robot_drive_status_note(drive_status: dict) -> str:
+        status_state = drive_status.get("status_state")
+        if isinstance(status_state, (list, tuple)) and status_state:
+            states = sorted({str(state) for state in status_state if str(state)})
+            if states:
+                return "Drive state: " + ", ".join(states[:3])
+        state = str(drive_status.get("state") or "").strip()
+        if state:
+            return f"Drive state: {state}"
+        return "EtherCAT/drives are not operation enabled"
+
+    @staticmethod
+    def _robot_drive_error_note(error: object) -> str:
+        message = str(error or "").strip()
+        lowered = message.lower()
+        if "sdo" in lowered or "ethercat" in lowered:
+            return "EtherCAT communication error"
+        if "timed out" in lowered or "timeout" in lowered:
+            return "Drive status request timed out"
+        if "connection refused" in lowered or "failed to establish a new connection" in lowered:
+            return "ROS2 bridge is not reachable"
+        return "Drive status is unavailable"
+
+    def _vision_status_card(self) -> DashboardCardState:
+        vision = self._vision_service
+        if vision is None:
+            return DashboardCardState("Vision Status", "UNAVAILABLE", "Vision service is not registered")
+        try:
+            healthy_getter = getattr(vision, "is_healthy", None)
+            details_getter = getattr(vision, "get_health_details", None)
+            details = details_getter() if callable(details_getter) else {}
+            details = details if isinstance(details, dict) else {}
+            health_ok = bool(healthy_getter()) if callable(healthy_getter) else True
+            healthy = bool(details.get("healthy", health_ok))
+            value = "ONLINE" if healthy else "OFFLINE"
+            note = str(
+                details.get("message")
+                or ("Vision service healthy" if healthy else "Vision service is stopped or unhealthy")
+            )
+        except Exception as exc:
+            return DashboardCardState("Vision Status", "ERROR", f"Could not read vision state: {exc}")
+        return DashboardCardState("Vision Status", value, note)
+
+    @staticmethod
+    def _process_status_card(process_state: str) -> DashboardCardState:
+        value = str(process_state or "idle").upper()
+        note = PaintDashboardService._status_lines(process_state)[0]
+        return DashboardCardState("Process Status", value, note)
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         if self._capture_snapshot_service is None:
