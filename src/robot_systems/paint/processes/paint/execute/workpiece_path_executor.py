@@ -325,6 +325,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._dropoff_unwind_prepared: bool = False
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
+        self._active_execution_control = None
 
     def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         """Build and cache the execution plan for a paint workpiece."""
@@ -1030,15 +1031,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._pickup_user,
             [round(v, 3) for v in pose],
         )
-        ok = self._robot_service.move_ptp(
-            position=pose,
-            tool=self._pickup_tool,
-            user=self._pickup_user,
-            velocity=velocity,
-            acceleration=acceleration,
-            wait_to_reach=True,
-        )
-        return ok
+        while True:
+            ok = self._robot_service.move_ptp(
+                position=pose,
+                tool=self._pickup_tool,
+                user=self._pickup_user,
+                velocity=velocity,
+                acceleration=acceleration,
+                wait_to_reach=True,
+            )
+            if ok:
+                return True
+            if not self._resume_after_interrupted_non_contact_motion(label):
+                return False
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
     def _move_ordered_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
@@ -1054,13 +1059,39 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not callable(execute_chain):
             _logger.info("[PICKUP] Ordered motion chain unavailable")
             return False
-        result = execute_chain(
-            segments=segments,
-            tool=self._pickup_tool,
-            user=self._pickup_user,
-            blocking=True,
-        )
-        return result in (0, True, None)
+        active_segments = list(segments)
+        while active_segments:
+            result = execute_chain(
+                segments=active_segments,
+                tool=self._pickup_tool,
+                user=self._pickup_user,
+                blocking=True,
+            )
+            if result in (0, True, None):
+                return True
+            if not self._resume_after_interrupted_non_contact_motion(label):
+                return False
+            active_segments = self._trim_ordered_pickup_segments_from_current_pose(active_segments)
+        return True
+
+    def pause_current_execution(self) -> None:
+        control = self._active_execution_control
+        if control is not None and getattr(control, "in_protected_phase", lambda: False)():
+            return
+        stop_motion = getattr(self._robot_service, "stop_motion", None)
+        if callable(stop_motion):
+            try:
+                stop_motion()
+            except Exception:
+                _logger.exception("[EXECUTE] Failed to stop robot motion during paint pause")
+
+    def _resume_after_interrupted_non_contact_motion(self, label: str) -> bool:
+        control = self._active_execution_control
+        pause_requested = getattr(control, "pause_requested", None)
+        if not callable(pause_requested) or not pause_requested():
+            return False
+        _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
+        return self._wait_for_paint_resume(control)
 
     def _paint_contact_staging_command_pose(self, pose: list[float], reference_pose: list[float]) -> list[float]:
         """Return the robot command pose for moving the held workpiece into XZ/RY pivot contact."""
@@ -1540,6 +1571,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     def execute_paint_process(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,
+        *,
+        control=None,
     ) -> tuple[bool, str]:
         """Run the full paint process.
 
@@ -1555,17 +1588,27 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """
         with timing_session("paint_process") as recorder:
             started = perf_counter()
+            previous_control = self._active_execution_control
+            self._active_execution_control = control
             self._refresh_paint_process_config_snapshot()
             self._apply_paint_process_contact_config()
             self._dropoff_unwind_prepared = False
             total_waypoints = 0
-            result: tuple[bool, str]
+            result: tuple[bool, str] = (True, "")
 
-            ordered_result = self._try_execute_ordered_motion_cycle(prepared_workpiece, started=started)
+            if not self._wait_for_paint_resume(control):
+                ordered_result = None
+                result = (False, "Paint process stopped")
+            else:
+                ordered_result = (
+                    None
+                    if control is not None
+                    else self._try_execute_ordered_motion_cycle(prepared_workpiece, started=started)
+                )
             if ordered_result is not None:
                 ok, msg, total_waypoints = ordered_result
                 result = (True, "") if ok else (False, msg)
-            else:
+            elif result[0]:
                 # Phase 1: pickup, lift, align, change plane, and stage at first contact.
                 ok, msg = self._pickup.execute(prepared_workpiece)
                 if not ok:
@@ -1575,13 +1618,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     result = (True, "")
 
             if ordered_result is None and result[0]:
+                if not self._wait_for_paint_resume(control):
+                    result = (False, "Paint process stopped")
+            if ordered_result is None and result[0]:
                 with timed_block(_logger, "paint_contact_cleanup_dropoff"):
                     # Phase 2: execute the primary paint-contact path.
-                    ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece)
+                    ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece, control=control)
                     if not ok:
                         self._edge_cleanup.cancel_early_preplanning()
                         _logger.info("[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f", elapsed_s(started))
                         result = (False, msg)
+                    elif not self._wait_for_paint_resume(control):
+                        result = (False, "Paint process stopped")
                     elif self._edge_cleanup.should_run_after_xz_ry():
                         # Phase 3: optional edge cleanup in XY/RZ after safe cleanup unwind.
                         ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_unwind(prepared_workpiece, started)
@@ -1603,6 +1651,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     else:
                         result = (True, "")
 
+                    if result[0] and not self._wait_for_paint_resume(control):
+                        result = (False, "Paint process stopped")
+
                     if result[0]:
                         # Phase 4: return to safe orientation and unwind Joint 6 before dropoff.
                         ok, msg = self._prepare_dropoff_joint6_unwind()
@@ -1610,12 +1661,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                             _logger.info("[TIMING] paint_process success=false stage=prepare_dropoff_unwind total_elapsed_s=%.3f", elapsed_s(started))
                             result = (False, msg)
 
+                    if result[0] and not self._wait_for_paint_resume(control):
+                        result = (False, "Paint process stopped")
+
                     if result[0]:
                         # Phase 5: execute the configured dropoff strategy and release the part.
                         ok, msg = self._dropoff.execute(prepared_workpiece)
                         if not ok:
                             _logger.info("[TIMING] paint_process success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
                             result = (False, msg)
+
+                    if result[0] and not self._wait_for_paint_resume(control):
+                        result = (False, "Paint process stopped")
 
                     if result[0]:
                         _logger.info(
@@ -1714,7 +1771,15 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
             csv_path = recorder.write_csv(self._debug_dump_dir) if self._diagnostics_artifacts_enabled() else None
             recorder.log_summary(_logger, csv_path=csv_path)
+            self._active_execution_control = previous_control
             return result
+
+    @staticmethod
+    def _wait_for_paint_resume(control) -> bool:
+        wait_if_paused = getattr(control, "wait_if_paused", None)
+        if callable(wait_if_paused):
+            return bool(wait_if_paused())
+        return True
 
     def _diagnostics_artifacts_enabled(self) -> bool:
         config = self._paint_process_config()

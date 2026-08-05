@@ -1,4 +1,6 @@
 import unittest
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +16,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintSafeTravelConfig,
     PaintToDropoffSafeTravelConfig,
 )
+from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
@@ -251,6 +254,40 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             [segment["label"] for segment in segments],
         )
         self.assertEqual(segments[0]["position"], [10.0, 20.0, 30.0, 180.0, 0.0, 0.0])
+
+    def test_ordered_non_contact_motion_resume_retries_remaining_waypoints(self):
+        control = PaintExecutionControl()
+        robot_service = MagicMock()
+        robot_service.get_current_position.return_value = [5.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        robot_service.execute_ordered_motion_chain.side_effect = [-14, 0]
+        executor = PaintWorkpiecePathExecutor(robot_service=robot_service)
+        executor._active_execution_control = control
+        segments = [
+            {"type": "linear", "label": "first", "position": [0, 0, 0, 0, 0, 0], "vel": 10, "acc": 10},
+            {"type": "linear", "label": "second", "position": [10, 0, 0, 0, 0, 0], "vel": 10, "acc": 10},
+        ]
+        result = {}
+
+        def _run():
+            result["ok"] = executor._move_ordered_pickup_sequence("resume test", segments)
+
+        control.request_pause()
+        thread = threading.Thread(target=_run)
+        thread.start()
+        for _ in range(100):
+            if robot_service.execute_ordered_motion_chain.call_count == 1:
+                break
+            time.sleep(0.01)
+
+        self.assertTrue(thread.is_alive())
+        control.resume()
+        thread.join(timeout=1.0)
+
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(result["ok"])
+        self.assertEqual(robot_service.execute_ordered_motion_chain.call_count, 2)
+        retry_segments = robot_service.execute_ordered_motion_chain.call_args_list[1].kwargs["segments"]
+        self.assertEqual(["second"], [segment["label"] for segment in retry_segments])
 
     def test_execute_pickup_target_and_release_at_position_falls_back_without_ordered_chain(self):
         config_service = MagicMock()
@@ -1136,6 +1173,46 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("3 waypoints", msg)
         post_execute_callback.assert_called_once_with()
+
+    def test_execute_paint_process_pauses_after_contact_before_dropoff(self):
+        control = PaintExecutionControl()
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=MagicMock(),
+            post_execute_callback=MagicMock(return_value=True),
+        )
+        executor._robot_service.execute_ordered_motion_chain = None
+        executor._pickup.execute = MagicMock(return_value=(True, "pickup ok"))
+        executor._edge_cleanup.should_run_after_xz_ry = MagicMock(return_value=False)
+        executor._edge_cleanup.should_run_after_xy_rz = MagicMock(return_value=False)
+        executor._prepare_dropoff_joint6_unwind = MagicMock(return_value=(True, ""))
+        executor._dropoff.execute = MagicMock(return_value=(True, ""))
+        plan = _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]]})
+        result = {}
+
+        def _contact(_plan, *, control=None):
+            control.request_pause()
+            return True, "", 3
+
+        executor._paint_contact.execute = MagicMock(side_effect=_contact)
+        thread = threading.Thread(
+            target=lambda: result.update(value=executor.execute_paint_process(plan, control=control))
+        )
+
+        thread.start()
+        for _ in range(100):
+            if executor._paint_contact.execute.called and not executor._dropoff.execute.called:
+                break
+            time.sleep(0.01)
+
+        self.assertTrue(thread.is_alive())
+        executor._dropoff.execute.assert_not_called()
+
+        control.resume()
+        thread.join(timeout=1.0)
+
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(result["value"][0], result["value"][1])
+        executor._dropoff.execute.assert_called_once_with(plan)
 
     def test_execute_paint_process_logs_timing_summary_after_cycle(self):
         config_service = MagicMock()

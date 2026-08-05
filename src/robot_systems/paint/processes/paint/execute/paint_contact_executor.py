@@ -83,6 +83,7 @@ class PaintContactExecutor:
         execute_robot: bool = True,
         collected_command_paths: list[list[list[float]]] | None = None,
         collected_command_jobs: list[dict] | None = None,
+        control=None,
     ) -> tuple[bool, str, int]:
         """Execute all projected paint-contact paths in the prepared execution plan."""
         owner = self._owner
@@ -288,19 +289,36 @@ class PaintContactExecutor:
 
             execute_started = perf_counter()
             with timed_block(_logger, "paint_contact_job_robot_execute", label=f"{job_label}:{pattern_type}"):
-                result = execute_paint_trajectory_with_optional_trace(
-                    robot_service=owner._robot_service,
-                    debug_dump_dir=owner._debug_dump_dir,
-                    pivot_config=paint_pivot_config,
-                    command_pivot_path=command_pivot_path,
-                    vel=vel,
-                    acc=acc,
-                    pivot_pose=pivot_pose,
-                    pattern_type=pattern_type,
-                    stage="execute",
-                    tcp_to_tool_local_xy=tcp_to_tool_local_xy,
-                    paint_process_config=owner._paint_process_config(),
-                )
+                protected_phase = getattr(control, "protected_phase", None)
+                if callable(protected_phase):
+                    with protected_phase():
+                        result = execute_paint_trajectory_with_optional_trace(
+                            robot_service=owner._robot_service,
+                            debug_dump_dir=owner._debug_dump_dir,
+                            pivot_config=paint_pivot_config,
+                            command_pivot_path=command_pivot_path,
+                            vel=vel,
+                            acc=acc,
+                            pivot_pose=pivot_pose,
+                            pattern_type=pattern_type,
+                            stage="execute",
+                            tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+                            paint_process_config=owner._paint_process_config(),
+                        )
+                else:
+                    result = execute_paint_trajectory_with_optional_trace(
+                        robot_service=owner._robot_service,
+                        debug_dump_dir=owner._debug_dump_dir,
+                        pivot_config=paint_pivot_config,
+                        command_pivot_path=command_pivot_path,
+                        vel=vel,
+                        acc=acc,
+                        pivot_pose=pivot_pose,
+                        pattern_type=pattern_type,
+                        stage="execute",
+                        tcp_to_tool_local_xy=tcp_to_tool_local_xy,
+                        paint_process_config=owner._paint_process_config(),
+                    )
             if result not in (0, True, None):
                 _logger.info(
                     "[TIMING] paint_contact_job index=%d pattern=%s success=false input_pts=%d output_pts=%d execute_elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -323,6 +341,9 @@ class PaintContactExecutor:
                 elapsed_s(execute_started),
                 elapsed_s(job_started),
             )
+            wait_if_paused = getattr(control, "wait_if_paused", None)
+            if callable(wait_if_paused) and not wait_if_paused():
+                return False, "Paint process stopped", total_waypoints
         _logger.info(
             "[TIMING] paint_contact_paths success=true jobs=%d total_waypoints=%d elapsed_s=%.3f",
             len(execution_plan.execution_jobs),

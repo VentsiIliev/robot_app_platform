@@ -5,6 +5,7 @@ from time import perf_counter
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
@@ -32,25 +33,33 @@ class PaintProductionService:
         self._vacuum_pump = vacuum_pump
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
+        self._paint_control = PaintExecutionControl()
 
     def pause_current_phase(self) -> None:
         pause_load = getattr(self._magazine_load_service, "pause_current_load", None)
         if callable(pause_load):
             pause_load()
+        self._paint_control.request_pause()
+        pause_execution = getattr(self._path_executor, "pause_current_execution", None)
+        if callable(pause_execution):
+            pause_execution()
 
     def resume_current_phase(self) -> None:
         resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
         if callable(resume_load):
             resume_load()
+        self._paint_control.resume()
 
     def stop_current_phase(self) -> None:
         stop_load = getattr(self._magazine_load_service, "stop_current_load", None)
         if callable(stop_load):
             stop_load()
+        self._paint_control.request_stop()
 
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
         """Run production once, or repeat from magazine until the magazine is empty."""
         should_stop = stop_requested or (lambda: False)
+        self._paint_control.reset()
         magazine_config_result = self._get_magazine_load_config()
         if not magazine_config_result[0]:
             return False, magazine_config_result[1]
@@ -148,7 +157,10 @@ class PaintProductionService:
         execute_process = getattr(self._path_executor, "execute_paint_process", None)
         if execute_process is None:
             execute_process = self._path_executor.execute_pickup_and_paint
-        ok, msg = execute_process(execution_plan)
+        try:
+            ok, msg = execute_process(execution_plan, control=self._paint_control)
+        except TypeError:
+            ok, msg = execute_process(execution_plan)
         self._log_phase_timing("paint_execution", phase_start, success=ok, cycle=cycle_index)
         if not ok:
             return False, f"{description}: {msg}"

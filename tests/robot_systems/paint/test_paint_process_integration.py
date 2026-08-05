@@ -58,7 +58,16 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             raw_workpiece,
             skip_debug_plot=True,
         )
-        service._path_executor.execute_paint_process.assert_called_once_with(execution_plan)
+        service._path_executor.execute_paint_process.assert_called_once()
+        self.assertIs(service._path_executor.execute_paint_process.call_args.args[0], execution_plan)
+        self.assertIsNotNone(service._path_executor.execute_paint_process.call_args.kwargs.get("control"))
+
+    def test_pause_current_phase_requests_path_executor_pause(self):
+        service = self._make_service()
+
+        service.pause_current_phase()
+
+        service._path_executor.pause_current_execution.assert_called_once_with()
 
     def test_run_once_enables_path_debug_plots_from_live_settings(self):
         config_service = MagicMock()
