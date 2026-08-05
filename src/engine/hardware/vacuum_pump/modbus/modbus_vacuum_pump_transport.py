@@ -52,9 +52,18 @@ class ModbusVacuumPumpTransport(ModbusRegisterTransport, IVacuumPumpTransport):
     def write_registers(self, address: int, values: List[int]) -> None:
         self._write_bits(address, [1 if value else 0 for value in values])
 
+    def _write_single_coil(self, address: int, value: bool) -> None:
+        """Send FC 5 frame via direct pyserial with RS485-safe settings."""
+        coil_value = 0xFF00 if value else 0x0000
+        frame = bytes([
+            self._slave_address, 5,
+            (address >> 8) & 0xFF, address & 0xFF,
+            (coil_value >> 8) & 0xFF, coil_value & 0xFF,
+        ])
+        self._write_raw_frame(address, frame)
+
     def _write_bits(self, address: int, values: List[int]) -> None:
         """Send FC 15 frame via direct pyserial with RS485-safe settings."""
-        slave_id = self._slave_address
         count = len(values)
         byte_count = (count + 7) // 8
 
@@ -64,11 +73,14 @@ class ModbusVacuumPumpTransport(ModbusRegisterTransport, IVacuumPumpTransport):
                 data_byte |= 1 << i
 
         frame = bytes([
-            slave_id, 15,
+            self._slave_address, 15,
             (address >> 8) & 0xFF, address & 0xFF,
             (count >> 8) & 0xFF, count & 0xFF,
             byte_count, data_byte,
         ])
+        self._write_raw_frame(address, frame)
+
+    def _write_raw_frame(self, address: int, frame: bytes) -> None:
         full_frame = frame + struct.pack("<H", _crc16(frame))
 
         self._logger.debug("Coil write raw frame=%s", full_frame.hex())
@@ -83,7 +95,7 @@ class ModbusVacuumPumpTransport(ModbusRegisterTransport, IVacuumPumpTransport):
                     time.sleep(self._write_retry_delay_s)
         raise RuntimeError(f"Coil write to {address} failed after 3 attempts")
 
-    def _raw_send(self, full_frame: bytes) -> None:
+    def _raw_send(self, full_frame: bytes) -> bytes:
         """Open a direct serial port, configure for RS485, send, close."""
         direct = serial.Serial(
             port=self._port,
@@ -91,7 +103,7 @@ class ModbusVacuumPumpTransport(ModbusRegisterTransport, IVacuumPumpTransport):
             bytesize=self._bytesize,
             parity=self._parity,
             stopbits=self._stopbits,
-            timeout=0.001,
+            timeout=max(0.001, self._timeout),
         )
         try:
             tty_attrs = termios.tcgetattr(direct.fileno())
@@ -107,12 +119,29 @@ class ModbusVacuumPumpTransport(ModbusRegisterTransport, IVacuumPumpTransport):
             direct.write(full_frame)
             direct.flush()
             time.sleep(0.02)
-            direct.read(8)
+            response = direct.read(8)
+            self._validate_response(response, full_frame)
+            return response
         finally:
             try:
                 direct.close()
             except Exception:
                 pass
+
+    def _validate_response(self, response: bytes, request: bytes) -> None:
+        if not response:
+            return
+        if len(response) >= 5 and response[0] == request[0] and response[1] == (request[1] | 0x80):
+            raise RuntimeError(
+                f"Modbus exception response for function {request[1]}: code={response[2]}"
+            )
+        if len(response) < 8:
+            raise RuntimeError(f"Short Modbus response: {response.hex()}")
+
+        payload = response[:-2]
+        expected_crc = struct.pack("<H", _crc16(payload))
+        if response[-2:] != expected_crc:
+            raise RuntimeError(f"Bad Modbus response CRC: {response.hex()}")
 
     # ── Coil reads (via minimalmodbus) ─────────────────────────────────
 

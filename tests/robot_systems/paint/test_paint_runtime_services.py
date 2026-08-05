@@ -17,7 +17,10 @@ from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_serv
 from src.robot_systems.paint.calibration.coordinator import PaintCalibrationCoordinator
 from src.robot_systems.paint.component_ids import ProcessID
 from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
-from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import ModbusVacuumPumpTransport
+from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import (
+    ModbusVacuumPumpTransport,
+    _crc16,
+)
 from src.engine.hardware.vacuum_pump.vacuum_pump_controller import VacuumPumpController
 from src.robot_systems.paint.processes.robot_calibration_process import (
     RobotCalibrationProcess,
@@ -272,15 +275,24 @@ class TestVacuumPumpController(unittest.TestCase):
 
 
 class TestModbusVacuumPumpTransport(unittest.TestCase):
-    def test_no_response_write_is_treated_as_success_for_write_only_relay(self) -> None:
+    def test_single_register_write_uses_fc15_single_coil_bitmap_frame(self) -> None:
+        transport = ModbusVacuumPumpTransport(
+            port="/dev/null",
+            slave_address=10,
+            write_retry_delay_s=0.0,
+        )
+        transport._raw_send = MagicMock(return_value=b"")
+
+        transport.write_register(128, 1)
+
+        frame = bytes([10, 15, 0, 128, 0, 1, 1, 1])
+        expected = frame + _crc16(frame).to_bytes(2, "little")
+        transport._raw_send.assert_called_once_with(expected)
+
+    def test_send_failures_are_retried_then_raised(self) -> None:
         class NoResponseError(Exception):
             pass
 
-        inst = MagicMock()
-        inst.write_bits.side_effect = NoResponseError("no answer")
-        session = MagicMock()
-        session.__enter__.return_value = inst
-        session.__exit__.return_value = None
         transport = ModbusVacuumPumpTransport(
             port="/dev/null",
             slave_address=1,
@@ -297,11 +309,6 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
         class NoResponseError(Exception):
             pass
 
-        inst = MagicMock()
-        inst.write_bits.side_effect = [NoResponseError("no answer"), None]
-        session = MagicMock()
-        session.__enter__.return_value = inst
-        session.__exit__.return_value = None
         transport = ModbusVacuumPumpTransport(
             port="/dev/null",
             slave_address=1,
@@ -313,17 +320,14 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
 
         self.assertEqual(transport._raw_send.call_count, 2)
 
-    def test_other_write_errors_still_raise(self) -> None:
-        inst = MagicMock()
-        inst.write_bits.side_effect = RuntimeError("serial failed")
-        session = MagicMock()
-        session.__enter__.return_value = inst
-        session.__exit__.return_value = None
+    def test_explicit_modbus_exception_response_raises(self) -> None:
         transport = ModbusVacuumPumpTransport(port="/dev/null", slave_address=1)
-        transport._session = MagicMock(return_value=session)
+        request = bytes([1, 15, 0, 128, 0, 1, 1, 1])
+        response_payload = bytes([1, 0x8F, 1])
+        response = response_payload + _crc16(response_payload).to_bytes(2, "little")
 
         with self.assertRaises(RuntimeError):
-            transport.write_register(128, 1)
+            transport._validate_response(response, request)
 
 
 if __name__ == "__main__":

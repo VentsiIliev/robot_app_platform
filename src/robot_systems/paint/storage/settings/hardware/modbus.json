@@ -1,10 +1,10 @@
 {
   "port": "/dev/ttyUSB0",
-  "baudrate": 115200,
+  "baudrate": 57600,
   "bytesize": 8,
   "stopbits": 1,
-  "parity": "N",
-  "timeout": 0.01,
-  "slave_address": 10,
+  "parity": "E",
+  "timeout": 0.001,
+  "slave_address": 1,
   "max_retries": 30
 }
