@@ -53,6 +53,7 @@ _logger = logging.getLogger(__name__)
 
 _STAGING_Z_OFFSET_MM = -10.0
 _STAGING_PAINT_AXIS_OFFSET_MM = 10.0
+_PICKUP_RESUME_WAYPOINT_TOLERANCE_MM = 2.0
 
 
 def _camera_to_tcp_delta(
@@ -592,6 +593,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         release_pose: list[float],
         workpiece_height_mm: float = 0.0,
         release_label: str = "release",
+        resume_from_current_pose: bool = False,
     ) -> tuple[bool, str]:
         """Pick up a simple resolved target and release it at an explicit pose."""
         self._refresh_paint_process_config_snapshot()
@@ -694,7 +696,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             }
             for label, pose, velocity, acceleration in transfer_waypoints
         ]
-        if not self._move_ordered_pickup_sequence("Ordered magazine pickup-to-release sequence", ordered_segments):
+        if resume_from_current_pose:
+            ordered_segments = self._trim_ordered_pickup_segments_from_current_pose(ordered_segments)
+            transfer_waypoints = tuple(
+                (
+                    str(segment.get("label", "")),
+                    list(segment["position"]),
+                    float(segment["vel"]),
+                    float(segment["acc"]),
+                )
+                for segment in ordered_segments
+            )
+        if not ordered_segments:
+            _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
+        elif not self._move_ordered_pickup_sequence("Ordered magazine pickup-to-release sequence", ordered_segments):
             execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
             if callable(execute_chain):
                 return False, f"Move to {release_label} release pose failed"
@@ -711,6 +726,90 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not ok:
             return False, msg
         return True, f"Workpiece transferred to {release_label}"
+
+    def _trim_ordered_pickup_segments_from_current_pose(self, segments: list[dict]) -> list[dict]:
+        """Skip already-passed pickup waypoints after pause/resume.
+
+        Ordered-chain execution starts from the robot's current pose. On resume we
+        keep the waypoint currently being approached and later waypoints, instead
+        of re-sending earlier pickup targets and making the robot backtrack.
+        """
+        if not segments:
+            return []
+
+        current = self._read_current_robot_pose()
+        if current is None:
+            _logger.warning("[PICKUP] Resume requested but current robot pose is unavailable; reusing full sequence")
+            return segments
+
+        target_positions = []
+        for segment in segments:
+            position = segment.get("position") if isinstance(segment, dict) else None
+            if not position or len(position) < 3:
+                return segments
+            target_positions.append([float(position[0]), float(position[1]), float(position[2])])
+
+        current_xyz = np.array(current[:3], dtype=float)
+        targets = [np.array(position[:3], dtype=float) for position in target_positions]
+
+        nearest_target_index = min(
+            range(len(targets)),
+            key=lambda index: float(np.linalg.norm(current_xyz - targets[index])),
+        )
+        if float(np.linalg.norm(current_xyz - targets[nearest_target_index])) <= _PICKUP_RESUME_WAYPOINT_TOLERANCE_MM:
+            start_index = min(nearest_target_index + 1, len(segments))
+            _logger.info(
+                "[PICKUP] Resume from current pose near waypoint %d; remaining segments=%d",
+                nearest_target_index,
+                len(segments) - start_index,
+            )
+            return segments[start_index:]
+
+        best_index = 0
+        best_distance = float("inf")
+        for index in range(len(targets)):
+            if index == 0:
+                distance = float(np.linalg.norm(current_xyz - targets[index]))
+            else:
+                distance = self._point_to_segment_distance(current_xyz, targets[index - 1], targets[index])
+            if distance < best_distance:
+                best_distance = distance
+                best_index = index
+
+        _logger.info(
+            "[PICKUP] Resume from current pose; continuing toward waypoint %d/%d distance_to_path=%.3fmm",
+            best_index,
+            len(segments) - 1,
+            best_distance,
+        )
+        return segments[best_index:]
+
+    def _read_current_robot_pose(self) -> list[float] | None:
+        get_current_position = getattr(self._robot_service, "get_current_position", None)
+        if not callable(get_current_position):
+            return None
+        try:
+            pose = get_current_position()
+        except Exception:
+            _logger.warning("[PICKUP] Failed to read current robot pose for resume", exc_info=True)
+            return None
+        if not pose or len(pose) < 3:
+            return None
+        try:
+            return [float(value) for value in pose]
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _point_to_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+        segment = end - start
+        length_sq = float(np.dot(segment, segment))
+        if length_sq <= 1e-9:
+            return float(np.linalg.norm(point - end))
+        t = float(np.dot(point - start, segment) / length_sq)
+        t = max(0.0, min(1.0, t))
+        projected = start + t * segment
+        return float(np.linalg.norm(point - projected))
 
     @staticmethod
     def _read_provider_position(provider: Optional[Callable[[], Optional[list[float]]]]) -> Optional[list[float]]:

@@ -13,6 +13,8 @@ from src.bootstrap.logging_config import setup_logging
 from src.bootstrap.build_engine import EngineContext
 from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
+from src.applications.base.notification_presenter import UserNotificationPresenter
+from src.applications.base.robot_connection_notifier import RobotConnectionNotifier
 from src.engine.localization.localization_service import LocalizationService
 from src.robot_systems.system_builder import SystemBuilder
 from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
@@ -114,6 +116,14 @@ def main() -> None:
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
+    notification_presenter = UserNotificationPresenter(
+        shell,
+        ctx.messaging_service,
+        translate=lambda key: localization_svc.translate("Notifications", key),
+    )
+    robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service)
+    shell._notification_presenter = notification_presenter
+    shell._robot_connection_notifier = robot_connection_notifier
 
     # Wire broker → shell navigation
     # Used to automatically open the workpiece editor when the "open in editor"
@@ -125,6 +135,8 @@ def main() -> None:
 
     ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
     shell.show()
+    notification_presenter.start()
+    robot_connection_notifier.start()
 
     # 4c — Login gate
     if _DEV_SKIP_LOGIN:
@@ -160,6 +172,8 @@ def main() -> None:
     try:
         sys.exit(qt_app.exec())
     finally:
+        robot_connection_notifier.stop()
+        notification_presenter.stop()
         robot_app.stop()
 def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
     """Load role-filtered apps and reload the shell's folder page."""

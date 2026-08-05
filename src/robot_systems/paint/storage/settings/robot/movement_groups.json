@@ -57,7 +57,7 @@
     },
     "Magazine": {
       "velocity": 10,
-      "acceleration": 10,
+      "acceleration": 40,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,

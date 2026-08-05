@@ -135,6 +135,11 @@ class PaintNavigationService:
             self._set_observed_area_for_group(group_name)
         return ok
 
+    def stop_motion(self) -> bool:
+        if self._robot is None:
+            return False
+        return bool(self._robot.stop_motion())
+
     def mark_group_observed_area_verified(self, group_name: str) -> None:
         self._set_observed_area_for_group(group_name)
 

@@ -6,6 +6,7 @@ from src.applications.base.notification_presenter import (
     UserNotificationPresenter,
 )
 from src.shared_contracts.events.notification_events import (
+    DismissNotificationEvent,
     NotificationSeverity,
     NotificationTopics,
     UserNotificationEvent,
@@ -73,8 +74,10 @@ class TestUserNotificationPresenter(unittest.TestCase):
             "Fallback Message",
         )
 
-    @patch("src.applications.base.notification_presenter.show_warning")
-    def test_dedupes_consecutive_notifications_with_same_key(self, mock_show_warning):
+    @patch("src.applications.base.notification_presenter.make_warning")
+    def test_dedupes_consecutive_notifications_with_same_key(self, mock_make_warning):
+        dialog = MagicMock()
+        mock_make_warning.return_value = dialog
         presenter = UserNotificationPresenter(
             parent=MagicMock(),
             messaging_service=MagicMock(),
@@ -88,7 +91,27 @@ class TestUserNotificationPresenter(unittest.TestCase):
         presenter.present(event)
         presenter.present(event)
 
-        mock_show_warning.assert_called_once()
+        mock_make_warning.assert_called_once()
+        dialog.open.assert_called_once_with()
+
+    @patch("src.applications.base.notification_presenter.make_warning")
+    def test_dismiss_closes_matching_keyed_notification(self, mock_make_warning):
+        dialog = MagicMock()
+        mock_make_warning.return_value = dialog
+        presenter = UserNotificationPresenter(
+            parent=MagicMock(),
+            messaging_service=MagicMock(),
+            translate=lambda key: key,
+        )
+
+        presenter.present(self._make_event(
+            severity=NotificationSeverity.WARNING,
+            dedupe_key="robot-disconnected",
+        ))
+        presenter._dismiss_notification(DismissNotificationEvent("robot-disconnected"))
+
+        dialog.close.assert_called_once_with()
+        self.assertNotIn("robot-disconnected", presenter._active_dialogs)
 
     def test_start_and_stop_manage_broker_subscription(self):
         broker = MagicMock()
@@ -101,5 +124,17 @@ class TestUserNotificationPresenter(unittest.TestCase):
         presenter.start()
         presenter.stop()
 
-        broker.subscribe.assert_called_once_with(NotificationTopics.USER, presenter._on_notification)
-        broker.unsubscribe.assert_called_once_with(NotificationTopics.USER, presenter._on_notification)
+        self.assertEqual(
+            broker.subscribe.call_args_list,
+            [
+                unittest.mock.call(NotificationTopics.USER, presenter._on_notification),
+                unittest.mock.call(NotificationTopics.DISMISS, presenter._on_dismiss),
+            ],
+        )
+        self.assertEqual(
+            broker.unsubscribe.call_args_list,
+            [
+                unittest.mock.call(NotificationTopics.USER, presenter._on_notification),
+                unittest.mock.call(NotificationTopics.DISMISS, presenter._on_dismiss),
+            ],
+        )

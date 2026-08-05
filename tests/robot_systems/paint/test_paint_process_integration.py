@@ -1,4 +1,5 @@
 import threading
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -8,6 +9,7 @@ import numpy as np
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.paint.component_ids import ProcessID
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.magazine_load.state import MagazineLoadState, MagazineLoadTransitions
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
@@ -286,6 +288,14 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
 
 class TestPaintMagazineLoadService(unittest.TestCase):
+    def test_magazine_load_allows_resume_to_interrupted_execution_state(self):
+        rules = MagazineLoadTransitions.get_rules()
+
+        self.assertIn(
+            MagazineLoadState.EXECUTE_PICKUP_AND_RELEASE,
+            rules[MagazineLoadState.STARTING],
+        )
+
     def test_load_to_calibration_uses_simple_contour_center_without_full_paint_planning(self):
         navigation = MagicMock()
         navigation.move_to_group.return_value = True
@@ -357,11 +367,211 @@ class TestPaintMagazineLoadService(unittest.TestCase):
             release_pose=[20.0, 10.0, 30, 180, 0, 0],
             workpiece_height_mm=0.0,
             release_label="paint work area center",
+            resume_from_current_pose=False,
         )
         pickup_xy = executor.execute_pickup_target_and_release_at_position.call_args.kwargs["pickup_xy"]
         self.assertAlmostEqual(1.5, pickup_xy[0])
         self.assertAlmostEqual(1.5, pickup_xy[1])
         navigation.mark_group_observed_area_verified.assert_called_once_with("CALIBRATION")
+
+    def test_load_to_calibration_can_pause_and_resume_during_magazine_move(self):
+        class PauseNavigation:
+            def __init__(self):
+                self.entered_first_move = threading.Event()
+                self.cancelled_first_move = threading.Event()
+                self.move_calls = []
+                self.stop_motion_calls = 0
+
+            def move_to_group(self, group, wait_cancelled=None, velocity=None, acceleration=None):
+                self.move_calls.append((group, velocity, acceleration))
+                if group == "Magazine" and len(self.move_calls) == 1:
+                    self.entered_first_move.set()
+                    deadline = time.monotonic() + 2.0
+                    while time.monotonic() < deadline:
+                        if wait_cancelled is not None and wait_cancelled():
+                            self.cancelled_first_move.set()
+                            return False
+                        time.sleep(0.01)
+                    return False
+                return True
+
+            def get_group_position(self, group):
+                return {
+                    "Magazine": [0, 0, 30, 180, 0, 0],
+                    "CALIBRATION": [10, 20, 30, 180, 0, 0],
+                }[group]
+
+            def mark_group_observed_area_verified(self, _group):
+                return None
+
+            def stop_motion(self):
+                self.stop_motion_calls += 1
+                return True
+
+        navigation = PauseNavigation()
+        work_area_service = MagicMock()
+        work_area_service.get_work_area.return_value = [
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.75, 0.75],
+            [0.25, 0.75],
+        ]
+        capture = MagicMock()
+        capture.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame=np.zeros((20, 40, 3), dtype=np.uint8),
+            contours=[_square(3.0)],
+            source="paint_magazine_load",
+        )
+        executor = MagicMock()
+        executor.execute_pickup_target_and_release_at_position.return_value = (
+            True,
+            "Workpiece transferred to paint work area center",
+        )
+        resolver = MagicMock()
+        resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
+        resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
+            final_xy=(float(request.x_pixels), float(request.y_pixels))
+        )
+        service = PaintMagazineLoadService(
+            navigation=navigation,
+            capture_snapshot_service=capture,
+            path_executor=executor,
+            resolver_getter=lambda: resolver,
+            work_area_service=work_area_service,
+        )
+        result = {}
+
+        thread = threading.Thread(
+            target=lambda: result.update(
+                value=service.load_to_calibration(
+                    PaintMagazineLoadConfig(
+                        enabled=True,
+                        camera_settle_s=0.0,
+                        release_settle_s=0.0,
+                    ),
+                    stop_requested=lambda: False,
+                )
+            )
+        )
+        thread.start()
+        self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
+
+        service.pause_current_load()
+        self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
+        for _ in range(100):
+            if service.get_control_snapshot().get("current_state") == "PAUSED":
+                break
+            time.sleep(0.01)
+        self.assertEqual("PAUSED", service.get_control_snapshot().get("current_state"))
+        self.assertEqual(1, navigation.stop_motion_calls)
+
+        service.resume_current_load()
+        thread.join(timeout=2.0)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((True, "Magazine contour: Workpiece transferred to paint work area center"), result["value"])
+        self.assertEqual("Magazine", navigation.move_calls[0][0])
+        self.assertEqual("Magazine", navigation.move_calls[1][0])
+        self.assertEqual("CALIBRATION", navigation.move_calls[-1][0])
+
+    def test_load_to_calibration_retries_interrupted_move_once_after_pause_resume(self):
+        class ResumeFailureNavigation:
+            def __init__(self):
+                self.entered_first_move = threading.Event()
+                self.cancelled_first_move = threading.Event()
+                self.move_calls = []
+                self.stop_motion_calls = 0
+
+            def move_to_group(self, group, wait_cancelled=None, velocity=None, acceleration=None):
+                self.move_calls.append((group, velocity, acceleration))
+                if group == "Magazine" and len([call for call in self.move_calls if call[0] == "Magazine"]) == 1:
+                    self.entered_first_move.set()
+                    deadline = time.monotonic() + 2.0
+                    while time.monotonic() < deadline:
+                        if wait_cancelled is not None and wait_cancelled():
+                            self.cancelled_first_move.set()
+                            return False
+                        time.sleep(0.01)
+                    return False
+                if group == "Magazine" and len([call for call in self.move_calls if call[0] == "Magazine"]) == 2:
+                    return False
+                return True
+
+            def get_group_position(self, group):
+                return {
+                    "Magazine": [0, 0, 30, 180, 0, 0],
+                    "CALIBRATION": [10, 20, 30, 180, 0, 0],
+                }[group]
+
+            def mark_group_observed_area_verified(self, _group):
+                return None
+
+            def stop_motion(self):
+                self.stop_motion_calls += 1
+                return True
+
+        navigation = ResumeFailureNavigation()
+        work_area_service = MagicMock()
+        work_area_service.get_work_area.return_value = [
+            [0.25, 0.25],
+            [0.75, 0.25],
+            [0.75, 0.75],
+            [0.25, 0.75],
+        ]
+        capture = MagicMock()
+        capture.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame=np.zeros((20, 40, 3), dtype=np.uint8),
+            contours=[_square(3.0)],
+            source="paint_magazine_load",
+        )
+        executor = MagicMock()
+        executor.execute_pickup_target_and_release_at_position.return_value = (
+            True,
+            "Workpiece transferred to paint work area center",
+        )
+        resolver = MagicMock()
+        resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
+        resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
+            final_xy=(float(request.x_pixels), float(request.y_pixels))
+        )
+        service = PaintMagazineLoadService(
+            navigation=navigation,
+            capture_snapshot_service=capture,
+            path_executor=executor,
+            resolver_getter=lambda: resolver,
+            work_area_service=work_area_service,
+        )
+        service._wait_after_pause_resume = lambda _context: True
+        result = {}
+
+        thread = threading.Thread(
+            target=lambda: result.update(
+                value=service.load_to_calibration(
+                    PaintMagazineLoadConfig(
+                        enabled=True,
+                        camera_settle_s=0.0,
+                        release_settle_s=0.0,
+                    ),
+                    stop_requested=lambda: False,
+                )
+            )
+        )
+        thread.start()
+        self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
+
+        service.pause_current_load()
+        self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
+        for _ in range(100):
+            if service.get_control_snapshot().get("current_state") == "PAUSED":
+                break
+            time.sleep(0.01)
+
+        service.resume_current_load()
+        thread.join(timeout=2.0)
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((True, "Magazine contour: Workpiece transferred to paint work area center"), result["value"])
+        self.assertEqual(["Magazine", "Magazine", "Magazine", "CALIBRATION"], [call[0] for call in navigation.move_calls])
 
 
 class TestPaintProcessIntegration(unittest.TestCase):
@@ -441,6 +651,18 @@ class TestPaintProcessIntegration(unittest.TestCase):
         process._stopping = True
         process._on_reset_errors()
         self.assertFalse(process._stopping)
+
+    def test_pause_resume_and_stop_delegate_to_current_production_phase(self):
+        production_service = MagicMock()
+        process = PaintProcess(production_service=production_service, messaging=MagicMock())
+
+        process._on_pause()
+        process._on_resume()
+        process._on_stop()
+
+        production_service.pause_current_phase.assert_called_once_with()
+        production_service.resume_current_phase.assert_called_once_with()
+        production_service.stop_current_phase.assert_called_once_with()
 
     def test_stop_requests_robot_motion_stop_and_vacuum_off(self):
         robot = MagicMock()

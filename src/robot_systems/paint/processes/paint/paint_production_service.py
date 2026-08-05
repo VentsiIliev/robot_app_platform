@@ -33,6 +33,21 @@ class PaintProductionService:
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
 
+    def pause_current_phase(self) -> None:
+        pause_load = getattr(self._magazine_load_service, "pause_current_load", None)
+        if callable(pause_load):
+            pause_load()
+
+    def resume_current_phase(self) -> None:
+        resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
+        if callable(resume_load):
+            resume_load()
+
+    def stop_current_phase(self) -> None:
+        stop_load = getattr(self._magazine_load_service, "stop_current_load", None)
+        if callable(stop_load):
+            stop_load()
+
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
         """Run production once, or repeat from magazine until the magazine is empty."""
         should_stop = stop_requested or (lambda: False)

@@ -42,18 +42,30 @@ def _make(icon, title: str, text: str, parent: QWidget) -> QMessageBox:
     return mb
 
 
+def make_warning(parent: QWidget, title: str, text: str) -> QMessageBox:
+    return _make(QMessageBox.Icon.Warning, title, text, parent)
+
+
+def make_info(parent: QWidget, title: str, text: str) -> QMessageBox:
+    return _make(QMessageBox.Icon.Information, title, text, parent)
+
+
+def make_critical(parent: QWidget, title: str, text: str) -> QMessageBox:
+    return _make(QMessageBox.Icon.Critical, title, text, parent)
+
+
 def show_warning(parent: QWidget, title: str, text: str) -> None:
-    mb = _make(QMessageBox.Icon.Warning, title, text, parent)
+    mb = make_warning(parent, title, text)
     mb.exec()
 
 
 def show_info(parent: QWidget, title: str, text: str) -> None:
-    mb = _make(QMessageBox.Icon.Information, title, text, parent)
+    mb = make_info(parent, title, text)
     mb.exec()
 
 
 def show_critical(parent: QWidget, title: str, text: str) -> None:
-    mb = _make(QMessageBox.Icon.Critical, title, text, parent)
+    mb = make_critical(parent, title, text)
     mb.exec()
 
 

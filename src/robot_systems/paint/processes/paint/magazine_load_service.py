@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from time import monotonic, sleep
 from typing import Callable
 
@@ -10,8 +11,8 @@ import numpy as np
 from src.engine.robot.path_preparation.geometry import compute_pickup_rz_from_min_rect_long_axis
 from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig
-from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
-from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
+from src.robot_systems.paint.processes.paint.magazine_load.context import MagazineLoadContext
+from src.robot_systems.paint.processes.paint.magazine_load.machine_factory import MagazineLoadMachineFactory
 
 _logger = logging.getLogger(__name__)
 
@@ -43,89 +44,101 @@ class PaintMagazineLoadService:
         self._frame_name = str(frame_name or "magazine").strip().lower()
         self._release_work_area_id = str(release_work_area_id or "paint").strip().lower()
         self._release_frame_name = str(release_frame_name or "calibration").strip().lower()
+        self._control_lock = threading.Lock()
+        self._active_context: MagazineLoadContext | None = None
+        self._machine_factory = MagazineLoadMachineFactory()
 
     def load_to_calibration(
         self,
         config: PaintMagazineLoadConfig,
         stop_requested: Callable[[], bool],
     ) -> tuple[bool, str]:
-        magazine_group = str(config.magazine_group_id or "Magazine").strip()
-        calibration_group = str(config.calibration_group_id or "CALIBRATION").strip()
-        if not magazine_group:
-            return False, "Magazine movement group is not configured"
-        if not calibration_group:
-            return False, "Calibration movement group is not configured"
-
-        if not self._navigation.move_to_group(
-            magazine_group,
-            wait_cancelled=stop_requested,
-            velocity=float(config.move_to_magazine_vel_percent),
-            acceleration=float(config.move_to_magazine_acc_percent),
-        ):
-            return False, f"Move to magazine group '{magazine_group}' failed"
-        _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", magazine_group)
-        if not self._wait(config.camera_settle_s, stop_requested):
-            return False, "Paint process stopped"
-
-        snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_magazine_load")
-        _logger.info(
-            "[MAGAZINE_LOAD] Captured magazine snapshot contours=%d",
-            len(snapshot.contours or []),
+        context = MagazineLoadContext(
+            service=self,
+            config=config,
+            stop_requested=stop_requested,
         )
-        if stop_requested():
-            return False, "Paint process stopped"
+        with self._control_lock:
+            self._active_context = context
+        try:
+            machine = self._machine_factory.build(context)
+            machine.start_execution()
+            return context.result_ok, context.result_message
+        finally:
+            with self._control_lock:
+                if self._active_context is context:
+                    self._active_context = None
 
-        contour = pick_largest_contour(snapshot.contours)
-        if contour is None:
-            _logger.warning("[MAGAZINE_LOAD] No usable contour detected after moving to '%s'", magazine_group)
-            return False, NO_WORKPIECE_AT_MAGAZINE
+    def pause_current_load(self) -> None:
+        with self._control_lock:
+            context = self._active_context
+        if context is None:
+            return
+        context.run_allowed.clear()
+        stop_motion = getattr(self._navigation, "stop_motion", None)
+        if callable(stop_motion):
+            try:
+                stop_motion()
+            except Exception:
+                _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
 
-        magazine_pose = self._navigation.get_group_position(magazine_group)
-        if magazine_pose is None:
-            return False, f"Magazine movement group '{magazine_group}' is not configured"
-        release_pose = self._navigation.get_group_position(calibration_group)
-        if release_pose is None:
-            return False, f"Calibration movement group '{calibration_group}' is not configured"
-        target = self._resolve_pickup_target(contour, magazine_pose)
-        if target is None:
-            return False, "Could not resolve magazine pickup target"
-        release_pose = self._resolve_work_area_center_release_pose(
-            base_pose=release_pose,
-            frame=snapshot.frame,
+    def resume_current_load(self) -> None:
+        with self._control_lock:
+            context = self._active_context
+        if context is not None:
+            context.run_allowed.set()
+
+    def stop_current_load(self) -> None:
+        with self._control_lock:
+            context = self._active_context
+        if context is None:
+            return
+        context.stop_event.set()
+        context.run_allowed.set()
+
+    def get_control_snapshot(self) -> dict:
+        with self._control_lock:
+            context = self._active_context
+        return context.snapshot_dict() if context is not None else {}
+
+    def _move_to_group_with_pause_resume_recovery(
+        self,
+        context: MagazineLoadContext,
+        state,
+        group_name: str,
+        *,
+        velocity: float,
+        acceleration: float,
+    ) -> bool:
+        ok = self._navigation.move_to_group(
+            group_name,
+            wait_cancelled=context.motion_cancel_requested,
+            velocity=velocity,
+            acceleration=acceleration,
         )
-        if release_pose is None:
-            return False, f"Could not resolve {self._release_work_area_id} work area center release pose"
+        if ok:
+            context.resume_retry_available = False
+            return True
+        if context.motion_cancel_requested() or not context.consume_resume_retry():
+            return ok
 
-        execute_transfer = getattr(self._path_executor, "execute_pickup_target_and_release_at_position", None)
-        if not callable(execute_transfer):
-            return False, "Paint path executor does not support magazine transfer"
-        ok, msg = execute_transfer(
-            pickup_xy=target["pickup_xy"],
-            pickup_rz=target["pickup_rz"],
-            pickup_base_pose=magazine_pose,
-            release_pose=release_pose,
-            workpiece_height_mm=0.0,
-            release_label=f"{self._release_work_area_id} work area center",
+        _logger.warning(
+            "[MAGAZINE_LOAD] Move to group '%s' failed immediately after resuming %s; "
+            "waiting for controller recovery and retrying once",
+            group_name,
+            getattr(state, "name", state),
         )
-        if not ok:
-            return False, f"Magazine contour: {msg}"
+        if not self._wait_after_pause_resume(context):
+            return False
+        return self._navigation.move_to_group(
+            group_name,
+            wait_cancelled=context.motion_cancel_requested,
+            velocity=velocity,
+            acceleration=acceleration,
+        )
 
-        if stop_requested():
-            return False, "Paint process stopped"
-        if not self._navigation.move_to_group(
-            calibration_group,
-            wait_cancelled=stop_requested,
-            velocity=float(config.transfer_to_calibration_vel_percent),
-            acceleration=float(config.transfer_to_calibration_acc_percent),
-        ):
-            return False, f"Move to calibration group '{calibration_group}' after release failed"
-
-        mark_verified = getattr(self._navigation, "mark_group_observed_area_verified", None)
-        if callable(mark_verified):
-            mark_verified(calibration_group)
-        if not self._wait(config.release_settle_s, stop_requested):
-            return False, "Paint process stopped"
-        return True, f"Magazine contour: {msg}"
+    def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:
+        return self._wait(1.0, context.motion_cancel_requested)
 
     def _resolve_work_area_center_release_pose(self, *, base_pose: list[float], frame) -> list[float] | None:
         if len(base_pose) < 6:

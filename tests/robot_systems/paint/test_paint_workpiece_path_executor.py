@@ -214,6 +214,44 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(31.0, segments[3]["vel"])
         self.assertEqual(32.0, segments[3]["acc"])
 
+    def test_resume_pickup_target_release_continues_from_current_pose_to_next_target(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            magazine_load=PaintMagazineLoadConfig(
+                transfer_to_calibration_vel_percent=31.0,
+                transfer_to_calibration_acc_percent=32.0,
+            )
+        )
+        robot_service = MagicMock()
+        robot_service.get_current_position.return_value = [10.5, 21.0, 75.0, 180.0, 0.0, 0.0]
+        robot_service.execute_ordered_motion_chain.return_value = 0
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            paint_process_config_service=config_service,
+        )
+        executor._turn_vacuum_on = MagicMock(return_value=(True, ""))
+        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._move_pickup_phase = MagicMock(return_value=True)
+
+        ok, msg = executor.execute_pickup_target_and_release_at_position(
+            pickup_xy=(11.0, 22.0),
+            pickup_rz=33.0,
+            pickup_base_pose=[0.0, 0.0, 0.0, 180.0, 5.0, 0.0],
+            release_pose=[10.0, 20.0, 30.0, 180.0, 0.0, 0.0],
+            workpiece_height_mm=7.0,
+            release_label="CALIBRATION",
+            resume_from_current_pose=True,
+        )
+
+        self.assertTrue(ok, msg)
+        robot_service.execute_ordered_motion_chain.assert_called_once()
+        segments = robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"]
+        self.assertEqual(
+            ["Moving picked workpiece to CALIBRATION release pose"],
+            [segment["label"] for segment in segments],
+        )
+        self.assertEqual(segments[0]["position"], [10.0, 20.0, 30.0, 180.0, 0.0, 0.0])
+
     def test_execute_pickup_target_and_release_at_position_falls_back_without_ordered_chain(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
