@@ -63,8 +63,10 @@ class PaintProductionService:
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
         process_config_result = self._get_process_config()
+
         if not process_config_result[0]:
             return False, process_config_result[1]
+
         process_config = process_config_result[2]
         magazine_config = process_config.magazine_load if process_config is not None else None
         run_while_found = bool(getattr(process_config, "run_while_workpiece_found", False))
@@ -72,12 +74,16 @@ class PaintProductionService:
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
             if run_while_found:
                 return self._run_magazine_loop(magazine_config, should_stop)
+
             ok, msg = self._run_single_cycle(should_stop, magazine_config=magazine_config, cycle_index=1)
+
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
                 return True, NO_WORKPIECE_AT_MAGAZINE
             return ok, msg
+
         if run_while_found and magazine_config is not None:
             return self._run_manual_loop(magazine_config, should_stop)
+
         if magazine_config is not None:
             ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
             if not ok:
@@ -139,6 +145,7 @@ class PaintProductionService:
                 magazine_config=magazine_config,
                 cycle_index=completed_cycles + 1,
             )
+
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
                 self._log_phase_timing(
                     "magazine_loop_total",
