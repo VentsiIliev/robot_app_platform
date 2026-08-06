@@ -5,17 +5,17 @@ from typing import List
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
 from src.engine.robot.motion_sequence import MotionSequenceSegment
-from .fairino_ros2_client import build_fairino_ros2_client
+from src.engine.robot.drivers.client_adapters import build_robot_client
 
 logger = logging.getLogger(__name__)
 
 
-class FairinoRos2Robot(IRobot):
+class Ros2Robot(IRobot):
 
     def __init__(self, server_url: str):
-        logger.info("FairinoRos2Robot init — server_url=%s", server_url)
-        self._client = build_fairino_ros2_client(server_url=server_url)
-        logger.info("FairinoRos2Robot ready")
+        logger.info("Ros2Robot init — server_url=%s", server_url)
+        self._client = build_robot_client(server_url=server_url)
+        logger.info("Ros2Robot ready")
 
     def move_ptp(self, position: List[float], tool: int, user: int, vel: float, acc: float, blocking: bool = True) -> int:
         logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, vel, acc)
@@ -301,7 +301,7 @@ class FairinoRos2Robot(IRobot):
 
     # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
     def clone(self) -> 'IRobot':
-        return FairinoRos2Robot(server_url=self._client.server_url)
+        return Ros2Robot(server_url=self._client.server_url)
 
     def prefers_incremental_jog(self) -> bool:
         return True

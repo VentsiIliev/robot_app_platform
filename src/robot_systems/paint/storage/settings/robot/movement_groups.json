@@ -48,8 +48,8 @@
       "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
     },
     "Dropoff": {
-      "velocity": 10,
-      "acceleration": 10,
+      "velocity": 90,
+      "acceleration": 50,
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,

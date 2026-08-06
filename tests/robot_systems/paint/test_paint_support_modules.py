@@ -63,7 +63,7 @@ class TestPaintBootstrapProvider(unittest.TestCase):
         self.assertIs(provider.system_class, PaintRobotSystem)
 
         with patch(
-            "src.robot_systems.paint.bootstrap_provider.FairinoRos2Robot",
+            "src.robot_systems.paint.bootstrap_provider.Ros2Robot",
             return_value="robot",
         ) as robot_cls:
             self.assertEqual(provider.build_robot(), "robot")

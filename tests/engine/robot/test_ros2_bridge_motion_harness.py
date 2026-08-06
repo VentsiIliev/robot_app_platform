@@ -11,9 +11,9 @@ if str(_ROS2_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_ROS2_SCRIPTS_DIR))
 
 try:
-    from fairino_ros2_robot import FairinoRos2Robot  # type: ignore
     from motion.execution.motion_queue import MotionQueue  # type: ignore
     from enums import RobotAxis, Direction  # type: ignore
+    raise ImportError("legacy in-process ROS2 robot wrapper is not part of the platform driver layer")
 except ImportError as _e:
     raise unittest.SkipTest(f"ROS2 bridge packages not available: {_e}")
 
@@ -96,7 +96,7 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
         node = _FakeNode()
         node.execute_result = 2
         node.motion_queue = _FakeQueue(wait_result=0)
-        robot = FairinoRos2Robot(ip="0.0.0.0", node=node, workobject=None)
+        robot = Ros2Robot(ip="0.0.0.0", node=node, workobject=None)
 
         result = robot.move_liner([10, 20, 30, 180, 0, 0], blocking=True)
 
@@ -108,7 +108,7 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
         node = _FakeNode()
         node.execute_result = 3
         node.motion_queue = _FakeQueue(wait_result=0)
-        robot = FairinoRos2Robot(ip="0.0.0.0", node=node, workobject=None)
+        robot = Ros2Robot(ip="0.0.0.0", node=node, workobject=None)
 
         result = robot.execute_path([[10, 20, 30], [40, 50, 60]], rx=180, ry=0, rz=0, blocking=True)
 
@@ -119,7 +119,7 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
     def test_start_jog_rejects_when_motion_is_active(self):
         node = _FakeNode()
         node._motion_active = True
-        robot = FairinoRos2Robot(ip="0.0.0.0", node=node, workobject=None)
+        robot = Ros2Robot(ip="0.0.0.0", node=node, workobject=None)
 
         result = robot.start_jog(RobotAxis.X, Direction.PLUS, 1.0, 10.0, 10.0)
 
@@ -129,7 +129,7 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
     def test_start_jog_rejects_when_motion_is_queued(self):
         node = _FakeNode()
         node.motion_queue.queue_size = 1
-        robot = FairinoRos2Robot(ip="0.0.0.0", node=node, workobject=None)
+        robot = Ros2Robot(ip="0.0.0.0", node=node, workobject=None)
 
         result = robot.start_jog(RobotAxis.X, Direction.PLUS, 1.0, 10.0, 10.0)
 
@@ -138,7 +138,7 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
 
     def test_start_jog_sends_non_queueable_goal_when_idle(self):
         node = _FakeNode()
-        robot = FairinoRos2Robot(ip="0.0.0.0", node=node, workobject=None)
+        robot = Ros2Robot(ip="0.0.0.0", node=node, workobject=None)
 
         result = robot.start_jog(RobotAxis.X, Direction.PLUS, 1.0, 10.0, 10.0)
 
@@ -146,4 +146,3 @@ class TestRos2BridgeMotionHarness(unittest.TestCase):
         self.assertEqual(len(node.send_cartesian_goal_calls), 1)
         _, kwargs = node.send_cartesian_goal_calls[0]
         self.assertEqual(kwargs.get("queue_if_busy"), False)
-

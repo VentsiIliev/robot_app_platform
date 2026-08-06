@@ -8,7 +8,7 @@ from src.engine.auth.authentication_service import AuthenticationService
 from src.engine.auth.authorization_service import AuthorizationService
 from src.engine.auth.json_permissions_repository import JsonPermissionsRepository
 from src.engine.common_service_ids import CommonServiceID
-from src.engine.robot.drivers.fairino import FairinoRos2Robot
+from src.engine.robot.drivers.ros2_robot import Ros2Robot
 from src.robot_systems.glue.domain.users import build_glue_user_schema
 from src.robot_systems.glue.glue_robot_system import GlueRobotSystem
 from src.robot_systems.robot_system_bootstrap_provider import RobotSystemBootstrapProvider
@@ -21,8 +21,8 @@ class GlueBootstrapProvider(RobotSystemBootstrapProvider):
 
     def build_robot(self):
         # TODO: Move concrete robot driver selection into persisted startup config.
-        # return FairinoRos2Robot(server_url="http://localhost:5000")
-        return FairinoRos2Robot(server_url="fake://local")
+        # return Ros2Robot(server_url="http://localhost:5000")
+        return Ros2Robot(server_url="fake://local")
 
     def build_login_view(self, robot_system, messaging_service):
         role_policy = robot_system.__class__.role_policy

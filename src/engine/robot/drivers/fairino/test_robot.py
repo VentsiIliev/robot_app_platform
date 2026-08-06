@@ -3,7 +3,7 @@ import logging
 from src.engine.robot.enums.axis import RobotAxis, Direction
 from src.engine.robot.interfaces.i_robot import IRobot
 from src.engine.robot.motion_sequence import MotionSequenceSegment
-from .fairino_ros2_client import FakeRos2Client
+from src.engine.robot.drivers.client_adapters import FakeRobotClient
 
 _logger = logging.getLogger(__name__)
 
