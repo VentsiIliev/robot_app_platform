@@ -1345,5 +1345,3 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     @staticmethod
     def _to_float_list(position):
         return [float(v) for v in position]
-
-

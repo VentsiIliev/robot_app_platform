@@ -86,7 +86,7 @@ class PaintProcessSettingsController(IApplicationController):
     def _safe_travel_is_allowed(self, flat: dict) -> bool:
         if not bool(flat.get("safe_travel_enabled", self._model.current_settings.safe_travel.enabled)):
             return True
-        return self._normalize_pose(flat.get("safe_travel_position", "")) is not None
+        return bool(self._normalize_poses(flat.get("safe_travel_positions", [])))
 
     def _dropoff_safe_travel_is_allowed(self, flat: dict) -> bool:
         if not bool(
@@ -96,7 +96,7 @@ class PaintProcessSettingsController(IApplicationController):
             )
         ):
             return True
-        return self._normalize_pose(flat.get("dropoff_safe_travel_position", "")) is not None
+        return bool(self._normalize_poses(flat.get("dropoff_safe_travel_positions", [])))
 
     def _reject_movement_group_dropoff(self) -> None:
         reason = self._model.dropoff_movement_group_configuration_error()
@@ -131,7 +131,7 @@ class PaintProcessSettingsController(IApplicationController):
             return
         self._view.set_safe_travel_position(position)
         self._view.set_status(
-            self._t("Safe travel pose set from current robot position. Save settings to keep it.")
+            self._t("Safe travel waypoint added from current robot position. Save settings to keep it.")
         )
 
     def _on_set_dropoff_safe_travel_current(self) -> None:
@@ -145,15 +145,15 @@ class PaintProcessSettingsController(IApplicationController):
             return
         self._view.set_dropoff_safe_travel_position(position)
         self._view.set_status(
-            self._t("Paint-to-dropoff safe travel pose set from current robot position. Save settings to keep it.")
+            self._t("Paint-to-dropoff safe travel waypoint added from current robot position. Save settings to keep it.")
         )
 
     def _reject_safe_travel_pose(self) -> None:
         show_warning(
             self._view,
-            self._t("Safe Travel Pose Not Set"),
+            self._t("Safe Travel Waypoints Not Set"),
             self._t(
-                "Set the safe travel pose from the current robot position before enabling calibration-to-paint safe travel."
+                "Add at least one safe travel waypoint before enabling calibration-to-paint safe travel."
             ),
         )
         flat = PaintProcessSettingsMapper.to_flat_dict(self._model.current_settings)
@@ -163,14 +163,14 @@ class PaintProcessSettingsController(IApplicationController):
             self._view.set_values(flat)
         finally:
             self._reverting_invalid_safe_travel = False
-        self._view.set_status(self._t("Safe travel pose is not set."))
+        self._view.set_status(self._t("Safe travel waypoints are not set."))
 
     def _reject_dropoff_safe_travel_pose(self) -> None:
         show_warning(
             self._view,
-            self._t("Paint-to-Dropoff Safe Travel Pose Not Set"),
+            self._t("Paint-to-Dropoff Safe Travel Waypoints Not Set"),
             self._t(
-                "Set the paint-to-dropoff safe travel pose from the current robot position before enabling paint-to-dropoff safe travel."
+                "Add at least one paint-to-dropoff safe travel waypoint before enabling paint-to-dropoff safe travel."
             ),
         )
         flat = PaintProcessSettingsMapper.to_flat_dict(self._model.current_settings)
@@ -180,10 +180,12 @@ class PaintProcessSettingsController(IApplicationController):
             self._view.set_values(flat)
         finally:
             self._reverting_invalid_safe_travel = False
-        self._view.set_status(self._t("Paint-to-dropoff safe travel pose is not set."))
+        self._view.set_status(self._t("Paint-to-dropoff safe travel waypoints are not set."))
 
     @staticmethod
     def _normalize_pose(value: object) -> list[float] | None:
+        if isinstance(value, dict):
+            value = value.get("position", value.get("pose", []))
         if isinstance(value, str):
             parts = [part.strip() for part in value.replace("[", "").replace("]", "").split(",")]
         else:
@@ -196,6 +198,47 @@ class PaintProcessSettingsController(IApplicationController):
         except (TypeError, ValueError):
             return None
         return pose if len(pose) >= 6 else None
+
+    @classmethod
+    def _normalize_waypoint(cls, value: object) -> dict | None:
+        pose = cls._normalize_pose(value)
+        if pose is None:
+            return None
+        if isinstance(value, dict):
+            try:
+                vel = float(value.get("vel_percent", 0.0))
+                acc = float(value.get("acc_percent", 0.0))
+            except (TypeError, ValueError):
+                return None
+        else:
+            try:
+                raw = list(value)
+                vel = float(raw[6]) if len(raw) >= 8 else 50.0
+                acc = float(raw[7]) if len(raw) >= 8 else 20.0
+            except (TypeError, ValueError):
+                vel = 50.0
+                acc = 20.0
+        if not 0.0 <= vel <= 100.0 or not 0.0 <= acc <= 100.0:
+            return None
+        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+
+    @classmethod
+    def _normalize_poses(cls, value: object) -> list[list[float]]:
+        if not value:
+            return []
+        if isinstance(value, str):
+            pose = cls._normalize_pose(value)
+            return [pose] if pose is not None else []
+        try:
+            items = list(value)
+        except TypeError:
+            return []
+        poses = []
+        for item in items:
+            waypoint = cls._normalize_waypoint(item)
+            if waypoint is not None:
+                poses.append(waypoint["position"])
+        return poses
 
     @staticmethod
     def _t(text: str) -> str:

@@ -91,13 +91,21 @@ class DefaultPickupStrategy:
                 )
             )
 
-        for waypoint_index, safe_travel_pose in enumerate(motion_plan.safe_travel_poses, start=1):
+        safe_travel_waypoints = getattr(motion_plan, "safe_travel_waypoints", None) or [
+            {
+                "position": safe_travel_pose,
+                "vel_percent": pickup_motion.stage_transition_vel_percent,
+                "acc_percent": pickup_motion.stage_transition_acc_percent,
+            }
+            for safe_travel_pose in motion_plan.safe_travel_poses
+        ]
+        for waypoint_index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
             waypoints.append(
                 PickupWaypoint(
                     f"Safe travel waypoint {waypoint_index}",
-                    list(safe_travel_pose),
-                    pickup_motion.stage_transition_vel_percent,
-                    pickup_motion.stage_transition_acc_percent,
+                    list(safe_travel_waypoint["position"]),
+                    float(safe_travel_waypoint["vel_percent"]),
+                    float(safe_travel_waypoint["acc_percent"]),
                 )
             )
 

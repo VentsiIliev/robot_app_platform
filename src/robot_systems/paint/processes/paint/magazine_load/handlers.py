@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 
 from src.robot_systems.paint.processes.paint.magazine_load.context import MagazineLoadContext
 from src.robot_systems.paint.processes.paint.magazine_load.state import MagazineLoadState
@@ -61,22 +62,49 @@ def handle_move_to_magazine(ctx: MagazineLoadContext) -> MagazineLoadState:
 
 
 def handle_wait_camera_settle(ctx: MagazineLoadContext) -> MagazineLoadState:
+    started = perf_counter()
     if not ctx.service._wait(ctx.config.camera_settle_s, ctx.motion_cancel_requested):
         return _interrupted_or_error(ctx, MagazineLoadState.WAIT_CAMERA_SETTLE, "Paint process stopped")
+    _logger.info(
+        "[MAGAZINE_LOAD_TIMING] wait_camera_settle configured_s=%.3f elapsed_s=%.3f",
+        float(ctx.config.camera_settle_s),
+        perf_counter() - started,
+    )
     return MagazineLoadState.CAPTURE_MAGAZINE
 
 
 def handle_capture_magazine(ctx: MagazineLoadContext) -> MagazineLoadState:
+    started = perf_counter()
+    capture_started = perf_counter()
     ctx.snapshot = ctx.service._capture_snapshot_service.capture_snapshot(source="paint_magazine_load")
+    capture_elapsed = perf_counter() - capture_started
+    contour_count = len(getattr(ctx.snapshot, "contours", None) or [])
     _logger.info(
         "[MAGAZINE_LOAD] Captured magazine snapshot contours=%d",
-        len(getattr(ctx.snapshot, "contours", None) or []),
+        contour_count,
     )
+    _logger.info(
+        "[MAGAZINE_LOAD_TIMING] capture_snapshot elapsed_s=%.3f contours=%d frame_available=%s",
+        capture_elapsed,
+        contour_count,
+        getattr(ctx.snapshot, "frame", None) is not None,
+    )
+    guard_started = perf_counter()
     interrupted = guard_control(ctx, MagazineLoadState.CAPTURE_MAGAZINE)
+    guard_elapsed = perf_counter() - guard_started
     if interrupted is not None:
         return interrupted
 
+    contour_started = perf_counter()
     ctx.contour = pick_largest_contour(getattr(ctx.snapshot, "contours", None))
+    contour_elapsed = perf_counter() - contour_started
+    _logger.info(
+        "[MAGAZINE_LOAD_TIMING] capture_magazine guard_s=%.3f pick_largest_s=%.3f total_s=%.3f selected_points=%d",
+        guard_elapsed,
+        contour_elapsed,
+        perf_counter() - started,
+        len(ctx.contour) if ctx.contour is not None else 0,
+    )
     if ctx.contour is None:
         _logger.warning(
             "[MAGAZINE_LOAD] No usable contour detected after moving to '%s'",
@@ -89,28 +117,46 @@ def handle_capture_magazine(ctx: MagazineLoadContext) -> MagazineLoadState:
 
 def handle_resolve_pickup(ctx: MagazineLoadContext) -> MagazineLoadState:
     service = ctx.service
+    started = perf_counter()
+    magazine_pose_started = perf_counter()
     ctx.magazine_pose = service._navigation.get_group_position(ctx.magazine_group)
+    magazine_pose_elapsed = perf_counter() - magazine_pose_started
     if ctx.magazine_pose is None:
         ctx.set_result(False, f"Magazine movement group '{ctx.magazine_group}' is not configured")
         return MagazineLoadState.ERROR
 
+    release_base_started = perf_counter()
     base_release_pose = service._navigation.get_group_position(ctx.calibration_group)
+    release_base_elapsed = perf_counter() - release_base_started
     if base_release_pose is None:
         ctx.set_result(False, f"Calibration movement group '{ctx.calibration_group}' is not configured")
         return MagazineLoadState.ERROR
 
+    pickup_started = perf_counter()
     ctx.target = service._resolve_pickup_target(ctx.contour, ctx.magazine_pose)
+    pickup_elapsed = perf_counter() - pickup_started
     if ctx.target is None:
         ctx.set_result(False, "Could not resolve magazine pickup target")
         return MagazineLoadState.ERROR
 
+    release_started = perf_counter()
     ctx.release_pose = service._resolve_work_area_center_release_pose(
         base_pose=base_release_pose,
         frame=getattr(ctx.snapshot, "frame", None),
     )
+    release_elapsed = perf_counter() - release_started
     if ctx.release_pose is None:
         ctx.set_result(False, f"Could not resolve {service._release_work_area_id} work area center release pose")
         return MagazineLoadState.ERROR
+    _logger.info(
+        "[MAGAZINE_LOAD_TIMING] resolve_pickup magazine_pose_s=%.3f release_base_pose_s=%.3f "
+        "pickup_target_s=%.3f release_pose_s=%.3f total_s=%.3f",
+        magazine_pose_elapsed,
+        release_base_elapsed,
+        pickup_elapsed,
+        release_elapsed,
+        perf_counter() - started,
+    )
     return MagazineLoadState.EXECUTE_PICKUP_AND_RELEASE
 
 

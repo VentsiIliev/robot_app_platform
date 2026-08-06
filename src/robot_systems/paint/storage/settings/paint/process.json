@@ -28,7 +28,7 @@
     "change_plane_vel_percent": 10.0,
     "change_plane_acc_percent": 10.0,
     "combine_change_plane_with_first_contact": true,
-    "stage_transition_vel_percent": 80.0,
+    "stage_transition_vel_percent": 90.0,
     "stage_transition_acc_percent": 50.0,
     "first_contact_vel_percent": 80.0,
     "first_contact_acc_percent": 50.0
@@ -49,7 +49,7 @@
     "release_align_acc_percent": 40.0
   },
   "magazine_load": {
-    "enabled": false,
+    "enabled": true,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 90.0,
@@ -57,7 +57,7 @@
     "transfer_to_calibration_vel_percent": 90.0,
     "transfer_to_calibration_acc_percent": 50.0,
     "camera_settle_s": 0.5,
-    "release_settle_s": 0.5
+    "release_settle_s": 0.2
   },
   "safe_travel": {
     "enabled": true,
@@ -68,6 +68,20 @@
       -178.775,
       -0.015,
       -0.049
+    ],
+    "positions": [
+      {
+        "position": [
+          -96.129,
+          458.472,
+          198.359,
+          -178.775,
+          -0.015,
+          -0.049
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      }
     ],
     "movement_group_id": "Magazine"
   },
@@ -80,6 +94,20 @@
       -178.795,
       -0.049,
       -0.104
+    ],
+    "positions": [
+      {
+        "position": [
+          223.574,
+          452.165,
+          232.635,
+          -178.795,
+          -0.049,
+          -0.104
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 40.0
+      }
     ]
   },
   "navigation_return": {

@@ -108,29 +108,17 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("Safe Travel"), [
             _toggle("safe_travel_enabled", "Use Waypoint Between Calibration and Paint"),
             SettingField(
-                "safe_travel_position",
-                _t("Calibration to Paint Pose"),
-                "paint_pose_display",
-                default=_t("Not set"),
-            ),
-            SettingField(
-                "safe_travel_set_current",
-                _t("Calibration to Paint"),
-                "paint_action_button",
-                default=_t("Set Current Calibration-to-Paint Pose"),
+                "safe_travel_positions",
+                _t("Calibration to Paint Waypoints"),
+                "paint_waypoint_table",
+                default={"vel_percent": 50.0, "acc_percent": 20.0},
             ),
             _toggle("dropoff_safe_travel_enabled", "Use Waypoint Between Paint and Dropoff"),
             SettingField(
-                "dropoff_safe_travel_position",
-                _t("Paint to Dropoff Pose"),
-                "paint_pose_display",
-                default=_t("Not set"),
-            ),
-            SettingField(
-                "dropoff_safe_travel_set_current",
-                _t("Paint to Dropoff"),
-                "paint_action_button",
-                default=_t("Set Current Paint-to-Dropoff Pose"),
+                "dropoff_safe_travel_positions",
+                _t("Paint to Dropoff Waypoints"),
+                "paint_waypoint_table",
+                default={"vel_percent": 60.0, "acc_percent": 40.0},
             ),
         ]),
     ]

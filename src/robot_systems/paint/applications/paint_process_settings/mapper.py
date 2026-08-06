@@ -40,6 +40,63 @@ class PaintProcessSettingsMapper:
         return values
 
     @staticmethod
+    def _waypoint_from_value(value: object, default_vel: float, default_acc: float) -> dict | None:
+        if isinstance(value, dict):
+            pose = PaintProcessSettingsMapper._pose_from_value(
+                value.get("position", value.get("pose", [])),
+                [],
+            )
+            if not pose:
+                return None
+            try:
+                vel = float(value.get("vel_percent", default_vel))
+                acc = float(value.get("acc_percent", default_acc))
+            except (TypeError, ValueError):
+                vel = float(default_vel)
+                acc = float(default_acc)
+            return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+
+        pose = PaintProcessSettingsMapper._pose_from_value(value, [])
+        if not pose:
+            return None
+        vel = float(default_vel)
+        acc = float(default_acc)
+        try:
+            raw = list(value)
+            if len(raw) >= 8:
+                vel = float(raw[6])
+                acc = float(raw[7])
+        except (TypeError, ValueError):
+            pass
+        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+
+    @staticmethod
+    def _waypoint_list_from_value(value: object, fallback: list[dict], default_vel: float, default_acc: float) -> list[dict]:
+        if not value:
+            return [dict(item) for item in fallback]
+        if isinstance(value, str):
+            waypoint = PaintProcessSettingsMapper._waypoint_from_value(value, default_vel, default_acc)
+            return [waypoint] if waypoint is not None else [dict(item) for item in fallback]
+        waypoints: list[dict] = []
+        try:
+            items = list(value)
+        except TypeError:
+            return [dict(item) for item in fallback]
+        for item in items:
+            waypoint = PaintProcessSettingsMapper._waypoint_from_value(item, default_vel, default_acc)
+            if waypoint is not None:
+                waypoints.append(waypoint)
+        return waypoints
+
+    @staticmethod
+    def _configured_waypoints(positions: object, position: object, default_vel: float, default_acc: float) -> list[dict]:
+        result = PaintProcessSettingsMapper._waypoint_list_from_value(positions, [], default_vel, default_acc)
+        if result:
+            return result
+        single = PaintProcessSettingsMapper._waypoint_from_value(position, default_vel, default_acc)
+        return [single] if single is not None else []
+
+    @staticmethod
     def to_flat_dict(settings: PaintProcessConfig) -> dict:
         pickup = settings.pickup_motion
         cleanup = settings.edge_cleanup
@@ -100,8 +157,20 @@ class PaintProcessSettingsMapper:
             "magazine_transfer_to_calibration_acc_percent": magazine.transfer_to_calibration_acc_percent,
             "safe_travel_enabled": safe_travel.enabled,
             "safe_travel_position": PaintProcessSettingsMapper._pose_to_text(safe_travel.position),
+            "safe_travel_positions": PaintProcessSettingsMapper._configured_waypoints(
+                safe_travel.positions,
+                safe_travel.position,
+                pickup.stage_transition_vel_percent,
+                pickup.stage_transition_acc_percent,
+            ),
             "dropoff_safe_travel_enabled": dropoff_safe_travel.enabled,
             "dropoff_safe_travel_position": PaintProcessSettingsMapper._pose_to_text(dropoff_safe_travel.position),
+            "dropoff_safe_travel_positions": PaintProcessSettingsMapper._configured_waypoints(
+                dropoff_safe_travel.positions,
+                dropoff_safe_travel.position,
+                dropoff.release_align_vel_percent,
+                dropoff.release_align_acc_percent,
+            ),
             "nav_unwind_vel_percent": nav.unwind_vel_percent,
             "nav_unwind_acc_percent": nav.unwind_acc_percent,
             "nav_unwind_queue_if_busy": nav.unwind_queue_if_busy,
@@ -211,18 +280,40 @@ class PaintProcessSettingsMapper:
         safe_travel = replace(
             base.safe_travel,
             enabled=bool(flat.get("safe_travel_enabled", base.safe_travel.enabled)),
-            position=PaintProcessSettingsMapper._pose_from_value(
-                flat.get("safe_travel_position", base.safe_travel.position),
-                base.safe_travel.position,
+            positions=PaintProcessSettingsMapper._waypoint_list_from_value(
+                flat.get("safe_travel_positions", base.safe_travel.positions),
+                PaintProcessSettingsMapper._configured_waypoints(
+                    base.safe_travel.positions,
+                    base.safe_travel.position,
+                    base.pickup_motion.stage_transition_vel_percent,
+                    base.pickup_motion.stage_transition_acc_percent,
+                ),
+                pickup.stage_transition_vel_percent,
+                pickup.stage_transition_acc_percent,
             ),
+        )
+        safe_travel = replace(
+            safe_travel,
+            position=list(safe_travel.positions[0]["position"]) if safe_travel.positions else [],
         )
         dropoff_safe_travel = replace(
             base.dropoff_safe_travel,
             enabled=bool(flat.get("dropoff_safe_travel_enabled", base.dropoff_safe_travel.enabled)),
-            position=PaintProcessSettingsMapper._pose_from_value(
-                flat.get("dropoff_safe_travel_position", base.dropoff_safe_travel.position),
-                base.dropoff_safe_travel.position,
+            positions=PaintProcessSettingsMapper._waypoint_list_from_value(
+                flat.get("dropoff_safe_travel_positions", base.dropoff_safe_travel.positions),
+                PaintProcessSettingsMapper._configured_waypoints(
+                    base.dropoff_safe_travel.positions,
+                    base.dropoff_safe_travel.position,
+                    base.dropoff.release_align_vel_percent,
+                    base.dropoff.release_align_acc_percent,
+                ),
+                dropoff.release_align_vel_percent,
+                dropoff.release_align_acc_percent,
             ),
+        )
+        dropoff_safe_travel = replace(
+            dropoff_safe_travel,
+            position=list(dropoff_safe_travel.positions[0]["position"]) if dropoff_safe_travel.positions else [],
         )
         nav = replace(
             base.navigation_return,

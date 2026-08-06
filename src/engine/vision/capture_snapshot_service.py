@@ -37,20 +37,29 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         self._active_work_area_validator = active_work_area_validator
 
     def capture_snapshot(self, source: str = "") -> VisionCaptureSnapshot:
+        started = time.perf_counter()
         frame = None
         contours = []
+        robot_pose_started = time.perf_counter()
         robot_pose = self._capture_robot_pose(source)
+        robot_pose_elapsed = time.perf_counter() - robot_pose_started
 
+        validate_started = time.perf_counter()
         self._validate_active_work_area(source, robot_pose)
+        validate_elapsed = time.perf_counter() - validate_started
 
+        vision_elapsed = 0.0
         if self._vision is not None:
             try:
+                vision_started = time.perf_counter()
                 frame, contours = self._vision.compute_contours_for_latest_frame()
+                vision_elapsed = time.perf_counter() - vision_started
             except VisionFrameUnavailableError:
                 _logger.error("Fresh vision frame unavailable for source=%s", source, exc_info=True)
                 raise
             except Exception:
                 _logger.exception("Failed to capture latest vision snapshot for source=%s", source)
+                fallback_started = time.perf_counter()
                 try:
                     frame = self._vision.get_latest_frame()
                 except Exception:
@@ -59,6 +68,20 @@ class CaptureSnapshotService(ICaptureSnapshotService):
                     contours = list(self._vision.get_latest_contours())
                 except Exception:
                     _logger.exception("Failed to capture latest contours fallback for source=%s", source)
+                vision_elapsed = time.perf_counter() - fallback_started
+
+        contour_count = len(contours or [])
+        _logger.info(
+            "[CAPTURE_TIMING] source=%s robot_pose_s=%.3f active_area_validate_s=%.3f "
+            "vision_contours_s=%.3f total_s=%.3f contours=%d frame_available=%s",
+            source,
+            robot_pose_elapsed,
+            validate_elapsed,
+            vision_elapsed,
+            time.perf_counter() - started,
+            contour_count,
+            frame is not None,
+        )
 
         return VisionCaptureSnapshot(
             frame=frame,

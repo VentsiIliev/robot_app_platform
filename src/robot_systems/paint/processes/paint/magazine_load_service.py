@@ -141,15 +141,23 @@ class PaintMagazineLoadService:
         return self._wait(1.0, context.motion_cancel_requested)
 
     def _resolve_work_area_center_release_pose(self, *, base_pose: list[float], frame) -> list[float] | None:
+        started = monotonic()
         if len(base_pose) < 6:
             return None
+        center_started = monotonic()
         center_px = self._release_work_area_center_px(frame)
+        center_elapsed = monotonic() - center_started
         if center_px is None:
             return None
+        resolver_started = monotonic()
         resolver = self._resolver()
+        resolver_elapsed = monotonic() - resolver_started
         if resolver is None:
             return None
+        registry_started = monotonic()
         target_point = resolver.registry.by_name(self._target_point_name)
+        registry_elapsed = monotonic() - registry_started
+        resolve_started = monotonic()
         result = resolver.resolve(
             VisionPoseRequest(
                 x_pixels=float(center_px[0]),
@@ -162,6 +170,7 @@ class PaintMagazineLoadService:
             target_point,
             frame=self._release_frame_name,
         )
+        resolve_elapsed = monotonic() - resolve_started
         release_pose = list(base_pose)
         release_pose[0] = float(result.final_xy[0])
         release_pose[1] = float(result.final_xy[1])
@@ -174,9 +183,19 @@ class PaintMagazineLoadService:
             float(release_pose[0]),
             float(release_pose[1]),
         )
+        _logger.info(
+            "[MAGAZINE_LOAD_TIMING] release_pose center_px_s=%.3f resolver_s=%.3f registry_s=%.3f "
+            "resolve_s=%.3f total_s=%.3f",
+            center_elapsed,
+            resolver_elapsed,
+            registry_elapsed,
+            resolve_elapsed,
+            monotonic() - started,
+        )
         return release_pose
 
     def _release_work_area_center_px(self, frame) -> tuple[float, float] | None:
+        started = monotonic()
         if self._work_area_service is None or frame is None or not hasattr(frame, "shape"):
             return None
         try:
@@ -195,25 +214,43 @@ class PaintMagazineLoadService:
         if len(arr) < 3:
             return None
         points_px = np.column_stack((arr[:, 0] * float(width), arr[:, 1] * float(height)))
-        return _contour_center_px(points_px)
+        center = _contour_center_px(points_px)
+        _logger.info(
+            "[MAGAZINE_LOAD_TIMING] release_work_area_center_px total_s=%.3f points=%d frame_size=%dx%d",
+            monotonic() - started,
+            len(points_px),
+            int(width),
+            int(height),
+        )
+        return center
 
     def _resolve_pickup_target(self, contour, magazine_pose: list[float]) -> dict | None:
+        started = monotonic()
+        points_started = monotonic()
         points_px = _contour_points_array(contour)
+        points_elapsed = monotonic() - points_started
         if len(points_px) < 3 or len(magazine_pose) < 6:
             return None
+        center_started = monotonic()
         center_px = _contour_center_px(points_px)
+        center_elapsed = monotonic() - center_started
         if center_px is None:
             return None
+        resolver_started = monotonic()
         resolver = self._resolver()
+        resolver_elapsed = monotonic() - resolver_started
         if resolver is None:
             return None
+        registry_started = monotonic()
         camera_point = resolver.registry.by_name(self._camera_point_name)
         target_point = resolver.registry.by_name(self._target_point_name)
+        registry_elapsed = monotonic() - registry_started
         reference_rz = float(magazine_pose[5])
         rx = float(magazine_pose[3])
         ry = float(magazine_pose[4])
         z = float(magazine_pose[2])
         robot_contour_xy = []
+        contour_resolve_started = monotonic()
         for px, py in points_px:
             result = resolver.resolve(
                 VisionPoseRequest(
@@ -228,7 +265,11 @@ class PaintMagazineLoadService:
                 frame=self._frame_name,
             )
             robot_contour_xy.append([float(result.final_xy[0]), float(result.final_xy[1])])
+        contour_resolve_elapsed = monotonic() - contour_resolve_started
+        rz_started = monotonic()
         pickup_rz = compute_pickup_rz_from_min_rect_long_axis(robot_contour_xy, reference_rz)
+        rz_elapsed = monotonic() - rz_started
+        center_resolve_started = monotonic()
         center_result = resolver.resolve(
             VisionPoseRequest(
                 x_pixels=float(center_px[0]),
@@ -241,6 +282,7 @@ class PaintMagazineLoadService:
             target_point,
             frame=self._frame_name,
         )
+        center_resolve_elapsed = monotonic() - center_resolve_started
         _logger.info(
             "[MAGAZINE_LOAD] simple pickup target center_px=(%.3f, %.3f) pickup_xy=(%.3f, %.3f) pickup_rz=%.3f contour_points=%d",
             float(center_px[0]),
@@ -249,6 +291,21 @@ class PaintMagazineLoadService:
             float(center_result.final_xy[1]),
             float(pickup_rz),
             len(points_px),
+        )
+        _logger.info(
+            "[MAGAZINE_LOAD_TIMING] pickup_target points_array_s=%.3f center_px_s=%.3f resolver_s=%.3f "
+            "registry_s=%.3f contour_resolve_s=%.3f contour_points=%d avg_point_resolve_ms=%.3f "
+            "pickup_rz_s=%.3f center_resolve_s=%.3f total_s=%.3f",
+            points_elapsed,
+            center_elapsed,
+            resolver_elapsed,
+            registry_elapsed,
+            contour_resolve_elapsed,
+            len(points_px),
+            (contour_resolve_elapsed / max(1, len(points_px))) * 1000.0,
+            rz_elapsed,
+            center_resolve_elapsed,
+            monotonic() - started,
         )
         return {
             "pickup_xy": (float(center_result.final_xy[0]), float(center_result.final_xy[1])),

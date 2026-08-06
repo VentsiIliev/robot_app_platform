@@ -839,18 +839,35 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     def _resolve_safe_travel_position(self) -> Optional[list[float]]:
         """Resolve the optional carried-workpiece safe travel waypoint."""
+        positions = self._resolve_safe_travel_positions()
+        return positions[0] if positions else None
+
+    def _resolve_safe_travel_positions(self) -> list[list[float]]:
+        """Resolve optional carried-workpiece safe travel waypoints."""
+        return [list(item["position"]) for item in self._resolve_safe_travel_waypoints()]
+
+    def _resolve_safe_travel_waypoints(self) -> list[dict]:
+        """Resolve optional carried-workpiece safe travel waypoints with motion tuning."""
         self._last_safe_travel_error = ""
         config = self._paint_process_config().safe_travel
         if not bool(config.enabled):
-            return None
-        position = self._read_configured_pose(config.position)
-        if position is None:
-            self._last_safe_travel_error = "Safe travel pose is enabled but no valid 6-axis pose is configured"
+            return []
+        motion = self._paint_process_config().pickup_motion
+        waypoints = self._read_configured_waypoints(
+            getattr(config, "positions", []),
+            getattr(config, "position", []),
+            float(motion.stage_transition_vel_percent),
+            float(motion.stage_transition_acc_percent),
+        )
+        if not waypoints:
+            self._last_safe_travel_error = "Safe travel is enabled but no valid 6-axis waypoint is configured"
             _logger.warning("[PICKUP] %s", self._last_safe_travel_error)
-        return position
+        return waypoints
 
     @staticmethod
     def _read_configured_pose(position: object) -> Optional[list[float]]:
+        if isinstance(position, dict):
+            position = position.get("position", position.get("pose", []))
         if not position:
             return None
         try:
@@ -858,6 +875,70 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         except (TypeError, ValueError):
             return None
         return values if len(values) >= 6 else None
+
+    @classmethod
+    def _read_configured_poses(cls, positions: object, legacy_position: object = None) -> list[list[float]]:
+        resolved: list[list[float]] = []
+        if positions:
+            try:
+                raw_positions = list(positions)
+            except TypeError:
+                raw_positions = []
+            for item in raw_positions:
+                pose = cls._read_configured_pose(item)
+                if pose is not None:
+                    resolved.append(pose)
+        if resolved:
+            return resolved
+        legacy = cls._read_configured_pose(legacy_position)
+        return [legacy] if legacy is not None else []
+
+    @classmethod
+    def _read_configured_waypoints(
+        cls,
+        positions: object,
+        legacy_position: object = None,
+        default_vel: float = 50.0,
+        default_acc: float = 20.0,
+    ) -> list[dict]:
+        resolved: list[dict] = []
+        if positions:
+            try:
+                raw_positions = list(positions)
+            except TypeError:
+                raw_positions = []
+            for item in raw_positions:
+                waypoint = cls._read_configured_waypoint(item, default_vel, default_acc)
+                if waypoint is not None:
+                    resolved.append(waypoint)
+        if resolved:
+            return resolved
+        legacy = cls._read_configured_waypoint(legacy_position, default_vel, default_acc)
+        return [legacy] if legacy is not None else []
+
+    @classmethod
+    def _read_configured_waypoint(cls, value: object, default_vel: float, default_acc: float) -> dict | None:
+        pose = cls._read_configured_pose(value)
+        if pose is None:
+            return None
+        vel = float(default_vel)
+        acc = float(default_acc)
+        if isinstance(value, dict):
+            try:
+                vel = float(value.get("vel_percent", default_vel))
+                acc = float(value.get("acc_percent", default_acc))
+            except (TypeError, ValueError):
+                vel = float(default_vel)
+                acc = float(default_acc)
+        else:
+            try:
+                raw = list(value)
+                if len(raw) >= 8:
+                    vel = float(raw[6])
+                    acc = float(raw[7])
+            except (TypeError, ValueError):
+                pass
+        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
 
     def _apply_pivot_offset(self, pivot_pose: list[float] | None, offset_mm: float) -> list[float] | None:
         """Apply the editor-configured pivot offset in the active pivot plane."""
@@ -1301,17 +1382,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
             return True, ""
         config = self._paint_process_config()
-        safe_pose = self._resolve_dropoff_safe_travel_position()
+        safe_waypoints = self._resolve_dropoff_safe_travel_waypoints()
         if bool(config.dropoff_safe_travel.enabled):
-            if safe_pose is None:
-                return False, "Pivot paint finished, but paint-to-dropoff safe travel pose is not configured"
-            if not self._move_pickup_phase(
-                "Moving through paint-to-dropoff safe travel pose",
-                safe_pose,
-                velocity=config.dropoff.release_align_vel_percent,
-                acceleration=config.dropoff.release_align_acc_percent,
-            ):
-                return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
+            if not safe_waypoints:
+                return False, "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured"
+            for index, safe_waypoint in enumerate(safe_waypoints, start=1):
+                if not self._move_pickup_phase(
+                    f"Moving through paint-to-dropoff safe travel waypoint {index}",
+                    safe_waypoint["position"],
+                    velocity=float(safe_waypoint["vel_percent"]),
+                    acceleration=float(safe_waypoint["acc_percent"]),
+                ):
+                    return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
         if self._should_prepare_dropoff_align_before_unwind():
             align_pose = self._resolve_dropoff_align_pose()
             if align_pose is None:
@@ -1355,10 +1437,25 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     def _resolve_dropoff_safe_travel_position(self) -> list[float] | None:
         """Resolve the optional carried-workpiece safe waypoint before entering dropoff."""
+        positions = self._resolve_dropoff_safe_travel_positions()
+        return positions[0] if positions else None
+
+    def _resolve_dropoff_safe_travel_positions(self) -> list[list[float]]:
+        """Resolve optional carried-workpiece safe waypoints before entering dropoff."""
+        return [list(item["position"]) for item in self._resolve_dropoff_safe_travel_waypoints()]
+
+    def _resolve_dropoff_safe_travel_waypoints(self) -> list[dict]:
+        """Resolve optional carried-workpiece safe waypoints before entering dropoff with motion tuning."""
         config = self._paint_process_config().dropoff_safe_travel
         if not bool(config.enabled):
-            return None
-        return self._read_configured_pose(config.position)
+            return []
+        dropoff = self._paint_process_config().dropoff
+        return self._read_configured_waypoints(
+            getattr(config, "positions", []),
+            getattr(config, "position", []),
+            float(dropoff.release_align_vel_percent),
+            float(dropoff.release_align_acc_percent),
+        )
 
     def _should_release_at_current_dropoff_pose(self) -> bool:
         """Return whether release should happen at the current post-paint retreat pose."""
@@ -1473,20 +1570,21 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         config = self._paint_process_config()
         segments: list[dict] = []
         final_pose: list[float] | None = None
-        safe_pose = self._resolve_dropoff_safe_travel_position()
+        safe_waypoints = self._resolve_dropoff_safe_travel_waypoints()
         if bool(config.dropoff_safe_travel.enabled):
-            if safe_pose is None:
+            if not safe_waypoints:
                 return [], None
-            segments.append(
-                {
-                    "type": "linear",
-                    "label": "prepare_dropoff_safe_travel",
-                    "position": safe_pose,
-                    "vel": float(config.dropoff.release_align_vel_percent),
-                    "acc": float(config.dropoff.release_align_acc_percent),
-                }
-            )
-            final_pose = safe_pose
+            for index, safe_waypoint in enumerate(safe_waypoints, start=1):
+                segments.append(
+                    {
+                        "type": "linear",
+                        "label": f"prepare_dropoff_safe_travel_{index}",
+                        "position": safe_waypoint["position"],
+                        "vel": float(safe_waypoint["vel_percent"]),
+                        "acc": float(safe_waypoint["acc_percent"]),
+                    }
+                )
+                final_pose = safe_waypoint["position"]
         if self._should_prepare_dropoff_align_before_unwind():
             final_pose = self._resolve_dropoff_align_pose(final_pose)
             if final_pose is None:
@@ -1574,10 +1672,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         final_pose: list[float] | None = list(paint_paths[-1][-1])
         config = self._paint_process_config()
-        if bool(config.dropoff_safe_travel.enabled) and self._resolve_dropoff_safe_travel_position() is None:
+        if bool(config.dropoff_safe_travel.enabled) and not self._resolve_dropoff_safe_travel_positions():
             return (
                 False,
-                "Pivot paint finished, but paint-to-dropoff safe travel pose is not configured",
+                "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
                 total_waypoints,
             )
         if self._edge_cleanup.should_run_after_xz_ry():
@@ -1691,10 +1789,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         final_pose: list[float] | None = list(paint_paths[-1][-1])
         if not self._edge_cleanup.should_run_after_xz_ry() and not self._edge_cleanup.should_run_after_xy_rz():
             config = self._paint_process_config()
-            if bool(config.dropoff_safe_travel.enabled) and self._resolve_dropoff_safe_travel_position() is None:
+            if bool(config.dropoff_safe_travel.enabled) and not self._resolve_dropoff_safe_travel_positions():
                 return (
                     False,
-                    "Pivot paint finished, but paint-to-dropoff safe travel pose is not configured",
+                    "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
                     total_waypoints,
                 )
             dropoff_segments, dropoff_final_pose = self._ordered_dropoff_preparation_segments()

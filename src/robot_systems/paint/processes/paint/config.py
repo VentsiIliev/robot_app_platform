@@ -96,19 +96,21 @@ class PaintMagazineLoadConfig:
 
 @dataclass(frozen=True)
 class PaintSafeTravelConfig:
-    """Optional safe waypoint used while carrying the workpiece from calibration to paint."""
+    """Optional safe waypoints used while carrying the workpiece from calibration to paint."""
 
     enabled: bool = False  # [LIVE SETTINGS]
     position: list[float] = field(default_factory=list)
+    positions: list[object] = field(default_factory=list)
     movement_group_id: str = ""
 
 
 @dataclass(frozen=True)
 class PaintToDropoffSafeTravelConfig:
-    """Optional safe waypoint used while carrying the workpiece from paint to dropoff."""
+    """Optional safe waypoints used while carrying the workpiece from paint to dropoff."""
 
     enabled: bool = False  # [LIVE SETTINGS]
     position: list[float] = field(default_factory=list)
+    positions: list[object] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

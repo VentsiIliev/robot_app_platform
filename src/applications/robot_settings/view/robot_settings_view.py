@@ -15,6 +15,8 @@ from src.applications.robot_settings.view.robot_settings_schema import (
 )
 
 
+_SHOW_LEGACY_CALIBRATION_TAB = False
+
 
 class RobotSettingsView(IApplicationView):
     """View — pure Qt widget. No services, no business logic."""
@@ -54,15 +56,16 @@ class RobotSettingsView(IApplicationView):
         self._settings_view.add_tab("Safety", [SAFETY_LIMITS_GROUP])
         self._add_lazy_raw_tab("Movement Groups")
         self._add_lazy_raw_tab("Targeting")
-        self._settings_view.add_tab(
-            "Calibration",
-            [
-                CALIBRATION_ADAPTIVE_GROUP,
-                CALIBRATION_MARKER_GROUP,
-                CALIBRATION_AXIS_MAPPING_GROUP,
-                CALIBRATION_CAMERA_TCP_GROUP,
-            ],
-        )
+        if _SHOW_LEGACY_CALIBRATION_TAB:
+            self._settings_view.add_tab(
+                "Calibration",
+                [
+                    CALIBRATION_ADAPTIVE_GROUP,
+                    CALIBRATION_MARKER_GROUP,
+                    CALIBRATION_AXIS_MAPPING_GROUP,
+                    CALIBRATION_CAMERA_TCP_GROUP,
+                ],
+            )
         layout.addWidget(self._settings_view)
 
         self._settings_view.save_requested.connect(self._on_inner_save)

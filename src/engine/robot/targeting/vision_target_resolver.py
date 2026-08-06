@@ -18,6 +18,7 @@ from src.engine.robot.targeting.target_point_geometry import (
 from src.engine.robot.targeting.vision_pose_request import VisionPoseRequest
 
 _logger = logging.getLogger(__name__)
+TRACE_LOG_LEVEL = logging.DEBUG - 5
 
 
 @dataclass(frozen=True)
@@ -118,7 +119,8 @@ class VisionTargetResolver:
                 rz_degrees=current_rz,
             )
 
-        _logger.info(
+        _logger.log(
+            TRACE_LOG_LEVEL,
             "[TARGETING] point=%s frame=%s pixels=(%.3f, %.3f) calibration_xy=(%.3f, %.3f) plane_xy=(%.3f, %.3f) "
             "orientation=(%.3f, %.3f, %.3f) reference_rz=%.3f tcp_delta=(%.3f, %.3f, %.3f) point_offset_local=(%.3f, %.3f) "
             "point_delta_rotated=(%.3f, %.3f, %.3f) final_xyz=(%.3f, %.3f, %.3f)",

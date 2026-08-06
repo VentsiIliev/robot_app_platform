@@ -28,6 +28,7 @@ class PickupTransferPlan:
     change_plane_pose: list[float]
     paint_pivot_pose: list[float]
     safe_travel_poses: list[list[float]] = field(default_factory=list)
+    safe_travel_waypoints: list[dict] = field(default_factory=list)
     source_rotation_deg: float = 0.0
     projected_source_path: list[list[float]] | None = None
     projected_pivot_path: list[list[float]] | None = None
@@ -224,14 +225,15 @@ class PaintPickupTransferPlanner:
             align_ry=pickup_ry,
             align_rz=align_rz,
         )
-        safe_travel_pose = owner._resolve_safe_travel_position()
-        if bool(owner._paint_process_config().safe_travel.enabled) and safe_travel_pose is None:
+        safe_travel_waypoints = owner._resolve_safe_travel_waypoints()
+        safe_travel_poses = [list(item["position"]) for item in safe_travel_waypoints]
+        if bool(owner._paint_process_config().safe_travel.enabled) and not safe_travel_waypoints:
             return None
-        safe_travel_poses = [safe_travel_pose] if safe_travel_pose is not None else []
-        if safe_travel_poses:
+        if safe_travel_waypoints:
             _logger.info(
-                "[PICKUP] safe travel waypoint configured: pose=%s",
-                [round(float(v), 3) for v in safe_travel_pose[:6]],
+                "[PICKUP] safe travel waypoints configured: count=%d first=%s",
+                len(safe_travel_waypoints),
+                [round(float(v), 3) for v in safe_travel_waypoints[0]["position"][:6]],
             )
 
         return PickupTransferPlan(
@@ -244,6 +246,7 @@ class PaintPickupTransferPlanner:
             staged_pose=staged_pose,
             paint_pivot_pose=list(paint_pivot_pose),
             safe_travel_poses=safe_travel_poses,
+            safe_travel_waypoints=safe_travel_waypoints,
             source_rotation_deg=source_rotation_deg,
             projected_source_path=source_path,
             projected_pivot_path=projected_pivot_path,

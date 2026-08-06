@@ -700,24 +700,25 @@ class PaintEdgeCleanupExecutor:
             },
         ]
         if post_cleanup_align_pose is not None:
-            safe_travel_pose = None
+            safe_travel_waypoints = []
             resolve_dropoff_safe_travel = getattr(
                 self._owner,
-                "_resolve_dropoff_safe_travel_position",
+                "_resolve_dropoff_safe_travel_waypoints",
                 None,
             )
             if callable(resolve_dropoff_safe_travel):
-                safe_travel_pose = resolve_dropoff_safe_travel()
-            if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_pose is not None:
-                segments.append(
-                    {
-                        "type": "linear",
-                        "label": "prepare_dropoff_safe_travel",
-                        "position": safe_travel_pose,
-                        "vel": float(config.dropoff.release_align_vel_percent),
-                        "acc": float(config.dropoff.release_align_acc_percent),
-                    }
-                )
+                safe_travel_waypoints = resolve_dropoff_safe_travel()
+            if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_waypoints:
+                for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
+                    segments.append(
+                        {
+                            "type": "linear",
+                            "label": f"prepare_dropoff_safe_travel_{index}",
+                            "position": safe_travel_waypoint["position"],
+                            "vel": float(safe_travel_waypoint["vel_percent"]),
+                            "acc": float(safe_travel_waypoint["acc_percent"]),
+                        }
+                    )
             segments.append(
                 {
                     "type": "linear",
@@ -730,21 +731,21 @@ class PaintEdgeCleanupExecutor:
         elif bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)):
             resolve_dropoff_safe_travel = getattr(
                 self._owner,
-                "_resolve_dropoff_safe_travel_position",
+                "_resolve_dropoff_safe_travel_waypoints",
                 None,
             )
-            safe_travel_pose = resolve_dropoff_safe_travel() if callable(resolve_dropoff_safe_travel) else None
-            if safe_travel_pose is not None:
+            safe_travel_waypoints = resolve_dropoff_safe_travel() if callable(resolve_dropoff_safe_travel) else []
+            for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
                 segments.append(
                     {
                         "type": "linear",
-                        "label": "prepare_dropoff_safe_travel",
-                        "position": safe_travel_pose,
-                        "vel": float(config.dropoff.release_align_vel_percent),
-                        "acc": float(config.dropoff.release_align_acc_percent),
+                        "label": f"prepare_dropoff_safe_travel_{index}",
+                        "position": safe_travel_waypoint["position"],
+                        "vel": float(safe_travel_waypoint["vel_percent"]),
+                        "acc": float(safe_travel_waypoint["acc_percent"]),
                     }
                 )
-                post_cleanup_align_pose = safe_travel_pose
+                post_cleanup_align_pose = safe_travel_waypoint["position"]
         segments.append(
             {
                 "type": "unwind_joint6",

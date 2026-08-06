@@ -59,7 +59,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--blow-off-seconds", type=float, default=DEFAULT_BLOW_OFF_SECONDS, help=f"How long to pulse blow-off after pump OFF. Default: {DEFAULT_BLOW_OFF_SECONDS}")
     parser.add_argument("--readback", action="store_true", help="Read pump and blow-off coils before and after each command when supported.")
     parser.add_argument("--repeat", type=int, default=1, help="How many ON/OFF pulses to send. Default: 1")
-    parser.add_argument("--hold", type=float, default=5.0, help="How long to keep the pump ON before turning it OFF. Default: 5.0")
+    parser.add_argument("--hold", type=float, default=1.0, help="How long to keep the pump ON before turning it OFF. Default: 5.0")
     parser.add_argument("--delay", type=float, default=0.05, help="Delay between pulses in seconds. Default: 0.05")
     return parser.parse_args()
 
