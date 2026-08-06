@@ -1,5 +1,6 @@
 import logging
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
 
 from src.applications.base.i_application_controller import IApplicationController
@@ -20,6 +21,7 @@ class WorkpieceLibraryController(IApplicationController):
         self._view    = view
         self._broker  = messaging
         self._all_records = []
+        self._pending_open_payload = None
 
     def load(self) -> None:
         self._connect_signals()
@@ -105,8 +107,15 @@ class WorkpieceLibraryController(IApplicationController):
         if raw is None:
             show_warning(self._view, "Open Failed", f"Could not load workpiece '{storage_id}'")
             return
-        self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, {"raw": raw, "storage_id": storage_id})
+        payload = {"raw": raw, "storage_id": storage_id}
+        self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
         self._broker.publish("shell/navigate", {"app": "WorkpieceEditor"})
+        self._pending_open_payload = payload
+        QTimer.singleShot(100, self._publish_pending_open_in_editor)
         _logger.info("Published OPEN_IN_EDITOR storage_id=%s", storage_id)
 
-
+    def _publish_pending_open_in_editor(self) -> None:
+        payload = self._pending_open_payload
+        self._pending_open_payload = None
+        if payload is not None:
+            self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)

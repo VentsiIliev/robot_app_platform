@@ -310,6 +310,10 @@ class WorkpieceLibraryView(IApplicationView):
 
     def set_schema(self, schema: WorkpieceSchema) -> None:
         self._schema = schema
+        if hasattr(self, "_table"):
+            headers = self._schema.get_table_headers()
+            self._table.setColumnCount(len(headers))
+            self._table.setHorizontalHeaderLabels(headers)
 
     # ── Internal slots ────────────────────────────────────────────────
 

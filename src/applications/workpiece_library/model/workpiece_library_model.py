@@ -45,4 +45,5 @@ class WorkpieceLibraryModel(IApplicationModel):
         return self._service.load_raw(storage_id)
 
     def get_schema(self) -> WorkpieceSchema:
-        return self._service.get_schema()  # calls _glue_types_fn() + _tools_fn() fresh
+        self._schema = self._service.get_schema()
+        return self._schema

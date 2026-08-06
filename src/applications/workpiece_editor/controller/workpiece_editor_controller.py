@@ -883,12 +883,14 @@ class WorkpieceEditorController(IApplicationController):
     def _load_raw_into_editor(self, raw: dict, storage_id=None) -> None:
         raw = self._normalize_workpiece_raw(raw)
         self._loaded_raw_workpiece = copy.deepcopy(raw)
+        self._camera_active = False
         editor_data = self._model.get_workpiece_data_adapter().from_raw(raw)
         self._logger.debug(f"Editor data keys: {editor_data.get_statistics()}")
         inner = self._view._editor.contourEditor.editor_with_rulers.editor
         inner.workpiece_manager.clear_workpiece()
         inner.workpiece_manager.load_editor_data(editor_data, close_contour=False)
         self._view._editor.contourEditor.data = raw
+        self._prefill_form_from_raw(raw)
         self._model.set_editing(storage_id)
         if raw.get("pickupPoint"):
             self._captured_pickup_point = self._parse_pickup_point(raw.get("pickupPoint"))
@@ -901,6 +903,20 @@ class WorkpieceEditorController(IApplicationController):
         except Exception:
             self._logger.debug("Failed to refresh editor after loading workpiece", exc_info=True)
         self._set_pickup_point_overlay()
+
+    def _prefill_form_from_raw(self, raw: dict) -> None:
+        form = getattr(self._view._editor, "additional_data_form", None)
+        if form is None:
+            return
+        try:
+            if hasattr(form, "prefill_form"):
+                form.prefill_form(raw)
+                return
+            if hasattr(form, "set_field_value"):
+                for key, value in (raw or {}).items():
+                    form.set_field_value(key, value)
+        except Exception:
+            self._logger.debug("Failed to prefill workpiece form from raw payload", exc_info=True)
 
     @staticmethod
     def _compute_contour_centroid(contour) -> tuple[float, float] | None:

@@ -1,7 +1,7 @@
 {
   "workpieceId": "1",
-  "name": "T",
-  "description": "T",
+  "name": "TT",
+  "description": "Tt",
   "height_mm": 4.0,
   "contour": [
     [
@@ -1667,7 +1667,7 @@
       ]
     ]
   ],
-  "velocity": 70.0,
+  "velocity": 90.0,
   "acceleration": 30.0,
   "offset": 0.0,
   "edge_cleanup_z_offset_mm": 0.0,
