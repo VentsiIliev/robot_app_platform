@@ -10,7 +10,7 @@ from src.applications.workpiece_editor.editor_core.config.segment_settings_schem
 )
 
 
-_COLOR = "#FF8C32"
+_ICON_COLOR = "#905BA9"
 
 
 def build_paint_layer_config() -> ContourEditorLayerConfig:
@@ -35,28 +35,28 @@ def build_paint_contour_form_schema() -> WorkpieceFormSchema:
                 label="Workpiece ID",
                 field_type="text",
                 mandatory=True,
-                icon=FieldIcon.from_qta("fa5s.barcode", color=_COLOR),
+                icon=FieldIcon.from_qta("fa5s.barcode", color=_ICON_COLOR),
             ),
             WorkpieceFormFieldSpec(
                 key="name",
                 label="Name",
                 field_type="text",
                 mandatory=False,
-                icon=FieldIcon.from_qta("fa5s.tag", color=_COLOR),
+                icon=FieldIcon.from_qta("fa5s.tag", color=_ICON_COLOR),
             ),
             WorkpieceFormFieldSpec(
                 key="description",
                 label="Description",
                 field_type="text",
                 mandatory=False,
-                icon=FieldIcon.from_qta("fa5s.align-left", color=_COLOR),
+                icon=FieldIcon.from_qta("fa5s.align-left", color=_ICON_COLOR),
             ),
             WorkpieceFormFieldSpec(
                 key="height_mm",
                 label="Height (mm)",
                 field_type="text",
                 mandatory=False,
-                icon=FieldIcon.from_qta("fa5s.ruler-vertical", color=_COLOR),
+                icon=FieldIcon.from_qta("fa5s.ruler-vertical", color=_ICON_COLOR),
                 placeholder="0.0",
                 default_value=0.0,
             ),

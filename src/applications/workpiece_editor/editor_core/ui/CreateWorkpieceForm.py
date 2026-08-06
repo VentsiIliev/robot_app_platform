@@ -69,6 +69,7 @@ from PyQt6.QtWidgets import QFrame, QSizePolicy, QSpacerItem, QVBoxLayout, QHBox
 from .CreateWorkpieceStyles import getStyles
 from .CreateWorkpieceStyles import get_input_field_styles
 from .CreateWorkpieceStyles import get_popup_view_styles
+from pl_gui.settings.settings_view.styles import TEXT_COLOR
 
 try:
     from .Drawer import Drawer
@@ -364,13 +365,14 @@ class CreateWorkpieceForm(Drawer, QFrame):
 
         self.settingsLayout = QVBoxLayout()
         self.settingsLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.settingsLayout.setContentsMargins(18, 18, 18, 18)
+        self.settingsLayout.setSpacing(10)
         self.setLayout(self.settingsLayout)
 
         self.buttons = []
         self.icon_widgets = []
 
-        self.setStyleSheet("background: white;")
-
+        self._add_title()
         self.add_config_button()
         self.build_form()
 
@@ -410,6 +412,11 @@ class CreateWorkpieceForm(Drawer, QFrame):
     def apply_stylesheet(self):
         styles = getStyles()
         self.setStyleSheet(styles)
+
+    def _add_title(self):
+        title = QLabel(self.form_config.form_title)
+        title.setObjectName("form_title")
+        self.settingsLayout.addWidget(title)
 
     def add_config_button(self):
         """Add configuration button to the form"""
@@ -455,24 +462,33 @@ class CreateWorkpieceForm(Drawer, QFrame):
         container = QFrame()
         container.setObjectName("field_container")
         row_layout = QHBoxLayout(container)
-        row_layout.setContentsMargins(8, 6, 8, 6)
-        row_layout.setSpacing(12)
+        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setSpacing(10)
 
-        icon_label = self.create_icon_label(field_config.icon)
+        icon_label = self.create_icon_label(field_config.icon, size=28)
         row_layout.addWidget(icon_label)
+
+        field_layout = QVBoxLayout()
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(6)
+
+        label = QLabel(self._field_label_text(field_config))
+        label.setObjectName("field_label")
+        field_layout.addWidget(label)
 
         input_field = WidgetProvider.get().create_lineedit(parent=self._parent)
         input_field.setStyleSheet(get_input_field_styles())
         input_field.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
 
         input_field.setPlaceholderText(field_config.placeholder)
-        input_field.setMinimumHeight(40)
+        input_field.setMinimumHeight(44)
         input_field.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         if field_config.default_value:
             input_field.setText(str(field_config.default_value))
 
-        row_layout.addWidget(input_field)
+        field_layout.addWidget(input_field)
+        row_layout.addLayout(field_layout)
         self.settingsLayout.addWidget(container)
 
         self.field_widgets[field_config.field_id] = input_field
@@ -482,22 +498,30 @@ class CreateWorkpieceForm(Drawer, QFrame):
         container = QFrame()
         container.setObjectName("field_container")
         row_layout = QHBoxLayout(container)
-        row_layout.setContentsMargins(8, 6, 8, 6)
-        row_layout.setSpacing(12)
+        row_layout.setContentsMargins(0, 4, 0, 4)
+        row_layout.setSpacing(10)
 
-        icon_label = self.create_icon_label(field_config.icon)
+        icon_label = self.create_icon_label(field_config.icon, size=28)
         row_layout.addWidget(icon_label)
 
+        field_layout = QVBoxLayout()
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(6)
+
+        label = QLabel(self._field_label_text(field_config))
+        label.setObjectName("field_label")
+        field_layout.addWidget(label)
+
         dropdown = QComboBox()
-        dropdown.setMinimumHeight(40)
+        dropdown.setMinimumHeight(44)
         dropdown.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         try:
             dropdown.setView(QListView())
             popup_view = dropdown.view()
             pal = popup_view.palette()
-            pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
-            pal.setColor(QPalette.ColorRole.Text, QColor("#000000"))
+            pal.setColor(QPalette.ColorRole.Base, QColor(Qt.GlobalColor.white))
+            pal.setColor(QPalette.ColorRole.Text, QColor(TEXT_COLOR))
             popup_view.setPalette(pal)
             popup_view.setStyleSheet(get_popup_view_styles())
             popup_view.setAutoFillBackground(True)
@@ -521,7 +545,8 @@ class CreateWorkpieceForm(Drawer, QFrame):
         if field_config.default_value:
             dropdown.setCurrentText(str(field_config.default_value))
 
-        row_layout.addWidget(dropdown)
+        field_layout.addWidget(dropdown)
+        row_layout.addLayout(field_layout)
         self.settingsLayout.addWidget(container)
 
         self.field_widgets[field_config.field_id] = dropdown
@@ -533,6 +558,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         button = QPushButton("")
         button.setIcon(QIcon(icon_path))
         button.setMinimumHeight(50)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         if button_type == "Accept":
             self.submit_button = button
@@ -634,7 +660,11 @@ class CreateWorkpieceForm(Drawer, QFrame):
     def onCancel(self):
         self.close()
 
-    def create_icon_label(self, icon, size=50):
+    @staticmethod
+    def _field_label_text(field_config: FormFieldConfig) -> str:
+        return f"{field_config.label} *" if field_config.mandatory else field_config.label
+
+    def create_icon_label(self, icon, size=28):
         import logging
         from src.applications.workpiece_editor.editor_core.config.workpiece_form_schema import FieldIcon
         _log = logging.getLogger(__name__)
@@ -662,6 +692,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
                 _log.warning("FieldIcon path string not found: %r", icon)
 
         label = QLabel()
+        label.setObjectName("field_icon")
         label.setFixedSize(size, size)
         if not pixmap.isNull():
             label.setPixmap(pixmap.scaled(size, size,
@@ -674,7 +705,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         if self._parent is None:
             return
         newWidth = self._parent.width()
-        icon_size = max(1, int(newWidth * 0.02))
+        icon_size = 28
 
         for label, original_pixmap in self.icon_widgets:
             if not original_pixmap.isNull():
