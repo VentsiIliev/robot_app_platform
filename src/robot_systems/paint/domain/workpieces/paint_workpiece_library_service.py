@@ -15,7 +15,7 @@ def build_paint_workpiece_library_schema() -> WorkpieceSchema:
         id_key="id",
         name_key="name",
         fields=[
-            WorkpieceFieldDescriptor(key="workpieceId", label="ID", table_display=True, detail_display=True, editable=True, widget="text"),
+            WorkpieceFieldDescriptor(key="workpieceId", label="ID", table_display=True, detail_display=True, editable=False),
             WorkpieceFieldDescriptor(key="name", label="Name", table_display=True, detail_display=True, editable=True, widget="text"),
             WorkpieceFieldDescriptor(key="date", label="Date", table_display=True, detail_display=True, editable=False),
             WorkpieceFieldDescriptor(key="description", label="Description", table_display=False, detail_display=True, editable=True, widget="text"),
@@ -54,6 +54,7 @@ class PaintWorkpieceLibraryService:
         if raw is None:
             return False, f"Workpiece '{storage_id}' not found"
         updates = dict(updates or {})
+        updates.pop("workpieceId", None)
         if "height_mm" in updates:
             try:
                 updates["height_mm"] = float(updates["height_mm"])

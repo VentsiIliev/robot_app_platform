@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Optional
 
 from PyQt6.QtCore import QEvent, QMargins, QPoint, QRect, Qt, QTimer
-from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtGui import QCursor, QMouseEvent
 from PyQt6.QtWidgets import (
     QAbstractScrollArea,
     QAbstractSpinBox,
+    QApplication,
     QDialog,
     QDoubleSpinBox,
     QHBoxLayout,
@@ -34,6 +35,16 @@ _KEYBOARD_ACTION_HOVER = "#7E4C96"
 _DOCK_MARGIN = 8
 _FIELD_MARGIN = 12
 _ACTIVE_KEYBOARD_OWNER: Optional["_KeyboardMixin"] = None
+
+
+def _keyboard_owner_for_widget(widget: Optional[QWidget]) -> Optional["_KeyboardMixin"]:
+    while widget is not None:
+        if callable(getattr(widget, "_show_keyboard", None)) and callable(
+            getattr(widget, "_keyboard_enabled", None)
+        ):
+            return widget
+        widget = widget.parentWidget()
+    return None
 
 
 class _PopupKeyboardDialog(QDialog):
@@ -95,6 +106,7 @@ class _PopupKeyboardDialog(QDialog):
     def hideEvent(self, event) -> None:
         self._restore_target_scroll_space()
         super().hideEvent(event)
+        QTimer.singleShot(0, self._show_keyboard_for_widget_under_cursor)
 
     def _restore_target_scroll_space(self) -> None:
         widget: Optional[QWidget] = self._target
@@ -110,6 +122,16 @@ class _PopupKeyboardDialog(QDialog):
             restore = getattr(self._target, "_restore_keyboard_scroll_space", None)
         if callable(restore):
             restore()
+
+    def _show_keyboard_for_widget_under_cursor(self) -> None:
+        next_owner = _keyboard_owner_for_widget(QApplication.widgetAt(QCursor.pos()))
+        current_owner = _keyboard_owner_for_widget(self._target)
+        if next_owner is None or next_owner is current_owner:
+            return
+        if not next_owner._keyboard_enabled():
+            return
+        next_owner.setFocus(Qt.FocusReason.MouseFocusReason)
+        next_owner._show_keyboard()
 
     def dock_to_target_window(self) -> None:
         window = self._dock_window()
@@ -318,9 +340,10 @@ class _KeyboardMixin:
     def _restore_other_keyboard_owner(self) -> None:
         global _ACTIVE_KEYBOARD_OWNER
         if _ACTIVE_KEYBOARD_OWNER is not None and _ACTIVE_KEYBOARD_OWNER is not self:
-            _ACTIVE_KEYBOARD_OWNER._restore_keyboard_adjustments()
-            if _ACTIVE_KEYBOARD_OWNER._keyboard_dialog is not None:
-                _ACTIVE_KEYBOARD_OWNER._keyboard_dialog.hide()
+            other_owner = _ACTIVE_KEYBOARD_OWNER
+            other_owner._restore_keyboard_adjustments()
+            if other_owner._keyboard_dialog is not None:
+                other_owner._keyboard_dialog.hide()
             _ACTIVE_KEYBOARD_OWNER = None
 
     def _position_content_for_keyboard(self) -> None:

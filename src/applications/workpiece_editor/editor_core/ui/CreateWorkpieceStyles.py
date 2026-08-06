@@ -45,6 +45,26 @@ def getStyles():
                 border: none;
             }}
 
+            QWidget#form_scroll_content, QScrollArea {{
+                background: transparent;
+                border: none;
+            }}
+
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 8px;
+                margin: 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {BORDER};
+                border-radius: 4px;
+                min-height: 32px;
+            }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+
             QLabel#form_title {{
                 color: {TEXT_COLOR};
                 background: transparent;
@@ -78,6 +98,12 @@ def getStyles():
             QLineEdit:focus {{
                 border: 2px solid {PRIMARY};
                 outline: none;
+            }}
+
+            QLineEdit:read-only {{
+                background: {BG_COLOR};
+                color: {TEXT_COLOR};
+                border: 2px solid {BORDER};
             }}
 
             QComboBox {{

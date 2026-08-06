@@ -363,11 +363,24 @@ class CreateWorkpieceForm(Drawer, QFrame):
         self.setWindowTitle(form_config.form_title)
         self.setContentsMargins(0, 0, 0, 0)
 
-        self.settingsLayout = QVBoxLayout()
+        root_layout = QVBoxLayout()
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.setLayout(root_layout)
+
+        self._scroll_area = QScrollArea(self)
+        self._scroll_area.setWidgetResizable(True)
+        self._scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self._scroll_area)
+
+        self._scroll_content = QWidget(self._scroll_area)
+        self._scroll_content.setObjectName("form_scroll_content")
+        self.settingsLayout = QVBoxLayout(self._scroll_content)
         self.settingsLayout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.settingsLayout.setContentsMargins(18, 18, 18, 18)
         self.settingsLayout.setSpacing(10)
-        self.setLayout(self.settingsLayout)
+        self._scroll_area.setWidget(self._scroll_content)
 
         self.buttons = []
         self.icon_widgets = []
@@ -384,6 +397,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
 
     def prefill_form(self, data):
         is_dict = isinstance(data, dict)
+        self._set_field_editable("workpieceId", True)
         for field_name, widget in self.field_widgets.items():
             if is_dict:
                 if field_name not in data:
@@ -408,6 +422,8 @@ class CreateWorkpieceForm(Drawer, QFrame):
                         widget.setCurrentText(str(value))
                 else:
                     widget.setCurrentText(str(value))
+        if is_dict and data.get("workpieceId"):
+            self._set_field_editable("workpieceId", False)
 
     def apply_stylesheet(self):
         styles = getStyles()
@@ -476,7 +492,7 @@ class CreateWorkpieceForm(Drawer, QFrame):
         label.setObjectName("field_label")
         field_layout.addWidget(label)
 
-        input_field = WidgetProvider.get().create_lineedit(parent=self._parent)
+        input_field = WidgetProvider.get().create_lineedit(parent=container)
         input_field.setStyleSheet(get_input_field_styles())
         input_field.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
 
@@ -726,8 +742,19 @@ class CreateWorkpieceForm(Drawer, QFrame):
             elif hasattr(widget, 'setCurrentText'):
                 widget.setCurrentText(str(value))
 
+    def _set_field_editable(self, field_id: str, editable: bool) -> None:
+        widget = self.field_widgets.get(field_id)
+        if widget is None:
+            return
+        if hasattr(widget, "setReadOnly"):
+            widget.setReadOnly(not editable)
+            widget.setFocusPolicy(Qt.FocusPolicy.StrongFocus if editable else Qt.FocusPolicy.NoFocus)
+        else:
+            widget.setEnabled(editable)
+
     def clear_form(self):
         for field_name, widget in self.field_widgets.items():
+            self._set_field_editable(field_name, True)
             if hasattr(widget, 'setText'):
                 widget.setText("")
             elif hasattr(widget, 'setCurrentIndex'):
