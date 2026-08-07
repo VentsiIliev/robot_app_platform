@@ -58,6 +58,8 @@ class PaintWorkpiecePreparationService:
                 if raw is not None:
                     label = payload.get("workpieceId") or payload.get("name") or "matched workpiece"
                     return raw, f"Executed {label}"
+            else:
+                return None, "No matched workpiece"
 
         _logger.info("[PREP] fallback to captured contour")
         return (

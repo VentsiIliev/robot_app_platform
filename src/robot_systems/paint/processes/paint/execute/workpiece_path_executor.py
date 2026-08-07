@@ -651,18 +651,21 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 approach_pose,
                 pickup_motion.approach_vel_percent,
                 pickup_motion.approach_acc_percent,
+                "linear",
             ),
             (
                 "Descending to magazine pickup pose",
                 pickup_pose,
                 pickup_motion.descend_vel_percent,
                 pickup_motion.descend_acc_percent,
+                "linear",
             ),
             (
                 "Lifting magazine workpiece",
                 lift_pose,
                 pickup_motion.lift_align_vel_percent,
                 pickup_motion.lift_align_acc_percent,
+                "ptp",
             ),
         )
         velocity, acceleration = self._magazine_transfer_to_calibration_speed()
@@ -673,18 +676,19 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 list(release_pose),
                 velocity,
                 acceleration,
+                "ptp",
             ),
         )
 
         ordered_segments = [
             {
-                "type": "linear",
+                "type": move_type,
                 "label": label,
                 "position": list(pose),
                 "vel": float(velocity),
                 "acc": float(acceleration),
             }
-            for label, pose, velocity, acceleration in transfer_waypoints
+            for label, pose, velocity, acceleration, move_type in transfer_waypoints
         ]
         if resume_from_current_pose:
             ordered_segments = self._trim_ordered_pickup_segments_from_current_pose(ordered_segments)
@@ -694,6 +698,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     list(segment["position"]),
                     float(segment["vel"]),
                     float(segment["acc"]),
+                    str(segment.get("type", "ptp")),
                 )
                 for segment in ordered_segments
             )
@@ -1145,7 +1150,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self,
         ordered_label: str,
         ordered_segments: list[dict],
-        transfer_waypoints: tuple[tuple[str, list[float], float, float], ...],
+        transfer_waypoints: tuple[tuple[str, list[float], float, float, str], ...],
         *,
         turn_vacuum_on: bool,
     ) -> tuple[bool, str]:
@@ -1577,7 +1582,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             for index, safe_waypoint in enumerate(safe_waypoints, start=1):
                 segments.append(
                     {
-                        "type": "linear",
+                        "type": "ptp",
                         "label": f"prepare_dropoff_safe_travel_{index}",
                         "position": safe_waypoint["position"],
                         "vel": float(safe_waypoint["vel_percent"]),
@@ -1591,7 +1596,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 return [], None
             segments.append(
                 {
-                    "type": "linear",
+                    "type": "ptp",
                     "label": "prepare_dropoff_align",
                     "position": final_pose,
                     "vel": float(config.dropoff.release_align_vel_percent),

@@ -17,10 +17,10 @@
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,
-    "contact_offset_mm": 10.0,
-    "initial_lift_clearance_mm": 20.0,
-    "approach_vel_percent": 80.0,
-    "approach_acc_percent": 50.0,
+    "contact_offset_mm": 20.0,
+    "initial_lift_clearance_mm": 100.0,
+    "approach_vel_percent": 100.0,
+    "approach_acc_percent": 100.0,
     "descend_vel_percent": 80.0,
     "descend_acc_percent": 50.0,
     "lift_align_vel_percent": 80.0,
@@ -45,18 +45,18 @@
   },
   "dropoff": {
     "strategy": "movement_group",
-    "release_align_vel_percent": 90.0,
-    "release_align_acc_percent": 40.0
+    "release_align_vel_percent": 100.0,
+    "release_align_acc_percent": 60.0
   },
   "magazine_load": {
     "enabled": true,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
-    "move_to_magazine_vel_percent": 90.0,
-    "move_to_magazine_acc_percent": 50.0,
-    "transfer_to_calibration_vel_percent": 90.0,
-    "transfer_to_calibration_acc_percent": 50.0,
-    "camera_settle_s": 0.5,
+    "move_to_magazine_vel_percent": 100.0,
+    "move_to_magazine_acc_percent": 80.0,
+    "transfer_to_calibration_vel_percent": 100.0,
+    "transfer_to_calibration_acc_percent": 80.0,
+    "camera_settle_s": 0.2,
     "release_settle_s": 0.2
   },
   "safe_travel": {
@@ -114,8 +114,8 @@
     "unwind_vel_percent": 90.0,
     "unwind_acc_percent": 40.0,
     "unwind_queue_if_busy": true,
-    "calibration_move_vel_percent": 90.0,
-    "calibration_move_acc_percent": 50.0
+    "calibration_move_vel_percent": 100.0,
+    "calibration_move_acc_percent": 80.0
   },
   "interpolation": {
     "path_tangent_lookahead_mm": 15.0,
