@@ -48,10 +48,6 @@ _LEGACY_VIOLATIONS = {
     ),
     ImportViolation(
         "src/applications/workpiece_editor/controller/workpiece_editor_controller.py",
-        "src.robot_systems.paint.processes.paint.align",
-    ),
-    ImportViolation(
-        "src/applications/workpiece_editor/controller/workpiece_editor_controller.py",
         "src.robot_systems.paint.processes.paint.config",
     ),
     ImportViolation(

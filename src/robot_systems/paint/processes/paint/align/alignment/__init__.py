@@ -1,9 +1,3 @@
-from .core import (
-    ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
-    ALIGNMENT_STRATEGY_RIGID,
-    DEFAULT_MAX_SCALE_DEVIATION,
-    align_raw_workpiece_to_contour,
-)
 from .io import (
     _extract_raw_contour_points,
     _main_contour_payload,

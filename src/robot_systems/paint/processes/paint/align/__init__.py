@@ -1,7 +1,4 @@
 from .alignment import (
-    ALIGNMENT_STRATEGY_REFERENCE_SMOOTH,
-    ALIGNMENT_STRATEGY_RIGID,
-    DEFAULT_MAX_SCALE_DEVIATION,
     _describe_contour,
     _extract_raw_contour_points,
     _laplacian_smooth_closed_path,
@@ -13,5 +10,4 @@ from .alignment import (
     _replace_raw_contour_payload,
     _resample_closed_path,
     _resample_raw_contour_payload,
-    align_raw_workpiece_to_contour,
 )

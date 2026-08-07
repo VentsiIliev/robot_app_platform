@@ -13,14 +13,14 @@
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
   "enable_vacuum_pump": false,
-  "run_while_workpiece_found": true,
+  "run_while_workpiece_found": false,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,
-    "contact_offset_mm": 20.0,
+    "contact_offset_mm": 10.0,
     "initial_lift_clearance_mm": 100.0,
-    "approach_vel_percent": 100.0,
-    "approach_acc_percent": 100.0,
+    "approach_vel_percent": 80.0,
+    "approach_acc_percent": 70.0,
     "descend_vel_percent": 80.0,
     "descend_acc_percent": 50.0,
     "lift_align_vel_percent": 80.0,
@@ -49,7 +49,7 @@
     "release_align_acc_percent": 60.0
   },
   "magazine_load": {
-    "enabled": true,
+    "enabled": false,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 100.0,

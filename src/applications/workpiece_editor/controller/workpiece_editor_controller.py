@@ -329,16 +329,6 @@ class WorkpieceEditorController(IApplicationController):
             self._logger.exception("Failed to match saved workpieces: %s", exc)
             show_warning(self._view, "Match Workpiece Failed", str(exc))
 
-    def _align_raw_workpiece_to_contour(
-        self,
-        raw: dict,
-        captured_contour,
-        **kwargs,
-    ) -> dict:
-        from src.robot_systems.paint.processes.paint.align import align_raw_workpiece_to_contour
-
-        return align_raw_workpiece_to_contour(raw, captured_contour, **kwargs)
-
     def _get_current_editor_workpiece_contour(self) -> np.ndarray:
         try:
             workpiece_manager = self._view._editor.contourEditor.editor_with_rulers.editor.workpiece_manager
@@ -996,13 +986,12 @@ class WorkpieceEditorController(IApplicationController):
             matched_raw = copy.deepcopy(payload.get("raw") or {})
             if not matched_raw.get("contour"):
                 return None
-            aligned = self._align_raw_workpiece_to_contour(matched_raw, captured_contour)
-            self._save_workpiece_alignment_debug_plot(matched_raw, aligned)
+            self._save_workpiece_alignment_debug_plot(matched_raw, matched_raw)
             self._logger.info(
                 "Capture: recognized known workpiece %s and loaded aligned saved contour",
                 payload.get("workpieceId") or "(no id)",
             )
-            return aligned
+            return matched_raw
         except Exception:
             self._logger.exception("Capture: known-workpiece detection failed")
             return None

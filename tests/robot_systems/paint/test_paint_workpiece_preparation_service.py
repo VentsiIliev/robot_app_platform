@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 
@@ -92,20 +91,13 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
             can_match_fn=lambda: True,
             match_workpiece_fn=lambda contour: (True, payload, "matched"),
         )
-        contour = _square(3.0)
-        aligned = {"workpieceId": "saved-1", "name": "Aligned", "sprayPattern": {"Contour": [], "Fill": []}}
 
-        with patch(
-            "src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service.align_raw_workpiece_to_contour",
-            return_value=aligned,
-        ) as align:
-            raw, description = service.prepare_workpiece(contour, frame=None)
+        raw, description = service.prepare_workpiece(_square(3.0), frame=None)
 
-        self.assertIs(raw, aligned)
+        self.assertEqual(raw["workpieceId"], "saved-1")
+        self.assertEqual(raw["name"], "Saved Workpiece")
+        self.assertEqual(raw["contour"], {"contour": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]})
         self.assertEqual(description, "Executed saved-1")
-        align.assert_called_once()
-        self.assertEqual(align.call_args.kwargs["max_scale_deviation"], 0.0)
-        self.assertEqual(align.call_args.kwargs["reference_scale_override"], 1.0)
 
     def test_prepare_workpiece_falls_back_when_matched_raw_has_no_contour(self):
         payload = _matched_payload()

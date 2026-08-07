@@ -6,7 +6,6 @@ from typing import Callable, Optional
 
 from src.robot_systems.paint.processes.paint.align import (
     _normalize_contour_points,
-    align_raw_workpiece_to_contour,
 )
 from src.robot_systems.paint.processes.paint.plan.contour_utils import (
     contour_to_workpiece_raw,
@@ -85,12 +84,7 @@ class PaintWorkpiecePreparationService:
                 describe_contour(extract_points_for_log(matched_raw)),
                 describe_contour(_normalize_contour_points(captured_contour)),
             )
-            return align_raw_workpiece_to_contour(
-                matched_raw,
-                captured_contour,
-                max_scale_deviation=0.0,
-                reference_scale_override=1.0,
-            )
+            return matched_raw
 
         _logger.info(
             "[PREP] matched workpiece has no saved contour; falling back to captured contour"
