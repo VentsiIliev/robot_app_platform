@@ -12,7 +12,7 @@
   "pivot_contact_side": "positive",
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
-  "enable_vacuum_pump": true,
+  "enable_vacuum_pump": false,
   "run_while_workpiece_found": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
