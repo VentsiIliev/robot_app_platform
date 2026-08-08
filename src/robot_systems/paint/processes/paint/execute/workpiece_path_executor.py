@@ -1522,51 +1522,425 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return None
         return self._dropoff_align_pose_near_reference(pose, reference_pose)
 
-    def _ordered_dropoff_preparation_segments(self) -> tuple[list[dict], list[float] | None]:
-        """Return ordered-chain segments that prepare the held part for release."""
+    def _apply_distributed_dropoff_unwind(
+        self,
+        poses: list[list[float]],
+        start_pose: list[float] | None,
+    ) -> list[list[float]]:
+        """
+        Progressively shift the active rotation component by whole-turn
+        equivalents so Joint 6 can unwind while travelling toward dropoff.
+
+        Configured XYZ positions are preserved.
+
+        Nominal waypoint rotations are first unwrapped onto one continuous
+        branch without considering the unwind offset. The unwind offset is then
+        added progressively according to cumulative XYZ travel distance.
+
+        Keeping those two operations separate prevents later waypoints from
+        selecting the opposite +/-360 degree branch and reversing the unwind.
+        """
+        if not poses:
+            return []
+
+        adjusted = [
+            list(pose)
+            for pose in poses
+        ]
+
+        if start_pose is None or len(start_pose) < 6:
+            return adjusted
+
+        rotation_index = int(
+            self._contact_motion_config.rotation_index
+        )
+
+        if rotation_index < 0:
+            return adjusted
+
+        if len(start_pose) <= rotation_index:
+            return adjusted
+
+        if any(
+            len(pose) <= rotation_index
+            for pose in adjusted
+        ):
+            return adjusted
+
+        start_rotation_deg = float(
+            start_pose[rotation_index]
+        )
+
+        #
+        # Build the nominal route on one continuous rotation branch.
+        # Do NOT include the unwind correction while choosing this branch.
+        #
+        nominal_continuous_rotations: list[float] = []
+        previous_nominal_rotation_deg = (
+            start_rotation_deg
+        )
+
+        for pose in adjusted:
+            nominal_rotation_deg = float(
+                pose[rotation_index]
+            )
+
+            continuous_rotation_deg = (
+                unwrap_degrees(
+                    previous_nominal_rotation_deg,
+                    nominal_rotation_deg,
+                )
+            )
+
+            nominal_continuous_rotations.append(
+                continuous_rotation_deg
+            )
+
+            previous_nominal_rotation_deg = (
+                continuous_rotation_deg
+            )
+
+        if not nominal_continuous_rotations:
+            return adjusted
+
+        final_nominal_continuous_deg = (
+            nominal_continuous_rotations[-1]
+        )
+
+        #
+        # Choose the whole-turn-equivalent final rotation nearest the
+        # canonical [-180, +180) region.
+        #
+        final_canonical_deg = (
+            (
+                final_nominal_continuous_deg
+                + 180.0
+            )
+            % 360.0
+        ) - 180.0
+
+        unwind_shift_deg = (
+            final_canonical_deg
+            - final_nominal_continuous_deg
+        )
+
+        #
+        # Snap to an exact number of full revolutions.
+        #
+        unwind_turns = int(
+            round(
+                unwind_shift_deg
+                / 360.0
+            )
+        )
+
+        unwind_shift_deg = (
+            360.0
+            * unwind_turns
+        )
+
+        if unwind_turns == 0:
+            _logger.info(
+                "[DROPOFF] Distributed unwind not needed: "
+                "start_rotation=%.3fdeg "
+                "final_nominal_continuous=%.3fdeg",
+                start_rotation_deg,
+                final_nominal_continuous_deg,
+            )
+            return adjusted
+
+        #
+        # Distribute the unwind according to cumulative XYZ travel distance.
+        #
+        route = [
+            list(start_pose),
+            *adjusted,
+        ]
+
+        segment_lengths: list[float] = []
+
+        for index in range(
+            1,
+            len(route),
+        ):
+            previous_xyz = np.asarray(
+                route[index - 1][:3],
+                dtype=float,
+            )
+
+            current_xyz = np.asarray(
+                route[index][:3],
+                dtype=float,
+            )
+
+            segment_lengths.append(
+                float(
+                    np.linalg.norm(
+                        current_xyz
+                        - previous_xyz
+                    )
+                )
+            )
+
+        total_distance = float(
+            sum(segment_lengths)
+        )
+
+        if total_distance <= 1e-6:
+            _logger.warning(
+                "[DROPOFF] Distributed unwind skipped because "
+                "dropoff route has no XYZ travel"
+            )
+            return adjusted
+
+        cumulative_distance = 0.0
+        applied_rotations: list[float] = []
+
+        for index, pose in enumerate(adjusted):
+            cumulative_distance += (
+                segment_lengths[index]
+            )
+
+            fraction = max(
+                0.0,
+                min(
+                    1.0,
+                    cumulative_distance
+                    / total_distance,
+                ),
+            )
+
+            nominal_continuous_deg = (
+                nominal_continuous_rotations[
+                    index
+                ]
+            )
+
+            applied_unwind_deg = (
+                unwind_shift_deg
+                * fraction
+            )
+
+            final_rotation_deg = (
+                nominal_continuous_deg
+                + applied_unwind_deg
+            )
+
+            pose[rotation_index] = (
+                final_rotation_deg
+            )
+
+            applied_rotations.append(
+                final_rotation_deg
+            )
+
+        _logger.info(
+            "[DROPOFF] Distributed unwind over travel: "
+            "start_rotation=%.3fdeg "
+            "nominal_rotations=%s "
+            "unwind_turns=%d "
+            "unwind_shift=%.3fdeg "
+            "applied_rotations=%s "
+            "travel_mm=%.3f",
+            start_rotation_deg,
+            [
+                round(value, 3)
+                for value
+                in nominal_continuous_rotations
+            ],
+            unwind_turns,
+            unwind_shift_deg,
+            [
+                round(value, 3)
+                for value
+                in applied_rotations
+            ],
+            total_distance,
+        )
+
+        return adjusted
+
+
+    def _ordered_dropoff_preparation_segments(
+        self,
+    ) -> tuple[list[dict], list[float] | None]:
+        """
+        Build the post-paint dropoff preparation chain.
+
+        Safe-travel/dropoff PTP poses are adjusted on the fly so the active
+        rotation component progressively sheds whole-turn cable twist while
+        travelling. A final standalone unwind_joint6 segment is still appended
+        as a fallback in case the distributed unwind did not fully relieve J6.
+        """
         config = self._paint_process_config()
-        segments: list[dict] = []
-        final_pose: list[float] | None = None
-        safe_waypoints = self._resolve_dropoff_safe_travel_waypoints()
-        if bool(config.dropoff_safe_travel.enabled):
+
+        route_items: list[dict] = []
+
+        safe_waypoints = (
+            self._resolve_dropoff_safe_travel_waypoints()
+        )
+
+        if bool(
+            config.dropoff_safe_travel.enabled
+        ):
             if not safe_waypoints:
                 return [], None
-            for index, safe_waypoint in enumerate(safe_waypoints, start=1):
+
+            for index, safe_waypoint in enumerate(
+                safe_waypoints,
+                start=1,
+            ):
+                route_items.append(
+                    {
+                        "label":
+                            f"prepare_dropoff_safe_travel_{index}",
+
+                        "position":
+                            list(
+                                safe_waypoint["position"]
+                            ),
+
+                        "vel":
+                            float(
+                                safe_waypoint[
+                                    "vel_percent"
+                                ]
+                            ),
+
+                        "acc":
+                            float(
+                                safe_waypoint[
+                                    "acc_percent"
+                                ]
+                            ),
+                    }
+                )
+
+        if self._should_prepare_dropoff_align_before_unwind():
+            reference_pose = (
+                route_items[-1]["position"]
+                if route_items
+                else self._last_process_end_pose
+            )
+
+            align_pose = (
+                self._resolve_dropoff_align_pose(
+                    reference_pose
+                )
+            )
+
+            if align_pose is None:
+                return [], None
+
+            route_items.append(
+                {
+                    "label":
+                        "prepare_dropoff_align",
+
+                    "position":
+                        list(align_pose),
+
+                    "vel":
+                        float(
+                            config.dropoff
+                            .release_align_vel_percent
+                        ),
+
+                    "acc":
+                        float(
+                            config.dropoff
+                            .release_align_acc_percent
+                        ),
+                }
+            )
+
+        segments: list[dict] = []
+
+        if route_items:
+            start_pose = (
+                list(self._last_process_end_pose)
+                if self._last_process_end_pose is not None
+                else None
+            )
+
+            adjusted_positions = (
+                self._apply_distributed_dropoff_unwind(
+                    [
+                        item["position"]
+                        for item in route_items
+                    ],
+                    start_pose,
+                )
+            )
+
+            for index, (
+                item,
+                adjusted_position,
+            ) in enumerate(
+                zip(
+                    route_items,
+                    adjusted_positions,
+                )
+            ):
+                is_last_route_pose = (
+                    index
+                    == len(route_items) - 1
+                )
+
                 segments.append(
                     {
                         "type": "ptp",
-                        "label": f"prepare_dropoff_safe_travel_{index}",
-                        "position": safe_waypoint["position"],
-                        "vel": float(safe_waypoint["vel_percent"]),
-                        "acc": float(safe_waypoint["acc_percent"]),
-                        "blendR": 20.0,
+                        "label": item["label"],
+                        "position":
+                            list(adjusted_position),
+                        "vel":
+                            float(item["vel"]),
+                        "acc":
+                            float(item["acc"]),
+                        "blendR": (
+                            0.0
+                            if is_last_route_pose
+                            else 20.0
+                        ),
                     }
                 )
-                final_pose = safe_waypoint["position"]
-        if self._should_prepare_dropoff_align_before_unwind():
-            final_pose = self._resolve_dropoff_align_pose(final_pose)
-            if final_pose is None:
-                return [], None
-            segments.append(
-                {
-                    "type": "ptp",
-                    "label": "prepare_dropoff_align",
-                    "position": final_pose,
-                    "vel": float(config.dropoff.release_align_vel_percent),
-                    "acc": float(config.dropoff.release_align_acc_percent),
-                }
+
+            final_pose = list(
+                adjusted_positions[-1]
             )
+
+        else:
+            final_pose = (
+                list(self._last_process_end_pose)
+                if self._last_process_end_pose is not None
+                else None
+            )
+
+        #
+        # Keep the existing standalone J6 unwind as a fallback.
+        #
+        # The distributed unwind should normally reduce or eliminate the
+        # required rotation. If J6 still needs relief, this final segment
+        # completes it after the robot has reached the exact dropoff pose.
+        #
         segments.append(
             {
                 "type": "unwind_joint6",
                 "label": "prepare_dropoff_unwind",
-                "vel": float(config.navigation_return.unwind_vel_percent),
-                "acc": float(config.navigation_return.unwind_acc_percent),
+                "vel": float(
+                    config.navigation_return
+                    .unwind_vel_percent
+                ),
+                "acc": float(
+                    config.navigation_return
+                    .unwind_acc_percent
+                ),
+                "protected": True,
             }
         )
+
         return segments, final_pose
 
-    @timed_step(_logger, "ordered_paint_motion_chain")
     def _try_execute_ordered_motion_cycle(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,

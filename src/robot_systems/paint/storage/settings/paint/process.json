@@ -12,25 +12,25 @@
   "pivot_contact_side": "positive",
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
-  "enable_vacuum_pump": false,
+  "enable_vacuum_pump": true,
   "run_while_workpiece_found": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,
-    "contact_offset_mm": 10.0,
+    "contact_offset_mm": 20.0,
     "initial_lift_clearance_mm": 100.0,
     "approach_vel_percent": 80.0,
     "approach_acc_percent": 40.0,
-    "descend_vel_percent": 80.0,
+    "descend_vel_percent": 60.0,
     "descend_acc_percent": 40.0,
-    "lift_align_vel_percent": 80.0,
+    "lift_align_vel_percent": 60.0,
     "lift_align_acc_percent": 40.0,
     "change_plane_vel_percent": 10.0,
     "change_plane_acc_percent": 10.0,
     "combine_change_plane_with_first_contact": true,
     "stage_transition_vel_percent": 100.0,
     "stage_transition_acc_percent": 60.0,
-    "first_contact_vel_percent": 80.0,
+    "first_contact_vel_percent": 60.0,
     "first_contact_acc_percent": 40.0
   },
   "edge_cleanup": {
@@ -49,7 +49,7 @@
     "release_align_acc_percent": 70.0
   },
   "magazine_load": {
-    "enabled": true,
+    "enabled": false,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 100.0,
@@ -88,25 +88,85 @@
   "dropoff_safe_travel": {
     "enabled": true,
     "position": [
-      224.09814588507888,
-      386.9362421901726,
-      237.0645427060531,
-      -178.7512200925325,
-      0.004189526291216576,
-      -0.0629970617924545
+      225.0,
+      440.0,
+      240.0,
+      -178.748,
+      -0.019,
+      -0.081
     ],
     "positions": [
       {
         "position": [
-          224.09814588507888,
-          386.9362421901726,
-          237.0645427060531,
-          -178.7512200925325,
-          0.004189526291216576,
-          -0.0629970617924545
+          225.0,
+          440.0,
+          240.0,
+          -178.748,
+          -0.019,
+          -0.081
         ],
-        "vel_percent": 60.0,
-        "acc_percent": 40.0
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      },
+      {
+        "position": [
+          195.0,
+          400.0,
+          240.0,
+          -178.751,
+          0.004,
+          -0.063
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      },
+      {
+        "position": [
+          160.0,
+          360.0,
+          240.0,
+          -178.741,
+          -0.023,
+          -0.085
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      },
+      {
+        "position": [
+          125.0,
+          330.0,
+          240.0,
+          -178.756,
+          -0.013,
+          -0.098
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      },
+      {
+        "position": [
+          95.0,
+          305.0,
+          240.0,
+          -178.756,
+          -0.013,
+          -0.098
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
+      },
+      {
+        "position": [
+          -26.042,
+          311.744,
+          240.0,
+          -178.77,
+          -0.015,
+          -0.061
+        ],
+        "vel_percent": 90.0,
+        "acc_percent": 50.0
       }
     ]
   },
