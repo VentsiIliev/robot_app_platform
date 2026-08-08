@@ -13,25 +13,25 @@
   "mirror_xz_ry_execution_rotation_value": true,
   "pickup_axis_alignment_sign_value": 1.0,
   "enable_vacuum_pump": false,
-  "run_while_workpiece_found": false,
+  "run_while_workpiece_found": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,
     "contact_offset_mm": 10.0,
     "initial_lift_clearance_mm": 100.0,
     "approach_vel_percent": 80.0,
-    "approach_acc_percent": 70.0,
+    "approach_acc_percent": 40.0,
     "descend_vel_percent": 80.0,
-    "descend_acc_percent": 50.0,
+    "descend_acc_percent": 40.0,
     "lift_align_vel_percent": 80.0,
-    "lift_align_acc_percent": 50.0,
+    "lift_align_acc_percent": 40.0,
     "change_plane_vel_percent": 10.0,
     "change_plane_acc_percent": 10.0,
     "combine_change_plane_with_first_contact": true,
-    "stage_transition_vel_percent": 90.0,
-    "stage_transition_acc_percent": 50.0,
+    "stage_transition_vel_percent": 100.0,
+    "stage_transition_acc_percent": 60.0,
     "first_contact_vel_percent": 80.0,
-    "first_contact_acc_percent": 50.0
+    "first_contact_acc_percent": 40.0
   },
   "edge_cleanup": {
     "enabled_after_xz_ry": false,
@@ -45,11 +45,11 @@
   },
   "dropoff": {
     "strategy": "movement_group",
-    "release_align_vel_percent": 100.0,
-    "release_align_acc_percent": 60.0
+    "release_align_vel_percent": 90.0,
+    "release_align_acc_percent": 70.0
   },
   "magazine_load": {
-    "enabled": false,
+    "enabled": true,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 100.0,
@@ -88,24 +88,24 @@
   "dropoff_safe_travel": {
     "enabled": true,
     "position": [
-      223.574,
-      452.165,
-      232.635,
-      -178.795,
-      -0.049,
-      -0.104
+      224.09814588507888,
+      386.9362421901726,
+      237.0645427060531,
+      -178.7512200925325,
+      0.004189526291216576,
+      -0.0629970617924545
     ],
     "positions": [
       {
         "position": [
-          223.574,
-          452.165,
-          232.635,
-          -178.795,
-          -0.049,
-          -0.104
+          224.09814588507888,
+          386.9362421901726,
+          237.0645427060531,
+          -178.7512200925325,
+          0.004189526291216576,
+          -0.0629970617924545
         ],
-        "vel_percent": 90.0,
+        "vel_percent": 60.0,
         "acc_percent": 40.0
       }
     ]

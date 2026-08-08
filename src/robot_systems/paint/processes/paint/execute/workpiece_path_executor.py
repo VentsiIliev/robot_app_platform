@@ -51,8 +51,8 @@ from src.robot_systems.paint.timing import timed_block, timed_step, timing_sessi
 
 _logger = logging.getLogger(__name__)
 
-_STAGING_Z_OFFSET_MM = -10.0
-_STAGING_PAINT_AXIS_OFFSET_MM = 10.0
+_STAGING_Z_OFFSET_MM = 0
+_STAGING_PAINT_AXIS_OFFSET_MM = 80.0
 _PICKUP_RESUME_WAYPOINT_TOLERANCE_MM = 2.0
 
 
@@ -504,78 +504,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             release_label="calibration",
         )
 
-    @timed_step(_logger, "pickup_to_position_release")
-    def execute_pickup_and_release_at_position(
-        self,
-        prepared_workpiece: WorkpieceExecutionPlan,
-        release_pose: list[float],
-        *,
-        release_label: str = "release",
-    ) -> tuple[bool, str]:
-        """Pick up the prepared contour and release it at an explicit pose."""
-        self._refresh_paint_process_config_snapshot()
-        self._apply_paint_process_contact_config()
-        pickup_motion = self._paint_process_config().pickup_motion
-        if release_pose is None or len(release_pose) < 6:
-            return False, f"{release_label.capitalize()} pose is not configured"
-        pickup_plan = self._pickup.build_plan(prepared_workpiece)
-        if pickup_plan is None:
-            return False, "Could not compute pickup poses"
-        self._last_pickup_plan = pickup_plan.motion_plan
 
-        transfer_waypoints = (
-            (
-                "Moving to magazine pickup approach pose",
-                list(pickup_plan.motion_plan.pickup_approach_pose),
-                pickup_motion.approach_vel_percent,
-                pickup_motion.approach_acc_percent,
-            ),
-            (
-                "Descending to magazine pickup pose",
-                list(pickup_plan.motion_plan.pickup_pose),
-                pickup_motion.descend_vel_percent,
-                pickup_motion.descend_acc_percent,
-            ),
-            (
-                "Lifting magazine workpiece",
-                list(pickup_plan.motion_plan.lift_pose),
-                pickup_motion.lift_align_vel_percent,
-                pickup_motion.lift_align_acc_percent,
-            ),
-        )
-        velocity, acceleration = self._magazine_transfer_to_calibration_speed()
-        release_move_label = f"Moving picked workpiece to {release_label} release pose"
-        transfer_waypoints = transfer_waypoints + (
-            (
-                release_move_label,
-                list(release_pose),
-                velocity,
-                acceleration,
-            ),
-        )
-        ordered_segments = [
-            {
-                "type": "linear",
-                "label": label,
-                "position": list(pose),
-                "vel": float(velocity),
-                "acc": float(acceleration),
-            }
-            for label, pose, velocity, acceleration in transfer_waypoints
-        ]
-        ok, msg = self._execute_pickup_transfer_sequence(
-            "Ordered magazine pickup-to-release sequence",
-            ordered_segments,
-            transfer_waypoints,
-            turn_vacuum_on=bool(pickup_plan.vacuum_on_before_moves),
-        )
-        if not ok:
-            return False, msg or f"Move to {release_label} release pose failed"
-
-        ok, msg = self._turn_vacuum_off()
-        if not ok:
-            return False, msg
-        return True, f"Workpiece transferred to {release_label}"
 
     @timed_step(_logger, "pickup_target_to_position_release")
     def execute_pickup_target_and_release_at_position(
@@ -680,16 +609,39 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             ),
         )
 
-        ordered_segments = [
-            {
-                "type": move_type,
-                "label": label,
-                "position": list(pose),
-                "vel": float(velocity),
-                "acc": float(acceleration),
-            }
-            for label, pose, velocity, acceleration, move_type in transfer_waypoints
-        ]
+        ordered_segments = []
+
+        for index, (
+                label,
+                pose,
+                velocity,
+                acceleration,
+                move_type,
+        ) in enumerate(transfer_waypoints):
+
+            blend_r = 0.0
+
+            #
+            # Blend "Lifting magazine workpiece"
+            # into the following release PTP.
+            #
+            if (
+                    label == "Lifting magazine workpiece"
+                    and index + 1 < len(transfer_waypoints)
+            ):
+                blend_r = 20.0
+
+            ordered_segments.append(
+                {
+                    "type": move_type,
+                    "label": label,
+                    "position": list(pose),
+                    "vel": float(velocity),
+                    "acc": float(acceleration),
+                    "blendR": blend_r,
+                }
+            )
+
         if resume_from_current_pose:
             ordered_segments = self._trim_ordered_pickup_segments_from_current_pose(ordered_segments)
             transfer_waypoints = tuple(
@@ -1587,6 +1539,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                         "position": safe_waypoint["position"],
                         "vel": float(safe_waypoint["vel_percent"]),
                         "acc": float(safe_waypoint["acc_percent"]),
+                        "blendR": 20.0,
                     }
                 )
                 final_pose = safe_waypoint["position"]
@@ -1651,7 +1604,14 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
         segments: list[dict] = []
-        for waypoint in pickup_plan.waypoints:
+        for waypoint_index, waypoint in enumerate(
+                pickup_plan.waypoints
+        ):
+            is_last_pickup_waypoint = (
+                    waypoint_index
+                    == len(pickup_plan.waypoints) - 1
+            )
+
             segments.append(
                 {
                     "type": "linear",
@@ -1659,6 +1619,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     "position": list(waypoint.pose),
                     "vel": float(waypoint.vel_percent),
                     "acc": float(waypoint.acc_percent),
+
+                    #
+                    # Blend all intermediate travel moves.
+                    #
+                    # The final one must currently stop because
+                    # the following segment is type="path".
+                    #
+                    "blendR": (
+                        0.0
+                        if is_last_pickup_waypoint
+                        else 20.0
+                    ),
                 }
             )
 
@@ -1767,16 +1739,40 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if not paint_paths:
             return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
-        segments: list[dict] = [
-            {
-                "type": "linear",
-                "label": waypoint.label,
-                "position": list(waypoint.pose),
-                "vel": float(waypoint.vel_percent),
-                "acc": float(waypoint.acc_percent),
-            }
-            for waypoint in pickup_plan.waypoints
-        ]
+        segments: list[dict] = []
+
+        for waypoint_index, waypoint in enumerate(
+                pickup_plan.waypoints
+        ):
+            is_last_pickup_waypoint = (
+                    waypoint_index
+                    == len(pickup_plan.waypoints) - 1
+            )
+
+            segments.append(
+                {
+                    "type": "linear",
+                    "label": waypoint.label,
+                    "position": list(waypoint.pose),
+                    "vel": float(waypoint.vel_percent),
+                    "acc": float(waypoint.acc_percent),
+
+                    #
+                    # Blend calibration/safe-travel/staging moves
+                    # into one continuous group.
+                    #
+                    # The final waypoint must stop because the
+                    # following segment is currently type="path".
+                    #
+                    "blendR": (
+                        0.0
+                        if is_last_pickup_waypoint
+                        else 20.0
+                    ),
+                }
+            )
+
+
         for path_index, command_path in enumerate(paint_paths):
             job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
             segments.append(
