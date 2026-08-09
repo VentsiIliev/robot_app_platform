@@ -65,6 +65,46 @@ def _tcp_to_tool_local_xy(job: dict, paint_config: PaintSimulationConfig) -> tup
     return tcp_to_tool_x, tcp_to_tool_y
 
 
+def _append_retreat_opposite_to_staging(owner, command_path: list[list[float]]) -> list[list[float]]:
+    """Append the existing retreat offset on the side opposite the paint-entry staging offset."""
+    if not command_path:
+        return []
+
+    path_with_retreat = owner._append_contact_retreat_waypoint(command_path)
+    if len(path_with_retreat) <= len(command_path):
+        return path_with_retreat
+
+    final_contact_pose = list(command_path[-1])
+    retreat_pose = list(path_with_retreat[-1])
+
+    try:
+        config = owner._contact_motion_config
+        axis_position = config.planar_axes.index(config.translation_axis)
+        axis_index = config.planar_coordinate_indices[axis_position]
+    except (AttributeError, ValueError, IndexError):
+        _logger.warning(
+            "[PIVOT_PATH] Could not resolve paint axis for opposite retreat; keeping existing retreat"
+        )
+        return path_with_retreat
+
+    if len(final_contact_pose) <= axis_index or len(retreat_pose) <= axis_index:
+        return path_with_retreat
+
+    original_retreat_value = float(retreat_pose[axis_index])
+    contact_value = float(final_contact_pose[axis_index])
+    retreat_pose[axis_index] = 2.0 * contact_value - original_retreat_value
+    path_with_retreat[-1] = retreat_pose
+
+    _logger.info(
+        "[PIVOT_PATH] flipped retreat opposite to staging side: axis=%s contact=%.3f old_retreat=%.3f new_retreat=%.3f",
+        config.translation_axis,
+        contact_value,
+        original_retreat_value,
+        float(retreat_pose[axis_index]),
+    )
+    return path_with_retreat
+
+
 class PaintContactExecutor:
     """Execute prepared paint-contact paths against the fixed paint shaft."""
 
@@ -214,7 +254,7 @@ class PaintContactExecutor:
                 if retreat_fn is not None:
                     command_pivot_path = retreat_fn(command_pivot_path)
                 elif append_retreat:
-                    command_pivot_path = owner._append_contact_retreat_waypoint(command_pivot_path)
+                    command_pivot_path = _append_retreat_opposite_to_staging(owner, command_pivot_path)
             if owner._last_process_start_rz is None and command_pivot_path:
                 owner._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 
