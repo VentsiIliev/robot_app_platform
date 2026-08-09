@@ -93,12 +93,23 @@ class PaintPickupTransferPlanner:
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
 
-        with timed_block(_logger, "pickup_plan_build", label="project_initial_pivot_path"):
+        pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
+        pickup_reference_rz = float(
+            jobs[0].get(
+                "pickup_reference_rz",
+                float(pickup_pivot_pose[5]) if len(pickup_pivot_pose) >= 6 else 0.0,
+            )
+        )
+        align_rz = pickup_reference_rz
+        source_rotation_deg = unwrap_degrees(float(pickup_rz), float(align_rz)) - float(pickup_rz)
+
+        with timed_block(_logger, "pickup_plan_build", label="project_pivot_path"):
             projected_pivot_path, projected_snapshots, projected_diagnostics = project_paint_contact_motion_continuous(
                 source_path,
                 paint_pivot_pose,
                 owner._contact_motion_config,
                 anchor_xy=anchor_xy,
+                source_rotation_deg=source_rotation_deg,
             )
 
         if not projected_pivot_path:
@@ -106,6 +117,15 @@ class PaintPickupTransferPlanner:
 
         first_pivot_pose = list(projected_pivot_path[0])
         _logger.debug("first_pivot_pose -> %s", first_pivot_pose)
+
+        if abs(source_rotation_deg) > 1e-9:
+            _logger.info(
+                "[PICKUP] carried source rotation applied to pivot geometry: pickup_rz=%.3f align_rz=%.3f source_rotation_deg=%.3f first_pivot=%s",
+                float(pickup_rz),
+                float(align_rz),
+                float(source_rotation_deg),
+                [round(float(v), 3) for v in first_pivot_pose[:6]],
+            )
 
         if anchor_xy is not None and len(source_path[0]) >= 2 and len(first_pivot_pose) >= 3:
             self._log_anchor_offset(
@@ -129,7 +149,6 @@ class PaintPickupTransferPlanner:
                 + pickup_motion.contact_offset_mm
             )
 
-        pickup_rz = float(jobs[0].get("pickup_rz", 0.0))
         should_apply_tcp_offset = (
             bool(owner._contact_motion_config.apply_camera_to_tcp_for_pickup)
             and not pickup_target_point_name
@@ -170,34 +189,6 @@ class PaintPickupTransferPlanner:
         pickup_approach_pose = [pickup_x, pickup_y, pickup_approach_z, pickup_rx, pickup_ry, pickup_rz]
         lift_pose = [pickup_x, pickup_y, pickup_lift_z, pickup_rx, pickup_ry, pickup_rz]
         pickup_pose = [pickup_x, pickup_y, float(pickup_z), pickup_rx, pickup_ry, pickup_rz]
-
-        pickup_reference_rz = float(
-            jobs[0].get(
-                "pickup_reference_rz",
-                float(pickup_pivot_pose[5]) if len(pickup_pivot_pose) >= 6 else 0.0,
-            )
-        )
-        align_rz = pickup_reference_rz
-        source_rotation_deg = unwrap_degrees(float(pickup_rz), float(align_rz)) - float(pickup_rz)
-        if abs(source_rotation_deg) > 1e-9:
-            with timed_block(_logger, "pickup_plan_build", label="project_carried_rotation_path"):
-                projected_pivot_path, projected_snapshots, projected_diagnostics = project_paint_contact_motion_continuous(
-                    source_path,
-                    paint_pivot_pose,
-                    owner._contact_motion_config,
-                    anchor_xy=anchor_xy,
-                    source_rotation_deg=source_rotation_deg,
-                )
-            if not projected_pivot_path:
-                return None
-            first_pivot_pose = list(projected_pivot_path[0])
-            _logger.info(
-                "[PICKUP] carried source rotation applied to pivot geometry: pickup_rz=%.3f align_rz=%.3f source_rotation_deg=%.3f first_pivot=%s",
-                float(pickup_rz),
-                float(align_rz),
-                float(source_rotation_deg),
-                [round(float(v), 3) for v in first_pivot_pose[:6]],
-            )
 
         if owner._contact_motion_config.motion_plane == "xz_y_ry":
             _logger.info(
