@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QSlider, QSizePolicy, QSpacerItem,
-    QComboBox,
+    QComboBox, QWidget, QTabWidget,
 )
 
 from pl_gui.settings.settings_view.styles import (
@@ -15,6 +15,7 @@ from pl_gui.settings.settings_view.styles import (
 
 _LINEAR_STEPS:   list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 50.0,100,250]
 _ROTATION_STEPS: list[float] = [0.1,0.2, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0,180,360]
+_JOINT_STEPS:    list[float] = [0.1, 0.5, 1.0, 5.0, 10.0, 45.0, 90.0]
 _LINEAR_AXES  = {"X", "Y", "Z"}
 _JOG_INTERVAL_MS = 100
 
@@ -32,6 +33,8 @@ _AXES = [
     ("rz_plus",  "RZ", "Plus"),
     ("rz_minus", "RZ", "Minus"),
 ]
+
+_JOINT_NAMES = ["J1", "J2", "J3", "J4", "J5", "J6"]
 
 _SLIDER_STYLE = f"""
     QSlider::groove:horizontal {{
@@ -73,10 +76,17 @@ class RobotJogWidget(QFrame):
     jog_stopped          = pyqtSignal(str)
     frame_changed        = pyqtSignal(str)   # emitted when the frame/point selector changes
 
+    joint_jog_requested  = pyqtSignal(str, str, str, float)  # command, joint, direction, step
+    joint_jog_started    = pyqtSignal(str)
+    joint_jog_stopped    = pyqtSignal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._timers:   dict[str, QTimer]       = {}
         self._axis_map: dict[str, tuple[str, str]] = {}
+        self._joint_timers:   dict[str, QTimer]       = {}
+        self._joint_axis_map: dict[str, tuple[str, str]] = {}
+        self._joint_btns:     dict[str, QPushButton]     = {}
         self._frame_label: Optional[QLabel]     = None
         self._frame_combo: Optional[QComboBox]  = None
         self._setup_ui()
@@ -100,21 +110,73 @@ class RobotJogWidget(QFrame):
         root.addWidget(self._build_position_display())
         root.addWidget(self._build_divider())
 
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+                top: -1px;
+            }}
+            QTabBar::tab {{
+                background: {SECONDARY_BG};
+                color: {TEXT_COLOR};
+                padding: 6px 18px;
+                border: 1px solid {BORDER};
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QTabBar::tab:selected {{
+                background: {PRIMARY};
+                color: white;
+                border-color: {PRIMARY};
+            }}
+            QTabBar::tab:hover:!selected {{ background: {SECONDARY_HOVER}; }}
+        """)
+        self._tabs.addTab(self._build_cartesian_tab(), "Cartesian")
+        self._tabs.addTab(self._build_joint_tab(), "Joint")
+        root.addWidget(self._tabs, 1)
 
-        root.addWidget(self._build_slider_row("Linear Step", _LINEAR_STEPS, "mm", "_linear_slider", "_linear_label", 2))
-        root.addWidget(self._build_divider())
-        root.addLayout(self._build_linear_section())
-
-        root.addSpacing(12)  # ← gap between the two blocks
-        root.addWidget(self._build_divider())
-        root.addSpacing(4)
-
-        root.addWidget(
-            self._build_slider_row("Rotation Step", _ROTATION_STEPS, "°", "_rotation_slider", "_rotation_label", 2))
-        root.addWidget(self._build_divider())
-        root.addLayout(self._build_rotational_section())
         root.addWidget(self._build_divider())
         root.addLayout(self._build_bottom_row())
+
+    def _build_cartesian_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+        layout.setContentsMargins(4, 10, 4, 4)
+
+        layout.addWidget(self._build_slider_row(
+            "Linear Step", _LINEAR_STEPS, "mm", "_linear_slider", "_linear_label", 2))
+        layout.addWidget(self._build_divider())
+        layout.addLayout(self._build_linear_section())
+
+        layout.addSpacing(12)
+        layout.addWidget(self._build_divider())
+        layout.addSpacing(4)
+
+        layout.addWidget(self._build_slider_row(
+            "Rotation Step", _ROTATION_STEPS, "°", "_rotation_slider", "_rotation_label", 2))
+        layout.addWidget(self._build_divider())
+        layout.addLayout(self._build_rotational_section())
+        return page
+
+    def _build_joint_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+        layout.setContentsMargins(4, 10, 4, 4)
+
+        layout.addWidget(self._build_slider_row(
+            "Joint Step", _JOINT_STEPS, "°", "_joint_slider", "_joint_step_label", 3))
+        layout.addWidget(self._build_divider())
+        layout.addWidget(self._build_joint_position_display())
+        layout.addWidget(self._build_divider())
+        layout.addLayout(self._build_joint_section())
+        layout.addStretch(1)
+        return page
 
     def _build_position_display(self) -> QFrame:
         frame = QFrame()
@@ -159,6 +221,49 @@ class RobotJogWidget(QFrame):
         outer.addLayout(grid)
         return frame
 
+    def _build_joint_position_display(self) -> QFrame:
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: white;
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+            }}
+        """)
+        outer = QVBoxLayout(frame)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(6)
+
+        title = QLabel("Joint Positions")
+        title.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};")
+        outer.addWidget(title)
+
+        self._joint_pos_labels: dict[str, QLabel] = {}
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        grid.setHorizontalSpacing(8)
+
+        for i, name in enumerate(_JOINT_NAMES):
+            row, col = divmod(i, 3)
+
+            name_lbl = QLabel(f"{name}:")
+            name_lbl.setStyleSheet("font-size: 10px; font-weight: 600; color: #888;")
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+            val_lbl = QLabel("—")
+            val_lbl.setStyleSheet(
+                f"font-size: 11px; font-weight: 600; font-family: monospace;"
+                f" color: {TEXT_COLOR}; min-width: 62px;"
+            )
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+            grid.addWidget(name_lbl, row, col * 2)
+            grid.addWidget(val_lbl,  row, col * 2 + 1)
+            self._joint_pos_labels[name] = val_lbl
+
+        outer.addLayout(grid)
+        return frame
+
     def set_position(self, pos: list) -> None:
         if not pos or len(pos) < 6:
             for lbl in self._pos_labels.values():
@@ -166,6 +271,14 @@ class RobotJogWidget(QFrame):
             return
         for name, idx in _POS_AXES:
             self._pos_labels[name].setText(f"{pos[idx]:.3f}")
+
+    def set_joint_position(self, joints: list) -> None:
+        if not joints or len(joints) < len(_JOINT_NAMES):
+            for lbl in self._joint_pos_labels.values():
+                lbl.setText("—")
+            return
+        for i, name in enumerate(_JOINT_NAMES):
+            self._joint_pos_labels[name].setText(f"{joints[i]:.3f}")
 
     def set_frame_options(self, names: Sequence[object], default: Optional[str] = None) -> None:
         """Populate the frame selector combo box."""
@@ -394,6 +507,46 @@ class RobotJogWidget(QFrame):
         outer.addLayout(body)
         return outer
 
+    def _build_joint_section(self) -> QVBoxLayout:
+        outer = QVBoxLayout()
+        outer.setSpacing(10)
+
+        header = QLabel("Joints")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setStyleSheet(
+            f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR}; letter-spacing: 0.5px;"
+        )
+        outer.addWidget(header)
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+
+        for row, name in enumerate(_JOINT_NAMES):
+            name_lbl = QLabel(name)
+            name_lbl.setFixedWidth(34)
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            name_lbl.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {TEXT_COLOR};")
+
+            minus_btn = self._make_jog_btn(f"{name}−", primary=True)
+            plus_btn  = self._make_jog_btn(f"{name}+", primary=True)
+            minus_btn.setFixedSize(84, 44)
+            plus_btn.setFixedSize(84, 44)
+
+            key_minus = f"{name.lower()}_minus"
+            key_plus  = f"{name.lower()}_plus"
+            self._joint_btns[key_minus] = minus_btn
+            self._joint_btns[key_plus]  = plus_btn
+
+            grid.addWidget(name_lbl,  row, 0)
+            grid.addWidget(minus_btn, row, 1)
+            grid.addWidget(plus_btn,  row, 2)
+
+        outer.addLayout(grid)
+        return outer
+
     def _build_bottom_row(self) -> QHBoxLayout:
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -501,6 +654,19 @@ class RobotJogWidget(QFrame):
             btn.pressed.connect(partial(self._on_jog_press, key))
             btn.released.connect(partial(self._on_jog_release, key))
 
+        for name in _JOINT_NAMES:
+            for direction, suffix in (("Plus", "plus"), ("Minus", "minus")):
+                key = f"{name.lower()}_{suffix}"
+                self._joint_axis_map[key] = (name, direction)
+                timer = QTimer(self)
+                timer.setInterval(_JOG_INTERVAL_MS)
+                timer.timeout.connect(partial(self._perform_joint_jog, key))
+                self._joint_timers[key] = timer
+
+        for key, btn in self._joint_btns.items():
+            btn.pressed.connect(partial(self._on_joint_jog_press, key))
+            btn.released.connect(partial(self._on_joint_jog_release, key))
+
     # ── Slots ─────────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -527,3 +693,51 @@ class RobotJogWidget(QFrame):
             direction = "Minus" if direction == "Plus" else "Plus"
 
         self.jog_requested.emit("JOG_ROBOT", axis, direction, step)
+
+    def _on_joint_jog_press(self, key: str) -> None:
+        self.joint_jog_started.emit(key)
+        self._perform_joint_jog(key)
+        self._joint_timers[key].start()
+
+    def _on_joint_jog_release(self, key: str) -> None:
+        self._joint_timers[key].stop()
+        self.joint_jog_stopped.emit(key)
+
+    def _perform_joint_jog(self, key: str) -> None:
+        joint, direction = self._joint_axis_map[key]
+        step = _JOINT_STEPS[self._joint_slider.value()]
+        self.joint_jog_requested.emit("JOG_JOINT", joint, direction, step)
+
+
+if __name__ == "__main__":
+    import sys
+
+    from PyQt6.QtWidgets import QApplication, QMainWindow
+
+    app = QApplication(sys.argv)
+
+    widget = RobotJogWidget()
+    widget.jog_requested.connect(
+        lambda cmd, axis, direction, step: print(f"JOG: {cmd} {axis} {direction} {step}")
+    )
+    widget.jog_started.connect(lambda key: print(f"started: {key}"))
+    widget.jog_stopped.connect(lambda key: print(f"stopped: {key}"))
+    widget.frame_changed.connect(lambda name: print(f"frame changed: {name}"))
+
+    widget.joint_jog_requested.connect(
+        lambda cmd, joint, direction, step: print(f"JOINT JOG: {cmd} {joint} {direction} {step}")
+    )
+    widget.joint_jog_started.connect(lambda key: print(f"joint started: {key}"))
+    widget.joint_jog_stopped.connect(lambda key: print(f"joint stopped: {key}"))
+
+    widget.set_position([10.0, -20.5, 3.25, 0.0, 0.0, 90.0])
+    widget.set_joint_position([12.5, -45.0, 30.0, 0.0, 60.0, 0.0])
+    widget.set_frame_options(["World", ("Base", "BASE"), "Tool"], default="BASE")
+
+    window = QMainWindow()
+    window.setCentralWidget(widget)
+    window.setWindowTitle("RobotJogWidget — standalone test")
+    window.resize(520, 920)
+    window.show()
+
+    sys.exit(app.exec())

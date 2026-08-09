@@ -49,7 +49,7 @@
     "release_align_acc_percent": 70.0
   },
   "magazine_load": {
-    "enabled": false,
+    "enabled": true,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 100.0,
