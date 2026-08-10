@@ -17,6 +17,7 @@ class PaintDashboardConfig(DashboardConfig):
     bottom_section_height: int = 380
 
 
+
 PAINT_DASHBOARD_CARDS: list[CardConfig] = [
     CardConfig(card_id=1, label="Robot Status"),
     CardConfig(card_id=2, label="Vision Status"),

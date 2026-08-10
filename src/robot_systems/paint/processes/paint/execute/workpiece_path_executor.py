@@ -1985,6 +1985,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     waypoint_index
                     == len(pickup_plan.waypoints) - 1
             )
+            ends_pickup_align_group = (
+                    waypoint.label == "Aligning workpiece to paint axis"
+            )
+            is_pickup_contact = (
+                    waypoint.label == "Descending to pickup pose"
+            )
 
             segments.append(
                 {
@@ -1995,14 +2001,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     "acc": float(waypoint.acc_percent),
 
                     #
-                    # Blend all intermediate travel moves.
+                    # Do not blend through the actual pickup/contact pose.
+                    # Keep pickup/align and safe-travel/staging as distinct
+                    # ordered groups so later planning can overlap execution.
                     #
                     # The final one must currently stop because
                     # the following segment is type="path".
                     #
                     "blendR": (
                         0.0
-                        if is_last_pickup_waypoint
+                        if (
+                                is_last_pickup_waypoint
+                                or ends_pickup_align_group
+                                or is_pickup_contact
+                        )
                         else 20.0
                     ),
                 }
@@ -2122,6 +2134,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     waypoint_index
                     == len(pickup_plan.waypoints) - 1
             )
+            ends_pickup_align_group = (
+                    waypoint.label == "Aligning workpiece to paint axis"
+            )
+            is_pickup_contact = (
+                    waypoint.label == "Descending to pickup pose"
+            )
 
             segments.append(
                 {
@@ -2132,15 +2150,20 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     "acc": float(waypoint.acc_percent),
 
                     #
-                    # Blend calibration/safe-travel/staging moves
-                    # into one continuous group.
+                    # Do not blend through the actual pickup/contact pose.
+                    # Keep pickup/align and safe-travel/staging as distinct
+                    # ordered groups so later planning can overlap execution.
                     #
                     # The final waypoint must stop because the
                     # following segment is currently type="path".
                     #
                     "blendR": (
                         0.0
-                        if is_last_pickup_waypoint
+                        if (
+                                is_last_pickup_waypoint
+                                or ends_pickup_align_group
+                                or is_pickup_contact
+                        )
                         else 20.0
                     ),
                 }

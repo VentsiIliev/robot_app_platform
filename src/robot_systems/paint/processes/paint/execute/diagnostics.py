@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 
 import numpy as np
@@ -20,6 +21,10 @@ from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts impor
 from src.robot_systems.paint.timing import TimingRecorder
 
 _logger = logging.getLogger(__name__)
+_CART_PATH_DIAG_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="cart_path_diag",
+)
 
 
 def elapsed_s(start: float) -> float:
@@ -34,6 +39,21 @@ def path_length_mm(path: list[list[float]]) -> float:
 
 
 def _log_cartesian_command_path_diagnostics(command_path: list[list[float]]) -> None:
+    snapshot = [list(pose) for pose in command_path or []]
+    _CART_PATH_DIAG_EXECUTOR.submit(
+        _run_cartesian_command_path_diagnostics,
+        snapshot,
+    )
+
+
+def _run_cartesian_command_path_diagnostics(command_path: list[list[float]]) -> None:
+    try:
+        _log_cartesian_command_path_diagnostics_sync(command_path)
+    except Exception:
+        _logger.debug("[CART_PATH_DIAG] background diagnostics failed", exc_info=True)
+
+
+def _log_cartesian_command_path_diagnostics_sync(command_path: list[list[float]]) -> None:
     """Log final Cartesian command-path geometry without modifying the path.
 
     The goal is to distinguish an upstream Cartesian backtrack from an IK-only
