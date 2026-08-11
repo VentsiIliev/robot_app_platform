@@ -14,6 +14,7 @@
   "pickup_axis_alignment_sign_value": 1.0,
   "enable_vacuum_pump": false,
   "run_while_workpiece_found": false,
+  "pause_dashboard_live_view_after_capture": true,
   "apply_camera_to_tcp_for_pickup": true,
   "pickup_motion": {
     "approach_offset_mm": 100.0,

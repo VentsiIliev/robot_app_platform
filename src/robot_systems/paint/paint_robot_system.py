@@ -360,6 +360,8 @@ class PaintRobotSystem(BaseRobotSystem):
             paint_process_config_service=self._paint_process_config_service,
             magazine_load_service=self._paint_magazine_load_service,
             navigation_service=self._navigation,
+            vision_service=self._vision,
+            messaging_service=self._messaging_service,
         )
         self._main_process = PaintProcess(
             production_service=self._paint_production_service,

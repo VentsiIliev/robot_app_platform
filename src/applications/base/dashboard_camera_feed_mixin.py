@@ -33,6 +33,9 @@ class DashboardCameraFeedMixin:
         subscribe(VisionTopics.LATEST_IMAGE, self._on_dashboard_camera_frame_raw)
 
     def _on_dashboard_camera_frame_raw(self, message: object) -> None:
+        updates_enabled = getattr(self, "_dashboard_camera_feed_updates_enabled", None)
+        if callable(updates_enabled) and not bool(updates_enabled()):
+            return
         if isinstance(message, dict):
             image = message.get("image")
             if image is not None:

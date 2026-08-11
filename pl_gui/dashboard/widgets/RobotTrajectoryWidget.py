@@ -6,14 +6,8 @@ from collections import deque
 import cv2
 import numpy as np
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QFont, QImage, QPixmap, QPainter, QPainterPath, QColor
+from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QFrame, QSizePolicy
-
-# Purple identity shared with the web dashboard (purple-600 / purple-700)
-PURPLE_600 = "#6C4C9C"
-PURPLE_700 = "#5A3D87"
-PURPLE_BGR = (156, 76, 108)   # PURPLE_600 in OpenCV BGR order, for drawing on frames
-INK_900 = "#1E1B29"
 
 try:
     from ...core.IconLoader import LOGO, CAMERA_PREVIEW_PLACEHOLDER
@@ -239,70 +233,6 @@ def draw_smooth_trail(image, trajectory_points_with_breaks):
                     cv2.line(image, p1, p2, (255, 100, 255), 2, lineType=cv2.LINE_AA)
 
 
-def draw_diagnostics_overlay(image, fps: float, text_color=(230, 220, 245), bg_alpha=0.55):
-    """
-    Draws a small translucent strip in the bottom-left with fps and
-    resolution. Dev/debug aid only — not meant to be on by default for
-    an operator-facing view.
-    """
-    h, w = image.shape[:2]
-    label = f"{w}x{h}  |  {fps:4.1f} fps"
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.42
-    thickness = 1
-    (text_w, text_h), baseline = cv2.getTextSize(label, font, scale, thickness)
-
-    pad_x, pad_y = 10, 6
-    x0, y0 = 10, h - 10 - text_h - pad_y * 2
-    x1, y1 = x0 + text_w + pad_x * 2, h - 10
-
-    overlay = image.copy()
-    cv2.rectangle(overlay, (x0, y0), (x1, y1), (30, 24, 41), thickness=-1)
-    cv2.addWeighted(overlay, bg_alpha, image, 1 - bg_alpha, 0, dst=image)
-
-    cv2.putText(image, label, (x0 + pad_x, y1 - pad_y), font, scale,
-                text_color, thickness, lineType=cv2.LINE_AA)
-
-
-def draw_hud_frame(image, color=PURPLE_BGR, margin=10, arm=22, thickness=2):
-    """
-    Draws four corner brackets on the frame, matching the HUD framing
-    used on the web dashboard's camera panel. Purely cosmetic — signals
-    'this is a live tracked view' without adding any operator-facing text.
-    """
-    h, w = image.shape[:2]
-    corners = [
-        # (x, y, dx, dy) — dx/dy give the direction each arm extends
-        (margin, margin, 1, 1),                    # top-left
-        (w - margin, margin, -1, 1),                # top-right
-        (margin, h - margin, 1, -1),                 # bottom-left
-        (w - margin, h - margin, -1, -1),            # bottom-right
-    ]
-    for x, y, dx, dy in corners:
-        cv2.line(image, (x, y), (x + dx * arm, y), color, thickness, lineType=cv2.LINE_AA)
-        cv2.line(image, (x, y), (x, y + dy * arm), color, thickness, lineType=cv2.LINE_AA)
-
-
-def rounded_pixmap(pixmap: QPixmap, radius: int) -> QPixmap:
-    """Clips a pixmap to rounded corners so the live feed reads as a
-    finished card rather than a raw square of pixels."""
-    if pixmap.isNull():
-        return pixmap
-    size = pixmap.size()
-    rounded = QPixmap(size)
-    rounded.fill(Qt.GlobalColor.transparent)
-
-    painter = QPainter(rounded)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    path = QPainterPath()
-    path.addRoundedRect(0, 0, size.width(), size.height(), radius, radius)
-    painter.setClipPath(path)
-    painter.drawPixmap(0, 0, pixmap)
-    painter.end()
-    return rounded
-
-
 def load_logo_icon():
     if not LOGO or not os.path.exists(LOGO):
         return None
@@ -340,13 +270,6 @@ class RobotTrajectoryWidget(QWidget):
         self.current_frame = None
         self.trajectory_manager = TrajectoryManager(trail_length=trail_length)
 
-        # Optional diagnostics overlay (fps / resolution) — off by default,
-        # meant for dev/debug use, not for the operator-facing view.
-        self.show_diagnostics = False
-        self._frame_times = deque(maxlen=30)
-        self._last_frame_time = None
-        self._current_fps = 0.0
-
         self.init_ui()
 
         self.logo_icon = load_logo_icon()
@@ -372,11 +295,9 @@ class RobotTrajectoryWidget(QWidget):
         metrics_widget.setLayout(metrics_layout)
         metrics_widget.setVisible(False)
 
-        self.corner_radius = 14
-
         self.image_label = QLabel()
         self.image_label.setFixedSize(self.image_width, self.image_height)
-        self.image_label.setStyleSheet(f"border-radius: {self.corner_radius}px; background: {INK_900};")
+        self.image_label.setStyleSheet(IMAGE_LABEL_STYLE)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setScaledContents(False)
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -389,13 +310,7 @@ class RobotTrajectoryWidget(QWidget):
 
         container_frame = QFrame()
         container_frame.setLayout(container_layout)
-        container_frame.setStyleSheet(f"""
-            QFrame {{
-                background: {INK_900};
-                border: 1px solid {PURPLE_600};
-                border-radius: {self.corner_radius + 4}px;
-            }}
-        """)
+        container_frame.setStyleSheet(CONTAINER_FRAME_STYLE)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -452,11 +367,6 @@ class RobotTrajectoryWidget(QWidget):
         self.drawing_enabled = False
         self.trajectory_manager.clear_trail()
 
-    def set_diagnostics_visible(self, visible: bool) -> None:
-        """Toggle the fps/resolution overlay. Off by default — intended
-        for dev/debug sessions, not the operator-facing view."""
-        self.show_diagnostics = bool(visible)
-
     # ------------------------------------------------------------------ #
     #  Internal display update                                             #
     # ------------------------------------------------------------------ #
@@ -475,18 +385,6 @@ class RobotTrajectoryWidget(QWidget):
             except (IndexError, ValueError):
                 pass
 
-        draw_hud_frame(self.current_frame)
-
-        if self.show_diagnostics:
-            now = time.time()
-            if self._last_frame_time is not None:
-                self._frame_times.append(now - self._last_frame_time)
-            self._last_frame_time = now
-            if self._frame_times:
-                avg_dt = sum(self._frame_times) / len(self._frame_times)
-                self._current_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
-            draw_diagnostics_overlay(self.current_frame, self._current_fps)
-
         self._update_label_from_frame()
         self.trajectory_manager.update_count += 1
         self.estimated_metric.update_value(f"{self.estimated_time_value:.2f} s")
@@ -498,8 +396,7 @@ class RobotTrajectoryWidget(QWidget):
         rgb_image = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
         h, w, ch = rgb_image.shape
         q_image = QImage(rgb_image.data, w, h, ch * w, QImage.Format.Format_RGB888)
-        pixmap = QPixmap.fromImage(q_image)
-        self.image_label.setPixmap(rounded_pixmap(pixmap, self.corner_radius))
+        self.image_label.setPixmap(QPixmap.fromImage(q_image))
 
     def get_image_dimensions(self):
         return self.image_width, self.image_height
@@ -515,8 +412,6 @@ if __name__ == "__main__":
 
     app = QApplication([])
     widget = RobotTrajectoryWidget(image_width=800, image_height=450)
-    widget.enable_drawing()
-    widget.set_diagnostics_visible(True)  # dev/debug view — flip off for operator runs
     widget.show()
 
     def simulate_trajectory():

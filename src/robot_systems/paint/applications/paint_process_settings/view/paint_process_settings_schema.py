@@ -83,6 +83,7 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("General"), [
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
             _toggle("run_while_workpiece_found", "Run While Workpiece Found", True),
+            _toggle("pause_dashboard_live_view_after_capture", "Pause Dashboard Live View After Capture", True),
             _toggle("apply_camera_to_tcp_for_pickup", "Apply Camera-to-TCP Pickup Offset", True),
             _toggle("enable_z_shift_pixel_compensation", "Enable Z-Shift Pixel Compensation"),
         ]),

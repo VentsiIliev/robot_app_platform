@@ -11,6 +11,10 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import Dashb
 from src.robot_systems.paint.applications.dashboard.model.paint_dashboard_model import (
     PaintDashboardModel,
 )
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+    PaintDashboardLiveViewEvent,
+    PaintDashboardLiveViewTopics,
+)
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
@@ -96,6 +100,7 @@ class TestPaintDashboardController(unittest.TestCase):
             patch.object(PaintDashboardController, "_subscribe_dashboard_camera_feed") as sub_camera,
             patch.object(PaintDashboardController, "_subscribe_dashboard_process_state") as sub_process,
             patch.object(PaintDashboardController, "_subscribe_dashboard_robot_state") as sub_robot,
+            patch.object(PaintDashboardController, "_subscribe_dashboard_live_view_state") as sub_live_view,
             patch.object(PaintDashboardController, "_unsubscribe_all") as unsub_all,
         ):
             controller = PaintDashboardController(model, view, MagicMock())
@@ -105,6 +110,7 @@ class TestPaintDashboardController(unittest.TestCase):
             sub_camera.assert_called_once_with()
             sub_process.assert_called_once_with()
             sub_robot.assert_called_once_with()
+            sub_live_view.assert_called_once_with()
             view.apply_dashboard_state.assert_called_once_with(state)
             view.destroyed.connect.assert_called_once_with(controller.stop)
 
@@ -252,6 +258,45 @@ class TestPaintDashboardController(unittest.TestCase):
         controller._subscribe_dashboard_robot_state()
 
         controller._subscribe.assert_called_once_with(RobotTopics.STATE, controller._on_dashboard_robot_state_raw)
+
+    def test_subscribe_dashboard_live_view_state_uses_paint_live_view_topic(self) -> None:
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), self._make_view(), MagicMock())
+        controller._subscribe = MagicMock()
+
+        controller._subscribe_dashboard_live_view_state()
+
+        controller._subscribe.assert_called_once_with(
+            PaintDashboardLiveViewTopics.STATE,
+            controller._on_dashboard_live_view_state_raw,
+        )
+
+    def test_dashboard_live_view_state_freezes_capture_frame_and_blocks_live_updates(self) -> None:
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, MagicMock())
+        controller._active = True
+        controller._dashboard_camera_bridge = MagicMock()
+
+        controller._on_dashboard_live_view_state_raw(
+            PaintDashboardLiveViewEvent(paused=True, image="capture-frame")
+        )
+
+        self.assertFalse(controller._dashboard_camera_feed_updates_enabled())
+        controller._dashboard_camera_bridge.frame_ready.emit.assert_called_once_with({"image": "capture-frame"})
+
+        controller._on_dashboard_camera_frame_raw({"image": "live-frame"})
+        controller._dashboard_camera_bridge.frame_ready.emit.assert_called_once_with({"image": "capture-frame"})
+
+        controller._on_dashboard_live_view_state_raw(PaintDashboardLiveViewEvent(paused=False))
+
+        self.assertTrue(controller._dashboard_camera_feed_updates_enabled())
 
 
 if __name__ == "__main__":

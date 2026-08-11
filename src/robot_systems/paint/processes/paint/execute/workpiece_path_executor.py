@@ -1,3 +1,18 @@
+"""Paint workpiece process executor.
+
+This module is intentionally organized as a phase map while the executor is
+still being split into smaller collaborators:
+
+1. Runtime configuration and editor-facing API.
+2. Magazine pickup/release helpers.
+3. Shared pose/configuration resolvers.
+4. Preview and paint-contact path projection helpers.
+5. Pickup, ordered-motion, pause/resume, and vacuum helpers.
+6. Dropoff preparation/unwind helpers.
+7. Ordered full-cycle execution helpers.
+8. Top-level paint process orchestration.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -208,7 +223,13 @@ def _xz_ry_projection_rotation_sign(motion_plane: str, mirror_execution_rotation
 
 
 class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
-    """Execute prepared paint paths, including pickup, staging, and pivot painting."""
+    """Execute prepared paint paths from pickup through paint contact and dropoff.
+
+    The class remains the process facade. Phase-specific collaborators already
+    exist for pickup, paint contact, edge cleanup, and dropoff, while this file
+    still owns shared state, configuration refresh, ordered-chain assembly, and
+    process-level orchestration.
+    """
     def __init__(
         self,
         robot_service=None,
@@ -328,6 +349,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._active_execution_control = None
         self._ordered_chain_resume_start_index: int | None = None
         self._ordered_chain_interrupted_by_pause: bool = False
+
+    # -------------------------------------------------------------------------
+    # Runtime Configuration And Public Editor API
+    # -------------------------------------------------------------------------
+    # These methods are the public surface used by the workpiece editor plus the
+    # config refresh hooks needed before previewing or executing a process.
 
     def prepare_workpiece_execution_plan(self, workpiece: dict, skip_debug_plot: bool = False) -> WorkpieceExecutionPlan:
         """Build and cache the execution plan for a paint workpiece."""
@@ -488,6 +515,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if action_id != "paint_process":
             return False, f"Unsupported paint process action: {action_id}"
         return self.execute_paint_process(execution_plan)
+
+    # -------------------------------------------------------------------------
+    # Magazine Load / Calibration Release Phase
+    # -------------------------------------------------------------------------
+    # This path is used when a known pickup target is transferred directly to a
+    # release pose, separate from the full paint-contact process.
 
     @timed_step(_logger, "magazine_pickup_to_calibration_release")
     def execute_pickup_and_release_at_calibration(
@@ -755,6 +788,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         projected = start + t * segment
         return float(np.linalg.norm(point - projected))
 
+    # -------------------------------------------------------------------------
+    # Shared Pose And Settings Resolvers
+    # -------------------------------------------------------------------------
+    # Phase executors call back into these helpers to resolve movement-group
+    # poses, configured waypoint lists, safe-travel settings, and pivot offsets.
+
     @staticmethod
     def _read_provider_position(provider: Optional[Callable[[], Optional[list[float]]]]) -> Optional[list[float]]:
         """Read and normalize a movement-group position provider result."""
@@ -950,6 +989,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         except (TypeError, ValueError):
             return None
 
+    # -------------------------------------------------------------------------
+    # Editor Preview And Paint-Contact Projection Helpers
+    # -------------------------------------------------------------------------
+    # These methods project prepared workpiece paths into the configured pivot
+    # execution plane for editor previews and later robot command generation.
+
     def get_projected_pivot_paths(
         self,
         execution_plan: WorkpieceExecutionPlan,
@@ -1040,6 +1085,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     ) -> tuple[bool, str]:
         """Paint no longer supports direct/manual paint-contact path execution."""
         return False, "Direct paint path execution is not supported; use the paint process action"
+
+    # -------------------------------------------------------------------------
+    # Pickup And Ordered Non-Contact Motion Helpers
+    # -------------------------------------------------------------------------
+    # Pickup, magazine transfer, safe travel, and dropoff preparation all share
+    # these robot move wrappers and ordered-chain execution utilities.
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
     def _move_pickup_phase(self, label: str, pose: list[float], *, velocity: float, acceleration: float) -> bool:
@@ -1134,6 +1185,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False
         return True
 
+    # -------------------------------------------------------------------------
+    # Pause / Resume Support For Ordered Non-Contact Motion
+    # -------------------------------------------------------------------------
+    # Paint-contact path segments are protected. Non-contact ordered motion can
+    # be interrupted, then resumed from the current ordered-chain segment.
+
     def pause_current_execution(self) -> None:
         control = self._active_execution_control
         if control is not None and getattr(control, "in_protected_phase", lambda: False)():
@@ -1195,6 +1252,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             return False
         _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
         return self._wait_for_paint_resume(control)
+
+    # -------------------------------------------------------------------------
+    # Paint-Contact Command Pose Helpers
+    # -------------------------------------------------------------------------
+    # These adapt projected paint-contact geometry into robot command poses and
+    # add the retreat waypoint that moves the held part off the paint axis.
 
     def _paint_contact_staging_command_pose(self, pose: list[float], reference_pose: list[float]) -> list[float]:
         """Return the robot command pose for moving the held workpiece into XZ/RY pivot contact."""
@@ -1304,6 +1367,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         return path_with_retreat
 
+    # -------------------------------------------------------------------------
+    # Vacuum Boundary Helpers
+    # -------------------------------------------------------------------------
+    # Vacuum is intentionally centralized here because pickup, ordered chains,
+    # and dropoff all need to preserve the same enable/disable semantics.
+
     @timed_step(_logger, "vacuum_on")
     def _turn_vacuum_on(self) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
@@ -1331,6 +1400,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         if self._vacuum_pump.turn_off():
             return True, ""
         return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
+
+    # -------------------------------------------------------------------------
+    # Dropoff Preparation And Joint-6 Unwind Phase
+    # -------------------------------------------------------------------------
+    # These helpers prepare a safe route from paint contact/cleanup to the
+    # release strategy, including optional safe travel and Joint 6 unwind.
 
     @timed_step(_logger, "prepare_dropoff_unwind")
     def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:
@@ -1941,6 +2016,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
         return segments, final_pose
 
+    # -------------------------------------------------------------------------
+    # Ordered Full-Cycle Execution Helpers
+    # -------------------------------------------------------------------------
+    # These methods preplan pickup, paint contact, optional cleanup, and dropoff
+    # preparation into robot ordered-motion chains when the robot service
+    # supports them.
+
     def _try_execute_ordered_motion_cycle(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,
@@ -2245,6 +2327,12 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._last_process_end_pose = list(final_pose)
         return True, "", total_waypoints
 
+    # -------------------------------------------------------------------------
+    # Top-Level Paint Process Orchestration
+    # -------------------------------------------------------------------------
+    # This is the high-level phase runner. Keep detailed phase mechanics in the
+    # helpers above or the dedicated phase executors where possible.
+
     def execute_paint_process(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,
@@ -2453,6 +2541,10 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             recorder.log_summary(_logger, csv_path=csv_path)
             self._active_execution_control = previous_control
             return result
+
+    # -------------------------------------------------------------------------
+    # Process Control And Diagnostics
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def _wait_for_paint_resume(control) -> bool:

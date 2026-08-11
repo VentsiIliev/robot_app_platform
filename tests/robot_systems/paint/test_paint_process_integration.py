@@ -9,6 +9,7 @@ import numpy as np
 from src.engine.vision.i_capture_snapshot_service import VisionCaptureSnapshot
 from src.robot_systems.paint.component_ids import ProcessID
 from src.robot_systems.paint.processes.paint.config import PaintMagazineLoadConfig, PaintProcessConfig
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
 from src.robot_systems.paint.processes.paint.magazine_load.state import MagazineLoadState, MagazineLoadTransitions
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
@@ -61,6 +62,233 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._path_executor.execute_paint_process.assert_called_once()
         self.assertIs(service._path_executor.execute_paint_process.call_args.args[0], execution_plan)
         self.assertIsNotNone(service._path_executor.execute_paint_process.call_args.kwargs.get("control"))
+
+    def test_run_once_freezes_brightness_after_capture_when_auto_enabled(self):
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = True
+        events = []
+        service = self._make_service()
+        service._vision_service = vision
+        service._capture_snapshot_service.capture_snapshot.side_effect = (
+            lambda **_kwargs: events.append("capture") or VisionCaptureSnapshot(
+                frame="frame",
+                contours=[_square(2.0)],
+                source="paint_process",
+            )
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.side_effect = (
+            lambda *args, **kwargs: events.append("execute") or (True, "Paint completed")
+        )
+        vision.lock_auto_brightness_adjustment.side_effect = lambda: events.append("lock")
+        vision.unlock_auto_brightness_adjustment.side_effect = lambda: events.append("unlock")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        vision.lock_auto_brightness_adjustment.assert_called_once_with()
+        vision.unlock_auto_brightness_adjustment.assert_called_once_with()
+        self.assertEqual(["capture", "lock", "execute", "unlock"], events)
+        self.assertFalse(service._brightness_locked)
+
+    def test_run_once_restores_existing_brightness_lock_before_magazine_and_paint_capture(self):
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = True
+        config = PaintMagazineLoadConfig(enabled=True, camera_settle_s=0.0, release_settle_s=0.0)
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            run_while_workpiece_found=False,
+            magazine_load=config,
+        )
+        magazine_load = MagicMock()
+        events = []
+        magazine_load.load_to_calibration.side_effect = lambda *_args: events.append("magazine_load") or (True, "Loaded")
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=magazine_load,
+            vision_service=vision,
+        )
+        service._brightness_locked = True
+        service._capture_snapshot_service.capture_snapshot.side_effect = (
+            lambda **_kwargs: events.append("paint_capture") or VisionCaptureSnapshot(
+                frame="frame",
+                contours=[_square(2.0)],
+                source="paint_process",
+            )
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.side_effect = (
+            lambda *args, **kwargs: events.append("paint_execution") or (True, "Paint completed")
+        )
+        vision.unlock_auto_brightness_adjustment.side_effect = lambda: events.append("unlock")
+        vision.lock_auto_brightness_adjustment.side_effect = lambda: events.append("lock")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(
+            ["unlock", "magazine_load", "paint_capture", "lock", "paint_execution", "unlock"],
+            events,
+        )
+        self.assertEqual(2, vision.unlock_auto_brightness_adjustment.call_count)
+        vision.lock_auto_brightness_adjustment.assert_called_once_with()
+        self.assertFalse(service._brightness_locked)
+
+    def test_run_once_pauses_dashboard_live_view_after_paint_capture_until_cycle_finishes(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            magazine_load=None,
+            pause_dashboard_live_view_after_capture=True,
+        )
+        messaging = MagicMock()
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            messaging_service=messaging,
+        )
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="captured-frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        published = [
+            call.args[1]
+            for call in messaging.publish.call_args_list
+            if call.args[0] == PaintDashboardLiveViewTopics.STATE
+        ]
+        self.assertEqual([False, True, False], [event.paused for event in published])
+        self.assertIsNone(published[0].image)
+        self.assertEqual("captured-frame", published[1].image)
+        self.assertIsNone(published[2].image)
+
+    def test_run_once_keeps_dashboard_live_view_enabled_when_capture_pause_disabled(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            magazine_load=None,
+            pause_dashboard_live_view_after_capture=False,
+        )
+        messaging = MagicMock()
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            messaging_service=messaging,
+        )
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="captured-frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        published = [
+            call.args[1]
+            for call in messaging.publish.call_args_list
+            if call.args[0] == PaintDashboardLiveViewTopics.STATE
+        ]
+        self.assertEqual([False, False], [event.paused for event in published])
+        self.assertTrue(all(event.image is None for event in published))
+
+    def test_run_once_restores_brightness_when_no_contour_found(self):
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = True
+        service = self._make_service()
+        service._vision_service = vision
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[],
+            source="paint_process",
+        )
+
+        ok, msg = service.run_once()
+
+        self.assertFalse(ok)
+        self.assertEqual(msg, "No usable contour detected")
+        vision.lock_auto_brightness_adjustment.assert_called_once_with()
+        vision.unlock_auto_brightness_adjustment.assert_called_once_with()
+        service._workpiece_preparation.prepare_workpiece.assert_not_called()
+
+    def test_run_once_restores_brightness_after_execution_failure(self):
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = True
+        service = self._make_service()
+        service._vision_service = vision
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (False, "pump fault")
+
+        ok, msg = service.run_once()
+
+        self.assertFalse(ok)
+        self.assertEqual(msg, "Prepared workpiece: pump fault")
+        vision.lock_auto_brightness_adjustment.assert_called_once_with()
+        vision.unlock_auto_brightness_adjustment.assert_called_once_with()
+        self.assertFalse(service._brightness_locked)
+
+    def test_run_once_skips_brightness_lock_when_vision_missing(self):
+        service = self._make_service()
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertFalse(service._brightness_locked)
+
+    def test_run_once_skips_brightness_lock_when_auto_disabled(self):
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = False
+        service = self._make_service()
+        service._vision_service = vision
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared workpiece")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        vision.lock_auto_brightness_adjustment.assert_not_called()
+        vision.unlock_auto_brightness_adjustment.assert_not_called()
+        self.assertFalse(service._brightness_locked)
 
     def test_pause_current_phase_requests_path_executor_pause(self):
         service = self._make_service()

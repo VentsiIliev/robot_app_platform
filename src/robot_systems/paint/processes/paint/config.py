@@ -241,6 +241,8 @@ class PaintProcessConfig:
     enable_vacuum_pump: bool = True
     # Repeat production cycles until the active source no longer yields a workpiece.
     run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
+    # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.
+    pause_dashboard_live_view_after_capture: bool = True  # [LIVE SETTINGS]
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.

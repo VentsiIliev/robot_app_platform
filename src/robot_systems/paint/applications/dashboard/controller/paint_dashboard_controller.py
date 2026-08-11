@@ -14,6 +14,7 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
     PaintDashboardView,
 )
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
@@ -40,6 +41,7 @@ class PaintDashboardController(
         self._view = view
         self._broker = broker
         self._active = False
+        self._dashboard_live_view_paused = False
         self._workers: list[tuple[QThread, _Worker]] = []
         timer_parent = self._view if isinstance(self._view, QObject) else None
         self._status_timer = QTimer(timer_parent)
@@ -58,6 +60,7 @@ class PaintDashboardController(
         self._subscribe_dashboard_camera_feed()
         self._subscribe_dashboard_process_state()
         self._subscribe_dashboard_robot_state()
+        self._subscribe_dashboard_live_view_state()
         self._view.apply_dashboard_state(self._model.load())
         if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
             self._status_timer.start()
@@ -86,6 +89,21 @@ class PaintDashboardController(
 
     def _subscribe_dashboard_robot_state(self) -> None:
         self._subscribe(RobotTopics.STATE, self._on_dashboard_robot_state_raw)
+
+    def _subscribe_dashboard_live_view_state(self) -> None:
+        self._subscribe(PaintDashboardLiveViewTopics.STATE, self._on_dashboard_live_view_state_raw)
+
+    def _on_dashboard_live_view_state_raw(self, event: object) -> None:
+        self._dashboard_live_view_paused = bool(getattr(event, "paused", False))
+        if not self._dashboard_live_view_paused:
+            return
+        image = getattr(event, "image", None)
+        if image is None or not self._view_ok():
+            return
+        self._dashboard_camera_bridge.frame_ready.emit({"image": image})
+
+    def _dashboard_camera_feed_updates_enabled(self) -> bool:
+        return not self._dashboard_live_view_paused
 
     def _on_dashboard_robot_state_raw(self, _event: object) -> None:
         if not self._active:

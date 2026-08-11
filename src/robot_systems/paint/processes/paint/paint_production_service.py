@@ -6,6 +6,10 @@ from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
+    PaintDashboardLiveViewEvent,
+    PaintDashboardLiveViewTopics,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
@@ -25,6 +29,8 @@ class PaintProductionService:
         paint_process_config_service=None,
         magazine_load_service=None,
         navigation_service=None,
+        vision_service=None,
+        messaging_service=None,
     ) -> None:
         """Store the services needed to capture, prepare, plan, and execute one paint cycle."""
         self._workpiece_preparation = workpiece_preparation_service
@@ -35,6 +41,9 @@ class PaintProductionService:
         self._paint_process_config_service = paint_process_config_service
         self._magazine_load_service = magazine_load_service
         self._navigation_service = navigation_service
+        self._vision_service = vision_service
+        self._messaging_service = messaging_service
+        self._brightness_locked = False
         self._paint_control = PaintExecutionControl()
 
     def pause_current_phase(self) -> None:
@@ -183,6 +192,8 @@ class PaintProductionService:
     ) -> tuple[bool, str]:
         total_start = perf_counter()
 
+        self._set_dashboard_live_view_paused(False, reason="paint cycle started")
+        self._restore_brightness_for_capture("before magazine load")
         if magazine_config is not None:
             phase_start = perf_counter()
             ok, msg = self._magazine_load_service.load_to_calibration(magazine_config, should_stop)
@@ -192,50 +203,101 @@ class PaintProductionService:
             if should_stop():
                 return False, "Paint process stopped"
 
+        self._restore_brightness_for_capture("before paint capture")
         phase_start = perf_counter()
         snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_process")
         self._log_phase_timing("paint_capture", phase_start, contour_count=len(snapshot.contours or []), cycle=cycle_index)
         if should_stop():
             return False, "Paint process stopped"
 
-        contour = pick_largest_contour(snapshot.contours)
-        if contour is None:
-            return False, "No usable contour detected"
-
-        phase_start = perf_counter()
-        raw_workpiece, description = self._workpiece_preparation.prepare_workpiece(contour, snapshot.frame)
-        self._log_phase_timing("workpiece_preparation", phase_start, cycle=cycle_index)
-        if should_stop():
-            return False, "Paint process stopped"
-
-        phase_start = perf_counter()
-        try:
-            execution_plan = self._path_preparation_service.build_execution_plan(
-                raw_workpiece,
-                skip_debug_plot=not self._path_debug_plots_enabled(),
+        if self._pause_dashboard_live_view_after_capture():
+            self._set_dashboard_live_view_paused(
+                True,
+                image=snapshot.frame,
+                reason="paint capture completed",
             )
-        except Exception as exc:
-            _logger.exception("Paint production plan generation failed")
-            return False, f"Plan generation failed: {exc}"
-        self._log_phase_timing("path_preparation", phase_start, cycle=cycle_index)
-
-        if should_stop():
-            return False, "Paint process stopped"
-
-        phase_start = perf_counter()
-        execute_process = getattr(self._path_executor, "execute_paint_process", None)
-        if execute_process is None:
-            execute_process = self._path_executor.execute_pickup_and_paint
+        self._freeze_brightness_after_capture()
         try:
-            ok, msg = execute_process(execution_plan, control=self._paint_control)
-        except TypeError:
-            ok, msg = execute_process(execution_plan)
-        self._log_phase_timing("paint_execution", phase_start, success=ok, cycle=cycle_index)
-        if not ok:
-            return False, f"{description}: {msg}"
+            contour = pick_largest_contour(snapshot.contours)
+            if contour is None:
+                return False, "No usable contour detected"
 
-        self._log_phase_timing("run_once_total", total_start, success=True, cycle=cycle_index)
-        return True, f"{description}: {msg}"
+            phase_start = perf_counter()
+            raw_workpiece, description = self._workpiece_preparation.prepare_workpiece(contour, snapshot.frame)
+            self._log_phase_timing("workpiece_preparation", phase_start, cycle=cycle_index)
+            if should_stop():
+                return False, "Paint process stopped"
+
+            phase_start = perf_counter()
+            try:
+                execution_plan = self._path_preparation_service.build_execution_plan(
+                    raw_workpiece,
+                    skip_debug_plot=not self._path_debug_plots_enabled(),
+                )
+            except Exception as exc:
+                _logger.exception("Paint production plan generation failed")
+                return False, f"Plan generation failed: {exc}"
+            self._log_phase_timing("path_preparation", phase_start, cycle=cycle_index)
+
+            if should_stop():
+                return False, "Paint process stopped"
+
+            phase_start = perf_counter()
+            execute_process = getattr(self._path_executor, "execute_paint_process", None)
+            if execute_process is None:
+                execute_process = self._path_executor.execute_pickup_and_paint
+            try:
+                ok, msg = execute_process(execution_plan, control=self._paint_control)
+            except TypeError:
+                ok, msg = execute_process(execution_plan)
+            self._log_phase_timing("paint_execution", phase_start, success=ok, cycle=cycle_index)
+            if not ok:
+                return False, f"{description}: {msg}"
+
+            self._log_phase_timing("run_once_total", total_start, success=True, cycle=cycle_index)
+            return True, f"{description}: {msg}"
+        finally:
+            self._restore_brightness()
+            self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
+
+    def _freeze_brightness_after_capture(self) -> None:
+        """Freeze auto-brightness after the workpiece capture so exposure stays stable while painting.
+
+        Mirrors the robot-calibration pattern (lock_auto_brightness_adjustment); the
+        lock is restored by _restore_brightness() in the cycle's finally block.
+        """
+        vision = self._vision_service
+        if vision is None:
+            return
+        try:
+            if not vision.get_auto_brightness_enabled():
+                return
+            vision.lock_auto_brightness_adjustment()
+            self._brightness_locked = True
+            _logger.info("Freezing auto brightness adjustment after workpiece capture")
+        except Exception:
+            _logger.exception("Failed to freeze auto brightness adjustment after capture")
+
+    def _restore_brightness(self) -> None:
+        """Restore adaptive auto brightness after the paint cycle finishes."""
+        if not self._brightness_locked:
+            return
+        self._brightness_locked = False
+        vision = self._vision_service
+        if vision is None:
+            return
+        try:
+            vision.unlock_auto_brightness_adjustment()
+            _logger.info("Restoring adaptive auto brightness adjustment after paint cycle")
+        except Exception:
+            _logger.exception("Failed to restore auto brightness adjustment after paint cycle")
+
+    def _restore_brightness_for_capture(self, reason: str) -> None:
+        """Resume auto-brightness before camera captures that need fresh correction."""
+        if not self._brightness_locked:
+            return
+        _logger.info("Restoring adaptive auto brightness adjustment %s", reason)
+        self._restore_brightness()
 
     def _get_process_config(self) -> tuple[bool, str, object | None]:
         config_service = self._paint_process_config_service
@@ -279,6 +341,38 @@ class PaintProductionService:
         except Exception:
             _logger.debug("Failed to read path debug plot setting", exc_info=True)
             return False
+
+    def _pause_dashboard_live_view_after_capture(self) -> bool:
+        config_service = self._paint_process_config_service
+        if config_service is None:
+            return True
+        try:
+            return bool(getattr(config_service.get_snapshot(), "pause_dashboard_live_view_after_capture", True))
+        except Exception:
+            _logger.debug("Failed to read dashboard live-view setting", exc_info=True)
+            return True
+
+    def _set_dashboard_live_view_paused(
+        self,
+        paused: bool,
+        *,
+        image: object | None = None,
+        reason: str = "",
+    ) -> None:
+        messaging = self._messaging_service
+        if messaging is None:
+            return
+        try:
+            messaging.publish(
+                PaintDashboardLiveViewTopics.STATE,
+                PaintDashboardLiveViewEvent(
+                    paused=bool(paused),
+                    image=image,
+                    reason=reason,
+                ),
+            )
+        except Exception:
+            _logger.exception("Failed to publish paint dashboard live-view state")
 
     @staticmethod
     def _log_phase_timing(label: str, started_at: float, **fields: object) -> None:
