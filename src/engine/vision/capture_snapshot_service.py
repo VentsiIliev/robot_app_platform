@@ -30,11 +30,15 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         active_work_area_validator: Optional[
             Callable[[str, Optional[list[float]]], tuple[bool, str]]
         ] = None,
+        active_work_area_retry_timeout_s: float = 0.0,
+        active_work_area_retry_interval_s: float = 0.1,
     ) -> None:
         self._vision = vision_service
         self._robot = robot_service
         self._work_area_service = work_area_service
         self._active_work_area_validator = active_work_area_validator
+        self._active_work_area_retry_timeout_s = max(0.0, float(active_work_area_retry_timeout_s))
+        self._active_work_area_retry_interval_s = max(0.01, float(active_work_area_retry_interval_s))
 
     def capture_snapshot(self, source: str = "") -> VisionCaptureSnapshot:
         started = time.perf_counter()
@@ -45,7 +49,7 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         robot_pose_elapsed = time.perf_counter() - robot_pose_started
 
         validate_started = time.perf_counter()
-        self._validate_active_work_area(source, robot_pose)
+        robot_pose = self._validate_active_work_area(source, robot_pose)
         validate_elapsed = time.perf_counter() - validate_started
 
         vision_elapsed = 0.0
@@ -104,9 +108,9 @@ class CaptureSnapshotService(ICaptureSnapshotService):
         self,
         source: str,
         robot_pose: Optional[list[float]],
-    ) -> None:
+    ) -> Optional[list[float]]:
         if self._work_area_service is None or self._active_work_area_validator is None:
-            return
+            return robot_pose
         try:
             active_area_id = str(self._work_area_service.get_active_area_id() or "").strip()
         except Exception as exc:
@@ -123,9 +127,29 @@ class CaptureSnapshotService(ICaptureSnapshotService):
                 f"Active work area '{active_area_id}' is not verified. "
                 "Move the robot to the capture position from the platform before capturing."
             )
-        ok, message = self._active_work_area_validator(active_area_id, robot_pose)
-        if not ok:
-            detail = message or f"Robot is not verified at active work area '{active_area_id}'."
-            raise ActiveWorkAreaVerificationError(
-                f"Vision capture blocked for {source or 'unknown source'}: {detail}"
-            )
+        deadline = time.perf_counter() + self._active_work_area_retry_timeout_s
+        last_message = ""
+        candidate_pose = robot_pose
+        attempts = 0
+        while True:
+            attempts += 1
+            ok, message = self._active_work_area_validator(active_area_id, candidate_pose)
+            if ok:
+                if attempts > 1:
+                    _logger.info(
+                        "Active work area '%s' verified after %d pose validation attempts for source=%s",
+                        active_area_id,
+                        attempts,
+                        source,
+                    )
+                return candidate_pose
+            last_message = message
+            if time.perf_counter() >= deadline:
+                break
+            time.sleep(self._active_work_area_retry_interval_s)
+            candidate_pose = self._capture_robot_pose(source)
+
+        detail = last_message or f"Robot is not verified at active work area '{active_area_id}'."
+        raise ActiveWorkAreaVerificationError(
+            f"Vision capture blocked for {source or 'unknown source'}: {detail}"
+        )

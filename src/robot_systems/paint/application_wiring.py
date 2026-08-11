@@ -249,6 +249,8 @@ def _build_capture_snapshot_service(robot_system):
             area_id,
             robot_pose,
         ),
+        active_work_area_retry_timeout_s=1.0,
+        active_work_area_retry_interval_s=0.1,
     )
 
 
