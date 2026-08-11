@@ -17,7 +17,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintToDropoffSafeTravelConfig,
 )
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_execute_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     execute_magazine_pickup_release,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (

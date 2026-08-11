@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 
 
 def execute_magazine_pickup_release(*args, **kwargs):
-    from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_execute_pickup_release_handler import (
+    from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
         execute_magazine_pickup_release as _execute_magazine_pickup_release,
     )
 

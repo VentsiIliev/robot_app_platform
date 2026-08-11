@@ -4,10 +4,10 @@ import logging
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     execute_dropoff_preparation_for_executor,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.motion_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     finish_paint_motion,
     set_paint_result,
     wait_or_guard,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.guards import guard_control
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState

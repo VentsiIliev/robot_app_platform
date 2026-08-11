@@ -8,7 +8,7 @@ from typing import Protocol
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _resolve_dropoff_align_pose,
     _should_release_at_current_dropoff_pose,
 )

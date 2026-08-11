@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.guards import guard_control
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 

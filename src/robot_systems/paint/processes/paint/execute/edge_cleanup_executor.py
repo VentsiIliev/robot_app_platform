@@ -14,7 +14,7 @@ from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     execute_paint_trajectory_with_optional_trace,
     path_length_mm,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _resolve_dropoff_align_pose,
     _resolve_dropoff_safe_travel_waypoints,
     _should_prepare_dropoff_align_before_unwind,

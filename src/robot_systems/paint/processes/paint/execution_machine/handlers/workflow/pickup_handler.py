@@ -8,13 +8,13 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_pickup_segments,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.motion_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     fail_paint_motion,
     finish_paint_motion,
     start_paint_motion_if_needed,
     wait_or_guard,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     build_ordered_dropoff_preparation_segments,
     _resolve_dropoff_safe_travel_waypoints,
 )

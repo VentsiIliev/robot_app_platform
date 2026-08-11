@@ -1,73 +1,73 @@
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.calibration_wait_camera_settle_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.calibration_wait_camera_settle_handler import (
     handle_calibration_wait_camera_settle,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.capture_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.capture_handler import (
     handle_capture_workpiece,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.completed_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.completed_handler import (
     handle_completed,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handler import (
     handle_dropoff,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.edge_cleanup_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.edge_cleanup_handler import (
     handle_edge_cleanup,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.error_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.error_handler import (
     handle_error,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.execution_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.execution_handler import (
     handle_execute_paint,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.idle_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.idle_handler import (
     handle_idle,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_capture_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_capture_handler import (
     handle_magazine_capture,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_execute_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     handle_magazine_execute_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load_compat_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_compat_handler import (
     handle_magazine_load,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_move_to_calibration_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_calibration_handler import (
     handle_magazine_move_to_calibration,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_move_to_magazine_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler import (
     handle_magazine_move_to_magazine,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_prepare_pickup_release_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_prepare_pickup_release_handler import (
     handle_magazine_prepare_pickup_release,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_wait_camera_settle_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_wait_camera_settle_handler import (
     handle_magazine_wait_camera_settle,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.paint_contact_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.paint_contact_handler import (
     handle_paint_contact,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.pause_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.pause_handler import (
     handle_paused,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.pickup_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
     handle_pickup,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.plan_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.plan_handler import (
     handle_build_execution_plan,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.preparation_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.preparation_handler import (
     handle_prepare_workpiece,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.prepare_dropoff_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.prepare_dropoff_handler import (
     handle_prepare_dropoff,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.post_return_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.post_return_handler import (
     handle_post_return,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.startup_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.startup_handler import (
     handle_starting,
 )
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.stopped_handler import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.lifecycle.stopped_handler import (
     handle_stopped,
 )
 

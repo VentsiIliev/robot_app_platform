@@ -5,7 +5,7 @@ from time import perf_counter
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.motion_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     finish_paint_motion,
     post_return_failure_result,
     set_paint_result,

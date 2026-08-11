@@ -4,7 +4,7 @@ import logging
 
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
-from src.robot_systems.paint.processes.paint.execution_machine.handlers.motion_handlers import (
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     fail_paint_motion,
     finish_paint_motion,
     wait_or_guard,
