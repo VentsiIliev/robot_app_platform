@@ -17,10 +17,14 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintToDropoffSafeTravelConfig,
 )
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_execute_pickup_release_handler import (
+    execute_magazine_pickup_release,
+)
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
 from src.robot_systems.paint.processes.paint.execute.dropoff_executor import _poses_close
+from src.robot_systems.paint.processes.paint.execute.pickup_executor import build_paint_pickup_segments
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     PickupTransferPlan,
@@ -54,6 +58,57 @@ class TestNormalizePivotConfig(unittest.TestCase):
         self.assertEqual("x", config.translation_axis)
         self.assertEqual("negative", config.paint_side)
         self.assertEqual("forward", config.translation_direction)
+
+    def test_paint_pickup_segments_stop_only_after_descend_and_at_staging(self):
+        waypoints = [
+            SimpleNamespace(
+                label="Moving to pickup approach pose",
+                pose=[1, 2, 3, 4, 5, 6],
+                vel_percent=11,
+                acc_percent=21,
+            ),
+            SimpleNamespace(
+                label="Descending to pickup pose",
+                pose=[1, 2, 0, 4, 5, 6],
+                vel_percent=12,
+                acc_percent=22,
+            ),
+            SimpleNamespace(
+                label="Lifting from pickup pose",
+                pose=[1, 2, 3, 4, 5, 6],
+                vel_percent=13,
+                acc_percent=23,
+            ),
+            SimpleNamespace(
+                label="Aligning workpiece to paint axis",
+                pose=[1, 2, 4, 4, 5, 6],
+                vel_percent=14,
+                acc_percent=24,
+            ),
+            SimpleNamespace(
+                label="Safe travel waypoint 1",
+                pose=[2, 2, 4, 4, 5, 6],
+                vel_percent=15,
+                acc_percent=25,
+            ),
+            SimpleNamespace(
+                label="Moving to staging offset before first pivot contact pose",
+                pose=[3, 2, 4, 4, 5, 6],
+                vel_percent=16,
+                acc_percent=26,
+            ),
+        ]
+
+        segments = build_paint_pickup_segments(waypoints)
+
+        self.assertEqual(
+            ["ptp", "linear", "ptp", "ptp", "ptp", "ptp"],
+            [segment["type"] for segment in segments],
+        )
+        self.assertEqual(
+            [20.0, 0.0, 20.0, 20.0, 20.0, 0.0],
+            [segment["blendR"] for segment in segments],
+        )
 
 
 class TestPaintPathRotationHelpers(unittest.TestCase):
@@ -140,7 +195,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertFalse(executor._paint_contact.execute.call_args.kwargs["execute_robot"])
         robot_service.execute_ordered_motion_chain.assert_called_once()
         segments = robot_service.execute_ordered_motion_chain.call_args.args[0]
-        self.assertEqual(["linear", "linear", "path"], [segment["type"] for segment in segments])
+        self.assertEqual(["ptp", "ptp", "path"], [segment["type"] for segment in segments])
         self.assertEqual(command_path, segments[-1]["path"])
         self.assertEqual("paint_contact_1:Path", segments[-1]["label"])
         self.assertTrue(segments[-1]["protected"])
@@ -200,7 +255,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertTrue(ok, msg)
         self.assertEqual(2, robot_service.execute_ordered_motion_chain.call_count)
         retry_segments = robot_service.execute_ordered_motion_chain.call_args_list[1].args[0]
-        self.assertEqual(["linear", "path"], [segment["type"] for segment in retry_segments])
+        self.assertEqual(["ptp", "path"], [segment["type"] for segment in retry_segments])
         self.assertEqual("Moving to staging offset before first pivot contact pose", retry_segments[0]["label"])
 
     def test_pause_current_execution_stops_non_protected_ordered_segment(self):
@@ -245,8 +300,8 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         )
 
         executor._refresh_paint_process_config_snapshot()
-        on_ok, on_msg = executor._turn_vacuum_on()
-        off_ok, off_msg = executor._turn_vacuum_off()
+        on_ok, on_msg = executor._motion.turn_vacuum_on()
+        off_ok, off_msg = executor._motion.turn_vacuum_off()
 
         self.assertTrue(on_ok)
         self.assertEqual("", on_msg)
@@ -277,9 +332,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             motion_plan=transfer_plan,
             vacuum_on_before_moves=True,
         )
-        executor._turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
-        executor._move_pickup_phase = MagicMock(return_value=True)
+        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
+        executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
         ok, msg = executor.execute_pickup_and_release_at_position(
             _execution_plan({"execution_path": [[0, 0, 0, 0, 0, 0]], "pickup_xy": [1, 2]}),
@@ -289,9 +344,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertTrue(ok, msg)
         self.assertEqual("Workpiece transferred to CALIBRATION", msg)
-        executor._turn_vacuum_on.assert_called_once()
-        executor._turn_vacuum_off.assert_called_once()
-        executor._move_pickup_phase.assert_not_called()
+        executor._motion.turn_vacuum_on.assert_called_once()
+        executor._motion.turn_vacuum_off.assert_called_once()
+        executor._motion.move_pickup_phase.assert_not_called()
         self.assertEqual(
             [
                 "vacuum_on",
@@ -305,7 +360,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             events,
         )
 
-    def test_execute_pickup_target_and_release_at_position_uses_direct_target_without_plan(self):
+    def test_execute_magazine_pickup_release_uses_direct_target_without_plan(self):
         events = []
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
@@ -322,11 +377,12 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             robot_service=robot_service,
             paint_process_config_service=config_service,
         )
-        executor._turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
-        executor._move_pickup_phase = MagicMock(return_value=True)
+        executor._motion.turn_vacuum_on = MagicMock(side_effect=lambda: events.append("vacuum_on") or (True, ""))
+        executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
-        ok, msg = executor.execute_pickup_target_and_release_at_position(
+        ok, msg = execute_magazine_pickup_release(
+            SimpleNamespace(_path_executor=executor),
             pickup_xy=(11.0, 22.0),
             pickup_rz=33.0,
             pickup_base_pose=[0.0, 0.0, 0.0, 180.0, 5.0, 0.0],
@@ -340,7 +396,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         expected_pickup_z = 100.0 + 7.0 + PAINT_PROCESS_CONFIG.pickup_motion.contact_offset_mm
         expected_approach_z = expected_pickup_z + PAINT_PROCESS_CONFIG.pickup_motion.approach_offset_mm
         expected_lift_z = expected_pickup_z + PAINT_PROCESS_CONFIG.pickup_motion.initial_lift_clearance_mm
-        executor._move_pickup_phase.assert_not_called()
+        executor._motion.move_pickup_phase.assert_not_called()
         robot_service.execute_ordered_motion_chain.assert_called_once()
         segments = robot_service.execute_ordered_motion_chain.call_args.kwargs["segments"]
         self.assertEqual(
@@ -377,11 +433,12 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             robot_service=robot_service,
             paint_process_config_service=config_service,
         )
-        executor._turn_vacuum_on = MagicMock(return_value=(True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
-        executor._move_pickup_phase = MagicMock(return_value=True)
+        executor._motion.turn_vacuum_on = MagicMock(return_value=(True, ""))
+        executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
-        ok, msg = executor.execute_pickup_target_and_release_at_position(
+        ok, msg = execute_magazine_pickup_release(
+            SimpleNamespace(_path_executor=executor),
             pickup_xy=(11.0, 22.0),
             pickup_rz=33.0,
             pickup_base_pose=[0.0, 0.0, 0.0, 180.0, 5.0, 0.0],
@@ -414,7 +471,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         result = {}
 
         def _run():
-            result["ok"] = executor._move_ordered_pickup_sequence("resume test", segments)
+            result["ok"] = executor._motion.move_ordered_pickup_sequence("resume test", segments)
 
         control.request_pause()
         thread = threading.Thread(target=_run)
@@ -434,7 +491,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         retry_segments = robot_service.execute_ordered_motion_chain.call_args_list[1].kwargs["segments"]
         self.assertEqual(["second"], [segment["label"] for segment in retry_segments])
 
-    def test_execute_pickup_target_and_release_at_position_fails_without_ordered_chain(self):
+    def test_execute_magazine_pickup_release_fails_without_ordered_chain(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
             magazine_load=PaintMagazineLoadConfig(
@@ -448,11 +505,12 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
             robot_service=robot_service,
             paint_process_config_service=config_service,
         )
-        executor._turn_vacuum_on = MagicMock(return_value=(True, ""))
-        executor._turn_vacuum_off = MagicMock(return_value=(True, ""))
-        executor._move_pickup_phase = MagicMock(return_value=True)
+        executor._motion.turn_vacuum_on = MagicMock(return_value=(True, ""))
+        executor._motion.turn_vacuum_off = MagicMock(return_value=(True, ""))
+        executor._motion.move_pickup_phase = MagicMock(return_value=True)
 
-        ok, msg = executor.execute_pickup_target_and_release_at_position(
+        ok, msg = execute_magazine_pickup_release(
+            SimpleNamespace(_path_executor=executor),
             pickup_xy=(11.0, 22.0),
             pickup_rz=33.0,
             pickup_base_pose=[0.0, 0.0, 0.0, 180.0, 5.0, 0.0],
@@ -463,9 +521,9 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
 
         self.assertFalse(ok)
         self.assertEqual("Ordered motion chain is unavailable", msg)
-        executor._turn_vacuum_on.assert_not_called()
-        executor._turn_vacuum_off.assert_not_called()
-        executor._move_pickup_phase.assert_not_called()
+        executor._motion.turn_vacuum_on.assert_not_called()
+        executor._motion.turn_vacuum_off.assert_not_called()
+        executor._motion.move_pickup_phase.assert_not_called()
 
     def test_get_projected_pivot_paths_skips_jobs_without_paths_and_applies_offsets(self):
         executor = PaintWorkpiecePathExecutor(
@@ -887,7 +945,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         executor = PaintWorkpiecePathExecutor(robot_service=robot_service)
         pose = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
 
-        result = executor._move_pickup_phase(
+        result = executor._motion.move_pickup_phase(
             "test move",
             pose,
             velocity=PAINT_PROCESS_CONFIG.pickup_motion.approach_vel_percent,

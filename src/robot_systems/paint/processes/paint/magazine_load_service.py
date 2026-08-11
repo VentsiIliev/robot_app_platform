@@ -109,12 +109,16 @@ class PaintMagazineLoadService:
         *,
         velocity: float,
         acceleration: float,
+        motion_type: str | None = None,
+        blendR: float | None = None,
     ) -> bool:
         ok = self._navigation.move_to_group(
             group_name,
             wait_cancelled=context.motion_cancel_requested,
             velocity=velocity,
             acceleration=acceleration,
+            motion_type=motion_type,
+            blendR=blendR,
         )
         if ok:
             context.resume_retry_available = False
@@ -135,6 +139,8 @@ class PaintMagazineLoadService:
             wait_cancelled=context.motion_cancel_requested,
             velocity=velocity,
             acceleration=acceleration,
+            motion_type=motion_type,
+            blendR=blendR,
         )
 
     def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:

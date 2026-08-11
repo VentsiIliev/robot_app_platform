@@ -97,6 +97,11 @@ class TestMovementGroupWidgetLoad(unittest.TestCase):
         w.load(MovementGroup(acceleration=50))
         self.assertEqual(int(w._acceleration_spin.value()), 50)
 
+    def test_load_sets_motion_type(self):
+        w = self._single()
+        w.load(MovementGroup(motion_type="linear"))
+        self.assertEqual(w._motion_type_combo.currentData(), "linear")
+
     def test_load_sets_position_display_for_single(self):
         w = self._single()
         w.load(MovementGroup(position="[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]"))
@@ -146,6 +151,11 @@ class TestMovementGroupWidgetGetValues(unittest.TestCase):
         w = MovementGroupWidget(MovementGroupDef("H", MovementGroupType.SINGLE_POSITION))
         w.load(MovementGroup(acceleration=60))
         self.assertEqual(w.get_values().acceleration, 60)
+
+    def test_get_values_motion_type(self):
+        w = MovementGroupWidget(MovementGroupDef("H", MovementGroupType.SINGLE_POSITION))
+        w.load(MovementGroup(motion_type="linear"))
+        self.assertEqual(w.get_values().motion_type, "linear")
 
     def test_get_values_position(self):
         w = MovementGroupWidget(MovementGroupDef("H", MovementGroupType.SINGLE_POSITION))

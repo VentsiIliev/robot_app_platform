@@ -15,10 +15,16 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         process_config_service: IPaintProcessConfigService,
         dropoff_group_provider: Callable[[], object | None] | None = None,
         current_position_provider: Callable[[], list[float] | None] | None = None,
+        robot_service_provider: Callable[[], object | None] | None = None,
+        robot_tool: int = 0,
+        robot_user: int = 0,
     ):
         self._process_config_service = process_config_service
         self._dropoff_group_provider = dropoff_group_provider
         self._current_position_provider = current_position_provider
+        self._robot_service_provider = robot_service_provider
+        self._robot_tool = int(robot_tool)
+        self._robot_user = int(robot_user)
 
     def load_settings(self) -> PaintProcessConfig:
         return self._process_config_service.get_snapshot()
@@ -76,3 +82,61 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         except (TypeError, ValueError):
             return None
         return values if len(values) >= 6 else None
+
+    def move_to_waypoint(self, waypoint: dict) -> bool:
+        if self._robot_service_provider is None:
+            return False
+        try:
+            robot = self._robot_service_provider()
+        except Exception:
+            return False
+        if robot is None:
+            return False
+        normalized = self._normalize_waypoint(waypoint)
+        if normalized is None:
+            return False
+        position = normalized["position"]
+        vel = normalized["vel_percent"]
+        acc = normalized["acc_percent"]
+        if normalized["motion_type"] == "linear":
+            move = getattr(robot, "move_linear", None)
+            if not callable(move):
+                return False
+            return bool(move(position, self._robot_tool, self._robot_user, vel, acc, normalized["blendR"], True))
+        move = getattr(robot, "move_ptp", None)
+        if not callable(move):
+            return False
+        return bool(move(position, self._robot_tool, self._robot_user, vel, acc, True))
+
+    @staticmethod
+    def _normalize_waypoint(value: object) -> dict | None:
+        if isinstance(value, dict):
+            raw_position = value.get("position", value.get("pose", []))
+        else:
+            raw_position = value
+        try:
+            position = [float(item) for item in list(raw_position)[:6]]
+        except (TypeError, ValueError):
+            return None
+        if len(position) < 6:
+            return None
+        try:
+            vel = float(value.get("vel_percent", 50.0)) if isinstance(value, dict) else 50.0
+            acc = float(value.get("acc_percent", 20.0)) if isinstance(value, dict) else 20.0
+            blend_r = float(value.get("blendR", value.get("blend_r", 0.0))) if isinstance(value, dict) else 0.0
+        except (TypeError, ValueError):
+            return None
+        if not 0.0 <= vel <= 100.0 or not 0.0 <= acc <= 100.0 or blend_r < 0.0:
+            return None
+        motion_type = "ptp"
+        if isinstance(value, dict):
+            candidate = str(value.get("motion_type", value.get("type", "ptp"))).strip().lower()
+            if candidate in {"ptp", "linear"}:
+                motion_type = candidate
+        return {
+            "position": position,
+            "vel_percent": vel,
+            "acc_percent": acc,
+            "motion_type": motion_type,
+            "blendR": blend_r,
+        }

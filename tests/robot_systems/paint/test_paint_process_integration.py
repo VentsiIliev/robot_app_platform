@@ -2,7 +2,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import ANY, MagicMock
+from unittest.mock import ANY, MagicMock, patch
 
 import numpy as np
 
@@ -670,10 +670,6 @@ class TestPaintMagazineLoadService(unittest.TestCase):
         preparation = MagicMock()
         path_preparation = MagicMock()
         executor = MagicMock()
-        executor.execute_pickup_target_and_release_at_position.return_value = (
-            True,
-            "Workpiece transferred to paint work area center",
-        )
         resolver = MagicMock()
         resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
         resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
@@ -687,16 +683,20 @@ class TestPaintMagazineLoadService(unittest.TestCase):
             work_area_service=work_area_service,
         )
 
-        ok, msg = service.load_to_calibration(
-            PaintMagazineLoadConfig(
-                enabled=True,
-                move_to_magazine_vel_percent=17.0,
-                move_to_magazine_acc_percent=18.0,
-                camera_settle_s=0.0,
-                release_settle_s=0.0,
-            ),
-            stop_requested=lambda: False,
-        )
+        with patch(
+            "src.robot_systems.paint.processes.paint.magazine_load.handlers.execute_magazine_pickup_release",
+            return_value=(True, "Workpiece transferred to paint work area center"),
+        ) as execute_transfer:
+            ok, msg = service.load_to_calibration(
+                PaintMagazineLoadConfig(
+                    enabled=True,
+                    move_to_magazine_vel_percent=17.0,
+                    move_to_magazine_acc_percent=18.0,
+                    camera_settle_s=0.0,
+                    release_settle_s=0.0,
+                ),
+                stop_requested=lambda: False,
+            )
 
         self.assertTrue(ok, msg)
         self.assertEqual("Magazine contour: Workpiece transferred to paint work area center", msg)
@@ -711,7 +711,8 @@ class TestPaintMagazineLoadService(unittest.TestCase):
         work_area_service.get_work_area.assert_called_once_with("paint")
         preparation.prepare_workpiece.assert_not_called()
         path_preparation.build_execution_plan.assert_not_called()
-        executor.execute_pickup_target_and_release_at_position.assert_called_once_with(
+        execute_transfer.assert_called_once_with(
+            service,
             pickup_xy=ANY,
             pickup_rz=ANY,
             pickup_base_pose=[0, 0, 30, 180, 0, 0],
@@ -720,7 +721,7 @@ class TestPaintMagazineLoadService(unittest.TestCase):
             release_label="paint work area center",
             resume_from_current_pose=False,
         )
-        pickup_xy = executor.execute_pickup_target_and_release_at_position.call_args.kwargs["pickup_xy"]
+        pickup_xy = execute_transfer.call_args.kwargs["pickup_xy"]
         self.assertAlmostEqual(1.5, pickup_xy[0])
         self.assertAlmostEqual(1.5, pickup_xy[1])
         navigation.mark_group_observed_area_verified.assert_called_once_with("CALIBRATION")
@@ -774,10 +775,6 @@ class TestPaintMagazineLoadService(unittest.TestCase):
             source="paint_magazine_load",
         )
         executor = MagicMock()
-        executor.execute_pickup_target_and_release_at_position.return_value = (
-            True,
-            "Workpiece transferred to paint work area center",
-        )
         resolver = MagicMock()
         resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
         resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
@@ -792,32 +789,36 @@ class TestPaintMagazineLoadService(unittest.TestCase):
         )
         result = {}
 
-        thread = threading.Thread(
-            target=lambda: result.update(
-                value=service.load_to_calibration(
-                    PaintMagazineLoadConfig(
-                        enabled=True,
-                        camera_settle_s=0.0,
-                        release_settle_s=0.0,
-                    ),
-                    stop_requested=lambda: False,
+        with patch(
+            "src.robot_systems.paint.processes.paint.magazine_load.handlers.execute_magazine_pickup_release",
+            return_value=(True, "Workpiece transferred to paint work area center"),
+        ):
+            thread = threading.Thread(
+                target=lambda: result.update(
+                    value=service.load_to_calibration(
+                        PaintMagazineLoadConfig(
+                            enabled=True,
+                            camera_settle_s=0.0,
+                            release_settle_s=0.0,
+                        ),
+                        stop_requested=lambda: False,
+                    )
                 )
             )
-        )
-        thread.start()
-        self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
+            thread.start()
+            self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
 
-        service.pause_current_load()
-        self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
-        for _ in range(100):
-            if service.get_control_snapshot().get("current_state") == "PAUSED":
-                break
-            time.sleep(0.01)
-        self.assertEqual("PAUSED", service.get_control_snapshot().get("current_state"))
-        self.assertEqual(1, navigation.stop_motion_calls)
+            service.pause_current_load()
+            self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
+            for _ in range(100):
+                if service.get_control_snapshot().get("current_state") == "PAUSED":
+                    break
+                time.sleep(0.01)
+            self.assertEqual("PAUSED", service.get_control_snapshot().get("current_state"))
+            self.assertEqual(1, navigation.stop_motion_calls)
 
-        service.resume_current_load()
-        thread.join(timeout=2.0)
+            service.resume_current_load()
+            thread.join(timeout=2.0)
 
         self.assertFalse(thread.is_alive())
         self.assertEqual((True, "Magazine contour: Workpiece transferred to paint work area center"), result["value"])
@@ -876,10 +877,6 @@ class TestPaintMagazineLoadService(unittest.TestCase):
             source="paint_magazine_load",
         )
         executor = MagicMock()
-        executor.execute_pickup_target_and_release_at_position.return_value = (
-            True,
-            "Workpiece transferred to paint work area center",
-        )
         resolver = MagicMock()
         resolver.registry.by_name.side_effect = lambda name: SimpleNamespace(name=name, offset_x=0.0, offset_y=0.0)
         resolver.resolve.side_effect = lambda request, _point, frame="": SimpleNamespace(
@@ -895,30 +892,34 @@ class TestPaintMagazineLoadService(unittest.TestCase):
         service._wait_after_pause_resume = lambda _context: True
         result = {}
 
-        thread = threading.Thread(
-            target=lambda: result.update(
-                value=service.load_to_calibration(
-                    PaintMagazineLoadConfig(
-                        enabled=True,
-                        camera_settle_s=0.0,
-                        release_settle_s=0.0,
-                    ),
-                    stop_requested=lambda: False,
+        with patch(
+            "src.robot_systems.paint.processes.paint.magazine_load.handlers.execute_magazine_pickup_release",
+            return_value=(True, "Workpiece transferred to paint work area center"),
+        ):
+            thread = threading.Thread(
+                target=lambda: result.update(
+                    value=service.load_to_calibration(
+                        PaintMagazineLoadConfig(
+                            enabled=True,
+                            camera_settle_s=0.0,
+                            release_settle_s=0.0,
+                        ),
+                        stop_requested=lambda: False,
+                    )
                 )
             )
-        )
-        thread.start()
-        self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
+            thread.start()
+            self.assertTrue(navigation.entered_first_move.wait(timeout=1.0))
 
-        service.pause_current_load()
-        self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
-        for _ in range(100):
-            if service.get_control_snapshot().get("current_state") == "PAUSED":
-                break
-            time.sleep(0.01)
+            service.pause_current_load()
+            self.assertTrue(navigation.cancelled_first_move.wait(timeout=1.0))
+            for _ in range(100):
+                if service.get_control_snapshot().get("current_state") == "PAUSED":
+                    break
+                time.sleep(0.01)
 
-        service.resume_current_load()
-        thread.join(timeout=2.0)
+            service.resume_current_load()
+            thread.join(timeout=2.0)
 
         self.assertFalse(thread.is_alive())
         self.assertEqual((True, "Magazine contour: Workpiece transferred to paint work area center"), result["value"])

@@ -18,3 +18,6 @@ class IPaintProcessSettingsService(ABC):
 
     @abstractmethod
     def get_current_robot_position(self) -> list[float] | None: ...
+
+    @abstractmethod
+    def move_to_waypoint(self, waypoint: dict) -> bool: ...

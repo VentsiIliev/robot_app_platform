@@ -14,6 +14,7 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
         self._settings = initial_settings or PAINT_PROCESS_CONFIG
         self._dropoff_movement_group_configured = bool(dropoff_movement_group_configured)
         self._current_position = list(current_position or [0.0, 0.0, 200.0, 180.0, 0.0, 0.0])
+        self.last_moved_waypoint: dict | None = None
 
     def load_settings(self) -> PaintProcessConfig:
         return self._settings
@@ -32,3 +33,8 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
 
     def get_current_robot_position(self) -> list[float] | None:
         return list(self._current_position)
+
+    def move_to_waypoint(self, waypoint: dict) -> bool:
+        self.last_moved_waypoint = dict(waypoint)
+        print(f"Stub: Move to paint safe travel waypoint {waypoint}")
+        return True

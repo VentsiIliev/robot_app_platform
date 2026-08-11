@@ -122,8 +122,6 @@ class TestPaintNavigationService(unittest.TestCase):
             [1.0, 2.0, 15.5, 4.0, 5.0, 6.0],
             "HOME",
             wait_cancelled=None,
-            velocity=None,
-            acceleration=None,
         )
         work_area_service.set_active_area_id.assert_called_once_with("pickup")
 
@@ -171,6 +169,8 @@ class TestPaintNavigationService(unittest.TestCase):
             wait_cancelled=None,
             velocity=30.0,
             acceleration=40.0,
+            motion_type="ptp",
+            blendR=0.0,
         )
         work_area_service.set_active_area_id.assert_called_once_with("paint")
 
@@ -207,6 +207,8 @@ class TestPaintNavigationService(unittest.TestCase):
             wait_cancelled=None,
             velocity=30.0,
             acceleration=40.0,
+            motion_type="ptp",
+            blendR=0.0,
         )
 
     def test_get_group_position_returns_none_on_lookup_or_parse_failure(self):
@@ -272,8 +274,6 @@ class TestPaintNavigationService(unittest.TestCase):
             [1.0, 2.0, 5.5],
             "A",
             wait_cancelled=None,
-            velocity=None,
-            acceleration=None,
         )
 
     def test_set_area_falls_back_to_vision_when_work_area_service_missing(self):

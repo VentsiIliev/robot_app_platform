@@ -8,6 +8,10 @@ from typing import Protocol
 from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+    _resolve_dropoff_align_pose,
+    _should_release_at_current_dropoff_pose,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -30,6 +34,8 @@ class DropoffWaypoint:
     pose: list[float] | None
     vel_percent: float
     acc_percent: float
+    motion_type: str = "ptp"
+    blendR: float = 0.0
     release_here: bool = False
 
 
@@ -57,7 +63,7 @@ class PickupOriginDropoffStrategy:
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         dropoff = owner._paint_process_config().dropoff
-        if getattr(owner, "_should_release_at_current_dropoff_pose", lambda: False)():
+        if _should_release_at_current_dropoff_pose(owner):
             return DropoffPlan(
                 strategy_name=self.name,
                 waypoints=(
@@ -66,6 +72,8 @@ class PickupOriginDropoffStrategy:
                         pose=None,
                         vel_percent=dropoff.release_align_vel_percent,
                         acc_percent=dropoff.release_align_acc_percent,
+                        motion_type=dropoff.release_align_motion_type,
+                        blendR=dropoff.release_align_blendR,
                         release_here=True,
                     ),
                 ),
@@ -79,6 +87,8 @@ class PickupOriginDropoffStrategy:
                     pose=None,
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
             )
@@ -89,6 +99,8 @@ class PickupOriginDropoffStrategy:
                     pose=list(plan.align_pose),
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
             )
@@ -103,7 +115,7 @@ class MovementGroupDropoffStrategy:
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         dropoff = owner._paint_process_config().dropoff
         group_id = "Dropoff"
-        pose = owner._resolve_dropoff_align_pose()
+        pose = _resolve_dropoff_align_pose(owner)
         if pose is None:
             _logger.info("[DROPOFF] movement_group has no configured pose for group '%s'", group_id)
             return DropoffPlan(strategy_name=self.name, waypoints=())
@@ -115,6 +127,8 @@ class MovementGroupDropoffStrategy:
                     pose=pose,
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
                     release_here=True,
                 ),
             ),
@@ -171,11 +185,13 @@ class PaintDropoffExecutor:
                         "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
                         waypoint.label,
                     )
-                elif not self._owner._move_pickup_phase(
+                elif not self._owner._motion.move_pickup_phase(
                     waypoint.label,
                     list(waypoint.pose),
                     velocity=waypoint.vel_percent,
                     acceleration=waypoint.acc_percent,
+                    motion_type=waypoint.motion_type,
+                    blendR=waypoint.blendR,
                 ):
                     _logger.info(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -188,7 +204,7 @@ class PaintDropoffExecutor:
                     return False, f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release"
 
             if waypoint.release_here:
-                ok, msg = self._owner._turn_vacuum_off()
+                ok, msg = self._owner._motion.turn_vacuum_off()
                 if not ok:
                     _logger.info(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",

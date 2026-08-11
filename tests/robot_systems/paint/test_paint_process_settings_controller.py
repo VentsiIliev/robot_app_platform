@@ -5,6 +5,7 @@ from src.engine.robot.configuration.robot_settings import MovementGroup
 from src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller import (
     PaintProcessSettingsController,
 )
+from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
 from src.robot_systems.paint.applications.paint_process_settings.service.paint_process_settings_application_service import (
     PaintProcessSettingsApplicationService,
 )
@@ -48,6 +49,49 @@ class _FakeView:
 
 
 class TestPaintProcessSettingsController(unittest.TestCase):
+    def test_motion_profile_tables_round_trip_type_and_blendr(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["pickup_motion_profiles"] = [
+            {
+                "key": "approach",
+                "vel_percent": 33,
+                "acc_percent": 44,
+                "motion_type": "linear",
+                "blendR": 12.5,
+            }
+        ]
+        flat["cleanup_motion_profiles"] = [
+            {
+                "key": "cleanup",
+                "vel_percent": 55,
+                "acc_percent": 66,
+                "motion_type": "ptp",
+                "blendR": 7.0,
+            }
+        ]
+        flat["navigation_motion_profiles"] = [
+            {
+                "key": "calibration_move",
+                "vel_percent": 22,
+                "acc_percent": 23,
+                "motion_type": "linear",
+                "blendR": 4.5,
+            }
+        ]
+
+        mapped = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        round_tripped = PaintProcessSettingsMapper.to_flat_dict(mapped)
+
+        self.assertEqual(mapped.pickup_motion.approach_motion_type, "linear")
+        self.assertEqual(mapped.pickup_motion.approach_blendR, 12.5)
+        self.assertEqual(mapped.edge_cleanup.motion_type, "ptp")
+        self.assertEqual(mapped.edge_cleanup.blendR, 7.0)
+        self.assertEqual(mapped.navigation_return.calibration_move_motion_type, "linear")
+        self.assertEqual(mapped.navigation_return.calibration_move_blendR, 4.5)
+        self.assertEqual(round_tripped["pickup_motion_profiles"][0]["motion_type"], "linear")
+        self.assertEqual(round_tripped["navigation_motion_profiles"][0]["blendR"], 4.5)
+
     def test_save_rejects_movement_group_strategy_when_dropoff_group_is_not_configured(self):
         model = _FakeModel(
             dropoff_configured=False,
@@ -152,6 +196,38 @@ class TestPaintProcessSettingsApplicationService(unittest.TestCase):
         )
 
         self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], service.get_current_robot_position())
+
+    def test_move_to_waypoint_dispatches_motion_type_with_robot_tool_and_user(self):
+        robot = MagicMock()
+        robot.move_linear.return_value = True
+        robot.move_ptp.return_value = True
+        service = PaintProcessSettingsApplicationService(
+            process_config_service=MagicMock(),
+            robot_service_provider=lambda: robot,
+            robot_tool=3,
+            robot_user=4,
+        )
+
+        linear = {
+            "position": ["1", 2, 3, 4, 5, 6],
+            "vel_percent": "70",
+            "acc_percent": "30",
+            "motion_type": "linear",
+            "blendR": "12.5",
+        }
+        ptp = {
+            "position": [7, 8, 9, 10, 11, 12],
+            "vel_percent": 50,
+            "acc_percent": 20,
+            "motion_type": "ptp",
+            "blendR": 99,
+        }
+
+        self.assertTrue(service.move_to_waypoint(linear))
+        self.assertTrue(service.move_to_waypoint(ptp))
+
+        robot.move_linear.assert_called_once_with([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 4, 70.0, 30.0, 12.5, True)
+        robot.move_ptp.assert_called_once_with([7.0, 8.0, 9.0, 10.0, 11.0, 12.0], 3, 4, 50.0, 20.0, True)
 
 
 if __name__ == "__main__":

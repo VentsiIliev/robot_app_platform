@@ -110,6 +110,7 @@ class TestPaintProcessConfig(unittest.TestCase):
 
         self.assertFalse(flat["magazine_load_enabled"])
         self.assertTrue(flat["run_while_workpiece_found"])
+        self.assertTrue(flat["enable_execution_state_timing"])
         self.assertEqual(0.5, flat["magazine_camera_settle_s"])
         self.assertEqual(0.5, flat["magazine_release_settle_s"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
@@ -122,6 +123,7 @@ class TestPaintProcessConfig(unittest.TestCase):
                 **flat,
                 "magazine_load_enabled": True,
                 "run_while_workpiece_found": False,
+                "enable_execution_state_timing": False,
                 "magazine_camera_settle_s": 0.25,
                 "magazine_release_settle_s": 0.75,
                 "magazine_move_to_magazine_vel_percent": 11.0,
@@ -134,6 +136,7 @@ class TestPaintProcessConfig(unittest.TestCase):
 
         self.assertTrue(restored.magazine_load.enabled)
         self.assertFalse(restored.run_while_workpiece_found)
+        self.assertFalse(restored.enable_execution_state_timing)
         self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
         self.assertEqual(0.75, restored.magazine_load.release_settle_s)
         self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
@@ -263,6 +266,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         safe_travel_groups = [group for group in process if group.title == "Safe Travel"]
 
         self.assertIn("run_while_workpiece_found", keys)
+        self.assertIn("enable_execution_state_timing", keys)
         self.assertIn("magazine_load_enabled", keys)
         self.assertIn("magazine_camera_settle_s", keys)
         self.assertIn("magazine_release_settle_s", keys)
@@ -433,8 +437,8 @@ class TestPaintProcessConfig(unittest.TestCase):
             _paint_contact_command_path=MagicMock(
                 side_effect=lambda path: [list(pose) for pose in path]
             ),
-            _append_contact_retreat_waypoint=MagicMock(
-                side_effect=lambda path: [list(pose) for pose in path]
+            _paint_start_staging_offset_pose=MagicMock(
+                side_effect=lambda pose: list(pose)
             ),
         )
         execution_plan = SimpleNamespace(

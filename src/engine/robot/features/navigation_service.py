@@ -30,6 +30,8 @@ class NavigationService:
         wait_cancelled: Callable[[], bool] | None = None,
         velocity: float | None = None,
         acceleration: float | None = None,
+        motion_type: str | None = None,
+        blendR: float | None = None,
     ) -> bool:
         try:
             config = self._get_robot_config()
@@ -38,13 +40,15 @@ class NavigationService:
             if position is None:
                 self._logger.error("Group '%s' has no position configured", group_name)
                 return False
-            return self._motion.move_ptp(
+            return self._move_position_with_group_motion_type(
                 position=list(position),
+                group=group,
                 tool=config.robot_tool,
                 user=config.robot_user,
-                velocity=velocity if velocity is not None else group.velocity,
-                acceleration=acceleration if acceleration is not None else group.acceleration,
-                wait_to_reach=True,
+                velocity=velocity,
+                acceleration=acceleration,
+                motion_type=motion_type,
+                blendR=blendR,
                 wait_cancelled=wait_cancelled,
             )
         except Exception:
@@ -118,20 +122,71 @@ class NavigationService:
         wait_cancelled: Callable[[], bool] | None = None,
         velocity: float | None = None,
         acceleration: float | None = None,
+        motion_type: str | None = None,
+        blendR: float | None = None,
     ) -> bool:
         """Move to an explicit position using the velocity/acceleration of the named group."""
         try:
             config = self._get_robot_config()
             group  = self._get_group(group_name)
-            return self._motion.move_ptp(
-                position=position,
+            return self._move_position_with_group_motion_type(
+                position=list(position),
+                group=group,
                 tool=config.robot_tool,
                 user=config.robot_user,
-                velocity=velocity if velocity is not None else group.velocity,
-                acceleration=acceleration if acceleration is not None else group.acceleration,
-                wait_to_reach=True,
+                velocity=velocity,
+                acceleration=acceleration,
+                motion_type=motion_type,
+                blendR=blendR,
                 wait_cancelled=wait_cancelled,
             )
         except Exception:
             self._logger.exception("move_to_position (group='%s') failed", group_name)
             return False
+
+    def _move_position_with_group_motion_type(
+        self,
+        *,
+        position: list,
+        group,
+        tool: int,
+        user: int,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+        motion_type: str | None = None,
+        blendR: float | None = None,
+        wait_cancelled: Callable[[], bool] | None = None,
+    ) -> bool:
+        vel = velocity if velocity is not None else group.velocity
+        acc = acceleration if acceleration is not None else group.acceleration
+        resolved_motion_type = self._normalize_motion_type(motion_type) if motion_type is not None else self._group_motion_type(group)
+        blend_r = max(0.0, float(blendR)) if blendR is not None else 0.0
+        if resolved_motion_type == "linear":
+            return self._motion.move_linear(
+                position=position,
+                tool=tool,
+                user=user,
+                velocity=vel,
+                acceleration=acc,
+                blendR=blend_r,
+                wait_to_reach=True,
+                wait_cancelled=wait_cancelled,
+            )
+        return self._motion.move_ptp(
+            position=position,
+            tool=tool,
+            user=user,
+            velocity=vel,
+            acceleration=acc,
+            wait_to_reach=True,
+            wait_cancelled=wait_cancelled,
+        )
+
+    @staticmethod
+    def _group_motion_type(group) -> str:
+        return NavigationService._normalize_motion_type(getattr(group, "motion_type", "ptp"))
+
+    @staticmethod
+    def _normalize_motion_type(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear"} else "ptp"

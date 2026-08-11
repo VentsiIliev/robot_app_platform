@@ -25,28 +25,40 @@ class PickupMotionConfig:
     # Move from the current robot pose to the pickup approach pose.
     approach_vel_percent: float = 60.0  # [LIVE SETTINGS]
     approach_acc_percent: float = 50.0  # [LIVE SETTINGS]
+    approach_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    approach_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Controlled final descent from approach height to pickup contact.
     descend_vel_percent: float = 60.0  # [LIVE SETTINGS]
     descend_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    descend_motion_type: str = "linear"  # [LIVE SETTINGS]
+    descend_blendR: float = 0.0  # [LIVE SETTINGS]
 
     # Lift away from pickup contact, then align to the paint start orientation.
     lift_align_vel_percent: float = 80.0  # [LIVE SETTINGS]
     lift_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    lift_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    lift_align_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Change from pickup/table plane orientation to paint plane orientation.
     change_plane_vel_percent: float = 80.0  # [LIVE SETTINGS]
     change_plane_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    change_plane_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    change_plane_blendR: float = 20.0  # [LIVE SETTINGS]
     # Combine change-plane orientation with the first pivot-contact translation.
     combine_change_plane_with_first_contact: bool = True
 
     # Optional intermediate staging poses between change-plane and pivot contact.
     stage_transition_vel_percent: float = 50.0  # [LIVE SETTINGS]
     stage_transition_acc_percent: float = 20.0  # [LIVE SETTINGS]
+    stage_transition_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    stage_transition_blendR: float = 20.0  # [LIVE SETTINGS]
 
     # Move into the first pivot contact pose.
     first_contact_vel_percent: float = 80.0  # [LIVE SETTINGS]
     first_contact_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    first_contact_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    first_contact_blendR: float = 0.0  # [LIVE SETTINGS]
 
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
@@ -61,6 +73,8 @@ class PaintEdgeCleanupConfig:
     # XY/RZ cleanup motion after XZ/RY paint; separate from paint and unwind speeds.
     vel_percent: float = 80.0  # [LIVE SETTINGS]
     acc_percent: float = 60.0  # [LIVE SETTINGS]
+    motion_type: str = "linear"  # [LIVE SETTINGS]
+    blendR: float = 0.0  # [LIVE SETTINGS]
     # Cleanup uses the prepared contour; approach/retreat transitions use this spacing.
     spacing_mm: float = 3.0  # [LIVE SETTINGS]
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
@@ -77,6 +91,8 @@ class PaintDropoffConfig:
     strategy: str = "pickup_origin"
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    release_align_blendR: float = 0.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)
@@ -88,8 +104,12 @@ class PaintMagazineLoadConfig:
     calibration_group_id: str = "CALIBRATION"
     move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]
     move_to_magazine_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    move_to_magazine_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    move_to_magazine_blendR: float = 0.0  # [LIVE SETTINGS]
     transfer_to_calibration_vel_percent: float = 30.0  # [LIVE SETTINGS]
     transfer_to_calibration_acc_percent: float = 30.0  # [LIVE SETTINGS]
+    transfer_to_calibration_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    transfer_to_calibration_blendR: float = 0.0  # [LIVE SETTINGS]
     camera_settle_s: float = 0.5
     release_settle_s: float = 0.5
 
@@ -126,6 +146,8 @@ class PaintNavigationReturnConfig:
     # Explicit navigation move to the calibration movement group pose.
     calibration_move_vel_percent: float = 30.0  # [LIVE SETTINGS]
     calibration_move_acc_percent: float = 40.0  # [LIVE SETTINGS]
+    calibration_move_motion_type: str = "ptp"  # [LIVE SETTINGS]
+    calibration_move_blendR: float = 0.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)
@@ -241,6 +263,8 @@ class PaintProcessConfig:
     enable_vacuum_pump: bool = True
     # Repeat production cycles until the active source no longer yields a workpiece.
     run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
+    # Log one end-of-cycle timing table for every paint execution state.
+    enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
     # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.
     pause_dashboard_live_view_after_capture: bool = True  # [LIVE SETTINGS]
     # Applies the configured camera-to-TCP pickup offset only for legacy camera-target pickup plans.

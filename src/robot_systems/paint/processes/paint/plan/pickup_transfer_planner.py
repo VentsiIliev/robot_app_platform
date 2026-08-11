@@ -58,8 +58,10 @@ class PaintPickupTransferPlanner:
         with timed_block(_logger, "pickup_plan_build", label="refresh_process_config"):
             owner._refresh_paint_process_config_snapshot()
             owner._apply_paint_process_contact_config()
+
         with timed_block(_logger, "pickup_plan_build", label="refresh_runtime_config"):
             owner._refresh_runtime_config()
+
         if not jobs:
             return None
 
@@ -153,6 +155,7 @@ class PaintPickupTransferPlanner:
             bool(owner._contact_motion_config.apply_camera_to_tcp_for_pickup)
             and not pickup_target_point_name
         )
+
         if should_apply_tcp_offset:
             pickup_tcp_dx, pickup_tcp_dy = _camera_to_tcp_delta(
                 owner._contact_motion_config.camera_to_tcp_x_offset,
@@ -184,6 +187,7 @@ class PaintPickupTransferPlanner:
             pickup_motion.initial_lift_clearance_mm,
             pickup_motion.approach_offset_mm,
         )
+
         pickup_x = pickup_centroid_x - pickup_tcp_dx
         pickup_y = pickup_centroid_y - pickup_tcp_dy
         pickup_approach_pose = [pickup_x, pickup_y, pickup_approach_z, pickup_rx, pickup_ry, pickup_rz]
@@ -216,10 +220,13 @@ class PaintPickupTransferPlanner:
             align_ry=pickup_ry,
             align_rz=align_rz,
         )
-        safe_travel_waypoints = owner._resolve_safe_travel_waypoints()
+
+        safe_travel_waypoints = self._resolve_safe_travel_waypoints()
         safe_travel_poses = [list(item["position"]) for item in safe_travel_waypoints]
+
         if bool(owner._paint_process_config().safe_travel.enabled) and not safe_travel_waypoints:
             return None
+
         if safe_travel_waypoints:
             _logger.info(
                 "[PICKUP] safe travel waypoints configured: count=%d first=%s",
@@ -244,6 +251,25 @@ class PaintPickupTransferPlanner:
             projected_snapshots=projected_snapshots,
             projected_diagnostics=projected_diagnostics,
         )
+
+    def _resolve_safe_travel_waypoints(self) -> list[dict]:
+        """Resolve optional carried-workpiece safe travel waypoints with motion tuning."""
+        owner = self._owner
+        owner._last_safe_travel_error = ""
+        config = owner._paint_process_config().safe_travel
+        if not bool(config.enabled):
+            return []
+        motion = owner._paint_process_config().pickup_motion
+        waypoints = owner._read_configured_waypoints(
+            getattr(config, "positions", []),
+            getattr(config, "position", []),
+            float(motion.stage_transition_vel_percent),
+            float(motion.stage_transition_acc_percent),
+        )
+        if not waypoints:
+            owner._last_safe_travel_error = "Safe travel is enabled but no valid 6-axis waypoint is configured"
+            _logger.warning("[PICKUP] %s", owner._last_safe_travel_error)
+        return waypoints
 
     def _log_anchor_offset(
         self,
@@ -298,6 +324,7 @@ class PaintPickupTransferPlanner:
         owner = self._owner
         staged_pose = list(first_pivot_pose)
         _logger.debug("staged_pose = %s", staged_pose)
+
         if owner._contact_motion_config.motion_plane == "xy_z_rz" and len(staged_pose) >= 6:
             raw_staged_rz = float(staged_pose[5])
             staged_pose[5] = float(align_rz)
@@ -307,6 +334,7 @@ class PaintPickupTransferPlanner:
                 float(align_rz),
                 float(staged_pose[5]),
             )
+
         elif owner._contact_motion_config.motion_plane == "xz_y_ry" and len(staged_pose) >= 6:
             raw_staged_ry = float(staged_pose[4])
             staged_pose[5] = float(align_rz)
@@ -324,4 +352,5 @@ class PaintPickupTransferPlanner:
                 [round(float(v), 3) for v in change_plane_pose[:6]],
                 [round(float(v), 3) for v in staged_pose[:6]],
             )
+
         return staged_pose

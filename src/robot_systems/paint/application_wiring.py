@@ -355,20 +355,22 @@ def _build_paint_path_preparation_service(robot_system):
     def _paint_source_contour_processor(pts_px, settings):
         started_at = perf_counter()
         _apply_process_interpolation_settings(settings)
+        include_debug_paths = not bool(settings.get("_skip_debug_plot", False))
         result = PaintContourInterpolation(
             PaintContourInterpolationConfig(
                 units="px",
                 fit_sample_spacing=1.0,
                 output_spacing=1.0,
             )
-        ).build(_pose_path_from_xy(pts_px))
+        ).build(_pose_path_from_xy(pts_px), include_debug_paths=include_debug_paths)
         output = [point[:2] for point in result.execution_path]
         _logger.info(
             "[PATH_PREP_TIMING] stage=paint_source_contour_processor "
-            "elapsed_s=%.3f input_points=%d output_points=%d",
+            "elapsed_s=%.3f input_points=%d output_points=%d debug_paths=%s",
             perf_counter() - started_at,
             len(pts_px),
             len(output),
+            include_debug_paths,
         )
         return output
 
@@ -594,6 +596,9 @@ def _build_paint_process_settings_application(robot_system):
             if robot_system.get_optional_service(CommonServiceID.ROBOT) is not None
             else None
         ),
+        robot_service_provider=lambda: robot_system.get_optional_service(CommonServiceID.ROBOT),
+        robot_tool=int(getattr(getattr(robot_system, "_robot_config", None), "robot_tool", 0)),
+        robot_user=int(getattr(getattr(robot_system, "_robot_config", None), "robot_user", 0)),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(

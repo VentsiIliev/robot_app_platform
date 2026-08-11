@@ -113,6 +113,24 @@ def _copy_path_collection(paths: list[list[list[float]]]) -> list[list[list[floa
     return [[list(point) for point in path] for path in paths]
 
 
+def _pose_path_from_xy(xy_points: np.ndarray, reference_path: list[list[float]]) -> list[list[float]]:
+    points = np.asarray(xy_points, dtype=float).reshape(-1, 2)
+    reference = list(reference_path[0]) if reference_path else [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    while len(reference) < 6:
+        reference.append(0.0)
+    return [
+        [
+            float(point[0]),
+            float(point[1]),
+            float(reference[2]),
+            float(reference[3]),
+            float(reference[4]),
+            float(reference[5]),
+        ]
+        for point in points
+    ]
+
+
 
 @dataclass(frozen=True)
 class WorkpieceExecutionPlan:
@@ -478,9 +496,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR
                     else raw_pts_px
                 )
+                source_settings = dict(settings)
+                source_settings["_skip_debug_plot"] = bool(skip_debug_plot)
                 pts_px = self._process_source_contour(
                     source_before_bezier_px,
-                    settings,
+                    source_settings,
                     label="workpiece_layer",
                 )
                 if config._CANONICALIZE_WORKPIECE_LAYER_CONTOUR and len(raw_pts_px) >= 3 and len(pts_px) >= 3:
@@ -512,9 +532,11 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                     if contour_arr.size == 0:
                         continue
                     source_before_bezier_px = np.asarray(contour_arr.reshape(-1, 2), dtype=np.float64)
+                    source_settings = dict(settings)
+                    source_settings["_skip_debug_plot"] = bool(skip_debug_plot)
                     pts_px = self._process_source_contour(
                         source_before_bezier_px,
-                        settings,
+                        source_settings,
                         label=f"sprayPattern.{pattern_type}[{i}]",
                     )
                     self._logger.info("[EXECUTE] source=sprayPattern.%s[%d] pixel_points=%d settings=%s", pattern_type,
@@ -535,9 +557,9 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
         curve_paths: list[list[list[float]]] = []
         execution_jobs: list[dict] = []
         debug_heading_marker_threshold_deg = PATH_TANGENT_HEADING_DEADBAND_DEG
-        preview_base_position = self._resolve_base_position()
-        preview_transformer = self._current_transformer()
-        preview_resolver = self._current_resolver()
+        preview_base_position = self._resolve_base_position() if not skip_debug_plot else None
+        preview_transformer = self._current_transformer() if not skip_debug_plot else None
+        preview_resolver = self._current_resolver() if not skip_debug_plot else None
 
         for path_pts, settings, pattern_type, pts_px, source_before_bezier_px in robot_paths:
             if not skip_debug_plot:
@@ -554,19 +576,22 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 [float(point[0]), float(point[1])]
                 for point in np.asarray(pts_px, dtype=float).reshape(-1, 2)
             ])
-            raw_homography_paths.append(
-                self._homography_preview_strategy.convert(
-                    pts_px,
-                    settings,
-                    segment_config=self._segment_config,
-                    z_min=self._z_min,
-                    base_position=preview_base_position,
-                    transformer=preview_transformer,
-                    resolver=preview_resolver,
-                    pixel_height_compensation_fn=self._pixel_height_compensation_fn,
-                    logger=self._logger,
+            if skip_debug_plot:
+                raw_homography_paths.append([])
+            else:
+                raw_homography_paths.append(
+                    self._homography_preview_strategy.convert(
+                        pts_px,
+                        settings,
+                        segment_config=self._segment_config,
+                        z_min=self._z_min,
+                        base_position=preview_base_position,
+                        transformer=preview_transformer,
+                        resolver=preview_resolver,
+                        pixel_height_compensation_fn=self._pixel_height_compensation_fn,
+                        logger=self._logger,
+                    )
                 )
-            )
             vel = _safe_float(settings.get("velocity"), 60.0)
             acc = _safe_float(settings.get("acceleration"), 30.0)
             tangent_lookahead_distance_mm, tangent_heading_deadband_deg = _resolve_segment_tangent_settings(settings)
@@ -610,17 +635,21 @@ class DefaultWorkpiecePathPreparationService(IWorkpiecePathPreparationService):
                 len(prepared_xy),
             )
 
-            prepared_path = rebuild_pose_path_from_xy(
-                prepared_xy, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
+            if skip_debug_plot:
+                prepared_path = _pose_path_from_xy(prepared_xy, path_pts)
+                curve_path = _pose_path_from_xy(curve_xy, path_pts)
+            else:
+                prepared_path = rebuild_pose_path_from_xy(
+                    prepared_xy, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
 
-            curve_path = rebuild_pose_path_from_xy(
-                curve_xy, path_pts, self._rz_mode,
-                tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
-                tangent_heading_deadband_deg=tangent_heading_deadband_deg,
-            )
+                curve_path = rebuild_pose_path_from_xy(
+                    curve_xy, path_pts, self._rz_mode,
+                    tangent_lookahead_distance_mm=tangent_lookahead_distance_mm,
+                    tangent_heading_deadband_deg=tangent_heading_deadband_deg,
+                )
 
             sampled_path = rebuild_pose_path_from_xy(
                 sampled_xy, path_pts, self._rz_mode,

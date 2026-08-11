@@ -3,6 +3,7 @@
     "HOME": {
       "velocity": 30,
       "acceleration": 40,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -11,6 +12,7 @@
     "CALIBRATION": {
       "velocity": 90,
       "acceleration": 50,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -19,6 +21,7 @@
     "JOG": {
       "velocity": 10,
       "acceleration": 10,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": false
@@ -26,6 +29,7 @@
     "Horizontal Shaft": {
       "velocity": 10,
       "acceleration": 10,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -34,6 +38,7 @@
     "Vertical Shaft": {
       "velocity": 10,
       "acceleration": 10,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -42,6 +47,7 @@
     "Clean": {
       "velocity": 10,
       "acceleration": 10,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -50,6 +56,7 @@
     "Dropoff": {
       "velocity": 90,
       "acceleration": 50,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
@@ -58,6 +65,7 @@
     "Magazine": {
       "velocity": 90,
       "acceleration": 50,
+      "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,

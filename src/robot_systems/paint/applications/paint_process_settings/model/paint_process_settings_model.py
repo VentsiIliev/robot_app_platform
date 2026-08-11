@@ -27,6 +27,9 @@ class PaintProcessSettingsModel(IApplicationModel):
     def get_current_robot_position(self) -> list[float] | None:
         return self._service.get_current_robot_position()
 
+    def move_to_waypoint(self, waypoint: dict) -> bool:
+        return self._service.move_to_waypoint(waypoint)
+
     @property
     def current_settings(self) -> PaintProcessConfig:
         if self._settings is None:

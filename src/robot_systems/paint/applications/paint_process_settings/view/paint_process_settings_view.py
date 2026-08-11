@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QComboBox,
     QPushButton,
     QScrollArea,
     QTableWidget,
@@ -50,8 +51,8 @@ class _WaypointTable(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(8)
 
-        self._table = QTableWidget(0, 9)
-        self._table.setHorizontalHeaderLabels(["#", "X", "Y", "Z", "RX", "RY", "RZ", "Vel %", "Acc %"])
+        self._table = QTableWidget(0, 11)
+        self._table.setHorizontalHeaderLabels(["#", "X", "Y", "Z", "RX", "RY", "RZ", "Vel %", "Acc %", "Type", "BlendR"])
         self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -69,17 +70,20 @@ class _WaypointTable(QWidget):
         self._add_current_btn = QPushButton("Add Current")
         self._add_manual_btn = QPushButton("Add")
         self._edit_btn = QPushButton("Edit")
+        self._move_to_btn = QPushButton("Move To")
         self._delete_btn = QPushButton("Delete")
         self._up_btn = QPushButton("Up")
         self._down_btn = QPushButton("Down")
         self._add_current_btn.setProperty("request_key", self._label)
         self._add_current_btn.setStyleSheet(ACTION_BTN_STYLE)
+        self._move_to_btn.setStyleSheet(ACTION_BTN_STYLE)
         for btn in (self._add_manual_btn, self._edit_btn, self._delete_btn, self._up_btn, self._down_btn):
             btn.setStyleSheet(GHOST_BTN_STYLE)
         for btn in (
             self._add_current_btn,
             self._add_manual_btn,
             self._edit_btn,
+            self._move_to_btn,
             self._delete_btn,
             self._up_btn,
             self._down_btn,
@@ -92,6 +96,7 @@ class _WaypointTable(QWidget):
         self._add_current_btn.clicked.connect(self._on_add_current)
         self._add_manual_btn.clicked.connect(self._on_add_manual)
         self._edit_btn.clicked.connect(self._on_edit)
+        self._move_to_btn.clicked.connect(self._on_move_to)
         self._delete_btn.clicked.connect(self._on_delete)
         self._up_btn.clicked.connect(self._on_move_up)
         self._down_btn.clicked.connect(self._on_move_down)
@@ -107,6 +112,8 @@ class _WaypointTable(QWidget):
                 "position": list(waypoint["position"]),
                 "vel_percent": float(waypoint["vel_percent"]),
                 "acc_percent": float(waypoint["acc_percent"]),
+                "motion_type": str(waypoint["motion_type"]),
+                "blendR": float(waypoint["blendR"]),
             }
             for waypoint in self._waypoints
         ]
@@ -128,6 +135,8 @@ class _WaypointTable(QWidget):
             values = list(pose["position"]) + [pose["vel_percent"], pose["acc_percent"]]
             for col, value in enumerate(values, start=1):
                 self._table.setItem(row, col, QTableWidgetItem(f"{float(value):.3f}"))
+            self._table.setItem(row, 9, QTableWidgetItem(str(pose["motion_type"]).upper()))
+            self._table.setItem(row, 10, QTableWidgetItem(f"{float(pose['blendR']):.3f}"))
         if select_row is not None and 0 <= select_row < self._table.rowCount():
             self._table.selectRow(select_row)
         self._update_buttons()
@@ -140,6 +149,7 @@ class _WaypointTable(QWidget):
         index = self._selected_index()
         has_selection = index is not None
         self._edit_btn.setEnabled(has_selection)
+        self._move_to_btn.setEnabled(has_selection)
         self._delete_btn.setEnabled(has_selection)
         self._up_btn.setEnabled(has_selection and index > 0)
         self._down_btn.setEnabled(has_selection and index < len(self._waypoints) - 1)
@@ -155,7 +165,7 @@ class _WaypointTable(QWidget):
     def _on_add_current(self) -> None:
         self._emit(f"{self._label}_add_current")
 
-    def _on_edit(self) -> None:
+    def _on_edit(self, *_args) -> None:
         index = self._selected_index()
         if index is None:
             return
@@ -165,6 +175,12 @@ class _WaypointTable(QWidget):
         self._waypoints[index] = dialog.waypoint()
         self._reload(select_row=index)
         self._emit(self.get_waypoints())
+
+    def _on_move_to(self) -> None:
+        index = self._selected_index()
+        if index is None:
+            return
+        self._emit({"action": "move_to", "waypoint": self.get_waypoints()[index]})
 
     def _on_delete(self) -> None:
         index = self._selected_index()
@@ -293,10 +309,14 @@ class _WaypointTable(QWidget):
             return None
         vel = float(default_vel)
         acc = float(default_acc)
+        motion_type = "ptp"
+        blend_r = 0.0
         if isinstance(value, dict):
             try:
                 vel = float(value.get("vel_percent", default_vel))
                 acc = float(value.get("acc_percent", default_acc))
+                motion_type = cls._normalize_motion_type(value.get("motion_type", value.get("type", "ptp")))
+                blend_r = float(value.get("blendR", value.get("blend_r", 0.0)))
             except (TypeError, ValueError):
                 vel = float(default_vel)
                 acc = float(default_acc)
@@ -306,9 +326,217 @@ class _WaypointTable(QWidget):
                 if len(raw) >= 8:
                     vel = float(raw[6])
                     acc = float(raw[7])
+                if len(raw) >= 9:
+                    motion_type = cls._normalize_motion_type(raw[8])
+                if len(raw) >= 10:
+                    blend_r = float(raw[9])
             except (TypeError, ValueError):
                 pass
-        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+        return {
+            "position": pose,
+            "vel_percent": vel,
+            "acc_percent": acc,
+            "motion_type": motion_type,
+            "blendR": max(0.0, blend_r),
+        }
+
+    @staticmethod
+    def _normalize_motion_type(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+
+
+class _MotionProfileTable(QWidget):
+    def __init__(self, rows: list[dict], emit, parent=None):
+        super().__init__(parent)
+        self._rows = [self._normalize_profile(row) for row in rows]
+        self._profiles = [dict(row) for row in self._rows]
+        self._emit = emit
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
+
+        self._table = QTableWidget(0, 5)
+        self._table.setHorizontalHeaderLabels(["Phase", "Vel %", "Acc %", "Type", "BlendR"])
+        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(True)
+        self._table.verticalHeader().setVisible(False)
+        self._table.itemSelectionChanged.connect(self._update_buttons)
+        self._table.itemDoubleClicked.connect(self._on_edit)
+        self._table.setMinimumHeight(max(150, 46 * len(self._rows) + 44))
+        self._table.setStyleSheet(_WaypointTable._table_style())
+        root.addWidget(self._table)
+
+        row = QHBoxLayout()
+        self._edit_btn = QPushButton("Edit")
+        self._edit_btn.setStyleSheet(GHOST_BTN_STYLE)
+        self._edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.addWidget(self._edit_btn)
+        row.addStretch()
+        root.addLayout(row)
+
+        self._edit_btn.clicked.connect(self._on_edit)
+        self._reload()
+
+    def set_profiles(self, value: object) -> None:
+        incoming = {
+            str(profile["key"]): profile
+            for profile in self._normalize_profiles(value)
+            if "key" in profile
+        }
+        self._profiles = []
+        for row in self._rows:
+            key = str(row["key"])
+            profile = dict(row)
+            profile.update(incoming.get(key, {}))
+            profile["label"] = str(row["label"])
+            self._profiles.append(self._normalize_profile(profile))
+        self._reload()
+
+    def get_profiles(self) -> list[dict]:
+        return [dict(profile) for profile in self._profiles]
+
+    def _reload(self, select_row: int | None = None) -> None:
+        self._table.setRowCount(0)
+        for profile in self._profiles:
+            row = self._table.rowCount()
+            self._table.insertRow(row)
+            self._table.setItem(row, 0, QTableWidgetItem(str(profile["label"])))
+            self._table.setItem(row, 1, QTableWidgetItem(f"{float(profile['vel_percent']):.3f}"))
+            self._table.setItem(row, 2, QTableWidgetItem(f"{float(profile['acc_percent']):.3f}"))
+            self._table.setItem(row, 3, QTableWidgetItem(str(profile["motion_type"]).upper()))
+            self._table.setItem(row, 4, QTableWidgetItem(f"{float(profile['blendR']):.3f}"))
+        if select_row is not None and 0 <= select_row < self._table.rowCount():
+            self._table.selectRow(select_row)
+        self._update_buttons()
+
+    def _selected_index(self) -> int | None:
+        row = self._table.currentRow()
+        return row if 0 <= row < len(self._profiles) else None
+
+    def _update_buttons(self) -> None:
+        self._edit_btn.setEnabled(self._selected_index() is not None)
+
+    def _on_edit(self) -> None:
+        index = self._selected_index()
+        if index is None:
+            return
+        dialog = _MotionProfileDialog(self._profiles[index], parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._profiles[index] = dialog.profile()
+        self._reload(select_row=index)
+        self._emit(self.get_profiles())
+
+    @classmethod
+    def _normalize_profiles(cls, value: object) -> list[dict]:
+        try:
+            items = list(value or [])
+        except TypeError:
+            return []
+        result: list[dict] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            result.append(cls._normalize_profile(item))
+        return result
+
+    @staticmethod
+    def _normalize_profile(value: dict) -> dict:
+        motion_type = str(value.get("motion_type", value.get("type", "ptp")) or "ptp").strip().lower()
+        if motion_type not in {"ptp", "linear"}:
+            motion_type = "ptp"
+        try:
+            vel = float(value.get("vel_percent", 0.0))
+            acc = float(value.get("acc_percent", 0.0))
+            blend_r = float(value.get("blendR", value.get("blend_r", 0.0)))
+        except (TypeError, ValueError):
+            vel = 0.0
+            acc = 0.0
+            blend_r = 0.0
+        return {
+            "key": str(value.get("key", "")),
+            "label": str(value.get("label", value.get("key", ""))),
+            "vel_percent": max(0.0, min(100.0, vel)),
+            "acc_percent": max(0.0, min(100.0, acc)),
+            "motion_type": motion_type,
+            "blendR": max(0.0, blend_r),
+        }
+
+
+class _MotionProfileDialog(AppDialog):
+    def __init__(self, profile: dict, parent=None):
+        super().__init__("Motion Profile", min_width=420, parent=parent)
+        normalized = _MotionProfileTable._normalize_profile(profile)
+        self._key = str(normalized["key"])
+        self._label = str(normalized["label"])
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 24, 24, 24)
+        root.setSpacing(16)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        phase = QLabel(self._label)
+        phase.setStyleSheet(LABEL_STYLE)
+        form.addRow("Phase", phase)
+
+        self._vel = KeyboardLineEdit()
+        self._vel.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._vel.setText(f"{float(normalized['vel_percent']):.3f}")
+        form.addRow("Velocity %", self._vel)
+
+        self._acc = KeyboardLineEdit()
+        self._acc.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._acc.setText(f"{float(normalized['acc_percent']):.3f}")
+        form.addRow("Acceleration %", self._acc)
+
+        self._motion_type = QComboBox()
+        self._motion_type.addItems(["PTP", "Linear"])
+        self._motion_type.setCurrentText("Linear" if normalized["motion_type"] == "linear" else "PTP")
+        self._motion_type.setStyleSheet(DIALOG_INPUT_STYLE)
+        form.addRow("Type", self._motion_type)
+
+        self._blend_r = KeyboardLineEdit()
+        self._blend_r.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._blend_r.setText(f"{float(normalized['blendR']):.3f}")
+        form.addRow("BlendR", self._blend_r)
+
+        root.addLayout(form)
+        root.addWidget(self._build_button_row(ok_label="Save"))
+
+    def profile(self) -> dict:
+        return {
+            "key": self._key,
+            "label": self._label,
+            "vel_percent": float(self._vel.text()),
+            "acc_percent": float(self._acc.text()),
+            "motion_type": "linear" if self._motion_type.currentText().lower() == "linear" else "ptp",
+            "blendR": float(self._blend_r.text()),
+        }
+
+    def accept(self) -> None:
+        try:
+            profile = self.profile()
+        except ValueError:
+            show_warning(self, "Motion Profile", "All motion profile values must be valid numbers.")
+            return
+        if not 0.0 <= profile["vel_percent"] <= 100.0 or not 0.0 <= profile["acc_percent"] <= 100.0:
+            show_warning(self, "Motion Profile", "Velocity and acceleration must be between 0 and 100 percent.")
+            return
+        if profile["blendR"] < 0.0:
+            show_warning(self, "Motion Profile", "BlendR must be zero or greater.")
+            return
+        super().accept()
 
 
 class _WaypointDialog(AppDialog):
@@ -322,8 +550,16 @@ class _WaypointDialog(AppDialog):
         super().__init__("Waypoint", min_width=520, parent=parent)
         normalized = _WaypointTable._normalize_waypoint(waypoint or [], default_vel, default_acc)
         if normalized is None:
-            normalized = {"position": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "vel_percent": default_vel, "acc_percent": default_acc}
+            normalized = {
+                "position": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "vel_percent": default_vel,
+                "acc_percent": default_acc,
+                "motion_type": "ptp",
+                "blendR": 0.0,
+            }
         values = list(normalized["position"]) + [normalized["vel_percent"], normalized["acc_percent"]]
+        motion_type = str(normalized["motion_type"])
+        blend_r = float(normalized["blendR"])
         self._virtual_keyboard_dock_window = parent.window() if parent is not None else None
         self._keyboard_scroll_area: QScrollArea | None = None
         self._keyboard_bottom_spacer: QWidget | None = None
@@ -343,6 +579,16 @@ class _WaypointDialog(AppDialog):
             edit.setText(f"{float(value):.3f}")
             form.addRow(label, edit)
             self._fields.append(edit)
+        self._motion_type = QComboBox()
+        self._motion_type.addItems(["PTP", "Linear"])
+        self._motion_type.setCurrentText("Linear" if motion_type == "linear" else "PTP")
+        self._motion_type.setStyleSheet(DIALOG_INPUT_STYLE)
+        form.addRow("Type", self._motion_type)
+        self._blend_r = KeyboardLineEdit()
+        self._blend_r.setStyleSheet(DIALOG_INPUT_STYLE)
+        self._blend_r.setText(f"{blend_r:.3f}")
+        form.addRow("BlendR", self._blend_r)
+        self._fields.append(self._blend_r)
         self._keyboard_bottom_spacer = QWidget(form_host)
         self._keyboard_bottom_spacer.setFixedHeight(0)
         form.addRow("", self._keyboard_bottom_spacer)
@@ -387,6 +633,8 @@ class _WaypointDialog(AppDialog):
             "position": values[:6],
             "vel_percent": values[6],
             "acc_percent": values[7],
+            "motion_type": "linear" if self._motion_type.currentText().lower() == "linear" else "ptp",
+            "blendR": values[8],
         }
 
     def accept(self) -> None:
@@ -397,6 +645,9 @@ class _WaypointDialog(AppDialog):
             return
         if not 0.0 <= waypoint["vel_percent"] <= 100.0 or not 0.0 <= waypoint["acc_percent"] <= 100.0:
             show_warning(self, "Waypoint", "Velocity and acceleration must be between 0 and 100 percent.")
+            return
+        if waypoint["blendR"] < 0.0:
+            show_warning(self, "Waypoint", "BlendR must be zero or greater.")
             return
         super().accept()
 
@@ -419,12 +670,14 @@ class PaintProcessSettingsView(IApplicationView):
     value_changed = pyqtSignal(str, object)
     set_safe_travel_current_requested = pyqtSignal()
     set_dropoff_safe_travel_current_requested = pyqtSignal()
+    move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         self.settings_view: KeyboardSettingsView | None = None
         self._status_label: QLabel | None = None
         self._layout: QVBoxLayout | None = None
         self._current_values: dict = {}
+        self._custom_widget_original_handlers: dict[str, WidgetHandler | None] | None = None
         super().__init__("PaintProcessSettings", parent)
 
     def setup_ui(self) -> None:
@@ -440,7 +693,7 @@ class PaintProcessSettingsView(IApplicationView):
         self.retranslateUi()
 
     def clean_up(self) -> None:
-        pass
+        self._restore_custom_widget_handlers()
 
     def set_values(self, values: dict) -> None:
         self._current_values = dict(values)
@@ -479,9 +732,25 @@ class PaintProcessSettingsView(IApplicationView):
         if self._layout is None:
             return
         self.settings_view = KeyboardSettingsView(component_name="PaintProcessSettings")
-        original_handler = widget_factory._REGISTRY.get("paint_action_button")
-        original_pose_handler = widget_factory._REGISTRY.get("paint_pose_display")
-        original_waypoint_handler = widget_factory._REGISTRY.get("paint_waypoint_table")
+        self._install_custom_widget_handlers()
+        for title, groups in build_paint_process_settings_tabs():
+            self.settings_view.add_tab(title, groups)
+        self.settings_view.value_changed_signal.connect(self._on_value_changed)
+        self.settings_view.save_requested.connect(self._on_save_requested)
+        self._layout.insertWidget(0, self.settings_view)
+
+    def _install_custom_widget_handlers(self) -> None:
+        custom_types = (
+            "paint_action_button",
+            "paint_pose_display",
+            "paint_waypoint_table",
+            "paint_motion_profile_table",
+        )
+        if self._custom_widget_original_handlers is None:
+            self._custom_widget_original_handlers = {
+                widget_type: widget_factory._REGISTRY.get(widget_type)
+                for widget_type in custom_types
+            }
         widget_factory._REGISTRY["paint_action_button"] = WidgetHandler(
             create=self._make_action_button,
             get_value=lambda _widget: False,
@@ -500,25 +769,24 @@ class PaintProcessSettingsView(IApplicationView):
             set_value=lambda widget, value: widget.set_waypoints(value),
             full_width=True,
         )
-        try:
-            for title, groups in build_paint_process_settings_tabs():
-                self.settings_view.add_tab(title, groups)
-        finally:
-            if original_handler is None:
-                widget_factory._REGISTRY.pop("paint_action_button", None)
-            else:
-                widget_factory._REGISTRY["paint_action_button"] = original_handler
-            if original_pose_handler is None:
-                widget_factory._REGISTRY.pop("paint_pose_display", None)
-            else:
-                widget_factory._REGISTRY["paint_pose_display"] = original_pose_handler
-            if original_waypoint_handler is None:
-                widget_factory._REGISTRY.pop("paint_waypoint_table", None)
-            else:
-                widget_factory._REGISTRY["paint_waypoint_table"] = original_waypoint_handler
-        self.settings_view.value_changed_signal.connect(self._on_value_changed)
-        self.settings_view.save_requested.connect(self._on_save_requested)
-        self._layout.insertWidget(0, self.settings_view)
+        widget_factory._REGISTRY["paint_motion_profile_table"] = WidgetHandler(
+            create=self._make_motion_profile_table,
+            get_value=lambda widget: widget.get_profiles(),
+            set_value=lambda widget, value: widget.set_profiles(value),
+            full_width=True,
+        )
+
+    def _restore_custom_widget_handlers(self) -> None:
+        if self._custom_widget_original_handlers is None:
+            return
+        for widget_type, handler in self._custom_widget_original_handlers.items():
+            current = widget_factory._REGISTRY.get(widget_type)
+            if current is not None and getattr(current.create, "__self__", None) is self:
+                if handler is None:
+                    widget_factory._REGISTRY.pop(widget_type, None)
+                else:
+                    widget_factory._REGISTRY[widget_type] = handler
+        self._custom_widget_original_handlers = None
 
     def _make_action_button(self, field, emit):
         button = _ActionButton(str(field.default or field.label), emit)
@@ -553,6 +821,10 @@ class PaintProcessSettingsView(IApplicationView):
             default_acc=float(defaults.get("acc_percent", 20.0)),
         )
 
+    def _make_motion_profile_table(self, field, emit):
+        rows = field.default if isinstance(field.default, list) else []
+        return _MotionProfileTable(rows, emit)
+
     def _rebuild_settings_view(self) -> None:
         if self._layout is None or self.settings_view is None:
             return
@@ -581,6 +853,12 @@ class PaintProcessSettingsView(IApplicationView):
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
             return
+        if key in {"safe_travel_positions", "dropoff_safe_travel_positions"} and isinstance(value, dict):
+            if value.get("action") == "move_to":
+                waypoint = value.get("waypoint", {})
+                if isinstance(waypoint, dict):
+                    self.move_to_safe_travel_waypoint_requested.emit(waypoint)
+                return
         self._current_values = self.values()
         self.value_changed.emit(key, value)
 

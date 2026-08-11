@@ -1667,8 +1667,8 @@
       ]
     ]
   ],
-  "velocity": 90.0,
-  "acceleration": 30.0,
+  "velocity": 100.0,
+  "acceleration": 60.0,
   "offset": 0.0,
   "edge_cleanup_z_offset_mm": 0.0,
   "sprayPattern": {

@@ -1,0 +1,477 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from time import perf_counter
+
+import numpy as np
+
+from src.engine.geometry.planar import unwrap_degrees
+from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
+from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.timing import timed_step
+
+_logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DropoffReleaseWaypoint:
+    """One release-strategy move or release action."""
+
+    label: str
+    pose: list[float] | None
+    vel_percent: float
+    acc_percent: float
+    motion_type: str = "ptp"
+    blendR: float = 0.0
+    release_here: bool = False
+
+
+@dataclass(frozen=True)
+class DropoffReleasePlan:
+    """Resolved release sequence for the currently held painted workpiece."""
+
+    strategy_name: str
+    waypoints: tuple[DropoffReleaseWaypoint, ...]
+
+
+@timed_step(_logger, "prepare_dropoff_unwind")
+def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, str]:
+    """Build and execute paint-to-dropoff safe travel, align, and Joint 6 unwind."""
+    if executor._dropoff_unwind_prepared:
+        _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
+        return True, ""
+
+    config = executor._paint_process_config()
+    safe_waypoints = _resolve_dropoff_safe_travel_waypoints(executor)
+    if bool(config.dropoff_safe_travel.enabled):
+        if not safe_waypoints:
+            return False, "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured"
+        for index, safe_waypoint in enumerate(safe_waypoints, start=1):
+            if not executor._motion.move_pickup_phase(
+                f"Moving through paint-to-dropoff safe travel waypoint {index}",
+                safe_waypoint["position"],
+                velocity=float(safe_waypoint["vel_percent"]),
+                acceleration=float(safe_waypoint["acc_percent"]),
+                motion_type=str(safe_waypoint.get("motion_type", "ptp")),
+                blendR=float(safe_waypoint.get("blendR", 0.0)),
+            ):
+                return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
+
+    if _should_prepare_dropoff_align_before_unwind(executor):
+        align_pose = _resolve_dropoff_align_pose(executor)
+        if align_pose is None:
+            return False, "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment"
+        if not executor._motion.move_pickup_phase(
+            "Moving to dropoff pose before unwind",
+            align_pose,
+            velocity=config.dropoff.release_align_vel_percent,
+            acceleration=config.dropoff.release_align_acc_percent,
+            motion_type=config.dropoff.release_align_motion_type,
+            blendR=float(config.dropoff.release_align_blendR),
+        ):
+            return False, "Pivot paint finished, but move to dropoff pose failed before unwind"
+    elif executor._configured_contact_motion_plane == "xz_y_ry":
+        return False, "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment"
+
+    if executor._robot_service is None:
+        return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
+
+    _logger.info(
+        "[DROPOFF] Unwinding Joint 6 before dropoff strategy vel=%.1f acc=%.1f queue_if_busy=%s",
+        config.navigation_return.unwind_vel_percent,
+        config.navigation_return.unwind_acc_percent,
+        PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+    )
+    ok = executor._robot_service.unwind_joint6(
+        blocking=True,
+        queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+        vel=config.navigation_return.unwind_vel_percent,
+        acc=config.navigation_return.unwind_acc_percent,
+    )
+    if not ok:
+        return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"
+    return True, ""
+
+
+@timed_step(_logger, "pre_release_dropoff")
+def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
+    """Build and execute the configured dropoff release strategy."""
+    started = perf_counter()
+    plan = _build_dropoff_release_plan(executor)
+    release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
+    if release_count != 1:
+        if plan.strategy_name == "movement_group":
+            return False, "Dropoff movement group 'Dropoff' is not configured"
+        return False, f"Dropoff strategy '{plan.strategy_name}' must define exactly one release waypoint"
+
+    _logger.info(
+        "[DROPOFF] executing strategy=%s waypoints=%d",
+        plan.strategy_name,
+        len(plan.waypoints),
+    )
+    for index, waypoint in enumerate(plan.waypoints, start=1):
+        waypoint_started = perf_counter()
+        if waypoint.pose is not None:
+            already_at_release_pose = (
+                bool(getattr(executor, "_dropoff_unwind_prepared", False))
+                and waypoint.release_here
+                and _poses_close(waypoint.pose, getattr(executor, "_last_process_end_pose", None))
+            )
+            if already_at_release_pose:
+                _logger.info(
+                    "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
+                    waypoint.label,
+                )
+            elif not executor._motion.move_pickup_phase(
+                waypoint.label,
+                list(waypoint.pose),
+                velocity=waypoint.vel_percent,
+                acceleration=waypoint.acc_percent,
+                motion_type=waypoint.motion_type,
+                blendR=waypoint.blendR,
+            ):
+                _logger.info(
+                    "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
+                    plan.strategy_name,
+                    index,
+                    waypoint.label,
+                    elapsed_s(waypoint_started),
+                    elapsed_s(started),
+                )
+                return False, f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release"
+
+        if waypoint.release_here:
+            ok, msg = executor._motion.turn_vacuum_off()
+            if not ok:
+                _logger.info(
+                    "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",
+                    plan.strategy_name,
+                    index,
+                    elapsed_s(waypoint_started),
+                    elapsed_s(started),
+                )
+                return False, msg
+
+    _logger.info(
+        "[DROPOFF] strategy=%s completed elapsed_s=%.3f",
+        plan.strategy_name,
+        elapsed_s(started),
+    )
+    return True, ""
+
+
+def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
+    strategy_name = _dropoff_strategy_name(executor)
+    dropoff = executor._paint_process_config().dropoff
+    if strategy_name == "pickup_origin":
+        if _should_release_at_current_dropoff_pose(executor):
+            return DropoffReleasePlan(
+                strategy_name=strategy_name,
+                waypoints=(
+                    DropoffReleaseWaypoint(
+                        label="Release at current dropoff pose",
+                        pose=None,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type=dropoff.release_align_motion_type,
+                        blendR=dropoff.release_align_blendR,
+                        release_here=True,
+                    ),
+                ),
+            )
+        pickup_plan = executor._last_pickup_plan
+        if pickup_plan is None:
+            _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")
+            return DropoffReleasePlan(
+                strategy_name=strategy_name,
+                waypoints=(
+                    DropoffReleaseWaypoint(
+                        label="Release at current pose",
+                        pose=None,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type=dropoff.release_align_motion_type,
+                        blendR=dropoff.release_align_blendR,
+                        release_here=True,
+                    ),
+                ),
+            )
+        return DropoffReleasePlan(
+            strategy_name=strategy_name,
+            waypoints=(
+                DropoffReleaseWaypoint(
+                    label="Returning to align pose for release",
+                    pose=list(pickup_plan.align_pose),
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
+                    release_here=True,
+                ),
+            ),
+        )
+
+    if strategy_name == "movement_group":
+        pose = _resolve_dropoff_align_pose(executor)
+        if pose is None:
+            _logger.info("[DROPOFF] movement_group has no configured pose for group 'Dropoff'")
+            return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
+        return DropoffReleasePlan(
+            strategy_name=strategy_name,
+            waypoints=(
+                DropoffReleaseWaypoint(
+                    label="Moving to dropoff group 'Dropoff' for release",
+                    pose=pose,
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
+                    release_here=True,
+                ),
+            ),
+        )
+
+    return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
+
+
+def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[dict], list[float] | None]:
+    """
+    Build the post-paint ordered dropoff preparation chain.
+
+    This is the place to adjust ordered dropoff preparation move shape:
+
+    - safe-travel segment labels
+    - safe-travel/dropoff align velocity and acceleration
+    - route `blendR`
+    - final Joint 6 unwind segment settings
+    """
+    config = executor._paint_process_config()
+    route_items: list[dict] = []
+
+    safe_waypoints = _resolve_dropoff_safe_travel_waypoints(executor)
+    if bool(config.dropoff_safe_travel.enabled):
+        if not safe_waypoints:
+            return [], None
+
+        for index, safe_waypoint in enumerate(safe_waypoints, start=1):
+            route_items.append(
+                {
+                    "label": f"prepare_dropoff_safe_travel_{index}",
+                    "position": list(safe_waypoint["position"]),
+                    "vel": float(safe_waypoint["vel_percent"]),
+                    "acc": float(safe_waypoint["acc_percent"]),
+                    "type": str(safe_waypoint.get("motion_type", "ptp")),
+                    "blendR": float(safe_waypoint.get("blendR", 0.0)),
+                }
+            )
+
+    if _should_prepare_dropoff_align_before_unwind(executor):
+        reference_pose = route_items[-1]["position"] if route_items else executor._last_process_end_pose
+        align_pose = _resolve_dropoff_align_pose(executor, reference_pose)
+        if align_pose is None:
+            return [], None
+
+        route_items.append(
+            {
+                "label": "prepare_dropoff_align",
+                "position": list(align_pose),
+                "vel": float(config.dropoff.release_align_vel_percent),
+                "acc": float(config.dropoff.release_align_acc_percent),
+                "type": str(config.dropoff.release_align_motion_type),
+                "blendR": float(config.dropoff.release_align_blendR),
+            }
+        )
+
+    segments: list[dict] = []
+    if route_items:
+        start_pose = list(executor._last_process_end_pose) if executor._last_process_end_pose is not None else None
+        adjusted_positions = _apply_distributed_dropoff_unwind(
+            executor,
+            [item["position"] for item in route_items],
+            start_pose,
+        )
+
+        for index, (item, adjusted_position) in enumerate(zip(route_items, adjusted_positions)):
+            is_last_route_pose = index == len(route_items) - 1
+            segments.append(
+                {
+                    "type": str(item.get("type", "ptp")),
+                    "label": item["label"],
+                    "position": list(adjusted_position),
+                    "vel": float(item["vel"]),
+                    "acc": float(item["acc"]),
+                    "blendR": float(item.get("blendR", 0.0 if is_last_route_pose else 20.0)),
+                }
+            )
+        final_pose = list(adjusted_positions[-1])
+    else:
+        final_pose = list(executor._last_process_end_pose) if executor._last_process_end_pose is not None else None
+
+    segments.append(
+        {
+            "type": "unwind_joint6",
+            "label": "prepare_dropoff_unwind",
+            "vel": float(config.navigation_return.unwind_vel_percent),
+            "acc": float(config.navigation_return.unwind_acc_percent),
+            "protected": True,
+        }
+    )
+    return segments, final_pose
+
+
+def _resolve_dropoff_safe_travel_waypoints(executor: object) -> list[dict]:
+    config = executor._paint_process_config().dropoff_safe_travel
+    if not bool(config.enabled):
+        return []
+    dropoff = executor._paint_process_config().dropoff
+    return executor._read_configured_waypoints(
+        getattr(config, "positions", []),
+        getattr(config, "position", []),
+        float(dropoff.release_align_vel_percent),
+        float(dropoff.release_align_acc_percent),
+        "ptp",
+    )
+
+
+def _apply_distributed_dropoff_unwind(
+    executor: object,
+    poses: list[list[float]],
+    start_pose: list[float] | None,
+) -> list[list[float]]:
+    """
+    Progressively shift the active rotation component by whole-turn equivalents
+    so Joint 6 can unwind while travelling toward dropoff.
+    """
+    if not poses:
+        return []
+
+    adjusted = [list(pose) for pose in poses]
+    if start_pose is None or len(start_pose) < 6:
+        return adjusted
+
+    rotation_index = int(executor._contact_motion_config.rotation_index)
+    if rotation_index < 0 or len(start_pose) <= rotation_index:
+        return adjusted
+    if any(len(pose) <= rotation_index for pose in adjusted):
+        return adjusted
+
+    start_rotation_deg = float(start_pose[rotation_index])
+    nominal_continuous_rotations: list[float] = []
+    previous_nominal_rotation_deg = start_rotation_deg
+
+    for pose in adjusted:
+        nominal_rotation_deg = float(pose[rotation_index])
+        continuous_rotation_deg = unwrap_degrees(previous_nominal_rotation_deg, nominal_rotation_deg)
+        nominal_continuous_rotations.append(continuous_rotation_deg)
+        previous_nominal_rotation_deg = continuous_rotation_deg
+
+    if not nominal_continuous_rotations:
+        return adjusted
+
+    final_nominal_continuous_deg = nominal_continuous_rotations[-1]
+    final_canonical_deg = ((final_nominal_continuous_deg + 180.0) % 360.0) - 180.0
+    unwind_shift_deg = final_canonical_deg - final_nominal_continuous_deg
+    unwind_turns = int(round(unwind_shift_deg / 360.0))
+    unwind_shift_deg = 360.0 * unwind_turns
+
+    if unwind_turns == 0:
+        _logger.info(
+            "[DROPOFF] Distributed unwind not needed: start_rotation=%.3fdeg final_nominal_continuous=%.3fdeg",
+            start_rotation_deg,
+            final_nominal_continuous_deg,
+        )
+        return adjusted
+
+    route = [list(start_pose), *adjusted]
+    segment_lengths: list[float] = []
+    for index in range(1, len(route)):
+        previous_xyz = np.asarray(route[index - 1][:3], dtype=float)
+        current_xyz = np.asarray(route[index][:3], dtype=float)
+        segment_lengths.append(float(np.linalg.norm(current_xyz - previous_xyz)))
+
+    total_distance = float(sum(segment_lengths))
+    if total_distance <= 1e-6:
+        _logger.warning("[DROPOFF] Distributed unwind skipped because dropoff route has no XYZ travel")
+        return adjusted
+
+    cumulative_distance = 0.0
+    applied_rotations: list[float] = []
+    for index, pose in enumerate(adjusted):
+        cumulative_distance += segment_lengths[index]
+        fraction = max(0.0, min(1.0, cumulative_distance / total_distance))
+        final_rotation_deg = nominal_continuous_rotations[index] + (unwind_shift_deg * fraction)
+        pose[rotation_index] = final_rotation_deg
+        applied_rotations.append(final_rotation_deg)
+
+    _logger.info(
+        "[DROPOFF] Distributed unwind over travel: start_rotation=%.3fdeg nominal_rotations=%s unwind_turns=%d unwind_shift=%.3fdeg applied_rotations=%s travel_mm=%.3f",
+        start_rotation_deg,
+        [round(value, 3) for value in nominal_continuous_rotations],
+        unwind_turns,
+        unwind_shift_deg,
+        [round(value, 3) for value in applied_rotations],
+        total_distance,
+    )
+    return adjusted
+
+
+def _should_prepare_dropoff_align_before_unwind(executor: object) -> bool:
+    if _dropoff_strategy_name(executor) == "movement_group":
+        return _resolve_dropoff_release_pose(executor) is not None
+    return (
+        executor._configured_contact_motion_plane == "xz_y_ry"
+        and _resolve_dropoff_release_pose(executor) is not None
+    )
+
+
+def _should_release_at_current_dropoff_pose(executor: object) -> bool:
+    return (
+        executor._configured_contact_motion_plane == "xy_z_rz"
+        and _dropoff_strategy_name(executor) == "pickup_origin"
+    )
+
+
+def _dropoff_strategy_name(executor: object) -> str:
+    return str(executor._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
+
+
+def _resolve_dropoff_release_pose(executor: object) -> list[float] | None:
+    if _dropoff_strategy_name(executor) == "movement_group":
+        return executor._read_provider_position(executor._dropoff_position_provider)
+    if executor._last_pickup_plan is not None and hasattr(executor._last_pickup_plan, "align_pose"):
+        return list(executor._last_pickup_plan.align_pose)
+    return None
+
+
+def _resolve_dropoff_align_pose(executor: object, reference_pose: list[float] | None = None) -> list[float] | None:
+    pose = _resolve_dropoff_release_pose(executor)
+    if pose is None:
+        return None
+    return _dropoff_align_pose_near_reference(executor, pose, reference_pose)
+
+
+def _dropoff_align_pose_near_reference(
+    executor: object,
+    align_pose: list[float],
+    reference_pose: list[float] | None = None,
+) -> list[float]:
+    pose = list(align_pose)
+    reference = reference_pose or executor._last_process_end_pose
+    if (
+        executor._configured_contact_motion_plane == "xy_z_rz"
+        and reference is not None
+        and len(pose) >= 6
+        and len(reference) >= 6
+    ):
+        pose[5] = unwrap_degrees(float(reference[5]), float(pose[5]))
+    return pose
+
+
+def _poses_close(left: list[float] | None, right: list[float] | None, tolerance: float = 1e-3) -> bool:
+    if left is None or right is None or len(left) < 6 or len(right) < 6:
+        return False
+    if not all(abs(float(a) - float(b)) <= tolerance for a, b in zip(left[:5], right[:5])):
+        return False
+    equivalent_rz = unwrap_degrees(float(right[5]), float(left[5]))
+    return abs(equivalent_rz - float(right[5])) <= tolerance

@@ -1,0 +1,14 @@
+from __future__ import annotations
+
+from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+
+
+def restore_cycle_resources(ctx: PaintExecutionContext) -> None:
+    service = ctx.production_service
+    service._restore_brightness()
+    service._set_dashboard_live_view_paused(False, reason="paint cycle finished")
+
+
+def stop_machine(ctx: PaintExecutionContext) -> None:
+    if ctx.state_machine is not None:
+        ctx.state_machine.stop_execution()

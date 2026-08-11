@@ -14,6 +14,11 @@ from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     execute_paint_trajectory_with_optional_trace,
     path_length_mm,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff_handlers import (
+    _resolve_dropoff_align_pose,
+    _resolve_dropoff_safe_travel_waypoints,
+    _should_prepare_dropoff_align_before_unwind,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -45,12 +50,24 @@ class PaintEdgeCleanupExecutor:
         cleanup = self._owner._paint_process_config().edge_cleanup
         return float(cleanup.vel_percent), float(cleanup.acc_percent)
 
+    def _cleanup_motion_type(self) -> str:
+        return str(self._owner._paint_process_config().edge_cleanup.motion_type)
+
+    def _cleanup_blendR(self) -> float:
+        return float(self._owner._paint_process_config().edge_cleanup.blendR)
+
     def _cleanup_config(self):
         return self._owner._paint_process_config().edge_cleanup
 
     def _dropoff_speed(self) -> tuple[float, float]:
         dropoff = self._owner._paint_process_config().dropoff
         return float(dropoff.release_align_vel_percent), float(dropoff.release_align_acc_percent)
+
+    def _dropoff_motion_type(self) -> str:
+        return str(self._owner._paint_process_config().dropoff.release_align_motion_type)
+
+    def _dropoff_blendR(self) -> float:
+        return float(self._owner._paint_process_config().dropoff.release_align_blendR)
 
     def _navigation_unwind_speed(self) -> tuple[float, float]:
         nav = self._owner._paint_process_config().navigation_return
@@ -104,11 +121,13 @@ class PaintEdgeCleanupExecutor:
         if plan is None:
             return False, "XZ/RY paint succeeded, but no pickup plan is available for safe edge-cleanup unwind alignment"
         vel, acc = self._dropoff_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Returning to original orientation before edge-cleanup unwind",
             plan.align_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._dropoff_motion_type(),
+            blendR=self._dropoff_blendR(),
         ):
             return False, "XZ/RY paint succeeded, but return to original orientation failed before unwind"
         return True, ""
@@ -144,11 +163,13 @@ class PaintEdgeCleanupExecutor:
         if not ok:
             return False, msg
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Moving to XY/RZ Y approach before edge cleanup",
             approach_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
             return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
         return True, ""
@@ -170,11 +191,13 @@ class PaintEdgeCleanupExecutor:
         if not approach_pose:
             return False, "XZ/RY paint succeeded, but preplanned XY/RZ edge-cleanup Y approach pose is empty"
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Moving to XY/RZ Y approach before edge cleanup",
             list(approach_pose),
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
             return False, "XZ/RY paint succeeded, but move to XY/RZ edge-cleanup Y approach pose failed"
         return True, ""
@@ -341,11 +364,13 @@ class PaintEdgeCleanupExecutor:
             return True, ""
         retreat_pose = retreat_path[-1]
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Retreating along Y after edge cleanup",
             retreat_pose,
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
             return False, "XY/RZ edge cleanup succeeded, but Y retreat from cleanup contact failed"
         self._owner._last_process_end_pose = list(retreat_pose)
@@ -572,11 +597,13 @@ class PaintEdgeCleanupExecutor:
             return True, "", len(command_path), command_path
 
         vel, acc = self._cleanup_speed()
-        if not self._owner._move_pickup_phase(
+        if not self._owner._motion.move_pickup_phase(
             "Moving to reverse XY/RZ cleanup Y approach",
             list(command_path[0]),
             velocity=vel,
             acceleration=acc,
+            motion_type=self._cleanup_motion_type(),
+            blendR=self._cleanup_blendR(),
         ):
             return False, "XY/RZ edge cleanup first pass succeeded, but move to reverse cleanup Y approach failed", 0, command_path
 
@@ -661,22 +688,16 @@ class PaintEdgeCleanupExecutor:
         stage_vel, stage_acc = self._cleanup_speed()
         config = self._owner._paint_process_config()
         post_cleanup_align_pose = None
-        should_align_before_unwind = getattr(
-            self._owner,
-            "_should_prepare_dropoff_align_before_unwind",
-            lambda: False,
-        )
-        if should_align_before_unwind():
-            make_dropoff_align_pose = getattr(self._owner, "_resolve_dropoff_align_pose", None)
-            if callable(make_dropoff_align_pose):
-                post_cleanup_align_pose = make_dropoff_align_pose(command_path[-1])
+        if _should_prepare_dropoff_align_before_unwind(self._owner):
+            post_cleanup_align_pose = _resolve_dropoff_align_pose(self._owner, command_path[-1])
         segments = [
             {
-                "type": "linear",
+                "type": self._dropoff_motion_type(),
                 "label": "edge_cleanup_align",
                 "position": list(align_pose),
                 "vel": align_vel,
                 "acc": align_acc,
+                "blendR": self._dropoff_blendR(),
             },
             {
                 "type": "unwind_joint6",
@@ -685,64 +706,57 @@ class PaintEdgeCleanupExecutor:
                 "acc": unwind_acc,
             },
             {
-                "type": "linear",
+                "type": self._cleanup_motion_type(),
                 "label": "edge_cleanup_stage",
                 "position": list(stage_approach_pose),
                 "vel": stage_vel,
                 "acc": stage_acc,
+                "blendR": self._cleanup_blendR(),
             },
             {
-                "type": "path",
-                "label": "edge_cleanup_follow_path",
-                "path": command_path,
-                "vel": stage_vel,
-                "acc": stage_acc,
+                    "type": "path",
+                    "label": "edge_cleanup_follow_path",
+                    "path": command_path,
+                    "vel": stage_vel,
+                    "acc": stage_acc,
+                    "blendR": self._cleanup_blendR(),
             },
         ]
         if post_cleanup_align_pose is not None:
-            safe_travel_waypoints = []
-            resolve_dropoff_safe_travel = getattr(
-                self._owner,
-                "_resolve_dropoff_safe_travel_waypoints",
-                None,
-            )
-            if callable(resolve_dropoff_safe_travel):
-                safe_travel_waypoints = resolve_dropoff_safe_travel()
+            safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
             if bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)) and safe_travel_waypoints:
                 for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
                     segments.append(
                         {
-                            "type": "linear",
+                            "type": str(safe_travel_waypoint.get("motion_type", "linear")),
                             "label": f"prepare_dropoff_safe_travel_{index}",
                             "position": safe_travel_waypoint["position"],
                             "vel": float(safe_travel_waypoint["vel_percent"]),
                             "acc": float(safe_travel_waypoint["acc_percent"]),
+                            "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
                         }
                     )
             segments.append(
                 {
-                    "type": "linear",
+                    "type": str(config.dropoff.release_align_motion_type),
                     "label": "prepare_dropoff_align",
                     "position": post_cleanup_align_pose,
                     "vel": float(config.dropoff.release_align_vel_percent),
                     "acc": float(config.dropoff.release_align_acc_percent),
+                    "blendR": float(config.dropoff.release_align_blendR),
                 }
             )
         elif bool(getattr(getattr(config, "dropoff_safe_travel", None), "enabled", False)):
-            resolve_dropoff_safe_travel = getattr(
-                self._owner,
-                "_resolve_dropoff_safe_travel_waypoints",
-                None,
-            )
-            safe_travel_waypoints = resolve_dropoff_safe_travel() if callable(resolve_dropoff_safe_travel) else []
+            safe_travel_waypoints = _resolve_dropoff_safe_travel_waypoints(self._owner)
             for index, safe_travel_waypoint in enumerate(safe_travel_waypoints, start=1):
                 segments.append(
                     {
-                        "type": "linear",
+                        "type": str(safe_travel_waypoint.get("motion_type", "linear")),
                         "label": f"prepare_dropoff_safe_travel_{index}",
                         "position": safe_travel_waypoint["position"],
                         "vel": float(safe_travel_waypoint["vel_percent"]),
                         "acc": float(safe_travel_waypoint["acc_percent"]),
+                        "blendR": float(safe_travel_waypoint.get("blendR", 0.0)),
                     }
                 )
                 post_cleanup_align_pose = safe_travel_waypoint["position"]

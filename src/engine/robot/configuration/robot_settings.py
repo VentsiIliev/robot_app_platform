@@ -71,6 +71,7 @@ class OffsetDirectionMap:
 class MovementGroup:
     velocity: int = 0
     acceleration: int = 0
+    motion_type: str = "ptp"
     position: Optional[str] = None
     points: List[str] = field(default_factory=list)
     iterations: int = 1
@@ -82,6 +83,7 @@ class MovementGroup:
         return cls(
             velocity=data.get("velocity", 0),
             acceleration=data.get("acceleration", 0),
+            motion_type=cls._normalize_motion_type(data.get("motion_type", data.get("type", "ptp"))),
             position=data.get("position"),
             points=data.get("points", []),
             iterations=data.get("iterations", 1),
@@ -103,6 +105,7 @@ class MovementGroup:
         result = {
             "velocity": self.velocity,
             "acceleration": self.acceleration,
+            "motion_type": self._normalize_motion_type(self.motion_type),
             "iterations": self.iterations,
             "has_iterations": self.has_iterations,
             "has_trajectory_execution": self.has_trajectory_execution,
@@ -112,6 +115,11 @@ class MovementGroup:
         if self.points:
             result["points"] = self.points
         return result
+
+    @staticmethod
+    def _normalize_motion_type(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
 
 
 

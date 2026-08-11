@@ -51,24 +51,106 @@ class PaintProcessSettingsMapper:
             try:
                 vel = float(value.get("vel_percent", default_vel))
                 acc = float(value.get("acc_percent", default_acc))
+                blend_r = float(value.get("blendR", value.get("blend_r", 0.0)))
             except (TypeError, ValueError):
                 vel = float(default_vel)
                 acc = float(default_acc)
-            return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+                blend_r = 0.0
+            return {
+                "position": pose,
+                "vel_percent": vel,
+                "acc_percent": acc,
+                "motion_type": PaintProcessSettingsMapper._motion_type_from_value(
+                    value.get("motion_type", value.get("type", "ptp"))
+                ),
+                "blendR": max(0.0, blend_r),
+            }
 
         pose = PaintProcessSettingsMapper._pose_from_value(value, [])
         if not pose:
             return None
         vel = float(default_vel)
         acc = float(default_acc)
+        motion_type = "ptp"
+        blend_r = 0.0
         try:
             raw = list(value)
             if len(raw) >= 8:
                 vel = float(raw[6])
                 acc = float(raw[7])
+            if len(raw) >= 9:
+                motion_type = PaintProcessSettingsMapper._motion_type_from_value(raw[8])
+            if len(raw) >= 10:
+                blend_r = float(raw[9])
         except (TypeError, ValueError):
             pass
-        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+        return {
+            "position": pose,
+            "vel_percent": vel,
+            "acc_percent": acc,
+            "motion_type": motion_type,
+            "blendR": max(0.0, blend_r),
+        }
+
+    @staticmethod
+    def _motion_type_from_value(value: object) -> str:
+        motion_type = str(value or "ptp").strip().lower()
+        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+
+    @staticmethod
+    def _profile_from_config(config: object, key: str, label: str, vel_attr: str, acc_attr: str) -> dict:
+        return {
+            "key": key,
+            "label": label,
+            "vel_percent": float(getattr(config, vel_attr)),
+            "acc_percent": float(getattr(config, acc_attr)),
+            "motion_type": PaintProcessSettingsMapper._motion_type_from_value(
+                getattr(config, f"{key}_motion_type", getattr(config, "motion_type", "ptp"))
+            ),
+            "blendR": max(0.0, float(getattr(config, f"{key}_blendR", getattr(config, "blendR", 0.0)))),
+        }
+
+    @staticmethod
+    def _profiles_by_key(value: object) -> dict[str, dict]:
+        try:
+            items = list(value or [])
+        except TypeError:
+            return {}
+        profiles: dict[str, dict] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key", "")).strip()
+            if not key:
+                continue
+            try:
+                vel = float(item.get("vel_percent", 0.0))
+                acc = float(item.get("acc_percent", 0.0))
+                blend_r = float(item.get("blendR", item.get("blend_r", 0.0)))
+            except (TypeError, ValueError):
+                continue
+            profiles[key] = {
+                "vel_percent": vel,
+                "acc_percent": acc,
+                "motion_type": PaintProcessSettingsMapper._motion_type_from_value(
+                    item.get("motion_type", item.get("type", "ptp"))
+                ),
+                "blendR": max(0.0, blend_r),
+            }
+        return profiles
+
+    @staticmethod
+    def _profile_value(
+        profiles: dict[str, dict],
+        key: str,
+        attr: str,
+        flat: dict,
+        legacy_key: str,
+        fallback: object,
+    ) -> object:
+        if key in profiles and attr in profiles[key]:
+            return profiles[key][attr]
+        return flat.get(legacy_key, fallback)
 
     @staticmethod
     def _waypoint_list_from_value(value: object, fallback: list[dict], default_vel: float, default_acc: float) -> list[dict]:
@@ -121,6 +203,7 @@ class PaintProcessSettingsMapper:
             "mirror_xz_ry_execution_rotation_value": settings.mirror_xz_ry_execution_rotation_value,
             "pickup_axis_alignment_sign_value": settings.pickup_axis_alignment_sign_value,
             "run_while_workpiece_found": settings.run_while_workpiece_found,
+            "enable_execution_state_timing": settings.enable_execution_state_timing,
             "pause_dashboard_live_view_after_capture": settings.pause_dashboard_live_view_after_capture,
             "combine_change_plane_with_first_contact": pickup.combine_change_plane_with_first_contact,
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
@@ -138,17 +221,37 @@ class PaintProcessSettingsMapper:
             "pickup_stage_transition_acc_percent": pickup.stage_transition_acc_percent,
             "pickup_first_contact_vel_percent": pickup.first_contact_vel_percent,
             "pickup_first_contact_acc_percent": pickup.first_contact_acc_percent,
+            "pickup_motion_profiles": [
+                PaintProcessSettingsMapper._profile_from_config(pickup, "approach", "Approach", "approach_vel_percent", "approach_acc_percent"),
+                PaintProcessSettingsMapper._profile_from_config(pickup, "descend", "Descend", "descend_vel_percent", "descend_acc_percent"),
+                PaintProcessSettingsMapper._profile_from_config(pickup, "lift_align", "Lift/Align", "lift_align_vel_percent", "lift_align_acc_percent"),
+                PaintProcessSettingsMapper._profile_from_config(pickup, "change_plane", "Change Plane", "change_plane_vel_percent", "change_plane_acc_percent"),
+                PaintProcessSettingsMapper._profile_from_config(pickup, "stage_transition", "Stage Transition", "stage_transition_vel_percent", "stage_transition_acc_percent"),
+                PaintProcessSettingsMapper._profile_from_config(pickup, "first_contact", "First Contact", "first_contact_vel_percent", "first_contact_acc_percent"),
+            ],
             "cleanup_enabled_after_xz_ry": cleanup.enabled_after_xz_ry,
             "cleanup_enabled_after_xy_rz": cleanup.enabled_after_xy_rz,
             "cleanup_enable_second_pass": cleanup.enable_second_pass,
             "cleanup_vel_percent": cleanup.vel_percent,
             "cleanup_acc_percent": cleanup.acc_percent,
+            "cleanup_motion_profiles": [
+                PaintProcessSettingsMapper._profile_from_config(cleanup, "cleanup", "Cleanup", "vel_percent", "acc_percent"),
+            ],
             "cleanup_spacing_mm": cleanup.spacing_mm,
             "cleanup_z_offset_mm": cleanup.z_offset_mm,
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
             "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
             "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
+            "dropoff_motion_profiles": [
+                PaintProcessSettingsMapper._profile_from_config(
+                    dropoff,
+                    "release_align",
+                    "Release Align",
+                    "release_align_vel_percent",
+                    "release_align_acc_percent",
+                ),
+            ],
             "magazine_load_enabled": magazine.enabled,
             "magazine_camera_settle_s": magazine.camera_settle_s,
             "magazine_release_settle_s": magazine.release_settle_s,
@@ -156,6 +259,22 @@ class PaintProcessSettingsMapper:
             "magazine_move_to_magazine_acc_percent": magazine.move_to_magazine_acc_percent,
             "magazine_transfer_to_calibration_vel_percent": magazine.transfer_to_calibration_vel_percent,
             "magazine_transfer_to_calibration_acc_percent": magazine.transfer_to_calibration_acc_percent,
+            "magazine_motion_profiles": [
+                PaintProcessSettingsMapper._profile_from_config(
+                    magazine,
+                    "move_to_magazine",
+                    "Move to Magazine",
+                    "move_to_magazine_vel_percent",
+                    "move_to_magazine_acc_percent",
+                ),
+                PaintProcessSettingsMapper._profile_from_config(
+                    magazine,
+                    "transfer_to_calibration",
+                    "Magazine to Calibration",
+                    "transfer_to_calibration_vel_percent",
+                    "transfer_to_calibration_acc_percent",
+                ),
+            ],
             "safe_travel_enabled": safe_travel.enabled,
             "safe_travel_position": PaintProcessSettingsMapper._pose_to_text(safe_travel.position),
             "safe_travel_positions": PaintProcessSettingsMapper._configured_waypoints(
@@ -177,6 +296,15 @@ class PaintProcessSettingsMapper:
             "nav_unwind_queue_if_busy": nav.unwind_queue_if_busy,
             "nav_calibration_move_vel_percent": nav.calibration_move_vel_percent,
             "nav_calibration_move_acc_percent": nav.calibration_move_acc_percent,
+            "navigation_motion_profiles": [
+                PaintProcessSettingsMapper._profile_from_config(
+                    nav,
+                    "calibration_move",
+                    "Move to Calibration",
+                    "calibration_move_vel_percent",
+                    "calibration_move_acc_percent",
+                ),
+            ],
             "path_tangent_lookahead_mm": interpolation.path_tangent_lookahead_mm,
             "path_tangent_deadband_deg": interpolation.path_tangent_deadband_deg,
             "enable_pivot_debug_plot": settings.enable_pivot_debug_plot,
@@ -187,6 +315,11 @@ class PaintProcessSettingsMapper:
 
     @staticmethod
     def from_flat_dict(flat: dict, base: PaintProcessConfig) -> PaintProcessConfig:
+        pickup_profiles = PaintProcessSettingsMapper._profiles_by_key(flat.get("pickup_motion_profiles"))
+        cleanup_profiles = PaintProcessSettingsMapper._profiles_by_key(flat.get("cleanup_motion_profiles"))
+        dropoff_profiles = PaintProcessSettingsMapper._profiles_by_key(flat.get("dropoff_motion_profiles"))
+        magazine_profiles = PaintProcessSettingsMapper._profiles_by_key(flat.get("magazine_motion_profiles"))
+        navigation_profiles = PaintProcessSettingsMapper._profiles_by_key(flat.get("navigation_motion_profiles"))
         pickup = replace(
             base.pickup_motion,
             approach_offset_mm=float(flat.get("pickup_approach_offset_mm", base.pickup_motion.approach_offset_mm)),
@@ -194,18 +327,26 @@ class PaintProcessSettingsMapper:
             initial_lift_clearance_mm=float(
                 flat.get("pickup_initial_lift_clearance_mm", base.pickup_motion.initial_lift_clearance_mm)
             ),
-            approach_vel_percent=float(flat.get("pickup_approach_vel_percent", base.pickup_motion.approach_vel_percent)),
-            approach_acc_percent=float(flat.get("pickup_approach_acc_percent", base.pickup_motion.approach_acc_percent)),
-            descend_vel_percent=float(flat.get("pickup_descend_vel_percent", base.pickup_motion.descend_vel_percent)),
-            descend_acc_percent=float(flat.get("pickup_descend_acc_percent", base.pickup_motion.descend_acc_percent)),
-            lift_align_vel_percent=float(flat.get("pickup_lift_align_vel_percent", base.pickup_motion.lift_align_vel_percent)),
-            lift_align_acc_percent=float(flat.get("pickup_lift_align_acc_percent", base.pickup_motion.lift_align_acc_percent)),
+            approach_vel_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "vel_percent", flat, "pickup_approach_vel_percent", base.pickup_motion.approach_vel_percent)),
+            approach_acc_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "acc_percent", flat, "pickup_approach_acc_percent", base.pickup_motion.approach_acc_percent)),
+            approach_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "motion_type", flat, "pickup_approach_motion_type", base.pickup_motion.approach_motion_type)),
+            approach_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "blendR", flat, "pickup_approach_blendR", base.pickup_motion.approach_blendR)),
+            descend_vel_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "descend", "vel_percent", flat, "pickup_descend_vel_percent", base.pickup_motion.descend_vel_percent)),
+            descend_acc_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "descend", "acc_percent", flat, "pickup_descend_acc_percent", base.pickup_motion.descend_acc_percent)),
+            descend_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "descend", "motion_type", flat, "pickup_descend_motion_type", base.pickup_motion.descend_motion_type)),
+            descend_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "descend", "blendR", flat, "pickup_descend_blendR", base.pickup_motion.descend_blendR)),
+            lift_align_vel_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "lift_align", "vel_percent", flat, "pickup_lift_align_vel_percent", base.pickup_motion.lift_align_vel_percent)),
+            lift_align_acc_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "lift_align", "acc_percent", flat, "pickup_lift_align_acc_percent", base.pickup_motion.lift_align_acc_percent)),
+            lift_align_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "lift_align", "motion_type", flat, "pickup_lift_align_motion_type", base.pickup_motion.lift_align_motion_type)),
+            lift_align_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "lift_align", "blendR", flat, "pickup_lift_align_blendR", base.pickup_motion.lift_align_blendR)),
             change_plane_vel_percent=float(
-                flat.get("pickup_change_plane_vel_percent", base.pickup_motion.change_plane_vel_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "change_plane", "vel_percent", flat, "pickup_change_plane_vel_percent", base.pickup_motion.change_plane_vel_percent)
             ),
             change_plane_acc_percent=float(
-                flat.get("pickup_change_plane_acc_percent", base.pickup_motion.change_plane_acc_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "change_plane", "acc_percent", flat, "pickup_change_plane_acc_percent", base.pickup_motion.change_plane_acc_percent)
             ),
+            change_plane_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "change_plane", "motion_type", flat, "pickup_change_plane_motion_type", base.pickup_motion.change_plane_motion_type)),
+            change_plane_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "change_plane", "blendR", flat, "pickup_change_plane_blendR", base.pickup_motion.change_plane_blendR)),
             combine_change_plane_with_first_contact=bool(
                 flat.get(
                     "combine_change_plane_with_first_contact",
@@ -213,25 +354,31 @@ class PaintProcessSettingsMapper:
                 )
             ),
             stage_transition_vel_percent=float(
-                flat.get("pickup_stage_transition_vel_percent", base.pickup_motion.stage_transition_vel_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "stage_transition", "vel_percent", flat, "pickup_stage_transition_vel_percent", base.pickup_motion.stage_transition_vel_percent)
             ),
             stage_transition_acc_percent=float(
-                flat.get("pickup_stage_transition_acc_percent", base.pickup_motion.stage_transition_acc_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "stage_transition", "acc_percent", flat, "pickup_stage_transition_acc_percent", base.pickup_motion.stage_transition_acc_percent)
             ),
+            stage_transition_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "stage_transition", "motion_type", flat, "pickup_stage_transition_motion_type", base.pickup_motion.stage_transition_motion_type)),
+            stage_transition_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "stage_transition", "blendR", flat, "pickup_stage_transition_blendR", base.pickup_motion.stage_transition_blendR)),
             first_contact_vel_percent=float(
-                flat.get("pickup_first_contact_vel_percent", base.pickup_motion.first_contact_vel_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "vel_percent", flat, "pickup_first_contact_vel_percent", base.pickup_motion.first_contact_vel_percent)
             ),
             first_contact_acc_percent=float(
-                flat.get("pickup_first_contact_acc_percent", base.pickup_motion.first_contact_acc_percent)
+                PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "acc_percent", flat, "pickup_first_contact_acc_percent", base.pickup_motion.first_contact_acc_percent)
             ),
+            first_contact_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "motion_type", flat, "pickup_first_contact_motion_type", base.pickup_motion.first_contact_motion_type)),
+            first_contact_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "blendR", flat, "pickup_first_contact_blendR", base.pickup_motion.first_contact_blendR)),
         )
         cleanup = replace(
             base.edge_cleanup,
             enabled_after_xz_ry=bool(flat.get("cleanup_enabled_after_xz_ry", base.edge_cleanup.enabled_after_xz_ry)),
             enabled_after_xy_rz=bool(flat.get("cleanup_enabled_after_xy_rz", base.edge_cleanup.enabled_after_xy_rz)),
             enable_second_pass=bool(flat.get("cleanup_enable_second_pass", base.edge_cleanup.enable_second_pass)),
-            vel_percent=float(flat.get("cleanup_vel_percent", base.edge_cleanup.vel_percent)),
-            acc_percent=float(flat.get("cleanup_acc_percent", base.edge_cleanup.acc_percent)),
+            vel_percent=float(PaintProcessSettingsMapper._profile_value(cleanup_profiles, "cleanup", "vel_percent", flat, "cleanup_vel_percent", base.edge_cleanup.vel_percent)),
+            acc_percent=float(PaintProcessSettingsMapper._profile_value(cleanup_profiles, "cleanup", "acc_percent", flat, "cleanup_acc_percent", base.edge_cleanup.acc_percent)),
+            motion_type=str(PaintProcessSettingsMapper._profile_value(cleanup_profiles, "cleanup", "motion_type", flat, "cleanup_motion_type", base.edge_cleanup.motion_type)),
+            blendR=float(PaintProcessSettingsMapper._profile_value(cleanup_profiles, "cleanup", "blendR", flat, "cleanup_blendR", base.edge_cleanup.blendR)),
             spacing_mm=float(flat.get("cleanup_spacing_mm", base.edge_cleanup.spacing_mm)),
             z_offset_mm=float(flat.get("cleanup_z_offset_mm", base.edge_cleanup.z_offset_mm)),
             second_pass_pivot_z_offset_mm=float(
@@ -242,11 +389,13 @@ class PaintProcessSettingsMapper:
             base.dropoff,
             strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
             release_align_vel_percent=float(
-                flat.get("dropoff_release_align_vel_percent", base.dropoff.release_align_vel_percent)
+                PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "vel_percent", flat, "dropoff_release_align_vel_percent", base.dropoff.release_align_vel_percent)
             ),
             release_align_acc_percent=float(
-                flat.get("dropoff_release_align_acc_percent", base.dropoff.release_align_acc_percent)
+                PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "acc_percent", flat, "dropoff_release_align_acc_percent", base.dropoff.release_align_acc_percent)
             ),
+            release_align_motion_type=str(PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "motion_type", flat, "dropoff_release_align_motion_type", base.dropoff.release_align_motion_type)),
+            release_align_blendR=float(PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "blendR", flat, "dropoff_release_align_blendR", base.dropoff.release_align_blendR)),
         )
         magazine = replace(
             base.magazine_load,
@@ -254,35 +403,27 @@ class PaintProcessSettingsMapper:
             camera_settle_s=float(flat.get("magazine_camera_settle_s", base.magazine_load.camera_settle_s)),
             release_settle_s=float(flat.get("magazine_release_settle_s", base.magazine_load.release_settle_s)),
             move_to_magazine_vel_percent=float(
-                flat.get(
-                    "magazine_move_to_magazine_vel_percent",
-                    base.magazine_load.move_to_magazine_vel_percent,
-                )
+                PaintProcessSettingsMapper._profile_value(magazine_profiles, "move_to_magazine", "vel_percent", flat, "magazine_move_to_magazine_vel_percent", base.magazine_load.move_to_magazine_vel_percent)
             ),
             move_to_magazine_acc_percent=float(
-                flat.get(
-                    "magazine_move_to_magazine_acc_percent",
-                    base.magazine_load.move_to_magazine_acc_percent,
-                )
+                PaintProcessSettingsMapper._profile_value(magazine_profiles, "move_to_magazine", "acc_percent", flat, "magazine_move_to_magazine_acc_percent", base.magazine_load.move_to_magazine_acc_percent)
             ),
+            move_to_magazine_motion_type=str(PaintProcessSettingsMapper._profile_value(magazine_profiles, "move_to_magazine", "motion_type", flat, "magazine_move_to_magazine_motion_type", base.magazine_load.move_to_magazine_motion_type)),
+            move_to_magazine_blendR=float(PaintProcessSettingsMapper._profile_value(magazine_profiles, "move_to_magazine", "blendR", flat, "magazine_move_to_magazine_blendR", base.magazine_load.move_to_magazine_blendR)),
             transfer_to_calibration_vel_percent=float(
-                flat.get(
-                    "magazine_transfer_to_calibration_vel_percent",
-                    base.magazine_load.transfer_to_calibration_vel_percent,
-                )
+                PaintProcessSettingsMapper._profile_value(magazine_profiles, "transfer_to_calibration", "vel_percent", flat, "magazine_transfer_to_calibration_vel_percent", base.magazine_load.transfer_to_calibration_vel_percent)
             ),
             transfer_to_calibration_acc_percent=float(
-                flat.get(
-                    "magazine_transfer_to_calibration_acc_percent",
-                    base.magazine_load.transfer_to_calibration_acc_percent,
-                )
+                PaintProcessSettingsMapper._profile_value(magazine_profiles, "transfer_to_calibration", "acc_percent", flat, "magazine_transfer_to_calibration_acc_percent", base.magazine_load.transfer_to_calibration_acc_percent)
             ),
+            transfer_to_calibration_motion_type=str(PaintProcessSettingsMapper._profile_value(magazine_profiles, "transfer_to_calibration", "motion_type", flat, "magazine_transfer_to_calibration_motion_type", base.magazine_load.transfer_to_calibration_motion_type)),
+            transfer_to_calibration_blendR=float(PaintProcessSettingsMapper._profile_value(magazine_profiles, "transfer_to_calibration", "blendR", flat, "magazine_transfer_to_calibration_blendR", base.magazine_load.transfer_to_calibration_blendR)),
         )
         safe_travel = replace(
             base.safe_travel,
             enabled=bool(flat.get("safe_travel_enabled", base.safe_travel.enabled)),
             positions=PaintProcessSettingsMapper._waypoint_list_from_value(
-                flat.get("safe_travel_positions", base.safe_travel.positions),
+                flat.get("safe_travel_positions") or flat.get("safe_travel_position", base.safe_travel.positions),
                 PaintProcessSettingsMapper._configured_waypoints(
                     base.safe_travel.positions,
                     base.safe_travel.position,
@@ -301,7 +442,8 @@ class PaintProcessSettingsMapper:
             base.dropoff_safe_travel,
             enabled=bool(flat.get("dropoff_safe_travel_enabled", base.dropoff_safe_travel.enabled)),
             positions=PaintProcessSettingsMapper._waypoint_list_from_value(
-                flat.get("dropoff_safe_travel_positions", base.dropoff_safe_travel.positions),
+                flat.get("dropoff_safe_travel_positions")
+                or flat.get("dropoff_safe_travel_position", base.dropoff_safe_travel.positions),
                 PaintProcessSettingsMapper._configured_waypoints(
                     base.dropoff_safe_travel.positions,
                     base.dropoff_safe_travel.position,
@@ -322,11 +464,13 @@ class PaintProcessSettingsMapper:
             unwind_acc_percent=float(flat.get("nav_unwind_acc_percent", base.navigation_return.unwind_acc_percent)),
             unwind_queue_if_busy=bool(flat.get("nav_unwind_queue_if_busy", base.navigation_return.unwind_queue_if_busy)),
             calibration_move_vel_percent=float(
-                flat.get("nav_calibration_move_vel_percent", base.navigation_return.calibration_move_vel_percent)
+                PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "vel_percent", flat, "nav_calibration_move_vel_percent", base.navigation_return.calibration_move_vel_percent)
             ),
             calibration_move_acc_percent=float(
-                flat.get("nav_calibration_move_acc_percent", base.navigation_return.calibration_move_acc_percent)
+                PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "acc_percent", flat, "nav_calibration_move_acc_percent", base.navigation_return.calibration_move_acc_percent)
             ),
+            calibration_move_motion_type=str(PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "motion_type", flat, "nav_calibration_move_motion_type", base.navigation_return.calibration_move_motion_type)),
+            calibration_move_blendR=float(PaintProcessSettingsMapper._profile_value(navigation_profiles, "calibration_move", "blendR", flat, "nav_calibration_move_blendR", base.navigation_return.calibration_move_blendR)),
         )
         interpolation = replace(
             base.interpolation,
@@ -368,6 +512,9 @@ class PaintProcessSettingsMapper:
             enable_vacuum_pump=bool(flat.get("enable_vacuum_pump", base.enable_vacuum_pump)),
             run_while_workpiece_found=bool(
                 flat.get("run_while_workpiece_found", base.run_while_workpiece_found)
+            ),
+            enable_execution_state_timing=bool(
+                flat.get("enable_execution_state_timing", base.enable_execution_state_timing)
             ),
             pause_dashboard_live_view_after_capture=bool(
                 flat.get(

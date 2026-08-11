@@ -11,6 +11,14 @@ from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 _logger = logging.getLogger(__name__)
 
 
+def execute_magazine_pickup_release(*args, **kwargs):
+    from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_execute_pickup_release_handler import (
+        execute_magazine_pickup_release as _execute_magazine_pickup_release,
+    )
+
+    return _execute_magazine_pickup_release(*args, **kwargs)
+
+
 def guard_control(ctx: MagazineLoadContext, state: MagazineLoadState) -> MagazineLoadState | None:
     if ctx.should_stop():
         ctx.set_result(False, "Paint process stopped")
@@ -54,6 +62,8 @@ def handle_move_to_magazine(ctx: MagazineLoadContext) -> MagazineLoadState:
         ctx.magazine_group,
         velocity=float(config.move_to_magazine_vel_percent),
         acceleration=float(config.move_to_magazine_acc_percent),
+        motion_type=config.move_to_magazine_motion_type,
+        blendR=float(config.move_to_magazine_blendR),
     )
     if not ok:
         return _interrupted_or_error(ctx, S.MOVE_TO_MAGAZINE, f"Move to magazine group '{ctx.magazine_group}' failed")
@@ -162,12 +172,8 @@ def handle_resolve_pickup(ctx: MagazineLoadContext) -> MagazineLoadState:
 
 def handle_execute_pickup_and_release(ctx: MagazineLoadContext) -> MagazineLoadState:
     service = ctx.service
-    execute_transfer = getattr(service._path_executor, "execute_pickup_target_and_release_at_position", None)
-    if not callable(execute_transfer):
-        ctx.set_result(False, "Paint path executor does not support magazine transfer")
-        return MagazineLoadState.ERROR
-
-    ok, msg = execute_transfer(
+    ok, msg = execute_magazine_pickup_release(
+        service,
         pickup_xy=ctx.target["pickup_xy"],
         pickup_rz=ctx.target["pickup_rz"],
         pickup_base_pose=ctx.magazine_pose,
@@ -190,6 +196,8 @@ def handle_move_to_calibration(ctx: MagazineLoadContext) -> MagazineLoadState:
         ctx.calibration_group,
         velocity=float(config.transfer_to_calibration_vel_percent),
         acceleration=float(config.transfer_to_calibration_acc_percent),
+        motion_type=config.transfer_to_calibration_motion_type,
+        blendR=float(config.transfer_to_calibration_blendR),
     )
     if not ok:
         return _interrupted_or_error(

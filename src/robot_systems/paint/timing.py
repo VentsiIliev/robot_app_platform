@@ -42,6 +42,19 @@ class TimingRecord:
     end_offset_s: float
 
 
+@dataclass(frozen=True)
+class StateTimingRecord:
+    order: int
+    state: str
+    next_state: str
+    success: bool
+    exception: bool
+    elapsed_s: float
+    start_offset_s: float
+    end_offset_s: float
+    message: str = ""
+
+
 class TimingRecorder:
     """Collect process timing records and emit an end-of-run summary."""
 
@@ -49,6 +62,7 @@ class TimingRecorder:
         self.name = str(name or "timing").strip() or "timing"
         self.started_at = perf_counter()
         self.records: list[TimingRecord] = []
+        self.state_records: list[StateTimingRecord] = []
 
     def record(
         self,
@@ -71,6 +85,32 @@ class TimingRecorder:
                 elapsed_s=float(elapsed_s),
                 start_offset_s=float(started_at - self.started_at),
                 end_offset_s=float(ended_at - self.started_at),
+            )
+        )
+
+    def record_state(
+        self,
+        *,
+        state: object,
+        next_state: object | None,
+        success: bool,
+        elapsed_s: float,
+        started_at: float,
+        ended_at: float,
+        exception: bool = False,
+        message: str = "",
+    ) -> None:
+        self.state_records.append(
+            StateTimingRecord(
+                order=len(self.state_records) + 1,
+                state=_state_name(state),
+                next_state=_state_name(next_state),
+                success=bool(success),
+                exception=bool(exception),
+                elapsed_s=float(elapsed_s),
+                start_offset_s=float(started_at - self.started_at),
+                end_offset_s=float(ended_at - self.started_at),
+                message=str(message or ""),
             )
         )
 
@@ -107,6 +147,35 @@ class TimingRecorder:
                         f"{record.end_offset_s:.6f}",
                     ]
                 )
+            if self.state_records:
+                writer.writerow([])
+                writer.writerow(
+                    [
+                        "state_order",
+                        "state",
+                        "next_state",
+                        "success",
+                        "exception",
+                        "elapsed_s",
+                        "start_offset_s",
+                        "end_offset_s",
+                        "message",
+                    ]
+                )
+                for display_order, record in enumerate(self._state_records_by_start(), start=1):
+                    writer.writerow(
+                        [
+                            display_order,
+                            record.state,
+                            record.next_state,
+                            str(record.success).lower(),
+                            str(record.exception).lower(),
+                            f"{record.elapsed_s:.6f}",
+                            f"{record.start_offset_s:.6f}",
+                            f"{record.end_offset_s:.6f}",
+                            record.message,
+                        ]
+                    )
         return path
 
     def log_summary(self, logger: logging.Logger, *, csv_path: str | None = None) -> None:
@@ -158,8 +227,41 @@ class TimingRecorder:
                 record.end_offset_s,
             )
 
+        self.log_state_summary(logger)
+
+    def log_state_summary(self, logger: logging.Logger) -> None:
+        records = self._state_records_by_start()
+        if not records:
+            return
+
+        failures = [record for record in records if not record.success or record.exception]
+        total_s = self._latest_state_end_offset(records)
+        logger.info(
+            "[STATE_TIMING_SUMMARY] name=%s success=%s total_s=%.3f states=%d",
+            self.name,
+            not failures,
+            total_s,
+            len(records),
+        )
+        for display_order, record in enumerate(records, start=1):
+            logger.info(
+                "[STATE_TIMING_SUMMARY] order=%d state=%s next=%s success=%s exception=%s elapsed_s=%.3f start_s=%.3f end_s=%.3f message=%s",
+                display_order,
+                record.state,
+                record.next_state or "-",
+                record.success,
+                record.exception,
+                record.elapsed_s,
+                record.start_offset_s,
+                record.end_offset_s,
+                record.message or "-",
+            )
+
     def _records_by_start(self) -> list[TimingRecord]:
         return sorted(self.records, key=lambda record: (record.start_offset_s, record.end_offset_s, record.order))
+
+    def _state_records_by_start(self) -> list[StateTimingRecord]:
+        return sorted(self.state_records, key=lambda record: (record.start_offset_s, record.end_offset_s, record.order))
 
     def _total_record(self, records: list[TimingRecord]) -> TimingRecord | None:
         for record in records:
@@ -169,6 +271,12 @@ class TimingRecorder:
 
     @staticmethod
     def _latest_end_offset(records: list[TimingRecord]) -> float:
+        if not records:
+            return 0.0
+        return max(record.end_offset_s for record in records)
+
+    @staticmethod
+    def _latest_state_end_offset(records: list[StateTimingRecord]) -> float:
         if not records:
             return 0.0
         return max(record.end_offset_s for record in records)
@@ -335,3 +443,9 @@ def _record_or_log(
 
 def _safe_name(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value).strip("_") or "timing"
+
+
+def _state_name(value: object | None) -> str:
+    if value is None:
+        return ""
+    return str(getattr(value, "name", value))

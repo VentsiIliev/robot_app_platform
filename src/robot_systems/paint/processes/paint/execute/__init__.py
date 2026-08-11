@@ -17,6 +17,5 @@ from .workpiece_path_executor import (
     PaintExecutorContactMotionConfig,
     PaintExecutorDependencies,
     PaintExecutorMotionConfig,
-    PaintExecutorPivotConfig,
     PaintWorkpiecePathExecutor,
 )

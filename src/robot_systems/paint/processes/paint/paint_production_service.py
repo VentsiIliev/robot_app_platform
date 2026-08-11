@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from time import perf_counter
 from typing import Callable, Optional
 
@@ -10,8 +11,11 @@ from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
     PaintDashboardLiveViewEvent,
     PaintDashboardLiveViewTopics,
 )
+from src.robot_systems.paint.processes.paint.execution_machine import (
+    PaintExecutionContext,
+    PaintExecutionMachineFactory,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
-from src.robot_systems.paint.processes.paint.plan import pick_largest_contour
 
 _logger = logging.getLogger(__name__)
 
@@ -45,12 +49,19 @@ class PaintProductionService:
         self._messaging_service = messaging_service
         self._brightness_locked = False
         self._paint_control = PaintExecutionControl()
+        self._active_context_lock = threading.Lock()
+        self._active_execution_context: PaintExecutionContext | None = None
 
     def pause_current_phase(self) -> None:
         pause_load = getattr(self._magazine_load_service, "pause_current_load", None)
         if callable(pause_load):
             pause_load()
+        with self._active_context_lock:
+            context = self._active_execution_context
+        if context is not None:
+            context.run_allowed.clear()
         self._paint_control.request_pause()
+        self._stop_active_magazine_navigation_motion()
         pause_execution = getattr(self._path_executor, "pause_current_execution", None)
         if callable(pause_execution):
             pause_execution()
@@ -59,12 +70,21 @@ class PaintProductionService:
         resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
         if callable(resume_load):
             resume_load()
+        with self._active_context_lock:
+            context = self._active_execution_context
+        if context is not None:
+            context.run_allowed.set()
         self._paint_control.resume()
 
     def stop_current_phase(self) -> None:
         stop_load = getattr(self._magazine_load_service, "stop_current_load", None)
         if callable(stop_load):
             stop_load()
+        with self._active_context_lock:
+            context = self._active_execution_context
+        if context is not None:
+            context.stop_event.set()
+            context.run_allowed.set()
         self._paint_control.request_stop()
 
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
@@ -82,24 +102,34 @@ class PaintProductionService:
 
         if self._magazine_load_service is not None and magazine_config is not None and magazine_config.enabled:
             if run_while_found:
-                return self._run_magazine_loop(magazine_config, should_stop)
+                return self._run_magazine_loop(magazine_config, process_config, should_stop)
 
-            ok, msg = self._run_single_cycle(should_stop, magazine_config=magazine_config, cycle_index=1)
+            ok, msg = self._run_single_cycle(
+                should_stop,
+                process_config=process_config,
+                magazine_config=magazine_config,
+                cycle_index=1,
+            )
 
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
                 return True, NO_WORKPIECE_AT_MAGAZINE
             return ok, msg
 
         if run_while_found and magazine_config is not None:
-            return self._run_manual_loop(magazine_config, should_stop)
+            return self._run_manual_loop(magazine_config, process_config, should_stop)
 
         if magazine_config is not None:
             ok, msg = self._move_to_calibration_before_manual_cycle(magazine_config, should_stop)
             if not ok:
                 return False, msg
-        return self._run_single_cycle(should_stop, magazine_config=None, cycle_index=1)
+        return self._run_single_cycle(
+            should_stop,
+            process_config=process_config,
+            magazine_config=None,
+            cycle_index=1,
+        )
 
-    def _run_manual_loop(self, magazine_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
+    def _run_manual_loop(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
         total_start = perf_counter()
         completed_cycles = 0
         while not should_stop():
@@ -114,6 +144,7 @@ class PaintProductionService:
                 return False, msg
             ok, msg = self._run_single_cycle(
                 should_stop,
+                process_config=process_config,
                 magazine_config=None,
                 cycle_index=completed_cycles + 1,
             )
@@ -145,12 +176,13 @@ class PaintProductionService:
         )
         return False, "Paint process stopped"
 
-    def _run_magazine_loop(self, magazine_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
+    def _run_magazine_loop(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
         total_start = perf_counter()
         completed_cycles = 0
         while not should_stop():
             ok, msg = self._run_single_cycle(
                 should_stop,
+                process_config=process_config,
                 magazine_config=magazine_config,
                 cycle_index=completed_cycles + 1,
             )
@@ -187,78 +219,51 @@ class PaintProductionService:
         self,
         should_stop: Callable[[], bool],
         *,
+        process_config,
         magazine_config,
         cycle_index: int,
     ) -> tuple[bool, str]:
-        total_start = perf_counter()
-
-        self._set_dashboard_live_view_paused(False, reason="paint cycle started")
-        self._restore_brightness_for_capture("before magazine load")
-        if magazine_config is not None:
-            phase_start = perf_counter()
-            ok, msg = self._magazine_load_service.load_to_calibration(magazine_config, should_stop)
-            self._log_phase_timing("magazine_load", phase_start, success=ok, cycle=cycle_index)
-            if not ok:
-                return False, msg
-            if should_stop():
-                return False, "Paint process stopped"
-
-        self._restore_brightness_for_capture("before paint capture")
-        phase_start = perf_counter()
-        snapshot = self._capture_snapshot_service.capture_snapshot(source="paint_process")
-        self._log_phase_timing("paint_capture", phase_start, contour_count=len(snapshot.contours or []), cycle=cycle_index)
-        if should_stop():
-            return False, "Paint process stopped"
-
-        if self._pause_dashboard_live_view_after_capture():
-            self._set_dashboard_live_view_paused(
-                True,
-                image=snapshot.frame,
-                reason="paint capture completed",
-            )
-        self._freeze_brightness_after_capture()
+        context = PaintExecutionContext(
+            production_service=self,
+            stop_requested=should_stop,
+            control=self._paint_control,
+            process_config=process_config,
+            magazine_config=magazine_config,
+            cycle_index=cycle_index,
+            total_started_at=perf_counter(),
+        )
+        with self._active_context_lock:
+            self._active_execution_context = context
         try:
-            contour = pick_largest_contour(snapshot.contours)
-            if contour is None:
-                return False, "No usable contour detected"
-
-            phase_start = perf_counter()
-            raw_workpiece, description = self._workpiece_preparation.prepare_workpiece(contour, snapshot.frame)
-            self._log_phase_timing("workpiece_preparation", phase_start, cycle=cycle_index)
-            if should_stop():
-                return False, "Paint process stopped"
-
-            phase_start = perf_counter()
-            try:
-                execution_plan = self._path_preparation_service.build_execution_plan(
-                    raw_workpiece,
-                    skip_debug_plot=not self._path_debug_plots_enabled(),
-                )
-            except Exception as exc:
-                _logger.exception("Paint production plan generation failed")
-                return False, f"Plan generation failed: {exc}"
-            self._log_phase_timing("path_preparation", phase_start, cycle=cycle_index)
-
-            if should_stop():
-                return False, "Paint process stopped"
-
-            phase_start = perf_counter()
-            execute_process = getattr(self._path_executor, "execute_paint_process", None)
-            if execute_process is None:
-                execute_process = self._path_executor.execute_pickup_and_paint
-            try:
-                ok, msg = execute_process(execution_plan, control=self._paint_control)
-            except TypeError:
-                ok, msg = execute_process(execution_plan)
-            self._log_phase_timing("paint_execution", phase_start, success=ok, cycle=cycle_index)
-            if not ok:
-                return False, f"{description}: {msg}"
-
-            self._log_phase_timing("run_once_total", total_start, success=True, cycle=cycle_index)
-            return True, f"{description}: {msg}"
+            machine = PaintExecutionMachineFactory().build(context)
+            machine.start_execution()
         finally:
+            self._log_execution_state_timing(context)
+            with self._active_context_lock:
+                if self._active_execution_context is context:
+                    self._active_execution_context = None
+
+        snapshot = machine.get_snapshot()
+        if snapshot.last_error is not None:
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
+            return False, snapshot.last_error
+
+        return context.result_ok, context.result_message
+
+    def _stop_active_magazine_navigation_motion(self) -> None:
+        with self._active_context_lock:
+            context = self._active_execution_context
+        state = getattr(context, "current_state", None)
+        if state is None or not str(getattr(state, "name", "")).startswith("MAGAZINE_"):
+            return
+        navigation = getattr(self._magazine_load_service, "_navigation", None)
+        stop_motion = getattr(navigation, "stop_motion", None)
+        if callable(stop_motion):
+            try:
+                stop_motion()
+            except Exception:
+                _logger.exception("[MAGAZINE_LOAD] Failed to stop robot motion during pause")
 
     def _freeze_brightness_after_capture(self) -> None:
         """Freeze auto-brightness after the workpiece capture so exposure stays stable while painting.
@@ -373,6 +378,16 @@ class PaintProductionService:
             )
         except Exception:
             _logger.exception("Failed to publish paint dashboard live-view state")
+
+    @staticmethod
+    def _log_execution_state_timing(context: PaintExecutionContext) -> None:
+        recorder = context.state_timing_recorder
+        if recorder is None:
+            return
+        try:
+            recorder.log_state_summary(_logger)
+        except Exception:
+            _logger.exception("Failed to log paint execution state timing summary")
 
     @staticmethod
     def _log_phase_timing(label: str, started_at: float, **fields: object) -> None:

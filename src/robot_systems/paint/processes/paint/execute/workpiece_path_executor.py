@@ -9,15 +9,13 @@ still being split into smaller collaborators:
 4. Preview and paint-contact path projection helpers.
 5. Pickup, ordered-motion, pause/resume, and vacuum helpers.
 6. Dropoff preparation/unwind helpers.
-7. Ordered full-cycle execution helpers.
-8. Top-level paint process orchestration.
+7. Top-level paint process orchestration.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from time import perf_counter
 from typing import Callable, Optional
 
 import numpy as np
@@ -25,7 +23,6 @@ import numpy as np
 from src.engine.geometry.planar import (
     axis_equivalent_shift_degrees,
     rotate_xy,
-    unwrap_degrees,
 )
 from src.applications.workpiece_editor.service.i_workpiece_path_executor import (
     IWorkpiecePathExecutor,
@@ -49,11 +46,8 @@ from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import PaintContactExecutor
+from src.robot_systems.paint.processes.paint.execute.paint_motion_executor import PaintMotionExecutor
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import PaintPickupExecutor
-from src.robot_systems.paint.processes.paint.execute.diagnostics import (
-    elapsed_s,
-
-)
 from src.robot_systems.paint.processes.paint.plan.paint_contact_motion import (
     project_paint_contact_motion_continuous,
     rebase_contact_motion_path_to_zero_start_rotation,
@@ -62,14 +56,12 @@ from src.robot_systems.paint.processes.paint.execute.projection_preview import (
     project_pivot_motion_snapshots_for_editor,
     project_pivot_paths_for_editor,
 )
-from src.robot_systems.paint.timing import timed_block, timed_step, timing_session
+from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
 
 _STAGING_Z_OFFSET_MM = 0
 _STAGING_PAINT_AXIS_OFFSET_MM = 80.0
-_PICKUP_RESUME_WAYPOINT_TOLERANCE_MM = 2.0
-
 
 def _camera_to_tcp_delta(
     x_offset: float,
@@ -178,7 +170,23 @@ class PaintExecutorContactMotionConfig:
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
 
-PaintExecutorPivotConfig = PaintExecutorContactMotionConfig
+class _PreparedPaintProcessAdapter:
+    """Minimal production-service shape for editor execution of an already prepared plan."""
+
+    def __init__(self, path_executor: "PaintWorkpiecePathExecutor") -> None:
+        self._path_executor = path_executor
+
+    @staticmethod
+    def _restore_brightness() -> None:
+        return None
+
+    @staticmethod
+    def _set_dashboard_live_view_paused(_paused: bool, *, reason: str = "", image: object | None = None) -> None:
+        return None
+
+    @staticmethod
+    def _log_phase_timing(_label: str, _started_at: float, **_fields: object) -> None:
+        return None
 
 
 def _normalize_contact_motion_config(
@@ -230,6 +238,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
     still owns shared state, configuration refresh, ordered-chain assembly, and
     process-level orchestration.
     """
+
+    supports_paint_motion_states = True
     def __init__(
         self,
         robot_service=None,
@@ -337,6 +347,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._edge_cleanup = PaintEdgeCleanupExecutor(self)
         self._pickup = PaintPickupExecutor(self)
         self._paint_contact = PaintContactExecutor(self)
+        self._motion = PaintMotionExecutor(self)
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
         self._staging_z_offset_mm = _STAGING_Z_OFFSET_MM
         self._staging_paint_axis_offset_mm = _STAGING_PAINT_AXIS_OFFSET_MM
@@ -347,8 +358,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
         self._active_execution_control = None
-        self._ordered_chain_resume_start_index: int | None = None
-        self._ordered_chain_interrupted_by_pause: bool = False
 
     # -------------------------------------------------------------------------
     # Runtime Configuration And Public Editor API
@@ -517,278 +526,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return self.execute_paint_process(execution_plan)
 
     # -------------------------------------------------------------------------
-    # Magazine Load / Calibration Release Phase
-    # -------------------------------------------------------------------------
-    # This path is used when a known pickup target is transferred directly to a
-    # release pose, separate from the full paint-contact process.
-
-    @timed_step(_logger, "magazine_pickup_to_calibration_release")
-    def execute_pickup_and_release_at_calibration(
-        self,
-        prepared_workpiece: WorkpieceExecutionPlan,
-    ) -> tuple[bool, str]:
-        """Pick up the prepared contour and release it at the calibration movement group."""
-        calibration_pose = self._resolve_calibration_position()
-        if calibration_pose is None:
-            return False, "Calibration movement group is not configured"
-        return self.execute_pickup_and_release_at_position(
-            prepared_workpiece,
-            calibration_pose,
-            release_label="calibration",
-        )
-
-
-
-    @timed_step(_logger, "pickup_target_to_position_release")
-    def execute_pickup_target_and_release_at_position(
-        self,
-        *,
-        pickup_xy: tuple[float, float] | list[float],
-        pickup_rz: float,
-        pickup_base_pose: list[float],
-        release_pose: list[float],
-        workpiece_height_mm: float = 0.0,
-        release_label: str = "release",
-        resume_from_current_pose: bool = False,
-    ) -> tuple[bool, str]:
-        """Pick up a simple resolved target and release it at an explicit pose."""
-        self._refresh_paint_process_config_snapshot()
-        self._apply_paint_process_contact_config()
-        self._refresh_runtime_config()
-        if pickup_xy is None or len(pickup_xy) < 2:
-            return False, "Pickup target XY is not configured"
-        if pickup_base_pose is None or len(pickup_base_pose) < 6:
-            return False, "Pickup base pose is not configured"
-        if release_pose is None or len(release_pose) < 6:
-            return False, f"{release_label.capitalize()} pose is not configured"
-
-        pickup_motion = self._paint_process_config().pickup_motion
-        pickup_z = self._pickup_z_mm
-        if pickup_z is None:
-            pickup_z = (
-                self._pickup_safety_z_min_mm
-                + float(workpiece_height_mm or 0.0)
-                + pickup_motion.contact_offset_mm
-            )
-
-        pickup_x = float(pickup_xy[0])
-        pickup_y = float(pickup_xy[1])
-        pickup_rx = float(pickup_base_pose[3])
-        pickup_ry = float(pickup_base_pose[4])
-        pickup_rz = float(pickup_rz)
-        approach_pose = [
-            pickup_x,
-            pickup_y,
-            float(pickup_z) + pickup_motion.approach_offset_mm,
-            pickup_rx,
-            pickup_ry,
-            pickup_rz,
-        ]
-        pickup_pose = [pickup_x, pickup_y, float(pickup_z), pickup_rx, pickup_ry, pickup_rz]
-        lift_pose = [
-            pickup_x,
-            pickup_y,
-            float(pickup_z) + min(
-                pickup_motion.initial_lift_clearance_mm,
-                pickup_motion.approach_offset_mm,
-            ),
-            pickup_rx,
-            pickup_ry,
-            pickup_rz,
-        ]
-
-        _logger.info(
-            "[MAGAZINE_LOAD] pickup target xy=(%.3f, %.3f) rz=%.3f workpiece_height=%.3f pickup_z=%.3f safety_z_min=%.3f",
-            pickup_x,
-            pickup_y,
-            pickup_rz,
-            float(workpiece_height_mm or 0.0),
-            float(pickup_z),
-            self._pickup_safety_z_min_mm,
-        )
-
-        transfer_waypoints = (
-            (
-                "Moving to magazine pickup approach pose",
-                approach_pose,
-                pickup_motion.approach_vel_percent,
-                pickup_motion.approach_acc_percent,
-                "linear",
-            ),
-            (
-                "Descending to magazine pickup pose",
-                pickup_pose,
-                pickup_motion.descend_vel_percent,
-                pickup_motion.descend_acc_percent,
-                "linear",
-            ),
-            (
-                "Lifting magazine workpiece",
-                lift_pose,
-                pickup_motion.lift_align_vel_percent,
-                pickup_motion.lift_align_acc_percent,
-                "ptp",
-            ),
-        )
-        velocity, acceleration = self._magazine_transfer_to_calibration_speed()
-        release_move_label = f"Moving picked workpiece to {release_label} release pose"
-        transfer_waypoints = transfer_waypoints + (
-            (
-                release_move_label,
-                list(release_pose),
-                velocity,
-                acceleration,
-                "ptp",
-            ),
-        )
-
-        ordered_segments = []
-
-        for index, (
-                label,
-                pose,
-                velocity,
-                acceleration,
-                move_type,
-        ) in enumerate(transfer_waypoints):
-
-            blend_r = 0.0
-
-            #
-            # Blend "Lifting magazine workpiece"
-            # into the following release PTP.
-            #
-            if (
-                    label == "Lifting magazine workpiece"
-                    and index + 1 < len(transfer_waypoints)
-            ):
-                blend_r = 20.0
-
-            ordered_segments.append(
-                {
-                    "type": move_type,
-                    "label": label,
-                    "position": list(pose),
-                    "vel": float(velocity),
-                    "acc": float(acceleration),
-                    "blendR": blend_r,
-                }
-            )
-
-        if resume_from_current_pose:
-            ordered_segments = self._trim_ordered_pickup_segments_from_current_pose(ordered_segments)
-            transfer_waypoints = tuple(
-                (
-                    str(segment.get("label", "")),
-                    list(segment["position"]),
-                    float(segment["vel"]),
-                    float(segment["acc"]),
-                    str(segment.get("type", "ptp")),
-                )
-                for segment in ordered_segments
-            )
-        if not ordered_segments:
-            _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
-        else:
-            ok, msg = self._execute_pickup_transfer_sequence(
-                "Ordered magazine pickup-to-release sequence",
-                ordered_segments,
-                transfer_waypoints,
-                turn_vacuum_on=True,
-            )
-            if not ok:
-                return False, msg or f"Move to {release_label} release pose failed"
-
-        ok, msg = self._turn_vacuum_off()
-        if not ok:
-            return False, msg
-        return True, f"Workpiece transferred to {release_label}"
-
-    def _trim_ordered_pickup_segments_from_current_pose(self, segments: list[dict]) -> list[dict]:
-        """Skip already-passed pickup waypoints after pause/resume.
-
-        Ordered-chain execution starts from the robot's current pose. On resume we
-        keep the waypoint currently being approached and later waypoints, instead
-        of re-sending earlier pickup targets and making the robot backtrack.
-        """
-        if not segments:
-            return []
-
-        current = self._read_current_robot_pose()
-        if current is None:
-            _logger.warning("[PICKUP] Resume requested but current robot pose is unavailable; reusing full sequence")
-            return segments
-
-        target_positions = []
-        for segment in segments:
-            position = segment.get("position") if isinstance(segment, dict) else None
-            if not position or len(position) < 3:
-                return segments
-            target_positions.append([float(position[0]), float(position[1]), float(position[2])])
-
-        current_xyz = np.array(current[:3], dtype=float)
-        targets = [np.array(position[:3], dtype=float) for position in target_positions]
-
-        nearest_target_index = min(
-            range(len(targets)),
-            key=lambda index: float(np.linalg.norm(current_xyz - targets[index])),
-        )
-        if float(np.linalg.norm(current_xyz - targets[nearest_target_index])) <= _PICKUP_RESUME_WAYPOINT_TOLERANCE_MM:
-            start_index = min(nearest_target_index + 1, len(segments))
-            _logger.info(
-                "[PICKUP] Resume from current pose near waypoint %d; remaining segments=%d",
-                nearest_target_index,
-                len(segments) - start_index,
-            )
-            return segments[start_index:]
-
-        best_index = 0
-        best_distance = float("inf")
-        for index in range(len(targets)):
-            if index == 0:
-                distance = float(np.linalg.norm(current_xyz - targets[index]))
-            else:
-                distance = self._point_to_segment_distance(current_xyz, targets[index - 1], targets[index])
-            if distance < best_distance:
-                best_distance = distance
-                best_index = index
-
-        _logger.info(
-            "[PICKUP] Resume from current pose; continuing toward waypoint %d/%d distance_to_path=%.3fmm",
-            best_index,
-            len(segments) - 1,
-            best_distance,
-        )
-        return segments[best_index:]
-
-    def _read_current_robot_pose(self) -> list[float] | None:
-        get_current_position = getattr(self._robot_service, "get_current_position", None)
-        if not callable(get_current_position):
-            return None
-        try:
-            pose = get_current_position()
-        except Exception:
-            _logger.warning("[PICKUP] Failed to read current robot pose for resume", exc_info=True)
-            return None
-        if not pose or len(pose) < 3:
-            return None
-        try:
-            return [float(value) for value in pose]
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _point_to_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
-        segment = end - start
-        length_sq = float(np.dot(segment, segment))
-        if length_sq <= 1e-9:
-            return float(np.linalg.norm(point - end))
-        t = float(np.dot(point - start, segment) / length_sq)
-        t = max(0.0, min(1.0, t))
-        projected = start + t * segment
-        return float(np.linalg.norm(point - projected))
-
-    # -------------------------------------------------------------------------
     # Shared Pose And Settings Resolvers
     # -------------------------------------------------------------------------
     # Phase executors call back into these helpers to resolve movement-group
@@ -829,37 +566,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Resolve the dedicated XY/RZ cleanup base pose."""
         return self._read_provider_position(self._cleanup_base_position_provider)
 
-    def _resolve_dropoff_position(self) -> Optional[list[float]]:
-        """Resolve the configured movement-group dropoff pose."""
-        return self._read_provider_position(self._dropoff_position_provider)
-
-    def _resolve_safe_travel_position(self) -> Optional[list[float]]:
-        """Resolve the optional carried-workpiece safe travel waypoint."""
-        positions = self._resolve_safe_travel_positions()
-        return positions[0] if positions else None
-
-    def _resolve_safe_travel_positions(self) -> list[list[float]]:
-        """Resolve optional carried-workpiece safe travel waypoints."""
-        return [list(item["position"]) for item in self._resolve_safe_travel_waypoints()]
-
-    def _resolve_safe_travel_waypoints(self) -> list[dict]:
-        """Resolve optional carried-workpiece safe travel waypoints with motion tuning."""
-        self._last_safe_travel_error = ""
-        config = self._paint_process_config().safe_travel
-        if not bool(config.enabled):
-            return []
-        motion = self._paint_process_config().pickup_motion
-        waypoints = self._read_configured_waypoints(
-            getattr(config, "positions", []),
-            getattr(config, "position", []),
-            float(motion.stage_transition_vel_percent),
-            float(motion.stage_transition_acc_percent),
-        )
-        if not waypoints:
-            self._last_safe_travel_error = "Safe travel is enabled but no valid 6-axis waypoint is configured"
-            _logger.warning("[PICKUP] %s", self._last_safe_travel_error)
-        return waypoints
-
     @staticmethod
     def _read_configured_pose(position: object) -> Optional[list[float]]:
         if isinstance(position, dict):
@@ -873,29 +579,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return values if len(values) >= 6 else None
 
     @classmethod
-    def _read_configured_poses(cls, positions: object, legacy_position: object = None) -> list[list[float]]:
-        resolved: list[list[float]] = []
-        if positions:
-            try:
-                raw_positions = list(positions)
-            except TypeError:
-                raw_positions = []
-            for item in raw_positions:
-                pose = cls._read_configured_pose(item)
-                if pose is not None:
-                    resolved.append(pose)
-        if resolved:
-            return resolved
-        legacy = cls._read_configured_pose(legacy_position)
-        return [legacy] if legacy is not None else []
-
-    @classmethod
     def _read_configured_waypoints(
         cls,
         positions: object,
         legacy_position: object = None,
         default_vel: float = 50.0,
         default_acc: float = 20.0,
+        default_motion_type: str = "ptp",
     ) -> list[dict]:
         resolved: list[dict] = []
         if positions:
@@ -904,37 +594,64 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             except TypeError:
                 raw_positions = []
             for item in raw_positions:
-                waypoint = cls._read_configured_waypoint(item, default_vel, default_acc)
+                waypoint = cls._read_configured_waypoint(item, default_vel, default_acc, default_motion_type)
                 if waypoint is not None:
                     resolved.append(waypoint)
         if resolved:
             return resolved
-        legacy = cls._read_configured_waypoint(legacy_position, default_vel, default_acc)
+        legacy = cls._read_configured_waypoint(legacy_position, default_vel, default_acc, default_motion_type)
         return [legacy] if legacy is not None else []
 
     @classmethod
-    def _read_configured_waypoint(cls, value: object, default_vel: float, default_acc: float) -> dict | None:
+    def _read_configured_waypoint(
+        cls,
+        value: object,
+        default_vel: float,
+        default_acc: float,
+        default_motion_type: str = "ptp",
+    ) -> dict | None:
         pose = cls._read_configured_pose(value)
         if pose is None:
             return None
         vel = float(default_vel)
         acc = float(default_acc)
+        motion_type = str(default_motion_type or "ptp").strip().lower()
+        if motion_type not in {"ptp", "linear"}:
+            motion_type = "ptp"
+        blend_r = 0.0
         if isinstance(value, dict):
             try:
                 vel = float(value.get("vel_percent", default_vel))
                 acc = float(value.get("acc_percent", default_acc))
+                blend_r = float(value.get("blendR", value.get("blend_r", 0.0)))
             except (TypeError, ValueError):
                 vel = float(default_vel)
                 acc = float(default_acc)
+                blend_r = 0.0
+            candidate = str(value.get("motion_type", value.get("type", "ptp")) or "ptp").strip().lower()
+            if candidate in {"ptp", "linear"}:
+                motion_type = candidate
         else:
             try:
                 raw = list(value)
                 if len(raw) >= 8:
                     vel = float(raw[6])
                     acc = float(raw[7])
+                if len(raw) >= 9:
+                    candidate = str(raw[8] or "ptp").strip().lower()
+                    if candidate in {"ptp", "linear"}:
+                        motion_type = candidate
+                if len(raw) >= 10:
+                    blend_r = float(raw[9])
             except (TypeError, ValueError):
                 pass
-        return {"position": pose, "vel_percent": vel, "acc_percent": acc}
+        return {
+            "position": pose,
+            "vel_percent": vel,
+            "acc_percent": acc,
+            "motion_type": motion_type,
+            "blendR": max(0.0, blend_r),
+        }
 
     def _apply_pivot_offset(self, pivot_pose: list[float] | None, offset_mm: float) -> list[float] | None:
         """Apply the editor-configured pivot offset in the active pivot plane."""
@@ -1087,171 +804,13 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         return False, "Direct paint path execution is not supported; use the paint process action"
 
     # -------------------------------------------------------------------------
-    # Pickup And Ordered Non-Contact Motion Helpers
-    # -------------------------------------------------------------------------
-    # Pickup, magazine transfer, safe travel, and dropoff preparation all share
-    # these robot move wrappers and ordered-chain execution utilities.
-
-    @timed_step(_logger, "pickup_phase", label_arg="label")
-    def _move_pickup_phase(self, label: str, pose: list[float], *, velocity: float, acceleration: float) -> bool:
-        """Execute one pickup-related robot move with explicit motion limits."""
-        if velocity is None or acceleration is None:
-            raise ValueError(
-                f"Pickup phase '{label}' requires explicit velocity and acceleration"
-            )
-        _logger.info(
-            "[PICKUP] %s tool=%d user=%d pose=%s",
-            label,
-            self._pickup_tool,
-            self._pickup_user,
-            [round(v, 3) for v in pose],
-        )
-        while True:
-            ok = self._robot_service.move_ptp(
-                position=pose,
-                tool=self._pickup_tool,
-                user=self._pickup_user,
-                velocity=velocity,
-                acceleration=acceleration,
-                wait_to_reach=True,
-            )
-            if ok:
-                return True
-            if not self._resume_after_interrupted_non_contact_motion(label):
-                return False
-
-    @timed_step(_logger, "pickup_phase", label_arg="label")
-    def _move_ordered_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
-        """Execute a pickup sequence as ordered linear motion segments."""
-        _logger.info(
-            "[PICKUP] %s tool=%d user=%d segments=%d",
-            label,
-            self._pickup_tool,
-            self._pickup_user,
-            len(segments),
-        )
-        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-        if not callable(execute_chain):
-            _logger.info("[PICKUP] Ordered motion chain unavailable")
-            return False
-        active_segments = list(segments)
-        while active_segments:
-            result = execute_chain(
-                segments=active_segments,
-                tool=self._pickup_tool,
-                user=self._pickup_user,
-                blocking=True,
-            )
-            if result in (0, True, None):
-                return True
-            if not self._resume_after_interrupted_non_contact_motion(label):
-                return False
-            active_segments = self._trim_ordered_pickup_segments_from_current_pose(active_segments)
-        return True
-
-    def _execute_pickup_transfer_sequence(
-        self,
-        ordered_label: str,
-        ordered_segments: list[dict],
-        transfer_waypoints: tuple[tuple[str, list[float], float, float, str], ...],
-        *,
-        turn_vacuum_on: bool,
-    ) -> tuple[bool, str]:
-        """Turn vacuum on, then execute the ordered pickup transfer."""
-        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-        if not callable(execute_chain):
-            return False, "Ordered motion chain is unavailable"
-
-        if turn_vacuum_on:
-            ok, msg = self._turn_vacuum_on()
-            if not ok:
-                return False, msg
-        if not self._move_ordered_pickup_sequence(ordered_label, ordered_segments):
-            return False, f"{ordered_label} failed"
-        return True, ""
-
-    def _execute_ordered_segments_with_pickup_vacuum_boundary(
-        self,
-        ordered_label: str,
-        segments: list[dict],
-        *,
-        turn_vacuum_on: bool,
-    ) -> bool:
-        if turn_vacuum_on:
-            ok, _msg = self._turn_vacuum_on()
-            if not ok:
-                return False
-        if not self._move_ordered_pickup_sequence(ordered_label, segments):
-            return False
-        return True
-
-    # -------------------------------------------------------------------------
     # Pause / Resume Support For Ordered Non-Contact Motion
     # -------------------------------------------------------------------------
     # Paint-contact path segments are protected. Non-contact ordered motion can
     # be interrupted, then resumed from the current ordered-chain segment.
 
     def pause_current_execution(self) -> None:
-        control = self._active_execution_control
-        if control is not None and getattr(control, "in_protected_phase", lambda: False)():
-            return
-        ordered_status = self._read_ordered_motion_chain_status()
-        if self._ordered_motion_chain_segment_is_protected(ordered_status):
-            _logger.info("[EXECUTE] Paint pause requested during protected ordered segment; deferring stop")
-            return
-        self._ordered_chain_resume_start_index = self._ordered_motion_chain_resume_index(ordered_status)
-        self._ordered_chain_interrupted_by_pause = True
-        stop_motion = getattr(self._robot_service, "stop_motion", None)
-        if callable(stop_motion):
-            try:
-                stop_motion()
-            except Exception:
-                _logger.exception("[EXECUTE] Failed to stop robot motion during paint pause")
-
-    def _read_ordered_motion_chain_status(self) -> dict | None:
-        get_status = getattr(self._robot_service, "get_execution_status", None)
-        if not callable(get_status):
-            return None
-        try:
-            status = get_status()
-        except Exception:
-            _logger.exception("[EXECUTE] Failed to read ordered motion status during paint pause")
-            return None
-        if not isinstance(status, dict):
-            return None
-        ordered = status.get("ordered_motion_chain")
-        if not isinstance(ordered, dict):
-            return None
-        return ordered
-
-    @staticmethod
-    def _ordered_motion_chain_segment_is_protected(ordered: dict | None) -> bool:
-        if not isinstance(ordered, dict):
-            return False
-        return bool(
-            ordered.get("active")
-            and ordered.get("phase") == "executing"
-            and ordered.get("current_segment_protected")
-        )
-
-    @staticmethod
-    def _ordered_motion_chain_resume_index(ordered: dict | None) -> int:
-        if not isinstance(ordered, dict) or not ordered.get("active"):
-            return 0
-        try:
-            index = int(ordered.get("current_segment_index"))
-        except (TypeError, ValueError):
-            return 0
-        return max(0, index)
-
-    def _resume_after_interrupted_non_contact_motion(self, label: str) -> bool:
-        control = self._active_execution_control
-        pause_requested = getattr(control, "pause_requested", None)
-        interrupted_by_pause = self._ordered_chain_interrupted_by_pause
-        if (not callable(pause_requested) or not pause_requested()) and not interrupted_by_pause:
-            return False
-        _logger.info("[EXECUTE] Paused during non-contact motion '%s'; waiting to resume", label)
-        return self._wait_for_paint_resume(control)
+        self._motion.pause_current_execution()
 
     # -------------------------------------------------------------------------
     # Paint-Contact Command Pose Helpers
@@ -1346,1201 +905,39 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             )
         return command_path
 
-    def _append_contact_retreat_waypoint(self, command_path: list[list[float]]) -> list[list[float]]:
-        """Append an off-contact retreat waypoint to the paint trajectory command."""
-        if not command_path:
-            return []
-        path_with_retreat = [list(pose) for pose in command_path]
-        final_contact_pose = list(path_with_retreat[-1])
-        retreat_pose = _paint_axis_staging_offset_pose(final_contact_pose, self._contact_motion_config)
-        if np.allclose(
-            np.asarray(final_contact_pose[:3], dtype=float),
-            np.asarray(retreat_pose[:3], dtype=float),
-            atol=1e-6,
-        ):
-            return path_with_retreat
-        path_with_retreat.append(retreat_pose)
-        _logger.info(
-            "[PIVOT_PATH] appended off-pivot retreat waypoint: contact_pose=%s retreat_pose=%s",
-            [round(float(v), 3) for v in final_contact_pose[:6]],
-            [round(float(v), 3) for v in retreat_pose[:6]],
-        )
-        return path_with_retreat
-
-    # -------------------------------------------------------------------------
-    # Vacuum Boundary Helpers
-    # -------------------------------------------------------------------------
-    # Vacuum is intentionally centralized here because pickup, ordered chains,
-    # and dropoff all need to preserve the same enable/disable semantics.
-
-    @timed_step(_logger, "vacuum_on")
-    def _turn_vacuum_on(self) -> tuple[bool, str]:
-        """Enable the vacuum pump before pickup if one is configured."""
-        if not self._enable_vacuum_pump:
-            _logger.info("[PICKUP] Vacuum pump ON skipped: disabled by configuration")
-            return True, ""
-        if self._vacuum_pump is None:
-            _logger.info("[PICKUP] Vacuum pump ON skipped: pump not configured")
-            return True, ""
-        _logger.info("[PICKUP] Turning vacuum pump ON before pickup")
-        if self._vacuum_pump.turn_on():
-            return True, ""
-        return False, "Pickup approach succeeded, but vacuum pump ON failed"
-
-    @timed_step(_logger, "vacuum_off")
-    def _turn_vacuum_off(self) -> tuple[bool, str]:
-        """Disable the vacuum pump after staging if one is configured."""
-        if not self._enable_vacuum_pump:
-            _logger.info("[PICKUP] Vacuum pump OFF skipped: disabled by configuration")
-            return True, ""
-        if self._vacuum_pump is None:
-            _logger.info("[PICKUP] Vacuum pump OFF skipped: pump not configured")
-            return True, ""
-        _logger.info("[PICKUP] Turning vacuum pump OFF after staged pivot move")
-        if self._vacuum_pump.turn_off():
-            return True, ""
-        return False, "Pickup succeeded, but vacuum pump OFF failed after pivot stage"
-
-    # -------------------------------------------------------------------------
-    # Dropoff Preparation And Joint-6 Unwind Phase
-    # -------------------------------------------------------------------------
-    # These helpers prepare a safe route from paint contact/cleanup to the
-    # release strategy, including optional safe travel and Joint 6 unwind.
-
-    @timed_step(_logger, "prepare_dropoff_unwind")
-    def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:
-        """Move to the safe unwind orientation, then relieve Joint 6 before dropoff."""
-        if self._dropoff_unwind_prepared:
-            _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
-            return True, ""
-        config = self._paint_process_config()
-        safe_waypoints = self._resolve_dropoff_safe_travel_waypoints()
-        if bool(config.dropoff_safe_travel.enabled):
-            if not safe_waypoints:
-                return False, "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured"
-            for index, safe_waypoint in enumerate(safe_waypoints, start=1):
-                if not self._move_pickup_phase(
-                    f"Moving through paint-to-dropoff safe travel waypoint {index}",
-                    safe_waypoint["position"],
-                    velocity=float(safe_waypoint["vel_percent"]),
-                    acceleration=float(safe_waypoint["acc_percent"]),
-                ):
-                    return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
-        if self._should_prepare_dropoff_align_before_unwind():
-            align_pose = self._resolve_dropoff_align_pose()
-            if align_pose is None:
-                return False, "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment"
-            if not self._move_pickup_phase(
-                "Moving to dropoff pose before unwind",
-                align_pose,
-                velocity=config.dropoff.release_align_vel_percent,
-                acceleration=config.dropoff.release_align_acc_percent,
-            ):
-                return False, "Pivot paint finished, but move to dropoff pose failed before unwind"
-        elif self._configured_contact_motion_plane == "xz_y_ry":
-            return False, "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment"
-        if self._robot_service is None:
-            return False, "Pivot paint finished, but robot service is not available for pre-dropoff Joint 6 unwind"
-        _logger.info(
-            "[DROPOFF] Unwinding Joint 6 before dropoff strategy vel=%.1f acc=%.1f queue_if_busy=%s",
-            config.navigation_return.unwind_vel_percent,
-            config.navigation_return.unwind_acc_percent,
-            PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-        )
-        ok = self._robot_service.unwind_joint6(
-            blocking=True,
-            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-            vel=config.navigation_return.unwind_vel_percent,
-            acc=config.navigation_return.unwind_acc_percent,
-        )
-        if not ok:
-            return False, "Pivot paint finished, but Joint 6 unwind failed before dropoff"
-        return True, ""
-
-    def _should_return_to_calibration_between_xy_rz_pickup_and_pivot(self) -> bool:
-        """Return whether pickup must pass through calibration before pivot staging."""
-        return False
-
-    def _should_prepare_dropoff_align_before_unwind(self) -> bool:
-        """Return whether the held part must move to a separate dropoff pose before unwind."""
-        if self._dropoff_strategy_name() == "movement_group":
-            return self._resolve_dropoff_release_pose() is not None
-        return self._configured_contact_motion_plane == "xz_y_ry" and self._resolve_dropoff_release_pose() is not None
-
-    def _resolve_dropoff_safe_travel_position(self) -> list[float] | None:
-        """Resolve the optional carried-workpiece safe waypoint before entering dropoff."""
-        positions = self._resolve_dropoff_safe_travel_positions()
-        return positions[0] if positions else None
-
-    def _resolve_dropoff_safe_travel_positions(self) -> list[list[float]]:
-        """Resolve optional carried-workpiece safe waypoints before entering dropoff."""
-        return [list(item["position"]) for item in self._resolve_dropoff_safe_travel_waypoints()]
-
-    def _resolve_dropoff_safe_travel_waypoints(self) -> list[dict]:
-        """Resolve optional carried-workpiece safe waypoints before entering dropoff with motion tuning."""
-        config = self._paint_process_config().dropoff_safe_travel
-        if not bool(config.enabled):
-            return []
-        dropoff = self._paint_process_config().dropoff
-        return self._read_configured_waypoints(
-            getattr(config, "positions", []),
-            getattr(config, "position", []),
-            float(dropoff.release_align_vel_percent),
-            float(dropoff.release_align_acc_percent),
-        )
-
-    def _should_release_at_current_dropoff_pose(self) -> bool:
-        """Return whether release should happen at the current post-paint retreat pose."""
-        return (
-            self._configured_contact_motion_plane == "xy_z_rz"
-            and self._dropoff_strategy_name() == "pickup_origin"
-        )
-
-    def _calibration_return_speed(self) -> tuple[float, float]:
-        config = self._paint_process_config()
-        return (
-            float(config.navigation_return.calibration_move_vel_percent),
-            float(config.navigation_return.calibration_move_acc_percent),
-        )
-
-    def _magazine_transfer_to_calibration_speed(self) -> tuple[float, float]:
-        config = self._paint_process_config()
-        return (
-            float(config.magazine_load.transfer_to_calibration_vel_percent),
-            float(config.magazine_load.transfer_to_calibration_acc_percent),
-        )
-
-    def _resolve_calibration_position(self) -> list[float] | None:
-        if self._calibration_position_provider is None:
-            return None
-        try:
-            position = self._calibration_position_provider()
-        except Exception:
-            _logger.exception("[PICKUP] Failed to resolve calibration position")
-            return None
-        if position is None:
-            return None
-        return list(position)
-
-    @timed_step(_logger, "xy_rz_pickup_to_calibration_before_pivot")
-    def _return_to_calibration_before_xy_rz_pivot(self) -> tuple[bool, str]:
-        """Move the held part to calibration after pickup alignment and before pivot staging."""
-        if not self._should_return_to_calibration_between_xy_rz_pickup_and_pivot():
-            return True, ""
-        position = self._resolve_calibration_position()
-        if position is None:
-            return False, "Pickup aligned, but calibration position is not configured before XY/RZ pivot"
-        velocity, acceleration = self._calibration_return_speed()
-        if not self._move_pickup_phase(
-            "Returning to calibration before XY/RZ pivot",
-            position,
-            velocity=velocity,
-            acceleration=acceleration,
-        ):
-            return False, "Pickup aligned, but return to calibration failed before XY/RZ pivot"
-        return True, ""
-
-    @timed_step(_logger, "xy_rz_cleanup_calibration_return")
-    def _return_to_calibration_and_unwind_before_xy_rz_cleanup(self) -> tuple[bool, str]:
-        """Move to calibration after XY/RZ paint, then unwind Joint 6 there before cleanup."""
-        if self._configured_contact_motion_plane != "xy_z_rz":
-            return True, ""
-        position = self._resolve_calibration_position()
-        if position is None:
-            return False, "XY/RZ paint succeeded, but calibration position is not configured before cleanup"
-        velocity, acceleration = self._calibration_return_speed()
-        if not self._move_pickup_phase(
-            "Returning to calibration before XY/RZ cleanup unwind",
-            position,
-            velocity=velocity,
-            acceleration=acceleration,
-        ):
-            return False, "XY/RZ paint succeeded, but return to calibration failed before edge cleanup"
-        ok, msg = self._edge_cleanup.unwind_joint6_before_cleanup(
-            failure_context="XY/RZ paint succeeded, but Joint 6 unwind failed at calibration before edge cleanup"
-        )
-        return ok, msg
-
-    def _dropoff_align_pose_near_reference(
-        self,
-        align_pose: list[float],
-        reference_pose: list[float] | None = None,
-    ) -> list[float]:
-        """Return a dropoff align pose without an XY/RZ wrap jump from the previous command."""
-        pose = list(align_pose)
-        reference = reference_pose or self._last_process_end_pose
-        if (
-            self._configured_contact_motion_plane == "xy_z_rz"
-            and reference is not None
-            and len(pose) >= 6
-            and len(reference) >= 6
-        ):
-            pose[5] = unwrap_degrees(float(reference[5]), float(pose[5]))
-        return pose
-
-    def _dropoff_strategy_name(self) -> str:
-        """Return the active dropoff strategy key from live process settings."""
-        return str(self._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
-
-    def _resolve_dropoff_release_pose(self) -> list[float] | None:
-        """Resolve the target pose where the held part should be released."""
-        if self._dropoff_strategy_name() == "movement_group":
-            return self._resolve_dropoff_position()
-        if self._last_pickup_plan is not None:
-            return list(self._last_pickup_plan.align_pose)
-        return None
-
-    def _resolve_dropoff_align_pose(self, reference_pose: list[float] | None = None) -> list[float] | None:
-        """Resolve the release pose adjusted to avoid an avoidable rotation wrap."""
-        pose = self._resolve_dropoff_release_pose()
-        if pose is None:
-            return None
-        return self._dropoff_align_pose_near_reference(pose, reference_pose)
-
-    def _apply_distributed_dropoff_unwind(
-        self,
-        poses: list[list[float]],
-        start_pose: list[float] | None,
-    ) -> list[list[float]]:
-        """
-        Progressively shift the active rotation component by whole-turn
-        equivalents so Joint 6 can unwind while travelling toward dropoff.
-
-        Configured XYZ positions are preserved.
-
-        Nominal waypoint rotations are first unwrapped onto one continuous
-        branch without considering the unwind offset. The unwind offset is then
-        added progressively according to cumulative XYZ travel distance.
-
-        Keeping those two operations separate prevents later waypoints from
-        selecting the opposite +/-360 degree branch and reversing the unwind.
-        """
-        if not poses:
-            return []
-
-        adjusted = [
-            list(pose)
-            for pose in poses
-        ]
-
-        if start_pose is None or len(start_pose) < 6:
-            return adjusted
-
-        rotation_index = int(
-            self._contact_motion_config.rotation_index
-        )
-
-        if rotation_index < 0:
-            return adjusted
-
-        if len(start_pose) <= rotation_index:
-            return adjusted
-
-        if any(
-            len(pose) <= rotation_index
-            for pose in adjusted
-        ):
-            return adjusted
-
-        start_rotation_deg = float(
-            start_pose[rotation_index]
-        )
-
-        #
-        # Build the nominal route on one continuous rotation branch.
-        # Do NOT include the unwind correction while choosing this branch.
-        #
-        nominal_continuous_rotations: list[float] = []
-        previous_nominal_rotation_deg = (
-            start_rotation_deg
-        )
-
-        for pose in adjusted:
-            nominal_rotation_deg = float(
-                pose[rotation_index]
-            )
-
-            continuous_rotation_deg = (
-                unwrap_degrees(
-                    previous_nominal_rotation_deg,
-                    nominal_rotation_deg,
-                )
-            )
-
-            nominal_continuous_rotations.append(
-                continuous_rotation_deg
-            )
-
-            previous_nominal_rotation_deg = (
-                continuous_rotation_deg
-            )
-
-        if not nominal_continuous_rotations:
-            return adjusted
-
-        final_nominal_continuous_deg = (
-            nominal_continuous_rotations[-1]
-        )
-
-        #
-        # Choose the whole-turn-equivalent final rotation nearest the
-        # canonical [-180, +180) region.
-        #
-        final_canonical_deg = (
-            (
-                final_nominal_continuous_deg
-                + 180.0
-            )
-            % 360.0
-        ) - 180.0
-
-        unwind_shift_deg = (
-            final_canonical_deg
-            - final_nominal_continuous_deg
-        )
-
-        #
-        # Snap to an exact number of full revolutions.
-        #
-        unwind_turns = int(
-            round(
-                unwind_shift_deg
-                / 360.0
-            )
-        )
-
-        unwind_shift_deg = (
-            360.0
-            * unwind_turns
-        )
-
-        if unwind_turns == 0:
-            _logger.info(
-                "[DROPOFF] Distributed unwind not needed: "
-                "start_rotation=%.3fdeg "
-                "final_nominal_continuous=%.3fdeg",
-                start_rotation_deg,
-                final_nominal_continuous_deg,
-            )
-            return adjusted
-
-        #
-        # Distribute the unwind according to cumulative XYZ travel distance.
-        #
-        route = [
-            list(start_pose),
-            *adjusted,
-        ]
-
-        segment_lengths: list[float] = []
-
-        for index in range(
-            1,
-            len(route),
-        ):
-            previous_xyz = np.asarray(
-                route[index - 1][:3],
-                dtype=float,
-            )
-
-            current_xyz = np.asarray(
-                route[index][:3],
-                dtype=float,
-            )
-
-            segment_lengths.append(
-                float(
-                    np.linalg.norm(
-                        current_xyz
-                        - previous_xyz
-                    )
-                )
-            )
-
-        total_distance = float(
-            sum(segment_lengths)
-        )
-
-        if total_distance <= 1e-6:
-            _logger.warning(
-                "[DROPOFF] Distributed unwind skipped because "
-                "dropoff route has no XYZ travel"
-            )
-            return adjusted
-
-        cumulative_distance = 0.0
-        applied_rotations: list[float] = []
-
-        for index, pose in enumerate(adjusted):
-            cumulative_distance += (
-                segment_lengths[index]
-            )
-
-            fraction = max(
-                0.0,
-                min(
-                    1.0,
-                    cumulative_distance
-                    / total_distance,
-                ),
-            )
-
-            nominal_continuous_deg = (
-                nominal_continuous_rotations[
-                    index
-                ]
-            )
-
-            applied_unwind_deg = (
-                unwind_shift_deg
-                * fraction
-            )
-
-            final_rotation_deg = (
-                nominal_continuous_deg
-                + applied_unwind_deg
-            )
-
-            pose[rotation_index] = (
-                final_rotation_deg
-            )
-
-            applied_rotations.append(
-                final_rotation_deg
-            )
-
-        _logger.info(
-            "[DROPOFF] Distributed unwind over travel: "
-            "start_rotation=%.3fdeg "
-            "nominal_rotations=%s "
-            "unwind_turns=%d "
-            "unwind_shift=%.3fdeg "
-            "applied_rotations=%s "
-            "travel_mm=%.3f",
-            start_rotation_deg,
-            [
-                round(value, 3)
-                for value
-                in nominal_continuous_rotations
-            ],
-            unwind_turns,
-            unwind_shift_deg,
-            [
-                round(value, 3)
-                for value
-                in applied_rotations
-            ],
-            total_distance,
-        )
-
-        return adjusted
-
-
-    def _ordered_dropoff_preparation_segments(
-        self,
-    ) -> tuple[list[dict], list[float] | None]:
-        """
-        Build the post-paint dropoff preparation chain.
-
-        Safe-travel/dropoff PTP poses are adjusted on the fly so the active
-        rotation component progressively sheds whole-turn cable twist while
-        travelling. A final standalone unwind_joint6 segment is still appended
-        as a fallback in case the distributed unwind did not fully relieve J6.
-        """
-        config = self._paint_process_config()
-
-        route_items: list[dict] = []
-
-        safe_waypoints = (
-            self._resolve_dropoff_safe_travel_waypoints()
-        )
-
-        if bool(
-            config.dropoff_safe_travel.enabled
-        ):
-            if not safe_waypoints:
-                return [], None
-
-            for index, safe_waypoint in enumerate(
-                safe_waypoints,
-                start=1,
-            ):
-                route_items.append(
-                    {
-                        "label":
-                            f"prepare_dropoff_safe_travel_{index}",
-
-                        "position":
-                            list(
-                                safe_waypoint["position"]
-                            ),
-
-                        "vel":
-                            float(
-                                safe_waypoint[
-                                    "vel_percent"
-                                ]
-                            ),
-
-                        "acc":
-                            float(
-                                safe_waypoint[
-                                    "acc_percent"
-                                ]
-                            ),
-                    }
-                )
-
-        if self._should_prepare_dropoff_align_before_unwind():
-            reference_pose = (
-                route_items[-1]["position"]
-                if route_items
-                else self._last_process_end_pose
-            )
-
-            align_pose = (
-                self._resolve_dropoff_align_pose(
-                    reference_pose
-                )
-            )
-
-            if align_pose is None:
-                return [], None
-
-            route_items.append(
-                {
-                    "label":
-                        "prepare_dropoff_align",
-
-                    "position":
-                        list(align_pose),
-
-                    "vel":
-                        float(
-                            config.dropoff
-                            .release_align_vel_percent
-                        ),
-
-                    "acc":
-                        float(
-                            config.dropoff
-                            .release_align_acc_percent
-                        ),
-                }
-            )
-
-        segments: list[dict] = []
-
-        if route_items:
-            start_pose = (
-                list(self._last_process_end_pose)
-                if self._last_process_end_pose is not None
-                else None
-            )
-
-            adjusted_positions = (
-                self._apply_distributed_dropoff_unwind(
-                    [
-                        item["position"]
-                        for item in route_items
-                    ],
-                    start_pose,
-                )
-            )
-
-            for index, (
-                item,
-                adjusted_position,
-            ) in enumerate(
-                zip(
-                    route_items,
-                    adjusted_positions,
-                )
-            ):
-                is_last_route_pose = (
-                    index
-                    == len(route_items) - 1
-                )
-
-                segments.append(
-                    {
-                        "type": "ptp",
-                        "label": item["label"],
-                        "position":
-                            list(adjusted_position),
-                        "vel":
-                            float(item["vel"]),
-                        "acc":
-                            float(item["acc"]),
-                        "blendR": (
-                            0.0
-                            if is_last_route_pose
-                            else 20.0
-                        ),
-                    }
-                )
-
-            final_pose = list(
-                adjusted_positions[-1]
-            )
-
-        else:
-            final_pose = (
-                list(self._last_process_end_pose)
-                if self._last_process_end_pose is not None
-                else None
-            )
-
-        #
-        # Keep the existing standalone J6 unwind as a fallback.
-        #
-        # The distributed unwind should normally reduce or eliminate the
-        # required rotation. If J6 still needs relief, this final segment
-        # completes it after the robot has reached the exact dropoff pose.
-        #
-        segments.append(
-            {
-                "type": "unwind_joint6",
-                "label": "prepare_dropoff_unwind",
-                "vel": float(
-                    config.navigation_return
-                    .unwind_vel_percent
-                ),
-                "acc": float(
-                    config.navigation_return
-                    .unwind_acc_percent
-                ),
-                "protected": True,
-            }
-        )
-
-        return segments, final_pose
-
-    # -------------------------------------------------------------------------
-    # Ordered Full-Cycle Execution Helpers
-    # -------------------------------------------------------------------------
-    # These methods preplan pickup, paint contact, optional cleanup, and dropoff
-    # preparation into robot ordered-motion chains when the robot service
-    # supports them.
-
-    def _try_execute_ordered_motion_cycle(
-        self,
-        prepared_workpiece: WorkpieceExecutionPlan,
-        *,
-        started: float,
-    ) -> tuple[bool, str, int] | None:
-        """Execute pickup, paint, optional cleanup, and pre-dropoff motion as one ordered chain."""
-        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-        if not callable(execute_chain):
-            return None
-
-        pickup_plan = self._pickup.build_plan(prepared_workpiece)
-        if pickup_plan is None:
-            return False, "Could not compute pickup-to-pivot poses", 0
-        self._last_pickup_plan = pickup_plan.motion_plan
-
-        if pickup_plan.change_plane_combined_with_first_contact:
-            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
-                _logger.info(
-                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
-                )
-
-        paint_paths: list[list[list[float]]] = []
-        paint_jobs: list[dict] = []
-        ok, msg, total_waypoints = self._paint_contact.execute(
-            prepared_workpiece,
-            execute_robot=False,
-            collected_command_paths=paint_paths,
-            collected_command_jobs=paint_jobs,
-        )
-        if not ok:
-            self._edge_cleanup.cancel_early_preplanning()
-            return False, msg, total_waypoints
-        if not paint_paths:
-            return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
-
-        segments: list[dict] = []
-        for waypoint_index, waypoint in enumerate(
-                pickup_plan.waypoints
-        ):
-            is_last_pickup_waypoint = (
-                    waypoint_index
-                    == len(pickup_plan.waypoints) - 1
-            )
-            ends_pickup_align_group = (
-                    waypoint.label == "Aligning workpiece to paint axis"
-            )
-            is_pickup_contact = (
-                    waypoint.label == "Descending to pickup pose"
-            )
-
-            segments.append(
-                {
-                    "type": "linear",
-                    "label": waypoint.label,
-                    "position": list(waypoint.pose),
-                    "vel": float(waypoint.vel_percent),
-                    "acc": float(waypoint.acc_percent),
-
-                    #
-                    # Do not blend through the actual pickup/contact pose.
-                    # Keep pickup/align and safe-travel/staging as distinct
-                    # ordered groups so later planning can overlap execution.
-                    #
-                    # The final one must currently stop because
-                    # the following segment is type="path".
-                    #
-                    "blendR": (
-                        0.0
-                        if (
-                                is_last_pickup_waypoint
-                                or ends_pickup_align_group
-                                or is_pickup_contact
-                        )
-                        else 20.0
-                    ),
-                }
-            )
-
-        for path_index, command_path in enumerate(paint_paths):
-            job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
-            segments.append(
-                {
-                    "type": "path",
-                    "label": f"paint_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
-                    "path": command_path,
-                    "vel": float(job.get("vel", 10.0)),
-                    "acc": float(job.get("acc", 30.0)),
-                    "protected": True,
-                }
-            )
-
-        final_pose: list[float] | None = list(paint_paths[-1][-1])
-        config = self._paint_process_config()
-        if bool(config.dropoff_safe_travel.enabled) and not self._resolve_dropoff_safe_travel_positions():
-            return (
-                False,
-                "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
-                total_waypoints,
-            )
-        if self._edge_cleanup.should_run_after_xz_ry():
-            ok, msg, cleanup_waypoints, cleanup_segments, cleanup_final_pose = (
-                self._edge_cleanup.build_ordered_cleanup_chain_extension(
-                    prepared_workpiece,
-                    started=started,
-                )
-            )
-            total_waypoints += cleanup_waypoints
-            if not ok:
-                return False, msg, total_waypoints
-            segments.extend(cleanup_segments)
-            final_pose = cleanup_final_pose
-        elif self._edge_cleanup.should_run_after_xy_rz():
-            ok, msg, cleanup_waypoints, cleanup_segments, cleanup_final_pose = (
-                self._edge_cleanup.build_ordered_cleanup_chain_extension(
-                    prepared_workpiece,
-                    started=started,
-                )
-            )
-            total_waypoints += cleanup_waypoints
-            if not ok:
-                return False, msg, total_waypoints
-            segments.extend(cleanup_segments)
-            final_pose = cleanup_final_pose
-        else:
-            dropoff_segments, dropoff_final_pose = self._ordered_dropoff_preparation_segments()
-            segments.extend(dropoff_segments)
-            final_pose = dropoff_final_pose or final_pose
-
-        _logger.info(
-            "[ORDERED_CHAIN] executing full paint motion chain: segments=%d paint_paths=%d cleanup=%s",
-            len(segments),
-            len(paint_paths),
-            self._edge_cleanup.should_run_after_xz_ry() or self._edge_cleanup.should_run_after_xy_rz(),
-        )
-        if not self._execute_ordered_segments_with_pickup_vacuum_boundary(
-            "Ordered paint motion chain",
-            segments,
-            turn_vacuum_on=bool(pickup_plan.vacuum_on_before_moves),
-        ):
-            return False, "Ordered paint motion chain failed", total_waypoints
-
-        self._dropoff_unwind_prepared = True
-        if final_pose is not None:
-            self._last_process_end_pose = list(final_pose)
-        return True, "", total_waypoints
-
-    @timed_step(_logger, "ordered_pickup_paint_contact_chain")
-    def _try_execute_ordered_pickup_and_paint_contact(
-        self,
-        prepared_workpiece: WorkpieceExecutionPlan,
-        *,
-        control,
-    ) -> tuple[bool, str, int] | None:
-        """Execute pickup/staging and primary paint contact as one preplanned ordered chain."""
-        execute_chain = getattr(self._robot_service, "execute_ordered_motion_chain", None)
-        if not callable(execute_chain):
-            return None
-
-        pickup_plan = self._pickup.build_plan(prepared_workpiece)
-        if pickup_plan is None:
-            return False, "Could not compute pickup-to-pivot poses", 0
-        self._last_pickup_plan = pickup_plan.motion_plan
-
-        if pickup_plan.change_plane_combined_with_first_contact:
-            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
-                _logger.info(
-                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
-                )
-
-        paint_paths: list[list[list[float]]] = []
-        paint_jobs: list[dict] = []
-        ok, msg, total_waypoints = self._paint_contact.execute(
-            prepared_workpiece,
-            execute_robot=False,
-            collected_command_paths=paint_paths,
-            collected_command_jobs=paint_jobs,
-        )
-        if not ok:
-            self._edge_cleanup.cancel_early_preplanning()
-            return False, msg, total_waypoints
-        if not paint_paths:
-            return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
-
-        segments: list[dict] = []
-
-        for waypoint_index, waypoint in enumerate(
-                pickup_plan.waypoints
-        ):
-            is_last_pickup_waypoint = (
-                    waypoint_index
-                    == len(pickup_plan.waypoints) - 1
-            )
-            ends_pickup_align_group = (
-                    waypoint.label == "Aligning workpiece to paint axis"
-            )
-            is_pickup_contact = (
-                    waypoint.label == "Descending to pickup pose"
-            )
-
-            segments.append(
-                {
-                    "type": "linear",
-                    "label": waypoint.label,
-                    "position": list(waypoint.pose),
-                    "vel": float(waypoint.vel_percent),
-                    "acc": float(waypoint.acc_percent),
-
-                    #
-                    # Do not blend through the actual pickup/contact pose.
-                    # Keep pickup/align and safe-travel/staging as distinct
-                    # ordered groups so later planning can overlap execution.
-                    #
-                    # The final waypoint must stop because the
-                    # following segment is currently type="path".
-                    #
-                    "blendR": (
-                        0.0
-                        if (
-                                is_last_pickup_waypoint
-                                or ends_pickup_align_group
-                                or is_pickup_contact
-                        )
-                        else 20.0
-                    ),
-                }
-            )
-
-
-        for path_index, command_path in enumerate(paint_paths):
-            job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
-            segments.append(
-                {
-                    "type": "path",
-                    "label": f"paint_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
-                    "path": command_path,
-                    "vel": float(job.get("vel", 10.0)),
-                    "acc": float(job.get("acc", 30.0)),
-                    "protected": True,
-                }
-            )
-
-        dropoff_prepared_in_chain = False
-        final_pose: list[float] | None = list(paint_paths[-1][-1])
-        if not self._edge_cleanup.should_run_after_xz_ry() and not self._edge_cleanup.should_run_after_xy_rz():
-            config = self._paint_process_config()
-            if bool(config.dropoff_safe_travel.enabled) and not self._resolve_dropoff_safe_travel_positions():
-                return (
-                    False,
-                    "Pivot paint finished, but paint-to-dropoff safe travel waypoints are not configured",
-                    total_waypoints,
-                )
-            dropoff_segments, dropoff_final_pose = self._ordered_dropoff_preparation_segments()
-            if not dropoff_segments:
-                return (
-                    False,
-                    "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment",
-                    total_waypoints,
-                )
-            segments.extend(dropoff_segments)
-            dropoff_prepared_in_chain = True
-            final_pose = dropoff_final_pose or final_pose
-
-        if pickup_plan.vacuum_on_before_moves:
-            ok, msg = self._turn_vacuum_on()
-            if not ok:
-                return False, msg, total_waypoints
-
-        active_segments = list(segments)
-        chain_completed = False
-        while active_segments:
-            _logger.info(
-                "[ORDERED_CHAIN] executing pickup plus paint contact chain: segments=%d paint_paths=%d dropoff_prep=%s",
-                len(active_segments),
-                len(paint_paths),
-                dropoff_prepared_in_chain,
-            )
-            self._ordered_chain_interrupted_by_pause = False
-            result = execute_chain(
-                active_segments,
-                tool=self._pickup_tool,
-                user=self._pickup_user,
-                blocking=True,
-            )
-            if result in (0, True, None):
-                chain_completed = True
-                break
-            if not self._resume_after_interrupted_non_contact_motion("Ordered pickup plus paint contact chain"):
-                return False, f"Ordered pickup and paint contact chain failed with code {result}", total_waypoints
-            start_index = self._ordered_chain_resume_start_index
-            if start_index is None:
-                start_index = self._ordered_motion_chain_resume_index(self._read_ordered_motion_chain_status())
-            self._ordered_chain_resume_start_index = None
-            self._ordered_chain_interrupted_by_pause = False
-            active_segments = active_segments[max(0, min(start_index, len(active_segments))):]
-        if not chain_completed:
-            return True, "", total_waypoints
-
-        if dropoff_prepared_in_chain:
-            self._dropoff_unwind_prepared = True
-        if final_pose is not None:
-            self._last_process_end_pose = list(final_pose)
-        return True, "", total_waypoints
-
-    # -------------------------------------------------------------------------
-    # Top-Level Paint Process Orchestration
-    # -------------------------------------------------------------------------
-    # This is the high-level phase runner. Keep detailed phase mechanics in the
-    # helpers above or the dedicated phase executors where possible.
-
     def execute_paint_process(
         self,
         prepared_workpiece: WorkpieceExecutionPlan,
         *,
         control=None,
     ) -> tuple[bool, str]:
-        """Run the full paint process.
+        """Run a prepared workpiece plan through the paint execution state machine."""
+        from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
+        from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
+        from src.robot_systems.paint.processes.paint.execution_machine.machine_factory import (
+            PaintExecutionMachineFactory,
+        )
+        from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
-        Phase order:
-        1. Pick up the workpiece.
-        2. Lift and align the held workpiece to the paint axis.
-        3. Change to the configured paint contact plane and stage at the first contact pose.
-        4. Execute the paint-contact path against the fixed paint shaft.
-        5. Optionally run the XY/RZ edge-cleanup pass after a safe unwind.
-        6. Move to a safe pre-dropoff orientation and unwind Joint 6.
-        7. Execute the configured dropoff strategy and release the workpiece.
-        8. Run the post-process return callback.
-        """
-        with timing_session("paint_process") as recorder:
-            started = perf_counter()
-            previous_control = self._active_execution_control
-            self._active_execution_control = control
-            self._refresh_paint_process_config_snapshot()
-            self._apply_paint_process_contact_config()
-            self._dropoff_unwind_prepared = False
-            total_waypoints = 0
-            result: tuple[bool, str] = (True, "")
-            contact_executed_in_ordered_chain = False
+        control = control or PaintExecutionControl()
+        context = PaintExecutionContext(
+            production_service=_PreparedPaintProcessAdapter(self),
+            stop_requested=lambda: False,
+            control=control,
+            process_config=self._paint_process_config(),
+            magazine_config=None,
+        )
+        context.execution_plan = prepared_workpiece
 
-            if not self._wait_for_paint_resume(control):
-                ordered_result = None
-                result = (False, "Paint process stopped")
-            else:
-                ordered_result = (
-                    self._try_execute_ordered_pickup_and_paint_contact(prepared_workpiece, control=control)
-                    if control is not None
-                    else self._try_execute_ordered_motion_cycle(prepared_workpiece, started=started)
-                )
-            if ordered_result is not None:
-                ok, msg, total_waypoints = ordered_result
-                result = (True, "") if ok else (False, msg)
-                contact_executed_in_ordered_chain = bool(control is not None and ok)
-            elif result[0]:
-                # Phase 1: pickup, lift, align, change plane, and stage at first contact.
-                ok, msg = self._pickup.execute(prepared_workpiece)
-                if not ok:
-                    _logger.info("[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f", elapsed_s(started))
-                    result = (False, msg)
-                else:
-                    result = (True, "")
-
-            if ordered_result is None and result[0]:
-                if not self._wait_for_paint_resume(control):
-                    result = (False, "Paint process stopped")
-            if (ordered_result is None or contact_executed_in_ordered_chain) and result[0]:
-                with timed_block(_logger, "paint_contact_cleanup_dropoff"):
-                    # Phase 2: execute the primary paint-contact path.
-                    if not contact_executed_in_ordered_chain:
-                        ok, msg, total_waypoints = self._paint_contact.execute(prepared_workpiece, control=control)
-                        if not ok:
-                            self._edge_cleanup.cancel_early_preplanning()
-                            _logger.info("[TIMING] paint_process success=false stage=contact total_elapsed_s=%.3f", elapsed_s(started))
-                            result = (False, msg)
-                    if result[0] and not self._wait_for_paint_resume(control):
-                        result = (False, "Paint process stopped")
-                    if result[0] and self._edge_cleanup.should_run_after_xz_ry():
-                        # Phase 3: optional edge cleanup in XY/RZ after safe cleanup unwind.
-                        ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_unwind(prepared_workpiece, started)
-                        total_waypoints += cleanup_waypoints
-                        result = (False, msg) if not ok else (True, "")
-                    elif result[0] and self._edge_cleanup.should_run_after_xy_rz():
-                        # Phase 3: optional edge cleanup in XY/RZ, reprojected at the cleanup station.
-                        ok, msg, cleanup_waypoints = self._edge_cleanup.execute_after_xy_rz_paint(
-                            prepared_workpiece,
-                            started,
-                            unwind_before_cleanup=True,
-                        )
-                        total_waypoints += cleanup_waypoints
-                        if not ok:
-                            _logger.info("[TIMING] paint_process success=false stage=edge_cleanup_xy_rz total_elapsed_s=%.3f", elapsed_s(started))
-                            result = (False, msg)
-                        else:
-                            result = (True, "")
-                    elif result[0]:
-                        result = (True, "")
-
-                    if result[0] and not self._wait_for_paint_resume(control):
-                        result = (False, "Paint process stopped")
-
-                    if result[0]:
-                        # Phase 4: return to safe orientation and unwind Joint 6 before dropoff.
-                        ok, msg = self._prepare_dropoff_joint6_unwind()
-                        if not ok:
-                            _logger.info("[TIMING] paint_process success=false stage=prepare_dropoff_unwind total_elapsed_s=%.3f", elapsed_s(started))
-                            result = (False, msg)
-
-                    if result[0] and not self._wait_for_paint_resume(control):
-                        result = (False, "Paint process stopped")
-
-                    if result[0]:
-                        # Phase 5: execute the configured dropoff strategy and release the part.
-                        ok, msg = self._dropoff.execute(prepared_workpiece)
-                        if not ok:
-                            _logger.info("[TIMING] paint_process success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
-                            result = (False, msg)
-
-                    if result[0] and not self._wait_for_paint_resume(control):
-                        result = (False, "Paint process stopped")
-
-                    if result[0]:
-                        _logger.info(
-                            "[EXECUTE] Paint process completed: jobs=%d total_waypoints=%d",
-                            len(prepared_workpiece.execution_jobs),
-                            total_waypoints,
-                        )
-                        result = (True, (
-                            f"Paint process completed "
-                            f"for {len(prepared_workpiece.execution_jobs)} path(s), {total_waypoints} waypoints"
-                        ))
-                with timed_block(_logger, "return_after_paint_process"):
-                    # Phase 6: return the robot to its configured post-process position.
-                    if self._post_execute_callback is None:
-                        _logger.info("[EXECUTE] Post-execute return skipped: callback not configured")
-                    else:
-                        try:
-                            return_started = perf_counter()
-                            moved = bool(self._post_execute_callback())
-                        except Exception:
-                            _logger.exception("[EXECUTE] Post-execute callback failed")
-                            _logger.info(
-                                "[TIMING] paint_process success=false stage=post_return total_elapsed_s=%.3f",
-                                elapsed_s(started),
-                            )
-                            result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
-                                False,
-                                f"{result[1]}; additionally, return-to-calibration failed",
-                            )
-                        else:
-                            if not moved:
-                                _logger.info(
-                                    "[TIMING] paint_process success=false stage=post_return return_elapsed_s=%.3f total_elapsed_s=%.3f",
-                                    elapsed_s(return_started),
-                                    elapsed_s(started),
-                                )
-                                result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
-                                    False,
-                                    f"{result[1]}; additionally, return-to-calibration failed",
-                                )
-
-            if ordered_result is not None and not contact_executed_in_ordered_chain:
-                if result[0]:
-                    ok, msg = self._dropoff.execute(prepared_workpiece)
-                    if not ok:
-                        _logger.info("[TIMING] paint_process success=false stage=pre_release_dropoff total_elapsed_s=%.3f", elapsed_s(started))
-                        result = (False, msg)
-
-                if result[0]:
-                    _logger.info(
-                        "[EXECUTE] Paint process completed: jobs=%d total_waypoints=%d",
-                        len(prepared_workpiece.execution_jobs),
-                        total_waypoints,
-                    )
-                    result = (True, (
-                        f"Paint process completed "
-                        f"for {len(prepared_workpiece.execution_jobs)} path(s), {total_waypoints} waypoints"
-                    ))
-
-                with timed_block(_logger, "return_after_paint_process"):
-                    if self._post_execute_callback is None:
-                        _logger.info("[EXECUTE] Post-execute return skipped: callback not configured")
-                    else:
-                        try:
-                            return_started = perf_counter()
-                            moved = bool(self._post_execute_callback())
-                        except Exception:
-                            _logger.exception("[EXECUTE] Post-execute callback failed")
-                            _logger.info(
-                                "[TIMING] paint_process success=false stage=post_return total_elapsed_s=%.3f",
-                                elapsed_s(started),
-                            )
-                            result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
-                                False,
-                                f"{result[1]}; additionally, return-to-calibration failed",
-                            )
-                        else:
-                            if not moved:
-                                _logger.info(
-                                    "[TIMING] paint_process success=false stage=post_return return_elapsed_s=%.3f total_elapsed_s=%.3f",
-                                    elapsed_s(return_started),
-                                    elapsed_s(started),
-                                )
-                                result = (False, "Paint process finished, but return-to-calibration failed") if result[0] else (
-                                    False,
-                                    f"{result[1]}; additionally, return-to-calibration failed",
-                                )
-
-            recorder.record(
-                step="paint_process",
-                label="",
-                success=result[0],
-                elapsed_s=elapsed_s(started),
-                started_at=started,
-                ended_at=perf_counter(),
-            )
-            csv_path = recorder.write_csv(self._debug_dump_dir) if self._diagnostics_artifacts_enabled() else None
-            recorder.log_summary(_logger, csv_path=csv_path)
-            self._active_execution_control = previous_control
-            return result
+        machine = PaintExecutionMachineFactory().build(
+            context,
+            initial_state=PaintExecutionState.PICKUP,
+        )
+        machine.start_execution()
+        snapshot = machine.get_snapshot()
+        if snapshot.last_error is not None:
+            return False, snapshot.last_error
+        return context.result_ok, context.result_message
 
     # -------------------------------------------------------------------------
     # Process Control And Diagnostics

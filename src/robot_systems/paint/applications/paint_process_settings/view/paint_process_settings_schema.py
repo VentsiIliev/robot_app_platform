@@ -78,11 +78,27 @@ def _toggle(key: str, label: str, default: bool = False) -> SettingField:
     return SettingField(key, _t(label), "toggle", default=default)
 
 
+def _profile(key: str, label: str, vel: float, acc: float, motion_type: str = "ptp", blend_r: float = 0.0) -> dict:
+    return {
+        "key": key,
+        "label": _t(label),
+        "vel_percent": vel,
+        "acc_percent": acc,
+        "motion_type": motion_type,
+        "blendR": blend_r,
+    }
+
+
+def _profile_table(key: str, label: str, rows: list[dict]) -> SettingField:
+    return SettingField(key, _t(label), "paint_motion_profile_table", default=rows)
+
+
 def build_process_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("General"), [
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
             _toggle("run_while_workpiece_found", "Run While Workpiece Found", True),
+            _toggle("enable_execution_state_timing", "Enable Execution State Timing", True),
             _toggle("pause_dashboard_live_view_after_capture", "Pause Dashboard Live View After Capture", True),
             _toggle("apply_camera_to_tcp_for_pickup", "Apply Camera-to-TCP Pickup Offset", True),
             _toggle("enable_z_shift_pixel_compensation", "Enable Z-Shift Pixel Compensation"),
@@ -128,38 +144,37 @@ def build_process_groups() -> list[SettingGroup]:
 def build_motion_speed_groups() -> list[SettingGroup]:
     return [
         SettingGroup(_t("Pickup"), [
-            _percent_field("pickup_approach_vel_percent", "Approach Velocity"),
-            _percent_field("pickup_approach_acc_percent", "Approach Acceleration"),
-            _percent_field("pickup_descend_vel_percent", "Descend Velocity"),
-            _percent_field("pickup_descend_acc_percent", "Descend Acceleration"),
-            _percent_field("pickup_lift_align_vel_percent", "Lift/Align Velocity"),
-            _percent_field("pickup_lift_align_acc_percent", "Lift/Align Acceleration"),
-            _percent_field("pickup_change_plane_vel_percent", "Change-Plane Velocity"),
-            _percent_field("pickup_change_plane_acc_percent", "Change-Plane Acceleration"),
-            _percent_field("pickup_stage_transition_vel_percent", "Stage Transition Velocity"),
-            _percent_field("pickup_stage_transition_acc_percent", "Stage Transition Acceleration"),
-            _percent_field("pickup_first_contact_vel_percent", "First-Contact Velocity"),
-            _percent_field("pickup_first_contact_acc_percent", "First-Contact Acceleration"),
+            _profile_table("pickup_motion_profiles", "Pickup Motion Profiles", [
+                _profile("approach", "Approach", 60.0, 50.0, "ptp", 20.0),
+                _profile("descend", "Descend", 60.0, 40.0, "linear", 0.0),
+                _profile("lift_align", "Lift/Align", 80.0, 40.0, "ptp", 20.0),
+                _profile("change_plane", "Change Plane", 80.0, 40.0, "ptp", 20.0),
+                _profile("stage_transition", "Stage Transition", 50.0, 20.0, "ptp", 20.0),
+                _profile("first_contact", "First Contact", 80.0, 30.0, "ptp", 0.0),
+            ]),
         ]),
         SettingGroup(_t("Magazine Load"), [
-            _percent_field("magazine_move_to_magazine_vel_percent", "Move to Magazine Velocity", 30.0),
-            _percent_field("magazine_move_to_magazine_acc_percent", "Move to Magazine Acceleration", 30.0),
-            _percent_field("magazine_transfer_to_calibration_vel_percent", "Magazine to Calibration Velocity", 30.0),
-            _percent_field("magazine_transfer_to_calibration_acc_percent", "Magazine to Calibration Acceleration", 30.0),
+            _profile_table("magazine_motion_profiles", "Magazine Motion Profiles", [
+                _profile("move_to_magazine", "Move to Magazine", 30.0, 30.0, "ptp", 0.0),
+                _profile("transfer_to_calibration", "Magazine to Calibration", 30.0, 30.0, "ptp", 0.0),
+            ]),
         ]),
         SettingGroup(_t("Cleanup"), [
-            _percent_field("cleanup_vel_percent", "Cleanup Velocity"),
-            _percent_field("cleanup_acc_percent", "Cleanup Acceleration"),
+            _profile_table("cleanup_motion_profiles", "Cleanup Motion Profiles", [
+                _profile("cleanup", "Cleanup", 80.0, 60.0, "linear", 0.0),
+            ]),
         ]),
         SettingGroup(_t("Dropoff"), [
-            _percent_field("dropoff_release_align_vel_percent", "Release-Align Velocity"),
-            _percent_field("dropoff_release_align_acc_percent", "Release-Align Acceleration"),
+            _profile_table("dropoff_motion_profiles", "Dropoff Motion Profiles", [
+                _profile("release_align", "Release Align", 60.0, 40.0, "ptp", 0.0),
+            ]),
         ]),
         SettingGroup(_t("Navigation"), [
             _percent_field("nav_unwind_vel_percent", "Joint 6 Unwind Velocity"),
             _percent_field("nav_unwind_acc_percent", "Joint 6 Unwind Acceleration"),
-            _percent_field("nav_calibration_move_vel_percent", "Move to Calibration Velocity"),
-            _percent_field("nav_calibration_move_acc_percent", "Move to Calibration Acceleration"),
+            _profile_table("navigation_motion_profiles", "Navigation Motion Profiles", [
+                _profile("calibration_move", "Move to Calibration", 30.0, 40.0, "ptp", 0.0),
+            ]),
         ]),
     ]
 

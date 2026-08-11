@@ -305,6 +305,8 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  unwind_queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
                                                  calibration_move_vel_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_vel_percent,
                                                  calibration_move_acc_percent=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_acc_percent,
+                                                 calibration_move_motion_type=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_motion_type,
+                                                 calibration_move_blendR=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_blendR,
                                                  paint_process_config_service=self._paint_process_config_service)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)

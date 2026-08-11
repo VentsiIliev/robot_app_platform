@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
-    QScrollArea, QVBoxLayout, QWidget, QFrame,
+    QScrollArea, QVBoxLayout, QWidget, QFrame, QComboBox,
 )
 
 from src.engine.robot.configuration import MovementGroup
@@ -15,7 +15,7 @@ from src.shared_contracts.declarations import (
 
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE, BG_COLOR, BORDER, GHOST_BTN_STYLE,
-    GROUP_STYLE, LABEL_STYLE, PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT,
+    GROUP_STYLE, LABEL_STYLE, PRIMARY, PRIMARY_DARK, PRIMARY_LIGHT, TEXT_COLOR,
 )
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox
 from pl_gui.utils.utils_widgets.touch_spinbox import TouchSpinBox
@@ -63,6 +63,21 @@ QDoubleSpinBox {{
     min-height: 56px;
 }}
 QDoubleSpinBox:focus {{
+    border-color: {PRIMARY};
+}}
+"""
+
+_COMBO_STYLE = f"""
+QComboBox {{
+    background: white;
+    color: {TEXT_COLOR};
+    border: 2px solid {BORDER};
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 11pt;
+    min-height: 44px;
+}}
+QComboBox:focus {{
     border-color: {PRIMARY};
 }}
 """
@@ -223,6 +238,7 @@ class MovementGroupWidget(QWidget):
     # Value-change signals
     velocity_changed     = pyqtSignal(str, int)
     acceleration_changed = pyqtSignal(str, int)
+    motion_type_changed = pyqtSignal(str, str)
     iterations_changed   = pyqtSignal(str, int)
     position_changed     = pyqtSignal(str, str)
     points_changed       = pyqtSignal(str, list)
@@ -279,6 +295,7 @@ class MovementGroupWidget(QWidget):
         # initialise optional widget references before _build_body
         self._velocity_spin:     Optional[TouchSpinBox] = None
         self._acceleration_spin: Optional[TouchSpinBox] = None
+        self._motion_type_combo: Optional[QComboBox] = None
         self._iterations_spin:   Optional[TouchSpinBox] = None
         self._position_display:  Optional[QLineEdit]    = None
         self._points_list:       Optional[QListWidget]  = None
@@ -330,6 +347,7 @@ class MovementGroupWidget(QWidget):
             self._body_layout.addLayout(rm_row)
 
         self._body_layout.addWidget(self._build_vel_acc_row())
+        self._body_layout.addWidget(self._build_motion_type_row())
 
         if self._def.has_iterations:
             self._body_layout.addWidget(self._build_iterations_row())
@@ -368,6 +386,25 @@ class MovementGroupWidget(QWidget):
         )
         acc_cell.layout().addWidget(self._acceleration_spin)
         layout.addWidget(acc_cell)
+
+        return row
+
+    def _build_motion_type_row(self) -> QWidget:
+        row = QWidget()
+        row.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        type_cell = self._labeled_cell("Type")
+        self._motion_type_combo = QComboBox()
+        self._motion_type_combo.addItem("PTP", "ptp")
+        self._motion_type_combo.addItem("Linear", "linear")
+        self._motion_type_combo.setStyleSheet(_COMBO_STYLE)
+        self._motion_type_combo.currentIndexChanged.connect(self._on_motion_type_changed)
+        type_cell.layout().addWidget(self._motion_type_combo)
+        layout.addWidget(type_cell)
+        layout.addStretch()
 
         return row
 
@@ -577,6 +614,10 @@ class MovementGroupWidget(QWidget):
     def _on_add_current(self):
         self.add_current_requested.emit(self._name)
 
+    def _on_motion_type_changed(self) -> None:
+        if self._motion_type_combo is None:
+            return
+        self.motion_type_changed.emit(self._name, str(self._motion_type_combo.currentData() or "ptp"))
 
     def _collect_points(self) -> List[str]:
         return [self._points_list.item(i).text() for i in range(self._points_list.count())]
@@ -599,6 +640,12 @@ class MovementGroupWidget(QWidget):
             self._iterations_spin.setValue(float(group.iterations))
             self._iterations_spin.blockSignals(False)
 
+        if self._motion_type_combo:
+            self._motion_type_combo.blockSignals(True)
+            motion_type = MovementGroup._normalize_motion_type(getattr(group, "motion_type", "ptp"))
+            self._motion_type_combo.setCurrentIndex(1 if motion_type == "linear" else 0)
+            self._motion_type_combo.blockSignals(False)
+
         if self._position_display and group.position is not None:
             self._position_display.setText(group.position)
 
@@ -611,6 +658,7 @@ class MovementGroupWidget(QWidget):
         return MovementGroup(
             velocity=int(self._velocity_spin.value()) if self._velocity_spin else 0,
             acceleration=int(self._acceleration_spin.value()) if self._acceleration_spin else 0,
+            motion_type=str(self._motion_type_combo.currentData() or "ptp") if self._motion_type_combo else "ptp",
             iterations=int(self._iterations_spin.value()) if self._iterations_spin else 1,
             position=self._position_display.text() or None if self._position_display else None,
             points=self._collect_points() if self._points_list else [],
@@ -748,6 +796,9 @@ class MovementGroupsTab(QWidget):
         )
         w.acceleration_changed.connect(
             lambda n, v: self.values_changed.emit(f"{n}.acceleration", v)
+        )
+        w.motion_type_changed.connect(
+            lambda n, v: self.values_changed.emit(f"{n}.motion_type", v)
         )
         w.iterations_changed.connect(
             lambda n, v: self.values_changed.emit(f"{n}.iterations", v)
