@@ -70,15 +70,6 @@ class MotionService(IMotionService):
             self._logger.debug("move_ptp → pos=%s tool=%s user=%s vel=%s acc=%s", position, tool, user, velocity,
                                acceleration)
             driver_started = time.perf_counter()
-            # ret = self._robot.move_linear(
-            #     position,
-            #     tool,
-            #     user,
-            #     velocity,
-            #     acceleration,
-            #     0,
-            #     blocking=wait_to_reach,
-            # )
 
             ret = self._robot.move_ptp(
                 position,
@@ -96,6 +87,12 @@ class MotionService(IMotionService):
                 wait_started = time.perf_counter()
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
                 wait_elapsed = time.perf_counter() - wait_started
+            if wait_to_reach:
+                diag_started = time.perf_counter()
+                while time.perf_counter() - diag_started < 1.0:
+                    current = self._robot.get_current_position() or self._cached_position
+                    self._logger.debug("[DIAG] move_ptp settle pose=%s", current)
+                    time.sleep(0.1)
             self._logger.info(
                 "[TIMING] move_ptp_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f pos=%s vel=%s acc=%s",
                 success,
