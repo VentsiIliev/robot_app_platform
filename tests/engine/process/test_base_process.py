@@ -67,6 +67,21 @@ class TestBaseProcessStateTransitions(unittest.TestCase):
         p.stop()
         self.assertEqual(p.state, ProcessState.STOPPED)
 
+    def test_stop_from_running_publishes_message_when_provided(self):
+        messaging = _ms()
+        p = _make(messaging=messaging)
+        p.start()
+
+        p.stop("No workpiece found")
+
+        stopped_events = [
+            call_args.args[1]
+            for call_args in messaging.publish.call_args_list
+            if call_args.args[0] == ProcessTopics.state("test_proc")
+            and call_args.args[1].state == ProcessState.STOPPED
+        ]
+        self.assertEqual(stopped_events[-1].message, "No workpiece found")
+
     def test_pause_from_running_transitions_to_paused(self):
         p = _make()
         p.start()

@@ -967,6 +967,30 @@ class TestPaintProcessIntegration(unittest.TestCase):
             )
         )
 
+    def test_no_workpiece_successful_stop_publishes_operator_message(self):
+        process, _production_service, messaging = self._make_process((True, "No workpiece detected after 2 paint cycle(s)"))
+        published = []
+        stop_seen = threading.Event()
+
+        def _publish(topic, event):
+            published.append((topic, event))
+            if topic == ProcessTopics.state(ProcessID.MAIN_PROCESS) and event.state == ProcessState.STOPPED:
+                stop_seen.set()
+
+        messaging.publish.side_effect = _publish
+
+        process.start()
+        self.assertTrue(stop_seen.wait(timeout=1.0), "paint process did not reach stopped state")
+        process._thread.join(timeout=1.0)
+
+        stopped_events = [
+            event
+            for topic, event in published
+            if topic == ProcessTopics.state(ProcessID.MAIN_PROCESS)
+            and event.state == ProcessState.STOPPED
+        ]
+        self.assertEqual(stopped_events[-1].message, "No workpiece detected after 2 paint cycle(s)")
+
     def test_failed_run_transitions_process_to_error(self):
         process, production_service, messaging = self._make_process((False, "No usable contour detected"))
         error_seen = threading.Event()

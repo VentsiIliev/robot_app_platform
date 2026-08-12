@@ -37,6 +37,36 @@ class TestDashboardProcessStateMixin(unittest.TestCase):
             "Move the robot to Calibration or Magazine before starting.",
         )
 
+    def test_no_workpiece_error_message_is_shown_as_operator_warning(self):
+        controller = _Controller()
+        event = SimpleNamespace(
+            process_id="paint_process",
+            state=SimpleNamespace(value="error"),
+            message="No usable contour detected",
+        )
+
+        controller._on_dashboard_process_state_raw(event)
+
+        controller._view.show_warning.assert_called_once_with(
+            "No Workpiece Found",
+            "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
+        )
+
+    def test_no_workpiece_stopped_message_is_shown_as_operator_warning(self):
+        controller = _Controller()
+        event = SimpleNamespace(
+            process_id="paint_process",
+            state=SimpleNamespace(value="stopped"),
+            message="No workpiece detected after 2 paint cycle(s)",
+        )
+
+        controller._on_dashboard_process_state_raw(event)
+
+        controller._view.show_warning.assert_called_once_with(
+            "No Workpiece Found",
+            "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
+        )
+
     def test_non_matching_process_event_is_ignored(self):
         controller = _Controller()
         event = SimpleNamespace(

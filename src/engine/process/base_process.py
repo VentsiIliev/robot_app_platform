@@ -67,9 +67,9 @@ class BaseProcess(IProcess):
             else:
                 self._transition(ProcessState.RUNNING, self._on_start)
 
-    def stop(self) -> None:
+    def stop(self, message: str = "") -> None:
         with self._lock:
-            self._transition(ProcessState.STOPPED, self._on_stop)
+            self._transition(ProcessState.STOPPED, self._on_stop, message)
 
     def pause(self) -> None:
         with self._lock:

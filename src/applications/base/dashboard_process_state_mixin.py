@@ -59,13 +59,38 @@ class DashboardProcessStateMixin:
         self._dashboard_process_bridge.state_ready.emit(state)
         message = str(getattr(event, "message", "") or "").strip()
         event_state = str(getattr(getattr(event, "state", None), "value", getattr(event, "state", "")) or "")
-        if event_state == "error" and message:
-            if message != self._last_dashboard_error_message:
-                self._last_dashboard_error_message = message
-                self._dashboard_process_bridge.warning_ready.emit("Process Blocked", message)
-        elif event_state != "error":
+        warning = self._dashboard_warning_for_event(event_state, message)
+        if warning is not None:
+            title, warning_message = warning
+            warning_key = f"{event_state}:{title}:{warning_message}"
+            if warning_key != self._last_dashboard_error_message:
+                self._last_dashboard_error_message = warning_key
+                self._dashboard_process_bridge.warning_ready.emit(title, warning_message)
+        elif event_state not in {"error", "stopped"}:
             self._last_dashboard_error_message = ""
 
     @staticmethod
     def _process_id_value(process_id: object) -> str:
         return str(getattr(process_id, "value", process_id))
+
+    @classmethod
+    def _dashboard_warning_for_event(cls, event_state: str, message: str) -> tuple[str, str] | None:
+        if not message:
+            return None
+        if cls._is_no_workpiece_message(message):
+            return (
+                "No Workpiece Found",
+                "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
+            )
+        if event_state == "error":
+            return "Process Blocked", message
+        return None
+
+    @staticmethod
+    def _is_no_workpiece_message(message: str) -> bool:
+        lowered = str(message or "").strip().lower()
+        return (
+            "no workpiece" in lowered
+            or "no usable contour detected" in lowered
+            or "magazine empty" in lowered
+        )

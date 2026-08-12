@@ -122,7 +122,16 @@ class PaintProcess(BaseProcess):
 
         if success:
             self._logger.info("Paint process completed: %s", msg)
-            self.stop()
+            self.stop(msg if self._is_no_workpiece_message(msg) else "")
         else:
             self._logger.error("Paint process failed: %s", msg)
             self.set_error(msg)
+
+    @staticmethod
+    def _is_no_workpiece_message(message: str) -> bool:
+        lowered = str(message or "").strip().lower()
+        return (
+            "no workpiece" in lowered
+            or "no usable contour detected" in lowered
+            or "magazine empty" in lowered
+        )
