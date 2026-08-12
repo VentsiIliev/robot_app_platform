@@ -201,7 +201,8 @@ def main() -> None:
         languages=localization_svc.available_languages(),
     )
     shell.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
-    shell.setFixedSize(1280, 1024)
+    # shell.setFixedSize(1280, 1024)
+    shell.showFullScreen()
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
