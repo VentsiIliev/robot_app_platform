@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QScrollArea,
     QVBoxLayout,
+    QWidget,
 )
 
 from src.applications.base.i_application_view import IApplicationView
@@ -18,7 +19,8 @@ from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
 
 
-_MAX_MESSAGE_ROWS = 6
+_MAX_MESSAGE_ROWS = 50
+_MESSAGE_SCROLL_HEIGHT = 180
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
     background: white;
@@ -93,6 +95,7 @@ class PaintDashboardView(IApplicationView):
         self._message_rows: list[QLabel] = []
         self._message_empty_label: QLabel | None = None
         self._message_panel: QFrame | None = None
+        self._message_scroll: QScrollArea | None = None
         super().__init__("PaintDashboard", parent)
 
     @staticmethod
@@ -171,7 +174,6 @@ class PaintDashboardView(IApplicationView):
     def _build_message_panel(self) -> QFrame:
         panel = QFrame()
         panel.setStyleSheet(_MESSAGE_PANEL_STYLE)
-        panel.setMinimumHeight(150)
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 10, 14, 10)
@@ -181,9 +183,23 @@ class PaintDashboardView(IApplicationView):
         title.setStyleSheet(_MESSAGE_TITLE_STYLE)
         layout.addWidget(title)
 
+        self._message_scroll = QScrollArea()
+        self._message_scroll.setWidgetResizable(True)
+        self._message_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._message_scroll.setFixedHeight(_MESSAGE_SCROLL_HEIGHT)
+        self._message_scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+        )
+
+        rows_container = QWidget()
+        rows_container.setStyleSheet("background: transparent; border: none;")
+        rows_layout = QVBoxLayout(rows_container)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(0)
+
         self._message_empty_label = QLabel("No process messages")
         self._message_empty_label.setStyleSheet(_MESSAGE_EMPTY_STYLE)
-        layout.addWidget(self._message_empty_label)
+        rows_layout.addWidget(self._message_empty_label)
 
         self._message_rows = []
         for _index in range(_MAX_MESSAGE_ROWS):
@@ -191,10 +207,12 @@ class PaintDashboardView(IApplicationView):
             row.setWordWrap(True)
             row.setStyleSheet(_MESSAGE_ROW_STYLE)
             row.hide()
-            layout.addWidget(row)
+            rows_layout.addWidget(row)
             self._message_rows.append(row)
 
-        layout.addStretch(1)
+        rows_layout.addStretch(1)
+        self._message_scroll.setWidget(rows_container)
+        layout.addWidget(self._message_scroll, 1)
         return panel
 
     @staticmethod
@@ -310,6 +328,14 @@ class PaintDashboardView(IApplicationView):
                 else _MESSAGE_ROW_STYLE
             )
             row.show()
+
+        QTimer.singleShot(0, self._scroll_messages_to_bottom)
+
+    def _scroll_messages_to_bottom(self) -> None:
+        if self._message_scroll is None:
+            return
+        bar = self._message_scroll.verticalScrollBar()
+        bar.setValue(bar.maximum())
 
     @staticmethod
     def _format_message(item: dict) -> str:

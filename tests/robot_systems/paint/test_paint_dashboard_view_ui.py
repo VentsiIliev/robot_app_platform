@@ -17,6 +17,7 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 )
 from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view import (
     PaintDashboardView,
+    _MAX_MESSAGE_ROWS,
 )
 
 
@@ -242,11 +243,14 @@ class TestPaintDashboardUi(unittest.TestCase):
                 cards=[],
             )
 
-        for index in range(8):
+        for index in range(_MAX_MESSAGE_ROWS + 2):
             view.show_warning("Warning", f"message {index}")
 
-        self.assertEqual(len(view._messages), 6)
-        self.assertEqual([item["message"] for item in view._messages], [f"message {index}" for index in range(2, 8)])
+        self.assertEqual(len(view._messages), _MAX_MESSAGE_ROWS)
+        self.assertEqual(
+            [item["message"] for item in view._messages],
+            [f"message {index}" for index in range(2, _MAX_MESSAGE_ROWS + 2)],
+        )
 
 
 if __name__ == "__main__":
