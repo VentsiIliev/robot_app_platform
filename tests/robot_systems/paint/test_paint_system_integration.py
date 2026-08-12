@@ -487,8 +487,6 @@ class TestPaintApplicationWiring(unittest.TestCase):
             robot_service="robot",
             work_area_service="work-areas",
             active_work_area_validator=unittest.mock.ANY,
-            active_work_area_retry_timeout_s=1.0,
-            active_work_area_retry_interval_s=0.1,
         )
         repo_cls.assert_called_once_with("/tmp/workpieces")
         service_cls.assert_called_once_with("repo")

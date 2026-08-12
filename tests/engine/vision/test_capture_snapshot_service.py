@@ -99,35 +99,6 @@ class TestCaptureSnapshotService(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "magazine invalid"):
             service.capture_snapshot(source="pick_target")
 
-    def test_capture_snapshot_retries_active_work_area_validation_with_fresh_pose(self):
-        work_areas = MagicMock()
-        work_areas.get_active_area_id.return_value = "paint"
-        work_areas.is_active_area_verified.return_value = True
-        robot = MagicMock()
-        robot.get_current_position.side_effect = [
-            [100, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-        ]
-        vision = MagicMock()
-        vision.compute_contours_for_latest_frame.return_value = ("frame", [])
-
-        def validate(_area, pose):
-            return (pose == [0, 0, 0, 0, 0, 0], "stale pose")
-
-        service = CaptureSnapshotService(
-            vision,
-            robot,
-            work_area_service=work_areas,
-            active_work_area_validator=validate,
-            active_work_area_retry_timeout_s=0.2,
-            active_work_area_retry_interval_s=0.01,
-        )
-
-        snapshot = service.capture_snapshot(source="paint")
-
-        self.assertEqual(snapshot.robot_pose, [0, 0, 0, 0, 0, 0])
-        self.assertEqual(robot.get_current_position.call_count, 2)
-
     def test_capture_snapshot_blocks_when_active_work_area_not_verified(self):
         work_areas = MagicMock()
         work_areas.get_active_area_id.return_value = "magazine"
