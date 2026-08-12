@@ -20,7 +20,7 @@ from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT
 
 
 _MAX_MESSAGE_ROWS = 50
-_MESSAGE_SCROLL_HEIGHT = 180
+_MESSAGE_SCROLL_MIN_HEIGHT = 60
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
     background: white;
@@ -123,8 +123,8 @@ class PaintDashboardView(IApplicationView):
         layout.addWidget(self._dashboard)
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
         self._align_preview_and_card_columns()
-        self._move_reset_below_cards()
         self._install_message_panel()
+        self._move_reset_below_cards()
         self._expand_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
@@ -140,7 +140,6 @@ class PaintDashboardView(IApplicationView):
             preview_container.setStyleSheet(f"background-color: {BG_COLOR};")
             aux_grid = preview_container.layout().itemAt(1).widget()
             aux_grid.setStyleSheet(f"background-color: {BG_COLOR};")
-            aux_grid.hide()
             side_panel = top_section.itemAt(1).widget()
             if side_panel is not None:
                 side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
@@ -152,21 +151,23 @@ class PaintDashboardView(IApplicationView):
     def _install_message_panel(self) -> None:
         try:
             main_layout = self._dashboard.layout_manager.main_layout
-            bottom_container = main_layout.itemAt(1).widget()
-            bottom_layout = bottom_container.layout()
-            action_area = bottom_layout.itemAt(0).widget()
-            layout = action_area.layout()
-            if layout is None:
-                layout = QVBoxLayout(action_area)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.setSpacing(0)
-            else:
-                self._clear_layout(layout)
+            top_section = main_layout.itemAt(0).layout()
+            preview_container = top_section.itemAt(0).widget()
+            aux_grid = preview_container.layout().itemAt(1).widget()
+            layout = aux_grid.layout()
             if layout is None:
                 return
-            self._message_panel = self._build_message_panel()
-            layout.addWidget(self._message_panel)
-            action_area.show()
+            self._clear_layout(layout)
+            panel = self._build_message_panel()
+            rows = max(1, layout.rowCount())
+            cols = max(1, layout.columnCount())
+            layout.addWidget(panel, 0, 0, rows, cols)
+            for row in range(rows):
+                layout.setRowStretch(row, 1)
+            for col in range(cols):
+                layout.setColumnStretch(col, 1)
+            aux_grid.show()
+            self._message_panel = panel
             self._render_messages()
         except Exception:
             pass
@@ -186,7 +187,7 @@ class PaintDashboardView(IApplicationView):
         self._message_scroll = QScrollArea()
         self._message_scroll.setWidgetResizable(True)
         self._message_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self._message_scroll.setFixedHeight(_MESSAGE_SCROLL_HEIGHT)
+        self._message_scroll.setMinimumHeight(_MESSAGE_SCROLL_MIN_HEIGHT)
         self._message_scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
         )
@@ -244,8 +245,8 @@ class PaintDashboardView(IApplicationView):
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
-            action_area.show()
-            bottom_layout.setStretchFactor(action_area, 1)
+            action_area.hide()
+            bottom_layout.setStretchFactor(action_area, 0)
             bottom_layout.setStretchFactor(controls, 1)
         except Exception:
             pass
