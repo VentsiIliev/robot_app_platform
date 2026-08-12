@@ -1,19 +1,78 @@
 from __future__ import annotations
 
+from collections import deque
+from datetime import datetime
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
+    QFrame,
+    QGridLayout,
     QLabel,
     QScrollArea,
     QVBoxLayout,
 )
 
-from src.applications.base.styled_message_box import show_info as show_styled_info
-from src.applications.base.styled_message_box import show_warning as show_styled_warning
 from src.applications.base.i_application_view import IApplicationView
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from pl_gui.settings.settings_view.styles import BG_COLOR
+from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
+
+
+_MAX_MESSAGE_ROWS = 6
+_MESSAGE_PANEL_STYLE = f"""
+QFrame {{
+    background: white;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+"""
+_MESSAGE_TITLE_STYLE = f"""
+QLabel {{
+    color: {TEXT_COLOR};
+    font-size: 11pt;
+    font-weight: bold;
+    background: transparent;
+    border: none;
+}}
+"""
+_MESSAGE_EMPTY_STYLE = """
+QLabel {
+    color: #777777;
+    font-size: 10pt;
+    background: transparent;
+    border: none;
+}
+"""
+_MESSAGE_ROW_STYLE = """
+QLabel {
+    color: #202124;
+    font-size: 10pt;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+}
+"""
+_MESSAGE_WARNING_STYLE = """
+QLabel {
+    color: #8A4B00;
+    font-size: 10pt;
+    font-weight: bold;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+}
+"""
+_MESSAGE_INFO_STYLE = f"""
+QLabel {{
+    color: {PRIMARY};
+    font-size: 10pt;
+    font-weight: bold;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+}}
+"""
 
 
 class PaintDashboardView(IApplicationView):
@@ -31,6 +90,10 @@ class PaintDashboardView(IApplicationView):
         self._cards_by_id = self._index_cards_by_id(cards)
         self._last_card_states = {}
         self._last_state_signature = None
+        self._messages = deque(maxlen=_MAX_MESSAGE_ROWS)
+        self._message_rows: list[QLabel] = []
+        self._message_empty_label: QLabel | None = None
+        self._message_panel: QFrame | None = None
         super().__init__("PaintDashboard", parent)
 
     @staticmethod
@@ -58,6 +121,7 @@ class PaintDashboardView(IApplicationView):
         layout.addWidget(self._dashboard)
         self._dashboard.setStyleSheet(f"background-color: {BG_COLOR};")
         self._align_preview_and_card_columns()
+        self._install_message_panel()
         self._move_reset_below_cards()
         self._expand_process_controls()
 
@@ -74,7 +138,6 @@ class PaintDashboardView(IApplicationView):
             preview_container.setStyleSheet(f"background-color: {BG_COLOR};")
             aux_grid = preview_container.layout().itemAt(1).widget()
             aux_grid.setStyleSheet(f"background-color: {BG_COLOR};")
-            aux_grid.hide()
             side_panel = top_section.itemAt(1).widget()
             if side_panel is not None:
                 side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
@@ -82,6 +145,64 @@ class PaintDashboardView(IApplicationView):
                 top_section.setAlignment(side_panel, Qt.AlignmentFlag.AlignTop)
         except Exception:
             pass
+
+    def _install_message_panel(self) -> None:
+        try:
+            main_layout = self._dashboard.layout_manager.main_layout
+            top_section = main_layout.itemAt(0).layout()
+            preview_container = top_section.itemAt(0).widget()
+            aux_grid = preview_container.layout().itemAt(1).widget()
+            layout = aux_grid.layout()
+            if layout is None:
+                return
+            self._clear_layout(layout)
+            self._message_panel = self._build_message_panel()
+            layout.addWidget(self._message_panel, 0, 0)
+            if isinstance(layout, QGridLayout):
+                layout.setRowStretch(0, 1)
+                layout.setColumnStretch(0, 1)
+            aux_grid.show()
+            self._render_messages()
+        except Exception:
+            pass
+
+    def _build_message_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setStyleSheet(_MESSAGE_PANEL_STYLE)
+        panel.setMinimumHeight(150)
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(4)
+
+        title = QLabel("Messages")
+        title.setStyleSheet(_MESSAGE_TITLE_STYLE)
+        layout.addWidget(title)
+
+        self._message_empty_label = QLabel("No process messages")
+        self._message_empty_label.setStyleSheet(_MESSAGE_EMPTY_STYLE)
+        layout.addWidget(self._message_empty_label)
+
+        self._message_rows = []
+        for _index in range(_MAX_MESSAGE_ROWS):
+            row = QLabel("")
+            row.setWordWrap(True)
+            row.setStyleSheet(_MESSAGE_ROW_STYLE)
+            row.hide()
+            layout.addWidget(row)
+            self._message_rows.append(row)
+
+        layout.addStretch(1)
+        return panel
+
+    @staticmethod
+    def _clear_layout(layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
 
     def _move_reset_below_cards(self) -> None:
         try:
@@ -146,10 +267,57 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.set_action_button_enabled(action_id, enabled)
 
     def show_info(self, title: str, message: str) -> None:
-        show_styled_info(self, title, message)
+        self._enqueue_message("info", title, message)
 
     def show_warning(self, title: str, message: str) -> None:
-        show_styled_warning(self, title, message)
+        self._enqueue_message("warning", title, message)
+
+    def _enqueue_message(self, level: str, title: str, message: str) -> None:
+        clean_title = str(title or "").strip()
+        clean_message = str(message or "").strip()
+        if not clean_title and not clean_message:
+            return
+        self._messages.append(
+            {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "level": str(level or "info").strip().lower(),
+                "title": clean_title,
+                "message": clean_message,
+            }
+        )
+        self._render_messages()
+
+    def _render_messages(self) -> None:
+        if self._message_empty_label is None or not self._message_rows:
+            return
+
+        messages = list(self._messages)
+        self._message_empty_label.setVisible(not messages)
+        for index, row in enumerate(self._message_rows):
+            if index >= len(messages):
+                row.clear()
+                row.hide()
+                continue
+            item = messages[index]
+            row.setText(self._format_message(item))
+            row.setStyleSheet(
+                _MESSAGE_WARNING_STYLE
+                if item["level"] == "warning"
+                else _MESSAGE_INFO_STYLE
+                if item["level"] == "info"
+                else _MESSAGE_ROW_STYLE
+            )
+            row.show()
+
+    @staticmethod
+    def _format_message(item: dict) -> str:
+        title = str(item.get("title") or "").strip()
+        message = str(item.get("message") or "").strip()
+        if title and message:
+            body = f"{title}: {message}"
+        else:
+            body = title or message
+        return f"{item.get('time', '')}  {body}".strip()
 
     def show_debug_plot(self, title: str, image_path: str, message: str = "") -> None:
         pixmap = QPixmap(image_path)

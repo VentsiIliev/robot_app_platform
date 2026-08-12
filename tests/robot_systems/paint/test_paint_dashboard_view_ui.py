@@ -211,18 +211,10 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         self.assertIsInstance(view._dashboard, _FakeDashboardWidget)
 
-    def test_info_and_warning_use_styled_message_boxes(self) -> None:
-        with (
-            patch(
-                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
-                _FakeDashboardWidget,
-            ),
-            patch(
-                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_info"
-            ) as info,
-            patch(
-                "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.show_styled_warning"
-            ) as warning,
+    def test_info_and_warning_are_added_to_dashboard_message_queue(self) -> None:
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
         ):
             view = PaintDashboardView(
                 config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
@@ -233,8 +225,28 @@ class TestPaintDashboardUi(unittest.TestCase):
             view.show_info("Info", "ok")
             view.show_warning("Warning", "blocked")
 
-        info.assert_called_once_with(view, "Info", "ok")
-        warning.assert_called_once_with(view, "Warning", "blocked")
+        self.assertEqual(len(view._messages), 2)
+        self.assertEqual(view._messages[0]["level"], "info")
+        self.assertEqual(view._messages[0]["title"], "Info")
+        self.assertEqual(view._messages[1]["level"], "warning")
+        self.assertEqual(view._messages[1]["message"], "blocked")
+
+    def test_dashboard_message_queue_keeps_latest_fifo_rows(self) -> None:
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+            )
+
+        for index in range(8):
+            view.show_warning("Warning", f"message {index}")
+
+        self.assertEqual(len(view._messages), 6)
+        self.assertEqual([item["message"] for item in view._messages], [f"message {index}" for index in range(2, 8)])
 
 
 if __name__ == "__main__":
