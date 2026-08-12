@@ -58,9 +58,16 @@ class FrameGrabber:
         self.running = True
         self.thread.start()
 
+    def set_camera(self, camera) -> None:
+        self.camera = camera
+
     def _grab_loop(self):
         while self.running:
-            frame = self.camera.capture(timeout=self.read_timeout_s)
+            camera = self.camera
+            if camera is None:
+                time.sleep(0.05)
+                continue
+            frame = camera.capture(timeout=self.read_timeout_s)
             if frame is not None:
                 self._consecutive_failures = 0
                 captured_at = time.time()

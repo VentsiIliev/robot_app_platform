@@ -13,8 +13,11 @@ class CameraInitializer:
         self.width = width
         self.height = height
 
-    def initializeCameraWithRetry(self, camera_index, max_retries=10, retry_delay=1.0):
+    def initializeCameraWithRetry(self, camera_index, max_retries=10, retry_delay=1.0, should_cancel=None):
         for attempt in range(max_retries):
+            if should_cancel is not None and should_cancel():
+                self._logger.info("Camera initialization cancelled")
+                return None, None
             try:
                 self._logger.info(f"Attempting camera {camera_index} (attempt {attempt + 1}/{max_retries})")
                 if attempt > 0:
@@ -33,10 +36,12 @@ class CameraInitializer:
                 self._logger.error(f"Error on attempt {attempt + 1}: {e}")
 
         self._logger.warning(f"Camera {camera_index} failed after {max_retries} attempts — searching alternatives")
-        return self._findAndInitializeCamera()
+        return self._findAndInitializeCamera(should_cancel=should_cancel)
 
-    def _findAndInitializeCamera(self):
+    def _findAndInitializeCamera(self, should_cancel=None):
         for cam_id in range(10):
+            if should_cancel is not None and should_cancel():
+                return None, None
             try:
                 self._logger.info(f"Testing camera index {cam_id}")
                 test_camera = Camera(cam_id, self.width, self.height, fps=30)
@@ -52,6 +57,8 @@ class CameraInitializer:
         if platform.system().lower() == "linux":
             try:
                 for cam_id in self.find_first_available_camera():
+                    if should_cancel is not None and should_cancel():
+                        return None, None
                     try:
                         test_camera = Camera(cam_id, self.width, self.height, fps=30)
                         if test_camera.cap.isOpened():
@@ -63,6 +70,8 @@ class CameraInitializer:
                 self._logger.error(f"Linux camera detection failed: {e}")
 
         self._logger.warning("No working cameras found — using dummy camera")
+        if should_cancel is not None and should_cancel():
+            return None, None
         return Camera(0, self.width, self.height, fps=30), 0
 
     def find_first_available_camera(self, max_devices=10):

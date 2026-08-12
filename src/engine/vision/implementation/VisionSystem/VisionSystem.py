@@ -43,7 +43,7 @@ class VisionSystem:
         self.service_id        = "vision_service"
 
         self.camera_settings = self.service.loadSettings()
-        self.setup_camera()
+        self.camera = None
         self.load_calibration_data()
 
         # ── Services (no back-references to VisionSystem) ─────────────────────
@@ -96,6 +96,12 @@ class VisionSystem:
 
         self.stop_signal  = False
         self.cameraThread = None
+        self._camera_init_thread = threading.Thread(
+            target=self._init_camera_in_background,
+            name="camera-init",
+            daemon=True,
+        )
+        self._camera_init_thread.start()
 
     @staticmethod
     def _configure_opencv_threads() -> None:
@@ -136,13 +142,18 @@ class VisionSystem:
         )
         SubscriptionManager(self, self.messaging_service).subscribe_all()
 
-    def setup_camera(self) -> None:
+    def setup_camera(self, should_cancel=None) -> None:
         camera_index       = self.camera_settings.get_camera_index()
         camera_initializer = CameraInitializer(
             width  = self.camera_settings.get_camera_width(),
             height = self.camera_settings.get_camera_height(),
         )
-        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(camera_index)
+        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(
+            camera_index,
+            should_cancel=should_cancel,
+        )
+        if self.camera is None:
+            return
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
         # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
@@ -151,6 +162,17 @@ class VisionSystem:
         # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)
+
+    def _init_camera_in_background(self) -> None:
+        try:
+            self.setup_camera(should_cancel=lambda: self.stop_signal)
+        except Exception:
+            _logger.exception("Background camera initialization failed")
+            return
+        if self.stop_signal or self.camera is None:
+            return
+        if self.frame_grabber is not None:
+            self.frame_grabber.set_camera(self.camera)
 
     def load_calibration_data(self) -> None:
         self.service.loadPerspectiveMatrix()
@@ -444,11 +466,15 @@ class VisionSystem:
         self.stop_signal = True
         if self.frame_grabber is not None:
             self.frame_grabber.stop()
+        if getattr(self, "_camera_init_thread", None) is not None:
+            self._camera_init_thread.join()
+            self._camera_init_thread = None
         if self.cameraThread is not None:
             self.cameraThread.join()
             self.cameraThread = None
-        self.camera.stop_stream()
-        self.camera.stopCapture()
+        if self.camera is not None:
+            self.camera.stop_stream()
+            self.camera.stopCapture()
 
     def _loop(self) -> None:
         while not self.stop_signal:
