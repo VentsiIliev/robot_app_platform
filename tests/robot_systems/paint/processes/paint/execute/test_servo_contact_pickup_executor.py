@@ -51,7 +51,7 @@ class _ConditionAfterStart:
 
     def __call__(self):
         self.calls += 1
-        return self.calls >= 2
+        return self.calls >= 3
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
@@ -62,6 +62,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_linear_mm_s=12.0,
             servo_contact_timeout_s=1.0,
             servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
             servo_contact_fallback_to_planned_descend=False,
         )
         owner = SimpleNamespace(

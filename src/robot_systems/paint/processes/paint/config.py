@@ -67,6 +67,8 @@ class PickupMotionConfig:
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_timeout_s: float = 5.0  # [LIVE SETTINGS]
     servo_contact_poll_interval_s: float = 0.02  # [LIVE SETTINGS]
+    servo_contact_preflight_read_attempts: int = 2  # [LIVE SETTINGS]
+    servo_contact_read_failure_limit: int = 3  # [LIVE SETTINGS]
     servo_contact_fallback_to_planned_descend: bool = False  # [LIVE SETTINGS]
 
 @dataclass(frozen=True)

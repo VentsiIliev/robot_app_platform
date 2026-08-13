@@ -45,7 +45,15 @@
     "first_contact_vel_percent": 60.0,
     "first_contact_acc_percent": 20.0,
     "first_contact_motion_type": "linear",
-    "first_contact_blendR": 0.0
+    "first_contact_blendR": 0.0,
+    "servo_contact_enabled": false,
+    "servo_contact_magazine_enabled": false,
+    "servo_contact_linear_mm_s": 10.0,
+    "servo_contact_timeout_s": 5.0,
+    "servo_contact_poll_interval_s": 0.02,
+    "servo_contact_preflight_read_attempts": 2,
+    "servo_contact_read_failure_limit": 3,
+    "servo_contact_fallback_to_planned_descend": false
   },
   "edge_cleanup": {
     "enabled_after_xz_ry": false,
@@ -197,7 +205,7 @@
           240.0,
           -178.765,
           -0.014,
-          -0.070
+          -0.07
         ],
         "vel_percent": 90.0,
         "acc_percent": 50.0,

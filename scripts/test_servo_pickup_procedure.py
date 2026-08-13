@@ -40,6 +40,8 @@ USER = 0
 
 TIMEOUT_S = 5.0
 POLL_INTERVAL_S = 0.02
+PREFLIGHT_CONDITION_READ_ATTEMPTS = 2
+CONDITION_READ_FAILURE_LIMIT = 3
 
 # Set to -1.0 to disable simulated detection and force timeout.
 DETECT_AFTER_S = 3.0
@@ -190,6 +192,8 @@ def main() -> int:
             user=USER,
             poll_interval_s=POLL_INTERVAL_S,
             timeout_s=TIMEOUT_S,
+            preflight_condition_read_attempts=PREFLIGHT_CONDITION_READ_ATTEMPTS,
+            condition_read_failure_limit=CONDITION_READ_FAILURE_LIMIT,
             approach_velocity=APPROACH_VELOCITY,
             approach_acceleration=APPROACH_ACCELERATION,
         ),

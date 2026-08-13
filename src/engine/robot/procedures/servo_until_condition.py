@@ -28,6 +28,8 @@ class ServoUntilConditionConfig:
     timeout_s: float = 10.0
     approach_velocity: float = 10.0
     approach_acceleration: float = 10.0
+    preflight_condition_read_attempts: int = 2
+    condition_read_failure_limit: int = 3
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class ServoUntilConditionResult:
     start_failed: bool
     elapsed_s: float
     message: str
+    condition_failed: bool = False
 
 
 class ServoUntilConditionProcedure:
@@ -69,6 +72,40 @@ class ServoUntilConditionProcedure:
         started_at = time.monotonic()
 
         try:
+            valid, message = self._validate_config(cfg)
+            if not valid:
+                return self._result(
+                    started_at,
+                    success=False,
+                    detected=False,
+                    timed_out=False,
+                    start_failed=False,
+                    condition_failed=False,
+                    message=message,
+                )
+
+            preflight = self._preflight_condition(cfg)
+            if preflight is None:
+                return self._result(
+                    started_at,
+                    success=False,
+                    detected=False,
+                    timed_out=False,
+                    start_failed=False,
+                    condition_failed=True,
+                    message="condition_unreadable_before_motion",
+                )
+            if preflight:
+                return self._result(
+                    started_at,
+                    success=True,
+                    detected=True,
+                    timed_out=False,
+                    start_failed=False,
+                    condition_failed=False,
+                    message="condition_already_active",
+                )
+
             if approach_pose is not None:
                 if not self._move_to_approach(approach_pose, cfg):
                     return self._result(
@@ -77,16 +114,29 @@ class ServoUntilConditionProcedure:
                         detected=False,
                         timed_out=False,
                         start_failed=True,
+                        condition_failed=False,
                         message="approach_failed",
                     )
 
-            if self._condition_active():
+            active, read_ok = self._read_condition()
+            if not read_ok:
+                return self._result(
+                    started_at,
+                    success=False,
+                    detected=False,
+                    timed_out=False,
+                    start_failed=False,
+                    condition_failed=True,
+                    message="condition_unreadable_after_approach",
+                )
+            if active:
                 return self._result(
                     started_at,
                     success=True,
                     detected=True,
                     timed_out=False,
                     start_failed=False,
+                    condition_failed=False,
                     message="condition_already_active",
                 )
 
@@ -106,12 +156,15 @@ class ServoUntilConditionProcedure:
                     detected=False,
                     timed_out=False,
                     start_failed=True,
+                    condition_failed=False,
                     message=f"servo_start_failed:{start_ret}",
                 )
 
             started = True
             deadline = started_at + max(0.0, float(cfg.timeout_s))
             poll_interval_s = max(0.005, float(cfg.poll_interval_s))
+            read_failure_count = 0
+            read_failure_limit = max(1, int(cfg.condition_read_failure_limit))
 
             while True:
                 if cancel_requested is not None and cancel_requested():
@@ -121,16 +174,39 @@ class ServoUntilConditionProcedure:
                         detected=False,
                         timed_out=False,
                         start_failed=False,
+                        condition_failed=False,
                         message="cancelled",
                     )
 
-                if self._condition_active():
+                active, read_ok = self._read_condition()
+                if not read_ok:
+                    read_failure_count += 1
+                    _logger.warning(
+                        "[SERVO_UNTIL_CONDITION] condition read failed while servo active (%d/%d)",
+                        read_failure_count,
+                        read_failure_limit,
+                    )
+                    if read_failure_count >= read_failure_limit:
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=True,
+                            message="condition_unreadable_during_servo",
+                        )
+                else:
+                    read_failure_count = 0
+
+                if active:
                     return self._result(
                         started_at,
                         success=True,
                         detected=True,
                         timed_out=False,
                         start_failed=False,
+                        condition_failed=False,
                         message="condition_detected",
                     )
 
@@ -141,6 +217,7 @@ class ServoUntilConditionProcedure:
                         detected=False,
                         timed_out=True,
                         start_failed=False,
+                        condition_failed=False,
                         message="timeout",
                     )
 
@@ -180,14 +257,53 @@ class ServoUntilConditionProcedure:
             return False
         return self._return_code_ok(ret)
 
-    def _condition_active(self) -> bool:
+    def _preflight_condition(self, cfg: ServoUntilConditionConfig) -> bool | None:
+        attempts = max(1, int(cfg.preflight_condition_read_attempts))
+        poll_interval_s = max(0.005, float(cfg.poll_interval_s))
+        for attempt in range(1, attempts + 1):
+            active, read_ok = self._read_condition()
+            if read_ok:
+                return active
+            _logger.warning(
+                "[SERVO_UNTIL_CONDITION] condition preflight read failed (%d/%d)",
+                attempt,
+                attempts,
+            )
+            if attempt < attempts:
+                time.sleep(poll_interval_s)
+        return None
+
+    def _read_condition(self) -> tuple[bool, bool]:
         try:
             if callable(self._condition):
-                return bool(self._condition())
-            return bool(self._condition.is_active())
+                return bool(self._condition()), True
+            return bool(self._condition.is_active()), True
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] condition read failed")
-            return False
+            return False, False
+
+    @staticmethod
+    def _validate_config(cfg: ServoUntilConditionConfig) -> tuple[bool, str]:
+        try:
+            axis = cfg.axis
+            axis_value = int(axis.value if hasattr(axis, "value") else axis)
+        except (TypeError, ValueError):
+            return False, "invalid_axis"
+        if axis_value <= 3:
+            try:
+                speed = float(cfg.linear_mm_s)
+            except (TypeError, ValueError):
+                return False, "invalid_linear_speed"
+            if speed <= 0.0:
+                return False, "invalid_linear_speed"
+        else:
+            try:
+                speed = float(cfg.angular_deg_s)
+            except (TypeError, ValueError):
+                return False, "invalid_angular_speed"
+            if speed <= 0.0:
+                return False, "invalid_angular_speed"
+        return True, ""
 
     @staticmethod
     def _return_code_ok(ret) -> bool:
@@ -206,6 +322,7 @@ class ServoUntilConditionProcedure:
         detected: bool,
         timed_out: bool,
         start_failed: bool,
+        condition_failed: bool,
         message: str,
     ) -> ServoUntilConditionResult:
         return ServoUntilConditionResult(
@@ -213,6 +330,7 @@ class ServoUntilConditionProcedure:
             detected=bool(detected),
             timed_out=bool(timed_out),
             start_failed=bool(start_failed),
+            condition_failed=bool(condition_failed),
             elapsed_s=max(0.0, time.monotonic() - started_at),
             message=str(message),
         )

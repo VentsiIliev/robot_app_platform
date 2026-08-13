@@ -74,8 +74,36 @@ def _seconds_field(key: str, label: str, default: float = 0.0) -> SettingField:
     )
 
 
+def _mm_per_second_field(key: str, label: str, default: float = 10.0) -> SettingField:
+    return SettingField(
+        key,
+        _t(label),
+        "double_spinbox",
+        default=default,
+        min_val=0.0,
+        max_val=500.0,
+        step=1.0,
+        decimals=1,
+        suffix=" mm/s",
+        step_options=[1.0, 5.0, 10.0, 25.0],
+    )
+
+
 def _toggle(key: str, label: str, default: bool = False) -> SettingField:
     return SettingField(key, _t(label), "toggle", default=default)
+
+
+def _count_field(key: str, label: str, default: int = 1, max_val: int = 20) -> SettingField:
+    return SettingField(
+        key,
+        _t(label),
+        "spinbox",
+        default=int(default),
+        min_val=1,
+        max_val=max_val,
+        step=1,
+        step_options=[1, 2, 5],
+    )
 
 
 def _profile(key: str, label: str, vel: float, acc: float, motion_type: str = "ptp", blend_r: float = 0.0) -> dict:
@@ -121,6 +149,16 @@ def build_process_groups() -> list[SettingGroup]:
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
+        ]),
+        SettingGroup(_t("Servo Contact Pickup"), [
+            _toggle("pickup_servo_contact_enabled", "Use Servo Contact For Calibration Pickup"),
+            _toggle("pickup_servo_contact_magazine_enabled", "Use Servo Contact For Magazine Pickup"),
+            _mm_per_second_field("pickup_servo_contact_linear_mm_s", "Descent Speed", 10.0),
+            _seconds_field("pickup_servo_contact_timeout_s", "Detection Timeout", 5.0),
+            _seconds_field("pickup_servo_contact_poll_interval_s", "Sensor Poll Interval", 0.02),
+            _count_field("pickup_servo_contact_preflight_read_attempts", "Preflight Read Attempts", 2),
+            _count_field("pickup_servo_contact_read_failure_limit", "Active Read Failure Limit", 3),
+            _toggle("pickup_servo_contact_fallback_to_planned_descend", "Fallback To Planned Descend"),
         ]),
         SettingGroup(_t("Safe Travel"), [
             _toggle("safe_travel_enabled", "Use Waypoint Between Calibration and Paint"),

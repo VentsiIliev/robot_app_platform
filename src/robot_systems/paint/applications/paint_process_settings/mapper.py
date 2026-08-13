@@ -209,6 +209,14 @@ class PaintProcessSettingsMapper:
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
             "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
+            "pickup_servo_contact_enabled": pickup.servo_contact_enabled,
+            "pickup_servo_contact_magazine_enabled": pickup.servo_contact_magazine_enabled,
+            "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
+            "pickup_servo_contact_timeout_s": pickup.servo_contact_timeout_s,
+            "pickup_servo_contact_poll_interval_s": pickup.servo_contact_poll_interval_s,
+            "pickup_servo_contact_preflight_read_attempts": pickup.servo_contact_preflight_read_attempts,
+            "pickup_servo_contact_read_failure_limit": pickup.servo_contact_read_failure_limit,
+            "pickup_servo_contact_fallback_to_planned_descend": pickup.servo_contact_fallback_to_planned_descend,
             "pickup_approach_vel_percent": pickup.approach_vel_percent,
             "pickup_approach_acc_percent": pickup.approach_acc_percent,
             "pickup_descend_vel_percent": pickup.descend_vel_percent,
@@ -326,6 +334,39 @@ class PaintProcessSettingsMapper:
             contact_offset_mm=float(flat.get("pickup_contact_offset_mm", base.pickup_motion.contact_offset_mm)),
             initial_lift_clearance_mm=float(
                 flat.get("pickup_initial_lift_clearance_mm", base.pickup_motion.initial_lift_clearance_mm)
+            ),
+            servo_contact_enabled=bool(
+                flat.get("pickup_servo_contact_enabled", base.pickup_motion.servo_contact_enabled)
+            ),
+            servo_contact_magazine_enabled=bool(
+                flat.get("pickup_servo_contact_magazine_enabled", base.pickup_motion.servo_contact_magazine_enabled)
+            ),
+            servo_contact_linear_mm_s=float(
+                flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)
+            ),
+            servo_contact_timeout_s=float(
+                flat.get("pickup_servo_contact_timeout_s", base.pickup_motion.servo_contact_timeout_s)
+            ),
+            servo_contact_poll_interval_s=float(
+                flat.get("pickup_servo_contact_poll_interval_s", base.pickup_motion.servo_contact_poll_interval_s)
+            ),
+            servo_contact_preflight_read_attempts=int(
+                flat.get(
+                    "pickup_servo_contact_preflight_read_attempts",
+                    base.pickup_motion.servo_contact_preflight_read_attempts,
+                )
+            ),
+            servo_contact_read_failure_limit=int(
+                flat.get(
+                    "pickup_servo_contact_read_failure_limit",
+                    base.pickup_motion.servo_contact_read_failure_limit,
+                )
+            ),
+            servo_contact_fallback_to_planned_descend=bool(
+                flat.get(
+                    "pickup_servo_contact_fallback_to_planned_descend",
+                    base.pickup_motion.servo_contact_fallback_to_planned_descend,
+                )
             ),
             approach_vel_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "vel_percent", flat, "pickup_approach_vel_percent", base.pickup_motion.approach_vel_percent)),
             approach_acc_percent=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "approach", "acc_percent", flat, "pickup_approach_acc_percent", base.pickup_motion.approach_acc_percent)),

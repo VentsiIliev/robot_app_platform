@@ -145,6 +145,8 @@ pickup_motion.servo_contact_enabled = True
 pickup_motion.servo_contact_linear_mm_s = 10.0
 pickup_motion.servo_contact_timeout_s = 5.0
 pickup_motion.servo_contact_poll_interval_s = 0.02
+pickup_motion.servo_contact_preflight_read_attempts = 2
+pickup_motion.servo_contact_read_failure_limit = 3
 ```
 
 To test servo contact pickup in magazine pickup, configure:
@@ -160,3 +162,9 @@ condition, servo contact pickup fails unless this fallback is explicitly enabled
 ```python
 pickup_motion.servo_contact_fallback_to_planned_descend = True
 ```
+
+Safety behavior:
+
+- Preflight read attempts happen before approach/servo motion. If every read fails, the procedure does not move.
+- Active read failure limit applies while servo is moving. If the sensor fails that many consecutive reads, servo is stopped and pickup fails.
+- A normal readable `False` means “not detected yet”; only exceptions/read failures count against these limits.

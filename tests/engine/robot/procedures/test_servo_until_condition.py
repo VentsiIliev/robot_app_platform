@@ -52,6 +52,22 @@ class ManualCondition:
         return self.active
 
 
+class FailingCondition:
+    def is_active(self):
+        raise RuntimeError("sensor disconnected")
+
+
+class FailsAfterStartCondition:
+    def __init__(self):
+        self.calls = 0
+
+    def is_active(self):
+        self.calls += 1
+        if self.calls <= 2:
+            return False
+        raise RuntimeError("sensor disconnected")
+
+
 class TestServoUntilConditionProcedure(unittest.TestCase):
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
@@ -114,6 +130,58 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertTrue(result.detected)
         self.assertEqual(result.message, "condition_already_active")
+        self.assertEqual(robot.started, [])
+        self.assertEqual(robot.stopped, 0)
+
+    def test_does_not_start_servo_when_condition_unreadable_in_preflight(self):
+        robot = FakeRobot()
+        procedure = ServoUntilConditionProcedure(robot, FailingCondition())
+
+        result = procedure.run(
+            config=ServoUntilConditionConfig(
+                timeout_s=0.02,
+                poll_interval_s=0.005,
+                preflight_condition_read_attempts=2,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.condition_failed)
+        self.assertEqual(result.message, "condition_unreadable_before_motion")
+        self.assertEqual(robot.started, [])
+        self.assertEqual(robot.stopped, 0)
+
+    def test_stops_servo_when_condition_becomes_unreadable_during_motion(self):
+        robot = FakeRobot()
+        procedure = ServoUntilConditionProcedure(robot, FailsAfterStartCondition())
+
+        result = procedure.run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=1.0,
+                condition_read_failure_limit=2,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.condition_failed)
+        self.assertEqual(result.message, "condition_unreadable_during_servo")
+        self.assertEqual(len(robot.started), 1)
+        self.assertEqual(robot.stopped, 1)
+
+    def test_invalid_linear_speed_blocks_servo_start(self):
+        robot = FakeRobot()
+        procedure = ServoUntilConditionProcedure(robot, lambda: False)
+
+        result = procedure.run(
+            config=ServoUntilConditionConfig(
+                axis=RobotAxis.Z,
+                linear_mm_s=0.0,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "invalid_linear_speed")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.stopped, 0)
 
