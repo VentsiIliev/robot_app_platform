@@ -145,6 +145,7 @@ class PaintExecutorDependencies:
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
     pickup_condition: object | None = None
+    pickup_condition_provider: Optional[Callable[[], object | None]] = None
     paint_process_config_service: object | None = None
 
 @dataclass(frozen=True)
@@ -264,6 +265,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
             pickup_condition=legacy_options.get("pickup_condition"),
+            pickup_condition_provider=legacy_options.get("pickup_condition_provider"),
             paint_process_config_service=legacy_options.get("paint_process_config_service"),
         )
         motion_config = motion_config or PaintExecutorMotionConfig(
@@ -300,6 +302,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
         self._pickup_condition = dependencies.pickup_condition
+        self._pickup_condition_provider = dependencies.pickup_condition_provider
         self._paint_process_config_service = dependencies.paint_process_config_service
 
         # Motion settings.
@@ -432,6 +435,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         try:
             self._paint_process_config_snapshot = service.get_snapshot()
             self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
+            if self._pickup_condition_provider is not None:
+                self._pickup_condition = self._pickup_condition_provider()
         except Exception:
             _logger.debug("[PAINT_CONFIG] Failed to refresh paint process settings", exc_info=True)
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG

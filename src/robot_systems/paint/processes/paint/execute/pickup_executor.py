@@ -374,6 +374,8 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
             else 20.0
         )
         blend_r = default_blend_r if waypoint.blendR is None else float(waypoint.blendR)
+        if is_last_pickup_waypoint:
+            blend_r = 0.0
         segments.append(
             {
                 "type": move_type,
@@ -426,6 +428,8 @@ def build_magazine_pickup_release_segments(
         blend_r = float(waypoint[5]) if len(waypoint) >= 6 else 0.0
         if len(waypoint) < 6 and label == "Lifting magazine workpiece" and index + 1 < len(transfer_waypoints):
             blend_r = 20.0
+        if index == len(transfer_waypoints) - 1:
+            blend_r = 0.0
         segments.append(
             {
                 "type": move_type,

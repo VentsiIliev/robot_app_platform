@@ -296,6 +296,10 @@ class PaintRobotSystem(BaseRobotSystem):
             )
         return None
 
+    def _get_pickup_condition(self):
+        self._pickup_condition = self._build_pickup_condition()
+        return self._pickup_condition
+
     def on_start(self) -> None:
         from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service import (
             PaintDashboardService,

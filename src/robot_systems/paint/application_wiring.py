@@ -306,6 +306,7 @@ def _build_paint_path_executor(robot_system):
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
         pickup_condition=getattr(robot_system, "_pickup_condition", None),
+        pickup_condition_provider=getattr(robot_system, "_get_pickup_condition", None),
         paint_process_config_service=getattr(robot_system, "_paint_process_config_service", None),
     )
     motion_config = PaintExecutorMotionConfig(

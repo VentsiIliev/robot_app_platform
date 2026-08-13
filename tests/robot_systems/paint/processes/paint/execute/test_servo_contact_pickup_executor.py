@@ -14,6 +14,8 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     PaintPickupExecutor,
     PickupPlan,
     PickupWaypoint,
+    build_magazine_pickup_release_segments,
+    build_paint_pickup_segments,
 )
 
 
@@ -106,7 +108,25 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             for segment in segments
         ]
         self.assertEqual(moved_labels, ["approach", "lift", "stage"])
+        self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
+        self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
+
+    def test_single_segment_pickup_chain_forces_terminal_blend_zero(self):
+        segments = build_paint_pickup_segments([
+            PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 20.0),
+        ])
+
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["blendR"], 0.0)
+
+    def test_single_segment_magazine_chain_forces_terminal_blend_zero(self):
+        segments = build_magazine_pickup_release_segments((
+            ("Moving to magazine pickup approach pose", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 20.0),
+        ))
+
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["blendR"], 0.0)
 
 
 if __name__ == "__main__":
