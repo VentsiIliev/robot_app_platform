@@ -226,6 +226,43 @@ class FakeRobotClient(RobotClientAdapter):
         self._queue_size = 1
         return 0
 
+    def start_servo_jog(
+        self,
+        axis,
+        direction,
+        *,
+        linear_mm_s=None,
+        angular_deg_s=None,
+        frame="user",
+        tool=0,
+        user=0,
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("FakeRobotClient.start_servo_jog")
+        if preflight_error is not None:
+            return preflight_error
+        logger.debug(
+            "FakeRobotClient.start_servo_jog axis=%s direction=%s linear_mm_s=%s angular_deg_s=%s frame=%s tool=%s user=%s",
+            axis,
+            direction,
+            linear_mm_s,
+            angular_deg_s,
+            frame,
+            tool,
+            user,
+        )
+        self._motion_active = True
+        self._queue_size = 1
+        return 0
+
+    def stop_servo_jog(self):
+        logger.debug("FakeRobotClient.stop_servo_jog")
+        self._motion_active = False
+        self._queue_size = 0
+        self._current_velocity_components = [0.0, 0.0, 0.0]
+        return 0
+
     def stop_motion(self):
         logger.debug("FakeRobotClient.stop_motion")
         stop_state = self._STOP_STATE_STOPPED if self._motion_active else self._STOP_STATE_NO_ACTIVE_MOTION

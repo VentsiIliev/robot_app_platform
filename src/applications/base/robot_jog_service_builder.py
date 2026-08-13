@@ -7,6 +7,8 @@ from src.engine.common_settings_ids import CommonSettingsID
 _JOG_GROUP_ID = "JOG"
 _DEFAULT_JOG_VELOCITY = 10.0
 _DEFAULT_JOG_ACCELERATION = 10.0
+_DEFAULT_SERVO_LINEAR_MM_S = 10.0
+_DEFAULT_SERVO_ANGULAR_DEG_S = 3.0
 
 
 def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> RobotJogService:
@@ -50,4 +52,14 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
         move_acceleration=_DEFAULT_JOG_ACCELERATION,
         move_velocity_getter=lambda: _jog_group_value("velocity", _DEFAULT_JOG_VELOCITY),
         move_acceleration_getter=lambda: _jog_group_value("acceleration", _DEFAULT_JOG_ACCELERATION),
+        servo_linear_speed_mm_s=_DEFAULT_SERVO_LINEAR_MM_S,
+        servo_angular_speed_deg_s=_DEFAULT_SERVO_ANGULAR_DEG_S,
+        servo_linear_speed_getter=lambda: _jog_group_value(
+            "servo_linear_mm_s",
+            _DEFAULT_SERVO_LINEAR_MM_S,
+        ),
+        servo_angular_speed_getter=lambda: _jog_group_value(
+            "servo_angular_deg_s",
+            _DEFAULT_SERVO_ANGULAR_DEG_S,
+        ),
     )

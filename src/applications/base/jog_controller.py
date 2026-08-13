@@ -156,12 +156,11 @@ class JogController:
             return
         set_options([], default="")
 
-    def _on_jog(self, _command: str, axis: str, direction: str, step: float) -> None:
+    def _on_jog(self, command: str, axis: str, direction: str, step: float) -> None:
         QThreadPool.globalInstance().start(
-            _FireAndForget(partial(self._service.jog, axis, direction, step))
+            _FireAndForget(partial(self._service.jog, command, axis, direction, step))
         )
 
     def _on_jog_stop(self, _key: str) -> None:
-        _logger.debug(f"Commented out jog stop: {_key}")
-        #START JOG IS ASYNC SO SHOULD NOT CALL STOP JOG IMMEDIATELY
-        # QThreadPool.globalInstance().start(_FireAndForget(self._service.stop_jog))
+        _logger.debug("jog stop: %s", _key)
+        QThreadPool.globalInstance().start(_FireAndForget(self._service.stop_jog))

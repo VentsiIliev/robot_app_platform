@@ -76,6 +76,22 @@ class IMotionService(ABC):
     ) -> int:
         ...
 
+    def start_servo_jog(
+        self,
+        axis: axis.RobotAxis,
+        direction: axis.Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+    ) -> int:
+        return -1
+
+    def stop_servo_jog(self) -> int:
+        return -1
+
     @abstractmethod
     def stop_motion(self) -> bool:
         ...

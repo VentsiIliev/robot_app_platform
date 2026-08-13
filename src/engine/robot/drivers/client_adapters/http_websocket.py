@@ -919,6 +919,75 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("start_jog error: %s", e, exc_info=True)
             return -1
 
+    def start_servo_jog(
+        self,
+        axis,
+        direction,
+        *,
+        linear_mm_s=None,
+        angular_deg_s=None,
+        frame="user",
+        tool=0,
+        user=0,
+    ):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_servo_jog")
+        if preflight_error is not None:
+            return preflight_error
+        axis_val = axis.value if hasattr(axis, 'value') else axis
+        dir_val = direction.value if hasattr(direction, 'value') else direction
+        payload = {
+            "axis": axis_val,
+            "direction": dir_val,
+            "frame": frame,
+            "tool": int(tool),
+            "user": int(user),
+        }
+        if linear_mm_s is not None:
+            payload["linear_mm_s"] = float(linear_mm_s)
+        if angular_deg_s is not None:
+            payload["angular_deg_s"] = float(angular_deg_s)
+        logger.debug("start_servo_jog → POST /servojog/start payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("start_servo_jog")
+            response = requests.post(f"{self.server_url}/servojog/start", json=payload, timeout=8)
+            if response.status_code == 404:
+                logger.info("start_servo_jog unsupported by runtime")
+                return -404
+            raw = response.json()
+            result_code = self._parse_motion_response("start_servo_jog", response, raw, blocking=True)
+            self._mark_execution_request_response("start_servo_jog", raw, time.monotonic() - request_started)
+            logger.debug(
+                "start_servo_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("start_servo_jog error: %s", e, exc_info=True)
+            return -1
+
+    def stop_servo_jog(self):
+        logger.debug("stop_servo_jog → POST /servojog/stop")
+        try:
+            response = requests.post(f"{self.server_url}/servojog/stop", timeout=5)
+            if response.status_code == 404:
+                logger.info("stop_servo_jog unsupported by runtime")
+                return -404
+            raw = response.json()
+            result_code = self._parse_motion_response("stop_servo_jog", response, raw, blocking=True)
+            self._mark_available()
+            logger.debug(
+                "stop_servo_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("stop_servo_jog error: %s", e, exc_info=True)
+            return -1
+
 
     def stop_motion(self):
         logger.debug("stop_motion → POST /stop")

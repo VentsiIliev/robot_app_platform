@@ -45,6 +45,24 @@ class IRobot(ABC):
     ) -> int:
         ...
 
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+    ) -> int:
+        """Optional continuous ServoJog. Intended for UI press/release jog."""
+        return -1
+
+    def stop_servo_jog(self) -> int:
+        """Optional stop for continuous ServoJog."""
+        return -1
+
     @abstractmethod
     def stop_motion(self) -> int:
         ...

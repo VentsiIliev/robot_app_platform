@@ -89,6 +89,9 @@ class RobotJogWidget(QFrame):
         self._joint_btns:     dict[str, QPushButton]     = {}
         self._frame_label: Optional[QLabel]     = None
         self._frame_combo: Optional[QComboBox]  = None
+        self._jog_mode_combo: Optional[QComboBox] = None
+        self._linear_title_label: Optional[QLabel] = None
+        self._rotation_title_label: Optional[QLabel] = None
         self._setup_ui()
         self._setup_timers()
 
@@ -352,7 +355,11 @@ class RobotJogWidget(QFrame):
 
         lbl = QLabel(f"{label_text}:")
         lbl.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {TEXT_COLOR};")
-        lbl.setFixedWidth(100)
+        lbl.setFixedWidth(112)
+        if slider_attr == "_linear_slider":
+            self._linear_title_label = lbl
+        elif slider_attr == "_rotation_slider":
+            self._rotation_title_label = lbl
 
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setMinimum(0)
@@ -551,6 +558,29 @@ class RobotJogWidget(QFrame):
         layout = QHBoxLayout()
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        mode_label = QLabel("Mode:")
+        mode_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
+        layout.addWidget(mode_label)
+
+        self._jog_mode_combo = QComboBox()
+        self._jog_mode_combo.setFixedHeight(32)
+        self._jog_mode_combo.setStyleSheet(f"""
+            QComboBox {{
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+                background: white;
+                color: {TEXT_COLOR};
+            }}
+            QComboBox::drop-down {{ border: none; }}
+        """)
+        self._jog_mode_combo.addItem("Step", "JOG_ROBOT")
+        self._jog_mode_combo.addItem("Servo", "SERVO_JOG")
+        self._jog_mode_combo.currentIndexChanged.connect(self._on_jog_mode_changed)
+        layout.addWidget(self._jog_mode_combo)
+        layout.addSpacing(12)
+
         self._frame_label = QLabel("Frame:")
         self._frame_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
         layout.addWidget(self._frame_label)
@@ -669,14 +699,19 @@ class RobotJogWidget(QFrame):
 
     # ── Slots ─────────────────────────────────────────────────────────────────
 
-    @staticmethod
-    def _on_slider_changed(steps: list[float], unit: str, label: QLabel, idx: int) -> None:
+    def _on_slider_changed(self, steps: list[float], unit: str, label: QLabel, idx: int) -> None:
+        if self._current_jog_command() == "SERVO_JOG":
+            if label is getattr(self, "_linear_label", None):
+                unit = "mm/s"
+            elif label is getattr(self, "_rotation_label", None):
+                unit = "°/s"
         label.setText(f"{steps[idx]} {unit}")
 
     def _on_jog_press(self, key: str) -> None:
         self.jog_started.emit(key)
         self._perform_jog(key)
-        self._timers[key].start()
+        if self._current_jog_command() != "SERVO_JOG":
+            self._timers[key].start()
 
     def _on_jog_release(self, key: str) -> None:
         self._timers[key].stop()
@@ -689,10 +724,29 @@ class RobotJogWidget(QFrame):
         else:
             step = _ROTATION_STEPS[self._rotation_slider.value()]
 
-        if axis == "Z" and self._invert_z_btn.isChecked():
+        if (
+            self._current_jog_command() != "SERVO_JOG"
+            and axis == "Z"
+            and self._invert_z_btn.isChecked()
+        ):
             direction = "Minus" if direction == "Plus" else "Plus"
 
-        self.jog_requested.emit("JOG_ROBOT", axis, direction, step)
+        self.jog_requested.emit(self._current_jog_command(), axis, direction, step)
+
+    def _current_jog_command(self) -> str:
+        if self._jog_mode_combo is None:
+            return "JOG_ROBOT"
+        data = self._jog_mode_combo.currentData()
+        return str(data or "JOG_ROBOT").strip().upper()
+
+    def _on_jog_mode_changed(self) -> None:
+        servo_mode = self._current_jog_command() == "SERVO_JOG"
+        if self._linear_title_label is not None:
+            self._linear_title_label.setText("Linear Speed:" if servo_mode else "Linear Step:")
+        if self._rotation_title_label is not None:
+            self._rotation_title_label.setText("Rotation Speed:" if servo_mode else "Rotation Step:")
+        self._on_slider_changed(_LINEAR_STEPS, "mm", self._linear_label, self._linear_slider.value())
+        self._on_slider_changed(_ROTATION_STEPS, "°", self._rotation_label, self._rotation_slider.value())
 
     def _on_joint_jog_press(self, key: str) -> None:
         self.joint_jog_started.emit(key)

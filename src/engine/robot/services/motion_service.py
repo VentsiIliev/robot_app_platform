@@ -323,6 +323,46 @@ class MotionService(IMotionService):
             self._logger.exception("start_jog failed")
             return -1
 
+    def start_servo_jog(
+            self,
+            axis: RobotAxis,
+            direction: Direction,
+            linear_mm_s: float | None = None,
+            angular_deg_s: float | None = None,
+            *,
+            frame: str | int = "user",
+            tool: int = 0,
+            user: int = 0,
+    ) -> int:
+        self._last_jog_target = []
+        try:
+            starter = getattr(self._robot, "start_servo_jog", None)
+            if not callable(starter):
+                return -1
+            return int(starter(
+                axis,
+                direction,
+                linear_mm_s=linear_mm_s,
+                angular_deg_s=angular_deg_s,
+                frame=frame,
+                tool=tool,
+                user=user,
+            ))
+        except Exception:
+            self._logger.exception("start_servo_jog failed")
+            return -1
+
+    def stop_servo_jog(self) -> int:
+        self._last_jog_target = []
+        try:
+            stopper = getattr(self._robot, "stop_servo_jog", None)
+            if not callable(stopper):
+                return -1
+            return int(stopper())
+        except Exception:
+            self._logger.exception("stop_servo_jog failed")
+            return -1
+
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
         self._last_jog_target = []

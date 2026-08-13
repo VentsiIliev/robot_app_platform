@@ -37,6 +37,52 @@ class Ros2Robot(IRobot):
         logger.debug("start_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+    ) -> int:
+        logger.debug(
+            "start_servo_jog → axis=%s direction=%s linear_mm_s=%s angular_deg_s=%s frame=%s tool=%s user=%s",
+            axis,
+            direction,
+            linear_mm_s,
+            angular_deg_s,
+            frame,
+            tool,
+            user,
+        )
+        starter = getattr(self._client, "start_servo_jog", None)
+        if not callable(starter):
+            return -1
+        ret = starter(
+            axis,
+            direction,
+            linear_mm_s=linear_mm_s,
+            angular_deg_s=angular_deg_s,
+            frame=frame,
+            tool=tool,
+            user=user,
+        ) or 0
+        logger.debug("start_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
+        return ret
+
+    def stop_servo_jog(self) -> int:
+        logger.debug("stop_servo_jog →")
+        stopper = getattr(self._client, "stop_servo_jog", None)
+        if not callable(stopper):
+            return -1
+        ret = stopper()
+        ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
+        logger.debug("stop_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
+        return ret
+
     def stop_motion(self) -> int:
         logger.debug("stop_motion →")
         ret = self._client.stop_motion()

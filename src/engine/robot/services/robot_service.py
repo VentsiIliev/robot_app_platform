@@ -70,6 +70,36 @@ class RobotService(IRobotService):
     ) -> int:
         return self._motion.start_jog(axis, direction, step, velocity=velocity, acceleration=acceleration)
 
+    def start_servo_jog(
+        self,
+        axis: RobotAxis,
+        direction: Direction,
+        linear_mm_s: float | None = None,
+        angular_deg_s: float | None = None,
+        *,
+        frame: str | int = "user",
+        tool: int = 0,
+        user: int = 0,
+    ) -> int:
+        starter = getattr(self._motion, "start_servo_jog", None)
+        if not callable(starter):
+            return -1
+        return starter(
+            axis,
+            direction,
+            linear_mm_s=linear_mm_s,
+            angular_deg_s=angular_deg_s,
+            frame=frame,
+            tool=tool,
+            user=user,
+        )
+
+    def stop_servo_jog(self) -> int:
+        stopper = getattr(self._motion, "stop_servo_jog", None)
+        if not callable(stopper):
+            return -1
+        return stopper()
+
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
 
