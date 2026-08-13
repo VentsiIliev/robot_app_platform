@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
 import logging
 import sys
 import threading
@@ -27,6 +26,33 @@ from src.engine.robot.procedures import (  # noqa: E402
     ServoUntilConditionProcedure,
     VacuumPickupCondition,
 )
+
+BACKEND = "http"  # "fake" or "http"
+SERVER_URL = "http://localhost:5000"
+
+SERVO_AXIS = RobotAxis.Z
+SERVO_DIRECTION = Direction.MINUS
+SERVO_LINEAR_MM_S = 100.0
+SERVO_ANGULAR_DEG_S = None
+SERVO_FRAME = "user"
+TOOL = 1
+USER = 0
+
+TIMEOUT_S = 5.0
+POLL_INTERVAL_S = 0.02
+
+# Set to -1.0 to disable simulated detection and force timeout.
+DETECT_AFTER_S = 3.0
+VACUUM_DETECTED_VALUE = 1
+VACUUM_CLEAR_VALUE = 0
+VACUUM_SENSOR_REGISTER = 0
+
+# Set to a 6-value list to test the optional approach move first.
+APPROACH_POSE = None
+APPROACH_VELOCITY = 10.0
+APPROACH_ACCELERATION = 10.0
+
+LOG_LEVEL = "INFO"
 
 
 class LocalFakeRobot:
@@ -76,32 +102,15 @@ class LocalFakeRobot:
         return 0
 
 
-def _axis(value: str) -> RobotAxis:
-    return RobotAxis.get_by_string(value)
-
-
-def _direction(value: str) -> Direction:
-    return Direction.get_by_string(value)
-
-
-def _parse_pose(value: str | None):
-    if not value:
-        return None
-    parts = [float(part.strip()) for part in value.split(",") if part.strip()]
-    if len(parts) != 6:
-        raise argparse.ArgumentTypeError("approach pose must have 6 comma-separated values")
-    return parts
-
-
-def _build_robot(args):
-    if args.backend == "fake":
+def _build_robot():
+    if BACKEND == "fake":
         return LocalFakeRobot()
 
     from src.engine.robot.drivers.client_adapters.http_websocket import (  # noqa: WPS433
         HttpWebSocketRobotClient,
     )
 
-    return HttpWebSocketRobotClient(server_url=args.server_url)
+    return HttpWebSocketRobotClient(server_url=SERVER_URL)
 
 
 def _start_vacuum_emulator(
@@ -136,42 +145,18 @@ def _start_vacuum_emulator(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Test ServoUntilConditionProcedure with a dummy vacuum sensor."
-    )
-    parser.add_argument("--backend", choices=["fake", "http"], default="fake")
-    parser.add_argument("--server-url", default="http://localhost:5000")
-    parser.add_argument("--axis", default="Z", type=_axis)
-    parser.add_argument("--direction", default="MINUS", type=_direction)
-    parser.add_argument("--linear-mm-s", type=float, default=25.0)
-    parser.add_argument("--angular-deg-s", type=float, default=None)
-    parser.add_argument("--tool", type=int, default=1)
-    parser.add_argument("--user", type=int, default=0)
-    parser.add_argument("--frame", default="user")
-    parser.add_argument("--timeout-s", type=float, default=5.0)
-    parser.add_argument("--poll-interval-s", type=float, default=0.02)
-    parser.add_argument("--detect-after", type=float, default=1.0)
-    parser.add_argument("--detected-value", type=int, default=1)
-    parser.add_argument("--clear-value", type=int, default=0)
-    parser.add_argument("--sensor-register", type=int, default=0)
-    parser.add_argument("--approach", type=_parse_pose, default=None)
-    parser.add_argument("--approach-velocity", type=float, default=10.0)
-    parser.add_argument("--approach-acceleration", type=float, default=10.0)
-    parser.add_argument("--log-level", default="INFO")
-    args = parser.parse_args()
-
     logging.basicConfig(
-        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
+        level=getattr(logging, str(LOG_LEVEL).upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
-    robot = _build_robot(args)
-    transport = DummyVacuumSensorTransport(simulated_value=args.clear_value)
+    robot = _build_robot()
+    transport = DummyVacuumSensorTransport(simulated_value=VACUUM_CLEAR_VALUE)
     sensor = VacuumSensorService(
         transport,
         VacuumSensorConfig(
-            sensor_register=args.sensor_register,
-            detected_value=args.detected_value,
+            sensor_register=VACUUM_SENSOR_REGISTER,
+            detected_value=VACUUM_DETECTED_VALUE,
             read_retries=1,
         ),
     )
@@ -180,33 +165,33 @@ def main() -> int:
 
     _start_vacuum_emulator(
         transport,
-        detect_after_s=float(args.detect_after),
-        detected_value=int(args.detected_value),
-        clear_value=int(args.clear_value),
+        detect_after_s=float(DETECT_AFTER_S),
+        detected_value=int(VACUUM_DETECTED_VALUE),
+        clear_value=int(VACUUM_CLEAR_VALUE),
     )
 
     logging.info(
         "[TEST] starting procedure backend=%s axis=%s direction=%s speed=%smm/s timeout=%ss",
-        args.backend,
-        args.axis.name,
-        args.direction.name,
-        args.linear_mm_s,
-        args.timeout_s,
+        BACKEND,
+        SERVO_AXIS.name,
+        SERVO_DIRECTION.name,
+        SERVO_LINEAR_MM_S,
+        TIMEOUT_S,
     )
     result = procedure.run(
-        approach_pose=args.approach,
+        approach_pose=APPROACH_POSE,
         config=ServoUntilConditionConfig(
-            axis=args.axis,
-            direction=args.direction,
-            linear_mm_s=args.linear_mm_s,
-            angular_deg_s=args.angular_deg_s,
-            frame=args.frame,
-            tool=args.tool,
-            user=args.user,
-            poll_interval_s=args.poll_interval_s,
-            timeout_s=args.timeout_s,
-            approach_velocity=args.approach_velocity,
-            approach_acceleration=args.approach_acceleration,
+            axis=SERVO_AXIS,
+            direction=SERVO_DIRECTION,
+            linear_mm_s=SERVO_LINEAR_MM_S,
+            angular_deg_s=SERVO_ANGULAR_DEG_S,
+            frame=SERVO_FRAME,
+            tool=TOOL,
+            user=USER,
+            poll_interval_s=POLL_INTERVAL_S,
+            timeout_s=TIMEOUT_S,
+            approach_velocity=APPROACH_VELOCITY,
+            approach_acceleration=APPROACH_ACCELERATION,
         ),
     )
 
