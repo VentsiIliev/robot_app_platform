@@ -178,9 +178,21 @@ class RobotJogService:
             if robot_axis.value > 3
             else None
         )
-        result = starter(
+        servo_direction = self._step_compatible_servo_direction(
             robot_axis,
             robot_direction,
+        )
+        if servo_direction is not robot_direction:
+            _logger.info(
+                "[SERVO_JOG] remapped direction for Step-compatible semantics: "
+                "axis=%s requested=%s servo=%s",
+                axis_name,
+                robot_direction.name,
+                servo_direction.name,
+            )
+        result = starter(
+            robot_axis,
+            servo_direction,
             linear_mm_s=linear_mm_s,
             angular_deg_s=angular_deg_s,
             frame="user",
@@ -214,6 +226,15 @@ class RobotJogService:
             return
 
         _logger.warning("[SERVO_JOG] rejected result=%s", result)
+
+    @staticmethod
+    def _step_compatible_servo_direction(
+        axis: RobotAxis,
+        direction: Direction,
+    ) -> Direction:
+        if axis == RobotAxis.Y:
+            return Direction.MINUS if direction == Direction.PLUS else Direction.PLUS
+        return direction
 
     def _activate_configured_tool(self, tool: int) -> bool:
         setter = getattr(self._robot, "set_active_tool", None)
