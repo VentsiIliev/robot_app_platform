@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from src.engine.hardware.vacuum_sensor.interfaces.i_vacuum_sensor_transport import IVacuumSensorTransport
 
@@ -20,18 +21,37 @@ class DummyVacuumSensorTransport(IVacuumSensorTransport):
     """
 
     def __init__(self, simulated_value: int = 0) -> None:
-        self.simulated_value = simulated_value
+        self._lock = threading.Lock()
+        self.simulated_value = int(simulated_value)
         self.raise_on_read: bool = False
-        self.call_log: List[tuple] = []
+        self.call_log: list[tuple] = []
 
     def read_register(self, address: int) -> int:
-        self.call_log.append(("read_register", address, self.simulated_value))
-        if self.raise_on_read:
+        with self._lock:
+            value = int(self.simulated_value)
+            raise_on_read = bool(self.raise_on_read)
+            self.call_log.append(("read_register", address, value))
+
+        if raise_on_read:
             _logger.info("[DUMMY VACUUM SENSOR] read_register(addr=%d) -> RAISED", address)
             raise IOError("Simulated vacuum-sensor read failure")
         _logger.info(
             "[DUMMY VACUUM SENSOR] read_register(addr=%d) -> %d",
             address,
-            self.simulated_value,
+            value,
         )
-        return self.simulated_value
+        return value
+
+    def set_simulated_value(self, value: int) -> None:
+        with self._lock:
+            self.simulated_value = int(value)
+        _logger.info("[DUMMY VACUUM SENSOR] simulated_value=%d", int(value))
+
+    def set_vacuum_detected(
+        self,
+        detected: bool,
+        *,
+        detected_value: int = 1,
+        clear_value: int = 0,
+    ) -> None:
+        self.set_simulated_value(detected_value if detected else clear_value)
