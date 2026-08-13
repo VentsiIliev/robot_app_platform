@@ -70,6 +70,8 @@ class PickupMotionConfig:
     servo_contact_preflight_read_attempts: int = 2  # [LIVE SETTINGS]
     servo_contact_read_failure_limit: int = 3  # [LIVE SETTINGS]
     servo_contact_fallback_to_planned_descend: bool = False  # [LIVE SETTINGS]
+    servo_contact_dummy_sensor_enabled: bool = False  # [LIVE SETTINGS]
+    servo_contact_dummy_detect_after_s: float = 1.0  # [LIVE SETTINGS]
 
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:

@@ -1,3 +1,4 @@
+import logging
 import os
 
 from src.engine.common_service_ids import CommonServiceID
@@ -48,6 +49,8 @@ from src.shared_contracts.declarations import (
     WorkAreaDefinition,
     WorkAreaObserverBinding,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 # ── System ───────────────────────────────────────────────────────────────────────
@@ -277,6 +280,22 @@ class PaintRobotSystem(BaseRobotSystem):
 
     ]
 
+    def _build_pickup_condition(self):
+        paint_config = self._paint_process_config_service.get_snapshot()
+        pickup_motion = paint_config.pickup_motion
+        if bool(pickup_motion.servo_contact_dummy_sensor_enabled):
+            from src.engine.robot.procedures import TimedDummyPickupCondition
+
+            _logger.error(
+                "[PICKUP] TEST ONLY dummy pickup sensor enabled; "
+                "do not use this for production pickup. detect_after_s=%.3f",
+                float(pickup_motion.servo_contact_dummy_detect_after_s),
+            )
+            return TimedDummyPickupCondition(
+                detect_after_s=float(pickup_motion.servo_contact_dummy_detect_after_s)
+            )
+        return None
+
     def on_start(self) -> None:
         from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service import (
             PaintDashboardService,
@@ -313,6 +332,7 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
+        self._pickup_condition = self._build_pickup_condition()
 
         if self._vision is not None:
             self._vision.start()

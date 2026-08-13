@@ -159,6 +159,8 @@ def build_process_groups() -> list[SettingGroup]:
             _count_field("pickup_servo_contact_preflight_read_attempts", "Preflight Read Attempts", 2),
             _count_field("pickup_servo_contact_read_failure_limit", "Active Read Failure Limit", 3),
             _toggle("pickup_servo_contact_fallback_to_planned_descend", "Fallback To Planned Descend"),
+            _toggle("pickup_servo_contact_dummy_sensor_enabled", "Use Dummy Pickup Sensor (TEST ONLY)"),
+            _seconds_field("pickup_servo_contact_dummy_detect_after_s", "Dummy Detect After", 1.0),
         ]),
         SettingGroup(_t("Safe Travel"), [
             _toggle("safe_travel_enabled", "Use Waypoint Between Calibration and Paint"),

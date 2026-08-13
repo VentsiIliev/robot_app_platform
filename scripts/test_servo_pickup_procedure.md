@@ -149,6 +149,18 @@ pickup_motion.servo_contact_preflight_read_attempts = 2
 pickup_motion.servo_contact_read_failure_limit = 3
 ```
 
+For temporary platform testing without a real sensor, enable the explicit dummy
+condition:
+
+```python
+pickup_motion.servo_contact_dummy_sensor_enabled = True
+pickup_motion.servo_contact_dummy_detect_after_s = 1.0
+```
+
+This is guarded by being default-off, labelled `TEST ONLY` in the Paint Settings
+UI, and logged at error level when the paint system starts. Leave it disabled for
+production.
+
 To test servo contact pickup in magazine pickup, configure:
 
 ```python
