@@ -6,6 +6,7 @@ from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoUntilConditionConfig,
     ServoUntilConditionProcedure,
+    TimedDummyPickupCondition,
 )
 
 
@@ -184,6 +185,24 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "invalid_linear_speed")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.stopped, 0)
+
+    def test_timed_dummy_condition_arms_only_after_servo_start(self):
+        robot = FakeRobot()
+        condition = TimedDummyPickupCondition(detect_after_s=0.0)
+        procedure = ServoUntilConditionProcedure(robot, condition)
+
+        result = procedure.run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+            )
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.detected)
+        self.assertEqual(result.message, "condition_detected")
+        self.assertEqual(len(robot.started), 1)
+        self.assertEqual(robot.stopped, 1)
 
 
 if __name__ == "__main__":

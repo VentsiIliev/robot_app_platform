@@ -13,11 +13,14 @@ class TimedDummyPickupCondition:
         self._detect_after_s = max(0.0, float(detect_after_s))
         self._started_at: float | None = None
 
+    def on_servo_start(self) -> None:
+        self._started_at = time.monotonic()
+        _logger.warning(
+            "[DUMMY_PICKUP_CONDITION] TEST ONLY dummy pickup condition armed detect_after_s=%.3f",
+            self._detect_after_s,
+        )
+
     def is_active(self) -> bool:
         if self._started_at is None:
-            self._started_at = time.monotonic()
-            _logger.warning(
-                "[DUMMY_PICKUP_CONDITION] TEST ONLY dummy pickup condition armed detect_after_s=%.3f",
-                self._detect_after_s,
-            )
+            return False
         return (time.monotonic() - self._started_at) >= self._detect_after_s

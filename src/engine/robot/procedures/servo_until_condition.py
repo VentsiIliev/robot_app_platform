@@ -161,6 +161,7 @@ class ServoUntilConditionProcedure:
                 )
 
             started = True
+            self._notify_condition_servo_started()
             deadline = started_at + max(0.0, float(cfg.timeout_s))
             poll_interval_s = max(0.005, float(cfg.poll_interval_s))
             read_failure_count = 0
@@ -281,6 +282,15 @@ class ServoUntilConditionProcedure:
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] condition read failed")
             return False, False
+
+    def _notify_condition_servo_started(self) -> None:
+        callback = getattr(self._condition, "on_servo_start", None)
+        if callback is None or not callable(callback):
+            return
+        try:
+            callback()
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] condition on_servo_start failed")
 
     @staticmethod
     def _validate_config(cfg: ServoUntilConditionConfig) -> tuple[bool, str]:

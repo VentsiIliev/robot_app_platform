@@ -143,7 +143,7 @@ def execute_magazine_pickup_release(
         if not ok:
             return False, msg
         if use_servo_contact:
-            ok = _execute_magazine_servo_contact_pickup_release(
+            ok, msg = _execute_magazine_servo_contact_pickup_release(
                 executor,
                 transfer_waypoints,
                 release_label=release_label,
@@ -153,8 +153,9 @@ def execute_magazine_pickup_release(
                 "Ordered magazine pickup-to-release sequence",
                 ordered_segments,
             )
+            msg = f"Move to {release_label} release pose failed"
         if not ok:
-            return False, f"Move to {release_label} release pose failed"
+            return False, msg
 
     ok, msg = executor._motion.turn_vacuum_off()
     if not ok:
@@ -167,18 +168,19 @@ def _execute_magazine_servo_contact_pickup_release(
     transfer_waypoints: tuple[tuple, ...],
     *,
     release_label: str,
-) -> bool:
+) -> tuple[bool, str]:
     pickup_motion = executor._paint_process_config().pickup_motion
     condition = getattr(executor, "_pickup_condition", None)
     if condition is None:
         if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
             _logger.warning("[MAGAZINE_LOAD] Servo contact condition missing; falling back to planned descend")
-            return executor._motion.move_ordered_pickup_sequence(
+            ok = executor._motion.move_ordered_pickup_sequence(
                 "Ordered magazine pickup-to-release sequence",
                 build_magazine_pickup_release_segments(transfer_waypoints),
             )
+            return bool(ok), "Planned magazine pickup fallback failed"
         _logger.error("[MAGAZINE_LOAD] Servo contact pickup requested, but no pickup condition is configured")
-        return False
+        return False, "Servo contact pickup condition is not configured"
 
     approach_segments = build_magazine_pickup_release_segments(transfer_waypoints[:1])
     remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[2:])
@@ -186,7 +188,7 @@ def _execute_magazine_servo_contact_pickup_release(
         "Magazine pickup approach before servo contact",
         approach_segments,
     ):
-        return False
+        return False, "Magazine pickup approach before servo contact failed"
 
     _logger.info(
         "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
@@ -220,18 +222,22 @@ def _execute_magazine_servo_contact_pickup_release(
     if not result.success:
         if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
             _logger.warning("[MAGAZINE_LOAD] Servo contact pickup failed (%s); falling back to planned descend", result.message)
-            return executor._motion.move_ordered_pickup_sequence(
+            ok = executor._motion.move_ordered_pickup_sequence(
                 "Magazine planned descend fallback",
                 build_magazine_pickup_release_segments(transfer_waypoints[1:]),
             )
-        return False
+            return bool(ok), f"Magazine planned descend fallback failed after servo contact failure: {result.message}"
+        return False, f"Magazine servo contact pickup failed: {result.message}"
 
     if not remaining_segments:
-        return True
-    return executor._motion.move_ordered_pickup_sequence(
+        return True, ""
+    ok = executor._motion.move_ordered_pickup_sequence(
         f"Magazine lift and {release_label} release after servo contact",
         remaining_segments,
     )
+    if not ok:
+        return False, f"Magazine lift/release after servo contact failed for {release_label}"
+    return True, ""
 
 
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:
