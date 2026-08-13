@@ -67,6 +67,9 @@ def try_execute_ordered_pickup_and_paint_contact(
     pickup_plan = executor._pickup.build_plan(prepared_workpiece)
     if pickup_plan is None:
         return False, "Could not compute pickup-to-pivot poses", 0
+    if pickup_plan.servo_contact_enabled:
+        _logger.info("[ORDERED_CHAIN] pickup plus paint contact chain skipped: servo contact pickup enabled")
+        return None
     executor._last_pickup_plan = pickup_plan.motion_plan
 
     if pickup_plan.change_plane_combined_with_first_contact:

@@ -144,6 +144,7 @@ class PaintExecutorDependencies:
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
+    pickup_condition: object | None = None
     paint_process_config_service: object | None = None
 
 @dataclass(frozen=True)
@@ -262,6 +263,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
+            pickup_condition=legacy_options.get("pickup_condition"),
             paint_process_config_service=legacy_options.get("paint_process_config_service"),
         )
         motion_config = motion_config or PaintExecutorMotionConfig(
@@ -297,6 +299,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
+        self._pickup_condition = dependencies.pickup_condition
         self._paint_process_config_service = dependencies.paint_process_config_service
 
         # Motion settings.

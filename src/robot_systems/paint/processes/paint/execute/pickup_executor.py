@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
 
+from src.engine.robot.enums.axis import Direction, RobotAxis
+from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.timing import timed_block, timed_step
@@ -33,6 +35,8 @@ class PickupPlan:
     waypoints: tuple[PickupWaypoint, ...]
     vacuum_on_before_moves: bool = True
     change_plane_combined_with_first_contact: bool = False
+    servo_contact_enabled: bool = False
+    contact_waypoint_index: int | None = None
 
 
 class PaintPickupStrategy(Protocol):
@@ -168,6 +172,8 @@ class DefaultPickupStrategy:
             waypoints=tuple(waypoints),
             vacuum_on_before_moves=True,
             change_plane_combined_with_first_contact=bool(combine_change_plane),
+            servo_contact_enabled=bool(pickup_motion.servo_contact_enabled),
+            contact_waypoint_index=1,
         )
 
 
@@ -199,7 +205,11 @@ class PaintPickupExecutor:
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
-        if self._execute_custom_pickup_sequence(pickup_plan):
+        if pickup_plan.servo_contact_enabled:
+            ok = self._execute_servo_contact_pickup_sequence(pickup_plan)
+        else:
+            ok = self._execute_custom_pickup_sequence(pickup_plan)
+        if ok:
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
         _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
         return False, "Ordered pickup sequence failed"
@@ -224,6 +234,76 @@ class PaintPickupExecutor:
         ):
             return False
         return True
+
+    def _execute_servo_contact_pickup_sequence(self, pickup_plan: PickupPlan) -> bool:
+        waypoints = list(pickup_plan.waypoints)
+        contact_index = 1 if pickup_plan.contact_waypoint_index is None else int(pickup_plan.contact_waypoint_index)
+        if contact_index <= 0 or contact_index >= len(waypoints):
+            _logger.error("[PICKUP] Servo contact pickup has invalid contact waypoint index=%s", contact_index)
+            return False
+
+        pickup_motion = self._owner._paint_process_config().pickup_motion
+        condition = getattr(self._owner, "_pickup_condition", None)
+        if condition is None:
+            if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
+                _logger.warning("[PICKUP] Servo contact pickup condition missing; falling back to planned descend")
+                return self._execute_custom_pickup_sequence(pickup_plan)
+            _logger.error("[PICKUP] Servo contact pickup requested, but no pickup condition is configured")
+            return False
+
+        if pickup_plan.change_plane_combined_with_first_contact:
+            with timed_block(_logger, "pickup_phase", label="Changing plane combined with first pivot contact pose"):
+                _logger.info(
+                    "[PICKUP] Changing plane skipped as standalone move; orientation will be combined with first pivot contact pose"
+                )
+
+        approach_waypoints = waypoints[:contact_index]
+        remaining_waypoints = waypoints[contact_index + 1 :]
+        if pickup_plan.vacuum_on_before_moves:
+            ok, _msg = self._owner._motion.turn_vacuum_on()
+            if not ok:
+                return False
+
+        if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
+            return False
+
+        _logger.info(
+            "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
+            float(pickup_motion.servo_contact_linear_mm_s),
+            float(pickup_motion.servo_contact_timeout_s),
+            int(self._owner._pickup_tool),
+            int(self._owner._pickup_user),
+        )
+        procedure = ServoUntilConditionProcedure(self._owner._robot_service, condition)
+        result = procedure.run(
+            config=ServoUntilConditionConfig(
+                axis=RobotAxis.Z,
+                direction=Direction.MINUS,
+                linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+                frame="user",
+                tool=int(self._owner._pickup_tool),
+                user=int(self._owner._pickup_user),
+                poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+                timeout_s=float(pickup_motion.servo_contact_timeout_s),
+            )
+        )
+        _logger.info(
+            "[PICKUP] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
+            result.success,
+            result.detected,
+            result.timed_out,
+            result.elapsed_s,
+            result.message,
+        )
+        if not result.success:
+            if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
+                _logger.warning("[PICKUP] Servo contact pickup failed (%s); falling back to planned descend", result.message)
+                return self._move_waypoint_sequence("Pickup planned descend fallback", waypoints[contact_index:])
+            return False
+
+        if not remaining_waypoints:
+            return True
+        return self._move_waypoint_sequence("Pickup lift and staging after servo contact", remaining_waypoints)
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = build_paint_pickup_segments(waypoints)

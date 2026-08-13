@@ -60,6 +60,15 @@ class PickupMotionConfig:
     first_contact_motion_type: str = "ptp"  # [LIVE SETTINGS]
     first_contact_blendR: float = 0.0  # [LIVE SETTINGS]
 
+    # Optional sensor-driven pickup contact. Defaults preserve the fully planned
+    # approach/descend/lift sequence.
+    servo_contact_enabled: bool = False  # [LIVE SETTINGS]
+    servo_contact_magazine_enabled: bool = False  # [LIVE SETTINGS]
+    servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
+    servo_contact_timeout_s: float = 5.0  # [LIVE SETTINGS]
+    servo_contact_poll_interval_s: float = 0.02  # [LIVE SETTINGS]
+    servo_contact_fallback_to_planned_descend: bool = False  # [LIVE SETTINGS]
+
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
     """Optional XY/RZ cleanup pass tuning used after XZ/RY paint."""

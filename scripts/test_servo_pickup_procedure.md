@@ -8,7 +8,7 @@ Run without any robot server:
 
 ```bash
 cd /home/ilv/Desktop/robot_app_platform
-python3 scripts/test_servo_pickup_procedure.py --backend fake --detect-after 1.0 --timeout-s 5
+python3 scripts/test_servo_pickup_procedure.py
 ```
 
 This uses:
@@ -19,30 +19,40 @@ This uses:
 - `VacuumPickupCondition`
 - `ServoUntilConditionProcedure`
 
-The dummy sensor changes to vacuum-detected after `--detect-after` seconds. The procedure should then call `stop_servo_jog()`.
+The runner uses the constants at the top of `scripts/test_servo_pickup_procedure.py`.
+With the default `BACKEND = "fake"` and `DETECT_AFTER_S = 3.0`, the dummy sensor changes
+to vacuum-detected after three seconds. The procedure should then call `stop_servo_jog()`.
 
 ## HTTP/Fake System Test
 
 Run against the running robot HTTP bridge:
 
-```bash
-cd /home/ilv/Desktop/robot_app_platform
-python3 scripts/test_servo_pickup_procedure.py \
-  --backend http \
-  --server-url http://localhost:5000 \
-  --axis Z \
-  --direction MINUS \
-  --linear-mm-s 25 \
-  --tool 1 \
-  --user 0 \
-  --detect-after 1.0 \
-  --timeout-s 5
+Edit the constants near the top of `scripts/test_servo_pickup_procedure.py`:
+
+```python
+BACKEND = "http"
+SERVER_URL = "http://localhost:5000"
+SERVO_AXIS = RobotAxis.Z
+SERVO_DIRECTION = Direction.MINUS
+SERVO_LINEAR_MM_S = 10.0
+TOOL = 1
+USER = 0
+DETECT_AFTER_S = 1.0
+TIMEOUT_S = 5.0
 ```
 
-Timeout/no-pickup test:
+Then run:
 
 ```bash
-python3 scripts/test_servo_pickup_procedure.py --backend http --detect-after -1 --timeout-s 3
+cd /home/ilv/Desktop/robot_app_platform
+python3 scripts/test_servo_pickup_procedure.py
+```
+
+For a timeout/no-pickup test, set:
+
+```python
+DETECT_AFTER_S = -1
+TIMEOUT_S = 3.0
 ```
 
 Expected timeout result:
@@ -123,3 +133,30 @@ poll_interval_s = 0.02
 ```
 
 Increase speed only after stop latency and sensor reliability are verified.
+
+## Paint Process Integration
+
+The paint process keeps the current planned pickup behavior by default.
+
+To test servo contact pickup in the calibration/paint pickup path, configure:
+
+```python
+pickup_motion.servo_contact_enabled = True
+pickup_motion.servo_contact_linear_mm_s = 10.0
+pickup_motion.servo_contact_timeout_s = 5.0
+pickup_motion.servo_contact_poll_interval_s = 0.02
+```
+
+To test servo contact pickup in magazine pickup, configure:
+
+```python
+pickup_motion.servo_contact_magazine_enabled = True
+```
+
+Both paths require `PaintWorkpiecePathExecutor._pickup_condition` to be set to a
+condition object such as `VacuumPickupCondition(vacuum_sensor_service)`. Without a
+condition, servo contact pickup fails unless this fallback is explicitly enabled:
+
+```python
+pickup_motion.servo_contact_fallback_to_planned_descend = True
+```

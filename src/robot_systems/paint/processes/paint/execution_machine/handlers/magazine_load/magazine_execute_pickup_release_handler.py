@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from src.engine.robot.enums.axis import Direction, RobotAxis
+from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -126,9 +128,13 @@ def execute_magazine_pickup_release(
         ),
     )
 
+    use_servo_contact = bool(pickup_motion.servo_contact_magazine_enabled)
     ordered_segments = build_magazine_pickup_release_segments(transfer_waypoints)
 
     if resume_from_current_pose:
+        if use_servo_contact:
+            _logger.info("[MAGAZINE_LOAD] Servo contact pickup resume requested; using planned resume path")
+            use_servo_contact = False
         ordered_segments = executor._motion.trim_ordered_pickup_segments_from_current_pose(ordered_segments)
     if not ordered_segments:
         _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
@@ -136,16 +142,94 @@ def execute_magazine_pickup_release(
         ok, msg = executor._motion.turn_vacuum_on()
         if not ok:
             return False, msg
-        if not executor._motion.move_ordered_pickup_sequence(
-            "Ordered magazine pickup-to-release sequence",
-            ordered_segments,
-        ):
+        if use_servo_contact:
+            ok = _execute_magazine_servo_contact_pickup_release(
+                executor,
+                transfer_waypoints,
+                release_label=release_label,
+            )
+        else:
+            ok = executor._motion.move_ordered_pickup_sequence(
+                "Ordered magazine pickup-to-release sequence",
+                ordered_segments,
+            )
+        if not ok:
             return False, f"Move to {release_label} release pose failed"
 
     ok, msg = executor._motion.turn_vacuum_off()
     if not ok:
         return False, msg
     return True, f"Workpiece transferred to {release_label}"
+
+
+def _execute_magazine_servo_contact_pickup_release(
+    executor,
+    transfer_waypoints: tuple[tuple, ...],
+    *,
+    release_label: str,
+) -> bool:
+    pickup_motion = executor._paint_process_config().pickup_motion
+    condition = getattr(executor, "_pickup_condition", None)
+    if condition is None:
+        if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
+            _logger.warning("[MAGAZINE_LOAD] Servo contact condition missing; falling back to planned descend")
+            return executor._motion.move_ordered_pickup_sequence(
+                "Ordered magazine pickup-to-release sequence",
+                build_magazine_pickup_release_segments(transfer_waypoints),
+            )
+        _logger.error("[MAGAZINE_LOAD] Servo contact pickup requested, but no pickup condition is configured")
+        return False
+
+    approach_segments = build_magazine_pickup_release_segments(transfer_waypoints[:1])
+    remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[2:])
+    if not executor._motion.move_ordered_pickup_sequence(
+        "Magazine pickup approach before servo contact",
+        approach_segments,
+    ):
+        return False
+
+    _logger.info(
+        "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
+        float(pickup_motion.servo_contact_linear_mm_s),
+        float(pickup_motion.servo_contact_timeout_s),
+        int(executor._pickup_tool),
+        int(executor._pickup_user),
+    )
+    result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
+        config=ServoUntilConditionConfig(
+            axis=RobotAxis.Z,
+            direction=Direction.MINUS,
+            linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+            frame="user",
+            tool=int(executor._pickup_tool),
+            user=int(executor._pickup_user),
+            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+            timeout_s=float(pickup_motion.servo_contact_timeout_s),
+        )
+    )
+    _logger.info(
+        "[MAGAZINE_LOAD] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
+        result.success,
+        result.detected,
+        result.timed_out,
+        result.elapsed_s,
+        result.message,
+    )
+    if not result.success:
+        if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
+            _logger.warning("[MAGAZINE_LOAD] Servo contact pickup failed (%s); falling back to planned descend", result.message)
+            return executor._motion.move_ordered_pickup_sequence(
+                "Magazine planned descend fallback",
+                build_magazine_pickup_release_segments(transfer_waypoints[1:]),
+            )
+        return False
+
+    if not remaining_segments:
+        return True
+    return executor._motion.move_ordered_pickup_sequence(
+        f"Magazine lift and {release_label} release after servo contact",
+        remaining_segments,
+    )
 
 
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:
