@@ -15,7 +15,6 @@ from src.engine.vision.implementation.VisionSystem.core.external_communication.s
 from src.engine.vision.implementation.VisionSystem.core.service.internal_service import Service
 from src.engine.vision.implementation.plvision.PLVision.Camera import Camera
 from src.engine.vision.implementation.VisionSystem.camera_initialization import CameraInitializer
-from src.engine.vision.implementation.plvision.PLVision import ImageProcessing
 from src.engine.vision.implementation.VisionSystem.services import (
     ContourDetectionService, CalibrationService, ArucoDetectionService, BrightnessService, QrDetectionService,
 )
@@ -34,6 +33,12 @@ class VisionSystem:
                  work_area_service: IWorkAreaService | None = None):
         self._configure_opencv_threads()
         self.optimal_camera_matrix = None
+        self.roi = None
+        self.cameraMatrix = None
+        self.cameraDist = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
 
         self.storage_path      = storage_path or DEFAULT_STORAGE_PATH
         self.service           = service or Service(data_storage_path=self.storage_path)
@@ -71,13 +76,6 @@ class VisionSystem:
             message_publisher = self.message_publisher,
             messaging_service = self.messaging_service,
         )
-
-        if self.service.cameraData is not None:
-            self.cameraMatrix = self.service.get_camera_matrix()
-            self.cameraDist   = self.service.get_distortion_coefficients()
-        else:
-            self.cameraMatrix = None
-            self.cameraDist   = None
 
         # ── Frame state ───────────────────────────────────────────────────────────
         self.image          = None
@@ -178,6 +176,20 @@ class VisionSystem:
         self.service.loadPerspectiveMatrix()
         self.service.loadCameraCalibrationData()
         self.service.loadCameraToRobotMatrix()
+        if self.service.cameraData is not None:
+            self.cameraMatrix = self.service.get_camera_matrix()
+            self.cameraDist = self.service.get_distortion_coefficients()
+        else:
+            self.cameraMatrix = None
+            self.cameraDist = None
+        self._clear_undistortion_cache()
+
+    def _clear_undistortion_cache(self) -> None:
+        self.optimal_camera_matrix = None
+        self.roi = None
+        self._undistort_map1 = None
+        self._undistort_map2 = None
+        self._undistort_map_size = None
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -314,21 +326,9 @@ class VisionSystem:
     # ── Image correction ──────────────────────────────────────────────────────
 
     def correctImage(self, image):
-        if self.optimal_camera_matrix is None:
-            self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
-                self.cameraMatrix, self.cameraDist,
-                (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-                0.5,
-                (self.camera_settings.get_camera_width(), self.camera_settings.get_camera_height()),
-            )
-        image = ImageProcessing.undistortImage(
-            image, self.cameraMatrix, self.cameraDist,
-            self.camera_settings.get_camera_width(),
-            self.camera_settings.get_camera_height(),
-            crop=False,
-            optimal_camera_matrix=self.optimal_camera_matrix,
-            roi=self.roi,
-        )
+        height, width = image.shape[:2]
+        self._ensure_undistortion_maps(width, height)
+        image = cv2.remap(image, self._undistort_map1, self._undistort_map2, cv2.INTER_LINEAR)
         # if self.perspectiveMatrix is not None:
         #     # _logger.debug(f"Perspective Matrix: {self.perspectiveMatrix}")
         #     image = cv2.warpPerspective(
@@ -340,6 +340,26 @@ class VisionSystem:
         #     _logger.debug(f"Perspective Matrix: Not applied (None)")
 
         return image
+
+    def _ensure_undistortion_maps(self, width: int, height: int) -> None:
+        image_size = (width, height)
+        if self.optimal_camera_matrix is None or self._undistort_map_size != image_size:
+            self.optimal_camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
+                self.cameraMatrix,
+                self.cameraDist,
+                image_size,
+                0.5,
+                image_size,
+            )
+            self._undistort_map1, self._undistort_map2 = cv2.initUndistortRectifyMap(
+                self.cameraMatrix,
+                self.cameraDist,
+                None,
+                self.optimal_camera_matrix,
+                image_size,
+                cv2.CV_16SC2,
+            )
+            self._undistort_map_size = image_size
 
     def get_latest_frame_for_snapshot(self):
         return self.correctedImage if self.correctedImage is not None else self.rawImage
@@ -355,7 +375,7 @@ class VisionSystem:
             self.cameraMatrix          = outcome.camera_matrix
             self.cameraDist            = outcome.distortion_coefficients
             self.perspectiveMatrix     = outcome.perspective_matrix
-            self.optimal_camera_matrix = None
+            self._clear_undistortion_cache()
             self.service.loadCameraCalibrationData()
             # Note: do NOT reload perspectiveMatrix from disk here — the outcome
             # already provides the correct value and the file may not exist yet.
