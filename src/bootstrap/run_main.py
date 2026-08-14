@@ -1,6 +1,6 @@
 from setproctitle import setproctitle
 
-setproctitle("robot_app_platform")  # whatever name you want
+setproctitle("robot_app_platform")
 # then continue with normal imports / startup
 import logging
 import os

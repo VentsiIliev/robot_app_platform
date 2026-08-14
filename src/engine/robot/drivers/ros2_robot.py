@@ -347,7 +347,7 @@ class Ros2Robot(IRobot):
 
     # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
     def clone(self) -> 'IRobot':
-        return Ros2Robot(server_url=self._client.server_url)
+        return self
 
     def prefers_incremental_jog(self) -> bool:
         return True
