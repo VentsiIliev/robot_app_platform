@@ -345,9 +345,12 @@ class Ros2Robot(IRobot):
         self._client.setDigitalOutput(port_id, int(value))
         logger.debug("set_digital_output ← done")
 
-    # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
+    # Unlike the Fairino driver, the ROS2 transport can safely be shared.
+    # Reuse this instance so RobotStateManager does not open a second pair
+    # of state/execution WebSocket connections.
     def clone(self) -> 'IRobot':
-        return Ros2Robot(server_url=self._client.server_url)
+        return self
+        # return Ros2Robot(server_url=self._client.server_url)
 
     def prefers_incremental_jog(self) -> bool:
         return True
