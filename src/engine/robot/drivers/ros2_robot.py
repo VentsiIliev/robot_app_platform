@@ -345,7 +345,8 @@ class Ros2Robot(IRobot):
         self._client.setDigitalOutput(port_id, int(value))
         logger.debug("set_digital_output ← done")
 
-    # OVERRIDE CLONE TO THE ROBOT STATE MANAGE USE SEPARATE CONNECTION
+    # ROS2 transport is safe to share between consumers.
+    # State/execution streams are cached and thread-safe.
     def clone(self) -> 'IRobot':
         return self
 
