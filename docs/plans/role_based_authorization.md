@@ -14,7 +14,7 @@
 | 8a | `ILoginApplicationService` + `LoginApplicationService` + `StubLoginApplicationService` | ✅ Done |
 | 8b | `LoginWindow` — MVC login application (`LoginModel`, `LoginView`, `LoginController`, `LoginFactory`) | ✅ Done |
 | 9 | Permissions editor in `UserManagement` (`PermissionsModel`, `PermissionsController`, `PermissionsView`, factory wiring) | ✅ Done |
-| 10 | Filter specs at startup in `main.py` | ⬜ Pending |
+| 10 | Filter specs at startup in `run_main.py` | ⬜ Pending |
 
 ---
 
@@ -213,7 +213,7 @@ class IPermissionsAdminService(IAuthorizationService):
 Comparison inside is done on `user.role.value` — no import of `Role` needed.
 
 **Caller access levels:**
-- `main.py` holds `IAuthorizationService` — read-only, cannot call `set_permissions`
+- `run_main.py` holds `IAuthorizationService` — read-only, cannot call `set_permissions`
 - Permissions editor model holds `IPermissionsAdminService` — full access
 
 **Stub:** `StubAuthorizationService(IAuthorizationService)` — `get_visible_apps` returns all specs, `can_access` always `True`. Used in tests and standalone runners.
@@ -309,7 +309,7 @@ class ISessionService(ABC):
 
 `UserSession` implements `ISessionService`. Internally it is a singleton (one global instance),
 but it is **always injected as `ISessionService`** — never accessed via `UserSession.get()` in
-production code. `main.py` constructs the singleton once and passes it down.
+production code. `run_main.py` constructs the singleton once and passes it down.
 
 Thread safety: a `threading.Lock` guards all reads and writes to `_current_user`.
 
@@ -384,7 +384,7 @@ class ILoginApplicationService(ABC):
 It is the **only** point where `LoginWindow` touches business logic.
 `LoginWindow` depends only on `ILoginApplicationService` — fully testable with the stub.
 
-**`LoginWindow`** is a `QDialog` subclass — shown from `main.py` before `AppShell` is built.
+**`LoginWindow`** is a `QDialog` subclass — shown from `run_main.py` before `AppShell` is built.
 Not registered in `GlueRobotSystem.shell`.
 
 #### 8a — Setup Wizard step (first run / onboarding)
@@ -423,7 +423,7 @@ Before the login tabs appear, a `SetupStepsWidget` is shown full-width:
 - ESC key and window close button **disabled** (`_allow_close` flag, only set `True` after successful auth)
 - Default tab (Normal or QR) configurable via `loginWindowConfig.json` (`DEFAULT_LOGIN: "NORMAL"` or `"QR"`)
 - Layout: logo panel left (purple gradient, responsive scaling) + login panel right (`QStackedLayout`)
-- On success: `session_service.login(user)` → `dialog.accept()` → `main.py` proceeds
+- On success: `session_service.login(user)` → `dialog.accept()` → `run_main.py` proceeds
 
 #### 8d — QR code generation (admin side — existing feature, just needs wiring)
 
@@ -468,9 +468,9 @@ responsibilities with separate interfaces.
 
 ---
 
-### Step 10 — Filter specs at startup in `main.py`
+### Step 10 — Filter specs at startup in `run_main.py`
 
-**File:** `src/bootstrap/main.py`
+**File:** `../../src/bootstrap/run_main.py`
 
 Modified startup sequence:
 ```
@@ -516,7 +516,7 @@ Modified startup sequence:
 | `src/engine/auth/permissions_migrator.py` | **New** — `ensure_permissions_current()` migration function |
 | `src/robot_systems/glue/storage/settings/permissions.json` | **New** — default permissions config |
 | `src/robot_systems/base_robot_system.py` | Add `app_id: str` field to `ApplicationSpec` with auto-derive in `__post_init__` |
-| `src/bootstrap/main.py` | Show login first, run migration, filter specs via `IAuthorizationService` |
+| `../../src/bootstrap/run_main.py` | Show login first, run migration, filter specs via `IAuthorizationService` |
 | `src/applications/login/i_login_application_service.py` | **New** — login service interface |
 | `src/applications/login/login_application_service.py` | **New** — wraps `IAuthenticationService`, adds `try_qr_login()` + `move_to_login_pos()` |
 | `src/applications/login/stub_login_application_service.py` | **New** — test/standalone stub |
@@ -529,7 +529,7 @@ Modified startup sequence:
 ## Key Design Decisions
 
 - **No layer violations**: engine interfaces operate on `IAuthenticatedUser` and `IPermissionsRepository`; concrete types (`User`, `CsvUserRepository`, `PermissionsRepository`) stay at application/robot-system level.
-- **ISP — two authorization interfaces**: `IAuthorizationService` (read-only, used by `main.py`) and `IPermissionsAdminService` (extends with write ops, used only by the permissions editor). No caller gets more power than it needs.
+- **ISP — two authorization interfaces**: `IAuthorizationService` (read-only, used by `run_main.py`) and `IPermissionsAdminService` (extends with write ops, used only by the permissions editor). No caller gets more power than it needs.
 - **ISP — `IUserManagementService` unchanged**: user CRUD and permission management are separate concerns with separate interfaces. The permissions tab injects `IPermissionsAdminService` directly.
 - **ISP — lockout is internal**: `record_failed_attempt` / `is_locked_out` are not on `IAuthenticationService`. Lockout is an implementation detail of `AuthenticationService`, not a contract for callers.
 - **DIP — `UserSession` injected as `ISessionService`**: never accessed via a bare `UserSession.get()` global in production code. Tests pass a `StubSessionService`.
@@ -582,7 +582,7 @@ Minimum fields: `timestamp | user_id | action | detail`.
 
 ### 5 — Logout button in shell
 The shell header/toolbar should have a logout button visible to all users. Since `pl_gui/` is
-read-only, this button lives in a thin wrapper widget created in `main.py` that wraps `AppShell`.
+read-only, this button lives in a thin wrapper widget created in `run_main.py` that wraps `AppShell`.
 On click: `session_service.logout()` → hide shell → show `LoginWindow` → rebuild with new role's
 filtered specs.
 

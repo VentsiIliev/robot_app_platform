@@ -12,4 +12,4 @@ fi
 export PYTHONPATH="${APP_DIR}:${PYTHONPATH:-}"
 cd "${APP_DIR}"
 
-exec "${PYTHON}" "${APP_DIR}/src/bootstrap/main.py"
+exec "${PYTHON}" "${APP_DIR}/src/bootstrap/run_main.py"

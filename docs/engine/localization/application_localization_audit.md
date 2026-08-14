@@ -8,7 +8,7 @@ This audit covers:
 
 - shared applications under `src/applications/`
 - robot-system-specific applications under `src/robot_systems/*/applications/`
-- the active runtime wiring through `src/bootstrap/main.py`
+- the active runtime wiring through `../../../src/bootstrap/run_main.py`
 
 It distinguishes between:
 
@@ -19,14 +19,14 @@ It distinguishes between:
 
 ## Runtime Summary
 
-Localization is always bootstrapped in `src/bootstrap/main.py`. Catalogs are now loaded from:
+Localization is always bootstrapped in `../../../src/bootstrap/run_main.py`. Catalogs are now loaded from:
 
 - shared application catalogs under `src/applications/localization/`
 - the active robot system's `metadata.translations_root`
 
 Current bootstrap:
 
-- `PaintBootstrapProvider` is active in `src/bootstrap/main.py`
+- `PaintBootstrapProvider` is active in `../../../src/bootstrap/run_main.py`
 
 Catalog inventory relevant to runtime today:
 

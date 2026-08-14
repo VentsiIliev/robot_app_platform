@@ -5,7 +5,7 @@ This file provides guidance for AI coding agents (Claude, OpenCode, etc.) when w
 ## Commands
 
 ```bash
-python src/bootstrap/main.py                          # run full application
+python src/bootstrap/run_main.py                          # run full application
 python tests/run_tests.py                             # run all tests
 python -m unittest tests/path/to/test_file.py -v     # single test file
 python src/applications/<name>/example_usage.py      # standalone app dev runner
@@ -18,11 +18,11 @@ No `pyproject.toml`, `setup.py`, or `requirements.txt` — dependencies are mana
 ## Git Workflow Rules
 
 - When the user asks for a commit, push, or PR, use the current work branch
-- Do **not** commit directly on `main`
-- Do **not** push directly to `main`
-- Do **not** open a PR from or against ad-hoc changes made directly on `main`; PR work must stay on a dedicated work branch
-- Treat `main` as protected: agents may inspect it, but should not use it as the branch they edit, commit, or push from
-- If the checkout is already on `main` and the task requires commit/push/PR work, stop and create or switch to an explicit work branch before proceeding
+- Do **not** commit directly on `run_main.py`
+- Do **not** push directly to `run_main.py`
+- Do **not** open a PR from or against ad-hoc changes made directly on `run_main.py`; PR work must stay on a dedicated work branch
+- Treat `run_main.py` as protected: agents may inspect it, but should not use it as the branch they edit, commit, or push from
+- If the checkout is already on `run_main.py` and the task requires commit/push/PR work, stop and create or switch to an explicit work branch before proceeding
 
 ---
 
@@ -79,9 +79,9 @@ Live data flows: `Broker callback → Controller → View setter`
 
 ---
 
-## Startup Sequence (`src/bootstrap/main.py`)
+## Startup Sequence (`src/bootstrap/run_main.py`)
 
-Uses a `BootstrapProvider` pattern (e.g. `GlueBootstrapProvider`, `PaintBootstrapProvider`) to select the active `RobotSystem`. See `_BOOTSTRAP_PROVIDER` in `main.py` — default is currently `PaintBootstrapProvider` (dev flag).
+Uses a `BootstrapProvider` pattern (e.g. `GlueBootstrapProvider`, `PaintBootstrapProvider`) to select the active `RobotSystem`. See `_BOOTSTRAP_PROVIDER` in `run_main.py` — default is currently `PaintBootstrapProvider` (dev flag).
 
 Ordered steps — order matters:
 
@@ -462,7 +462,7 @@ def run_standalone():
 
 ## Adding a New Robot System
 
-Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables, then compose runtime dependencies in `on_start()` / `on_stop()`. Wire it in `src/bootstrap/main.py` through a `BootstrapProvider` and the selected `_BOOTSTRAP_PROVIDER`.
+Subclass `BaseRobotSystem`, declare `metadata`, `settings_specs`, `services`, and `shell` as class variables, then compose runtime dependencies in `on_start()` / `on_stop()`. Wire it in `src/bootstrap/run_main.py` through a `BootstrapProvider` and the selected `_BOOTSTRAP_PROVIDER`.
 
 If the robot system supports localization:
 - set `metadata.translations_root`
@@ -510,10 +510,10 @@ These guidelines complement the architecture rules above. They do **not** overri
 
 | File | Purpose |
 |---|---|
-| `src/bootstrap/main.py` | Startup sequence, BootstrapProvider pattern, login gate |
+| `src/bootstrap/run_main.py` | Startup sequence, BootstrapProvider pattern, login gate |
 | `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/my_robot_system.py` | Canonical robot-system template |
 | `src/robot_systems/ROBOT_SYSTEM_BLUEPRINT/ROBOT_SYSTEM_GUIDE.MD` | Full robot-system implementation guide |
-| `src/robot_systems/paint/paint_robot_system.py` | Current default bootstrap target in `main.py` |
+| `src/robot_systems/paint/paint_robot_system.py` | Current default bootstrap target in `run_main.py` |
 | `src/robot_systems/glue/glue_robot_system.py` | Rich example of a mature robot-system implementation |
 | `src/robot_systems/paint/application_wiring.py` and `src/robot_systems/glue/application_wiring.py` | Representative application wiring patterns |
 | `src/applications/APPLICATION_BLUEPRINT/` | Canonical template — copy, don't hand-write |
