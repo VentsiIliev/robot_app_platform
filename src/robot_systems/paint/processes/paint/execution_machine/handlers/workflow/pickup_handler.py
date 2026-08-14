@@ -7,6 +7,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
     build_ordered_pickup_segments,
 )
+from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODE_PLANNED
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     fail_paint_motion,
@@ -67,8 +68,11 @@ def try_execute_ordered_pickup_and_paint_contact(
     pickup_plan = executor._pickup.build_plan(prepared_workpiece)
     if pickup_plan is None:
         return False, "Could not compute pickup-to-pivot poses", 0
-    if pickup_plan.servo_contact_enabled:
-        _logger.info("[ORDERED_CHAIN] pickup plus paint contact chain skipped: servo contact pickup enabled")
+    if pickup_plan.contact_mode != PICKUP_CONTACT_MODE_PLANNED:
+        _logger.info(
+            "[ORDERED_CHAIN] pickup plus paint contact chain skipped: pickup contact mode=%s",
+            pickup_plan.contact_mode,
+        )
         return None
     executor._last_pickup_plan = pickup_plan.motion_plan
 

@@ -209,8 +209,8 @@ class PaintProcessSettingsMapper:
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
             "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
-            "pickup_servo_contact_enabled": pickup.servo_contact_enabled,
-            "pickup_servo_contact_magazine_enabled": pickup.servo_contact_magazine_enabled,
+            "pickup_contact_mode": pickup.pickup_contact_mode,
+            "magazine_pickup_contact_mode": pickup.magazine_pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
             "pickup_servo_contact_timeout_s": pickup.servo_contact_timeout_s,
             "pickup_servo_contact_poll_interval_s": pickup.servo_contact_poll_interval_s,
@@ -337,11 +337,11 @@ class PaintProcessSettingsMapper:
             initial_lift_clearance_mm=float(
                 flat.get("pickup_initial_lift_clearance_mm", base.pickup_motion.initial_lift_clearance_mm)
             ),
-            servo_contact_enabled=bool(
-                flat.get("pickup_servo_contact_enabled", base.pickup_motion.servo_contact_enabled)
+            pickup_contact_mode=str(
+                flat.get("pickup_contact_mode", base.pickup_motion.pickup_contact_mode)
             ),
-            servo_contact_magazine_enabled=bool(
-                flat.get("pickup_servo_contact_magazine_enabled", base.pickup_motion.servo_contact_magazine_enabled)
+            magazine_pickup_contact_mode=str(
+                flat.get("magazine_pickup_contact_mode", base.pickup_motion.magazine_pickup_contact_mode)
             ),
             servo_contact_linear_mm_s=float(
                 flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)

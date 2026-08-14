@@ -2,6 +2,15 @@ from dataclasses import dataclass, field
 
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 
+PICKUP_CONTACT_MODE_PLANNED = "planned"
+PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
+PICKUP_CONTACT_MODE_HEIGHT_MEASURE = "height_measure"
+PICKUP_CONTACT_MODES = (
+    PICKUP_CONTACT_MODE_PLANNED,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+)
+
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process
 # settings service at runtime. Unmarked values are still static defaults or need
@@ -60,10 +69,10 @@ class PickupMotionConfig:
     first_contact_motion_type: str = "ptp"  # [LIVE SETTINGS]
     first_contact_blendR: float = 0.0  # [LIVE SETTINGS]
 
-    # Optional sensor-driven pickup contact. Defaults preserve the fully planned
-    # approach/descend/lift sequence.
-    servo_contact_enabled: bool = False  # [LIVE SETTINGS]
-    servo_contact_magazine_enabled: bool = False  # [LIVE SETTINGS]
+    # Pickup contact strategy. Defaults preserve the fully planned
+    # approach/descend/lift sequence. Valid values: planned | servo_contact | height_measure.
+    pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
+    magazine_pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_timeout_s: float = 5.0  # [LIVE SETTINGS]
     servo_contact_poll_interval_s: float = 0.02  # [LIVE SETTINGS]

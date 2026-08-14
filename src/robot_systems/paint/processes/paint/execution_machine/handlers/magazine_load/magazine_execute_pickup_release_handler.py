@@ -10,8 +10,14 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
     interrupted_or_error,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.config import (
+    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+    PICKUP_CONTACT_MODE_PLANNED,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+)
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
+    normalize_pickup_contact_mode,
 )
 from src.robot_systems.paint.timing import timed_step
 
@@ -128,13 +134,16 @@ def execute_magazine_pickup_release(
         ),
     )
 
-    use_servo_contact = bool(pickup_motion.servo_contact_magazine_enabled)
+    contact_mode = normalize_pickup_contact_mode(pickup_motion.magazine_pickup_contact_mode)
     ordered_segments = build_magazine_pickup_release_segments(transfer_waypoints)
 
     if resume_from_current_pose:
-        if use_servo_contact:
-            _logger.info("[MAGAZINE_LOAD] Servo contact pickup resume requested; using planned resume path")
-            use_servo_contact = False
+        if contact_mode != PICKUP_CONTACT_MODE_PLANNED:
+            _logger.info(
+                "[MAGAZINE_LOAD] Contact-mode pickup resume requested; using planned resume path mode=%s",
+                contact_mode,
+            )
+            contact_mode = PICKUP_CONTACT_MODE_PLANNED
         ordered_segments = executor._motion.trim_ordered_pickup_segments_from_current_pose(ordered_segments)
     if not ordered_segments:
         _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
@@ -142,18 +151,28 @@ def execute_magazine_pickup_release(
         ok, msg = executor._motion.turn_vacuum_on()
         if not ok:
             return False, msg
-        if use_servo_contact:
+        if contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
             ok, msg = _execute_magazine_servo_contact_pickup_release(
                 executor,
                 transfer_waypoints,
                 release_label=release_label,
             )
-        else:
+        elif contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
+            _logger.error(
+                "[MAGAZINE_LOAD] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet"
+            )
+            ok = False
+            msg = "Magazine height-measured pickup Z mode is not wired yet"
+        elif contact_mode == PICKUP_CONTACT_MODE_PLANNED:
             ok = executor._motion.move_ordered_pickup_sequence(
                 "Ordered magazine pickup-to-release sequence",
                 ordered_segments,
             )
             msg = f"Move to {release_label} release pose failed"
+        else:
+            _logger.error("[MAGAZINE_LOAD] Invalid magazine pickup contact mode: %s", contact_mode)
+            ok = False
+            msg = f"Invalid magazine pickup contact mode: {contact_mode}"
         if not ok:
             return False, msg
 

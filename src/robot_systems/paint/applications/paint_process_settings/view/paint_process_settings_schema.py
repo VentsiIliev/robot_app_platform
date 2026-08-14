@@ -5,6 +5,7 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
+from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODES
 
 _CTX = "PaintProcessSettings"
 
@@ -150,9 +151,21 @@ def build_process_groups() -> list[SettingGroup]:
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
         ]),
-        SettingGroup(_t("Servo Contact Pickup"), [
-            _toggle("pickup_servo_contact_enabled", "Use Servo Contact For Calibration Pickup"),
-            _toggle("pickup_servo_contact_magazine_enabled", "Use Servo Contact For Magazine Pickup"),
+        SettingGroup(_t("Pickup Contact Strategy"), [
+            SettingField(
+                "pickup_contact_mode",
+                _t("Calibration Pickup Mode"),
+                "combo",
+                default="planned",
+                choices=list(PICKUP_CONTACT_MODES),
+            ),
+            SettingField(
+                "magazine_pickup_contact_mode",
+                _t("Magazine Pickup Mode"),
+                "combo",
+                default="planned",
+                choices=list(PICKUP_CONTACT_MODES),
+            ),
             _mm_per_second_field("pickup_servo_contact_linear_mm_s", "Descent Speed", 10.0),
             _seconds_field("pickup_servo_contact_timeout_s", "Detection Timeout", 5.0),
             _seconds_field("pickup_servo_contact_poll_interval_s", "Sensor Poll Interval", 0.02),

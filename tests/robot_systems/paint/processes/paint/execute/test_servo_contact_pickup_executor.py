@@ -17,6 +17,10 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     build_paint_pickup_segments,
 )
+from src.robot_systems.paint.processes.paint.config import (
+    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+)
 
 
 class _FakeRobot:
@@ -87,7 +91,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("stage", [10, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
             ),
             vacuum_on_before_moves=True,
-            servo_contact_enabled=True,
+            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
             contact_waypoint_index=1,
         )
 
@@ -119,6 +123,33 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["blendR"], 0.0)
+
+    def test_height_measure_pickup_mode_fails_fast_until_wired(self):
+        robot = _FakeRobot()
+        motion = _FakeMotion()
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _last_pickup_plan=None,
+        )
+        executor = PaintPickupExecutor(owner)
+        executor.build_plan = lambda _prepared: PickupPlan(
+            strategy_name="test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
+                PickupWaypoint("planned descend", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
+            ),
+            contact_mode=PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+            contact_waypoint_index=1,
+        )
+
+        ok, msg = executor.execute(object())
+
+        self.assertFalse(ok)
+        self.assertEqual(msg, "Height-measured pickup Z mode is not wired yet")
+        self.assertEqual(motion.sequences, [])
+        self.assertEqual(robot.started, [])
 
     def test_single_segment_magazine_chain_forces_terminal_blend_zero(self):
         segments = build_magazine_pickup_release_segments((

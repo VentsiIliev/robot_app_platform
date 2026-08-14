@@ -8,6 +8,12 @@ from typing import Protocol
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
+from src.robot_systems.paint.processes.paint.config import (
+    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+    PICKUP_CONTACT_MODE_PLANNED,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODES,
+)
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.timing import timed_block, timed_step
 
@@ -35,8 +41,12 @@ class PickupPlan:
     waypoints: tuple[PickupWaypoint, ...]
     vacuum_on_before_moves: bool = True
     change_plane_combined_with_first_contact: bool = False
-    servo_contact_enabled: bool = False
+    contact_mode: str = PICKUP_CONTACT_MODE_PLANNED
     contact_waypoint_index: int | None = None
+
+
+def normalize_pickup_contact_mode(value: object) -> str:
+    return str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
 
 
 class PaintPickupStrategy(Protocol):
@@ -172,7 +182,7 @@ class DefaultPickupStrategy:
             waypoints=tuple(waypoints),
             vacuum_on_before_moves=True,
             change_plane_combined_with_first_contact=bool(combine_change_plane),
-            servo_contact_enabled=bool(pickup_motion.servo_contact_enabled),
+            contact_mode=normalize_pickup_contact_mode(pickup_motion.pickup_contact_mode),
             contact_waypoint_index=1,
         )
 
@@ -205,8 +215,14 @@ class PaintPickupExecutor:
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
-        if pickup_plan.servo_contact_enabled:
+        if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
             ok = self._execute_servo_contact_pickup_sequence(pickup_plan)
+        elif pickup_plan.contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
+            _logger.error("[PICKUP] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet")
+            return False, "Height-measured pickup Z mode is not wired yet"
+        elif pickup_plan.contact_mode != PICKUP_CONTACT_MODE_PLANNED:
+            _logger.error("[PICKUP] Invalid pickup contact mode: %s", pickup_plan.contact_mode)
+            return False, f"Invalid pickup contact mode: {pickup_plan.contact_mode}"
         else:
             ok = self._execute_custom_pickup_sequence(pickup_plan)
         if ok:
