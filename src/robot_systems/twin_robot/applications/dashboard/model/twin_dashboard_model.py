@@ -25,6 +25,9 @@ class TwinDashboardModel(IApplicationModel):
     def plan(self) -> Dict[str, Any]:
         return self._service.plan_selected()
 
+    def prepared_status(self) -> Dict[str, Any]:
+        return self._service.prepared_status()
+
     def start(self, loop_count: int) -> Dict[str, Any]:
         return self._service.start(loop_count=loop_count)
 
