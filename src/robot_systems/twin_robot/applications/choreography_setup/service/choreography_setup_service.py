@@ -15,6 +15,9 @@ class ChoreographySetupService:
         self._repository = repository
         self._runtime = runtime
 
+    def set_runtime(self, runtime: Any | None) -> None:
+        self._runtime = runtime
+
     def list(self) -> List[ChoreographyDefinition]:
         return self._repository.list()
 
