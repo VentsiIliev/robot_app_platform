@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -27,7 +26,7 @@ from pl_gui.settings.settings_view.styles import (
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.robot_jog_widget import RobotJogWidget
-from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit, KeyboardSpinBox
 
 
 class ChoreographySetupView(IApplicationView):
@@ -86,7 +85,7 @@ class ChoreographySetupView(IApplicationView):
         loop_label = QLabel(self.tr("Loops"))
         loop_label.setStyleSheet(LABEL_STYLE)
         header.addWidget(loop_label)
-        self.loop_spin = QSpinBox()
+        self.loop_spin = KeyboardSpinBox()
         self.loop_spin.setRange(1, 100000)
         self.loop_spin.setValue(1)
         header.addWidget(self.loop_spin)
