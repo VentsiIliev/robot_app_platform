@@ -37,6 +37,8 @@ class RobotChoreographyPose:
 
 @dataclass
 class RobotMotionProfile:
+    """Motion limits for the segment ending at the owning choreography step."""
+
     velocity: float = 30.0
     acceleration: float = 30.0
 
@@ -122,11 +124,15 @@ class ChoreographyDefinition:
             errors.append("Choreography name is required")
         if len(self.steps) < 2:
             errors.append("At least two choreography steps are required")
+
         for index, step in enumerate(self.steps, start=1):
             if not step.robot1.captured:
                 errors.append(f"Step {index} has no Robot 1 pose")
             if not step.robot2.captured:
                 errors.append(f"Step {index} has no Robot 2 pose")
+            self._validate_motion_profile(errors, index, "Robot 1", step.robot1_motion)
+            self._validate_motion_profile(errors, index, "Robot 2", step.robot2_motion)
+
         if self.steps:
             start = self.steps[0]
             if len(start.robot1.joints) != 6:
@@ -134,6 +140,22 @@ class ChoreographyDefinition:
             if len(start.robot2.joints) != 6:
                 errors.append("Start step must contain exact Robot 2 joint anchor")
         return errors
+
+    @staticmethod
+    def _validate_motion_profile(
+        errors: List[str],
+        step_index: int,
+        robot_label: str,
+        profile: RobotMotionProfile,
+    ) -> None:
+        if not 0.0 < float(profile.velocity) <= 100.0:
+            errors.append(
+                f"Step {step_index} {robot_label} velocity must be in (0, 100]"
+            )
+        if not 0.0 < float(profile.acceleration) <= 100.0:
+            errors.append(
+                f"Step {step_index} {robot_label} acceleration must be in (0, 100]"
+            )
 
     @property
     def start_step(self) -> Optional[ChoreographyStep]:
