@@ -79,9 +79,9 @@ class TwinRobotSystem(BaseRobotSystem):
         """Attach the transport/runtime adapter used by both twin applications."""
         self._twin_runtime = runtime
         if self._dashboard_service is not None:
-            self._dashboard_service._runtime = runtime
+            self._dashboard_service.set_runtime(runtime)
         if self._choreography_setup_service is not None:
-            self._choreography_setup_service._runtime = runtime
+            self._choreography_setup_service.set_runtime(runtime)
 
     def on_start(self) -> None:
         choreography_dir = self.storage_path("choreographies")
