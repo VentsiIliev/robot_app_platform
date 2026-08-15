@@ -20,6 +20,10 @@ class TwinDashboardService:
         self._selected_id: Optional[str] = None
         self._prepared: Any | None = None
 
+    def set_runtime(self, runtime: Any | None) -> None:
+        self._runtime = runtime
+        self._prepared = None
+
     def list_choreographies(self) -> List[ChoreographyDefinition]:
         return self._repository.list()
 
