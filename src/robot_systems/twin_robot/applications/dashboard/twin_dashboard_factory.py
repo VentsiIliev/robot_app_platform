@@ -1,54 +1,33 @@
 from __future__ import annotations
 
+from src.applications.base.application_factory import ApplicationFactory
+from src.applications.base.i_application_controller import IApplicationController
+from src.applications.base.i_application_model import IApplicationModel
+from src.applications.base.i_application_view import IApplicationView
+from src.robot_systems.twin_robot.applications.dashboard.controller.twin_dashboard_controller import (
+    TwinDashboardController,
+)
+from src.robot_systems.twin_robot.applications.dashboard.model.twin_dashboard_model import (
+    TwinDashboardModel,
+)
+from src.robot_systems.twin_robot.applications.dashboard.service.i_twin_dashboard_service import (
+    ITwinDashboardService,
+)
 from src.robot_systems.twin_robot.applications.dashboard.view.twin_dashboard_view import (
     TwinDashboardView,
 )
 
 
-class TwinDashboardFactory:
-    def build(self, service, messaging=None):
-        view = TwinDashboardView()
+class TwinDashboardFactory(ApplicationFactory):
+    def _create_model(self, service: ITwinDashboardService) -> IApplicationModel:
+        return TwinDashboardModel(service)
 
-        def refresh() -> None:
-            view.set_choreographies(service.list_choreographies())
+    def _create_view(self) -> IApplicationView:
+        return TwinDashboardView()
 
-        def select(choreography_id: str) -> None:
-            try:
-                choreography = service.select(choreography_id)
-                view.loop_count.setValue(max(1, int(choreography.loop_count)))
-                view.set_plan_status(False, False, "Selected. Press PLAN BOTH.")
-            except Exception as exc:
-                view.set_plan_status(False, False, str(exc))
-
-        def plan() -> None:
-            try:
-                result = service.plan_selected()
-            except Exception as exc:
-                view.set_plan_status(False, False, str(exc))
-                return
-            view.set_plan_status(
-                bool(result.get("robot1_ready", False)),
-                bool(result.get("robot2_ready", False)),
-                str(result.get("error", "") or ("Both trajectories prepared" if result.get("success") else "Planning failed")),
-            )
-
-        def start(loop_count: int) -> None:
-            try:
-                result = service.start(loop_count=loop_count)
-                view.set_message(str(result.get("error", "") or ("Choreography started" if result.get("success") else "Start failed")))
-            except Exception as exc:
-                view.set_message(str(exc))
-
-        def stop() -> None:
-            try:
-                result = service.stop()
-                view.set_message(str(result.get("error", "") or "Stop requested"))
-            except Exception as exc:
-                view.set_message(str(exc))
-
-        view.choreography_selected.connect(select)
-        view.plan_requested.connect(plan)
-        view.start_requested.connect(start)
-        view.stop_requested.connect(stop)
-        refresh()
-        return view
+    def _create_controller(
+        self,
+        model: IApplicationModel,
+        view: IApplicationView,
+    ) -> IApplicationController:
+        return TwinDashboardController(model, view)
