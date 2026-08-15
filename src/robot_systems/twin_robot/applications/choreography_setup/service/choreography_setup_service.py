@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, Dict, List
 
 from src.robot_systems.twin_robot.domain import (
     ChoreographyDefinition,
@@ -34,6 +34,13 @@ class ChoreographySetupService:
             steps=[ChoreographyStep(name="Start")],
         )
 
+    def robot_state(self, robot_name: str) -> Dict[str, List[float]]:
+        captured = self.capture_robot(robot_name)
+        return {
+            "pose": list(captured.pose),
+            "joints": list(captured.joints),
+        }
+
     def capture_robot(self, robot_name: str) -> RobotChoreographyPose:
         robot = self._robot(robot_name)
         position = robot.get_current_position()
@@ -58,9 +65,39 @@ class ChoreographySetupService:
 
     def jog(self, robot_name: str, command: str, axis: str, direction: str, step: float) -> int:
         robot = self._robot(robot_name)
-        if command.lower() not in {"jog", "move", "cartesian"}:
-            return -1
-        return int(robot.jog(axis=axis.lower(), direction=direction, step=float(step), vel=20, acc=20))
+        command = str(command or "JOG_ROBOT").strip().upper()
+        if command == "JOG_ROBOT":
+            return int(
+                robot.jog(
+                    axis=axis.lower(),
+                    direction=direction,
+                    step=float(step),
+                    vel=20,
+                    acc=20,
+                )
+            )
+        if command == "SERVO_JOG":
+            method = getattr(robot, "servo_jog_start", None)
+            if not callable(method):
+                raise RuntimeError("Twin runtime adapter does not expose servo jogging yet")
+            return int(
+                method(
+                    axis=axis.lower(),
+                    direction=direction,
+                    vel=20,
+                    acc=20,
+                    linear_mm_s=float(step) if axis.upper() in {"X", "Y", "Z"} else None,
+                    angular_deg_s=float(step) if axis.upper() in {"RX", "RY", "RZ"} else None,
+                )
+            )
+        raise RuntimeError(f"Unsupported jog command: {command}")
+
+    def stop_servo_jog(self, robot_name: str) -> int:
+        robot = self._robot(robot_name)
+        method = getattr(robot, "servo_jog_stop", None)
+        if not callable(method):
+            return 0
+        return int(method())
 
     def joint_jog(self, robot_name: str, command: str, joint: str, direction: str, step: float) -> int:
         robot = self._robot(robot_name)
