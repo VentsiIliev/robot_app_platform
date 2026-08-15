@@ -3,6 +3,8 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -38,6 +40,15 @@ class ChoreographySetupView(QWidget):
         title = QLabel("Twin Choreography Setup")
         title.setStyleSheet("font-size: 20px; font-weight: 700;")
         root.addWidget(title)
+
+        library_row = QHBoxLayout()
+        library_row.addWidget(QLabel("Saved choreography"))
+        self.library_combo = QComboBox()
+        library_row.addWidget(self.library_combo, 1)
+        self.load_button = QPushButton("Load")
+        self.load_button.clicked.connect(self._request_load)
+        library_row.addWidget(self.load_button)
+        root.addLayout(library_row)
 
         header = QHBoxLayout()
         header.addWidget(QLabel("ID"))
@@ -96,6 +107,7 @@ class ChoreographySetupView(QWidget):
         ])
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         root.addWidget(self.table, 1)
 
         row = QHBoxLayout()
@@ -115,12 +127,28 @@ class ChoreographySetupView(QWidget):
         self.message_label.setWordWrap(True)
         root.addWidget(self.message_label)
 
+    def _request_load(self) -> None:
+        choreography_id = self.library_combo.currentData()
+        if choreography_id:
+            self.load_requested.emit(str(choreography_id))
+
     def selected_row(self) -> int:
         row = self.table.currentRow()
         return row if row >= 0 else 0
 
     def set_message(self, message: str) -> None:
         self.message_label.setText(str(message or ""))
+
+    def set_library(self, choreographies, selected_id: str | None = None) -> None:
+        self.library_combo.blockSignals(True)
+        self.library_combo.clear()
+        for choreography in choreographies:
+            self.library_combo.addItem(choreography.name, choreography.choreography_id)
+        if selected_id:
+            index = self.library_combo.findData(selected_id)
+            if index >= 0:
+                self.library_combo.setCurrentIndex(index)
+        self.library_combo.blockSignals(False)
 
     def set_definition(self, choreography) -> None:
         self.id_edit.setText(choreography.choreography_id)
