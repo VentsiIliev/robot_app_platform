@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
 )
 
@@ -19,6 +18,7 @@ from pl_gui.settings.settings_view.styles import (
     LABEL_STYLE,
 )
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardSpinBox
 
 
 class TwinDashboardView(IApplicationView):
@@ -72,7 +72,7 @@ class TwinDashboardView(IApplicationView):
         loop_label = QLabel(self.tr("Loops"))
         loop_label.setStyleSheet(LABEL_STYLE)
         controls.addWidget(loop_label)
-        self.loop_count = QSpinBox()
+        self.loop_count = KeyboardSpinBox()
         self.loop_count.setRange(1, 100000)
         self.loop_count.setValue(1)
         controls.addWidget(self.loop_count)
