@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
@@ -87,7 +88,7 @@ class TwinDashboardController(IApplicationController, BackgroundWorker):
             return
         self._view.set_busy(True, "Moving to exact start anchors and starting synchronized execution...")
         self._run_in_thread(
-            fn=lambda: self._model.start(loop_count),
+            fn=partial(self._model.start, loop_count),
             on_done=self._on_start_done,
             on_error=self._on_background_error,
         )
@@ -98,9 +99,9 @@ class TwinDashboardController(IApplicationController, BackgroundWorker):
         result = result if isinstance(result, dict) else {}
         message = str(
             result.get("error", "")
-            or ("Choreography execution started" if result.get("success") else "Start failed")
+            or ("Choreography execution completed" if result.get("success") else "Start failed")
         )
-        status = self._model._service.prepared_status()
+        status = self._model.prepared_status()
         self._view.set_plan_status(
             bool(status.get("robot1_ready", False)),
             bool(status.get("robot2_ready", False)),
