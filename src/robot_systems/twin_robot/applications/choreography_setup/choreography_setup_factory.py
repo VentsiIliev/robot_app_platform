@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from PyQt6.QtCore import QTimer
+
 from src.robot_systems.twin_robot.applications.choreography_setup.view.choreography_setup_view import (
     ChoreographySetupView,
 )
@@ -11,10 +13,16 @@ class ChoreographySetupFactory:
         view = ChoreographySetupView()
         current = {"definition": None}
 
+        def refresh_library() -> None:
+            choreography = current["definition"]
+            selected_id = choreography.choreography_id if choreography is not None else None
+            view.set_library(service.list(), selected_id=selected_id)
+
         def render(message: str = "") -> None:
             choreography = current["definition"]
             if choreography is not None:
                 view.set_definition(choreography)
+            refresh_library()
             view.set_message(message)
 
         def new(choreography_id: str, name: str) -> None:
@@ -24,11 +32,19 @@ class ChoreographySetupFactory:
             current["definition"] = service.new(choreography_id, name)
             render("New choreography created")
 
+        def load(choreography_id: str) -> None:
+            try:
+                current["definition"] = service.load(choreography_id)
+                render(f"Loaded {current['definition'].name}")
+            except Exception as exc:
+                view.set_message(str(exc))
+
         def add_step() -> None:
             choreography = current["definition"]
             if choreography is None:
                 view.set_message("Create or load a choreography first")
                 return
+            sync_table_to_model()
             choreography.steps.append(ChoreographyStep(name=f"Step {len(choreography.steps) + 1}"))
             render()
             view.table.selectRow(len(choreography.steps) - 1)
@@ -37,6 +53,7 @@ class ChoreographySetupFactory:
             choreography = current["definition"]
             if choreography is None or not (0 <= row < len(choreography.steps)):
                 return
+            sync_table_to_model()
             del choreography.steps[row]
             render()
 
@@ -46,6 +63,7 @@ class ChoreographySetupFactory:
                 view.set_message("Select a choreography step first")
                 return
             try:
+                sync_table_to_model()
                 captured = service.capture_robot(robot_name)
                 setattr(choreography.steps[row], robot_name, captured)
                 render(f"Captured {robot_name} into step {row + 1}")
@@ -59,6 +77,7 @@ class ChoreographySetupFactory:
                 view.set_message("Select a choreography step first")
                 return
             try:
+                sync_table_to_model()
                 choreography.steps[row].robot1 = service.capture_robot("robot1")
                 choreography.steps[row].robot2 = service.capture_robot("robot2")
                 render(f"Captured both robots into step {row + 1}")
@@ -98,18 +117,6 @@ class ChoreographySetupFactory:
             except Exception as exc:
                 view.set_message(str(exc))
 
-        def bind_jog(widget, robot_name: str) -> None:
-            widget.jog_requested.connect(
-                lambda command, axis, direction, step, name=robot_name: _safe_jog(
-                    lambda: service.jog(name, command, axis, direction, step)
-                )
-            )
-            widget.joint_jog_requested.connect(
-                lambda command, joint, direction, step, name=robot_name: _safe_jog(
-                    lambda: service.joint_jog(name, command, joint, direction, step)
-                )
-            )
-
         def _safe_jog(call) -> None:
             try:
                 result = call()
@@ -118,7 +125,39 @@ class ChoreographySetupFactory:
             except Exception as exc:
                 view.set_message(str(exc))
 
+        def bind_jog(widget, robot_name: str) -> None:
+            widget.jog_requested.connect(
+                lambda command, axis, direction, step, name=robot_name: _safe_jog(
+                    lambda: service.jog(name, command, axis, direction, step)
+                )
+            )
+            widget.jog_stopped.connect(
+                lambda _key, name=robot_name: _safe_jog(
+                    lambda: service.stop_servo_jog(name)
+                )
+            )
+            widget.joint_jog_requested.connect(
+                lambda command, joint, direction, step, name=robot_name: _safe_jog(
+                    lambda: service.joint_jog(name, command, joint, direction, step)
+                )
+            )
+
+        def refresh_robot_state() -> None:
+            for robot_name, widget in (
+                ("robot1", view.robot1_jog),
+                ("robot2", view.robot2_jog),
+            ):
+                try:
+                    state = service.robot_state(robot_name)
+                except Exception:
+                    widget.set_position([])
+                    widget.set_joint_position([])
+                    continue
+                widget.set_position(state.get("pose", []))
+                widget.set_joint_position(state.get("joints", []))
+
         view.new_requested.connect(new)
+        view.load_requested.connect(load)
         view.save_requested.connect(save)
         view.add_step_requested.connect(add_step)
         view.delete_step_requested.connect(delete_step)
@@ -134,4 +173,11 @@ class ChoreographySetupFactory:
         else:
             current["definition"] = service.new("new_choreography", "New Choreography")
             render("Create the start pose by jogging both robots and pressing Capture Both")
+
+        state_timer = QTimer(view)
+        state_timer.setInterval(200)
+        state_timer.timeout.connect(refresh_robot_state)
+        state_timer.start()
+        view._twin_state_timer = state_timer
+        refresh_robot_state()
         return view
