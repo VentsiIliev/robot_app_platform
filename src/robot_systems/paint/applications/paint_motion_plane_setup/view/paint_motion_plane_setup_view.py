@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QPointF, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -110,6 +110,11 @@ _GUIDE_ORANGE = QColor(217, 136, 0)
 _GUIDE_MARKER = QColor(85, 213, 106)
 _GUIDE_CENTER = QColor(246, 164, 0)
 _GUIDE_CENTER_GLOW = QColor(245, 163, 22, 190)
+
+
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("PaintMotionPlaneSetup", text)
+    return translated or text
 
 
 def _pose_text(pose: Pose6D | None) -> str:
@@ -321,7 +326,7 @@ class _WizardPage(QWizardPage):
         self._layout.addLayout(row)
 
     def _show_help(self) -> None:
-        show_info(self, "Step information", self._help_text)
+        show_info(self, _t("Step information"), _t(self._help_text))
 
 
 class _ResultPage(_WizardPage):
@@ -461,7 +466,7 @@ class PaintMotionPlaneSetupView(IApplicationView):
         self._capture_rotation_btn.setEnabled(not busy)
 
     def show_error(self, title: str, message: str) -> None:
-        show_critical(self, title, message)
+        show_critical(self, _t(title), _t(message))
 
     def confirm_move_to_paint_pose(self) -> bool:
         if self._paint_pose is None:
@@ -469,10 +474,10 @@ class PaintMotionPlaneSetupView(IApplicationView):
             return False
         return ask_yes_no(
             self,
-            "Move robot to paint pose",
-            "The robot will move to:\n\n"
-            f"{_pose_text(self._paint_pose)}\n\n"
-            "Confirm only if the robot path is clear.",
+            _t("Move robot to paint pose"),
+            _t("The robot will move to:\n\n{pose}\n\nConfirm only if the robot path is clear.").format(
+                pose=_pose_text(self._paint_pose)
+            ),
             default_no=True,
         )
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -29,6 +29,11 @@ from src.robot_systems.paint.applications.paint_motion_recipe.domain.recipe impo
     MotionRecipe,
     MotionRecipeStep,
 )
+
+
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("PaintMotionRecipe", text)
+    return translated or text
 
 
 class PaintMotionRecipeView(IApplicationView):
@@ -149,10 +154,10 @@ class PaintMotionRecipeView(IApplicationView):
         self._status.setText(str(message or "Ready"))
 
     def show_info(self, title: str, message: str) -> None:
-        show_info(self, title, message)
+        show_info(self, _t(title), _t(message))
 
     def show_error(self, title: str, message: str) -> None:
-        show_critical(self, title, message)
+        show_critical(self, _t(title), _t(message))
 
     def _set_step_row(self, row: int, step: MotionRecipeStep) -> None:
         enabled = QCheckBox()

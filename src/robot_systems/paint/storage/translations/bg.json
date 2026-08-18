@@ -1,0 +1,51 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "PaintProcessSettings": {
+    "Dropoff Not Configured": "Dropoff не е конфигуриран",
+    "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Задайте и запазете Dropoff групата за движение в Robot Settings, преди да използвате dropoff чрез група за движение.",
+    "Reason": "Причина",
+    "Robot Position Not Available": "Позицията на робота не е налична",
+    "Could not read the current robot position for the safe travel pose.": "Текущата позиция на робота за safe travel позата не може да бъде прочетена.",
+    "Could not read the current robot position for the paint-to-dropoff safe travel pose.": "Текущата позиция на робота за safe travel позата от paint към dropoff не може да бъде прочетена.",
+    "Safe Travel Waypoint Invalid": "Невалидна safe travel точка",
+    "The selected safe travel waypoint is not valid.": "Избраната safe travel точка не е валидна.",
+    "Move Failed": "Движението е неуспешно",
+    "Robot move to the selected safe travel waypoint failed.": "Движението на робота към избраната safe travel точка е неуспешно.",
+    "Safe Travel Waypoints Not Set": "Safe travel точките не са зададени",
+    "Add at least one safe travel waypoint before enabling calibration-to-paint safe travel.": "Добавете поне една safe travel точка, преди да активирате safe travel от calibration към paint.",
+    "Paint-to-Dropoff Safe Travel Waypoints Not Set": "Safe travel точките от paint към dropoff не са зададени",
+    "Add at least one paint-to-dropoff safe travel waypoint before enabling paint-to-dropoff safe travel.": "Добавете поне една safe travel точка от paint към dropoff, преди да активирате safe travel от paint към dropoff.",
+    "Motion Profile": "Профил на движение",
+    "All motion profile values must be valid numbers.": "Всички стойности на профила на движение трябва да са валидни числа.",
+    "Velocity and acceleration must be between 0 and 100 percent.": "Скоростта и ускорението трябва да са между 0 и 100 процента.",
+    "BlendR must be zero or greater.": "BlendR трябва да бъде нула или по-голям.",
+    "Waypoint": "Точка",
+    "All waypoint values must be valid numbers.": "Всички стойности на точката трябва да са валидни числа."
+  },
+  "PaintMotionPlaneSetup": {
+    "Step information": "Информация за стъпката",
+    "Move robot to paint pose": "Преместване на робота до paint поза",
+    "The robot will move to:\n\n{pose}\n\nConfirm only if the robot path is clear.": "Роботът ще се премести до:\n\n{pose}\n\nПотвърдете само ако пътят на робота е свободен.",
+    "Paint pose unavailable": "Paint позата не е налична",
+    "The configured paint movement group has no valid 6D pose.": "Конфигурираната paint група за движение няма валидна 6D поза.",
+    "Paint setup unavailable": "Paint настройката не е налична",
+    "Move failed": "Движението е неуспешно",
+    "The robot did not report a successful move to the paint position.": "Роботът не отчете успешно движение до paint позицията.",
+    "Operation failed": "Операцията е неуспешна",
+    "Inference failed": "Изчисляването е неуспешно",
+    "Start from the same taught paint position that paint execution will use. The inferred axes are meaningful only for this pose orientation.": "Започнете от същата обучена paint позиция, която ще използва paint изпълнението. Изведените оси имат смисъл само за тази ориентация на позата.",
+    "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.": "Използвайте jog панела при нужда, след това заснемете текущата поза на робота като начало за проверката на осите.",
+    "Jog along the desired paint translation direction, then capture the current pose.": "Преместете чрез jog по желаната paint посока на транслация, след това заснемете текущата поза.",
+    "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Върнете се близо до референтната позиция при нужда, завъртете около желаната paint ос на въртене, след това заснемете."
+  },
+  "PaintMotionRecipe": {
+    "Recipe Saved": "Рецептата е запазена",
+    "Paint development motion recipe saved.": "Paint development рецептата за движение е запазена.",
+    "Mock Step Test": "Тест на mock стъпка",
+    "Recipe Load Failed": "Зареждането на рецептата е неуспешно",
+    "Save Failed": "Запазването е неуспешно",
+    "Capture Failed": "Заснемането е неуспешно"
+  }
+}

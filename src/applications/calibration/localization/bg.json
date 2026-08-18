@@ -1,0 +1,9 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "Calibration": {
+    "Calibration Running": "Калибрацията работи",
+    "Calibration is currently running.\nPlease stop it before leaving.": "Калибрацията в момента работи.\nМоля, спрете я преди да излезете."
+  }
+}

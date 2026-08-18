@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -34,6 +34,11 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEd
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
     build_paint_process_settings_tabs,
 )
+
+
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("PaintProcessSettings", text)
+    return translated or text
 
 
 class _WaypointTable(QWidget):
@@ -528,13 +533,17 @@ class _MotionProfileDialog(AppDialog):
         try:
             profile = self.profile()
         except ValueError:
-            show_warning(self, "Motion Profile", "All motion profile values must be valid numbers.")
+            show_warning(self, _t("Motion Profile"), _t("All motion profile values must be valid numbers."))
             return
         if not 0.0 <= profile["vel_percent"] <= 100.0 or not 0.0 <= profile["acc_percent"] <= 100.0:
-            show_warning(self, "Motion Profile", "Velocity and acceleration must be between 0 and 100 percent.")
+            show_warning(
+                self,
+                _t("Motion Profile"),
+                _t("Velocity and acceleration must be between 0 and 100 percent."),
+            )
             return
         if profile["blendR"] < 0.0:
-            show_warning(self, "Motion Profile", "BlendR must be zero or greater.")
+            show_warning(self, _t("Motion Profile"), _t("BlendR must be zero or greater."))
             return
         super().accept()
 
@@ -641,13 +650,17 @@ class _WaypointDialog(AppDialog):
         try:
             waypoint = self.waypoint()
         except ValueError:
-            show_warning(self, "Waypoint", "All waypoint values must be valid numbers.")
+            show_warning(self, _t("Waypoint"), _t("All waypoint values must be valid numbers."))
             return
         if not 0.0 <= waypoint["vel_percent"] <= 100.0 or not 0.0 <= waypoint["acc_percent"] <= 100.0:
-            show_warning(self, "Waypoint", "Velocity and acceleration must be between 0 and 100 percent.")
+            show_warning(
+                self,
+                _t("Waypoint"),
+                _t("Velocity and acceleration must be between 0 and 100 percent."),
+            )
             return
         if waypoint["blendR"] < 0.0:
-            show_warning(self, "Waypoint", "BlendR must be zero or greater.")
+            show_warning(self, _t("Waypoint"), _t("BlendR must be zero or greater."))
             return
         super().accept()
 

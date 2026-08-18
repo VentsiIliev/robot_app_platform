@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -24,6 +24,11 @@ from pl_gui.settings.settings_view.styles import ACTION_BTN_STYLE, GHOST_BTN_STY
 from src.applications.base.app_dialog import AppDialog, DIALOG_CHECKBOX_STYLE, DIALOG_INPUT_STYLE
 from src.applications.base.styled_message_box import ask_yes_no, show_warning
 from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEdit
+
+
+def _t(text: str) -> str:
+    translated = QCoreApplication.translate("RobotSettings", text)
+    return translated or text
 
 
 class TargetingDefinitionsTab(QWidget):
@@ -185,7 +190,11 @@ class TargetingDefinitionsTab(QWidget):
             return
         point = dlg.get_values()
         if self._find_point(point["name"]) is not None:
-            show_warning(self, "Add Point", f"Point '{point['name']}' already exists.")
+            show_warning(
+                self,
+                _t("Add Point"),
+                _t("Point '{name}' already exists.").format(name=point["name"]),
+            )
             return
         self._points.append(point)
         self._points.sort(key=lambda item: item["name"])
@@ -207,7 +216,11 @@ class TargetingDefinitionsTab(QWidget):
         updated = dlg.get_values()
         existing = self._find_point(updated["name"])
         if existing is not None and existing != idx:
-            show_warning(self, "Edit Point", f"Point '{updated['name']}' already exists.")
+            show_warning(
+                self,
+                _t("Edit Point"),
+                _t("Point '{name}' already exists.").format(name=updated["name"]),
+            )
             return
         self._points[idx] = updated
         self._points.sort(key=lambda item: item["name"])
@@ -220,9 +233,13 @@ class TargetingDefinitionsTab(QWidget):
             return
         name = str(self._points[idx].get("name", ""))
         if name in self._protected_points:
-            show_warning(self, "Remove Point", f"Point '{name}' is marked as required and cannot be removed.")
+            show_warning(
+                self,
+                _t("Remove Point"),
+                _t("Point '{name}' is marked as required and cannot be removed.").format(name=name),
+            )
             return
-        if not ask_yes_no(self, "Remove Point", f"Remove point '{name}'?"):
+        if not ask_yes_no(self, _t("Remove Point"), _t("Remove point '{name}'?").format(name=name)):
             return
         self._points.pop(idx)
         self._reload_points_table()
@@ -234,7 +251,11 @@ class TargetingDefinitionsTab(QWidget):
             return
         frame = dlg.get_values()
         if self._find_frame(frame["name"]) is not None:
-            show_warning(self, "Add Frame", f"Frame '{frame['name']}' already exists.")
+            show_warning(
+                self,
+                _t("Add Frame"),
+                _t("Frame '{name}' already exists.").format(name=frame["name"]),
+            )
             return
         self._frames.append(frame)
         self._frames.sort(key=lambda item: item["name"])
@@ -251,7 +272,11 @@ class TargetingDefinitionsTab(QWidget):
         updated = dlg.get_values()
         existing = self._find_frame(updated["name"])
         if existing is not None and existing != idx:
-            show_warning(self, "Edit Frame", f"Frame '{updated['name']}' already exists.")
+            show_warning(
+                self,
+                _t("Edit Frame"),
+                _t("Frame '{name}' already exists.").format(name=updated["name"]),
+            )
             return
         self._frames[idx] = updated
         self._frames.sort(key=lambda item: item["name"])
@@ -264,9 +289,13 @@ class TargetingDefinitionsTab(QWidget):
             return
         name = str(self._frames[idx].get("name", ""))
         if name in self._protected_frames:
-            show_warning(self, "Remove Frame", f"Frame '{name}' is marked as required and cannot be removed.")
+            show_warning(
+                self,
+                _t("Remove Frame"),
+                _t("Frame '{name}' is marked as required and cannot be removed.").format(name=name),
+            )
             return
-        if not ask_yes_no(self, "Remove Frame", f"Remove frame '{name}'?"):
+        if not ask_yes_no(self, _t("Remove Frame"), _t("Remove frame '{name}'?").format(name=name)):
             return
         self._frames.pop(idx)
         self._reload_frames_table()
@@ -360,13 +389,13 @@ class _PointDialog(AppDialog):
 
     def accept(self) -> None:
         if not self._name.text().strip():
-            show_warning(self, "Target Point", "Name cannot be empty.")
+            show_warning(self, _t("Target Point"), _t("Name cannot be empty."))
             return
         try:
             float(self._x.text().strip() or 0.0)
             float(self._y.text().strip() or 0.0)
         except ValueError:
-            show_warning(self, "Target Point", "X and Y must be valid numbers.")
+            show_warning(self, _t("Target Point"), _t("X and Y must be valid numbers."))
             return
         super().accept()
 
@@ -454,7 +483,7 @@ class _FrameDialog(AppDialog):
 
     def accept(self) -> None:
         if not self._name.text().strip():
-            show_warning(self, "Target Frame", "Name cannot be empty.")
+            show_warning(self, _t("Target Frame"), _t("Name cannot be empty."))
             return
         super().accept()
 

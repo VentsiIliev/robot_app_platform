@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import cv2
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QDialog, QLabel, QScrollArea, QVBoxLayout, QPushButton, QHBoxLayout, QTabWidget
 
@@ -100,13 +100,17 @@ class WorkpieceEditorController(IApplicationController):
         try:
             contours = self._model.get_contours()
         except RuntimeError as exc:
-            show_warning(self._view, "Capture", str(exc))
+            show_warning(self._view, self._t("Capture"), str(exc))
             return []
         self._logger.debug("Capture: got %d contours from vision", len(contours))
         largest = self._pick_largest(contours)
         if largest is None:
             self._logger.warning("Capture: no usable contour found")
-            show_warning(self._view, "Capture", "No contour detected.\nMake sure the vision vision_service is running.")
+            show_warning(
+                self._view,
+                self._t("Capture"),
+                self._t("No contour detected.\nMake sure the vision service is running."),
+            )
             return []
 
         self._logger.debug("Capture: largest contour has %d points", len(largest))
@@ -198,7 +202,7 @@ class WorkpieceEditorController(IApplicationController):
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece: %s — %s", ok, msg)
         if not ok:
-            show_warning(self._view, "Cannot Save", msg)
+            show_warning(self._view, self._t("Cannot Save"), msg)
             return False, msg
         # Resume live feed after successful save
         self._camera_active = True
@@ -296,17 +300,21 @@ class WorkpieceEditorController(IApplicationController):
         contours = self._model.get_contours()
         largest = self._pick_largest(contours)
         if largest is None:
-            show_warning(self._view, "Match Workpiece", "No contour detected.")
+            show_warning(self._view, self._t("Match Workpiece"), self._t("No contour detected."))
             return
 
         if not self._model.can_match_saved_workpieces():
-            show_warning(self._view, "Match Workpiece", "Matching is not available in this editor.")
+            show_warning(
+                self._view,
+                self._t("Match Workpiece"),
+                self._t("Matching is not available in this editor."),
+            )
             return
 
         try:
             ok, payload, msg = self._model.match_saved_workpieces(largest)
             if not ok or not payload:
-                show_info(self._view, "Match Workpiece", msg)
+                show_info(self._view, self._t("Match Workpiece"), msg)
                 return
 
             self._camera_active = False
@@ -314,20 +322,34 @@ class WorkpieceEditorController(IApplicationController):
             self._on_load_workpiece_raw({"raw": payload["raw"], "storage_id": payload.get("storage_id")})
             show_info(
                 self._view,
-                "Matched Workpiece",
-                f"Matched: {payload.get('workpieceId') or '(no id)'}"
-                + (f"\nName: {payload.get('name')}" if payload.get("name") else "")
+                self._t("Matched Workpiece"),
+                self._t("Matched: {workpiece_id}").format(
+                    workpiece_id=payload.get("workpieceId") or self._t("(no id)")
+                )
                 + (
-                    f"\nConfidence: {float(payload.get('confidence')):.2f}"
+                    "\n" + self._t("Name: {name}").format(name=payload.get("name"))
+                    if payload.get("name")
+                    else ""
+                )
+                + (
+                    "\n" + self._t("Confidence: {confidence:.2f}").format(
+                        confidence=float(payload.get("confidence"))
+                    )
                     if payload.get("confidence") is not None
                     else ""
                 )
-                + f"\nSaved workpieces checked: {payload.get('candidate_count', 0)}"
-                + f"\nUnmatched contours: {payload.get('no_match_count', 0)}",
+                + "\n"
+                + self._t("Saved workpieces checked: {count}").format(
+                    count=payload.get("candidate_count", 0)
+                )
+                + "\n"
+                + self._t("Unmatched contours: {count}").format(
+                    count=payload.get("no_match_count", 0)
+                ),
             )
         except Exception as exc:
             self._logger.exception("Failed to match saved workpieces: %s", exc)
-            show_warning(self._view, "Match Workpiece Failed", str(exc))
+            show_warning(self._view, self._t("Match Workpiece Failed"), str(exc))
 
     def _get_current_editor_workpiece_contour(self) -> np.ndarray:
         try:
@@ -601,7 +623,7 @@ class WorkpieceEditorController(IApplicationController):
         ok, msg = self._model.save_workpiece(data)
         self._logger.info("Save workpiece (fallback): %s — %s", ok, msg)
         if not ok:
-            show_warning(self._view, "Cannot Save", msg)
+            show_warning(self._view, self._t("Cannot Save"), msg)
 
     def _on_execute(self, data: dict) -> None:
         self._restore_live_feed()
@@ -659,7 +681,11 @@ class WorkpieceEditorController(IApplicationController):
     def _continue_with_process_action_after_prepare(self) -> None:
         actions = tuple(self._model.get_process_actions())
         if not actions:
-            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
             return
         if len(actions) > 1:
             self._logger.info(
@@ -723,7 +749,11 @@ class WorkpieceEditorController(IApplicationController):
 
         actions = tuple(self._model.get_process_actions())
         if not actions:
-            show_warning(self._view, "No Process Action", "Prepared process has no executable action.")
+            show_warning(
+                self._view,
+                self._t("No Process Action"),
+                self._t("Prepared process has no executable action."),
+            )
             return
         action = actions[0]
         if len(actions) > 1:
@@ -776,9 +806,9 @@ class WorkpieceEditorController(IApplicationController):
         self._logger.info("[TIMING] controller execute_process_action elapsed_s=%.3f", perf_counter() - _t1)
         self._logger.info("Execute process action (%s): %s — %s", action.action_id, ok, msg)
         if ok:
-            show_info(self._preview_dialog or self._view, "Process Started", msg)
+            show_info(self._preview_dialog or self._view, self._t("Process Started"), msg)
         else:
-            show_critical(self._preview_dialog or self._view, "Process Failed", msg)
+            show_critical(self._preview_dialog or self._view, self._t("Process Failed"), msg)
 
     def _show_pivot_path_plot(
             self,
@@ -844,7 +874,7 @@ class WorkpieceEditorController(IApplicationController):
             self._load_raw_into_editor(raw, storage_id=storage_id)
         except Exception as exc:
             self._logger.exception("Failed to load workpiece: %s", exc)
-            show_warning(self._view, "Load Failed", str(exc))
+            show_warning(self._view, self._t("Load Failed"), str(exc))
 
     def _augment_form_data_with_editor_context(self, form_data: dict) -> dict:
         enriched = dict(form_data or {})
@@ -1013,3 +1043,8 @@ class WorkpieceEditorController(IApplicationController):
                 inner.workpiece_manager.apply_defaults_to_segments_without_settings()
         except Exception:
             self._logger.debug("_on_segment_added: could not apply defaults", exc_info=True)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("WorkpieceEditor", text)
+        return translated or text

@@ -1,0 +1,26 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "WorkpieceEditor": {
+    "Capture": "Capture",
+    "No contour detected.\nMake sure the vision service is running.": "No contour detected.\nMake sure the vision service is running.",
+    "Cannot Save": "Cannot Save",
+    "Match Workpiece": "Match Workpiece",
+    "No contour detected.": "No contour detected.",
+    "Matching is not available in this editor.": "Matching is not available in this editor.",
+    "Matched Workpiece": "Matched Workpiece",
+    "Matched: {workpiece_id}": "Matched: {workpiece_id}",
+    "(no id)": "(no id)",
+    "Name: {name}": "Name: {name}",
+    "Confidence: {confidence:.2f}": "Confidence: {confidence:.2f}",
+    "Saved workpieces checked: {count}": "Saved workpieces checked: {count}",
+    "Unmatched contours: {count}": "Unmatched contours: {count}",
+    "Match Workpiece Failed": "Match Workpiece Failed",
+    "No Process Action": "No Process Action",
+    "Prepared process has no executable action.": "Prepared process has no executable action.",
+    "Process Started": "Process Started",
+    "Process Failed": "Process Failed",
+    "Load Failed": "Load Failed"
+  }
+}

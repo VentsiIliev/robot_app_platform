@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QCoreApplication, QTimer
 from PyQt6.QtWidgets import QMessageBox
 
 from src.applications.base.i_application_controller import IApplicationController
@@ -73,8 +73,11 @@ class WorkpieceLibraryController(IApplicationController):
         self._view.set_thumbnail(thumbnail)
 
     def _on_delete(self, workpiece_id: str) -> None:
-        if not ask_yes_no(self._view, "Delete Workpiece",
-                          f"Delete workpiece '{workpiece_id}'?"):
+        if not ask_yes_no(
+            self._view,
+            self._t("Delete Workpiece"),
+            self._t("Delete workpiece '{workpiece_id}'?").format(workpiece_id=workpiece_id),
+        ):
             return
         ok, msg = self._model.delete(workpiece_id)
         self._view.set_status(msg)
@@ -82,7 +85,7 @@ class WorkpieceLibraryController(IApplicationController):
             self._view.set_records(self._model.get_all())
             self._view.set_detail(None)
         else:
-            show_warning(self._view, "Delete Failed", msg)
+            show_warning(self._view, self._t("Delete Failed"), msg)
         _logger.info("Delete %s: %s — %s", workpiece_id, ok, msg)
 
     def _on_edit(self, record, updates: dict) -> None:
@@ -98,14 +101,18 @@ class WorkpieceLibraryController(IApplicationController):
             )
             self._view.set_detail(updated)
         else:
-            show_warning(self._view, "Save Failed", msg)
+            show_warning(self._view, self._t("Save Failed"), msg)
         _logger.info("Edit %s: %s — %s", storage_id, ok, msg)
 
     def _on_open_in_editor(self, record) -> None:
         storage_id = str(record.get_id(self._model.schema.id_key))
         raw = self._model.load_raw(storage_id)
         if raw is None:
-            show_warning(self._view, "Open Failed", f"Could not load workpiece '{storage_id}'")
+            show_warning(
+                self._view,
+                self._t("Open Failed"),
+                self._t("Could not load workpiece '{storage_id}'").format(storage_id=storage_id),
+            )
             return
         payload = {"raw": raw, "storage_id": storage_id}
         self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
@@ -119,3 +126,8 @@ class WorkpieceLibraryController(IApplicationController):
         self._pending_open_payload = None
         if payload is not None:
             self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("WorkpieceLibrary", text)
+        return translated or text

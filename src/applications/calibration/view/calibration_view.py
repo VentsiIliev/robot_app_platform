@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QTextCursor
 from PyQt6.QtWidgets import (
     QDialog,
@@ -336,8 +336,8 @@ class CalibrationView(IApplicationView):
         if hasattr(self, "_controller") and self._controller.is_calibrating():
             show_warning(
                 self,
-                "Calibration Running",
-                "Calibration is currently running.\nPlease stop it before leaving.",
+                self._t("Calibration Running"),
+                self._t("Calibration is currently running.\nPlease stop it before leaving."),
             )
             return False
         return True
@@ -345,6 +345,11 @@ class CalibrationView(IApplicationView):
     def clean_up(self) -> None:
         if hasattr(self, "_controller"):
             self._controller.stop()
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("Calibration", text)
+        return translated or text
 
     def _connect_signals(self) -> None:
         self._controls_panel.capture_btn.clicked.connect(self.capture_requested.emit)

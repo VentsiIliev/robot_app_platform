@@ -1,0 +1,51 @@
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "PaintProcessSettings": {
+    "Dropoff Not Configured": "Dropoff Not Configured",
+    "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.",
+    "Reason": "Reason",
+    "Robot Position Not Available": "Robot Position Not Available",
+    "Could not read the current robot position for the safe travel pose.": "Could not read the current robot position for the safe travel pose.",
+    "Could not read the current robot position for the paint-to-dropoff safe travel pose.": "Could not read the current robot position for the paint-to-dropoff safe travel pose.",
+    "Safe Travel Waypoint Invalid": "Safe Travel Waypoint Invalid",
+    "The selected safe travel waypoint is not valid.": "The selected safe travel waypoint is not valid.",
+    "Move Failed": "Move Failed",
+    "Robot move to the selected safe travel waypoint failed.": "Robot move to the selected safe travel waypoint failed.",
+    "Safe Travel Waypoints Not Set": "Safe Travel Waypoints Not Set",
+    "Add at least one safe travel waypoint before enabling calibration-to-paint safe travel.": "Add at least one safe travel waypoint before enabling calibration-to-paint safe travel.",
+    "Paint-to-Dropoff Safe Travel Waypoints Not Set": "Paint-to-Dropoff Safe Travel Waypoints Not Set",
+    "Add at least one paint-to-dropoff safe travel waypoint before enabling paint-to-dropoff safe travel.": "Add at least one paint-to-dropoff safe travel waypoint before enabling paint-to-dropoff safe travel.",
+    "Motion Profile": "Motion Profile",
+    "All motion profile values must be valid numbers.": "All motion profile values must be valid numbers.",
+    "Velocity and acceleration must be between 0 and 100 percent.": "Velocity and acceleration must be between 0 and 100 percent.",
+    "BlendR must be zero or greater.": "BlendR must be zero or greater.",
+    "Waypoint": "Waypoint",
+    "All waypoint values must be valid numbers.": "All waypoint values must be valid numbers."
+  },
+  "PaintMotionPlaneSetup": {
+    "Step information": "Step information",
+    "Move robot to paint pose": "Move robot to paint pose",
+    "The robot will move to:\n\n{pose}\n\nConfirm only if the robot path is clear.": "The robot will move to:\n\n{pose}\n\nConfirm only if the robot path is clear.",
+    "Paint pose unavailable": "Paint pose unavailable",
+    "The configured paint movement group has no valid 6D pose.": "The configured paint movement group has no valid 6D pose.",
+    "Paint setup unavailable": "Paint setup unavailable",
+    "Move failed": "Move failed",
+    "The robot did not report a successful move to the paint position.": "The robot did not report a successful move to the paint position.",
+    "Operation failed": "Operation failed",
+    "Inference failed": "Inference failed",
+    "Start from the same taught paint position that paint execution will use. The inferred axes are meaningful only for this pose orientation.": "Start from the same taught paint position that paint execution will use. The inferred axes are meaningful only for this pose orientation.",
+    "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.": "Use the jog drawer if needed, then capture the current robot pose as the origin for the axis probe.",
+    "Jog along the desired paint translation direction, then capture the current pose.": "Jog along the desired paint translation direction, then capture the current pose.",
+    "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture.": "Return near the reference position if needed, rotate around the desired paint rotation axis, then capture."
+  },
+  "PaintMotionRecipe": {
+    "Recipe Saved": "Recipe Saved",
+    "Paint development motion recipe saved.": "Paint development motion recipe saved.",
+    "Mock Step Test": "Mock Step Test",
+    "Recipe Load Failed": "Recipe Load Failed",
+    "Save Failed": "Save Failed",
+    "Capture Failed": "Capture Failed"
+  }
+}

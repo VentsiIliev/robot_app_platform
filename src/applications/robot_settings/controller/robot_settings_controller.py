@@ -1,7 +1,7 @@
 import logging
 import threading
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, pyqtSignal
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
 from src.applications.base.styled_message_box import show_warning, ask_yes_no
@@ -81,9 +81,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
     def _on_set_current(self, group_name: str) -> None:
         position = self._model.get_current_position()
         if position is None:
-            show_warning(self._view, "Set Current Position",
-                         "Could not read robot position.\n"
-                         "Make sure the robot is connected.")
+            show_warning(
+                self._view,
+                self._t("Set Current Position"),
+                self._t("Could not read robot position.\nMake sure the robot is connected."),
+            )
             return
 
         position_str = "[" + ", ".join(f"{v:.3f}" for v in position) + "]"
@@ -100,8 +102,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._logger.info("Added point to '%s': %s", group_name, position_str)
 
     def _on_remove_group(self, name: str) -> None:
-        if not ask_yes_no(self._view, "Remove Group",
-                          f"Remove movement group '{name}'?\n\nThis cannot be undone until you save."):
+        if not ask_yes_no(
+            self._view,
+            self._t("Remove Group"),
+            self._t("Remove movement group '{name}'?\n\nThis cannot be undone until you save.").format(name=name),
+        ):
             return
         self._view.remove_movement_group(name)
         self._logger.info("Removed movement group '%s'", name)
@@ -111,21 +116,24 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         if point_str is None:
             widget = self._view.get_group_widget(group_name)
             if widget is not None and widget._def.group_type == MovementGroupType.MULTI_POSITION:
-                show_warning(self._view, "Move To",
-                             "No point selected.\nSelect a point from the list first.")
+                show_warning(
+                    self._view,
+                    self._t("Move To"),
+                    self._t("No point selected.\nSelect a point from the list first."),
+                )
                 return
             fn = lambda: self._model.move_to_group(group_name)
-            label = f"Move To — {group_name}"
+            label = f"{self._t('Move To')} — {group_name}"
         else:
             fn = lambda: self._model.move_to_point(group_name, point_str)
-            label = f"Move To point in {group_name}"
+            label = self._t("Move To point in {group_name}").format(group_name=group_name)
         self._run_blocking(fn=fn, label=label)
 
     def _on_execute(self, group_name: str) -> None:
         self._auto_save()
         self._run_blocking(
             fn=lambda: self._model.execute_group(group_name),
-            label=f"Execute — {group_name}",
+            label=f"{self._t('Execute')} — {group_name}",
         )
 
     def _on_targeting_changed(self) -> None:
@@ -179,10 +187,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         ok, reason = result if isinstance(result, tuple) else (bool(result), "")
         if not ok:
             msg = reason or (
-                f"Motion failed for '{label}'.\n"
-                "Check the robot is connected and the group has a position configured."
+                self._t("Motion failed for '{label}'.\nCheck the robot is connected and the group has a position configured.").format(
+                    label=label
+                )
             )
-            show_warning(self._view, label, msg)
+            show_warning(self._view, self._t(label), msg)
         else:
             self._logger.info("%s completed successfully", label)
 
@@ -190,6 +199,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._logger.exception("%s raised an unexpected error: %s", label, error)
         show_warning(
             self._view,
-            label,
-            error or f"Unexpected error while running '{label}'.",
+            self._t(label),
+            error or self._t("Unexpected error while running '{label}'.").format(label=label),
         )
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("RobotSettings", text)
+        return translated or text

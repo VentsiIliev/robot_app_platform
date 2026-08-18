@@ -1,0 +1,33 @@
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "RobotSettings": {
+    "Set Current Position": "Задаване на текуща позиция",
+    "Could not read robot position.\nMake sure the robot is connected.": "Позицията на робота не може да бъде прочетена.\nУверете се, че роботът е свързан.",
+    "Remove Group": "Премахване на група",
+    "Remove movement group '{name}'?\n\nThis cannot be undone until you save.": "Да се премахне ли групата за движение '{name}'?\n\nТова не може да бъде отменено след запазване.",
+    "Move To": "Премести до",
+    "Move To point in {group_name}": "Премести до точка в {group_name}",
+    "Execute": "Изпълни",
+    "No point selected.\nSelect a point from the list first.": "Няма избрана точка.\nПърво изберете точка от списъка.",
+    "Motion failed for '{label}'.\nCheck the robot is connected and the group has a position configured.": "Движението за '{label}' е неуспешно.\nПроверете дали роботът е свързан и дали групата има конфигурирана позиция.",
+    "Unexpected error while running '{label}'.": "Неочаквана грешка при изпълнение на '{label}'.",
+    "Add Point": "Добавяне на точка",
+    "Edit Point": "Редактиране на точка",
+    "Remove Point": "Премахване на точка",
+    "Point '{name}' already exists.": "Точката '{name}' вече съществува.",
+    "Point '{name}' is marked as required and cannot be removed.": "Точката '{name}' е задължителна и не може да бъде премахната.",
+    "Remove point '{name}'?": "Да се премахне ли точката '{name}'?",
+    "Add Frame": "Добавяне на рамка",
+    "Edit Frame": "Редактиране на рамка",
+    "Remove Frame": "Премахване на рамка",
+    "Frame '{name}' already exists.": "Рамката '{name}' вече съществува.",
+    "Frame '{name}' is marked as required and cannot be removed.": "Рамката '{name}' е задължителна и не може да бъде премахната.",
+    "Remove frame '{name}'?": "Да се премахне ли рамката '{name}'?",
+    "Target Point": "Целева точка",
+    "Target Frame": "Целева рамка",
+    "Name cannot be empty.": "Името не може да бъде празно.",
+    "X and Y must be valid numbers.": "X и Y трябва да бъдат валидни числа."
+  }
+}
