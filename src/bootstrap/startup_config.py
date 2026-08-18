@@ -23,10 +23,21 @@ class RosBackendConfig:
 
 
 @dataclass(frozen=True)
+class UiStartupConfig:
+    dev_skip_login: bool = False
+    skip_splash: bool = False
+    show_account_button_when_dev_skip_login: bool = False
+    fullscreen: bool = True
+    window_width: int = 1280
+    window_height: int = 1024
+
+
+@dataclass(frozen=True)
 class StartupConfig:
     robot_system: str
     supported_robot_systems: tuple[str, ...]
     ros_backend: RosBackendConfig = field(default_factory=RosBackendConfig)
+    ui: UiStartupConfig = field(default_factory=UiStartupConfig)
 
 
 def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfig:
@@ -63,6 +74,7 @@ def load_startup_config(config_path: Path = DEFAULT_CONFIG_PATH) -> StartupConfi
         robot_system=robot_system,
         supported_robot_systems=supported_robot_systems,
         ros_backend=_load_ros_backend_config(payload.get("ros_backend")),
+        ui=_load_ui_startup_config(payload.get("ui")),
     )
 
 
@@ -77,10 +89,37 @@ def _load_ros_backend_config(raw_config: object) -> RosBackendConfig:
     )
 
 
-def _read_bool(payload: dict, field_name: str, *, default: bool) -> bool:
+def _load_ui_startup_config(raw_config: object) -> UiStartupConfig:
+    if raw_config is None:
+        return UiStartupConfig()
+    if not isinstance(raw_config, dict):
+        raise RuntimeError("'ui' must be a JSON object")
+    return UiStartupConfig(
+        dev_skip_login=_read_bool(raw_config, "dev_skip_login", default=False, prefix="ui"),
+        skip_splash=_read_bool(raw_config, "skip_splash", default=False, prefix="ui"),
+        show_account_button_when_dev_skip_login=_read_bool(
+            raw_config,
+            "show_account_button_when_dev_skip_login",
+            default=False,
+            prefix="ui",
+        ),
+        fullscreen=_read_bool(raw_config, "fullscreen", default=True, prefix="ui"),
+        window_width=_read_positive_int(raw_config, "window_width", default=1280, prefix="ui"),
+        window_height=_read_positive_int(raw_config, "window_height", default=1024, prefix="ui"),
+    )
+
+
+def _read_bool(payload: dict, field_name: str, *, default: bool, prefix: str = "ros_backend") -> bool:
     value = payload.get(field_name, default)
     if not isinstance(value, bool):
-        raise RuntimeError(f"'ros_backend.{field_name}' must be a boolean")
+        raise RuntimeError(f"'{prefix}.{field_name}' must be a boolean")
+    return value
+
+
+def _read_positive_int(payload: dict, field_name: str, *, default: int, prefix: str) -> int:
+    value = payload.get(field_name, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise RuntimeError(f"'{prefix}.{field_name}' must be a positive integer")
     return value
 
 

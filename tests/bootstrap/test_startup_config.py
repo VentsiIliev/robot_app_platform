@@ -9,6 +9,7 @@ from unittest.mock import patch
 from src.bootstrap.startup_config import (
     RosBackendConfig,
     StartupConfig,
+    UiStartupConfig,
     load_bootstrap_provider,
     load_startup_config,
 )
@@ -76,6 +77,75 @@ class TestStartupConfig(unittest.TestCase):
             config = load_startup_config(config_path)
 
         self.assertEqual(config.ros_backend, RosBackendConfig(auto_launch=False, auto_stop=False))
+
+    def test_loads_ui_startup_config(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ui": {
+                            "dev_skip_login": True,
+                            "skip_splash": True,
+                            "show_account_button_when_dev_skip_login": True,
+                            "fullscreen": False,
+                            "window_width": 1024,
+                            "window_height": 768,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            config = load_startup_config(config_path)
+
+        self.assertEqual(
+            config.ui,
+            UiStartupConfig(
+                dev_skip_login=True,
+                skip_splash=True,
+                show_account_button_when_dev_skip_login=True,
+                fullscreen=False,
+                window_width=1024,
+                window_height=768,
+            ),
+        )
+
+    def test_rejects_invalid_ui_window_size(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ui": {"window_width": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "ui.window_width"):
+                load_startup_config(config_path)
+
+    def test_rejects_invalid_ui_bool(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ui": {"dev_skip_login": "false"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "ui.dev_skip_login"):
+                load_startup_config(config_path)
 
     def test_rejects_invalid_ros_backend_bool(self):
         with TemporaryDirectory() as tmp_dir:

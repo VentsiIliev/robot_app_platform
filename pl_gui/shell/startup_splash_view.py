@@ -20,9 +20,9 @@ from pl_gui.settings.settings_view.styles import (
 
 
 class StartupSplashView(QWidget):
-    """Reusable full-page startup/loading view."""
+    """Reusable shell startup/loading view."""
 
-    _DEFAULT_LOGO_PATH = Path(__file__).resolve().parents[1] / "resources" / "logo.ico"
+    _DEFAULT_LOGO_PATH = Path(__file__).resolve().parent / "resources" / "logo.ico"
 
     def __init__(self, parent: QWidget | None = None, *, logo_path: str | Path | None = None) -> None:
         super().__init__(parent)
@@ -94,7 +94,9 @@ class StartupSplashView(QWidget):
             )
         else:
             self._logo.setText(self.tr("Robot App Platform"))
-            self._logo.setStyleSheet(f"color: {PRIMARY}; font-size: 28pt; font-weight: bold; background: transparent;")
+            self._logo.setStyleSheet(
+                f"color: {PRIMARY}; font-size: 28pt; font-weight: bold; background: transparent;"
+            )
         root.addWidget(self._logo, 0, Qt.AlignmentFlag.AlignCenter)
 
         root.addStretch(1)
@@ -104,7 +106,9 @@ class StartupSplashView(QWidget):
         self._message.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._message.setMinimumWidth(360)
         self._message.setMinimumHeight(28)
-        self._message.setStyleSheet(f"color: {TERTIARY_TEXT}; font-size: 10pt; font-weight: bold; background: transparent;")
+        self._message.setStyleSheet(
+            f"color: {TERTIARY_TEXT}; font-size: 10pt; font-weight: bold; background: transparent;"
+        )
         bottom_row.addWidget(self._message)
         root.addLayout(bottom_row)
 

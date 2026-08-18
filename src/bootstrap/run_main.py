@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from PyQt6.QtCore import QObject, QEvent, QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -19,13 +19,15 @@ from src.bootstrap.application_loader import ApplicationLoader
 from src.bootstrap.shell_configurator import ShellConfigurator
 from src.applications.base.notification_presenter import UserNotificationPresenter
 from src.applications.base.robot_connection_notifier import RobotConnectionNotifier
-from src.applications.base.widgets.startup_splash_view import StartupSplashView
 from src.engine.localization.localization_service import LocalizationService
-from src.shared_contracts.events.robot_events import RobotTopics
+from src.engine.auth.user_session import UserSession
 from src.robot_systems.system_builder import SystemBuilder
 from src.bootstrap.startup_config import load_bootstrap_provider, load_startup_config
 from src.bootstrap.ros_backend_launcher import build_ros_backend_launcher_from_env
+from src.bootstrap.shell_session_controller import ShellSessionController
+from src.bootstrap.startup_splash_runtime import StartupSplashCoordinator
 from pl_gui.shell.AppShell import AppShell
+from pl_gui.shell.startup_splash_view import StartupSplashView
 
 _LOGGER = logging.getLogger("main")
 
@@ -43,10 +45,6 @@ _LOGGER = logging.getLogger("main")
 #             _LOGGER.warning("No non-RT CPUs available; leaving affinity unchanged")
 #     except Exception:
 #         _LOGGER.exception("Failed to set CPU affinity")
-
-
-_DEV_SKIP_LOGIN = True
-_SKIP_SPLASH= True
 
 
 class _FramelessHeaderDrag(QObject):
@@ -81,87 +79,18 @@ class _FramelessHeaderDrag(QObject):
         return False
 
 
-class _StartupSplashBridge(QObject):
-    state_ready = pyqtSignal(object)
-
-
-def _startup_splash_stage_text(snapshot) -> str:
-    extra = getattr(snapshot, "extra", {}) or {}
-    readiness_state = str(extra.get("readiness_state") or getattr(snapshot, "state", "") or "").strip().lower()
-    note = str(extra.get("readiness_note") or "").strip().lower()
-
-    if readiness_state == "disconnected":
-        return "Connecting to robot runtime"
-    if readiness_state == "starting":
-        return "Starting robot runtime"
-    if readiness_state == "drive_not_ready":
-        if "ethercat" in note or "sdo" in note:
-            return "Checking EtherCAT communication"
-        if "disabled" in note or "not motion-ready" in note or "not operation" in note:
-            return "Enabling robot drives"
-        return "Preparing robot drives"
-    if readiness_state == "tool_mismatch":
-        return "Configuring robot tool"
-    if readiness_state in {"error", "fault"}:
-        return "Checking robot status"
-    return "Waiting for robot readiness"
-
-
-class _StartupSplashCoordinator:
-    def __init__(self, shell: AppShell, splash: StartupSplashView, messaging_service) -> None:
-        self._shell = shell
-        self._splash = splash
-        self._messaging = messaging_service
-        self._bridge = _StartupSplashBridge()
-        self._bridge.state_ready.connect(self._apply_robot_state)
-        self._active = False
-        self._finished = False
-
-    def start(self) -> None:
-        if self._active:
-            return
-        self._messaging.subscribe(RobotTopics.STATE, self._on_robot_state)
-        self._active = True
-
-    def stop(self) -> None:
-        if not self._active:
-            return
-        try:
-            self._messaging.unsubscribe(RobotTopics.STATE, self._on_robot_state)
-        finally:
-            self._active = False
-
-    def _on_robot_state(self, snapshot) -> None:
-        self._bridge.state_ready.emit(snapshot)
-
-    def _apply_robot_state(self, snapshot) -> None:
-        if self._finished:
-            return
-        extra = getattr(snapshot, "extra", {}) or {}
-        readiness_state = str(extra.get("readiness_state") or getattr(snapshot, "state", "") or "").strip().lower()
-        robot_ready = extra.get("robot_ready") is True or readiness_state == "idle"
-
-        if robot_ready:
-            self._finished = True
-            self._splash.set_active_step(3)
-            self._splash.mark_complete()
-            QTimer.singleShot(350, self._hide_splash)
-            return
-
-        self._splash.set_active_step(3)
-        self._splash.set_message(_startup_splash_stage_text(snapshot))
-
-    def _hide_splash(self) -> None:
-        self.stop()
-        if self._shell.stacked_widget.currentWidget() is self._splash:
-            self._shell.stacked_widget.setCurrentWidget(self._shell.folders_page)
-        self._shell.stacked_widget.removeWidget(self._splash)
-        self._splash.deleteLater()
-
 def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
     startup_config = load_startup_config()
+    dev_skip_login = startup_config.ui.dev_skip_login
+    skip_splash = startup_config.ui.skip_splash
+    fullscreen = startup_config.ui.fullscreen
+    window_width = startup_config.ui.window_width
+    window_height = startup_config.ui.window_height
+    show_account_button_when_dev_skip_login = (
+        startup_config.ui.show_account_button_when_dev_skip_login
+    )
     bootstrap_provider = load_bootstrap_provider(startup_config)
 
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
@@ -206,19 +135,22 @@ def main() -> None:
         languages=localization_svc.available_languages(),
     )
     shell.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
-    # shell.setFixedSize(1280, 1024)
-    shell.showFullScreen()
+    if not fullscreen:
+        shell.setFixedSize(window_width, window_height)
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
 
-    if not _SKIP_SPLASH:
+    startup_splash_coordinator = None
+    notification_presenter = None
+    robot_connection_notifier = None
+    if not skip_splash:
         startup_splash = StartupSplashView(shell)
         startup_splash.set_active_step(2)
         startup_splash.set_message("Loading applications")
         shell.stacked_widget.addWidget(startup_splash)
         shell.stacked_widget.setCurrentWidget(startup_splash)
-        startup_splash_coordinator = _StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
+        startup_splash_coordinator = StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
         notification_presenter = UserNotificationPresenter(
             shell,
             ctx.messaging_service,
@@ -230,37 +162,33 @@ def main() -> None:
         shell._startup_splash = startup_splash
         shell._startup_splash_coordinator = startup_splash_coordinator
 
+    session = UserSession()
+    active_login_view = {"widget": None}
+
     # Wire broker → shell navigation
     # Used to automatically open the workpiece editor when the "open in editor"
     # button is clicked in the library
     def _on_navigate(payload: dict) -> None:
+        if not session.is_authenticated():
+            _LOGGER.warning("Ignoring shell navigation while logged out")
+            return
         app_name = payload.get("app") if isinstance(payload, dict) else str(payload)
         if app_name:
             shell.show_app(app_name)
 
     ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
-    shell.show()
+    if fullscreen:
+        shell.showFullScreen()
+    else:
+        shell.show()
 
-    if not _SKIP_SPLASH:
+    if not skip_splash:
         notification_presenter.start()
         robot_connection_notifier.start()
 
-    # 4c — Login gate
-    if _DEV_SKIP_LOGIN:
-        from src.applications.login.stub_login_application_service import _StubUser
-        from src.engine.auth.user_session import UserSession
-        session = UserSession()
-        session.login(_StubUser())
-        _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
-        _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
-        if not _SKIP_SPLASH:
-            startup_splash.set_active_step(3)
-            startup_splash.set_message("Waiting for robot readiness")
-            shell.stacked_widget.setCurrentWidget(startup_splash)
-            startup_splash_coordinator.start()
-
-    else:
+    def _show_login_view() -> None:
         login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
+        active_login_view["widget"] = login_view
         shell.stacked_widget.addWidget(login_view)
         shell.stacked_widget.setCurrentWidget(login_view)   # show login in shell content area
 
@@ -268,21 +196,51 @@ def main() -> None:
         shell.header.language_selector.languageChanged.connect(login_view.retranslateUi)
 
         def _on_login_accepted():
-            from src.engine.auth.user_session import UserSession
             shell.header.language_selector.languageChanged.disconnect(login_view.retranslateUi)
-            session = UserSession()
-            session.login(login_view.result_user())
+            session_controller.login(login_view.result_user())
+            active_login_view["widget"] = None
             shell.stacked_widget.removeWidget(login_view)
             login_view.deleteLater()
             _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
 
-            if not _SKIP_SPLASH:
+            if not skip_splash:
                 startup_splash.set_active_step(3)
                 startup_splash.set_message("Waiting for robot readiness")
                 shell.stacked_widget.setCurrentWidget(startup_splash)
                 startup_splash_coordinator.start()
 
         login_view.accepted.connect(_on_login_accepted)
+
+    def _can_close_running_apps() -> bool:
+        for app_widget in shell.running_widgets.values():
+            if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
+                return False
+        return True
+
+    session_controller = ShellSessionController(
+        shell=shell,
+        session=session,
+        dev_skip_login=dev_skip_login,
+        show_account_button_when_dev_skip_login=show_account_button_when_dev_skip_login,
+        show_login_view=_show_login_view,
+        can_close_running_apps=_can_close_running_apps,
+    )
+    session_controller.start()
+
+    # 4c — Login gate
+    if dev_skip_login:
+        from src.applications.login.stub_login_application_service import _StubUser
+        session_controller.login(_StubUser())
+        _LOGGER.warning("ui.dev_skip_login is enabled — bypassing authentication")
+        _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
+        if not skip_splash:
+            startup_splash.set_active_step(3)
+            startup_splash.set_message("Waiting for robot readiness")
+            shell.stacked_widget.setCurrentWidget(startup_splash)
+            startup_splash_coordinator.start()
+
+    else:
+        _show_login_view()
 
     # # 7 — broker debug window (temporary — remove when no longer needed)
     # _debug_window = _build_broker_debug_window(ctx.messaging_service)
@@ -291,10 +249,12 @@ def main() -> None:
     try:
         sys.exit(qt_app.exec())
     finally:
-        if not _SKIP_SPLASH:
+        if startup_splash_coordinator is not None:
             startup_splash_coordinator.stop()
-        robot_connection_notifier.stop()
-        notification_presenter.stop()
+        if robot_connection_notifier is not None:
+            robot_connection_notifier.stop()
+        if notification_presenter is not None:
+            notification_presenter.stop()
         robot_app.stop()
         ros_backend.stop()
 def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 )
 
 from pl_gui.shell.ui.icon_loader import load_icon
+from pl_gui.shell.ui.styles import BORDER, PRIMARY, PRIMARY_DARK
 
 
 
@@ -92,10 +93,27 @@ class Header(QFrame):
         self.power_on: bool = False  # Power state
 
         self.userAccountButton: QPushButton = QPushButton()
-        self.userAccountButton.setIcon(load_icon('fa5s.user'))
-        self.userAccountButton.setStyleSheet("border: none; background: transparent; padding: 0px;")
+        self.userAccountButton.setIcon(load_icon('fa5s.user', color=PRIMARY))
+        self.userAccountButton.setFixedSize(48, 48)
+        self.userAccountButton.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.userAccountButton.setStyleSheet(f"""
+            QPushButton {{
+                background: white;
+                border: 1px solid {BORDER};
+                border-radius: 8px;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                border: 2px solid {PRIMARY};
+                background-color: rgba(122, 90, 248, 0.08);
+            }}
+            QPushButton:pressed {{
+                background-color: rgba(122, 90, 248, 0.14);
+                border: 2px solid {PRIMARY_DARK};
+            }}
+        """)
         self.userAccountButton.clicked.connect(self.on_user_account_clicked)
-        self.userAccountButton.setVisible(False)
+        self.userAccountButton.setVisible(True)
         self.header_layout.addWidget(self.userAccountButton)
 
         # FPS Label
@@ -157,7 +175,7 @@ class Header(QFrame):
         self.menu_button.setIconSize(QSize(icon_size, icon_size))
         self.power_toggle_button.setIconSize(QSize(icon_size, icon_size))
         self.dashboardButton.setIconSize(QSize(icon_size, icon_size))
-        self.userAccountButton.setIconSize(QSize(icon_size, icon_size))
+        self.userAccountButton.setIconSize(QSize(26, 26))
         super().resizeEvent(event)
 
 

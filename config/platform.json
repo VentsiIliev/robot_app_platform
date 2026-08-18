@@ -8,5 +8,13 @@
   "ros_backend": {
     "auto_launch": false,
     "auto_stop": false
+  },
+  "ui": {
+    "dev_skip_login": true,
+    "skip_splash": false,
+    "show_account_button_when_dev_skip_login": false,
+    "fullscreen": false,
+    "window_width": 1280,
+    "window_height": 1024
   }
 }
