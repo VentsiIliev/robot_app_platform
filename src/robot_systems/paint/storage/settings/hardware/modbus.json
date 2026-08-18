@@ -4,7 +4,7 @@
   "bytesize": 8,
   "stopbits": 1,
   "parity": "E",
-  "timeout": 0.001,
+  "timeout": 0.5,
   "slave_address": 1,
   "max_retries": 30
 }

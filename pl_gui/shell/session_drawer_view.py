@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, Qt, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from pl_gui.shell.ui.styles import PRIMARY, PRIMARY_DARK
@@ -18,18 +18,23 @@ class SessionDrawerView(Drawer):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(360)
         self._labels: dict[str, QLabel] = {}
+        self._field_labels: dict[str, QLabel] = {}
+        self._logged_out = True
 
         self._setup_ui()
+        self.retranslateUi()
         self.hide()
 
     def set_logged_out(self) -> None:
-        self._labels["name"].setText("Not logged in")
+        self._logged_out = True
+        self._labels["name"].setText(self._t("Not logged in"))
         self._labels["user_id"].setText("-")
         self._labels["role"].setText("-")
         self._labels["email"].setText("-")
 
     def set_session_info(self, *, name: str, user_id: str, role: str, email: str) -> None:
-        self._labels["name"].setText(name or "Not logged in")
+        self._logged_out = False
+        self._labels["name"].setText(name or self._t("Not logged in"))
         self._labels["user_id"].setText(user_id or "-")
         self._labels["role"].setText(role or "-")
         self._labels["email"].setText(email or "-")
@@ -89,9 +94,9 @@ class SessionDrawerView(Drawer):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        title = QLabel("Session")
-        title.setObjectName("DrawerTitle")
-        layout.addWidget(title)
+        self._title = QLabel()
+        self._title.setObjectName("DrawerTitle")
+        layout.addWidget(self._title)
 
         for key, label_text in (
             ("name", "Name"),
@@ -99,18 +104,19 @@ class SessionDrawerView(Drawer):
             ("role", "Role"),
             ("email", "Email"),
         ):
-            label = QLabel(label_text)
+            label = QLabel()
             label.setObjectName("DrawerLabel")
             value = QLabel("-")
             value.setObjectName("DrawerValue")
             value.setWordWrap(True)
             layout.addWidget(label)
             layout.addWidget(value)
+            self._field_labels[key] = label
             self._labels[key] = value
 
         layout.addStretch(1)
 
-        self._logout_btn = QPushButton("Logout")
+        self._logout_btn = QPushButton()
         self._logout_btn.setObjectName("LogoutButton")
         self._logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._logout_btn.clicked.connect(self._on_logout_clicked)
@@ -118,3 +124,23 @@ class SessionDrawerView(Drawer):
 
     def _on_logout_clicked(self, checked: bool = False) -> None:
         self.logout_requested.emit()
+
+    def retranslateUi(self) -> None:
+        self._title.setText(self._t("Session"))
+        self._field_labels["name"].setText(self._t("Name"))
+        self._field_labels["user_id"].setText(self._t("User ID"))
+        self._field_labels["role"].setText(self._t("Role"))
+        self._field_labels["email"].setText(self._t("Email"))
+        self._logout_btn.setText(self._t("Logout"))
+        if self._logged_out:
+            self._labels["name"].setText(self._t("Not logged in"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("SessionDrawer", text)
+        return translated or text

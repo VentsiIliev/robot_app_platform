@@ -353,11 +353,16 @@ Verification:
 The platform has an engine-level localization service under `src/engine/localization/`. Use it consistently.
 
 Rules:
-- Catalogs live per robot system under `src/robot_systems/<system>/storage/translations/`
-- Widget-owned static text should use `self.tr("...")`
+- Catalogs are layered: shared strings live in `src/applications/localization/<lang>.json`; robot-system-specific overrides live in `src/robot_systems/<system>/storage/translations/<lang>.json`
+- Use a stable Qt context for every string. For widgets, the context is usually the widget class name when using `self.tr(...)`; for controllers/presenters use `QCoreApplication.translate("ContextName", source_text)`
+- Widget-owned static text should be set in `retranslateUi()`, not only in `__init__`
 - Long-lived widgets must handle `QEvent.LanguageChange` and call `retranslateUi()`
 - Controller-owned or config-driven text must be retranslated explicitly
 - If text is not created by `self.tr(...)`, do an explicit initial `_retranslate()` after view initialization
+- Keep source strings stable once added to catalogs. Changing the English source string is a catalog-key migration and must update every language file
+- Translate UI chrome only; do not translate user data, IDs, file names, raw hardware state values, logs, or enum values unless there is an explicit display mapping
+- Add every new source string to English and Bulgarian catalogs for this repo's current supported languages
+- Verify both initial render and runtime language switching; these are separate paths
 
 Example for a widget:
 ```python
@@ -389,6 +394,9 @@ Notes:
 - `QCoreApplication.translate(...)` can return `""` for a miss with the custom translator, so always use `translated or source_text`
 - Initial render and runtime language change are different paths; verify both
 - If a controller/view exposes a language-change signal, connect it to the controller `_retranslate()` for dynamic text
+- For shell/shared UI such as login, splash, session drawer, notifications, or shared applications, put catalog entries in `src/applications/localization/`
+- For robot-system-specific applications or terminology overrides, put entries in the active system catalog under `src/robot_systems/<system>/storage/translations/`
+- Before finishing localization work, compile touched Python files and validate JSON catalogs. For key coverage, parse `_t("...")` calls or otherwise check that every source string exists in `en.json` and `bg.json`
 
 ### Process state machine (`BaseProcess`)
 - Override `_on_start`, `_on_pause`, `_on_resume`, `_on_stop`

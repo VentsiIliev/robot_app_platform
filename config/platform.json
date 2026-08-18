@@ -10,7 +10,7 @@
     "auto_stop": false
   },
   "ui": {
-    "dev_skip_login": true,
+    "dev_skip_login": false,
     "skip_splash": false,
     "show_account_button_when_dev_skip_login": false,
     "fullscreen": false,

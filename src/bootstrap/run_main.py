@@ -150,6 +150,7 @@ def main() -> None:
         startup_splash.set_message("Loading applications")
         shell.stacked_widget.addWidget(startup_splash)
         shell.stacked_widget.setCurrentWidget(startup_splash)
+        shell.header.language_selector.languageChanged.connect(startup_splash.retranslateUi)
         startup_splash_coordinator = StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
         notification_presenter = UserNotificationPresenter(
             shell,

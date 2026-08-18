@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
@@ -28,7 +28,8 @@ class StartupSplashView(QWidget):
         super().__init__(parent)
         self._active_step = 0
         self._dot_count = 0
-        self._message_base = self.tr("Preparing runtime services")
+        self._message_source = "Preparing runtime services"
+        self._message_base = self._t(self._message_source)
         self._logo_path = Path(logo_path) if logo_path is not None else self._DEFAULT_LOGO_PATH
 
         self._logo = QLabel()
@@ -45,7 +46,8 @@ class StartupSplashView(QWidget):
         return None
 
     def set_message(self, text: str) -> None:
-        self._message_base = str(text or "")
+        self._message_source = str(text or "")
+        self._message_base = self._t(self._message_source)
         self._dot_count = 0
         self._message.setText(self._message_base)
 
@@ -57,7 +59,7 @@ class StartupSplashView(QWidget):
         self._active_step = max(0, int(index))
 
     def mark_complete(self) -> None:
-        self.set_message(self.tr("Ready"))
+        self.set_message("Ready")
         self.set_busy(False)
 
     def set_error(self, message: str) -> None:
@@ -93,7 +95,7 @@ class StartupSplashView(QWidget):
                 )
             )
         else:
-            self._logo.setText(self.tr("Robot App Platform"))
+            self._logo.setText(self._t("Robot App Platform"))
             self._logo.setStyleSheet(
                 f"color: {PRIMARY}; font-size: 28pt; font-weight: bold; background: transparent;"
             )
@@ -115,3 +117,19 @@ class StartupSplashView(QWidget):
     def _tick(self) -> None:
         self._dot_count = (self._dot_count + 1) % 4
         self._message.setText(self._message_base + ("." * self._dot_count))
+
+    def retranslateUi(self) -> None:
+        if self._logo.pixmap() is None:
+            self._logo.setText(self._t("Robot App Platform"))
+        self._message_base = self._t(self._message_source)
+        self._message.setText(self._message_base + ("." * self._dot_count))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("StartupSplashView", text)
+        return translated or text

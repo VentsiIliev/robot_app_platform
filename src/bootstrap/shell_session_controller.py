@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from PyQt6.QtCore import QCoreApplication
 from PyQt6.QtWidgets import QWidget
 
 from pl_gui.shell.AppShell import AppShell
@@ -37,7 +38,8 @@ class ShellSessionController:
     def start(self) -> None:
         self._shell.header.user_account_clicked.connect(self._toggle_drawer)
         self._drawer.logout_requested.connect(self._on_logout_requested)
-        self._shell.header.userAccountButton.setToolTip("Session")
+        self._shell.header.language_selector.languageChanged.connect(self.retranslateUi)
+        self.retranslateUi()
         self.refresh_account_button()
 
     def login(self, user: IAuthenticatedUser) -> None:
@@ -106,3 +108,12 @@ class ShellSessionController:
         ]
         name = " ".join(part for part in parts if part)
         return name or f"User {getattr(user, 'user_id', '-')}"
+
+    def retranslateUi(self, *_) -> None:
+        self._shell.header.userAccountButton.setToolTip(self._t("Session"))
+        self._drawer.retranslateUi()
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("SessionDrawer", text)
+        return translated or text

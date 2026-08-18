@@ -233,6 +233,219 @@ Bootstrap now does this:
 
 ## Step By Step
 
+### Localize an existing application or shell widget
+
+Use this workflow when the user asks to localize a screen, drawer, dialog, presenter, or shell component.
+
+1. Find the runtime path first.
+
+Do not patch a legacy widget just because it has similar text. Trace the active factory/wiring path:
+
+```bash
+rg -n "LoginFactory|SessionDrawerView|MyApplicationFactory|ApplicationSpec|build_.*application" src pl_gui
+```
+
+For application screens, confirm:
+- the active `ApplicationSpec.factory(...)`
+- the `WidgetApplication` / factory class
+- the view class that is actually constructed
+- whether the controller owns any display text
+
+For shell widgets, confirm where the widget is constructed and whether parent code sets labels/tooltips.
+
+2. Classify every visible string by ownership.
+
+Use these categories:
+
+| Text type | Owner | Pattern |
+|-----------|-------|---------|
+| Labels, buttons, tabs, placeholders, static tooltips inside a view | View/widget | `retranslateUi()` + `self.tr(...)` or a local `_t(...)` |
+| Text derived from controller state, config, schemas, button definitions, process states | Controller/presenter | `_retranslate()` + `QCoreApplication.translate(...)` |
+| Shared shell text: splash, login, session drawer, notifications, shell folders | Shared catalog | `src/applications/localization/<lang>.json` |
+| Robot-system terminology or system-specific app text | Robot-system catalog | `src/robot_systems/<system>/storage/translations/<lang>.json` |
+| User data, IDs, emails, file paths, raw logs, hardware codes | Not translated | Display unchanged |
+
+3. Choose a stable context.
+
+Use one context per UI surface or logical owner:
+
+```python
+QCoreApplication.translate("Login", "Invalid credentials. Please try again.")
+QCoreApplication.translate("SessionDrawer", "Logout")
+QCoreApplication.translate("PaintDashboard", "Start")
+```
+
+Good context names are stable and specific:
+- `Login`
+- `StartupSplashView`
+- `SessionDrawer`
+- `UserManagement`
+- `PaintDashboard`
+
+Avoid generic contexts such as `Common`, `View`, or `Dialog` unless the codebase already uses them for that exact purpose.
+
+4. Move widget text into `retranslateUi()`.
+
+If the widget owns the text, store widgets as attributes and assign text from `retranslateUi()`:
+
+```python
+from PyQt6.QtCore import QEvent
+
+class MyView(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._title = QLabel()
+        self._save_btn = QPushButton()
+        self._build_ui()
+        self.retranslateUi()
+
+    def retranslateUi(self) -> None:
+        self._title.setText(self.tr("Settings"))
+        self._save_btn.setText(self.tr("Save"))
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+```
+
+For `IApplicationView`/`AppWidget`-based views, check the base class first. If it already handles `LanguageChange`, implement `retranslateUi()` and avoid duplicate event plumbing unless the local class is not using that base path.
+
+5. Preserve source strings for runtime retranslation.
+
+If a view receives source text from startup code, controller code, or a process callback, store the untranslated source string and translate only at display time. This allows switching languages while the widget is visible.
+
+```python
+class StartupSplashView(QWidget):
+    def set_message(self, text: str) -> None:
+        self._message_source = str(text or "")
+        self._message.setText(self._t(self._message_source))
+
+    def retranslateUi(self) -> None:
+        self._message.setText(self._t(self._message_source))
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("StartupSplashView", text)
+        return translated or text
+```
+
+Do not store only the translated text when the message may need to change language later.
+
+6. Retranslate controller-owned text explicitly.
+
+Controller-owned/config-driven text needs both an initial pass and a language-change pass:
+
+```python
+from PyQt6.QtCore import QCoreApplication
+
+class MyController:
+    def __init__(self, model, view):
+        self._model = model
+        self._view = view
+        self._view.language_changed.connect(self._retranslate)
+
+    def load(self) -> None:
+        self._initialize_view()
+        self._retranslate()
+
+    def _retranslate(self) -> None:
+        self._view.set_action_text("reset", self._t("Reset Errors"))
+        self._view.set_status_label(self._t("Ready"))
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("MyContext", text)
+        return translated or text
+```
+
+If the view does not expose `language_changed`, connect the shell language selector only from bootstrap/shell orchestration code, or add a standard `changeEvent()`/`retranslateUi()` path to the widget.
+
+7. Localize message boxes and modal text at the call site.
+
+Modal dialogs are often created on demand, so translate title and body immediately before showing them:
+
+```python
+QMessageBox.warning(
+    self,
+    self._t("Warning"),
+    self._t("The robot will move to the login position.\nPlease ensure the area is clear before proceeding."),
+)
+```
+
+8. Add catalog entries.
+
+Shared catalog example:
+
+```json
+{
+  "__meta__": {
+    "display_name": "English"
+  },
+  "SessionDrawer": {
+    "Session": "Session",
+    "Logout": "Logout"
+  }
+}
+```
+
+Bulgarian catalog:
+
+```json
+{
+  "__meta__": {
+    "display_name": "Български"
+  },
+  "SessionDrawer": {
+    "Session": "Сесия",
+    "Logout": "Изход"
+  }
+}
+```
+
+Rules:
+- add every source string to `en.json`
+- add every source string to `bg.json`
+- keep source keys exactly identical to the code, including punctuation, newlines, and spaces
+- use `ensure_ascii=False` compatible UTF-8 JSON; Bulgarian text should stay readable
+- do not remove existing robot-system overrides unless the user asked for catalog cleanup
+
+9. Verify coverage and behavior.
+
+Minimum checks:
+
+```bash
+python3 -m py_compile path/to/touched_view.py path/to/touched_controller.py
+python3 -c "import json; json.load(open('src/applications/localization/en.json', encoding='utf-8')); json.load(open('src/applications/localization/bg.json', encoding='utf-8')); print('json ok')"
+```
+
+Smoke test a context:
+
+```bash
+python3 -c "import sys; from PyQt6.QtCore import QCoreApplication; from src.engine.localization.localization_service import LocalizationService; app=QCoreApplication(sys.argv); svc=LocalizationService(['src/applications/localization'], state_file='/tmp/localization_smoke.json'); svc.set_language('bg'); print(svc.translate('SessionDrawer', 'Logout'))"
+```
+
+For `_t("...")` helper calls, run a key-coverage check:
+
+```bash
+python3 -c "import ast,json,pathlib; files=[pathlib.Path('path/to/view.py'), pathlib.Path('path/to/controller.py')]; keys=set();
+for path in files:
+    tree=ast.parse(path.read_text(encoding='utf-8'))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == '_t' and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            keys.add(node.args[0].value)
+for catalog_path in ['src/applications/localization/en.json','src/applications/localization/bg.json']:
+    data=json.loads(pathlib.Path(catalog_path).read_text(encoding='utf-8'))
+    print(catalog_path, sorted(keys-set(data.get('MyContext', {}))))"
+```
+
+Manual/runtime checks:
+- start in English and inspect initial render
+- switch to Bulgarian while the screen is open
+- switch back to English while the screen is open
+- verify tabs, placeholders, tooltips, message boxes, status labels, and errors
+- verify user/session data remains unchanged
+
 ### Add a new language
 
 1. Create a new file in a catalog root:
