@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
 from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
 from src.applications.base.dashboard_process_state_mixin import DashboardProcessStateMixin
@@ -54,6 +54,7 @@ class PaintDashboardController(
         self._view.pause_requested.connect(self._on_pause)
         self._view.reset_requested.connect(self._on_reset)
         self._view.action_requested.connect(self._on_action)
+        self._view.language_changed.connect(self._retranslate)
 
     def load(self) -> None:
         self._active = True
@@ -62,6 +63,7 @@ class PaintDashboardController(
         self._subscribe_dashboard_robot_state()
         self._subscribe_dashboard_live_view_state()
         self._view.apply_dashboard_state(self._model.load())
+        self._retranslate()
         if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
             self._status_timer.start()
         self._view.destroyed.connect(self.stop)
@@ -172,7 +174,7 @@ class PaintDashboardController(
         if action_id != "debug_contour_transform":
             return
         self._view.set_action_enabled("debug_contour_transform", False)
-        self._view.set_notes(["Capturing latest contour and building pixel-to-mm debug plot..."])
+        self._view.set_notes([self._t("Capturing latest contour and building pixel-to-mm debug plot...")])
         self._run_background(
             self._model.capture_latest_contour_transform_debug,
             self._on_contour_transform_debug_finished,
@@ -201,15 +203,31 @@ class PaintDashboardController(
         self._view.apply_dashboard_state(self._model.load())
         if getattr(result, "success", False) and getattr(result, "image_path", None):
             self._view.show_debug_plot(
-                "Latest Contour Pixel-to-MM Transform",
+                self._t("Latest Contour Pixel-to-MM Transform"),
                 result.image_path,
                 result.message,
             )
         else:
             self._view.show_warning(
-                "Latest Contour Pixel-to-MM Transform",
-                getattr(result, "message", "Failed to create contour transform plot."),
+                self._t("Latest Contour Pixel-to-MM Transform"),
+                getattr(result, "message", self._t("Failed to create contour transform plot.")),
             )
+
+    def _retranslate(self) -> None:
+        if not self._view_ok():
+            return
+        for action in getattr(self._view, "action_button_configs", []):
+            self._view.set_action_button_text(action.action_id, self._t(action.label))
+        try:
+            state = self._model.load()
+        except Exception:
+            return
+        self._view.set_pause_label(self._t(state.pause_label))
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("PaintDashboard", text)
+        return translated or text
 
     def _view_ok(self) -> bool:
         if not self._active:

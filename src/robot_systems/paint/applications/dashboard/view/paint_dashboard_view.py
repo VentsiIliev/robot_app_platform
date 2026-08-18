@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
@@ -94,9 +94,15 @@ class PaintDashboardView(IApplicationView):
         self._messages = deque(maxlen=_MAX_MESSAGE_ROWS)
         self._message_rows: list[QLabel] = []
         self._message_empty_label: QLabel | None = None
+        self._message_title_label: QLabel | None = None
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
+        self._last_state = None
         super().__init__("PaintDashboard", parent)
+
+    @property
+    def action_button_configs(self) -> list:
+        return list(self._action_buttons)
 
     @staticmethod
     def _index_cards_by_id(cards: list) -> dict[int, object]:
@@ -180,9 +186,9 @@ class PaintDashboardView(IApplicationView):
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(4)
 
-        title = QLabel("Messages")
-        title.setStyleSheet(_MESSAGE_TITLE_STYLE)
-        layout.addWidget(title)
+        self._message_title_label = QLabel()
+        self._message_title_label.setStyleSheet(_MESSAGE_TITLE_STYLE)
+        layout.addWidget(self._message_title_label)
 
         self._message_scroll = QScrollArea()
         self._message_scroll.setWidgetResizable(True)
@@ -198,7 +204,7 @@ class PaintDashboardView(IApplicationView):
         rows_layout.setContentsMargins(0, 0, 0, 0)
         rows_layout.setSpacing(0)
 
-        self._message_empty_label = QLabel("No process messages")
+        self._message_empty_label = QLabel()
         self._message_empty_label.setStyleSheet(_MESSAGE_EMPTY_STYLE)
         rows_layout.addWidget(self._message_empty_label)
 
@@ -214,6 +220,7 @@ class PaintDashboardView(IApplicationView):
         rows_layout.addStretch(1)
         self._message_scroll.setWidget(rows_container)
         layout.addWidget(self._message_scroll, 1)
+        self.retranslateUi()
         return panel
 
     @staticmethod
@@ -282,10 +289,13 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.set_pause_enabled(enabled)
 
     def set_pause_label(self, text: str) -> None:
-        self._dashboard.set_pause_text(text)
+        self._dashboard.set_pause_text(self._translate_text(text))
 
     def set_action_enabled(self, action_id: str, enabled: bool) -> None:
         self._dashboard.set_action_button_enabled(action_id, enabled)
+
+    def set_action_button_text(self, action_id: str, text: str) -> None:
+        self._dashboard.set_action_button_text(action_id, self._translate_text(text))
 
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
@@ -338,10 +348,11 @@ class PaintDashboardView(IApplicationView):
         bar = self._message_scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
 
-    @staticmethod
-    def _format_message(item: dict) -> str:
+    def _format_message(self, item: dict) -> str:
         title = str(item.get("title") or "").strip()
         message = str(item.get("message") or "").strip()
+        title = self._translate_text(title)
+        message = self._translate_text(message)
         if title and message:
             body = f"{title}: {message}"
         else:
@@ -351,16 +362,16 @@ class PaintDashboardView(IApplicationView):
     def show_debug_plot(self, title: str, image_path: str, message: str = "") -> None:
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
-            self.show_warning(title, f"Could not load plot image:\n{image_path}")
+            self.show_warning(title, self._translate_template("Could not load plot image:\n{image_path}", image_path=image_path))
             return
 
         dialog = QDialog(self)
-        dialog.setWindowTitle(title)
+        dialog.setWindowTitle(self._translate_text(title))
         dialog.resize(1200, 800)
 
         layout = QVBoxLayout(dialog)
         if message:
-            message_label = QLabel(message)
+            message_label = QLabel(self._translate_text(message))
             message_label.setWordWrap(True)
             layout.addWidget(message_label)
 
@@ -376,6 +387,7 @@ class PaintDashboardView(IApplicationView):
         dialog.exec()
 
     def apply_dashboard_state(self, state) -> None:
+        self._last_state = state
         signature = self._state_signature(state)
         if self._last_state_signature == signature:
             return
@@ -424,11 +436,57 @@ class PaintDashboardView(IApplicationView):
             if not callable(set_content):
                 continue
             set_content(
-                getattr(card_state, "title", ""),
-                getattr(card_state, "value", ""),
-                getattr(card_state, "note", ""),
+                self._translate_text(getattr(card_state, "title", "")),
+                self._translate_text(getattr(card_state, "value", "")),
+                self._translate_text(getattr(card_state, "note", "")),
             )
             self._last_card_states[card_id] = card_state
+
+    def retranslateUi(self) -> None:
+        if hasattr(self, "_dashboard"):
+            self._dashboard.retranslateUi()
+            for action in self._action_buttons:
+                self.set_action_button_text(action.action_id, action.label)
+        if self._message_title_label is not None:
+            self._message_title_label.setText(self._translate_text("Messages"))
+        if self._message_empty_label is not None:
+            self._message_empty_label.setText(self._translate_text("No process messages"))
+        self._last_card_states.clear()
+        self._last_state_signature = None
+        if self._last_state is not None:
+            self.apply_dashboard_state(self._last_state)
+        self._render_messages()
+
+    @staticmethod
+    def _translate_text(text: str) -> str:
+        source = str(text or "")
+        translated = QCoreApplication.translate("PaintDashboard", source)
+        if translated:
+            return translated
+        dynamic = PaintDashboardView._translate_dynamic_text(source)
+        return dynamic or source
+
+    @staticmethod
+    def _translate_dynamic_text(text: str) -> str:
+        templates = (
+            ("Runtime startup phase: ", "Runtime startup phase: {phase}", "phase"),
+            ("Drive state: ", "Drive state: {state}", "state"),
+            ("Could not read vision state: ", "Could not read vision state: {error}", "error"),
+            ("Failed to transform latest contour: ", "Failed to transform latest contour: {error}", "error"),
+            ("Failed to create contour transform plot: ", "Failed to create contour transform plot: {error}", "error"),
+            ("Saved contour transform debug plot to ", "Saved contour transform debug plot to {image_path}", "image_path"),
+        )
+        for prefix, template, field in templates:
+            if text.startswith(prefix):
+                value = text[len(prefix):]
+                translated = QCoreApplication.translate("PaintDashboard", template) or template
+                return translated.format(**{field: value})
+        return ""
+
+    @staticmethod
+    def _translate_template(template: str, **values) -> str:
+        translated = QCoreApplication.translate("PaintDashboard", template) or template
+        return translated.format(**values)
 
     def clean_up(self) -> None:
         pass

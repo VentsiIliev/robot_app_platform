@@ -10,8 +10,8 @@
     "auto_stop": false
   },
   "ui": {
-    "dev_skip_login": false,
-    "skip_splash": false,
+    "dev_skip_login": true,
+    "skip_splash": true,
     "show_account_button_when_dev_skip_login": false,
     "fullscreen": false,
     "window_width": 1280,
