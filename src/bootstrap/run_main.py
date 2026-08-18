@@ -46,6 +46,7 @@ _LOGGER = logging.getLogger("main")
 
 
 _DEV_SKIP_LOGIN = True
+_SKIP_SPLASH= True
 
 
 class _FramelessHeaderDrag(QObject):
@@ -210,22 +211,24 @@ def main() -> None:
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
-    startup_splash = StartupSplashView(shell)
-    startup_splash.set_active_step(2)
-    startup_splash.set_message("Loading applications")
-    shell.stacked_widget.addWidget(startup_splash)
-    shell.stacked_widget.setCurrentWidget(startup_splash)
-    startup_splash_coordinator = _StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
-    notification_presenter = UserNotificationPresenter(
-        shell,
-        ctx.messaging_service,
-        translate=lambda key: localization_svc.translate("Notifications", key),
-    )
-    robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service, suppress_until_ready=True)
-    shell._notification_presenter = notification_presenter
-    shell._robot_connection_notifier = robot_connection_notifier
-    shell._startup_splash = startup_splash
-    shell._startup_splash_coordinator = startup_splash_coordinator
+
+    if not _SKIP_SPLASH:
+        startup_splash = StartupSplashView(shell)
+        startup_splash.set_active_step(2)
+        startup_splash.set_message("Loading applications")
+        shell.stacked_widget.addWidget(startup_splash)
+        shell.stacked_widget.setCurrentWidget(startup_splash)
+        startup_splash_coordinator = _StartupSplashCoordinator(shell, startup_splash, ctx.messaging_service)
+        notification_presenter = UserNotificationPresenter(
+            shell,
+            ctx.messaging_service,
+            translate=lambda key: localization_svc.translate("Notifications", key),
+        )
+        robot_connection_notifier = RobotConnectionNotifier(ctx.messaging_service, suppress_until_ready=True)
+        shell._notification_presenter = notification_presenter
+        shell._robot_connection_notifier = robot_connection_notifier
+        shell._startup_splash = startup_splash
+        shell._startup_splash_coordinator = startup_splash_coordinator
 
     # Wire broker → shell navigation
     # Used to automatically open the workpiece editor when the "open in editor"
@@ -237,8 +240,10 @@ def main() -> None:
 
     ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
     shell.show()
-    notification_presenter.start()
-    robot_connection_notifier.start()
+
+    if not _SKIP_SPLASH:
+        notification_presenter.start()
+        robot_connection_notifier.start()
 
     # 4c — Login gate
     if _DEV_SKIP_LOGIN:
@@ -248,10 +253,12 @@ def main() -> None:
         session.login(_StubUser())
         _LOGGER.warning("DEV_SKIP_LOGIN is enabled — bypassing authentication")
         _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
-        startup_splash.set_active_step(3)
-        startup_splash.set_message("Waiting for robot readiness")
-        shell.stacked_widget.setCurrentWidget(startup_splash)
-        startup_splash_coordinator.start()
+        if not _SKIP_SPLASH:
+            startup_splash.set_active_step(3)
+            startup_splash.set_message("Waiting for robot readiness")
+            shell.stacked_widget.setCurrentWidget(startup_splash)
+            startup_splash_coordinator.start()
+
     else:
         login_view = bootstrap_provider.build_login_view(robot_app, ctx.messaging_service)   # parent=None; stacked_widget becomes parent
         shell.stacked_widget.addWidget(login_view)
@@ -268,10 +275,12 @@ def main() -> None:
             shell.stacked_widget.removeWidget(login_view)
             login_view.deleteLater()
             _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider)
-            startup_splash.set_active_step(3)
-            startup_splash.set_message("Waiting for robot readiness")
-            shell.stacked_widget.setCurrentWidget(startup_splash)
-            startup_splash_coordinator.start()
+
+            if not _SKIP_SPLASH:
+                startup_splash.set_active_step(3)
+                startup_splash.set_message("Waiting for robot readiness")
+                shell.stacked_widget.setCurrentWidget(startup_splash)
+                startup_splash_coordinator.start()
 
         login_view.accepted.connect(_on_login_accepted)
 
@@ -282,7 +291,8 @@ def main() -> None:
     try:
         sys.exit(qt_app.exec())
     finally:
-        startup_splash_coordinator.stop()
+        if not _SKIP_SPLASH:
+            startup_splash_coordinator.stop()
         robot_connection_notifier.stop()
         notification_presenter.stop()
         robot_app.stop()
