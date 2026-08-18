@@ -24,7 +24,7 @@ It does not depend on any specific robot system.
 ## Architecture
 
 ```text
-shared catalog root + robot-system metadata.translations_root
+shared catalog root + app-local catalog roots + robot-system metadata.translations_root
         ↓
 bootstrap/main.py
         ↓
@@ -46,15 +46,22 @@ Qt widgets
 
 ### 1. Catalogs are layered
 
-Translations are now loaded from two roots:
+Translations are loaded from three layers:
 
-- shared application catalogs under `src/applications/localization/`
+- shell/shared catalogs under `src/applications/localization/`
+- app-local shared catalogs under `src/applications/<app>/localization/`
 - robot-system-specific catalogs under `src/robot_systems/<system>/storage/translations/`
 
 Example:
 
 ```text
 src/applications/localization/
+  en.json
+  bg.json
+src/applications/login/localization/
+  en.json
+  bg.json
+src/applications/user_management/localization/
   en.json
   bg.json
 src/robot_systems/glue/storage/translations/
@@ -65,7 +72,17 @@ src/robot_systems/glue/storage/translations/
 Bootstrap resolves the active robot-system directory from:
 - [SystemMetadata.translations_root](/home/ilv/Desktop/robot_app_platform/src/robot_systems/base_robot_system.py)
 
-Shared catalogs load first. Robot-system catalogs load second and can override shared wording when needed.
+Shared shell catalogs load first. App-local catalogs load next. Robot-system catalogs load last and can override shared wording when needed.
+
+This is the intended ownership model:
+
+| Catalog location | Owns | Examples |
+|------------------|------|----------|
+| `src/applications/localization/<lang>.json` | Shell/shared platform UI text that does not belong to one application | shell folders, startup splash, session drawer, shared notifications |
+| `src/applications/<app>/localization/<lang>.json` | Default translations for a shared application | login, user management, robot settings, modbus settings |
+| `src/robot_systems/<system>/storage/translations/<lang>.json` | Robot-system-specific screens and terminology overrides | glue dashboard text, paint process terms, system-specific wording for a shared app |
+
+Do not duplicate shared application translations into every robot system. Put the default wording beside the shared application, then override only the few strings a robot system wants to change.
 
 ### 2. Fallback language is merged, not chained
 
@@ -76,6 +93,30 @@ Why:
 - partial translations work
 - missing Bulgarian strings still show English instead of raw source text when English has an explicit catalog entry
 - shared application strings can be reused by `paint`, `glue`, and `welding` without duplicating the same entries per system
+- each shared application can carry its own default translations beside its code
+- robot systems can override any inherited shared string by defining the same context/source key in their own catalog
+
+Override example:
+
+```jsonc
+// src/applications/login/localization/bg.json
+{
+  "Login": {
+    "Login": "Вход"
+  }
+}
+```
+
+```jsonc
+// src/robot_systems/paint/storage/translations/bg.json
+{
+  "Login": {
+    "Login": "Операторски вход"
+  }
+}
+```
+
+With Paint active, the UI shows `Операторски вход`. Other robot systems continue to inherit the shared `Вход` unless they define their own override.
 
 ### 3. Language changes are also published on the broker
 
@@ -220,6 +261,7 @@ Bootstrap now does this:
 1. create `QApplication`
 2. build `LocalizationService` from:
    - `src/applications/localization`
+   - each discovered `src/applications/*/localization` directory
    - the active robot system's `translations_root`
 3. set default language (`en`)
    or the persisted language if one was previously selected
@@ -261,7 +303,8 @@ Use these categories:
 |-----------|-------|---------|
 | Labels, buttons, tabs, placeholders, static tooltips inside a view | View/widget | `retranslateUi()` + `self.tr(...)` or a local `_t(...)` |
 | Text derived from controller state, config, schemas, button definitions, process states | Controller/presenter | `_retranslate()` + `QCoreApplication.translate(...)` |
-| Shared shell text: splash, login, session drawer, notifications, shell folders | Shared catalog | `src/applications/localization/<lang>.json` |
+| Shared shell text: splash, session drawer, notifications, shell folders | Shared shell catalog | `src/applications/localization/<lang>.json` |
+| Shared application text: login, user management, reusable app screens | App-local catalog | `src/applications/<app>/localization/<lang>.json` |
 | Robot-system terminology or system-specific app text | Robot-system catalog | `src/robot_systems/<system>/storage/translations/<lang>.json` |
 | User data, IDs, emails, file paths, raw logs, hardware codes | Not translated | Display unchanged |
 
@@ -375,7 +418,12 @@ QMessageBox.warning(
 
 8. Add catalog entries.
 
-Shared catalog example:
+Choose the catalog by ownership:
+- shell/shared UI text goes in `src/applications/localization/<lang>.json`
+- shared application text goes in `src/applications/<app>/localization/<lang>.json`
+- robot-system-only text and overrides go in `src/robot_systems/<system>/storage/translations/<lang>.json`
+
+Shared shell catalog example:
 
 ```json
 {
@@ -409,6 +457,7 @@ Rules:
 - keep source keys exactly identical to the code, including punctuation, newlines, and spaces
 - use `ensure_ascii=False` compatible UTF-8 JSON; Bulgarian text should stay readable
 - do not remove existing robot-system overrides unless the user asked for catalog cleanup
+- when moving a context from the shared shell catalog to an app-local catalog, preserve the exact source keys so existing code continues to translate
 
 9. Verify coverage and behavior.
 
@@ -416,13 +465,13 @@ Minimum checks:
 
 ```bash
 python3 -m py_compile path/to/touched_view.py path/to/touched_controller.py
-python3 -c "import json; json.load(open('src/applications/localization/en.json', encoding='utf-8')); json.load(open('src/applications/localization/bg.json', encoding='utf-8')); print('json ok')"
+python3 -c "import json; paths=['src/applications/localization/en.json','src/applications/localization/bg.json','src/applications/login/localization/en.json','src/applications/login/localization/bg.json']; [json.load(open(p, encoding='utf-8')) for p in paths]; print('json ok')"
 ```
 
 Smoke test a context:
 
 ```bash
-python3 -c "import sys; from PyQt6.QtCore import QCoreApplication; from src.engine.localization.localization_service import LocalizationService; app=QCoreApplication(sys.argv); svc=LocalizationService(['src/applications/localization'], state_file='/tmp/localization_smoke.json'); svc.set_language('bg'); print(svc.translate('SessionDrawer', 'Logout'))"
+python3 -c "import sys; from PyQt6.QtCore import QCoreApplication; from src.engine.localization.localization_service import LocalizationService; app=QCoreApplication(sys.argv); svc=LocalizationService(['src/applications/localization','src/applications/login/localization'], state_file='/tmp/localization_smoke.json'); svc.set_language('bg'); print(svc.translate('Login', 'Login'))"
 ```
 
 For `_t("...")` helper calls, run a key-coverage check:
@@ -434,7 +483,7 @@ for path in files:
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == '_t' and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
             keys.add(node.args[0].value)
-for catalog_path in ['src/applications/localization/en.json','src/applications/localization/bg.json']:
+for catalog_path in ['src/applications/login/localization/en.json','src/applications/login/localization/bg.json']:
     data=json.loads(pathlib.Path(catalog_path).read_text(encoding='utf-8'))
     print(catalog_path, sorted(keys-set(data.get('MyContext', {}))))"
 ```
@@ -454,11 +503,19 @@ Manual/runtime checks:
 src/applications/localization/de.json
 ```
 
-or:
+for shell/shared UI, or:
+
+```text
+src/applications/<app>/localization/de.json
+```
+
+for a shared application, or:
 
 ```text
 src/robot_systems/<system>/storage/translations/de.json
 ```
+
+for robot-system-owned text or overrides.
 
 2. Add metadata:
 
@@ -484,6 +541,11 @@ Examples:
 
 3. Add the translated value to other language catalogs.
 
+Use the right catalog owner:
+- shell/shared UI: `src/applications/localization/`
+- shared app text: `src/applications/<app>/localization/`
+- robot-system-only text or override: `src/robot_systems/<system>/storage/translations/`
+
 4. In the code:
 - widgets: use `self.tr("My String")`
 - controllers/presenters: use `QCoreApplication.translate("MyContext", "My String")`
@@ -505,12 +567,19 @@ Examples:
 
 ### Wire a new application
 
-1. Make sure the robot system has `metadata.translations_root` pointing to its catalog directory.
+1. Create app-local catalogs for shared application defaults:
 
-2. In the view:
+```text
+src/applications/<app>/localization/en.json
+src/applications/<app>/localization/bg.json
+```
+
+2. Make sure the robot system has `metadata.translations_root` pointing to its catalog directory for system-specific overrides.
+
+3. In the view:
 - use `self.tr(...)` for static labels, button text, placeholders, tab labels, etc.
 
-3. If the view needs to update after language changes:
+4. If the view needs to update after language changes:
 - implement `changeEvent(...)` and call `retranslateUi()`
 - or use the existing `AppWidget.on_language_changed()` pattern already used in some views
 
@@ -527,11 +596,11 @@ def changeEvent(self, event) -> None:
     super().changeEvent(event)
 ```
 
-4. If the controller owns dynamic text:
+5. If the controller owns dynamic text:
 - re-read translations when the view emits its language-change signal
 - use `QCoreApplication.translate("Context", "...")`
 
-5. Add the new strings to the catalogs.
+6. Add default strings to the app-local catalogs. Add robot-system catalog entries only for system-specific wording or overrides.
 
 ---
 

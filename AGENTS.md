@@ -353,7 +353,7 @@ Verification:
 The platform has an engine-level localization service under `src/engine/localization/`. Use it consistently.
 
 Rules:
-- Catalogs are layered: shared strings live in `src/applications/localization/<lang>.json`; robot-system-specific overrides live in `src/robot_systems/<system>/storage/translations/<lang>.json`
+- Catalogs are layered: shell/shared strings live in `src/applications/localization/<lang>.json`; app-owned shared strings live beside the app in `src/applications/<app>/localization/<lang>.json`; robot-system-specific overrides live in `src/robot_systems/<system>/storage/translations/<lang>.json`
 - Use a stable Qt context for every string. For widgets, the context is usually the widget class name when using `self.tr(...)`; for controllers/presenters use `QCoreApplication.translate("ContextName", source_text)`
 - Widget-owned static text should be set in `retranslateUi()`, not only in `__init__`
 - Long-lived widgets must handle `QEvent.LanguageChange` and call `retranslateUi()`
@@ -394,7 +394,8 @@ Notes:
 - `QCoreApplication.translate(...)` can return `""` for a miss with the custom translator, so always use `translated or source_text`
 - Initial render and runtime language change are different paths; verify both
 - If a controller/view exposes a language-change signal, connect it to the controller `_retranslate()` for dynamic text
-- For shell/shared UI such as login, splash, session drawer, notifications, or shared applications, put catalog entries in `src/applications/localization/`
+- For shell/shared UI such as splash, session drawer, notifications, or shell folders, put catalog entries in `src/applications/localization/`
+- For shared applications such as login and user management, put catalog entries in the app-local `src/applications/<app>/localization/` directory
 - For robot-system-specific applications or terminology overrides, put entries in the active system catalog under `src/robot_systems/<system>/storage/translations/`
 - Before finishing localization work, compile touched Python files and validate JSON catalogs. For key coverage, parse `_t("...")` calls or otherwise check that every source string exists in `en.json` and `bg.json`
 

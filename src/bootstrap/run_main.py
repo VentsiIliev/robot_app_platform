@@ -283,10 +283,21 @@ def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
 def _build_localization_service(robot_app, messaging_service) -> LocalizationService:
     module_path = Path(sys.modules[robot_app.__class__.__module__].__file__).resolve().parent
     translations_dir = module_path / robot_app.metadata.translations_root
-    shared_translations_dir = Path(__file__).resolve().parent.parent / "applications" / "localization"
+    applications_dir = Path(__file__).resolve().parent.parent / "applications"
+    shared_translations_dir = applications_dir / "localization"
+    application_translation_dirs = sorted(
+        path
+        for path in applications_dir.glob("*/localization")
+        if path.is_dir()
+    )
     state_file = module_path / robot_app.metadata.settings_root / "localization.json"
+    translation_dirs = [
+        shared_translations_dir,
+        *application_translation_dirs,
+        translations_dir,
+    ]
     return LocalizationService(
-        [str(shared_translations_dir), str(translations_dir)],
+        [str(path) for path in translation_dirs],
         messaging_service=messaging_service,
         state_file=str(state_file),
     )

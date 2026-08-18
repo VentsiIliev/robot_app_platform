@@ -153,10 +153,10 @@ Because `PermissionsController._refresh()` repopulates the table, the role-value
 
 Field labels and role values must exist as keys in the active catalog set. Shared keys can now live in:
 
-- `src/applications/localization/*.json`
+- `src/applications/user_management/localization/*.json`
 - optionally overridden by `src/robot_systems/<system>/storage/translations/*.json`
 
-`UserManagement` is currently shared through `src/applications/localization/en.json` and `bg.json`. The glue system may still override or extend those entries in its own catalogs.
+`UserManagement` carries its default shared translations in `src/applications/user_management/localization/en.json` and `bg.json`. Robot systems may still override or extend those entries in their own catalogs.
 
 Current shared keys include:
 
