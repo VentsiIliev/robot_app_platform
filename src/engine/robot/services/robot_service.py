@@ -94,6 +94,25 @@ class RobotService(IRobotService):
             user=user,
         )
 
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: Direction,
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> int:
+        starter = getattr(self._motion, "start_joint_jog", None)
+        if not callable(starter):
+            return -1
+        return starter(
+            joint,
+            direction,
+            step,
+            velocity=velocity,
+            acceleration=acceleration,
+        )
+
     def stop_servo_jog(self) -> int:
         stopper = getattr(self._motion, "stop_servo_jog", None)
         if not callable(stopper):

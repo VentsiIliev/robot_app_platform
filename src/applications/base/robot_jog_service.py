@@ -136,6 +136,55 @@ class RobotJogService:
                 self._lock.release()
             pass
 
+    def joint_jog(
+        self,
+        command: str,
+        joint: str | None = None,
+        direction: str | None = None,
+        step: float | None = None,
+    ) -> None:
+        if self._robot is None:
+            return
+        command_name = str(command).strip().upper()
+        if command_name != "JOG_JOINT":
+            command, joint, direction, step = "JOG_JOINT", command, joint, direction
+            command_name = "JOG_JOINT"
+        if joint is None or direction is None or step is None:
+            return
+        try:
+            step_value = float(step)
+        except (TypeError, ValueError):
+            return
+        try:
+            if not self._lock.acquire(blocking=False):
+                return
+            robot_direction = Direction.get_by_string(direction)
+            starter = getattr(self._robot, "start_joint_jog", None)
+            if not callable(starter):
+                _logger.warning("[JOINT_JOG] unsupported by robot service")
+                self._lock.release()
+                return
+            result = starter(
+                joint,
+                robot_direction,
+                step_value,
+                velocity=self._current_move_velocity(),
+                acceleration=self._current_move_acceleration(),
+            )
+            _logger.info(
+                "[JOINT_JOG] request command=%s joint=%s direction=%s step=%s result=%s",
+                command_name,
+                joint,
+                direction,
+                step_value,
+                result,
+            )
+            self._lock.release()
+        except Exception:
+            if self._lock.locked():
+                self._lock.release()
+            pass
+
     def _try_start_servo_jog(
         self,
         robot_axis: RobotAxis,

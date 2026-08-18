@@ -89,6 +89,16 @@ class IMotionService(ABC):
     ) -> int:
         return -1
 
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: axis.Direction,
+        step: float,
+        velocity: float | None = None,
+        acceleration: float | None = None,
+    ) -> int:
+        return -1
+
     def stop_servo_jog(self) -> int:
         return -1
 

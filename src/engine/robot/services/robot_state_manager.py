@@ -1,12 +1,40 @@
 import logging
 import threading
 import time
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 from ..interfaces.i_robot import IRobot
 from ..interfaces.i_robot_state_provider import IRobotStateProvider
 from ..interfaces.i_state_publisher import IStatePublisher
 from .robot_state_snapshot import RobotStateSnapshot
+
+
+def _coerce_joint_snapshot(value: Any) -> dict | None:
+    if isinstance(value, dict):
+        names = list(value.get("names") or [])
+        radians = value.get("radians")
+        degrees = value.get("degrees")
+    else:
+        names = []
+        radians = None
+        degrees = value
+
+    if isinstance(degrees, str) or not isinstance(degrees, (list, tuple)) or len(degrees) < 6:
+        return None
+    try:
+        clean_degrees = [float(v) for v in degrees[:6]]
+    except (TypeError, ValueError):
+        return None
+
+    clean = {"degrees": clean_degrees}
+    if names:
+        clean["names"] = [str(name) for name in names[:6]]
+    if isinstance(radians, (list, tuple)) and len(radians) >= 6:
+        try:
+            clean["radians"] = [float(v) for v in radians[:6]]
+        except (TypeError, ValueError):
+            pass
+    return clean
 
 
 class RobotStateManager(IRobotStateProvider):
@@ -37,6 +65,7 @@ class RobotStateManager(IRobotStateProvider):
             "readiness_state": "idle",
             "readiness_note": "Robot service healthy",
         }
+        self._snapshot_extra: dict = {}
         self._drive_status: dict = {}
         self._last_drive_status_at = 0.0
         self._connection_was_disconnected = False
@@ -112,6 +141,7 @@ class RobotStateManager(IRobotStateProvider):
                     self._logger.debug("Failed to collect robot connection details", exc_info=True)
             extra = dict(extra) if isinstance(extra, dict) else {}
             extra.update(self._readiness_extra)
+            extra.update(self._snapshot_extra)
             return RobotStateSnapshot(
                 state=self._state,
                 position=list(self._position),
@@ -171,8 +201,13 @@ class RobotStateManager(IRobotStateProvider):
 
         snapshot_getter = getattr(self._robot, "get_state_snapshot", None)
         snapshot = snapshot_getter() if callable(snapshot_getter) else None
+        snapshot_extra = {}
         if snapshot:
             pos = snapshot.get("position")
+            joints = snapshot.get("joints")
+            joints = _coerce_joint_snapshot(joints)
+            if joints is not None:
+                snapshot_extra["joints"] = joints
             vel = snapshot.get("velocity_magnitude")
             if vel is None:
                 velocity_components = snapshot.get("velocity")
@@ -204,6 +239,7 @@ class RobotStateManager(IRobotStateProvider):
             self._velocity = vel if vel is not None else self._velocity
             self._acceleration = acc if acc is not None else self._acceleration
             self._state = connection_state or "idle"
+            self._snapshot_extra = snapshot_extra
 
         if self._publisher:
             self._publisher.publish(self._build_snapshot())
@@ -224,6 +260,7 @@ class RobotStateManager(IRobotStateProvider):
             self._active_tool_synced = None
             self._connection_was_disconnected = state == "disconnected"
             self._readiness_extra = self._readiness_for_unavailable_state(state)
+            self._snapshot_extra = {}
         if self._publisher:
             self._publisher.publish(self._build_snapshot())
 

@@ -59,6 +59,17 @@ class IRobot(ABC):
         """Optional continuous ServoJog. Intended for UI press/release jog."""
         return -1
 
+    def start_joint_jog(
+        self,
+        joint: str,
+        direction: Direction,
+        step: float,
+        vel: float,
+        acc: float,
+    ) -> int:
+        """Optional incremental joint jog. Step is in degrees."""
+        return -1
+
     def stop_servo_jog(self) -> int:
         """Optional stop for continuous ServoJog."""
         return -1

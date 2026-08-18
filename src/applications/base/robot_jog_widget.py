@@ -276,12 +276,18 @@ class RobotJogWidget(QFrame):
             self._pos_labels[name].setText(f"{pos[idx]:.3f}")
 
     def set_joint_position(self, joints: list) -> None:
-        if not joints or len(joints) < len(_JOINT_NAMES):
+        if isinstance(joints, str) or not isinstance(joints, (list, tuple)) or len(joints) < len(_JOINT_NAMES):
+            for lbl in self._joint_pos_labels.values():
+                lbl.setText("—")
+            return
+        try:
+            values = [float(value) for value in joints[:len(_JOINT_NAMES)]]
+        except (TypeError, ValueError):
             for lbl in self._joint_pos_labels.values():
                 lbl.setText("—")
             return
         for i, name in enumerate(_JOINT_NAMES):
-            self._joint_pos_labels[name].setText(f"{joints[i]:.3f}")
+            self._joint_pos_labels[name].setText(f"{values[i]:.3f}")
 
     def set_frame_options(self, names: Sequence[object], default: Optional[str] = None) -> None:
         """Populate the frame selector combo box."""
@@ -715,7 +721,8 @@ class RobotJogWidget(QFrame):
 
     def _on_jog_release(self, key: str) -> None:
         self._timers[key].stop()
-        self.jog_stopped.emit(key)
+        if self._current_jog_command() == "SERVO_JOG":
+            self.jog_stopped.emit(key)
 
     def _perform_jog(self, key: str) -> None:
         axis, direction = self._axis_map[key]

@@ -73,6 +73,15 @@ class Ros2Robot(IRobot):
         logger.debug("start_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def start_joint_jog(self, joint: str, direction: Direction, step: float, vel: float, acc: float) -> int:
+        logger.debug("start_joint_jog → joint=%s direction=%s step=%s vel=%s acc=%s", joint, direction, step, vel, acc)
+        starter = getattr(self._client, "start_joint_jog", None)
+        if not callable(starter):
+            return -1
+        ret = starter(joint, direction, step, vel, acc) or 0
+        logger.debug("start_joint_jog ← raw_ret=%s success=%s", ret, ret == 0)
+        return ret
+
     def stop_servo_jog(self) -> int:
         logger.debug("stop_servo_jog →")
         stopper = getattr(self._client, "stop_servo_jog", None)

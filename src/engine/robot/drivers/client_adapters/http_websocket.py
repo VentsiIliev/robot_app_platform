@@ -228,6 +228,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             "unavailable_fields": list(data.get("unavailable_fields") or []),
             "position": data.get("position"),
             "flange_position": data.get("flange_position"),
+            "joints": data.get("joints"),
             "velocity": data.get("velocity"),
             "acceleration": data.get("acceleration"),
             "timestamp": data.get("timestamp"),
@@ -917,6 +918,38 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         except Exception as e:
             self._mark_unavailable(e)
             logger.error("start_jog error: %s", e, exc_info=True)
+            return -1
+
+    def start_joint_jog(self, joint, direction, step, vel, acc):
+        if not self._drive_enabled and self.enable() != 0:
+            return -1
+        preflight_error = self._motion_preflight_error("start_joint_jog")
+        if preflight_error is not None:
+            return preflight_error
+        dir_val = direction.value if hasattr(direction, 'value') else direction
+        payload = {
+            "joint": str(joint),
+            "direction": dir_val,
+            "step": float(step),
+            "vel": float(vel),
+            "acc": float(acc),
+            "blocking": True,
+        }
+        logger.debug("start_joint_jog → POST /jog/joint payload=%s", payload)
+        try:
+            request_started = self._mark_execution_request_sent("start_joint_jog")
+            response = requests.post(f"{self.server_url}/jog/joint", json=payload, timeout=10)
+            raw = response.json()
+            result_code = self._parse_motion_response("start_joint_jog", response, raw, blocking=True)
+            self._mark_execution_request_response("start_joint_jog", raw, time.monotonic() - request_started)
+            logger.debug(
+                "start_joint_jog ← http=%s raw=%s result_code=%s",
+                response.status_code, raw, result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("start_joint_jog error: %s", e, exc_info=True)
             return -1
 
     def start_servo_jog(

@@ -352,6 +352,26 @@ class MotionService(IMotionService):
             self._logger.exception("start_servo_jog failed")
             return -1
 
+    def start_joint_jog(
+            self,
+            joint: str,
+            direction: Direction,
+            step: float,
+            velocity: float | None = None,
+            acceleration: float | None = None,
+    ) -> int:
+        self._last_jog_target = []
+        jog_velocity = self._jog_vel if velocity is None else float(velocity)
+        jog_acceleration = self._jog_acc if acceleration is None else float(acceleration)
+        try:
+            starter = getattr(self._robot, "start_joint_jog", None)
+            if not callable(starter):
+                return -1
+            return int(starter(joint, direction, step, jog_velocity, jog_acceleration))
+        except Exception:
+            self._logger.exception("start_joint_jog failed")
+            return -1
+
     def stop_servo_jog(self) -> int:
         self._last_jog_target = []
         try:
