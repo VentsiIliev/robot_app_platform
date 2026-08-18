@@ -25,12 +25,13 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 5.0)
 
         robot.set_active_tool.assert_called_once_with(1)
-        robot.move_ptp.assert_called_once_with(
+        robot.move_linear.assert_called_once_with(
             [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
             velocity=20.0,
             acceleration=10.0,
+            blendR=0.0,
             wait_to_reach=True,
         )
 
@@ -51,16 +52,17 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("X", "PLUS", 5.0)
 
-        robot.move_ptp.assert_called_once_with(
+        robot.move_linear.assert_called_once_with(
             [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
             velocity=35.0,
             acceleration=25.0,
+            blendR=0.0,
             wait_to_reach=True,
         )
 
-    def test_rotation_jog_passes_motion_settings_to_robot(self):
+    def test_rotation_jog_uses_linear_pose_move(self):
         robot = MagicMock()
         robot._robot = None
         robot.set_active_tool.return_value = True
@@ -77,8 +79,16 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("RZ", "PLUS", 5.0)
 
-        robot.start_jog.assert_called_once()
-        self.assertEqual(robot.start_jog.call_args.args[3:], (35.0, 25.0))
+        robot.start_jog.assert_not_called()
+        robot.move_linear.assert_called_once_with(
+            [10.0, 20.0, 30.0, 0.0, 0.0, 5.0],
+            tool=1,
+            user=2,
+            velocity=35.0,
+            acceleration=25.0,
+            blendR=0.0,
+            wait_to_reach=True,
+        )
 
     def test_builder_uses_ten_when_saved_jog_velocity_or_acceleration_is_zero(self):
         robot = MagicMock()
@@ -98,12 +108,13 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 5.0)
 
         settings_service.get.assert_called_with(CommonSettingsID.MOVEMENT_GROUPS)
-        robot.move_ptp.assert_called_once_with(
+        robot.move_linear.assert_called_once_with(
             [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
             velocity=10.0,
             acceleration=10.0,
+            blendR=0.0,
             wait_to_reach=True,
         )
 
@@ -130,7 +141,7 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 1.0)
 
         robot.get_current_position.assert_not_called()
-        robot.move_ptp.assert_not_called()
+        robot.move_linear.assert_not_called()
 
     def test_jog_applies_delta_in_current_tool_orientation(self):
         robot = MagicMock()
@@ -141,7 +152,7 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("X", "PLUS", 5.0)
 
-        target = robot.move_ptp.call_args.args[0]
+        target = robot.move_linear.call_args.args[0]
         self.assertAlmostEqual(target[0], 10.0, places=6)
         self.assertAlmostEqual(target[1], 25.0, places=6)
         self.assertAlmostEqual(target[2], 30.0, places=6)
@@ -169,8 +180,8 @@ class TestRobotJogService(unittest.TestCase):
         self.assertEqual(service.get_available_frames(), [])
         self.assertEqual(service.get_default_frame(), "")
         resolver.resolve.assert_not_called()
-        robot.move_ptp.assert_called_once()
-        self.assertEqual(robot.move_ptp.call_args.args[0], [1.0, 2.0, 1.0, 0.0, 0.0, 0.0])
+        robot.move_linear.assert_called_once()
+        self.assertEqual(robot.move_linear.call_args.args[0], [1.0, 2.0, 1.0, 0.0, 0.0, 0.0])
 
     def test_jog_does_not_use_native_incremental_jog_when_driver_prefers_it(self):
         robot = MagicMock()
@@ -183,8 +194,8 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("Y", "PLUS", 4.0)
 
         robot.start_jog.assert_not_called()
-        robot.move_ptp.assert_called_once()
-        self.assertEqual(robot.move_ptp.call_args.args[0], [0.0, 4.0, 0.0, 0.0, 0.0, 0.0])
+        robot.move_linear.assert_called_once()
+        self.assertEqual(robot.move_linear.call_args.args[0], [0.0, 4.0, 0.0, 0.0, 0.0, 0.0])
 
 
 if __name__ == "__main__":

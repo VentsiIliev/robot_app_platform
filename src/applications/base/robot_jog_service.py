@@ -121,25 +121,15 @@ class RobotJogService:
                 target,
             )
             if target is not None:
-                velocity = self._current_move_velocity()
-                acceleration = self._current_move_acceleration()
-                if robot_axis.value > 3:
-                    self._robot.start_jog(
-                        robot_axis,
-                        robot_direction,
-                        step_value,
-                        velocity,
-                        acceleration,
-                    )
-                else:
-                    self._robot.move_ptp(
-                        target,
-                        tool=tool,
-                        user=user,
-                        velocity=velocity,
-                        acceleration=acceleration,
-                        wait_to_reach=True,
-                    )
+                self._robot.move_linear(
+                    target,
+                    tool=tool,
+                    user=user,
+                    velocity=self._current_move_velocity(),
+                    acceleration=self._current_move_acceleration(),
+                    blendR=0.0,
+                    wait_to_reach=True,
+                )
             self._lock.release()
         except Exception:
             if self._lock.locked():
