@@ -1,7 +1,7 @@
 from typing import Callable, List
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (QStackedWidget, QFrame, QWidget)
-from PyQt6.QtWidgets import (QVBoxLayout, QApplication)
+from PyQt6.QtWidgets import (QVBoxLayout, QApplication, QSizePolicy)
 
 from pl_gui.shell.app_descriptor import AppDescriptor
 from pl_gui.shell.ui.Header import Header
@@ -102,6 +102,7 @@ class AppShell(QWidget):
         else:
             app_widget = self.create_app(app_name)
             self.running_widgets[app_name] = app_widget
+        self._prepare_hosted_widget(app_widget)
 
         print("MAIN_WINDOW LEN RUNNING WIDGETS:", len(self.running_widgets))
 
@@ -119,6 +120,24 @@ class AppShell(QWidget):
         self.stacked_widget.addWidget(app_widget)
         self.stacked_widget.setCurrentIndex(1)
         return app_widget
+
+    @staticmethod
+    def _prepare_hosted_widget(app_widget: QWidget) -> None:
+        app_widget.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Ignored,
+        )
+
+        screen = QApplication.primaryScreen()
+        if not screen:
+            return
+
+        available_size = screen.availableGeometry().size()
+        min_size = app_widget.minimumSize()
+        min_width = 0 if min_size.width() >= available_size.width() else min_size.width()
+        min_height = 0 if min_size.height() >= available_size.height() else min_size.height()
+        if min_width != min_size.width() or min_height != min_size.height():
+            app_widget.setMinimumSize(min_width, min_height)
 
 
     def close_all_apps(self):
@@ -174,8 +193,9 @@ class AppShell(QWidget):
 
     def setup_ui(self):
         self.setWindowTitle("PL Project")
-        # Set a reasonable window size instead of maximized
-        self.resize(1280, 1024)  # Reasonable default size
+        # Keep the shell inside the usable desktop area; the header lives inside
+        # this window, so the hosted app must use the remaining layout space.
+        self.resize(self._default_window_size())
         # Center the window on screen
         self.center_on_screen()
         self.setStyleSheet("""
@@ -214,6 +234,11 @@ class AppShell(QWidget):
 
         # Create the stacked widget
         self.stacked_widget = QStackedWidget()
+        self.stacked_widget.setMinimumSize(0, 0)
+        self.stacked_widget.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Ignored,
+        )
         main_layout.addWidget(self.stacked_widget)
 
         # Create and add the folders page (index 0)
@@ -278,7 +303,7 @@ class AppShell(QWidget):
         """Center the window on the screen"""
         screen = QApplication.primaryScreen()
         if screen:
-            screen_geometry = screen.geometry()
+            screen_geometry = screen.availableGeometry()
             window_geometry = self.frameGeometry()
             center_point = screen_geometry.center()
             window_geometry.moveCenter(center_point)
@@ -291,15 +316,19 @@ class AppShell(QWidget):
 
     def sizeHint(self):
         """Provide a reasonable size hint for the window"""
-        # Calculate size based on folder grid (3x2) plus margins
-        folder_size = 350  # Approximate folder width
-        spacing = 30
-        margins = 80  # Total margins (40 on each side)
+        return self._default_window_size()
 
-        width = (folder_size * 3) + (spacing * 2) + margins
-        height = (folder_size * 2) + spacing + margins
+    @staticmethod
+    def _default_window_size() -> QSize:
+        screen = QApplication.primaryScreen()
+        if not screen:
+            return QSize(1280, 900)
 
-        return self.size() if hasattr(self, '_initialized') else self.size()
+        available = screen.availableGeometry().size()
+        return QSize(
+            min(1280, available.width()),
+            min(1024, available.height()),
+        )
 
     def keyPressEvent(self, event):
         """Handle key press events"""
