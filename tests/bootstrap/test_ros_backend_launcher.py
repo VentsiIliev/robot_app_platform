@@ -170,11 +170,55 @@ class TestRosBackendLauncher(unittest.TestCase):
 
     def test_builder_uses_config_defaults(self) -> None:
         launcher = build_ros_backend_launcher_from_env(
-            RosBackendConfig(auto_launch=False, auto_stop=False)
+            RosBackendConfig(
+                auto_launch=False,
+                auto_stop=False,
+                launch_script="~/custom_ws/launch.sh",
+                stop_script="~/custom_ws/stop.sh",
+                startup_delay_s=2.5,
+                log_file="~/backend.log",
+                status_urls=("http://localhost:6000/health",),
+                status_timeout_s=0.7,
+            )
         )
 
         self.assertFalse(launcher._auto_launch)
         self.assertFalse(launcher._auto_stop)
+        self.assertEqual(launcher._launch_script, Path.home() / "custom_ws" / "launch.sh")
+        self.assertEqual(launcher._stop_script, Path.home() / "custom_ws" / "stop.sh")
+        self.assertEqual(launcher._startup_delay_s, 2.5)
+        self.assertEqual(launcher._log_file, Path.home() / "backend.log")
+        self.assertEqual(launcher._status_urls, ("http://localhost:6000/health",))
+        self.assertEqual(launcher._status_timeout_s, 0.7)
+
+    def test_builder_defaults_to_current_users_ros_workspace(self) -> None:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("src.bootstrap.ros_backend_launcher.Path.home", return_value=Path("/home/plp")),
+        ):
+            launcher = build_ros_backend_launcher_from_env(RosBackendConfig())
+
+        self.assertEqual(launcher._launch_script, Path("/home/plp/ros2_ws/launch_zeroerr.sh"))
+        self.assertEqual(launcher._stop_script, Path("/home/plp/ros2_ws/stop_zeroerr.sh"))
+
+    def test_env_overrides_config_paths(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "ROBOT_APP_BACKEND_LAUNCH_SCRIPT": "/tmp/env_launch.sh",
+                "ROBOT_APP_BACKEND_STOP_SCRIPT": "/tmp/env_stop.sh",
+            },
+            clear=False,
+        ):
+            launcher = build_ros_backend_launcher_from_env(
+                RosBackendConfig(
+                    launch_script="/tmp/config_launch.sh",
+                    stop_script="/tmp/config_stop.sh",
+                )
+            )
+
+        self.assertEqual(launcher._launch_script, Path("/tmp/env_launch.sh"))
+        self.assertEqual(launcher._stop_script, Path("/tmp/env_stop.sh"))
 
 
 if __name__ == "__main__":

@@ -20,6 +20,12 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "platform
 class RosBackendConfig:
     auto_launch: bool = True
     auto_stop: bool = True
+    launch_script: str | None = None
+    stop_script: str | None = None
+    startup_delay_s: float | None = None
+    log_file: str | None = None
+    status_urls: tuple[str, ...] | None = None
+    status_timeout_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,12 @@ def _load_ros_backend_config(raw_config: object) -> RosBackendConfig:
     return RosBackendConfig(
         auto_launch=_read_bool(raw_config, "auto_launch", default=True),
         auto_stop=_read_bool(raw_config, "auto_stop", default=True),
+        launch_script=_read_optional_str(raw_config, "launch_script"),
+        stop_script=_read_optional_str(raw_config, "stop_script"),
+        startup_delay_s=_read_optional_float(raw_config, "startup_delay_s", minimum=0.0),
+        log_file=_read_optional_str(raw_config, "log_file"),
+        status_urls=_read_optional_str_tuple(raw_config, "status_urls"),
+        status_timeout_s=_read_optional_float(raw_config, "status_timeout_s", minimum=0.0),
     )
 
 
@@ -121,6 +133,49 @@ def _read_positive_int(payload: dict, field_name: str, *, default: int, prefix: 
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise RuntimeError(f"'{prefix}.{field_name}' must be a positive integer")
     return value
+
+
+def _read_optional_str(payload: dict, field_name: str, *, prefix: str = "ros_backend") -> str | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"'{prefix}.{field_name}' must be a non-empty string")
+    return value
+
+
+def _read_optional_float(
+    payload: dict,
+    field_name: str,
+    *,
+    prefix: str = "ros_backend",
+    minimum: float,
+) -> float | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < minimum:
+        raise RuntimeError(f"'{prefix}.{field_name}' must be a number >= {minimum:g}")
+    return float(value)
+
+
+def _read_optional_str_tuple(
+    payload: dict,
+    field_name: str,
+    *,
+    prefix: str = "ros_backend",
+) -> tuple[str, ...] | None:
+    value = payload.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, list) or not value:
+        raise RuntimeError(f"'{prefix}.{field_name}' must be a non-empty list of strings")
+    items = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise RuntimeError(f"'{prefix}.{field_name}' must be a non-empty list of strings")
+        items.append(item.strip())
+    return tuple(items)
 
 
 def _validate_system_name(value: object, field_name: str) -> str:

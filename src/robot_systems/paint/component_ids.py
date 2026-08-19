@@ -8,6 +8,7 @@ class ServiceID(str, Enum):
 
 class SettingsID(str, Enum):
     PAINT_PROCESS_CONFIG = "paint_process_config"
+    DRYER_CONFIG = "dryer_config"
 
 
 class ProcessID(str, Enum):

@@ -68,6 +68,12 @@ class TestStartupConfig(unittest.TestCase):
                         "ros_backend": {
                             "auto_launch": False,
                             "auto_stop": False,
+                            "launch_script": "~/ros2_ws/launch_zeroerr.sh",
+                            "stop_script": "~/ros2_ws/stop_zeroerr.sh",
+                            "startup_delay_s": 0,
+                            "log_file": "/tmp/backend.log",
+                            "status_urls": ["http://localhost:5000/health"],
+                            "status_timeout_s": 0.5,
                         },
                     }
                 ),
@@ -76,7 +82,19 @@ class TestStartupConfig(unittest.TestCase):
 
             config = load_startup_config(config_path)
 
-        self.assertEqual(config.ros_backend, RosBackendConfig(auto_launch=False, auto_stop=False))
+        self.assertEqual(
+            config.ros_backend,
+            RosBackendConfig(
+                auto_launch=False,
+                auto_stop=False,
+                launch_script="~/ros2_ws/launch_zeroerr.sh",
+                stop_script="~/ros2_ws/stop_zeroerr.sh",
+                startup_delay_s=0.0,
+                log_file="/tmp/backend.log",
+                status_urls=("http://localhost:5000/health",),
+                status_timeout_s=0.5,
+            ),
+        )
 
     def test_loads_ui_startup_config(self):
         with TemporaryDirectory() as tmp_dir:
@@ -162,6 +180,23 @@ class TestStartupConfig(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(RuntimeError, "ros_backend.auto_launch"):
+                load_startup_config(config_path)
+
+    def test_rejects_invalid_ros_backend_path(self):
+        with TemporaryDirectory() as tmp_dir:
+            config_path = Path(tmp_dir) / "platform.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "robot_system": "paint",
+                        "supported_robot_systems": ["paint"],
+                        "ros_backend": {"launch_script": ""},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "ros_backend.launch_script"):
                 load_startup_config(config_path)
 
     def test_rejects_dotted_module_path(self):

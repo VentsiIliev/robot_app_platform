@@ -7,7 +7,9 @@
   ],
   "ros_backend": {
     "auto_launch": false,
-    "auto_stop": false
+    "auto_stop": false,
+    "launch_script": "~/ros2_ws/launch_zeroerr.sh",
+    "stop_script": "~/ros2_ws/stop_zeroerr.sh"
   },
   "ui": {
     "dev_skip_login": true,

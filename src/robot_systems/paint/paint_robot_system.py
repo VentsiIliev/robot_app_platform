@@ -2,6 +2,7 @@ import logging
 import os
 
 from src.engine.common_service_ids import CommonServiceID
+from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.common_settings_ids import CommonSettingsID
@@ -203,6 +204,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_ethercat_diagnostics_application),
             ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
                             factory=application_wiring._build_modbus_settings_application),
+            ApplicationSpec(name="DryerSettings", folder_id=2, icon="fa5s.wind",
+                            factory=application_wiring._build_dryer_settings_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
                             factory=application_wiring._build_work_area_settings_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
@@ -259,6 +262,7 @@ class PaintRobotSystem(BaseRobotSystem):
                      "height_measuring/calibration_data.json"),
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
+        SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "hardware/dryer.json"),
         SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
     ]
 

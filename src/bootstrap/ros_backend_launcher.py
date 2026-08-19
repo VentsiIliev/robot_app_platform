@@ -18,8 +18,8 @@ _LOGGER = logging.getLogger(__name__)
 class RosBackendLauncher:
     def __init__(
         self,
-        launch_script: str | os.PathLike = "/home/ilv/ros2_ws/launch_zeroerr.sh",
-        stop_script: str | os.PathLike = "/home/ilv/ros2_ws/stop_zeroerr.sh",
+        launch_script: str | os.PathLike | None = None,
+        stop_script: str | os.PathLike | None = None,
         startup_delay_s: float = 1.0,
         log_file: str | os.PathLike = "/tmp/robot_app_zeroerr_backend.log",
         status_urls: tuple[str, ...] = (
@@ -30,10 +30,10 @@ class RosBackendLauncher:
         auto_launch: bool = True,
         auto_stop: bool = True,
     ) -> None:
-        self._launch_script = Path(launch_script)
-        self._stop_script = Path(stop_script)
+        self._launch_script = _expand_path(launch_script or _default_launch_script())
+        self._stop_script = _expand_path(stop_script or _default_stop_script())
         self._startup_delay_s = float(startup_delay_s)
-        self._log_file = Path(log_file)
+        self._log_file = _expand_path(log_file)
         self._status_urls = status_urls
         self._status_timeout_s = float(status_timeout_s)
         self._auto_launch = bool(auto_launch)
@@ -139,15 +139,61 @@ class RosBackendLauncher:
 def build_ros_backend_launcher_from_env(config: RosBackendConfig | None = None) -> RosBackendLauncher:
     config = config or RosBackendConfig()
     return RosBackendLauncher(
-        launch_script=os.environ.get("ROBOT_APP_BACKEND_LAUNCH_SCRIPT", "/home/ilv/ros2_ws/launch_zeroerr.sh"),
-        stop_script=os.environ.get("ROBOT_APP_BACKEND_STOP_SCRIPT", "/home/ilv/ros2_ws/stop_zeroerr.sh"),
-        startup_delay_s=float(os.environ.get("ROBOT_APP_BACKEND_STARTUP_DELAY_S", "1.0")),
-        log_file=os.environ.get("ROBOT_APP_BACKEND_LOG_FILE", "/tmp/robot_app_zeroerr_backend.log"),
-        status_urls=_status_urls_from_env(),
-        status_timeout_s=float(os.environ.get("ROBOT_APP_BACKEND_STATUS_TIMEOUT_S", "0.3")),
+        launch_script=_value_from_env_or_config(
+            "ROBOT_APP_BACKEND_LAUNCH_SCRIPT",
+            config.launch_script,
+            str(_default_launch_script()),
+        ),
+        stop_script=_value_from_env_or_config(
+            "ROBOT_APP_BACKEND_STOP_SCRIPT",
+            config.stop_script,
+            str(_default_stop_script()),
+        ),
+        startup_delay_s=float(
+            _value_from_env_or_config(
+                "ROBOT_APP_BACKEND_STARTUP_DELAY_S",
+                config.startup_delay_s,
+                "1.0",
+            )
+        ),
+        log_file=_value_from_env_or_config(
+            "ROBOT_APP_BACKEND_LOG_FILE",
+            config.log_file,
+            "/tmp/robot_app_zeroerr_backend.log",
+        ),
+        status_urls=_status_urls_from_env(config.status_urls),
+        status_timeout_s=float(
+            _value_from_env_or_config(
+                "ROBOT_APP_BACKEND_STATUS_TIMEOUT_S",
+                config.status_timeout_s,
+                "0.3",
+            )
+        ),
         auto_launch=config.auto_launch,
         auto_stop=config.auto_stop,
     )
+
+
+def _default_launch_script() -> Path:
+    return Path.home() / "ros2_ws" / "launch_zeroerr.sh"
+
+
+def _default_stop_script() -> Path:
+    return Path.home() / "ros2_ws" / "stop_zeroerr.sh"
+
+
+def _expand_path(path: str | os.PathLike) -> Path:
+    expanded = os.path.expandvars(os.fspath(path))
+    return Path(expanded).expanduser()
+
+
+def _value_from_env_or_config(name: str, config_value: object, default: str) -> str:
+    env_value = os.environ.get(name)
+    if env_value is not None:
+        return env_value
+    if config_value is not None:
+        return str(config_value)
+    return default
 
 
 def _env_enabled(name: str, *, default: bool) -> bool:
@@ -157,15 +203,18 @@ def _env_enabled(name: str, *, default: bool) -> bool:
     return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _status_urls_from_env() -> tuple[str, ...]:
+def _status_urls_from_env(config_urls: tuple[str, ...] | None = None) -> tuple[str, ...]:
     value = os.environ.get("ROBOT_APP_BACKEND_STATUS_URLS")
+    if value is None and config_urls is not None:
+        return config_urls
     if value is None:
-        return (
-            "http://localhost:5000/startup/status",
-            "http://localhost:5000/health",
-        )
+        return _default_status_urls()
     urls = tuple(item.strip() for item in value.split(",") if item.strip())
-    return urls or (
+    return urls or _default_status_urls()
+
+
+def _default_status_urls() -> tuple[str, ...]:
+    return (
         "http://localhost:5000/startup/status",
         "http://localhost:5000/health",
     )

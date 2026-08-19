@@ -1010,6 +1010,21 @@ def _build_modbus_settings_application(robot_app):
     )
 
 
+def _build_dryer_settings_application(robot_app):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.dryer_settings import DryerSettingsApplicationService, DryerSettingsFactory
+    from src.robot_systems.paint.component_ids import SettingsID
+
+    service = DryerSettingsApplicationService(
+        settings_service=robot_app._settings_service,
+        dryer_config_key=SettingsID.DRYER_CONFIG,
+        modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
+    )
+    return WidgetApplication(
+        widget_factory=lambda _ms: DryerSettingsFactory().build(service)
+    )
+
+
 def _build_ethercat_diagnostics_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.ethercat_diagnostics import EthercatDiagnosticsFactory

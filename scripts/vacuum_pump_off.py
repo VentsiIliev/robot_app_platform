@@ -36,8 +36,8 @@ from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import 
 )
 
 DEFAULT_CONFIG = ROOT / "src" / "robot_systems" / "paint" / "storage" / "settings" / "hardware" / "modbus.json"
-DEFAULT_REGISTER = 128  # Relay output Y0 coil address.
-DEFAULT_BLOW_OFF_REGISTER = 129  # Relay output Y1 release valve coil address.
+DEFAULT_REGISTER = 130  # Relay output Y0(128) coil address. moved to Y2(130)
+DEFAULT_BLOW_OFF_REGISTER = 131  # Relay output Y2(129) release valve coil address moved to Y3(131).
 DEFAULT_BLOW_OFF_SECONDS = 0.2
 
 
@@ -134,8 +134,11 @@ def main() -> int:
         print(f"ON command {index + 1}/{repeat}: {'ok' if attempt_ok else 'failed'}")
         if readback_transport is not None:
             _print_readback(readback_transport, "After ON", args.register, args.blow_off_register)
-        print(f"Pump should be ON for {hold:.1f} seconds now")
-        if hold > 0:
+        if attempt_ok:
+            print(f"Pump should be ON for {hold:.1f} seconds now")
+        else:
+            print("Pump ON failed; skipping hold")
+        if attempt_ok and hold > 0:
             time.sleep(hold)
         attempt_ok = controller.turn_off()
         all_ok = attempt_ok and all_ok
