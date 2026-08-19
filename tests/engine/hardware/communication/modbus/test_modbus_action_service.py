@@ -93,6 +93,27 @@ class TestModbusActionServiceDetectPortsSuccess(unittest.TestCase):
             ModbusActionService().detect_ports()
         mock_serial.tools.list_ports.comports.assert_called_once()
 
+    def test_logs_open_failure_reason_and_continues(self):
+        mock_serial = MagicMock()
+        mock_serial.tools.list_ports.comports.return_value = [
+            MagicMock(device="/dev/ttyUSB0", vid=1234),
+        ]
+        mock_serial.Serial.side_effect = PermissionError("permission denied")
+        with patch.dict(sys.modules, {
+            "serial": mock_serial,
+            "serial.tools": mock_serial.tools,
+            "serial.tools.list_ports": mock_serial.tools.list_ports,
+        }):
+            with self.assertLogs("ModbusActionService", level="DEBUG") as logs:
+                result = ModbusActionService().detect_ports()
+
+        self.assertEqual(result, [])
+        self.assertIn(
+            "Port /dev/ttyUSB0 skipped",
+            "\n".join(logs.output),
+        )
+        self.assertIn("permission denied", "\n".join(logs.output))
+
 
 # ---------------------------------------------------------------------------
 # detect_ports() — serial unavailable / exception

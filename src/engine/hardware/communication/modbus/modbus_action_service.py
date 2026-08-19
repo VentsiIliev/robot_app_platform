@@ -30,8 +30,12 @@ class ModbusActionService(IModbusActionService):
                     with serial.Serial(port=info.device, baudrate=9600, timeout=0.05):
                         pass
                     active.append(info.device)
-                except serial.SerialException:
-                    self._logger.debug("Port %s skipped — open failed", info.device)
+                except Exception as exc:
+                    self._logger.debug(
+                        "Port %s skipped — open failed: %s",
+                        info.device,
+                        exc,
+                    )
 
             self._logger.info("RS485 ports detected: %s", active)
             return active
