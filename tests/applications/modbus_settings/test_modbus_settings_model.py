@@ -19,8 +19,9 @@ def _make_settings_service(config=None):
 
 def _make_action_service():
     svc = MagicMock()
-    svc.detect_ports.return_value    = []
-    svc.test_connection.return_value = False
+    svc.detect_ports.return_value                   = []
+    svc.test_connection.return_value                = False
+    svc.grant_serial_port_permissions.return_value  = []
     return svc
 
 
@@ -123,6 +124,32 @@ class TestModbusSettingsModelDetectPorts(unittest.TestCase):
     def test_detect_ports_empty_list(self):
         model = ModbusSettingsModel(_make_settings_service(), _make_action_service())
         self.assertEqual(model.detect_ports(), [])
+
+
+# ---------------------------------------------------------------------------
+# grant_serial_port_permissions() — delegates to action service
+# ---------------------------------------------------------------------------
+
+class TestModbusSettingsModelGrantPermissions(unittest.TestCase):
+
+    def test_grant_permissions_delegates_to_action_service(self):
+        acts = _make_action_service()
+        acts.grant_serial_port_permissions.return_value = ["/dev/ttyUSB0"]
+        model = ModbusSettingsModel(_make_settings_service(), acts)
+
+        result = model.grant_serial_port_permissions()
+
+        acts.grant_serial_port_permissions.assert_called_once()
+        self.assertEqual(result, ["/dev/ttyUSB0"])
+
+    def test_grant_permissions_does_not_call_settings_service(self):
+        ss = _make_settings_service()
+        acts = _make_action_service()
+
+        ModbusSettingsModel(ss, acts).grant_serial_port_permissions()
+
+        ss.load_config.assert_not_called()
+        ss.save_config.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

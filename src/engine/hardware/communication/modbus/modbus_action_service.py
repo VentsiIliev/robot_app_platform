@@ -1,4 +1,6 @@
 import logging
+import os
+import subprocess
 from typing import List
 
 from src.engine.hardware.communication.modbus.i_modbus_action_service import IModbusActionService
@@ -60,3 +62,40 @@ class ModbusActionService(IModbusActionService):
         except Exception:
             self._logger.warning("Test connection failed for port '%s'", config.port)
             return False
+
+    def grant_serial_port_permissions(self) -> List[str]:
+        targets = self._serial_permission_targets()
+        if not targets:
+            self._logger.info("No USB serial ports found for permission update")
+            return []
+
+        command = ["chmod", "a+rw", *targets]
+        if hasattr(os, "geteuid") and os.geteuid() != 0:
+            command.insert(0, "pkexec")
+
+        try:
+            self._logger.info("Granting serial port permissions for: %s", targets)
+            subprocess.run(command, check=True, timeout=60)
+            return targets
+        except Exception as exc:
+            self._logger.warning("Failed to grant serial port permissions: %s", exc)
+            return []
+
+    def _serial_permission_targets(self) -> List[str]:
+        if os.name != "posix":
+            return []
+
+        try:
+            import serial.tools.list_ports
+
+            targets: List[str] = []
+            for info in serial.tools.list_ports.comports():
+                device = str(getattr(info, "device", ""))
+                if getattr(info, "vid", None) is None:
+                    continue
+                if device.startswith(("/dev/ttyUSB", "/dev/ttyACM")):
+                    targets.append(device)
+            return sorted(set(targets))
+        except Exception:
+            self._logger.exception("Failed to list USB serial ports for permission update")
+            return []

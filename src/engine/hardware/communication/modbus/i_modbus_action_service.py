@@ -15,3 +15,8 @@ class IModbusActionService(ABC):
     def test_connection(self, config: ModbusConfig) -> bool:
         """Attempt a connection with the given config. Return True on success."""
         ...
+
+    @abstractmethod
+    def grant_serial_port_permissions(self) -> List[str]:
+        """Grant user read/write access to detected USB serial ports. Return changed port names."""
+        ...

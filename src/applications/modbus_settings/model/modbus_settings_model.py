@@ -34,6 +34,9 @@ class ModbusSettingsModel(IApplicationModel):
     def test_connection(self, config: ModbusConfig) -> bool:
         return self._actions.test_connection(config)
 
+    def grant_serial_port_permissions(self) -> List[str]:
+        return self._actions.grant_serial_port_permissions()
+
     def config_from_flat(self, flat: dict) -> ModbusConfig:
         base = self._config if self._config is not None else ModbusConfig()
         return ModbusSettingsMapper.from_flat_dict(flat, base)

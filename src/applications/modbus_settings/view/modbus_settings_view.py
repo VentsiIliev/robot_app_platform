@@ -73,6 +73,7 @@ class ModbusSettingsView(IApplicationView):
 
     save_requested            = pyqtSignal(dict)
     detect_ports_requested    = pyqtSignal()
+    grant_permission_requested = pyqtSignal()
     test_connection_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -173,6 +174,10 @@ class ModbusSettingsView(IApplicationView):
         self._btn_detect.setStyleSheet(GHOST_BTN_STYLE)
         self._btn_detect.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        self._btn_permission = QPushButton("Give Permission")
+        self._btn_permission.setStyleSheet(GHOST_BTN_STYLE)
+        self._btn_permission.setCursor(Qt.CursorShape.PointingHandCursor)
+
         self._btn_test = QPushButton("Test Connection")
         self._btn_test.setStyleSheet(ACTION_BTN_STYLE)
         self._btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -182,11 +187,13 @@ class ModbusSettingsView(IApplicationView):
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         row.addWidget(self._btn_detect)
+        row.addWidget(self._btn_permission)
         row.addWidget(self._btn_test)
         row.addStretch()
         row.addWidget(self._status_label)
 
         self._btn_detect.clicked.connect(self._on_inner_detect)
+        self._btn_permission.clicked.connect(self._on_inner_permission)
         self._btn_test.clicked.connect(self._on_inner_test)
         return bar
 
@@ -197,6 +204,9 @@ class ModbusSettingsView(IApplicationView):
 
     def _on_inner_detect(self) -> None:
         self.detect_ports_requested.emit()
+
+    def _on_inner_permission(self) -> None:
+        self.grant_permission_requested.emit()
 
     def _on_inner_test(self) -> None:
         self.test_connection_requested.emit()
@@ -235,6 +245,7 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setText("No serial ports detected")
         self._port_combo.blockSignals(False)
         self._btn_detect.setEnabled(True)
+        self._btn_permission.setEnabled(True)
         self._btn_test.setEnabled(True)
 
     def set_connection_result(self, success: bool, port: str = "") -> None:
@@ -245,10 +256,23 @@ class ModbusSettingsView(IApplicationView):
             self._status_label.setStyleSheet(_STATUS_FAIL)
             self._status_label.setText(f"✗ Connection failed — {port}")
         self._btn_detect.setEnabled(True)
+        self._btn_permission.setEnabled(True)
+        self._btn_test.setEnabled(True)
+
+    def set_permission_result(self, success: bool, ports: list) -> None:
+        if success:
+            self._status_label.setStyleSheet(_STATUS_OK)
+            self._status_label.setText(f"Permission updated — {len(ports)} port(s)")
+        else:
+            self._status_label.setStyleSheet(_STATUS_FAIL)
+            self._status_label.setText("Permission update failed")
+        self._btn_detect.setEnabled(True)
+        self._btn_permission.setEnabled(True)
         self._btn_test.setEnabled(True)
 
     def set_busy(self, busy: bool) -> None:
         self._btn_detect.setEnabled(not busy)
+        self._btn_permission.setEnabled(not busy)
         self._btn_test.setEnabled(not busy)
         if busy:
             self._status_label.setStyleSheet(_STATUS_IDLE)
