@@ -340,6 +340,7 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
+        self.register_managed_resource(self._vacuum_pump)
         self._pickup_condition = self._build_pickup_condition()
 
         if self._vision is not None:

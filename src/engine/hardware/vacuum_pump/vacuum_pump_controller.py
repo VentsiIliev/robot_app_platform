@@ -59,6 +59,10 @@ class VacuumPumpController(IVacuumPumpController):
             return False
         return self._pulse_blow_off()
 
+    def close(self) -> None:
+        """Release the underlying Modbus transport if it owns a session."""
+        self._transport.disconnect()
+
     def _write_pump(self, value: int, label: str) -> bool:
         """Write a value to the pump register.
 

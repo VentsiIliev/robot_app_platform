@@ -4,12 +4,13 @@ setproctitle("robot_app_platform")
 # then continue with normal imports / startup
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from PyQt6.QtCore import QObject, QEvent, QPoint, Qt
+from PyQt6.QtCore import QObject, QEvent, QPoint, Qt, QTimer
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -79,6 +80,33 @@ class _FramelessHeaderDrag(QObject):
         return False
 
 
+def _install_terminal_signal_handlers(qt_app: QApplication) -> None:
+    """Route terminal shutdown signals through Qt so normal cleanup runs."""
+    shutdown_requested = {"value": False}
+
+    def _request_shutdown(signum, _frame) -> None:
+        if shutdown_requested["value"]:
+            return
+        shutdown_requested["value"] = True
+        try:
+            signal_name = signal.Signals(signum).name
+        except ValueError:
+            signal_name = str(signum)
+        _LOGGER.info("Received %s; requesting Qt application shutdown", signal_name)
+        qt_app.quit()
+
+    def _keep_python_signal_handlers_active() -> None:
+        pass
+
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
+
+    timer = QTimer(qt_app)
+    timer.timeout.connect(_keep_python_signal_handlers_active)
+    timer.start(200)
+    qt_app._terminal_signal_timer = timer
+
+
 def main() -> None:
     setup_logging()
     # _pin_process_to_non_rt_cores()
@@ -125,6 +153,7 @@ def main() -> None:
 
     # 4 — Qt app + localization
     qt_app = QApplication(sys.argv)
+    _install_terminal_signal_handlers(qt_app)
     localization_svc = _build_localization_service(robot_app, ctx.messaging_service)
     localization_svc.set_language(localization_svc.get_language())
 
@@ -247,17 +276,34 @@ def main() -> None:
     # _debug_window = _build_broker_debug_window(ctx.messaging_service)
     # _debug_window.show()
 
+    exit_code = 0
     try:
-        sys.exit(qt_app.exec())
+        exit_code = qt_app.exec()
     finally:
         if startup_splash_coordinator is not None:
-            startup_splash_coordinator.stop()
+            try:
+                startup_splash_coordinator.stop()
+            except Exception:
+                _LOGGER.exception("Failed to stop startup splash coordinator")
         if robot_connection_notifier is not None:
-            robot_connection_notifier.stop()
+            try:
+                robot_connection_notifier.stop()
+            except Exception:
+                _LOGGER.exception("Failed to stop robot connection notifier")
         if notification_presenter is not None:
-            notification_presenter.stop()
-        robot_app.stop()
-        ros_backend.stop()
+            try:
+                notification_presenter.stop()
+            except Exception:
+                _LOGGER.exception("Failed to stop notification presenter")
+        try:
+            robot_app.stop()
+        except Exception:
+            _LOGGER.exception("Failed to stop robot system")
+        try:
+            ros_backend.stop()
+        except Exception:
+            _LOGGER.exception("Failed to stop ROS backend")
+    sys.exit(exit_code)
 def _load_apps_into_shell(shell, session, robot_app, ctx, bootstrap_provider):
     """Load role-filtered apps and reload the shell's folder page."""
     auth_svc = bootstrap_provider.build_authorization_service(robot_app)
