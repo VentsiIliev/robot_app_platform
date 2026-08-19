@@ -33,6 +33,7 @@ class UiStartupConfig:
     dev_skip_login: bool = False
     skip_splash: bool = False
     show_account_button_when_dev_skip_login: bool = False
+    custom_virtual_keyboard_enabled: bool = True
     fullscreen: bool = True
     window_width: int = 1280
     window_height: int = 1024
@@ -113,6 +114,12 @@ def _load_ui_startup_config(raw_config: object) -> UiStartupConfig:
             raw_config,
             "show_account_button_when_dev_skip_login",
             default=False,
+            prefix="ui",
+        ),
+        custom_virtual_keyboard_enabled=_read_bool(
+            raw_config,
+            "custom_virtual_keyboard_enabled",
+            default=True,
             prefix="ui",
         ),
         fullscreen=_read_bool(raw_config, "fullscreen", default=True, prefix="ui"),

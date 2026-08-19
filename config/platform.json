@@ -15,6 +15,7 @@
     "dev_skip_login": true,
     "skip_splash": true,
     "show_account_button_when_dev_skip_login": false,
+    "custom_virtual_keyboard_enabled": false,
     "fullscreen": false,
     "window_width": 1280,
     "window_height": 1024
