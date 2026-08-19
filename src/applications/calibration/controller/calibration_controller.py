@@ -191,6 +191,9 @@ class CalibrationController(IApplicationController):
         self._view.tool_tcp_solve_requested.connect(self._on_tool_tcp_solve)
         self._view.tool_tcp_save_requested.connect(self._on_tool_tcp_save)
         self._view.tool_tcp_clear_requested.connect(self._on_tool_tcp_clear)
+        self._view.workobject_capture_requested.connect(self._on_workobject_capture)
+        self._view.workobject_solve_requested.connect(self._on_workobject_solve)
+        self._view.workobject_save_requested.connect(self._on_workobject_save)
         self._view.calibrate_laser_requested.connect(self._on_calibrate_laser)
         self._view.detect_laser_requested.connect(self._on_detect_laser)
         self._view.test_calibration_requested.connect(self._on_test_calibration)
@@ -345,6 +348,23 @@ class CalibrationController(IApplicationController):
         self._log(ok, msg)
         if ok:
             self._view.set_tool_tcp_result(None)
+
+    def _on_workobject_capture(self, point: str) -> None:
+        ok, msg, payload = self._model.capture_workobject_point(point)
+        if ok:
+            self._view.set_workobject_capture(payload.get("point", point), payload.get("pose"))
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
+
+    def _on_workobject_solve(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.solve_workobject(user_id, name)
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
+
+    def _on_workobject_save(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.save_workobject(user_id, name=name, persist=True)
+        self._view.set_workobject_result(ok, msg, payload)
+        self._log(ok, msg)
 
     def _on_task_done(self, result) -> None:
         if not self._running:

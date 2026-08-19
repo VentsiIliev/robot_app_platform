@@ -18,13 +18,39 @@ class CalibrationSettingsController(IApplicationController):
         settings = self._model.load()
         self._view.settings_view.set_values(CalibrationSettingsMapper.to_flat_dict(settings))
         self._view.save_requested.connect(self._on_save)
+        self._view.workobject_capture_requested.connect(self._on_workobject_capture)
+        self._view.workobject_solve_requested.connect(self._on_workobject_solve)
+        self._view.workobject_save_requested.connect(self._on_workobject_save)
 
     def stop(self) -> None:
         try:
             self._view.save_requested.disconnect(self._on_save)
         except Exception:
             pass
+        for signal, handler in (
+            (self._view.workobject_capture_requested, self._on_workobject_capture),
+            (self._view.workobject_solve_requested, self._on_workobject_solve),
+            (self._view.workobject_save_requested, self._on_workobject_save),
+        ):
+            try:
+                signal.disconnect(handler)
+            except Exception:
+                pass
 
     def _on_save(self, flat: dict) -> None:
         updated = CalibrationSettingsMapper.from_flat_dict(flat, self._model.current_settings)
         self._model.save(updated)
+
+    def _on_workobject_capture(self, point: str) -> None:
+        ok, msg, payload = self._model.capture_workobject_point(point)
+        if ok:
+            self._view.set_workobject_capture(payload.get("point", point), payload.get("pose"))
+        self._view.set_workobject_result(ok, msg, payload)
+
+    def _on_workobject_solve(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.solve_workobject(user_id, name)
+        self._view.set_workobject_result(ok, msg, payload)
+
+    def _on_workobject_save(self, user_id: int, name: str) -> None:
+        ok, msg, payload = self._model.save_workobject(user_id, name=name, persist=True)
+        self._view.set_workobject_result(ok, msg, payload)

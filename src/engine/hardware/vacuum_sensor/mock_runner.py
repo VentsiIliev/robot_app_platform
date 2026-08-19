@@ -1,86 +1,94 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
+import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
-from src.engine.hardware.vacuum_sensor.dummy_vacuum_sensor_transport import DummyVacuumSensorTransport
+from src.engine.hardware.communication.modbus.modbus import ModbusConfig
+from src.engine.hardware.communication.transport_registry import DEFAULT_TRANSPORT_REGISTRY
+from src.engine.hardware.peripherals import PeripheralConfig, PeripheralConfigSerializer
 from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import VacuumSensorConfig
 from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensorService
+from src.engine.hardware.xinje import XinjeMA8X8YR
+
+ROOT = Path(__file__).resolve().parents[4]
+MODBUS_CONFIG_PATH = ROOT / "src" / "robot_systems" / "paint" / "storage" / "settings" / "hardware" / "modbus.json"
+PERIPHERALS_CONFIG_PATH = ROOT / "src" / "robot_systems" / "paint" / "storage" / "settings" / "hardware" / "peripherals.json"
+DETECTED_VALUE = 1
+READ_RETRIES = 3
+READ_COUNT = 100000
+READ_DELAY_S = 0.5
 
 
-def scenario_vacuum_present_absent():
-    print("\n=== scenario: vacuum present / absent ===")
+def _load_modbus_config(path: Path) -> ModbusConfig:
+    with path.open("r", encoding="utf-8") as fh:
+        return ModbusConfig.from_dict(json.load(fh))
 
-    transport = DummyVacuumSensorTransport(simulated_value=1)
-    service = VacuumSensorService(
-        transport=transport,
-        config=VacuumSensorConfig(sensor_register=130),
+
+def _load_peripherals(path: Path) -> PeripheralConfig:
+    with path.open("r", encoding="utf-8") as fh:
+        return PeripheralConfigSerializer().from_dict(json.load(fh))
+
+
+def _build_transport(config: ModbusConfig, slave_id: int):
+    slave_name = config.find_slave_name(slave_id)
+    return slave_name, DEFAULT_TRANSPORT_REGISTRY.build_for_slave(config, slave_name)
+
+
+def run_real_sensor() -> None:
+    modbus_config = _load_modbus_config(MODBUS_CONFIG_PATH)
+    peripherals = _load_peripherals(PERIPHERALS_CONFIG_PATH)
+    sensor = peripherals.get("vacuum_sensor")
+    if sensor is None:
+        raise RuntimeError(
+            f"vacuum_sensor is missing or disabled in {PERIPHERALS_CONFIG_PATH}"
+        )
+
+    sensor_point = sensor.inputs.get("sensor") or sensor.outputs.get("sensor")
+    if sensor_point is None:
+        raise RuntimeError(
+            f"vacuum_sensor has no inputs.sensor/output.sensor in {PERIPHERALS_CONFIG_PATH}"
+        )
+
+    slave_name, transport = _build_transport(modbus_config, sensor.slave_id)
+    address = (
+        XinjeMA8X8YR.resolve_input(sensor_point)
+        if sensor_point.upper().startswith("X")
+        else XinjeMA8X8YR.resolve_output(sensor_point)
+    )
+    connection = modbus_config.get_connection(slave_name)
+    print(
+        f"Reading vacuum sensor {sensor_point} ({address}) from {connection.port} "
+        f"slave={connection.slave_address} {connection.baudrate},"
+        f"{connection.bytesize}{connection.parity}{connection.stopbits} "
+        f"profile={slave_name} transport={modbus_config.get_slave(slave_name).transport_type}"
     )
 
-    assert service.is_vacuum_detected() is True, "vacuum should be detected"
-    assert service.is_healthy() is True, "sensor should be healthy"
-
-    transport.simulated_value = 0
-    assert service.is_vacuum_detected() is False, "vacuum should NOT be detected"
-    assert service.is_healthy() is True, "sensor should still be healthy"
-    print("PASS")
-
-
-def scenario_active_low_sensor():
-    print("\n=== scenario: active-low sensor (detected_value=0) ===")
-
-    transport = DummyVacuumSensorTransport(simulated_value=0)
     service = VacuumSensorService(
         transport=transport,
-        config=VacuumSensorConfig(sensor_register=130, detected_value=0),
+        config=VacuumSensorConfig(
+            sensor_register=sensor_point,
+            detected_value=DETECTED_VALUE,
+            read_retries=READ_RETRIES,
+        ),
     )
 
-    assert service.is_vacuum_detected() is True, "active-low 0 should mean vacuum present"
-    transport.simulated_value = 1
-    assert service.is_vacuum_detected() is False, "active-low 1 should mean no vacuum"
-    print("PASS")
-
-
-def scenario_sensor_failure_failsafe():
-    print("\n=== scenario: sensor failure is fail-safe (no vacuum) ===")
-
-    transport = DummyVacuumSensorTransport()
-    transport.raise_on_read = True
-    service = VacuumSensorService(
-        transport=transport,
-        config=VacuumSensorConfig(sensor_register=130, read_retries=2),
-    )
-
-    assert service.is_vacuum_detected() is False, "failed read must report no vacuum"
-    assert service.is_healthy() is False, "sensor must be unhealthy after failure"
-    assert len(transport.call_log) == 2, "read_retries attempts expected"
-    print("PASS")
-
-
-def scenario_simulate_interactive():
-    print("\n=== scenario: interactive simulation ===")
-
-    transport = DummyVacuumSensorTransport(simulated_value=1)
-    service = VacuumSensorService(
-        transport=transport,
-        config=VacuumSensorConfig(sensor_register=130),
-    )
-
-    for value in (1, 1, 0, 1, 0, 0):
-        transport.simulated_value = value
-        print(f"  simulated_value={value} -> is_vacuum_detected={service.is_vacuum_detected()}")
-    print("PASS")
+    for index in range(READ_COUNT):
+        detected = service.is_vacuum_detected()
+        print(
+            f"read {index + 1}/{READ_COUNT}: "
+            f"detected={detected} healthy={service.is_healthy()}"
+        )
+        if index + 1 < READ_COUNT and READ_DELAY_S > 0:
+            time.sleep(READ_DELAY_S)
 
 
 if __name__ == "__main__":
     import logging
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-
-    scenario_vacuum_present_absent()
-    scenario_active_low_sensor()
-    scenario_sensor_failure_failsafe()
-    scenario_simulate_interactive()
-
-    print("\nAll scenarios passed.")
+    run_real_sensor()

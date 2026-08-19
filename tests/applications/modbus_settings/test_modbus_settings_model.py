@@ -2,7 +2,11 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.engine.common_settings_ids import CommonSettingsID
-from src.engine.hardware.communication.modbus.modbus import ModbusConfig
+from src.engine.hardware.communication.modbus.modbus import (
+    ModbusConfig,
+    ModbusDeviceConfig,
+    ModbusSlaveConfig,
+)
 from src.applications.modbus_settings.model.mapper import ModbusSettingsMapper
 from src.applications.modbus_settings.model.modbus_settings_model import ModbusSettingsModel
 
@@ -98,6 +102,158 @@ class TestModbusSettingsModelSave(unittest.TestCase):
         flat        = dict(ModbusSettingsMapper.to_flat_dict(original), port="COM99")
         model.save(flat)
         self.assertEqual(original.port, "COM1")
+
+
+class TestModbusSettingsModelPersistence(unittest.TestCase):
+
+    def test_save_all_persists_profile_and_slave_assignment_together(self):
+        config = ModbusConfig(
+            profiles={"xinje_even": ModbusDeviceConfig(parity="E")},
+            slaves={"xinje_ma": ModbusSlaveConfig(profile_name="xinje_even")},
+        )
+        model, settings, _ = _loaded(config)
+
+        model.save_all(
+            {
+                "default": ModbusSettingsMapper.device_to_flat_dict(config.get_profile("default")),
+                "xinje_even": {
+                    "port": "/dev/ttyUSB0",
+                    "baudrate": 57600,
+                    "bytesize": 8,
+                    "stopbits": 1,
+                    "parity": "N",
+                    "timeout": 0.5,
+                    "slave_address": 1,
+                    "max_retries": 30,
+                },
+            },
+            {
+                "default": {
+                    "slave_address": 10,
+                    "profile_name": "default",
+                    "transport_type": "modbus_register",
+                    "max_retries": 30,
+                },
+                "xinje_ma": {
+                    "slave_address": 1,
+                    "profile_name": "xinje_even",
+                    "transport_type": "xinje_ma_8x8yr",
+                    "max_retries": 30,
+                },
+            },
+        )
+
+        saved = settings.save_config.call_args.args[0]
+        self.assertEqual(saved.get_profile("xinje_even").parity, "N")
+        self.assertEqual(saved.get_slave("xinje_ma").profile_name, "xinje_even")
+
+    def test_save_all_rejects_unknown_slave_profile(self):
+        model, settings, _ = _loaded(ModbusConfig())
+        with self.assertRaises(ValueError):
+            model.save_all(
+                {"default": ModbusSettingsMapper.device_to_flat_dict(ModbusConfig())},
+                {"xinje_ma": {"profile_name": "missing"}},
+            )
+        settings.save_config.assert_not_called()
+
+    def test_save_profiles_replaces_deleted_profiles(self):
+        config = ModbusConfig(
+            profiles={
+                "xinje_even": ModbusDeviceConfig(parity="E", slave_address=1),
+                "TEST": ModbusDeviceConfig(baudrate=230400),
+            }
+        )
+        model, settings, _ = _loaded(config)
+
+        model.save_profiles({
+            "default": ModbusSettingsMapper.device_to_flat_dict(config.get_profile("default")),
+            "xinje_even": ModbusSettingsMapper.device_to_flat_dict(config.get_profile("xinje_even")),
+        })
+
+        saved = settings.save_config.call_args.args[0]
+        self.assertNotIn("TEST", saved.profiles)
+        self.assertEqual(saved.get_profile("xinje_even").parity, "E")
+        self.assertIs(model._config, saved)
+
+    def test_save_slaves_preserves_slave_values_when_rebuilding_map(self):
+        config = ModbusConfig(
+            slaves={
+                "xinje_ma": ModbusSlaveConfig(
+                    slave_address=1,
+                    profile_name="xinje_even",
+                    transport_type="xinje_ma_8x8yr",
+                    max_retries=10,
+                )
+            }
+        )
+        model, settings, _ = _loaded(config)
+
+        model.save_slaves({
+            "default": {
+                "slave_address": 10,
+                "profile_name": "default",
+                "transport_type": "modbus_register",
+                "max_retries": 30,
+            },
+            "xinje_ma": {
+                "slave_address": 1,
+                "profile_name": "xinje_even",
+                "transport_type": "xinje_ma_8x8yr",
+                "max_retries": 10,
+            },
+        })
+
+        saved = settings.save_config.call_args.args[0]
+        slave = saved.get_slave("xinje_ma")
+        self.assertEqual(slave.slave_address, 1)
+        self.assertEqual(slave.profile_name, "xinje_even")
+        self.assertEqual(slave.transport_type, "xinje_ma_8x8yr")
+        self.assertIs(model._config, saved)
+
+    def test_sequential_profile_and_slave_saves_share_updated_in_memory_config(self):
+        config = ModbusConfig(
+            profiles={"TEST": ModbusDeviceConfig(baudrate=230400)},
+            slaves={"xinje_ma": ModbusSlaveConfig()},
+        )
+        model, settings, _ = _loaded(config)
+        cached_reference = model._config
+
+        model.save_profiles({
+            "default": ModbusSettingsMapper.device_to_flat_dict(config.get_profile("default")),
+            "xinje_even": {
+                "port": "/dev/ttyUSB0",
+                "baudrate": 57600,
+                "bytesize": 8,
+                "stopbits": 1,
+                "parity": "E",
+                "timeout": 0.5,
+                "slave_address": 1,
+                "max_retries": 30,
+            },
+        })
+        profiles_saved = settings.save_config.call_args.args[0]
+        model.save_slaves({
+            "default": {
+                "slave_address": 10,
+                "profile_name": "default",
+                "transport_type": "modbus_register",
+                "max_retries": 30,
+            },
+            "xinje_ma": {
+                "slave_address": 1,
+                "profile_name": "xinje_even",
+                "transport_type": "xinje_ma_8x8yr",
+                "max_retries": 30,
+            },
+        })
+
+        current = model._config
+        self.assertIs(current, profiles_saved)
+        self.assertIs(current, cached_reference)
+        self.assertNotIn("TEST", current.profiles)
+        self.assertEqual(current.get_slave("xinje_ma").slave_address, 1)
+        self.assertEqual(current.get_slave("xinje_ma").profile_name, "xinje_even")
+        self.assertEqual(current.get_slave("xinje_ma").transport_type, "xinje_ma_8x8yr")
 
 
 # ---------------------------------------------------------------------------

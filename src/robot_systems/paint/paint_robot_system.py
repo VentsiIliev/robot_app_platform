@@ -3,6 +3,9 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
+from src.engine.hardware.fan.interfaces.i_fan_control import IFanControl
+from src.engine.hardware.physical_control_buttons.interfaces.i_physical_control_buttons import IPhysicalControlButtons
+from src.engine.hardware.peripherals import PeripheralConfigSerializer
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.common_settings_ids import CommonSettingsID
@@ -33,7 +36,11 @@ from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import (
     PaintProcessConfigSerializer,
 )
-from src.robot_systems.paint.service_builders import build_vacuum_pump_service
+from src.robot_systems.paint.service_builders import (
+    build_fan_service,
+    build_physical_control_buttons_service,
+    build_vacuum_pump_service,
+)
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
     ApplicationSpec,
@@ -263,6 +270,7 @@ class PaintRobotSystem(BaseRobotSystem):
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
         SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "hardware/dryer.json"),
+        SettingsSpec(SettingsID.PERIPHERALS, PeripheralConfigSerializer(), "hardware/peripherals.json"),
         SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
     ]
 
@@ -280,6 +288,20 @@ class PaintRobotSystem(BaseRobotSystem):
             required=False,
             description="Vacuum pump controller",
             builder=build_vacuum_pump_service,
+        ),
+        ServiceSpec(
+            name=ServiceID.FAN,
+            service_type=IFanControl,
+            required=False,
+            description="Fan controller",
+            builder=build_fan_service,
+        ),
+        ServiceSpec(
+            name=ServiceID.PHYSICAL_CONTROL_BUTTONS,
+            service_type=IPhysicalControlButtons,
+            required=False,
+            description="Physical start, pause, and reset buttons",
+            builder=build_physical_control_buttons_service,
         ),
 
     ]

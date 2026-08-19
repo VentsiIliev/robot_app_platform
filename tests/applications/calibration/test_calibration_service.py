@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration.service.stub_calibration_service import StubCalibrationService
 from src.applications.calibration.service.calibration_application_service import CalibrationApplicationService
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.configuration import RobotCalibrationSettings
 from src.engine.robot.height_measuring.settings import HeightMeasuringModuleSettings
 from src.engine.vision.calibration_vision_settings import CalibrationVisionSettings
@@ -32,6 +33,9 @@ def _make_svc(
     calibrator=None,
     calibration_settings_service=None,
     tool_tcp_calibrator=None,
+    robot_service=None,
+    robot_config=None,
+    settings_service=None,
 ):
     vs = _make_vision(capture=capture, calibrate=calibrate)
     pc = MagicMock()
@@ -39,9 +43,12 @@ def _make_svc(
         CalibrationApplicationService(
             vs,
             pc,
+            robot_service=robot_service,
+            robot_config=robot_config,
             camera_tcp_offset_calibrator=calibrator,
             calibration_settings_service=calibration_settings_service,
             tool_tcp_calibrator=tool_tcp_calibrator,
+            settings_service=settings_service,
         ),
         vs,
         pc,
@@ -198,6 +205,59 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         tool_tcp.solve.assert_called_once()
         tool_tcp.save.assert_called_once()
         tool_tcp.clear_samples.assert_called_once()
+
+    def test_start_tool_tcp_calibration_refuses_nonzero_tool(self):
+        tool_tcp = MagicMock()
+        robot_service = MagicMock()
+        robot_config = SimpleNamespace(robot_tool=5, robot_user=3)
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_service=robot_service,
+            robot_config=robot_config,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(4)
+
+        self.assertFalse(ok)
+        self.assertIn("Tool ID is 5", msg)
+        self.assertEqual(robot_config.robot_tool, 5)
+        self.assertEqual(robot_config.robot_user, 3)
+        robot_service.set_active_tool.assert_not_called()
+        robot_service.set_active_workobject.assert_not_called()
+        tool_tcp.start.assert_not_called()
+
+    def test_start_tool_tcp_calibration_allows_nonzero_workobject_when_tool_is_zero(self):
+        tool_tcp = MagicMock()
+        robot_config = SimpleNamespace(robot_tool=0, robot_user=3)
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_config=robot_config,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(4)
+
+        self.assertTrue(ok)
+        self.assertIn("tool 4", msg)
+        tool_tcp.start.assert_called_once_with(4)
+
+    def test_start_tool_tcp_calibration_checks_latest_saved_robot_settings(self):
+        tool_tcp = MagicMock()
+        injected_robot_config = SimpleNamespace(robot_tool=0, robot_user=0)
+        latest_robot_config = SimpleNamespace(robot_tool=1, robot_user=0)
+        settings_service = MagicMock()
+        settings_service.get.return_value = latest_robot_config
+        svc, _, _ = _make_svc(
+            tool_tcp_calibrator=tool_tcp,
+            robot_config=injected_robot_config,
+            settings_service=settings_service,
+        )
+
+        ok, msg = svc.start_tool_tcp_calibration(1)
+
+        self.assertFalse(ok)
+        self.assertIn("Tool ID is 1", msg)
+        settings_service.get.assert_called_once_with(CommonSettingsID.ROBOT_CONFIG)
+        tool_tcp.start.assert_not_called()
 
     def test_tool_tcp_methods_report_not_configured(self):
         svc, _, _ = _make_svc()

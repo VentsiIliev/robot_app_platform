@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.common_service_ids import CommonServiceID
@@ -43,7 +43,6 @@ from src.robot_systems.paint.domain.workpieces.paint_workpiece_library_service i
 from src.robot_systems.paint.height_measuring import (
     PaintRobotSystemHeightMeasuringProvider,
 )
-from src.robot_systems.paint.height_measuring.mock_laser_control import MockLaserControl
 from src.robot_systems.paint.service_builders import build_vacuum_pump_service
 from src.robot_systems.paint.targeting import (
     PaintRobotSystemTargetingProvider,
@@ -186,8 +185,8 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
         ctx.settings.get.assert_called_once_with(CommonSettingsID.MODBUS_CONFIG)
         kwargs = factory.call_args.kwargs
         self.assertIs(kwargs["modbus_config"], modbus_config)
-        self.assertEqual(kwargs["vacuum_config"].pump_register, 128)
-        self.assertEqual(kwargs["vacuum_config"].blow_off_register, 129)
+        self.assertEqual(kwargs["vacuum_config"].pump_register, "Y2")
+        self.assertEqual(kwargs["vacuum_config"].blow_off_register, "Y3")
         self.assertEqual(kwargs["vacuum_config"].blow_off_pulse_seconds, 0.2)
 
     def test_build_vacuum_pump_service_returns_none_on_build_failure(self) -> None:
@@ -195,17 +194,32 @@ class TestPaintServiceBuildersAndProviders(unittest.TestCase):
 
         self.assertIsNone(build_vacuum_pump_service(ctx))
 
-    def test_height_measuring_provider_builds_mock_laser(self) -> None:
-        provider = PaintRobotSystemHeightMeasuringProvider(robot_system=object())
+    def test_height_measuring_provider_builds_xinje_modbus_laser(self) -> None:
+        modbus_config = SimpleNamespace(
+            port="/dev/ttyUSB0",
+            slave_address=1,
+            baudrate=57600,
+            bytesize=8,
+            stopbits=1,
+            parity="E",
+            timeout=0.01,
+        )
+        robot_system = SimpleNamespace(
+            _settings_service=SimpleNamespace(get=MagicMock(return_value=modbus_config)),
+        )
+        provider = PaintRobotSystemHeightMeasuringProvider(robot_system=robot_system)
 
         laser = provider.build_laser_control()
 
-        self.assertIsInstance(laser, MockLaserControl)
-        self.assertFalse(laser.is_on)
+        self.assertEqual(laser._register, 133)
+        robot_system._settings_service.get.assert_called_once_with(CommonSettingsID.MODBUS_CONFIG)
+        laser._transport.write_register = MagicMock()
         laser.turn_on()
-        self.assertTrue(laser.is_on)
         laser.turn_off()
-        self.assertFalse(laser.is_on)
+        self.assertEqual(
+            laser._transport.write_register.call_args_list,
+            [call(133, 1), call(133, 0)],
+        )
 
 
 class TestPaintDashboardSupport(unittest.TestCase):

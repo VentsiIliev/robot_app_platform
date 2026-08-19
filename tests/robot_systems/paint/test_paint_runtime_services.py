@@ -22,6 +22,10 @@ from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import 
     _crc16,
 )
 from src.engine.hardware.vacuum_pump.vacuum_pump_controller import VacuumPumpController
+from src.engine.hardware.laser import ModbusLaserControl
+from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import VacuumSensorConfig
+from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensorService
+from src.engine.hardware.xinje import XinjeMA8X8YR
 from src.robot_systems.paint.processes.robot_calibration_process import (
     RobotCalibrationProcess,
 )
@@ -354,6 +358,32 @@ class TestRobotCalibrationProcess(unittest.TestCase):
 
 
 class TestVacuumPumpController(unittest.TestCase):
+    def test_xinje_ma8x8yr_output_labels_resolve_to_modbus_addresses(self) -> None:
+        self.assertEqual(128, XinjeMA8X8YR.resolve_output("Y0"))
+        self.assertEqual(130, XinjeMA8X8YR.resolve_output("y2"))
+        self.assertEqual(135, XinjeMA8X8YR.resolve_output("Y7"))
+
+    def test_turn_on_and_off_resolve_configured_xinje_output_labels(self) -> None:
+        transport = MagicMock()
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(pump_register="Y2", blow_off_register="Y3"),
+        )
+
+        self.assertTrue(controller.turn_on())
+        self.assertTrue(controller.turn_off())
+
+        self.assertEqual(
+            transport.write_register.call_args_list,
+            [
+                call(131, 0),
+                call(130, 1),
+                call(130, 0),
+                call(131, 1),
+                call(131, 0),
+            ],
+        )
+
     def test_turn_on_and_off_write_configured_values(self) -> None:
         transport = MagicMock()
         controller = VacuumPumpController(
@@ -419,8 +449,47 @@ class TestVacuumPumpController(unittest.TestCase):
         self.assertFalse(controller.turn_off())
 
 
+class TestVacuumSensorService(unittest.TestCase):
+    def test_sensor_register_accepts_xinje_output_label(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = 1
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="Y4"),
+        )
+
+        self.assertTrue(service.is_vacuum_detected())
+        transport.read_register.assert_called_once_with(132)
+
+    def test_sensor_register_accepts_xinje_input_label(self) -> None:
+        transport = MagicMock()
+        transport.read_input.return_value = 1
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="X4"),
+        )
+
+        self.assertTrue(service.is_vacuum_detected())
+        transport.read_input.assert_called_once_with(4)
+        transport.read_register.assert_not_called()
+
+
+class TestModbusLaserControl(unittest.TestCase):
+    def test_laser_register_accepts_xinje_output_label(self) -> None:
+        transport = MagicMock()
+        laser = ModbusLaserControl(transport, register="Y5")
+
+        laser.turn_on()
+        laser.turn_off()
+
+        self.assertEqual(
+            transport.write_register.call_args_list,
+            [call(133, 1), call(133, 0)],
+        )
+
+
 class TestModbusVacuumPumpTransport(unittest.TestCase):
-    def test_single_register_write_uses_fc15_single_coil_bitmap_frame(self) -> None:
+    def test_ma_output_write_uses_fc15_output_bank_frame(self) -> None:
         transport = ModbusVacuumPumpTransport(
             port="/dev/null",
             slave_address=10,
@@ -428,9 +497,38 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
         )
         transport._raw_send = MagicMock(return_value=b"")
 
-        transport.write_register(128, 1)
+        transport.write_register(130, 1)
 
-        frame = bytes([10, 15, 0, 128, 0, 1, 1, 1])
+        frame = bytes([10, 15, 0, 128, 0, 16, 2, 0b00000100, 0])
+        expected = frame + _crc16(frame).to_bytes(2, "little")
+        transport._raw_send.assert_called_once_with(expected)
+
+    def test_ma_output_shadow_preserves_previous_bank_values(self) -> None:
+        transport = ModbusVacuumPumpTransport(
+            port="/dev/null",
+            slave_address=10,
+            write_retry_delay_s=0.0,
+        )
+        transport._raw_send = MagicMock(return_value=b"")
+
+        transport.write_register(130, 1)
+        transport.write_register(131, 1)
+
+        frame = bytes([10, 15, 0, 128, 0, 16, 2, 0b00001100, 0])
+        expected = frame + _crc16(frame).to_bytes(2, "little")
+        transport._raw_send.assert_called_with(expected)
+
+    def test_non_ma_output_write_uses_fc5_single_coil_frame(self) -> None:
+        transport = ModbusVacuumPumpTransport(
+            port="/dev/null",
+            slave_address=10,
+            write_retry_delay_s=0.0,
+        )
+        transport._raw_send = MagicMock(return_value=b"")
+
+        transport.write_register(200, 1)
+
+        frame = bytes([10, 5, 0, 200, 0xFF, 0])
         expected = frame + _crc16(frame).to_bytes(2, "little")
         transport._raw_send.assert_called_once_with(expected)
 
@@ -467,11 +565,20 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
 
     def test_explicit_modbus_exception_response_raises(self) -> None:
         transport = ModbusVacuumPumpTransport(port="/dev/null", slave_address=1)
-        request = bytes([1, 15, 0, 128, 0, 1, 1, 1])
-        response_payload = bytes([1, 0x8F, 1])
+        request = bytes([1, 5, 0, 128, 0xFF, 0])
+        response_payload = bytes([1, 0x85, 1])
         response = response_payload + _crc16(response_payload).to_bytes(2, "little")
 
         with self.assertRaises(RuntimeError):
+            transport._validate_response(response, request)
+
+    def test_padded_modbus_exception_response_raises_clear_exception(self) -> None:
+        transport = ModbusVacuumPumpTransport(port="/dev/null", slave_address=1)
+        request = bytes([1, 5, 0, 130, 0xFF, 0])
+        response_payload = bytes([1, 0x85, 0x12])
+        response = b"\x00" + response_payload + _crc16(response_payload).to_bytes(2, "little") + b"\x00"
+
+        with self.assertRaisesRegex(RuntimeError, "Modbus exception response"):
             transport._validate_response(response, request)
 
 

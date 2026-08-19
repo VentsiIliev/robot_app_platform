@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 from src.applications.calibration_settings.service.calibration_settings_application_service import (
     CalibrationSettingsApplicationService,
@@ -100,3 +101,69 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
                 },
             }
         )
+
+    def test_workobject_solve_computes_rz_from_center_to_x_point(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_user=0)
+        robot_service = MagicMock()
+        robot_service.get_current_position.side_effect = [
+            [100.0, 200.0, 300.0, 1.0, 2.0, 3.0],
+            [100.0, 250.0, 300.0, 1.0, 2.0, 3.0],
+            [50.0, 200.0, 300.0, 1.0, 2.0, 3.0],
+        ]
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        service.capture_workobject_point("center")
+        service.capture_workobject_point("x")
+        service.capture_workobject_point("y")
+        ok, msg, payload = service.solve_workobject(2, "fixture")
+
+        self.assertTrue(ok)
+        self.assertIn("rz=90.000", msg)
+        self.assertEqual(payload["name"], "fixture")
+        self.assertEqual(payload["transform"], [100.0, 200.0, 300.0, 0.0, 0.0, 90.0])
+
+    def test_workobject_capture_refuses_nonzero_workobject_user(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_user=2)
+        robot_service = MagicMock()
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        ok, msg, payload = service.capture_workobject_point("center")
+
+        self.assertFalse(ok)
+        self.assertIn("WorkObject/User ID is 2", msg)
+        self.assertEqual(payload, {})
+        robot_service.get_current_position.assert_not_called()
+
+    def test_workobject_save_updates_runtime_robot_settings_and_active_workobject(self):
+        robot_config = SimpleNamespace(robot_user=0)
+        settings_service = MagicMock()
+        settings_service.get.return_value = robot_config
+        robot_service = MagicMock()
+        robot_service.get_current_position.side_effect = [
+            [10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            [20.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            [10.0, 30.0, 30.0, 0.0, 0.0, 0.0],
+        ]
+        robot_service.update_workobject_registry.return_value = 0
+        robot_service.set_active_workobject.return_value = True
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        service.capture_workobject_point("center")
+        service.capture_workobject_point("x")
+        service.capture_workobject_point("y")
+        ok, msg, payload = service.save_workobject(4, "WOBJ_FIXTURE")
+
+        self.assertTrue(ok)
+        self.assertIn("Saved WorkObject", msg)
+        robot_service.update_workobject_registry.assert_called_once_with(
+            4,
+            name="WOBJ_FIXTURE",
+            transform=[10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            persist=True,
+        )
+        self.assertEqual(robot_config.robot_user, 4)
+        settings_service.save.assert_called_once_with(CommonSettingsID.ROBOT_CONFIG, robot_config)
+        robot_service.set_active_workobject.assert_called_once_with(4)
+        self.assertEqual(payload["user_id"], 4)

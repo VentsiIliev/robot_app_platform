@@ -1154,6 +1154,31 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("set_active_tool error: %s", e, exc_info=True)
             return False
 
+    def set_active_workobject(self, user: int) -> bool:
+        try:
+            user_id = int(user)
+            response = requests.post(
+                f"{self.server_url}/workobject/active",
+                json={"user_id": user_id},
+                timeout=5,
+            )
+            data = response.json()
+            if response.status_code >= 400 or data.get("success") is False:
+                logger.warning(
+                    "set_active_workobject rejected: user=%s http=%s data=%s",
+                    user,
+                    response.status_code,
+                    data,
+                )
+                return False
+            self._mark_available()
+            logger.info("Active ROS2 workobject set to %s (%s)", user_id, data.get("workobject_name"))
+            return True
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("set_active_workobject error: %s", e, exc_info=True)
+            return False
+
     def GetActualTCPPose(self):
         position = self.get_current_position()
         if position is None:
@@ -1425,6 +1450,49 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         return self.resetAllErrors()
 
     # ============ WorkObject Support ============
+
+    def get_workobject_registry(self):
+        logger.debug("get_workobject_registry → GET /workobject/registry")
+        try:
+            response = requests.get(f"{self.server_url}/workobject/registry", timeout=5)
+            raw = response.json()
+            if self._response_failed("get_workobject_registry", response, raw):
+                return None
+            self._mark_available()
+            return raw
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_workobject_registry error: %s", e, exc_info=True)
+            return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        payload = {
+            "name": name,
+            "transform": transform,
+            "persist": bool(persist),
+        }
+        logger.debug("update_workobject_registry → POST /workobject/registry/%s payload=%s", user_id, payload)
+        try:
+            response = requests.post(
+                f"{self.server_url}/workobject/registry/{int(user_id)}",
+                json=payload,
+                timeout=5,
+            )
+            raw = response.json()
+            result_code = 0 if raw.get("success") else -1
+            if not self._response_failed("update_workobject_registry", response, raw):
+                self._mark_available()
+            logger.debug(
+                "update_workobject_registry ← http=%s raw=%s result_code=%s",
+                response.status_code,
+                raw,
+                result_code,
+            )
+            return result_code
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("update_workobject_registry error: %s", e, exc_info=True)
+            return -1
 
     def set_workobject(self, origin, user_id=0):
         payload = {"origin": origin, "user_id": user_id}

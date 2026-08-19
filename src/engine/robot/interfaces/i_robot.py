@@ -74,6 +74,16 @@ class IRobot(ABC):
         """Optional stop for continuous ServoJog."""
         return -1
 
+    def set_active_workobject(self, user: int) -> bool:
+        """Optional active workobject selection for state/current-position reporting."""
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
+
     @abstractmethod
     def stop_motion(self) -> int:
         ...

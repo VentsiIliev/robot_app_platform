@@ -104,7 +104,11 @@ class Ros2Robot(IRobot):
         if not snapshot:
             return None
         snapshot["velocity_magnitude"] = self._vector_magnitude(snapshot.get("velocity"))
-        snapshot["acceleration_magnitude"] = self._vector_magnitude(snapshot.get("acceleration"))
+        acceleration = snapshot.get("acceleration")
+        snapshot["acceleration_magnitude"] = self._vector_magnitude(acceleration)
+        if isinstance(acceleration, (list, tuple)):
+            snapshot["acceleration_components"] = list(acceleration)
+            snapshot["acceleration"] = snapshot["acceleration_magnitude"]
         return snapshot
 
     @staticmethod
@@ -129,6 +133,22 @@ class Ros2Robot(IRobot):
 
     def set_active_tool(self, tool: int) -> bool:
         return self._client.set_active_tool(tool)
+
+    def set_active_workobject(self, user: int) -> bool:
+        setter = getattr(self._client, "set_active_workobject", None)
+        if not callable(setter):
+            return False
+        return bool(setter(user))
+
+    def get_workobject_registry(self):
+        getter = getattr(self._client, "get_workobject_registry", None)
+        return getter() if callable(getter) else None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        updater = getattr(self._client, "update_workobject_registry", None)
+        if not callable(updater):
+            return -1
+        return updater(user_id, name=name, transform=transform, persist=persist)
 
     def get_current_velocity(self) -> float:
         # logger.debug("get_current_velocity →")

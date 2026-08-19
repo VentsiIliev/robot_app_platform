@@ -6,6 +6,7 @@ import time
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_transport import IVacuumPumpTransport
 from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
+from src.engine.hardware.xinje import XinjeMA8X8YR
 
 _logger = logging.getLogger(__name__)
 
@@ -31,6 +32,12 @@ class VacuumPumpController(IVacuumPumpController):
         """
         self._transport = transport
         self._config = config or VacuumPumpConfig()
+        self._pump_register = XinjeMA8X8YR.resolve_output(self._config.pump_register)
+        self._blow_off_register = (
+            XinjeMA8X8YR.resolve_output(self._config.blow_off_register)
+            if self._config.blow_off_register is not None
+            else None
+        )
 
     def turn_on(self) -> bool:
         """Turn the vacuum pump ON.
@@ -74,19 +81,19 @@ class VacuumPumpController(IVacuumPumpController):
             True if the write succeeded, False if an exception occurred.
         """
         try:
-            self._transport.write_register(self._config.pump_register, int(value))
+            self._transport.write_register(self._pump_register, int(value))
         except Exception:
             _logger.exception(
                 "Vacuum pump %s failed register=%d value=%d",
                 label,
-                self._config.pump_register,
+                self._pump_register,
                 value,
             )
             return False
         _logger.info(
             "Vacuum pump %s register=%d value=%d",
             label,
-            self._config.pump_register,
+            self._pump_register,
             value,
         )
         return True
@@ -101,7 +108,7 @@ class VacuumPumpController(IVacuumPumpController):
             True if the pulse succeeded (or if blow-off is disabled).
             False if an exception occurred during the pulse.
         """
-        register = self._config.blow_off_register
+        register = self._blow_off_register
         if register is None:
             return True
         try:
@@ -116,7 +123,7 @@ class VacuumPumpController(IVacuumPumpController):
 
     def _close_blow_off(self) -> bool:
         """Force the blow-off valve closed before creating vacuum."""
-        register = self._config.blow_off_register
+        register = self._blow_off_register
         if register is None:
             return True
         try:

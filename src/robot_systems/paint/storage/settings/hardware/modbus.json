@@ -1,10 +1,30 @@
 {
   "port": "/dev/ttyUSB0",
-  "baudrate": 115200,
+  "baudrate": 57600,
   "bytesize": 8,
   "stopbits": 1,
-  "parity": "E",
+  "parity": "N",
   "timeout": 0.5,
   "slave_address": 10,
-  "max_retries": 30
+  "max_retries": 30,
+  "profiles": {
+    "xinje_even": {
+      "port": "/dev/ttyUSB0",
+      "baudrate": 57600,
+      "bytesize": 8,
+      "stopbits": 1,
+      "parity": "E",
+      "timeout": 0.5,
+      "slave_address": 1,
+      "max_retries": 30
+    }
+  },
+  "slaves": {
+    "xinje_ma": {
+      "slave_address": 1,
+      "profile_name": "xinje_even",
+      "transport_type": "xinje_ma_8x8yr",
+      "max_retries": 30
+    }
+  }
 }

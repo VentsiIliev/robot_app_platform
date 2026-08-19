@@ -31,10 +31,21 @@ class ModbusSettingsController(IApplicationController, BackgroundWorker):
 
     def _on_save(self, _values: dict) -> None:
         try:
-            self._model.save(self._view.get_values())
+            if isinstance(self._view, ModbusSettingsView):
+                profiles = self._view.get_profile_values()
+                slaves = self._view.get_slave_values()
+                self._model.save_all(profiles, slaves)
+                self._view.set_save_result(
+                    True,
+                    f"Saved {len(profiles)} profile(s), {len(slaves)} slave(s)",
+                )
+            else:
+                self._model.save(self._view.get_values())
             self._logger.info("Modbus config saved")
         except Exception:
             self._logger.exception("Failed to save modbus config")
+            if isinstance(self._view, ModbusSettingsView):
+                self._view.set_save_result(False, "Modbus configuration was not saved")
 
     # ── Detect ports ──────────────────────────────────────────────────────
 

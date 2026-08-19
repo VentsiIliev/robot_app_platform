@@ -83,6 +83,15 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     @abstractmethod
     def set_active_tool(self, tool: int) -> bool: ...
 
+    def set_active_workobject(self, user: int) -> bool:
+        return True
+
+    def get_workobject_registry(self):
+        return None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        return -1
+
     def is_healthy(self) -> bool:
         """Healthy = robot is not in error state."""
         return self.get_connection_state() not in ("disconnected", "starting", "error", "fault")

@@ -1,0 +1,44 @@
+{
+  "vacuum_pump": {
+    "enabled": true,
+    "slave_id": 1,
+    "outputs": {
+      "pump": "Y2",
+      "blow_off": "Y4"
+    }
+  },
+  "vacuum_sensor": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {
+      "sensor": "X5"
+    }
+  },
+  "laser": {
+    "enabled": true,
+    "slave_id": 1,
+    "outputs": {
+      "enable": "Y5"
+    }
+  },
+
+  "fan": {
+    "enabled": true,
+    "slave_id": 1,
+    "outputs": {
+      "fan": "Y3"
+    }
+  },
+  "physical_control_buttons": {
+    "enabled": true,
+    "slave_id": 1,
+    "inputs": {
+      "start": "X1",
+      "pause": "X0"
+    },
+    "outputs": {
+      "start": "Y0",
+      "pause": "Y1"
+    }
+  }
+}

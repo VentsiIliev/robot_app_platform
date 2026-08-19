@@ -292,6 +292,9 @@ class CalibrationView(IApplicationView):
     tool_tcp_solve_requested = pyqtSignal()
     tool_tcp_save_requested = pyqtSignal()
     tool_tcp_clear_requested = pyqtSignal()
+    workobject_capture_requested = pyqtSignal(str)
+    workobject_solve_requested = pyqtSignal(int, str)
+    workobject_save_requested = pyqtSignal(int, str)
     calibrate_laser_requested = pyqtSignal()
     detect_laser_requested = pyqtSignal()
     stop_calibration_requested = pyqtSignal()
@@ -369,6 +372,9 @@ class CalibrationView(IApplicationView):
         self._controls_panel.tool_tcp_solve_btn.clicked.connect(self.tool_tcp_solve_requested.emit)
         self._controls_panel.tool_tcp_save_btn.clicked.connect(self.tool_tcp_save_requested.emit)
         self._controls_panel.tool_tcp_clear_btn.clicked.connect(self.tool_tcp_clear_requested.emit)
+        self._controls_panel.workobject_tab.capture_requested.connect(self.workobject_capture_requested)
+        self._controls_panel.workobject_tab.solve_requested.connect(self.workobject_solve_requested)
+        self._controls_panel.workobject_tab.save_requested.connect(self.workobject_save_requested)
         self._controls_panel.calibrate_laser_btn.clicked.connect(self.calibrate_laser_requested.emit)
         self._controls_panel.detect_laser_btn.clicked.connect(self.detect_laser_requested.emit)
         self._controls_panel.test_calibration_btn.clicked.connect(self.test_calibration_requested.emit)
@@ -410,6 +416,12 @@ class CalibrationView(IApplicationView):
 
     def set_tool_tcp_result(self, result: dict | None) -> None:
         self._controls_panel.set_tool_tcp_result(result)
+
+    def set_workobject_capture(self, point: str, pose) -> None:
+        self._controls_panel.workobject_tab.set_capture_result(point, pose)
+
+    def set_workobject_result(self, ok: bool, message: str, payload: dict | None = None) -> None:
+        self._controls_panel.workobject_tab.set_result(ok, message, payload)
 
     def _emit_tool_tcp_start_requested(self) -> None:
         self.tool_tcp_start_requested.emit(int(self._controls_panel.tool_tcp_tool_spin.value()))

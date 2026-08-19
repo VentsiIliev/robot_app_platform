@@ -20,6 +20,7 @@ from src.applications.intrinsic_calibration_capture.service.i_intrinsic_capture_
 from src.applications.height_measuring.service.i_height_measuring_app_service import LaserDetectionResult
 from src.applications.calibration.service.i_calibration_service import ICalibrationService, RobotCalibrationPreview
 from src.applications.calibration.service.calibration_settings_bridge import CalibrationSettingsBridge
+from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.robot_calibration import metrics
 from src.engine.core.i_coordinate_transformer import ICoordinateTransformer
 from src.engine.robot.calibration.robot_calibration.target_planning import (
@@ -29,6 +30,7 @@ from src.engine.robot.calibration.robot_calibration.target_planning import (
 from src.engine.vision.i_vision_service import IVisionService
 from src.shared_contracts.declarations import WorkAreaDefinition
 from src.engine.work_areas.i_work_area_service import IWorkAreaService
+from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 
 _logger = logging.getLogger(__name__)
 
@@ -76,6 +78,8 @@ class _IRobotService(Protocol):
     def get_current_position(self) -> list: ...
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool: ...
     def stop_motion(self) -> bool: ...
+    def set_active_tool(self, tool: int) -> bool: ...
+    def set_active_workobject(self, user: int) -> bool: ...
     def validate_pose(
         self,
         start_position,
@@ -205,6 +209,7 @@ class CalibrationApplicationService(ICalibrationService):
                  tool_tcp_calibrator: Optional[_IToolTcpCalibrator] = None,
                  marker_height_mapping_service: Optional[_IMarkerHeightMappingService] = None,
                  calibration_settings_service: Optional[ICalibrationSettingsService] = None,
+                 settings_service: Optional[ISettingsService] = None,
                  laser_calibration_service: Optional[_ILaserCalibrator] = None,
                  laser_ops: Optional[_ILaserOps] = None,
                  intrinsic_capture_service: Optional[_IIntrinsicCaptureService] = None,
@@ -225,6 +230,7 @@ class CalibrationApplicationService(ICalibrationService):
         self._tool_tcp_calibrator = tool_tcp_calibrator
         self._marker_height_mapping_service = marker_height_mapping_service
         self._calibration_settings = CalibrationSettingsBridge(calibration_settings_service)
+        self._settings_service = settings_service
         self._laser_calibration_service = laser_calibration_service
         self._laser_ops = laser_ops
         self._intrinsic_capture_service = intrinsic_capture_service
@@ -244,6 +250,27 @@ class CalibrationApplicationService(ICalibrationService):
 
     def _robot_user(self) -> int:
         return self._robot_config.robot_user if self._robot_config else 0
+
+    def _current_robot_config(self):
+        if self._settings_service is not None:
+            try:
+                latest = self._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+                if latest is not None:
+                    return latest
+            except Exception:
+                _logger.warning("Could not read latest Robot Settings for Tool TCP precheck", exc_info=True)
+        return self._robot_config
+
+    def _validate_tool_tcp_reference_frames(self) -> tuple[bool, str]:
+        config = self._current_robot_config()
+        tool = int(getattr(config, "robot_tool", 0) if config is not None else 0)
+        if tool != 0:
+            return (
+                False,
+                "Tool TCP calibration requires Robot Settings Tool ID = 0. "
+                f"Current Tool ID is {tool}. Change Tool ID to 0 and start again.",
+            )
+        return True, ""
 
     def _required_ids(self) -> set | None:
         if self._calib_config is None:
@@ -947,6 +974,9 @@ class CalibrationApplicationService(ICalibrationService):
         if self._tool_tcp_calibrator is None:
             return False, "Tool TCP calibration is not configured"
         try:
+            ok, msg = self._validate_tool_tcp_reference_frames()
+            if not ok:
+                return False, msg
             self._tool_tcp_calibrator.start(tool_id)
             return True, f"Tool TCP calibration started for tool {int(tool_id)}"
         except Exception as exc:
@@ -987,6 +1017,15 @@ class CalibrationApplicationService(ICalibrationService):
             return False, "Tool TCP calibration is not configured"
         self._tool_tcp_calibrator.clear_samples()
         return True, "Tool TCP samples cleared"
+
+    def capture_workobject_point(self, point_name: str) -> tuple[bool, str, dict]:
+        return self._calibration_settings.capture_workobject_point(point_name)
+
+    def solve_workobject(self, user_id: int, name: str = "") -> tuple[bool, str, dict]:
+        return self._calibration_settings.solve_workobject(user_id, name)
+
+    def save_workobject(self, user_id: int, name: str = "", persist: bool = True) -> tuple[bool, str, dict]:
+        return self._calibration_settings.save_workobject(user_id, name=name, persist=persist)
 
     def calibrate_laser(self) -> tuple[bool, str]:
         if self._laser_calibration_service is None:

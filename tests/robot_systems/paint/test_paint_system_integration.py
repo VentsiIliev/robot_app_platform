@@ -307,6 +307,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
     def test_build_camera_and_calibration_settings_applications_wire_expected_services(self):
         robot_system = SimpleNamespace(
             _settings_service="settings",
+            _robot="robot",
             get_optional_service=MagicMock(return_value="vision"),
             get_service=MagicMock(return_value="work_areas"),
             get_work_area_definitions=MagicMock(return_value=["area"]),
@@ -345,6 +346,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         calibration_service_cls.assert_called_once_with(
             "settings",
             vision_service="vision",
+            robot_service="robot",
         )
         calibration_factory.build.assert_called_once_with("calibration-service", messaging=messaging, jog_service="jog")
         work_area_service_cls.assert_called_once_with(work_area_service="work_areas", vision_service="vision")
@@ -665,11 +667,12 @@ class TestPaintApplicationWiring(unittest.TestCase):
             default_output_dir="/tmp/intrinsic",
             settings_service="settings",
         )
-        calibration_settings_cls.assert_called_once_with("settings")
+        calibration_settings_cls.assert_called_once_with("settings", robot_service="robot")
         service = calibration_service_cls.call_args.args[0] if calibration_service_cls.call_args.args else calibration_service_cls.call_args.kwargs
         if isinstance(service, dict):
             observer_position_provider = service["observer_position_provider"]
             self.assertEqual(["observer-pose"], observer_position_provider("observer-group"))
+            self.assertEqual("settings", service["settings_service"])
         calibration_factory_cls.assert_called_once_with(work_area_definitions=["paint-area"])
         calibration_factory.build.assert_called_once()
 

@@ -48,12 +48,15 @@ class RobotStateManager(IRobotStateProvider):
         publisher: Optional[IStatePublisher] = None,
         state_topic: str = "robot/state",
         active_tool_getter: Callable[[], int] | None = None,
+        active_workobject_getter: Callable[[], int] | None = None,
     ):
         self._robot = robot
         self._publisher = publisher
         self._state_topic = state_topic
         self._active_tool_getter = active_tool_getter
+        self._active_workobject_getter = active_workobject_getter
         self._active_tool_synced: int | None = None
+        self._active_workobject_synced: int | None = None
         self._logger = logging.getLogger(self.__class__.__name__)
 
         self._position: List[float] = []
@@ -189,6 +192,20 @@ class RobotStateManager(IRobotStateProvider):
                 self._publisher.publish(self._build_snapshot())
             return
 
+        if not self._sync_configured_workobject():
+            self._logger.warning("Failed to configure robot workobject", exc_info=True)
+            with self._lock:
+                self._state = "workobject_mismatch"
+                self._position = []
+                self._readiness_extra = {
+                    "robot_ready": False,
+                    "readiness_state": "workobject_mismatch",
+                    "readiness_note": "Configured robot workobject could not be activated",
+                }
+            if self._publisher:
+                self._publisher.publish(self._build_snapshot())
+            return
+
         if self._connection_was_disconnected:
             drive_status_getter = getattr(self._robot, "get_drive_status", None)
             if callable(drive_status_getter):
@@ -218,10 +235,13 @@ class RobotStateManager(IRobotStateProvider):
             acc = snapshot.get("acceleration_magnitude")
             if acc is None:
                 acceleration_components = snapshot.get("acceleration")
-                try:
-                    acc = sum(float(v) ** 2 for v in acceleration_components) ** 0.5
-                except (TypeError, ValueError):
-                    acc = None
+                if isinstance(acceleration_components, (int, float)):
+                    acc = float(acceleration_components)
+                else:
+                    try:
+                        acc = sum(float(v) ** 2 for v in acceleration_components) ** 0.5
+                    except (TypeError, ValueError):
+                        acc = None
         else:
             self._logger.debug("Robot state snapshot unavailable; keeping last known kinematics")
             pos = None
@@ -258,6 +278,7 @@ class RobotStateManager(IRobotStateProvider):
             self._velocity = 0.0
             self._acceleration = 0.0
             self._active_tool_synced = None
+            self._active_workobject_synced = None
             self._connection_was_disconnected = state == "disconnected"
             self._readiness_extra = self._readiness_for_unavailable_state(state)
             self._snapshot_extra = {}
@@ -384,6 +405,42 @@ class RobotStateManager(IRobotStateProvider):
         self._logger.info("Configured active robot tool synced: %s", desired_tool)
         return True
 
+    def _sync_configured_workobject(self) -> bool:
+        if self._active_workobject_getter is None:
+            return True
+
+        try:
+            desired_workobject = int(self._active_workobject_getter())
+        except Exception:
+            self._logger.warning("Failed to read configured robot workobject", exc_info=True)
+            return False
+
+        if self._active_workobject_synced == desired_workobject:
+            return True
+
+        setter = getattr(self._robot, "set_active_workobject", None)
+        if not callable(setter):
+            self._logger.warning("Robot driver does not support active workobject selection")
+            return False
+
+        try:
+            ok = bool(setter(desired_workobject))
+        except Exception:
+            self._logger.warning(
+                "Failed to activate configured robot workobject=%s",
+                desired_workobject,
+                exc_info=True,
+            )
+            return False
+
+        if not ok:
+            self._logger.warning("Robot rejected configured active workobject=%s", desired_workobject)
+            return False
+
+        self._active_workobject_synced = desired_workobject
+        self._logger.info("Configured active robot workobject synced: %s", desired_workobject)
+        return True
+
     def _sync_connection_generation(self) -> None:
         details_getter = getattr(self._robot, "get_connection_details", None)
         if not callable(details_getter):
@@ -404,5 +461,6 @@ class RobotStateManager(IRobotStateProvider):
                 return
             self._last_connection_generation = generation
             self._active_tool_synced = None
+            self._active_workobject_synced = None
             self._connection_was_disconnected = True
-        self._logger.info("Robot connection generation changed; active tool will be re-synced")
+        self._logger.info("Robot connection generation changed; active tool/workobject will be re-synced")

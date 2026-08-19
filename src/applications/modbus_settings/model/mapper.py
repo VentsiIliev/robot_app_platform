@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from src.engine.hardware.communication.modbus.modbus import ModbusConfig
+from src.engine.hardware.communication.modbus.modbus import ModbusConfig, ModbusDeviceConfig
 
 
 class ModbusSettingsMapper:
@@ -32,4 +32,30 @@ class ModbusSettingsMapper:
         c.timeout       = float(flat.get("timeout",       c.timeout))
         c.slave_address = int(flat.get("slave_address", c.slave_address))
         c.max_retries   = int(flat.get("max_retries",   c.max_retries))
+        return c
+
+    @staticmethod
+    def device_to_flat_dict(config: ModbusDeviceConfig) -> dict:
+        return {
+            "port": config.port,
+            "baudrate": config.baudrate,
+            "bytesize": config.bytesize,
+            "stopbits": config.stopbits,
+            "parity": config.parity,
+            "timeout": config.timeout,
+            "slave_address": config.slave_address,
+            "max_retries": config.max_retries,
+        }
+
+    @staticmethod
+    def device_from_flat_dict(flat: dict, base: ModbusDeviceConfig) -> ModbusDeviceConfig:
+        c = deepcopy(base)
+        c.port = flat.get("port", c.port)
+        c.baudrate = int(flat.get("baudrate", c.baudrate))
+        c.bytesize = int(flat.get("bytesize", c.bytesize))
+        c.stopbits = int(flat.get("stopbits", c.stopbits))
+        c.parity = flat.get("parity", c.parity)
+        c.timeout = float(flat.get("timeout", c.timeout))
+        c.slave_address = int(flat.get("slave_address", c.slave_address))
+        c.max_retries = int(flat.get("max_retries", c.max_retries))
         return c

@@ -758,6 +758,7 @@ def _build_calibration_settings_application(robot_system):
     service = CalibrationSettingsApplicationService(
         robot_system._settings_service,
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
+        robot_service=getattr(robot_system, "_robot", None),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -911,7 +912,11 @@ def _build_calibration_application(robot_system):
         marker_height_mapping_service=marker_height_mapping_service,
         intrinsic_capture_service=intrinsic_capture_service,
         tool_tcp_calibrator=tool_tcp_calibrator,
-        calibration_settings_service=CalibrationSettingsApplicationService(robot_system._settings_service),
+        calibration_settings_service=CalibrationSettingsApplicationService(
+            robot_system._settings_service,
+            robot_service=robot_service,
+        ),
+        settings_service=robot_system._settings_service,
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
         laser_ops=getattr(robot_system, "_laser_detection_service", None),
         observer_group_provider=robot_system.get_observer_group_for_area,

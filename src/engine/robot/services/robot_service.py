@@ -143,6 +143,34 @@ class RobotService(IRobotService):
                     self._logger.warning("State refresh after set_active_tool failed", exc_info=True)
         return ok
 
+    def set_active_workobject(self, user: int) -> bool:
+        setter = getattr(self._robot, "set_active_workobject", None)
+        if not callable(setter):
+            return False
+        try:
+            ok = bool(setter(int(user)))
+        except Exception:
+            self._logger.exception("set_active_workobject failed for user=%s", user)
+            return False
+        if ok:
+            refresh = getattr(self._state, "refresh_once", None)
+            if callable(refresh):
+                try:
+                    refresh()
+                except Exception:
+                    self._logger.warning("State refresh after set_active_workobject failed", exc_info=True)
+        return ok
+
+    def get_workobject_registry(self):
+        getter = getattr(self._robot, "get_workobject_registry", None)
+        return getter() if callable(getter) else None
+
+    def update_workobject_registry(self, user_id, name=None, transform=None, persist=False):
+        updater = getattr(self._robot, "update_workobject_registry", None)
+        if not callable(updater):
+            return -1
+        return updater(user_id, name=name, transform=transform, persist=persist)
+
     # --- IRobotLifecycle ---
 
     def enable_robot(self) -> None:

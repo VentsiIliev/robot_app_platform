@@ -16,7 +16,7 @@ class TestCalibrationControlsPanel(unittest.TestCase):
         tab_titles = [panel._tabs.tabText(i) for i in range(panel._tabs.count())]
         self.assertEqual(
             tab_titles,
-            ["System", "Camera", "Robot", "Tool TCP", "Laser", "Height Mapping"],
+            ["System", "Camera", "Robot", "Tool TCP", "WorkObject", "Laser", "Height Mapping"],
         )
 
     def test_stop_button_starts_disabled(self):
