@@ -23,6 +23,34 @@ DISABLED_PREVIEW_BORDER = "#C4C0CA"
 SCROLLBAR_BG = "#F6F7FB"       # same as BG_COLOR
 SCROLLBAR_HANDLE = "#CAC4D0"
 SCROLLBAR_HANDLE_HOVER = "#79747E"
+TOUCH_SCROLL_AREA_STYLE = f"""
+QScrollArea {{
+    border: none;
+    background: transparent;
+}}
+QScrollBar:vertical {{
+    background: {SCROLLBAR_BG};
+    width: 24px;
+    margin: 0;
+    border-radius: 8px;
+}}
+QScrollBar::handle:vertical {{
+    background: {SCROLLBAR_HANDLE};
+    min-height: 48px;
+    border-radius: 8px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: {SCROLLBAR_HANDLE_HOVER};
+}}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+"""
 # Overlay
 OVERLAY_BG = "rgba(0, 0, 0, 0.5)"
 OVERLAY_LIGHT = "rgba(0, 0, 0, 0.32)"
