@@ -229,6 +229,22 @@ class TestPaintProcessSettingsApplicationService(unittest.TestCase):
         robot.move_linear.assert_called_once_with([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 4, 70.0, 30.0, 12.5, True)
         robot.move_ptp.assert_called_once_with([7.0, 8.0, 9.0, 10.0, 11.0, 12.0], 3, 4, 50.0, 20.0, True)
 
+    def test_move_to_waypoint_uses_live_robot_settings(self):
+        robot = MagicMock()
+        robot.move_ptp.return_value = True
+        robot_config = MagicMock(robot_tool=5, robot_user=6)
+        service = PaintProcessSettingsApplicationService(
+            process_config_service=MagicMock(),
+            robot_service_provider=lambda: robot,
+            robot_config_provider=lambda: robot_config,
+            robot_tool=1,
+            robot_user=2,
+        )
+
+        self.assertTrue(service.move_to_waypoint({"position": [1, 2, 3, 4, 5, 6]}))
+
+        robot.move_ptp.assert_called_once_with([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 5, 6, 50.0, 20.0, True)
+
 
 if __name__ == "__main__":
     unittest.main()

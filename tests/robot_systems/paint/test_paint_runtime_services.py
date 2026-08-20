@@ -491,7 +491,7 @@ class TestModbusLaserControl(unittest.TestCase):
 class TestModbusVacuumPumpTransport(unittest.TestCase):
     def test_ma_output_write_uses_fc15_output_bank_frame(self) -> None:
         transport = ModbusVacuumPumpTransport(
-            port="/dev/null",
+            port="/dev/test-ma-frame",
             slave_address=10,
             write_retry_delay_s=0.0,
         )
@@ -505,7 +505,7 @@ class TestModbusVacuumPumpTransport(unittest.TestCase):
 
     def test_ma_output_shadow_preserves_previous_bank_values(self) -> None:
         transport = ModbusVacuumPumpTransport(
-            port="/dev/null",
+            port="/dev/test-ma-shadow",
             slave_address=10,
             write_retry_delay_s=0.0,
         )

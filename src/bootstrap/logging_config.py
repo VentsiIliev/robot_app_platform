@@ -1,4 +1,9 @@
 import logging
+import os
+
+# OpenCV writes video backend warnings directly through its native logger,
+# outside Python's logging hierarchy. Set this before cv2 is imported.
+os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
 
 
 class _ColorFormatter(logging.Formatter):

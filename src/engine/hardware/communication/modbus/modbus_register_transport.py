@@ -3,6 +3,7 @@ import logging
 from typing import Any, List, Optional
 
 from src.engine.hardware.communication.i_register_transport import IRegisterTransport
+from src.engine.hardware.communication.modbus.serial_bus import serial_bus_session
 
 
 class _Session:
@@ -14,18 +15,30 @@ class _Session:
         self._owns = False
 
     def __enter__(self) -> Any:
+        self._bus_session = serial_bus_session(
+            self._transport._port,
+            self._transport._timeout,
+        )
+        self._bus_session.__enter__()
         if self._transport._persistent is not None:
             return self._transport._persistent
-        self._inst  = self._transport._make_instrument()
-        self._owns  = True
-        return self._inst
+        try:
+            self._inst = self._transport._make_instrument()
+            self._owns = True
+            return self._inst
+        except Exception:
+            self._bus_session.__exit__(None, None, None)
+            raise
 
     def __exit__(self, *_: Any) -> None:
-        if self._owns and self._inst is not None:
-            try:
-                self._inst.serial.close()
-            except Exception:
-                pass
+        try:
+            if self._owns and self._inst is not None:
+                try:
+                    self._inst.serial.close()
+                except Exception:
+                    pass
+        finally:
+            self._bus_session.__exit__(None, None, None)
 
 
 class ModbusRegisterTransport(IRegisterTransport):

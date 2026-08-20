@@ -19,9 +19,18 @@ from src.engine.work_areas import IWorkAreaService, WorkAreaService
 def build_robot_service(ctx) -> IRobotService:
     publisher = RobotStatePublisher(ctx.messaging_service)
     active_tool_getter = None
+    active_workobject_getter = None
     if ctx.settings is not None:
         active_tool_getter = lambda: int(getattr(ctx.settings.get(CommonSettingsID.ROBOT_CONFIG), "robot_tool", 0))
-    state = RobotStateManager(ctx.robot.clone(), publisher=publisher, active_tool_getter=active_tool_getter)
+        active_workobject_getter = lambda: int(
+            getattr(ctx.settings.get(CommonSettingsID.ROBOT_CONFIG), "robot_user", 0)
+        )
+    state = RobotStateManager(
+        ctx.robot.clone(),
+        publisher=publisher,
+        active_tool_getter=active_tool_getter,
+        active_workobject_getter=active_workobject_getter,
+    )
     state.start_monitoring()
     return RobotService(motion=ctx.motion, robot=ctx.robot, state_provider=state)
 

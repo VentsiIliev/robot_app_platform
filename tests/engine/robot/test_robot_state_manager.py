@@ -200,6 +200,20 @@ class TestRobotStateManager(unittest.TestCase):
         self.assertFalse(snapshot.extra["robot_ready"])
         self.assertEqual(snapshot.extra["readiness_state"], "tool_mismatch")
 
+    def test_tool_sync_failure_exposes_robot_rejection_to_readiness(self):
+        publisher = MagicMock()
+        robot = MagicMock()
+        robot.set_active_tool.return_value = False
+        robot.get_connection_details.return_value = {
+            "last_command_error": "tool_id 1 maps to unknown tool 'TOOL_1'",
+        }
+        mgr = RobotStateManager(robot, publisher=publisher, active_tool_getter=lambda: 1)
+
+        mgr.refresh_once()
+
+        snapshot = publisher.publish.call_args[0][0]
+        self.assertIn("tool_id 1 maps to unknown tool 'TOOL_1'", snapshot.extra["readiness_note"])
+
     def test_refresh_publishes_drive_not_ready_when_drive_status_blocks_motion(self):
         publisher = MagicMock()
         robot = MagicMock()

@@ -2,15 +2,18 @@ from __future__ import annotations
 from functools import partial
 from typing import List
 
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import QTimer, pyqtSignal, Qt
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QWidget,
+    QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QTabWidget, QWidget,
 )
 from pl_gui.settings.settings_view.styles import BG_COLOR, GROUP_STYLE
 from src.applications.base.app_styles import indicator_dot_style, semantic_button_style
 
 from src.applications.base.i_application_view import IApplicationView
-from src.applications.device_control.service.i_device_control_service import MotorEntry
+from src.applications.device_control.service.i_device_control_service import (
+    IDeviceControlDevice,
+    MotorEntry,
+)
 
 _GREEN     = "#2E7D32"
 _GREEN_HOV = "#1B5E20"
@@ -43,6 +46,8 @@ class DeviceControlView(IApplicationView):
     motor_off_requested       = pyqtSignal(int)   # carries motor address
     generator_on_requested    = pyqtSignal()
     generator_off_requested   = pyqtSignal()
+    device_action_requested   = pyqtSignal(str, str)
+    device_state_poll_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__("Device Control", parent)
@@ -62,7 +67,19 @@ class DeviceControlView(IApplicationView):
         self._device_layout.setSpacing(10)
         self._device_layout.setContentsMargins(0, 0, 0, 0)
         scroll.setWidget(self._inner)
+        self._legacy_scroll = scroll
+        self._tabs = QTabWidget()
+        self._tabs.setVisible(False)
+        root.addWidget(self._tabs)
         root.addWidget(scroll)
+
+        self._device_tabs: dict[str, QWidget] = {}
+        self._device_state_labels: dict[str, QLabel] = {}
+        self._device_buttons: dict[str, list[QPushButton]] = {}
+        self._vacuum_status_dot: QLabel | None = None
+        self._vacuum_status_label: QLabel | None = None
+        self._state_timer = QTimer(self)
+        self._state_timer.timeout.connect(self._on_state_timer)
 
         self._on_btns:    dict[str, QPushButton] = {}
         self._off_btns:   dict[str, QPushButton] = {}
@@ -79,6 +96,115 @@ class DeviceControlView(IApplicationView):
 
         # motor rows added later via setup_motors()
         self._device_layout.addStretch()
+
+    def setup_devices(self, devices: List[IDeviceControlDevice]) -> None:
+        while self._tabs.count():
+            widget = self._tabs.widget(0)
+            self._tabs.removeTab(0)
+            widget.deleteLater()
+        self._device_tabs.clear()
+        self._device_state_labels.clear()
+        self._device_buttons.clear()
+        self._vacuum_status_dot = None
+        self._vacuum_status_label = None
+
+        for device in devices:
+            page = QWidget()
+            layout = QVBoxLayout(page)
+            layout.setContentsMargins(16, 16, 16, 16)
+            layout.setSpacing(12)
+
+            if device.key == "vacuum_sensor":
+                status_row = QHBoxLayout()
+                status_row.setSpacing(12)
+                self._vacuum_status_dot = QLabel("●")
+                self._vacuum_status_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._vacuum_status_dot.setFixedSize(40, 40)
+                self._vacuum_status_dot.setStyleSheet(
+                    indicator_dot_style(color=_MUTED, font_pt=30)
+                )
+                self._vacuum_status_label = QLabel(self.tr("Waiting for sensor reading"))
+                self._vacuum_status_label.setStyleSheet(
+                    f"color: {_MUTED}; font-size: 14pt; font-weight: bold;"
+                )
+                status_row.addWidget(self._vacuum_status_dot)
+                status_row.addWidget(self._vacuum_status_label)
+                status_row.addStretch()
+                layout.addLayout(status_row)
+
+            state = QLabel("State: not read")
+            state.setWordWrap(True)
+            layout.addWidget(state)
+            buttons = []
+            for action, label in device.actions().items():
+                button = QPushButton(label)
+                button.setProperty("device_key", device.key)
+                button.setProperty("action", action)
+                button.setStyleSheet(_BTN_ON)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(self._on_device_action_clicked)
+                layout.addWidget(button)
+                buttons.append(button)
+            layout.addStretch()
+            self._tabs.addTab(page, device.label)
+            self._device_tabs[device.key] = page
+            self._device_state_labels[device.key] = state
+            self._device_buttons[device.key] = buttons
+
+        has_devices = bool(devices)
+        self._tabs.setVisible(has_devices)
+        self._legacy_scroll.setVisible(not has_devices)
+        if has_devices:
+            self._state_timer.start(1000)
+            self._on_state_timer()
+        else:
+            self._state_timer.stop()
+
+    def set_device_state(self, device_key: str, state: dict[str, object]) -> None:
+        label = self._device_state_labels.get(device_key)
+        if label is None:
+            return
+        if state.get("healthy") is False:
+            text = f"Communication error: {state.get('error', 'read failed')}"
+            label.setStyleSheet(f"color: {_RED}; font-weight: bold;")
+        else:
+            values = ", ".join(f"{key}={value}" for key, value in state.items())
+            text = f"State: {values or 'OK'}"
+            label.setStyleSheet("")
+        label.setText(text)
+        if device_key == "vacuum_sensor":
+            self._set_vacuum_sensor_status(state)
+
+    def _set_vacuum_sensor_status(self, state: dict[str, object]) -> None:
+        if self._vacuum_status_dot is None or self._vacuum_status_label is None:
+            return
+        if state.get("healthy") is False:
+            color = _MUTED
+            text = self.tr("Sensor unavailable")
+        elif bool(state.get("detected")):
+            color = _GREEN
+            text = self.tr("Workpiece attached")
+        else:
+            color = _RED
+            text = self.tr("No workpiece attached")
+        self._vacuum_status_dot.setStyleSheet(
+            indicator_dot_style(color=color, font_pt=30)
+        )
+        self._vacuum_status_label.setText(text)
+        self._vacuum_status_label.setStyleSheet(
+            f"color: {color}; font-size: 14pt; font-weight: bold;"
+        )
+
+    def _on_device_action_clicked(self) -> None:
+        button = self.sender()
+        if isinstance(button, QPushButton):
+            self.device_action_requested.emit(
+                str(button.property("device_key")),
+                str(button.property("action")),
+            )
+
+    def _on_state_timer(self) -> None:
+        self.device_state_poll_requested.emit()
 
     # ── Motor rows built dynamically from config ───────────────────────
 
@@ -173,4 +299,4 @@ class DeviceControlView(IApplicationView):
             self._dots[key].setStyleSheet(_DOT_ON if active else _DOT_OFF)
 
     def clean_up(self) -> None:
-        pass
+        self._state_timer.stop()

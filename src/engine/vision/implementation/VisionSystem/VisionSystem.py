@@ -146,17 +146,17 @@ class VisionSystem:
             width  = self.camera_settings.get_camera_width(),
             height = self.camera_settings.get_camera_height(),
         )
-        self.camera, camera_index = camera_initializer.initializeCameraWithRetry(
-            camera_index,
-            should_cancel=should_cancel,
-        )
-        if self.camera is None:
-            return
+        # self.camera, camera_index = camera_initializer.initializeCameraWithRetry(
+        #     camera_index,
+        #     should_cancel=should_cancel,
+        # )
+        # if self.camera is None:
+        #     return
         # TODO -- CHANGE CAMERA SOURCE HERE IF NEEDED (e.g. for remote camera)
         # self.camera = RemoteCamera(url = "http://192.168.222.178:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://127.0.0.1:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://192.168.222.110:5000/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
-        # self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
+        self.camera = RemoteCamera(url = "http://192.168.222.44:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera = RemoteCamera(url = "http://localhost:5005/video_feed", width=self.camera_settings.get_camera_width(), height=self.camera_settings.get_camera_height())
         # self.camera.set_auto_exposure(True)
         self.camera_settings.set_camera_index(camera_index)

@@ -927,6 +927,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         )
         from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 
+        self._refresh_runtime_config()
         control = control or PaintExecutionControl()
         context = PaintExecutionContext(
             production_service=_PreparedPaintProcessAdapter(self),

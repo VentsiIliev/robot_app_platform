@@ -8,6 +8,7 @@ from src.engine.hardware.fan.interfaces.i_fan_control import IFanControl
 from src.engine.hardware.physical_control_buttons.interfaces.i_physical_control_buttons import IPhysicalControlButtons
 from src.engine.hardware.peripherals import PeripheralConfigSerializer
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
+from src.engine.hardware.vacuum_sensor.interfaces.i_vacuum_sensor_service import IVacuumSensorService
 from src.engine.hardware.communication.modbus.modbus import ModbusConfigSerializer
 from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.robot.calibration.service_builders import build_robot_system_calibration_service
@@ -42,6 +43,7 @@ from src.robot_systems.paint.service_builders import (
     build_dryer_service,
     build_physical_control_buttons_service,
     build_vacuum_pump_service,
+    build_vacuum_sensor_service,
 )
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
 from src.shared_contracts.declarations import (
@@ -215,6 +217,8 @@ class PaintRobotSystem(BaseRobotSystem):
                             factory=application_wiring._build_modbus_settings_application),
             ApplicationSpec(name="DryerSettings", folder_id=2, icon="fa5s.wind",
                             factory=application_wiring._build_dryer_settings_application),
+            ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
+                            factory=application_wiring._build_device_control_application),
             ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
                             factory=application_wiring._build_work_area_settings_application),
             ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
@@ -304,6 +308,13 @@ class PaintRobotSystem(BaseRobotSystem):
             required=False,
             description="Physical start, pause, and reset buttons",
             builder=build_physical_control_buttons_service,
+        ),
+        ServiceSpec(
+            name=ServiceID.VACUUM_SENSOR,
+            service_type=IVacuumSensorService,
+            required=False,
+            description="Vacuum sensor service",
+            builder=build_vacuum_sensor_service,
         ),
         ServiceSpec(
             name=ServiceID.DRYER,

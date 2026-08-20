@@ -133,6 +133,11 @@ class RobotSettingsView(IApplicationView):
         self._cached_flat_config = dict(flat)
         self._settings_view.set_values(flat)
 
+    def update_robot_config(self, config) -> None:
+        flat = RobotSettingsMapper.to_flat_dict(config)
+        self._cached_flat_config.update(flat)
+        self._settings_view.set_values(flat)
+
     def load_movement_groups(
         self,
         groups: dict,

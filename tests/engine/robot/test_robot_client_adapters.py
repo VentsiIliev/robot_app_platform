@@ -31,6 +31,29 @@ class TestRobotClientAdapters(unittest.TestCase):
         self.assertEqual(client.get_connection_state(), "idle")
         self.assertIsNone(client.get_connection_details()["last_error"])
 
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
+    def test_rejected_active_tool_is_available_to_state_reporting(self, get_mock, post_mock):
+        health = MagicMock()
+        health.status_code = 200
+        health.json.return_value = {"status": "ok"}
+        get_mock.return_value = health
+        response = MagicMock()
+        response.status_code = 400
+        response.json.return_value = {
+            "success": False,
+            "error": "tool_id 1 maps to unknown tool 'TOOL_1'",
+        }
+        post_mock.return_value = response
+
+        client = HttpWebSocketRobotClient(server_url="http://localhost:5000")
+
+        self.assertFalse(client.set_active_tool(1))
+        self.assertEqual(
+            client.get_connection_details()["last_command_error"],
+            "tool_id 1 maps to unknown tool 'TOOL_1'",
+        )
+
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
     def test_starting_health_check_reports_starting_state(self, get_mock):
         response = MagicMock()

@@ -16,6 +16,7 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         dropoff_group_provider: Callable[[], object | None] | None = None,
         current_position_provider: Callable[[], list[float] | None] | None = None,
         robot_service_provider: Callable[[], object | None] | None = None,
+        robot_config_provider: Callable[[], object | None] | None = None,
         robot_tool: int = 0,
         robot_user: int = 0,
     ):
@@ -23,6 +24,7 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         self._dropoff_group_provider = dropoff_group_provider
         self._current_position_provider = current_position_provider
         self._robot_service_provider = robot_service_provider
+        self._robot_config_provider = robot_config_provider
         self._robot_tool = int(robot_tool)
         self._robot_user = int(robot_user)
 
@@ -98,15 +100,30 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         position = normalized["position"]
         vel = normalized["vel_percent"]
         acc = normalized["acc_percent"]
+        tool, user = self._resolve_robot_frame()
         if normalized["motion_type"] == "linear":
             move = getattr(robot, "move_linear", None)
             if not callable(move):
                 return False
-            return bool(move(position, self._robot_tool, self._robot_user, vel, acc, normalized["blendR"], True))
+            return bool(move(position, tool, user, vel, acc, normalized["blendR"], True))
         move = getattr(robot, "move_ptp", None)
         if not callable(move):
             return False
-        return bool(move(position, self._robot_tool, self._robot_user, vel, acc, True))
+        return bool(move(position, tool, user, vel, acc, True))
+
+    def _resolve_robot_frame(self) -> tuple[int, int]:
+        if self._robot_config_provider is None:
+            return self._robot_tool, self._robot_user
+        try:
+            config = self._robot_config_provider()
+        except Exception:
+            config = None
+        if config is None:
+            return self._robot_tool, self._robot_user
+        return (
+            int(getattr(config, "robot_tool", self._robot_tool)),
+            int(getattr(config, "robot_user", self._robot_user)),
+        )
 
     @staticmethod
     def _normalize_waypoint(value: object) -> dict | None:

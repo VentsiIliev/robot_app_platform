@@ -128,6 +128,10 @@ class RobotService(IRobotService):
     def get_current_flange_position(self) -> List[float]:
         return self._robot.get_current_flange_position()
 
+    def get_current_base_tcp_position(self) -> List[float] | None:
+        getter = getattr(self._robot, "get_current_base_tcp_position", None)
+        return getter() if callable(getter) else None
+
     def set_active_tool(self, tool: int) -> bool:
         try:
             ok = bool(self._robot.set_active_tool(int(tool)))

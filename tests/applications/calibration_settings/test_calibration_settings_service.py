@@ -106,7 +106,7 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
         settings_service = MagicMock()
         settings_service.get.return_value = SimpleNamespace(robot_user=0)
         robot_service = MagicMock()
-        robot_service.get_current_position.side_effect = [
+        robot_service.get_current_base_tcp_position.side_effect = [
             [100.0, 200.0, 300.0, 1.0, 2.0, 3.0],
             [100.0, 250.0, 300.0, 1.0, 2.0, 3.0],
             [50.0, 200.0, 300.0, 1.0, 2.0, 3.0],
@@ -125,7 +125,7 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
 
     def test_workobject_capture_refuses_nonzero_workobject_user(self):
         settings_service = MagicMock()
-        settings_service.get.return_value = SimpleNamespace(robot_user=2)
+        settings_service.get.return_value = SimpleNamespace(robot_tool=0, robot_user=2)
         robot_service = MagicMock()
         service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
 
@@ -136,19 +136,108 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
         self.assertEqual(payload, {})
         robot_service.get_current_position.assert_not_called()
 
+    def test_workobject_solve_rejects_y_point_on_negative_y_side(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_user=0)
+        service = CalibrationSettingsApplicationService(settings_service)
+        service._workobject_points = {
+            "center": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "x": [100.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "y": [0.0, -100.0, 0.0, 0.0, 0.0, 0.0],
+        }
+
+        ok, msg, payload = service.solve_workobject(1)
+
+        self.assertFalse(ok)
+        self.assertIn("-Y side", msg)
+        self.assertEqual({}, payload)
+
+    def test_workobject_solve_rejects_non_perpendicular_axes(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_user=0)
+        service = CalibrationSettingsApplicationService(settings_service)
+        service._workobject_points = {
+            "center": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "x": [100.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "y": [100.0, 100.0, 0.0, 0.0, 0.0, 0.0],
+        }
+
+        ok, msg, payload = service.solve_workobject(1)
+
+        self.assertFalse(ok)
+        self.assertIn("45.0 deg", msg)
+        self.assertEqual({}, payload)
+
+    def test_workobject_capture_uses_base_tcp_pose(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_tool=0, robot_user=0)
+        robot_service = MagicMock()
+        robot_service.get_current_base_tcp_position.return_value = [
+            10.0, 20.0, 30.0, 0.0, 0.0, 0.0
+        ]
+        robot_service.get_current_flange_position.return_value = [
+            999.0, 999.0, 999.0, 0.0, 0.0, 0.0
+        ]
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        ok, msg, payload = service.capture_workobject_point("center")
+
+        self.assertTrue(ok)
+        self.assertEqual(payload["pose"], [10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        robot_service.get_current_flange_position.assert_not_called()
+
+    def test_workobject_capture_allows_calibrated_nonzero_tool_with_user_zero(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_tool=1, robot_user=0)
+        robot_service = MagicMock()
+        robot_service.get_current_base_tcp_position.return_value = [
+            10.0, 20.0, 30.0, 0.0, 0.0, 0.0
+        ]
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        ok, msg, payload = service.capture_workobject_point("center")
+
+        self.assertTrue(ok)
+        self.assertEqual(payload["pose"], [10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        robot_service.set_active_tool.assert_called_once_with(1)
+
+    def test_workobject_capture_rejects_tool_change_after_center(self):
+        robot_config = SimpleNamespace(robot_tool=1, robot_user=0)
+        settings_service = MagicMock()
+        settings_service.get.return_value = robot_config
+        robot_service = MagicMock()
+        robot_service.set_active_tool.return_value = True
+        robot_service.get_current_base_tcp_position.return_value = [10.0, 20.0, 30.0, 0.0, 0.0, 0.0]
+        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+
+        center_ok, _, _ = service.capture_workobject_point("center")
+        robot_config.robot_tool = 0
+        x_ok, msg, payload = service.capture_workobject_point("x")
+
+        self.assertTrue(center_ok)
+        self.assertFalse(x_ok)
+        self.assertIn("started with Tool ID 1", msg)
+        self.assertEqual({}, payload)
+        self.assertEqual(1, robot_service.get_current_base_tcp_position.call_count)
+
     def test_workobject_save_updates_runtime_robot_settings_and_active_workobject(self):
         robot_config = SimpleNamespace(robot_user=0)
         settings_service = MagicMock()
         settings_service.get.return_value = robot_config
         robot_service = MagicMock()
-        robot_service.get_current_position.side_effect = [
+        robot_service.get_current_base_tcp_position.side_effect = [
             [10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             [20.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             [10.0, 30.0, 30.0, 0.0, 0.0, 0.0],
         ]
         robot_service.update_workobject_registry.return_value = 0
         robot_service.set_active_workobject.return_value = True
-        service = CalibrationSettingsApplicationService(settings_service, robot_service=robot_service)
+        messaging = MagicMock()
+        service = CalibrationSettingsApplicationService(
+            settings_service,
+            robot_service=robot_service,
+            messaging=messaging,
+        )
 
         service.capture_workobject_point("center")
         service.capture_workobject_point("x")
@@ -165,5 +254,9 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
         )
         self.assertEqual(robot_config.robot_user, 4)
         settings_service.save.assert_called_once_with(CommonSettingsID.ROBOT_CONFIG, robot_config)
+        messaging.publish.assert_called_once_with(
+            "robot/config_changed",
+            {"robot_user": 4},
+        )
         robot_service.set_active_workobject.assert_called_once_with(4)
         self.assertEqual(payload["user_id"], 4)

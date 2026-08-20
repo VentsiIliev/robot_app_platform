@@ -8,6 +8,7 @@ from src.engine.common_settings_ids import CommonSettingsID
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.engine.vision.camera_settings_serializer import CameraSettings
 from src.engine.vision.i_vision_service import IVisionService
+from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class CalibrationSettingsApplicationService(ICalibrationSettingsService):
@@ -17,11 +18,14 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         settings_service: ISettingsService,
         vision_service: IVisionService | None = None,
         robot_service=None,
+        messaging=None,
     ):
         self._settings_service = settings_service
         self._vision_service = vision_service
         self._robot_service = robot_service
+        self._messaging = messaging
         self._workobject_points: dict[str, list[float]] = {}
+        self._workobject_tool_id: int | None = None
 
     def load_settings(self) -> CalibrationSettingsData:
         vision = self._settings_service.get(CommonSettingsID.CALIBRATION_VISION_SETTINGS)
@@ -45,15 +49,15 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         except Exception:
             pass
 
-    def _current_robot_user(self) -> int:
+    def _current_robot_config(self):
         try:
-            robot_config = self._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
+            return self._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
         except Exception:
-            return 0
-        return int(getattr(robot_config, "robot_user", 0) if robot_config is not None else 0)
+            return None
 
     def _validate_workobject_reference_frame(self) -> tuple[bool, str]:
-        user = self._current_robot_user()
+        robot_config = self._current_robot_config()
+        user = int(getattr(robot_config, "robot_user", 0) if robot_config is not None else 0)
         if user != 0:
             return (
                 False,
@@ -68,19 +72,59 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
             return False, msg, {}
         if self._robot_service is None:
             return False, "Robot service is not configured", {}
+        key = str(point_name).strip().lower()
+        if key not in {"center", "x", "y"}:
+            return False, f"Unknown WorkObject point '{point_name}'", {}
+
+        robot_config = self._current_robot_config()
+        tool_id = int(getattr(robot_config, "robot_tool", 0) if robot_config is not None else 0)
+        if key == "center":
+            self._workobject_points.clear()
+            self._workobject_tool_id = tool_id
+        elif "center" not in self._workobject_points:
+            return False, "Capture the WorkObject center point first", {}
+        elif self._workobject_tool_id != tool_id:
+            return (
+                False,
+                f"WorkObject calibration started with Tool ID {self._workobject_tool_id}, but Robot Settings "
+                f"now has Tool ID {tool_id}. Restore Tool ID {self._workobject_tool_id} or recapture center.",
+                {},
+            )
+
+        set_active_tool = getattr(self._robot_service, "set_active_tool", None)
+        if callable(set_active_tool) and not bool(set_active_tool(tool_id)):
+            return False, f"Could not activate Robot Settings Tool ID {tool_id}", {}
         try:
-            pose = self._robot_service.get_current_position()
+            # WorkObject geometry is defined from the active TCP in robot base.
+            # get_current_position() intentionally reports the active WOBJ frame.
+            pose_reader = getattr(self._robot_service, "get_current_base_tcp_position", None)
+            pose = pose_reader() if callable(pose_reader) else None
+            if pose is None or not isinstance(pose, (list, tuple)) or len(pose) < 3:
+                return False, "Robot base TCP position is unavailable", {}
         except Exception as exc:
             return False, f"Could not read robot position: {exc}", {}
         if pose is None or len(pose) < 3:
             return False, "Robot position is unavailable", {}
-        key = str(point_name).strip().lower()
-        if key not in {"center", "x", "y"}:
-            return False, f"Unknown WorkObject point '{point_name}'", {}
         self._workobject_points[key] = [float(v) for v in list(pose)[:6]]
-        return True, f"Captured {key} point", {"point": key, "pose": list(self._workobject_points[key])}
+        return True, f"Captured {key} point with Tool ID {tool_id}", {
+            "point": key,
+            "pose": list(self._workobject_points[key]),
+            "tool_id": tool_id,
+        }
 
     def solve_workobject(self, user_id: int, name: str = "") -> tuple[bool, str, dict]:
+        frame_ok, frame_msg = self._validate_workobject_reference_frame()
+        if not frame_ok:
+            return False, frame_msg, {}
+        robot_config = self._current_robot_config()
+        current_tool_id = int(getattr(robot_config, "robot_tool", 0) if robot_config is not None else 0)
+        if self._workobject_tool_id is not None and current_tool_id != self._workobject_tool_id:
+            return (
+                False,
+                f"WorkObject points were captured with Tool ID {self._workobject_tool_id}, but Robot Settings "
+                f"now has Tool ID {current_tool_id}. Restore Tool ID {self._workobject_tool_id} or recapture center.",
+                {},
+            )
         missing = [key for key in ("center", "x", "y") if key not in self._workobject_points]
         if missing:
             return False, f"Capture missing WorkObject point(s): {', '.join(missing)}", {}
@@ -100,10 +144,28 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         if abs(cross_z) < 1e-6:
             return False, "X and Y points are collinear", {}
 
+        dot = x_vec[0] * y_vec[0] + x_vec[1] * y_vec[1]
+        angle_deg = math.degrees(math.atan2(abs(cross_z), dot))
+        if cross_z < 0.0:
+            return (
+                False,
+                "Y point is on the -Y side of the selected X axis. "
+                "Move from center in the desired +Y direction and capture Y again.",
+                {},
+            )
+        if abs(angle_deg - 90.0) > 10.0:
+            return (
+                False,
+                f"X and Y directions must be perpendicular; measured angle is {angle_deg:.1f} deg. "
+                "Recapture X and Y approximately 90 deg apart.",
+                {},
+            )
+
         rz = math.degrees(math.atan2(x_vec[1], x_vec[0]))
         transform = [center[0], center[1], center[2], 0.0, 0.0, rz]
         payload = {
             "user_id": int(user_id),
+            "calibration_tool_id": self._workobject_tool_id,
             "name": str(name).strip() or f"WOBJ_{int(user_id)}",
             "transform": transform,
             "points": {
@@ -112,6 +174,7 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
                 "y": list(y_point),
             },
             "cross_z": cross_z,
+            "xy_angle_deg": angle_deg,
         }
         return True, f"WorkObject solved: rz={rz:.3f} deg", payload
 
@@ -141,6 +204,14 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         if robot_config is not None:
             robot_config.robot_user = payload["user_id"]
             self._settings_service.save(CommonSettingsID.ROBOT_CONFIG, robot_config)
+            if self._messaging is not None:
+                try:
+                    self._messaging.publish(
+                        RobotTopics.ROBOT_CONFIG_CHANGED,
+                        {"robot_user": int(robot_config.robot_user)},
+                    )
+                except Exception:
+                    pass
 
         setter = getattr(self._robot_service, "set_active_workobject", None)
         if callable(setter) and not bool(setter(payload["user_id"])):

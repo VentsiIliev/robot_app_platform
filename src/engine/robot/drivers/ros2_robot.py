@@ -131,6 +131,10 @@ class Ros2Robot(IRobot):
     def get_current_flange_position(self) -> List[float] | None:
         return self._client.get_current_flange_position()
 
+    def get_current_base_tcp_position(self) -> List[float] | None:
+        getter = getattr(self._client, "get_current_base_tcp_position", None)
+        return getter() if callable(getter) else None
+
     def set_active_tool(self, tool: int) -> bool:
         return self._client.set_active_tool(tool)
 

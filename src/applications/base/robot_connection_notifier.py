@@ -21,6 +21,7 @@ class RobotConnectionNotifier:
     _READINESS_DEDUPE_PREFIX = "robot.readiness.unavailable"
     _READY_STATES = {"idle"}
     _UNAVAILABLE_STATES = {"disconnected", "starting", "error", "fault", "tool_mismatch", "drive_not_ready"}
+    _CONFIGURATION_FAILURE_STATES = {"tool_mismatch", "workobject_mismatch"}
 
     def __init__(self, messaging_service: IMessagingService, *, suppress_until_ready: bool = False) -> None:
         self._messaging = messaging_service
@@ -55,7 +56,8 @@ class RobotConnectionNotifier:
             return
 
         dedupe_key, fallback_title, fallback_message, detail = alert
-        if not self._has_seen_ready:
+        readiness_state = str((getattr(snapshot, "extra", {}) or {}).get("readiness_state") or "").strip().lower()
+        if not self._has_seen_ready and readiness_state not in self._CONFIGURATION_FAILURE_STATES:
             return
         if self._active_dedupe_key == dedupe_key:
             return

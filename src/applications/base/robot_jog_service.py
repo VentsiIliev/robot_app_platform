@@ -1,4 +1,3 @@
-import math
 import threading
 import logging
 from typing import Callable
@@ -91,6 +90,14 @@ class RobotJogService:
                 tool,
                 user,
             )
+            if not self._activate_configured_tool(tool):
+                _logger.warning("[JOG] aborted: failed to activate configured tool=%s", tool)
+                self._lock.release()
+                return
+            if not self._activate_configured_workobject(user):
+                _logger.warning("[JOG] aborted: failed to activate configured workobject=%s", user)
+                self._lock.release()
+                return
             if command_name == "SERVO_JOG":
                 self._servo_jog_stop_expected = True
                 self._servo_jog_stop_requested = False
@@ -105,15 +112,12 @@ class RobotJogService:
                 )
                 self._lock.release()
                 return
-            if not self._activate_configured_tool(tool):
-                _logger.warning("[JOG] aborted: failed to activate configured tool=%s", tool)
-                self._lock.release()
-                return
             current = self._robot.get_current_position()
-            target = self._resolve_tool_frame_target(current, axis, direction, step_value)
+            target = self._resolve_user_frame_target(current, axis, direction, step_value)
             _logger.info(
-                "[JOG] mode=configured_tool tool=%s axis=%s direction=%s step=%s current=%s target=%s",
+                "[JOG] mode=configured_user tool=%s user=%s axis=%s direction=%s step=%s current=%s target=%s",
                 tool,
+                user,
                 axis,
                 direction,
                 step_value,
@@ -217,21 +221,9 @@ class RobotJogService:
             if robot_axis.value > 3
             else None
         )
-        servo_direction = self._step_compatible_servo_direction(
-            robot_axis,
-            robot_direction,
-        )
-        if servo_direction is not robot_direction:
-            _logger.info(
-                "[SERVO_JOG] remapped direction for Step-compatible semantics: "
-                "axis=%s requested=%s servo=%s",
-                axis_name,
-                robot_direction.name,
-                servo_direction.name,
-            )
         result = starter(
             robot_axis,
-            servo_direction,
+            robot_direction,
             linear_mm_s=linear_mm_s,
             angular_deg_s=angular_deg_s,
             frame="user",
@@ -266,20 +258,17 @@ class RobotJogService:
 
         _logger.warning("[SERVO_JOG] rejected result=%s", result)
 
-    @staticmethod
-    def _step_compatible_servo_direction(
-        axis: RobotAxis,
-        direction: Direction,
-    ) -> Direction:
-        if axis == RobotAxis.Y:
-            return Direction.MINUS if direction == Direction.PLUS else Direction.PLUS
-        return direction
-
     def _activate_configured_tool(self, tool: int) -> bool:
         setter = getattr(self._robot, "set_active_tool", None)
         if not callable(setter):
             return True
         return bool(setter(tool))
+
+    def _activate_configured_workobject(self, user: int) -> bool:
+        setter = getattr(self._robot, "set_active_workobject", None)
+        if not callable(setter):
+            return True
+        return bool(setter(user))
 
     def stop_jog(self) -> None:
         if self._robot is None:
@@ -360,7 +349,7 @@ class RobotJogService:
                 return None
         return None
 
-    def _resolve_tool_frame_target(self, current_pose, axis: str, direction: str, step: float) -> list[float] | None:
+    def _resolve_user_frame_target(self, current_pose, axis: str, direction: str, step: float) -> list[float] | None:
         if not current_pose or len(current_pose) < 6:
             return None
         target = [float(v) for v in current_pose[:6]]
@@ -369,25 +358,5 @@ class RobotJogService:
         idx = robot_axis.value - 1
         if idx < 0 or idx >= len(target):
             return None
-        if idx < 3:
-            dx, dy, dz = self._tool_frame_delta(target, idx, robot_direction.value, float(step))
-            target[0] += dx
-            target[1] += dy
-            target[2] += dz
-        else:
-            target[idx] += robot_direction.value * float(step)
+        target[idx] += robot_direction.value * float(step)
         return target
-
-    @staticmethod
-    def _tool_frame_delta(position: list[float], axis_idx: int, direction_value: float, step: float):
-        cx, sx = math.cos(math.radians(position[3])), math.sin(math.radians(position[3]))
-        cy, sy = math.cos(math.radians(position[4])), math.sin(math.radians(position[4]))
-        cz, sz = math.cos(math.radians(position[5])), math.sin(math.radians(position[5]))
-        cols = (
-            (cy * cz, cy * sz, -sy),
-            (cz * sx * sy - cx * sz, cx * cz + sx * sy * sz, cy * sx),
-            (cx * cz * sy + sx * sz, cx * sy * sz - cz * sx, cx * cy),
-        )
-        col = cols[axis_idx]
-        scale = direction_value * step
-        return col[0] * scale, col[1] * scale, col[2] * scale

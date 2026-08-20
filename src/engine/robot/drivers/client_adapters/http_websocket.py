@@ -39,6 +39,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         self._available = False
         self._connection_state = "disconnected"
         self._last_error = None
+        self._last_command_error = None
         self._startup_status = {}
         self._last_reconnect_check = 0.0
         self._last_health_error = None
@@ -151,6 +152,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             "transport": self.transport_name,
             "state": self.get_connection_state(),
             "last_error": self._last_error,
+            "last_command_error": self._last_command_error,
             "startup": dict(self._startup_status),
             "drive_enabled": bool(self._drive_enabled),
             "connection_generation": self._connection_generation,
@@ -1134,6 +1136,21 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("get_current_flange_position error: %s", e, exc_info=True)
             return None
 
+    def get_current_base_tcp_position(self):
+        """Return active TCP pose in robot-base coordinates, without WOBJ conversion."""
+        try:
+            response = requests.get(f"{self.server_url}/position/base_tcp", timeout=2)
+            data = response.json()
+            position = data.get("position")
+            if self._response_failed("get_current_base_tcp_position", response, data) or position is None:
+                return None
+            self._mark_available()
+            return [float(v) for v in position]
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_current_base_tcp_position error: %s", e, exc_info=True)
+            return None
+
     def set_active_tool(self, tool: int) -> bool:
         try:
             tool_id = int(tool)
@@ -1144,12 +1161,15 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             )
             data = response.json()
             if response.status_code >= 400 or data.get("success") is False:
+                self._last_command_error = str(data.get("error") or f"HTTP {response.status_code}")
                 logger.warning("set_active_tool rejected: tool=%s http=%s data=%s", tool, response.status_code, data)
                 return False
+            self._last_command_error = None
             self._mark_available()
             logger.info("Active ROS2 tool set to %s (%s)", tool_id, data.get("tool_name"))
             return True
         except Exception as e:
+            self._last_command_error = str(e)
             self._mark_unavailable(e)
             logger.error("set_active_tool error: %s", e, exc_info=True)
             return False
@@ -1164,6 +1184,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             )
             data = response.json()
             if response.status_code >= 400 or data.get("success") is False:
+                self._last_command_error = str(data.get("error") or f"HTTP {response.status_code}")
                 logger.warning(
                     "set_active_workobject rejected: user=%s http=%s data=%s",
                     user,
@@ -1171,10 +1192,12 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
                     data,
                 )
                 return False
+            self._last_command_error = None
             self._mark_available()
             logger.info("Active ROS2 workobject set to %s (%s)", user_id, data.get("workobject_name"))
             return True
         except Exception as e:
+            self._last_command_error = str(e)
             self._mark_unavailable(e)
             logger.error("set_active_workobject error: %s", e, exc_info=True)
             return False

@@ -158,6 +158,25 @@ class TestRobotConnectionNotifier(unittest.TestCase):
         self.assertEqual(len(broker.published), 1)
         self.assertEqual(broker.published[0][1].fallback_title, "Robot Not Ready")
 
+    def test_startup_configuration_failure_is_shown_immediately(self):
+        broker = _Broker()
+        notifier = RobotConnectionNotifier(broker, suppress_until_ready=True)
+        notifier.start()
+
+        callback = broker.subscriptions[RobotTopics.STATE]
+        callback(
+            self._snapshot("tool_mismatch").with_extra(
+                robot_ready=False,
+                readiness_state="tool_mismatch",
+                readiness_note="Configured robot tool could not be activated (ID 1): "
+                               "tool_id 1 maps to unknown tool 'TOOL_1'",
+            )
+        )
+
+        self.assertEqual(len(broker.published), 1)
+        event = broker.published[0][1]
+        self.assertIn("unknown tool 'TOOL_1'", event.fallback_message)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import select
 import struct
 import time
 from typing import Any, List
@@ -11,10 +13,40 @@ import termios
 from src.engine.hardware.communication.modbus.modbus_register_transport import (
     ModbusRegisterTransport,
 )
+from src.engine.hardware.communication.modbus.serial_bus import (
+    get_serial_bus_lock,
+    serial_bus_session,
+)
 
 _logger = logging.getLogger(__name__)
 _MA_OUTPUT_START = 128
 _MA_OUTPUT_COUNT = 16
+_MA_OUTPUT_SHADOWS: dict[tuple[object, ...], list[int]] = {}
+
+
+def _write_fd_bounded(fd: int, data: bytes, timeout: float) -> None:
+    """Write a complete RTU frame without allowing the driver to block."""
+    deadline = time.monotonic() + max(0.001, float(timeout))
+    offset = 0
+    was_blocking = os.get_blocking(fd)
+    os.set_blocking(fd, False)
+    try:
+        while offset < len(data):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise serial.SerialTimeoutException("Timed out writing Xinje RTU frame")
+            _, writable, _ = select.select([], [fd], [], remaining)
+            if not writable:
+                raise serial.SerialTimeoutException("Timed out waiting for writable Xinje serial port")
+            try:
+                written = os.write(fd, data[offset:])
+            except BlockingIOError:
+                continue
+            if written <= 0:
+                raise serial.SerialException("Xinje serial write returned zero bytes")
+            offset += written
+    finally:
+        os.set_blocking(fd, was_blocking)
 
 
 class ModbusExceptionResponse(RuntimeError):
@@ -42,7 +74,19 @@ class XinjeMA8X8YRTransport(ModbusRegisterTransport):
     def __init__(self, *args, write_retry_delay_s: float = 0.02, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._write_retry_delay_s = max(0.0, float(write_retry_delay_s))
-        self._ma_output_shadow = [0] * _MA_OUTPUT_COUNT
+        shadow_key = (
+            self._port,
+            self._slave_address,
+            self._baudrate,
+            self._bytesize,
+            self._parity,
+            self._stopbits,
+        )
+        with get_serial_bus_lock(self._port):
+            self._ma_output_shadow = _MA_OUTPUT_SHADOWS.setdefault(
+                shadow_key,
+                [0] * _MA_OUTPUT_COUNT,
+            )
 
     def write_register(self, address: int, value: int) -> None:
         if _MA_OUTPUT_START <= address < _MA_OUTPUT_START + _MA_OUTPUT_COUNT:
@@ -105,13 +149,14 @@ class XinjeMA8X8YRTransport(ModbusRegisterTransport):
 
     def _write_ma_output(self, address: int, value: bool) -> None:
         index = address - _MA_OUTPUT_START
-        previous = list(self._ma_output_shadow)
-        self._ma_output_shadow[index] = 1 if value else 0
-        try:
-            self._write_bits(_MA_OUTPUT_START, self._ma_output_shadow)
-        except Exception:
-            self._ma_output_shadow = previous
-            raise
+        with serial_bus_session(self._port, self._timeout):
+            previous = list(self._ma_output_shadow)
+            self._ma_output_shadow[index] = 1 if value else 0
+            try:
+                self._write_bits(_MA_OUTPUT_START, self._ma_output_shadow)
+            except Exception:
+                self._ma_output_shadow[:] = previous
+                raise
 
     def _write_raw_frame(self, address: int, frame: bytes) -> None:
         full_frame = frame + struct.pack("<H", _crc16(frame))
@@ -130,34 +175,50 @@ class XinjeMA8X8YRTransport(ModbusRegisterTransport):
         raise RuntimeError(f"Xinje write to {address} failed after 3 attempts")
 
     def _raw_send(self, full_frame: bytes) -> bytes:
-        direct = serial.Serial(
-            port=self._port,
-            baudrate=self._baudrate,
-            bytesize=self._bytesize,
-            parity=self._parity,
-            stopbits=self._stopbits,
-            timeout=max(0.001, self._timeout),
-        )
-        try:
-            tty_attrs = termios.tcgetattr(direct.fileno())
-            tty_attrs[0] = 0
-            tty_attrs[1] = 0
-            tty_attrs[2] |= termios.CLOCAL | termios.CREAD
-            tty_attrs[3] = 0
-            termios.tcsetattr(direct.fileno(), termios.TCSANOW, tty_attrs)
-            direct.rts = False
-            direct.dtr = False
-            direct.write(full_frame)
-            direct.flush()
-            time.sleep(0.02)
-            response = direct.read(8)
-            self._validate_response(response, full_frame)
-            return response
-        finally:
+        # Several configured peripherals may share one RS-485 port. Keep the
+        # complete request/response exchange atomic across transport instances.
+        with serial_bus_session(self._port, self._timeout):
+            _logger.debug("Xinje bus acquired port=%s slave=%d", self._port, self._slave_address)
+            direct = serial.Serial(
+                port=self._port,
+                baudrate=self._baudrate,
+                bytesize=self._bytesize,
+                parity=self._parity,
+                stopbits=self._stopbits,
+                timeout=max(0.001, self._timeout),
+                write_timeout=max(0.001, self._timeout),
+                rtscts=False,
+                dsrdtr=False,
+                xonxoff=False,
+            )
             try:
-                direct.close()
-            except Exception:
-                pass
+                _logger.debug("Xinje serial opened port=%s", self._port)
+                tty_attrs = termios.tcgetattr(direct.fileno())
+                tty_attrs[0] = 0
+                tty_attrs[1] = 0
+                tty_attrs[2] |= termios.CLOCAL | termios.CREAD
+                if hasattr(termios, "CRTSCTS"):
+                    tty_attrs[2] &= ~termios.CRTSCTS
+                tty_attrs[3] = 0
+                termios.tcsetattr(direct.fileno(), termios.TCSANOW, tty_attrs)
+                direct.rts = False
+                direct.dtr = False
+                _logger.debug("Xinje writing %d bytes port=%s", len(full_frame), self._port)
+                _write_fd_bounded(direct.fileno(), full_frame, self._timeout)
+                # Do not call pyserial.flush() here. On some USB-RS485
+                # drivers tcdrain() can wait indefinitely when the adapter
+                # loses its line state. write_timeout already bounds write().
+                time.sleep(0.02)
+                _logger.debug("Xinje waiting for response port=%s", self._port)
+                response = direct.read(8)
+                _logger.debug("Xinje response received bytes=%d port=%s", len(response), self._port)
+                self._validate_response(response, full_frame)
+                return response
+            finally:
+                try:
+                    direct.close()
+                except Exception:
+                    pass
 
     def _validate_response(self, response: bytes, request: bytes) -> None:
         response = self._normalize_response(response)
@@ -187,12 +248,14 @@ class XinjeMA8X8YRTransport(ModbusRegisterTransport):
         return response
 
     def read_register(self, address: int) -> int:
-        with self._session() as inst:
-            return int(inst.read_bit(address, functioncode=1))
+        with serial_bus_session(self._port, self._timeout):
+            with self._session() as inst:
+                return int(inst.read_bit(address, functioncode=1))
 
     def read_registers(self, address: int, count: int) -> List[int]:
-        with self._session() as inst:
-            return [int(value) for value in inst.read_bits(address, count, functioncode=1)]
+        with serial_bus_session(self._port, self._timeout):
+            with self._session() as inst:
+                return [int(value) for value in inst.read_bits(address, count, functioncode=1)]
 
     def read_input(self, address: int) -> int:
         """Read one Xinje X point through the MA coil-read function.
@@ -200,8 +263,9 @@ class XinjeMA8X8YRTransport(ModbusRegisterTransport):
         MA-8X8YR firmware exposes the X image through FC1; FC2 returns
         exception code 1 (illegal function) on this module.
         """
-        with self._session() as inst:
-            return int(inst.read_bit(address, functioncode=1))
+        with serial_bus_session(self._port, self._timeout):
+            with self._session() as inst:
+                return int(inst.read_bit(address, functioncode=1))
 
     def _make_instrument(self) -> Any:
         import minimalmodbus

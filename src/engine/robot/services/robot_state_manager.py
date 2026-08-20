@@ -57,6 +57,8 @@ class RobotStateManager(IRobotStateProvider):
         self._active_workobject_getter = active_workobject_getter
         self._active_tool_synced: int | None = None
         self._active_workobject_synced: int | None = None
+        self._last_tool_sync_desired: int | None = None
+        self._last_workobject_sync_desired: int | None = None
         self._logger = logging.getLogger(self.__class__.__name__)
 
         self._position: List[float] = []
@@ -179,28 +181,32 @@ class RobotStateManager(IRobotStateProvider):
             return
 
         if not self._sync_configured_tool():
-            self._logger.warning("Failed to configure robot tool", exc_info=True)
+            self._logger.warning("Failed to configure robot tool")
             with self._lock:
                 self._state = "tool_mismatch"
                 self._position = []
                 self._readiness_extra = {
                     "robot_ready": False,
                     "readiness_state": "tool_mismatch",
-                    "readiness_note": "Configured robot tool could not be activated",
+                    "readiness_note": self._configuration_failure_note(
+                        "tool", self._last_tool_sync_desired or 0
+                    ),
                 }
             if self._publisher:
                 self._publisher.publish(self._build_snapshot())
             return
 
         if not self._sync_configured_workobject():
-            self._logger.warning("Failed to configure robot workobject", exc_info=True)
+            self._logger.warning("Failed to configure robot workobject")
             with self._lock:
                 self._state = "workobject_mismatch"
                 self._position = []
                 self._readiness_extra = {
                     "robot_ready": False,
                     "readiness_state": "workobject_mismatch",
-                    "readiness_note": "Configured robot workobject could not be activated",
+                    "readiness_note": self._configuration_failure_note(
+                        "workobject", self._last_workobject_sync_desired or 0
+                    ),
                 }
             if self._publisher:
                 self._publisher.publish(self._build_snapshot())
@@ -377,7 +383,7 @@ class RobotStateManager(IRobotStateProvider):
 
     def _sync_configured_tool(self) -> bool:
         if self._active_tool_getter is None:
-            self._logger.warning("Failed to get configured robot tool (no active tool getter)", exc_info=True)
+            self._logger.warning("Failed to get configured robot tool (no active tool getter)")
             return False
 
         # self._logger.info("Configured robot tool synced: %s", self._active_tool_getter())
@@ -387,6 +393,8 @@ class RobotStateManager(IRobotStateProvider):
         except Exception:
             self._logger.warning("Failed to read configured robot tool", exc_info=True)
             return False
+
+        self._last_tool_sync_desired = desired_tool
 
         if self._active_tool_synced == desired_tool:
             return True
@@ -415,6 +423,8 @@ class RobotStateManager(IRobotStateProvider):
             self._logger.warning("Failed to read configured robot workobject", exc_info=True)
             return False
 
+        self._last_workobject_sync_desired = desired_workobject
+
         if self._active_workobject_synced == desired_workobject:
             return True
 
@@ -440,6 +450,19 @@ class RobotStateManager(IRobotStateProvider):
         self._active_workobject_synced = desired_workobject
         self._logger.info("Configured active robot workobject synced: %s", desired_workobject)
         return True
+
+    def _configuration_failure_note(self, frame_type: str, frame_id: int) -> str:
+        details_getter = getattr(self._robot, "get_connection_details", None)
+        detail = None
+        if callable(details_getter):
+            try:
+                details = details_getter() or {}
+                if isinstance(details, dict):
+                    detail = details.get("last_command_error") or details.get("last_error")
+            except Exception:
+                self._logger.debug("Failed to collect robot configuration error", exc_info=True)
+        base = f"Configured robot {frame_type} could not be activated (ID {frame_id})"
+        return f"{base}: {detail}" if isinstance(detail, str) and detail.strip() else base
 
     def _sync_connection_generation(self) -> None:
         details_getter = getattr(self._robot, "get_connection_details", None)

@@ -106,3 +106,31 @@ def build_dryer_service(ctx):
     except Exception:
         _logger.exception("Dryer service could not be built; continuing without it")
         return None
+
+
+def build_vacuum_sensor_service(ctx):
+    """Build the configured vacuum sensor using the selected slave transport."""
+    from src.engine.hardware.communication.transport_registry import DEFAULT_TRANSPORT_REGISTRY
+    from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import VacuumSensorConfig
+    from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensorService
+
+    try:
+        modbus_config = ctx.settings.get(CommonSettingsID.MODBUS_CONFIG)
+        peripheral_config = ctx.settings.get(SettingsID.PERIPHERALS)
+        if not isinstance(modbus_config, ModbusConfig) or not isinstance(peripheral_config, PeripheralConfig):
+            return None
+        binding = peripheral_config.get("vacuum_sensor")
+        if binding is None:
+            return None
+        sensor_register = binding.inputs.get("sensor") or binding.outputs.get("sensor")
+        if sensor_register is None:
+            return None
+        slave_name = modbus_config.find_slave_name(binding.slave_id)
+        transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus_config, slave_name)
+        return VacuumSensorService(
+            transport=transport,
+            config=VacuumSensorConfig(sensor_register=sensor_register, detected_value=0),
+        )
+    except Exception:
+        _logger.exception("Vacuum sensor service could not be built; continuing without it")
+        return None

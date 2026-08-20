@@ -18,6 +18,10 @@ class _MotionBridge(QObject):
     failed = pyqtSignal(str, str)
 
 
+class _ConfigBridge(QObject):
+    changed = pyqtSignal()
+
+
 class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def __init__(self, model: RobotSettingsModel, view: RobotSettingsView,
@@ -30,6 +34,8 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._motion_bridge = _MotionBridge()
         self._motion_bridge.done.connect(self._on_motion_done)
         self._motion_bridge.failed.connect(self._on_motion_failed)
+        self._config_bridge = _ConfigBridge()
+        self._config_bridge.changed.connect(self._on_robot_config_changed)
 
         self._view.save_requested.connect(self._on_save)
         self._view.remove_group_requested.connect(self._on_remove_group)
@@ -38,6 +44,11 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
         self._view.execute_requested.connect(self._on_execute)
         self._view.targeting_changed.connect(self._on_targeting_changed)
         self._view.destroyed.connect(self.stop)
+        if self._messaging is not None:
+            self._messaging.subscribe(
+                RobotTopics.ROBOT_CONFIG_CHANGED,
+                self._on_robot_config_changed_raw,
+            )
 
 
 
@@ -57,6 +68,14 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
 
     def stop(self) -> None:
         self._stop_threads()
+        if self._messaging is not None:
+            try:
+                self._messaging.unsubscribe(
+                    RobotTopics.ROBOT_CONFIG_CHANGED,
+                    self._on_robot_config_changed_raw,
+                )
+            except (RuntimeError, TypeError):
+                pass
         try:
             self._motion_bridge.done.disconnect(self._on_motion_done)
         except (RuntimeError, TypeError):
@@ -65,6 +84,16 @@ class RobotSettingsController(IApplicationController, BackgroundWorker):
             self._motion_bridge.failed.disconnect(self._on_motion_failed)
         except (RuntimeError, TypeError):
             pass
+
+    def _on_robot_config_changed_raw(self, _message=None) -> None:
+        self._config_bridge.changed.emit()
+
+    def _on_robot_config_changed(self) -> None:
+        try:
+            self._view.update_robot_config(self._model.reload_config())
+            self._logger.debug("Robot Settings UI refreshed after external config change")
+        except Exception:
+            self._logger.exception("Failed to refresh Robot Settings after external config change")
 
     def _on_save(self, _values: dict) -> None:
         try:

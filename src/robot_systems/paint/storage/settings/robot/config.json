@@ -1,7 +1,7 @@
 {
   "ROBOT_IP": "192.168.58.2",
   "ROBOT_TOOL": 1,
-  "ROBOT_USER": 0,
+  "ROBOT_USER": 1,
   "CAMERA_TO_TCP_X_OFFSET": 1.936,
   "CAMERA_TO_TCP_Y_OFFSET": 71.612,
   "CAMERA_Z_SHIFT_X_PER_MM_PX": 0.0,
@@ -23,7 +23,7 @@
     "x_max": 900,
     "y_min": -900,
     "y_max": 900,
-    "z_min": 6,
+    "z_min": 0,
     "z_max": 800,
     "rx_min": 170,
     "rx_max": 180,

@@ -226,7 +226,7 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
         robot_service.set_active_workobject.assert_not_called()
         tool_tcp.start.assert_not_called()
 
-    def test_start_tool_tcp_calibration_allows_nonzero_workobject_when_tool_is_zero(self):
+    def test_start_tool_tcp_calibration_refuses_nonzero_workobject(self):
         tool_tcp = MagicMock()
         robot_config = SimpleNamespace(robot_tool=0, robot_user=3)
         svc, _, _ = _make_svc(
@@ -236,9 +236,9 @@ class TestCalibrationApplicationServiceDelegation(unittest.TestCase):
 
         ok, msg = svc.start_tool_tcp_calibration(4)
 
-        self.assertTrue(ok)
-        self.assertIn("tool 4", msg)
-        tool_tcp.start.assert_called_once_with(4)
+        self.assertFalse(ok)
+        self.assertIn("WorkObject/User ID is 3", msg)
+        tool_tcp.start.assert_not_called()
 
     def test_start_tool_tcp_calibration_checks_latest_saved_robot_settings(self):
         tool_tcp = MagicMock()

@@ -25,8 +25,12 @@ def create_robot_service(
     active_tool_getter = None
     active_workobject_getter = None
     if settings_service is not None:
-        active_tool_getter = lambda: int(getattr(settings_service.get_robot_config(), "robot_tool", 0))
-        active_workobject_getter = lambda: int(getattr(settings_service.get_robot_config(), "robot_user", 0))
+        active_tool_getter = lambda: int(
+            getattr(settings_service.get(robot_settings_key), "robot_tool", 0)
+        )
+        active_workobject_getter = lambda: int(
+            getattr(settings_service.get(robot_settings_key), "robot_user", 0)
+        )
     state = RobotStateManager(
         robot,
         publisher=publisher,
@@ -40,7 +44,7 @@ def create_robot_service(
     if tool_changer is not None and settings_service is not None:
         tool_service = RobotToolService(
             motion_service=motion,
-            robot_config=settings_service.get_robot_config(),
+            robot_config=settings_service.get(robot_settings_key),
             tool_changer=tool_changer,
         )
 

@@ -264,11 +264,14 @@ class CalibrationApplicationService(ICalibrationService):
     def _validate_tool_tcp_reference_frames(self) -> tuple[bool, str]:
         config = self._current_robot_config()
         tool = int(getattr(config, "robot_tool", 0) if config is not None else 0)
-        if tool != 0:
+        user = int(getattr(config, "robot_user", 0) if config is not None else 0)
+        if tool != 0 or user != 0:
             return (
                 False,
-                "Tool TCP calibration requires Robot Settings Tool ID = 0. "
-                f"Current Tool ID is {tool}. Change Tool ID to 0 and start again.",
+                "Tool TCP calibration requires Robot Settings Tool ID = 0 and "
+                "WorkObject/User ID = 0. "
+                f"Current Tool ID is {tool}, WorkObject/User ID is {user}. "
+                "Change both IDs to 0 and start again.",
             )
         return True, ""
 

@@ -599,6 +599,7 @@ def _build_paint_process_settings_application(robot_system):
             else None
         ),
         robot_service_provider=lambda: robot_system.get_optional_service(CommonServiceID.ROBOT),
+        robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         robot_tool=int(getattr(getattr(robot_system, "_robot_config", None), "robot_tool", 0)),
         robot_user=int(getattr(getattr(robot_system, "_robot_config", None), "robot_user", 0)),
     )
@@ -759,6 +760,7 @@ def _build_calibration_settings_application(robot_system):
         robot_system._settings_service,
         vision_service=robot_system.get_optional_service(CommonServiceID.VISION),
         robot_service=getattr(robot_system, "_robot", None),
+        messaging=getattr(robot_system, "_messaging_service", None),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(
@@ -915,6 +917,7 @@ def _build_calibration_application(robot_system):
         calibration_settings_service=CalibrationSettingsApplicationService(
             robot_system._settings_service,
             robot_service=robot_service,
+            messaging=getattr(robot_system, "_messaging_service", None),
         ),
         settings_service=robot_system._settings_service,
         laser_calibration_service=getattr(robot_system, "_height_measuring_calibration_service", None),
@@ -1028,6 +1031,34 @@ def _build_dryer_settings_application(robot_app):
     )
     return WidgetApplication(
         widget_factory=lambda _ms: DryerSettingsFactory().build(service)
+    )
+
+
+def _build_device_control_application(robot_system):
+    """Build the shared dynamic device-control app from configured peripherals."""
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.device_control.device_control_factory import DeviceControlFactory
+    from src.applications.device_control.service.device_control_application_service import (
+        DeviceControlApplicationService,
+    )
+    from src.engine.hardware.peripherals.device_control_adapters import (
+        build_device_control_adapters,
+    )
+    from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+
+    peripheral_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
+    services = {
+        "vacuum_pump": robot_system.get_optional_service(ServiceID.VACUUM_PUMP),
+        "fan": robot_system.get_optional_service(ServiceID.FAN),
+        "vacuum_sensor": robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
+        "physical_control_buttons": robot_system.get_optional_service(ServiceID.PHYSICAL_CONTROL_BUTTONS),
+        "dryer": robot_system.get_optional_service(ServiceID.DRYER),
+        "laser": getattr(robot_system, "_laser_detection_service", None),
+    }
+    devices = build_device_control_adapters(peripheral_config, services)
+    service = DeviceControlApplicationService(motors=[], devices=devices)
+    return WidgetApplication(
+        widget_factory=lambda _ms: DeviceControlFactory().build(service)
     )
 
 

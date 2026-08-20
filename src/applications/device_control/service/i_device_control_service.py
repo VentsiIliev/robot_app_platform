@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Mapping, Protocol
 
 
 @dataclass
@@ -9,7 +9,29 @@ class MotorEntry:
     address: int
 
 
+class IDeviceControlDevice(Protocol):
+    """Configuration-driven device surface consumed by the shared app."""
+
+    key: str
+    label: str
+
+    def actions(self) -> Mapping[str, str]: ...
+
+    def execute(self, action: str) -> bool: ...
+
+    def read_state(self) -> Mapping[str, object]: ...
+
+
 class IDeviceControlService(ABC):
+
+    @abstractmethod
+    def get_devices(self) -> List[IDeviceControlDevice]: ...
+
+    @abstractmethod
+    def execute_device_action(self, device_key: str, action: str) -> bool: ...
+
+    @abstractmethod
+    def read_device_state(self, device_key: str) -> Mapping[str, object]: ...
 
     @abstractmethod
     def get_motors(self) -> List[MotorEntry]: ...

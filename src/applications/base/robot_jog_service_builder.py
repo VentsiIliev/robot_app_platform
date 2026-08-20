@@ -15,12 +15,24 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
     def _robot_service():
         return getattr(robot_system, "_robot", None)
 
+    def _current_robot_config():
+        settings_service = getattr(robot_system, "_settings_service", None)
+        getter = getattr(settings_service, "get", None)
+        if callable(getter):
+            try:
+                config = getter(CommonSettingsID.ROBOT_CONFIG)
+                if config is not None:
+                    return config
+            except Exception:
+                pass
+        return getattr(robot_system, "_robot_config", None)
+
     def _tool_id() -> int:
-        robot_config = getattr(robot_system, "_robot_config", None)
+        robot_config = _current_robot_config()
         return int(getattr(robot_config, "robot_tool", 0)) if robot_config is not None else 0
 
     def _user_id() -> int:
-        robot_config = getattr(robot_system, "_robot_config", None)
+        robot_config = _current_robot_config()
         return int(getattr(robot_config, "robot_user", 0)) if robot_config is not None else 0
 
     def _jog_group():
