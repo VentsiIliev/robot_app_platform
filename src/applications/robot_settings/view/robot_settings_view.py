@@ -7,6 +7,7 @@ from src.applications.base.keyboard_settings_view import KeyboardSettingsView
 from src.applications.robot_settings.model.mapper import RobotSettingsMapper
 from src.applications.robot_settings.view.movement_groups_tab import MovementGroupsTab
 from src.applications.robot_settings.view.targeting_definitions_tab import TargetingDefinitionsTab
+from pl_gui.settings.settings_view.styles import TOUCH_SCROLL_AREA_STYLE
 
 from src.applications.robot_settings.view.robot_settings_schema import (
     CALIBRATION_ADAPTIVE_GROUP, CALIBRATION_AXIS_MAPPING_GROUP, CALIBRATION_CAMERA_TCP_GROUP, CALIBRATION_MARKER_GROUP,
@@ -114,7 +115,7 @@ class RobotSettingsView(IApplicationView):
     def _replace_tab_with_widget(self, index: int, title: str, widget: QWidget) -> None:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
         scroll.setWidget(widget)
         self._settings_view._tabs.removeTab(index)
         self._settings_view._tabs.insertTab(index, scroll, title)
