@@ -11,7 +11,9 @@ def build_modbus_fan_control(
     modbus_config: ModbusConfig,
     peripheral_config: PeripheralConfig,
 ) -> IFanControl | None:
-    binding = peripheral_config.get("fan")
+    # Construct configured hardware even when its runtime enabled flag is off;
+    # Device Control needs the controller in order to perform the enable check.
+    binding = peripheral_config.peripherals.get("fan")
     if binding is None:
         return None
     slave_name = modbus_config.find_slave_name(binding.slave_id)
@@ -19,4 +21,6 @@ def build_modbus_fan_control(
     return ModbusFanControl(
         transport=transport,
         register=binding.outputs.get("fan", "Y0"),
+        on_value=binding.commands.get("on", 1),
+        off_value=binding.commands.get("off", 0),
     )

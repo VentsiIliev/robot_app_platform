@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QGridLayout,
@@ -17,6 +19,7 @@ from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
     BG_COLOR,
     BORDER,
+    ERROR_COLOR,
     GHOST_BTN_STYLE,
     LABEL_STYLE,
     PRIMARY,
@@ -31,6 +34,9 @@ from src.applications.base.keyboard_settings_view import build_with_keyboard_set
 from src.applications.dryer_settings.model.mapper import DryerSettingsMapper
 from src.applications.dryer_settings.view.dryer_settings_schema import REGISTER_GROUP, TIMING_GROUP
 from src.engine.hardware.dryer.models.dryer_state import DryerState
+
+
+_logger = logging.getLogger(__name__)
 
 
 _STATUS_STYLE = f"""
@@ -72,6 +78,19 @@ QLabel {{
 }}
 """
 
+_STATUS_ERROR = f"""
+QLabel {{
+    background: white;
+    color: {ERROR_COLOR};
+    border: 2px solid {ERROR_COLOR};
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 11pt;
+    font-weight: bold;
+    min-height: 38px;
+}}
+"""
+
 
 def _make_scroll(widget: QWidget) -> QScrollArea:
     scroll = QScrollArea()
@@ -85,6 +104,7 @@ def _make_scroll(widget: QWidget) -> QScrollArea:
 
 class DryerSettingsView(IApplicationView):
     save_requested = pyqtSignal(dict)
+    enabled_changed = pyqtSignal(bool)
     refresh_status_requested = pyqtSignal()
     move_servos_requested = pyqtSignal()
     open_plate_requested = pyqtSignal()
@@ -125,6 +145,12 @@ class DryerSettingsView(IApplicationView):
     def _build_setting_groups(self) -> None:
         self._register_group = GenericSettingGroup(REGISTER_GROUP)
         self._timing_group = GenericSettingGroup(TIMING_GROUP)
+        self._register_group.value_changed.connect(self._on_setting_changed)
+
+    def _on_setting_changed(self, key: str, value: object) -> None:
+        if key == "enabled":
+            _logger.info("Dryer enabled toggle changed by user: checked=%s", bool(value))
+            self.enabled_changed.emit(bool(value))
 
     def _build_settings_tab(self) -> QWidget:
         widget = QWidget()
@@ -251,6 +277,17 @@ class DryerSettingsView(IApplicationView):
         self._register_group.set_values(flat)
         self._timing_group.set_values(flat)
 
+    def set_enabled(self, enabled: bool) -> None:
+        before = bool(self._register_group.get_values().get("enabled", False))
+        _logger.info(
+            "Applying dryer enabled toggle state: before=%s requested=%s",
+            before,
+            bool(enabled),
+        )
+        self._register_group.set_values({"enabled": enabled})
+        after = bool(self._register_group.get_values().get("enabled", False))
+        _logger.info("Dryer enabled toggle state applied: after=%s", after)
+
     def get_values(self) -> dict:
         values = {}
         values.update(self._register_group.get_values())
@@ -287,6 +324,11 @@ class DryerSettingsView(IApplicationView):
 
     def set_status(self, message: str) -> None:
         self._status_label.setText(message)
+        self._status_label.setStyleSheet(_STATUS_MUTED)
+
+    def set_error(self, message: str) -> None:
+        self._status_label.setText(message)
+        self._status_label.setStyleSheet(_STATUS_ERROR)
 
     def _set_bool(self, label: QLabel, value: bool) -> None:
         label.setText("YES" if value else "NO")

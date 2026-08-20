@@ -23,6 +23,7 @@ from src.engine.hardware.vacuum_pump.modbus.modbus_vacuum_pump_transport import 
 )
 from src.engine.hardware.vacuum_pump.vacuum_pump_controller import VacuumPumpController
 from src.engine.hardware.laser import ModbusLaserControl
+from src.engine.hardware.fan.modbus.modbus_fan_control import ModbusFanControl
 from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import VacuumSensorConfig
 from src.engine.hardware.vacuum_sensor.vacuum_sensor_service import VacuumSensorService
 from src.engine.hardware.xinje import XinjeMA8X8YR
@@ -358,6 +359,18 @@ class TestRobotCalibrationProcess(unittest.TestCase):
 
 
 class TestVacuumPumpController(unittest.TestCase):
+    def test_read_state_reads_configured_register_without_writing(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = 1
+        controller = VacuumPumpController(
+            transport,
+            VacuumPumpConfig(pump_register="Y2", on_value=1),
+        )
+
+        self.assertTrue(controller.read_state())
+        transport.read_register.assert_called_once_with(130)
+        transport.write_register.assert_not_called()
+
     def test_xinje_ma8x8yr_output_labels_resolve_to_modbus_addresses(self) -> None:
         self.assertEqual(128, XinjeMA8X8YR.resolve_output("Y0"))
         self.assertEqual(130, XinjeMA8X8YR.resolve_output("y2"))
@@ -447,6 +460,23 @@ class TestVacuumPumpController(unittest.TestCase):
 
         self.assertFalse(controller.turn_on())
         self.assertFalse(controller.turn_off())
+        self.assertFalse(controller.is_healthy())
+
+
+class TestModbusFanControl(unittest.TestCase):
+    def test_operations_update_cached_health(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = 1
+        fan = ModbusFanControl(transport, register="Y3")
+
+        self.assertFalse(fan.is_healthy())
+        self.assertTrue(fan.read_state())
+        self.assertTrue(fan.is_healthy())
+
+        transport.write_register.side_effect = OSError("offline")
+        with self.assertRaises(OSError):
+            fan.turn_off()
+        self.assertFalse(fan.is_healthy())
 
 
 class TestVacuumSensorService(unittest.TestCase):
@@ -480,6 +510,7 @@ class TestModbusLaserControl(unittest.TestCase):
         laser = ModbusLaserControl(transport, register="Y5")
 
         laser.turn_on()
+        self.assertTrue(laser.is_healthy())
         laser.turn_off()
 
         self.assertEqual(

@@ -6,12 +6,13 @@ import time
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_transport import IVacuumPumpTransport
 from src.engine.hardware.vacuum_pump.models.vacuum_pump_config import VacuumPumpConfig
+from src.engine.core.i_health_checkable import IHealthCheckable
 from src.engine.hardware.xinje import XinjeMA8X8YR
 
 _logger = logging.getLogger(__name__)
 
 
-class VacuumPumpController(IVacuumPumpController):
+class VacuumPumpController(IVacuumPumpController, IHealthCheckable):
     """High-level vacuum-pump controller.
 
     Implements turn-on/turn-off commands with optional blow-off pulse.
@@ -38,6 +39,7 @@ class VacuumPumpController(IVacuumPumpController):
             if self._config.blow_off_register is not None
             else None
         )
+        self._last_operation_ok = False
 
     def turn_on(self) -> bool:
         """Turn the vacuum pump ON.
@@ -49,8 +51,10 @@ class VacuumPumpController(IVacuumPumpController):
             True if the write succeeded, False otherwise.
         """
         if not self._close_blow_off():
+            self._last_operation_ok = False
             return False
-        return self._write_pump(self._config.on_value, "ON")
+        self._last_operation_ok = self._write_pump(self._config.on_value, "ON")
+        return self._last_operation_ok
 
     def turn_off(self) -> bool:
         """Turn the vacuum pump OFF and optionally pulse the blow-off.
@@ -63,12 +67,28 @@ class VacuumPumpController(IVacuumPumpController):
             False if the OFF write failed or the blow-off pulse failed.
         """
         if not self._write_pump(self._config.off_value, "OFF"):
+            self._last_operation_ok = False
             return False
-        return self._pulse_blow_off()
+        self._last_operation_ok = self._pulse_blow_off()
+        return self._last_operation_ok
 
     def close(self) -> None:
         """Release the underlying Modbus transport if it owns a session."""
         self._transport.disconnect()
+        self._last_operation_ok = False
+
+    def read_state(self) -> bool:
+        """Return whether the pump output register currently contains ON."""
+        try:
+            value = self._transport.read_register(self._pump_register)
+        except Exception:
+            self._last_operation_ok = False
+            raise
+        self._last_operation_ok = True
+        return int(value) == int(self._config.on_value)
+
+    def is_healthy(self) -> bool:
+        return self._last_operation_ok
 
     def _write_pump(self, value: int, label: str) -> bool:
         """Write a value to the pump register.

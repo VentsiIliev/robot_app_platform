@@ -4,6 +4,7 @@ PRIMARY_LIGHT = "rgba(122, 90, 248, 0.10)"
 BG_COLOR      = "#F8F9FA"
 BORDER        = "#E0E0E0"
 TEXT_COLOR    = "#1A1A2E"
+ERROR_COLOR   = "#C62828"
 
 ###
 PRIMARY_HOVER = "#8B6FF9"       # lighter primary for hover

@@ -1021,13 +1021,14 @@ def _build_modbus_settings_application(robot_app):
 def _build_dryer_settings_application(robot_app):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.dryer_settings import DryerSettingsApplicationService, DryerSettingsFactory
-    from src.robot_systems.paint.component_ids import SettingsID
+    from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 
     service = DryerSettingsApplicationService(
         settings_service=robot_app._settings_service,
         dryer_config_key=SettingsID.DRYER_CONFIG,
         modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
         peripherals_config_key=SettingsID.PERIPHERALS,
+        live_controller=robot_app.get_optional_service(ServiceID.DRYER),
     )
     return WidgetApplication(
         widget_factory=lambda _ms: DryerSettingsFactory().build(service)
@@ -1047,6 +1048,25 @@ def _build_device_control_application(robot_system):
     from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 
     peripheral_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
+
+    def persist_enabled(device_key: str, enabled: bool) -> None:
+        from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
+
+        current_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
+        current = current_config.peripherals.get(device_key)
+        if current is None:
+            raise KeyError(f"Peripheral is not configured: {device_key}")
+        updated = PeripheralBinding(
+            slave_id=current.slave_id,
+            enabled=enabled,
+            inputs=current.inputs,
+            outputs=current.outputs,
+            commands=current.commands,
+        )
+        robot_system._settings_service.save(
+            SettingsID.PERIPHERALS,
+            PeripheralConfig({**current_config.peripherals, device_key: updated}),
+        )
     services = {
         "vacuum_pump": robot_system.get_optional_service(ServiceID.VACUUM_PUMP),
         "fan": robot_system.get_optional_service(ServiceID.FAN),
@@ -1055,7 +1075,7 @@ def _build_device_control_application(robot_system):
         "dryer": robot_system.get_optional_service(ServiceID.DRYER),
         "laser": getattr(robot_system, "_laser_detection_service", None),
     }
-    devices = build_device_control_adapters(peripheral_config, services)
+    devices = build_device_control_adapters(peripheral_config, services, persist_enabled)
     service = DeviceControlApplicationService(motors=[], devices=devices)
     return WidgetApplication(
         widget_factory=lambda _ms: DeviceControlFactory().build(service)

@@ -2,6 +2,11 @@ from src.engine.hardware.dryer.models.dryer_commands import DryerCommand, DryerS
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig, DryerConfigSerializer
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
+from src.engine.hardware.dryer.models.dryer_modbus_registers import (
+    DryerDefaults,
+    DryerModbusRegister,
+    DryerRegisterMap,
+)
 
 __all__ = [
     "DryerCommand",
@@ -10,4 +15,7 @@ __all__ = [
     "DryerConfigSerializer",
     "DryerState",
     "DryerWriteData",
+    "DryerDefaults",
+    "DryerModbusRegister",
+    "DryerRegisterMap",
 ]

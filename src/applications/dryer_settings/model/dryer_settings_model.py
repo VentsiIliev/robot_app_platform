@@ -19,6 +19,13 @@ class DryerSettingsModel(IApplicationModel):
         self._config = self._service.load_config()
         return self._config
 
+    def is_enabled(self) -> bool:
+        return self._service.is_enabled()
+
+    def set_enabled(self, enabled: bool) -> bool:
+        self._service.set_enabled(enabled)
+        return self._service.is_enabled()
+
     def save(self, flat: dict, **kwargs) -> None:
         updated = self.config_from_flat(flat)
         self._service.save_config(updated)

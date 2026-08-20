@@ -3,7 +3,7 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
-from src.engine.hardware.dryer.interfaces.i_dryer_controller import IDryerController
+from src.engine.hardware.dryer.interfaces.i_dryer_service import IDryerService
 from src.engine.hardware.fan.interfaces.i_fan_control import IFanControl
 from src.engine.hardware.physical_control_buttons.interfaces.i_physical_control_buttons import IPhysicalControlButtons
 from src.engine.hardware.peripherals import PeripheralConfigSerializer
@@ -275,8 +275,8 @@ class PaintRobotSystem(BaseRobotSystem):
                      "height_measuring/calibration_data.json"),
         SettingsSpec(CommonSettingsID.DEPTH_MAP_DATA, DepthMapDataSerializer(), "height_measuring/depth_map.json"),
         SettingsSpec(CommonSettingsID.MODBUS_CONFIG, ModbusConfigSerializer(), "hardware/modbus.json"),
-        SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "hardware/dryer.json"),
         SettingsSpec(SettingsID.PERIPHERALS, PeripheralConfigSerializer(), "hardware/peripherals.json"),
+        SettingsSpec(SettingsID.DRYER_CONFIG, DryerConfigSerializer(), "dryer/settings.json"),
         SettingsSpec(SettingsID.PAINT_PROCESS_CONFIG, PaintProcessConfigSerializer(), "paint/process.json"),
     ]
 
@@ -318,9 +318,9 @@ class PaintRobotSystem(BaseRobotSystem):
         ),
         ServiceSpec(
             name=ServiceID.DRYER,
-            service_type=IDryerController,
+            service_type=IDryerService,
             required=False,
-            description="Dryer plate controller",
+            description="Managed dryer hardware service",
             builder=build_dryer_service,
         ),
 
@@ -383,6 +383,8 @@ class PaintRobotSystem(BaseRobotSystem):
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
         self.register_managed_resource(self._vacuum_pump)
+        self._dryer = self.get_optional_service(ServiceID.DRYER)
+        self.register_managed_resource(self._dryer)
         self._pickup_condition = self._build_pickup_condition()
 
         if self._vision is not None:

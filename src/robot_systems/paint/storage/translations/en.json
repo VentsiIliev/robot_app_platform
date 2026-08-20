@@ -2,6 +2,9 @@
   "__meta__": {
     "display_name": "English"
   },
+  "DeviceControlView": {
+    "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands."
+  },
   "PaintDashboard": {
     "Messages": "Messages",
     "No process messages": "No process messages",

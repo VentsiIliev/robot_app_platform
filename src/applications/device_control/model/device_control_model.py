@@ -30,6 +30,12 @@ class DeviceControlModel(IApplicationModel):
     def read_device_state(self, device_key: str) -> Mapping[str, object]:
         return self._service.read_device_state(device_key)
 
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        return self._service.set_device_enabled(device_key, enabled)
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        return self._service.is_device_enabled(device_key)
+
     def get_motors(self) -> List[MotorEntry]:
         return self._service.get_motors()
 

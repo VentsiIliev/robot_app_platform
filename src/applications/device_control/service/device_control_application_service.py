@@ -69,6 +69,17 @@ class DeviceControlApplicationService(IDeviceControlService):
             _logger.exception("Device state read failed: %s", device_key)
             return {"healthy": False, "error": "Communication failed"}
 
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        device = self._devices.get(device_key)
+        if device is None:
+            return False
+        with self._hardware_lock:
+            return bool(device.set_enabled(enabled))
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        device = self._devices.get(device_key)
+        return bool(device is not None and device.is_enabled())
+
     # ── Queries ───────────────────────────────────────────────────────
 
     def get_motors(self) -> List[MotorEntry]:

@@ -2,32 +2,62 @@ from __future__ import annotations
 from functools import partial
 from typing import List
 
-from PyQt6.QtCore import QTimer, pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, QLabel, QScrollArea, QTabWidget, QWidget,
 )
-from pl_gui.settings.settings_view.styles import BG_COLOR, GROUP_STYLE
-from src.applications.base.app_styles import indicator_dot_style, semantic_button_style
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE,
+    BG_COLOR,
+    BORDER,
+    GHOST_BTN_STYLE,
+    GROUP_STYLE,
+    LABEL_STYLE,
+    PRIMARY,
+    PRIMARY_LIGHT,
+    TAB_WIDGET_STYLE,
+    TERTIARY_TEXT,
+    TEXT_COLOR,
+)
+from src.applications.base.app_styles import indicator_dot_style
 
 from src.applications.base.i_application_view import IApplicationView
+from pl_gui.utils.utils_widgets.SwitchButton import QToggle
 from src.applications.device_control.service.i_device_control_service import (
     IDeviceControlDevice,
     MotorEntry,
 )
 
-_GREEN     = "#2E7D32"
-_GREEN_HOV = "#1B5E20"
-_RED       = "#C62828"
-_RED_HOV   = "#B71C1C"
 _MUTED     = "#9E9E9E"
 
-_BTN_ON = semantic_button_style(bg=_GREEN, hover_bg=_GREEN_HOV, disabled_bg=_MUTED)
-_BTN_OFF = semantic_button_style(bg=_RED, hover_bg=_RED_HOV, disabled_bg=_MUTED)
-_BTN_NA = semantic_button_style(bg=_MUTED, hover_bg=_MUTED, disabled_bg=_MUTED)
-
-_DOT_ON  = indicator_dot_style(color=_GREEN)
-_DOT_OFF = indicator_dot_style(color=_RED)
+_DOT_ON  = indicator_dot_style(color=PRIMARY)
+_DOT_OFF = indicator_dot_style(color=TERTIARY_TEXT)
 _DOT_NA  = indicator_dot_style(color=_MUTED)
+
+_STATE_STYLE = f"""
+QLabel {{
+    background: white;
+    color: {TEXT_COLOR};
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 11pt;
+    min-height: 36px;
+}}
+"""
+
+_STATE_ERROR_STYLE = f"""
+QLabel {{
+    background: {PRIMARY_LIGHT};
+    color: {TEXT_COLOR};
+    border: 1px solid {PRIMARY};
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 11pt;
+    font-weight: bold;
+    min-height: 36px;
+}}
+"""
 
 _STATIC_DEVICES = [
     ("laser",       "Laser"),
@@ -47,7 +77,7 @@ class DeviceControlView(IApplicationView):
     generator_on_requested    = pyqtSignal()
     generator_off_requested   = pyqtSignal()
     device_action_requested   = pyqtSignal(str, str)
-    device_state_poll_requested = pyqtSignal()
+    device_enabled_requested = pyqtSignal(str, bool)
 
     def __init__(self, parent=None):
         super().__init__("Device Control", parent)
@@ -69,6 +99,7 @@ class DeviceControlView(IApplicationView):
         scroll.setWidget(self._inner)
         self._legacy_scroll = scroll
         self._tabs = QTabWidget()
+        self._tabs.setStyleSheet(TAB_WIDGET_STYLE)
         self._tabs.setVisible(False)
         root.addWidget(self._tabs)
         root.addWidget(scroll)
@@ -76,10 +107,10 @@ class DeviceControlView(IApplicationView):
         self._device_tabs: dict[str, QWidget] = {}
         self._device_state_labels: dict[str, QLabel] = {}
         self._device_buttons: dict[str, list[QPushButton]] = {}
+        self._device_action_labels: dict[str, QLabel] = {}
+        self._device_enabled_toggles: dict[str, QToggle] = {}
         self._vacuum_status_dot: QLabel | None = None
         self._vacuum_status_label: QLabel | None = None
-        self._state_timer = QTimer(self)
-        self._state_timer.timeout.connect(self._on_state_timer)
 
         self._on_btns:    dict[str, QPushButton] = {}
         self._off_btns:   dict[str, QPushButton] = {}
@@ -105,14 +136,45 @@ class DeviceControlView(IApplicationView):
         self._device_tabs.clear()
         self._device_state_labels.clear()
         self._device_buttons.clear()
+        self._device_action_labels.clear()
+        self._device_enabled_toggles.clear()
         self._vacuum_status_dot = None
         self._vacuum_status_label = None
 
         for device in devices:
             page = QWidget()
+            page.setStyleSheet(f"background-color: {BG_COLOR};")
             layout = QVBoxLayout(page)
             layout.setContentsMargins(16, 16, 16, 16)
-            layout.setSpacing(12)
+            layout.setSpacing(16)
+
+            heading = QLabel(device.label)
+            heading.setStyleSheet(
+                f"color: {TEXT_COLOR}; font-size: 18pt; font-weight: bold; "
+                "background: transparent;"
+            )
+            hint = QLabel(self.tr("Manage availability, inspect state, and run device commands."))
+            hint.setStyleSheet(
+                f"color: {TERTIARY_TEXT}; font-size: 10pt; background: transparent;"
+            )
+            layout.addWidget(heading)
+            layout.addWidget(hint)
+
+            lifecycle_box = QGroupBox(self.tr("Availability"))
+            lifecycle_box.setStyleSheet(GROUP_STYLE)
+            lifecycle_layout = QHBoxLayout(lifecycle_box)
+            lifecycle_layout.setContentsMargins(16, 12, 16, 12)
+            lifecycle_label = QLabel(self.tr("Enabled"))
+            lifecycle_label.setStyleSheet(LABEL_STYLE)
+            enabled_toggle = QToggle()
+            enabled_toggle.setFixedHeight(40)
+            enabled_toggle.setProperty("device_key", device.key)
+            enabled_toggle.stateChanged.connect(self._on_device_enabled_changed)
+            enabled_toggle.sync_visual_state(device.is_enabled())
+            lifecycle_layout.addWidget(lifecycle_label)
+            lifecycle_layout.addStretch()
+            lifecycle_layout.addWidget(enabled_toggle)
+            layout.addWidget(lifecycle_box)
 
             if device.key == "vacuum_sensor":
                 status_row = QHBoxLayout()
@@ -125,55 +187,100 @@ class DeviceControlView(IApplicationView):
                 )
                 self._vacuum_status_label = QLabel(self.tr("Waiting for sensor reading"))
                 self._vacuum_status_label.setStyleSheet(
-                    f"color: {_MUTED}; font-size: 14pt; font-weight: bold;"
+                    f"color: {TERTIARY_TEXT}; font-size: 13pt; font-weight: bold;"
                 )
                 status_row.addWidget(self._vacuum_status_dot)
                 status_row.addWidget(self._vacuum_status_label)
                 status_row.addStretch()
                 layout.addLayout(status_row)
 
-            state = QLabel("State: not read")
+            state_box = QGroupBox(self.tr("Device State"))
+            state_box.setStyleSheet(GROUP_STYLE)
+            state_layout = QVBoxLayout(state_box)
+            state_layout.setContentsMargins(16, 16, 16, 16)
+            state = QLabel(self.tr("State: not read"))
             state.setWordWrap(True)
-            layout.addWidget(state)
+            state.setStyleSheet(_STATE_STYLE)
+            state_layout.addWidget(state)
+            layout.addWidget(state_box)
+
+            action_status = QLabel(self.tr("Ready"))
+            action_status.setStyleSheet(
+                f"color: {TERTIARY_TEXT}; font-size: 10pt; font-weight: bold;"
+            )
             buttons = []
-            for action, label in device.actions().items():
-                button = QPushButton(label)
-                button.setProperty("device_key", device.key)
-                button.setProperty("action", action)
-                button.setStyleSheet(_BTN_ON)
-                button.setCursor(Qt.CursorShape.PointingHandCursor)
-                button.clicked.connect(self._on_device_action_clicked)
-                layout.addWidget(button)
-                buttons.append(button)
+            actions = device.actions()
+            if actions:
+                actions_box = QGroupBox(self.tr("Actions"))
+                actions_box.setStyleSheet(GROUP_STYLE)
+                actions_layout = QVBoxLayout(actions_box)
+                actions_layout.setContentsMargins(16, 16, 16, 16)
+                actions_layout.setSpacing(12)
+                action_row = QHBoxLayout()
+                action_row.setSpacing(12)
+                for action, label in actions.items():
+                    button = QPushButton(label)
+                    button.setProperty("device_key", device.key)
+                    button.setProperty("action", action)
+                    button.setStyleSheet(self._action_button_style(action))
+                    button.setMinimumWidth(140)
+                    button.setCursor(Qt.CursorShape.PointingHandCursor)
+                    button.clicked.connect(self._on_device_action_clicked)
+                    action_row.addWidget(button)
+                    buttons.append(button)
+                action_row.addStretch()
+                actions_layout.addLayout(action_row)
+                actions_layout.addWidget(action_status)
+                layout.addWidget(actions_box)
             layout.addStretch()
             self._tabs.addTab(page, device.label)
             self._device_tabs[device.key] = page
             self._device_state_labels[device.key] = state
             self._device_buttons[device.key] = buttons
+            if actions:
+                self._device_action_labels[device.key] = action_status
+            self._device_enabled_toggles[device.key] = enabled_toggle
+            self._set_device_buttons_enabled(device.key, device.is_enabled())
+            self._set_device_idle_status(device.key)
+            self.set_device_state(
+                device.key,
+                {"enabled": device.is_enabled(), "healthy": None},
+            )
 
         has_devices = bool(devices)
         self._tabs.setVisible(has_devices)
         self._legacy_scroll.setVisible(not has_devices)
         if has_devices:
-            self._state_timer.start(1000)
-            self._on_state_timer()
-        else:
-            self._state_timer.stop()
+            self._tabs.setCurrentIndex(0)
 
     def set_device_state(self, device_key: str, state: dict[str, object]) -> None:
         label = self._device_state_labels.get(device_key)
         if label is None:
             return
-        if state.get("healthy") is False:
+        if state.get("enabled") is False:
+            text = self.tr("Disabled")
+            label.setStyleSheet(_STATE_STYLE)
+        elif state.get("healthy") is False:
             text = f"Communication error: {state.get('error', 'read failed')}"
-            label.setStyleSheet(f"color: {_RED}; font-weight: bold;")
+            label.setStyleSheet(_STATE_ERROR_STYLE)
         else:
-            values = ", ".join(f"{key}={value}" for key, value in state.items())
+            values = ", ".join(
+                f"{self._state_label(key)}: "
+                f"{'N/A' if key == 'healthy' and value is None else value}"
+                for key, value in state.items()
+                if key != "error" or value
+            )
             text = f"State: {values or 'OK'}"
-            label.setStyleSheet("")
+            label.setStyleSheet(_STATE_STYLE)
         label.setText(text)
         if device_key == "vacuum_sensor":
             self._set_vacuum_sensor_status(state)
+
+    @staticmethod
+    def _state_label(key: str) -> str:
+        if key == "healthy":
+            return "Health"
+        return key.replace("_", " ").title()
 
     def _set_vacuum_sensor_status(self, state: dict[str, object]) -> None:
         if self._vacuum_status_dot is None or self._vacuum_status_label is None:
@@ -182,10 +289,10 @@ class DeviceControlView(IApplicationView):
             color = _MUTED
             text = self.tr("Sensor unavailable")
         elif bool(state.get("detected")):
-            color = _GREEN
+            color = PRIMARY
             text = self.tr("Workpiece attached")
         else:
-            color = _RED
+            color = TERTIARY_TEXT
             text = self.tr("No workpiece attached")
         self._vacuum_status_dot.setStyleSheet(
             indicator_dot_style(color=color, font_pt=30)
@@ -203,8 +310,72 @@ class DeviceControlView(IApplicationView):
                 str(button.property("action")),
             )
 
-    def _on_state_timer(self) -> None:
-        self.device_state_poll_requested.emit()
+    def _on_device_enabled_changed(self, state: int) -> None:
+        toggle = self.sender()
+        if isinstance(toggle, QToggle):
+            self.device_enabled_requested.emit(
+                str(toggle.property("device_key")),
+                bool(state),
+            )
+
+    @staticmethod
+    def _action_button_style(action: str) -> str:
+        normalized = action.lower()
+        if normalized.endswith("off") or normalized.startswith("close"):
+            return GHOST_BTN_STYLE
+        return ACTION_BTN_STYLE
+
+    def set_device_busy(self, device_key: str, busy: bool) -> None:
+        for button in self._device_buttons.get(device_key, []):
+            button.setEnabled(not busy)
+        label = self._device_action_labels.get(device_key)
+        if label is not None:
+            if busy:
+                label.setText(self.tr("Working…"))
+            else:
+                self._set_device_idle_status(device_key)
+            label.setStyleSheet(
+                f"color: {TERTIARY_TEXT}; font-size: 10pt; font-weight: bold;"
+            )
+
+    def set_device_enabled(self, device_key: str, enabled: bool) -> None:
+        toggle = self._device_enabled_toggles.get(device_key)
+        if toggle is not None:
+            blocked = toggle.blockSignals(True)
+            try:
+                toggle.sync_visual_state(enabled)
+            finally:
+                toggle.blockSignals(blocked)
+        self._set_device_buttons_enabled(device_key, enabled)
+        self._set_device_idle_status(device_key)
+
+    def _set_device_buttons_enabled(self, device_key: str, enabled: bool) -> None:
+        for button in self._device_buttons.get(device_key, []):
+            button.setEnabled(enabled)
+
+    def _set_device_idle_status(self, device_key: str) -> None:
+        label = self._device_action_labels.get(device_key)
+        toggle = self._device_enabled_toggles.get(device_key)
+        if label is None or toggle is None:
+            return
+        label.setText(self.tr("Ready") if toggle.isChecked() else self.tr("Disabled"))
+        label.setStyleSheet(
+            f"color: {TERTIARY_TEXT}; font-size: 10pt; font-weight: bold;"
+        )
+
+    def set_device_action_result(self, device_key: str, success: bool) -> None:
+        label = self._device_action_labels.get(device_key)
+        if label is None:
+            return
+        toggle = self._device_enabled_toggles.get(device_key)
+        if success and toggle is not None and not toggle.isChecked():
+            label.setText(self.tr("Disabled"))
+        else:
+            label.setText(self.tr("Command completed") if success else self.tr("Command failed"))
+        label.setStyleSheet(
+            f"color: {PRIMARY if success else TERTIARY_TEXT}; "
+            "font-size: 10pt; font-weight: bold;"
+        )
 
     # ── Motor rows built dynamically from config ───────────────────────
 
@@ -238,13 +409,13 @@ class DeviceControlView(IApplicationView):
         dot.setFixedWidth(22)
 
         btn_on = QPushButton("ON")
-        btn_on.setStyleSheet(_BTN_NA)
+        btn_on.setStyleSheet(ACTION_BTN_STYLE)
         btn_on.setEnabled(False)
         btn_on.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_on.clicked.connect(on_slot)
 
         btn_off = QPushButton("OFF")
-        btn_off.setStyleSheet(_BTN_NA)
+        btn_off.setStyleSheet(GHOST_BTN_STYLE)
         btn_off.setEnabled(False)
         btn_off.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_off.clicked.connect(off_slot)
@@ -286,8 +457,8 @@ class DeviceControlView(IApplicationView):
             return
         self._on_btns[key].setEnabled(available)
         self._off_btns[key].setEnabled(available)
-        self._on_btns[key].setStyleSheet(_BTN_ON if available else _BTN_NA)
-        self._off_btns[key].setStyleSheet(_BTN_OFF if available else _BTN_NA)
+        self._on_btns[key].setStyleSheet(ACTION_BTN_STYLE)
+        self._off_btns[key].setStyleSheet(GHOST_BTN_STYLE)
         self._dots[key].setStyleSheet(_DOT_OFF if available else _DOT_NA)
 
     def set_motors_available(self, available: bool) -> None:
@@ -299,4 +470,4 @@ class DeviceControlView(IApplicationView):
             self._dots[key].setStyleSheet(_DOT_ON if active else _DOT_OFF)
 
     def clean_up(self) -> None:
-        self._state_timer.stop()
+        pass

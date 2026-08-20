@@ -8,6 +8,7 @@ from src.engine.hardware.dryer.models.dryer_commands import DryerCommand
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
+from src.engine.hardware.dryer.models.dryer_modbus_registers import DryerRegisterMap
 
 
 class DryerController(IDryerController):
@@ -17,37 +18,51 @@ class DryerController(IDryerController):
         self,
         transport: IDryerTransport,
         config: DryerConfig | None = None,
+        register_map: DryerRegisterMap | None = None,
     ) -> None:
         self._transport = transport
         self._config = config or DryerConfig()
-        self._config.require_contiguous_write_block()
+        self._register_map = register_map or DryerRegisterMap()
+        self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def initialize(self) -> bool:
+        """Synchronize the dryer firmware with the current persisted defaults."""
+        return self.write_data(DryerWriteData.from_config(self._config))
+
+    def shutdown(self) -> None:
+        self._transport.disconnect()
+
+    def update_config(self, config: DryerConfig) -> None:
+        if not isinstance(config, DryerConfig):
+            raise TypeError(f"Expected DryerConfig, got {type(config).__name__}")
+        self._config = config
 
     def write_data(self, data: DryerWriteData) -> bool:
         values = data.to_register_values()
         try:
-            self._transport.write_registers(self._config.block_start_register, values)
+            self._transport.write_registers(self._register_map.status, values)
         except Exception:
             self._logger.exception(
                 "Dryer write failed start_register=%d values=%s",
-                self._config.block_start_register,
+                self._register_map.status,
                 values,
             )
             return False
         self._logger.info(
             "Dryer write ok start_register=%d values=%s",
-            self._config.block_start_register,
+            self._register_map.status,
             values,
         )
         return True
 
     def get_state(self) -> DryerState:
         try:
-            raw_status = self._transport.read_register(self._config.status_register)
+            raw_status = self._transport.read_register(self._register_map.status)
         except Exception as exc:
             self._logger.exception(
                 "Dryer status read failed register=%d",
-                self._config.status_register,
+                self._register_map.status,
             )
             return DryerState(
                 is_healthy=False,
@@ -71,29 +86,18 @@ class DryerController(IDryerController):
     def next_position(self, data: DryerWriteData | None = None) -> bool:
         return self._write_command(DryerCommand.NEXT_POSITION, data)
 
+    def execute_command(self, command: int, data: DryerWriteData | None = None) -> bool:
+        """Write a command supplied by the robot-system peripheral config."""
+        return self._write_command(int(command), data)
+
     def _write_command(
         self,
-        command: DryerCommand,
+        command: DryerCommand | int,
         data: DryerWriteData | None,
     ) -> bool:
         payload = data or self._default_write_data()
-        return self.write_data(
-            DryerWriteData(
-                status=payload.status,
-                command=int(payload.command) | int(command),
-                delay_move_up=payload.delay_move_up,
-                delay_move_down=payload.delay_move_down,
-                delay_move_in=payload.delay_move_in,
-                delay_move_out=payload.delay_move_out,
-                speed_of_plates=payload.speed_of_plates,
-            )
-        )
+        values = {**payload.__dict__, "command": int(payload.command) | int(command)}
+        return self.write_data(DryerWriteData(**values))
 
     def _default_write_data(self) -> DryerWriteData:
-        return DryerWriteData(
-            delay_move_up=self._config.default_delay_move_up,
-            delay_move_down=self._config.default_delay_move_down,
-            delay_move_in=self._config.default_delay_move_in,
-            delay_move_out=self._config.default_delay_move_out,
-            speed_of_plates=self._config.default_speed_of_plates,
-        )
+        return DryerWriteData.from_config(self._config)

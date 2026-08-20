@@ -2,6 +2,9 @@
   "__meta__": {
     "display_name": "Български"
   },
+  "DeviceControlView": {
+    "Manage availability, inspect state, and run device commands.": "Управлявайте наличността, преглеждайте състоянието и изпълнявайте команди."
+  },
   "PaintDashboard": {
     "Messages": "Съобщения",
     "No process messages": "Няма съобщения от процеса",

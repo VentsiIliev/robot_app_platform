@@ -32,9 +32,8 @@ class PeripheralBinding:
             "slave_id": self.slave_id,
             "inputs": dict(self.inputs),
             "outputs": dict(self.outputs),
+            "commands": dict(self.commands),
         }
-        if self.commands:
-            result["commands"] = dict(self.commands)
         return result
 
 

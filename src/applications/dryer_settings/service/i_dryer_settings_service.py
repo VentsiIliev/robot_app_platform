@@ -7,6 +7,12 @@ from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 
 class IDryerSettingsService(ABC):
     @abstractmethod
+    def is_enabled(self) -> bool: ...
+
+    @abstractmethod
+    def set_enabled(self, enabled: bool) -> None: ...
+
+    @abstractmethod
     def load_config(self) -> DryerConfig: ...
 
     @abstractmethod

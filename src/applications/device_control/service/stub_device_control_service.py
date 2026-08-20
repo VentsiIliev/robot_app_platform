@@ -22,6 +22,12 @@ class StubDeviceControlService(IDeviceControlService):
     def read_device_state(self, device_key: str) -> Mapping[str, object]:
         return {"healthy": True}
 
+    def set_device_enabled(self, device_key: str, enabled: bool) -> bool:
+        return bool(enabled)
+
+    def is_device_enabled(self, device_key: str) -> bool:
+        return True
+
     def get_motors(self) -> List[MotorEntry]:
         return list(_STUB_MOTORS)
 

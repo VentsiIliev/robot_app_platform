@@ -17,10 +17,4 @@ class DryerSettingsMapper:
 
     @staticmethod
     def write_data_from_flat(flat: dict) -> DryerWriteData:
-        return DryerWriteData(
-            delay_move_up=int(flat.get("default_delay_move_up", 0)),
-            delay_move_down=int(flat.get("default_delay_move_down", 0)),
-            delay_move_in=int(flat.get("default_delay_move_in", 0)),
-            delay_move_out=int(flat.get("default_delay_move_out", 0)),
-            speed_of_plates=int(flat.get("default_speed_of_plates", 0)),
-        )
+        return DryerWriteData.from_config(DryerConfig.from_dict(flat))

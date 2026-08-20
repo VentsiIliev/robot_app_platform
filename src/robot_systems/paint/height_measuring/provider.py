@@ -26,6 +26,8 @@ class PaintRobotSystemHeightMeasuringProvider(RobotSystemHeightMeasuringProvider
         )
         slave_name = "xinje_ma"
         register = "Y5"
+        on_value = 1
+        off_value = 0
         if binding is not None:
             try:
                 slave_name = modbus_config.find_slave_name(binding.slave_id)
@@ -35,6 +37,8 @@ class PaintRobotSystemHeightMeasuringProvider(RobotSystemHeightMeasuringProvider
                     "but that slave is not configured in Modbus settings"
                 ) from exc
             register = binding.outputs.get("enable", register)
+            on_value = binding.commands.get("on", on_value)
+            off_value = binding.commands.get("off", off_value)
         if hasattr(modbus_config, "get_connection"):
             transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus_config, slave_name)
         else:
@@ -48,4 +52,9 @@ class PaintRobotSystemHeightMeasuringProvider(RobotSystemHeightMeasuringProvider
                 parity=modbus_config.parity,
                 timeout=modbus_config.timeout,
             )
-        return ModbusLaserControl(transport=transport, register=register)
+        return ModbusLaserControl(
+            transport=transport,
+            register=register,
+            on_value=on_value,
+            off_value=off_value,
+        )

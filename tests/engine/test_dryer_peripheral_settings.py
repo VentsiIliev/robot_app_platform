@@ -4,42 +4,55 @@ from unittest.mock import MagicMock
 from src.applications.dryer_settings.service.dryer_settings_application_service import (
     DryerSettingsApplicationService,
 )
-from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
 
 
-class TestDryerPeripheralSettings(unittest.TestCase):
-    def test_load_and_save_use_dryer_peripheral_commands(self) -> None:
+class TestDryerSettingsPersistence(unittest.TestCase):
+    def test_load_and_save_use_dedicated_dryer_settings(self) -> None:
         settings = MagicMock()
-        settings.get.side_effect = lambda key: {
-            "dryer": DryerConfig(),
-            "peripherals": PeripheralConfig(peripherals={
-                "dryer": PeripheralBinding(
-                    slave_id=10,
-                    outputs={"plate": "1"},
-                    commands={"open_plate": 2, "close_plate": 0},
-                ),
-            }),
-            "modbus": ModbusConfig(),
-        }[key]
+        live_controller = MagicMock()
+        current = DryerConfig(pwm_open_vrytka=700, acceleration=0.2)
+        settings.get.return_value = current
         service = DryerSettingsApplicationService(
             settings_service=settings,
             dryer_config_key="dryer",
             modbus_config_key="modbus",
             peripherals_config_key="peripherals",
+            live_controller=live_controller,
         )
 
-        config = service.load_config()
-        self.assertEqual(config.plate_register, 1)
-        self.assertEqual(config.open_plate_value, 2)
-        self.assertEqual(config.close_plate_value, 0)
+        self.assertIs(service.load_config(), current)
 
-        service.save_config(DryerConfig(plate_register=3, open_plate_value=4, close_plate_value=5))
-        saved_peripherals = settings.save.call_args_list[1].args[1]
-        saved = saved_peripherals.get("dryer")
-        self.assertEqual(saved.outputs["plate"], "3")
-        self.assertEqual(saved.commands, {"open_plate": 4, "close_plate": 5})
+        updated = DryerConfig(pwm_open_vrytka=800)
+        service.save_config(updated)
+        settings.save.assert_called_once_with("dryer", updated)
+        live_controller.update_config.assert_called_once_with(updated)
+
+    def test_enable_failure_is_persisted_and_reported(self) -> None:
+        settings = MagicMock()
+        dryer_config = DryerConfig()
+        peripherals = PeripheralConfig({"dryer": PeripheralBinding(slave_id=10, enabled=False)})
+        settings.get.side_effect = lambda key: {
+            "dryer": dryer_config,
+            "peripherals": peripherals,
+        }[key]
+        live_service = MagicMock()
+        live_service.enable.return_value = False
+        live_service.last_error = "No response from dryer"
+        service = DryerSettingsApplicationService(
+            settings_service=settings,
+            dryer_config_key="dryer",
+            modbus_config_key="modbus",
+            peripherals_config_key="peripherals",
+            live_controller=live_service,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "No response"):
+            service.set_enabled(True)
+
+        saved = settings.save.call_args.args[1].peripherals["dryer"]
+        self.assertFalse(saved.enabled)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ class QToggle(QCheckBox):
         self._circle_pos, self._intermediate_bg_color = None, None
         self.setFixedHeight(18)
         self._animation_duration = 500  # milliseconds
+        self._position_animation = None
+        self._color_animation = None
         self.stateChanged.connect(self.start_transition)
         self._user_checked = False  # Introduced flag to check user-initiated changes
 
@@ -40,7 +42,7 @@ class QToggle(QCheckBox):
         lambda self, pos: (setattr(self, '_circle_pos', pos), self.update()))
     intermediate_bg_color = pyqtProperty(
         QColor, lambda self: self._intermediate_bg_color,
-        lambda self, col: setattr(self, '_intermediate_bg_color', col))
+        lambda self, col: (setattr(self, '_intermediate_bg_color', col), self.update()))
 
     def setDuration(self, duration: int):
         """
@@ -56,13 +58,27 @@ class QToggle(QCheckBox):
         else:
             self._intermediate_bg_color = self._bg_color
 
+    def sync_visual_state(self, checked: bool) -> None:
+        """Force a state from the backend, cancelling stale click animations."""
+        for animation in (self._position_animation, self._color_animation):
+            if animation is not None:
+                animation.stop()
+        self._user_checked = False
+        self.setChecked(bool(checked))
+        self.update_pos_color(bool(checked))
+        self.update()
+
     def start_transition(self, state):
         if not self._user_checked:  # Skip animation if change isn't user-initiated
             self.update_pos_color(state)
             return
-        for anim in [self.create_animation, self.create_bg_color_animation]:
-            animation = anim(state)
-            animation.start()
+        # Retain both animations. Local-only QPropertyAnimation wrappers may be
+        # garbage-collected immediately, leaving the logical state changed but
+        # the custom-painted toggle visually unchanged.
+        self._position_animation = self.create_animation(state)
+        self._color_animation = self.create_bg_color_animation(state)
+        self._position_animation.start()
+        self._color_animation.start()
         self._user_checked = False  # Reset the flag after animation starts
 
     def mousePressEvent(self, event):

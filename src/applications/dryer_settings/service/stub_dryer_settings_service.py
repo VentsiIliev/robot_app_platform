@@ -47,32 +47,26 @@ class StubDryerSettingsService(IDryerSettingsService):
             slave_address=10,
             max_retries=3,
         )
-        self._config = dryer_config or DryerConfig(
-            status_register=100,
-            command_register=101,
-            delay_move_up_register=102,
-            delay_move_down_register=103,
-            delay_move_in_register=104,
-            delay_move_out_register=105,
-            speed_of_plates_register=106,
-            default_delay_move_up=120,
-            default_delay_move_down=140,
-            default_delay_move_in=80,
-            default_delay_move_out=90,
-            default_speed_of_plates=50,
-        )
+        self._config = dryer_config or DryerConfig()
         self.transport = MockDryerTransport()
-        self.transport.registers[self._config.status_register] = int(
+        self._enabled = True
+        self.transport.registers[0] = int(
             DryerStatus.READY | DryerStatus.PLATE_ON_POSITION
         )
 
     def load_config(self) -> DryerConfig:
         return self._config
 
+    def is_enabled(self) -> bool:
+        return self._enabled
+
+    def set_enabled(self, enabled: bool) -> None:
+        self._enabled = bool(enabled)
+
     def save_config(self, config: DryerConfig) -> None:
         self._config = config
         self.transport.registers.setdefault(
-            self._config.status_register,
+            0,
             int(DryerStatus.READY | DryerStatus.PLATE_ON_POSITION),
         )
 

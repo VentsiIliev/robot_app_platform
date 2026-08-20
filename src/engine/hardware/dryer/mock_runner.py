@@ -79,20 +79,7 @@ def run_mock() -> None:
         slave_address=10,
         max_retries=3,
     )
-    dryer_config = DryerConfig(
-        status_register=100,
-        command_register=101,
-        delay_move_up_register=102,
-        delay_move_down_register=103,
-        delay_move_in_register=104,
-        delay_move_out_register=105,
-        speed_of_plates_register=106,
-        default_delay_move_up=120,
-        default_delay_move_down=140,
-        default_delay_move_in=80,
-        default_delay_move_out=90,
-        default_speed_of_plates=50,
-    )
+    dryer_config = DryerConfig()
 
     transport = MockDryerTransport()
     transport.connect()
@@ -101,7 +88,7 @@ def run_mock() -> None:
         config=dryer_config,
     )
 
-    transport.registers[dryer_config.status_register] = int(
+    transport.registers[0] = int(
         DryerStatus.READY | DryerStatus.PLATE_ON_POSITION
     )
 
@@ -111,13 +98,7 @@ def run_mock() -> None:
 
     controller.move_servos()
     controller.open_plate(
-        DryerWriteData(
-            delay_move_up=200,
-            delay_move_down=210,
-            delay_move_in=75,
-            delay_move_out=85,
-            speed_of_plates=60,
-        )
+        DryerWriteData.from_config(dryer_config)
     )
     controller.next_position()
 
