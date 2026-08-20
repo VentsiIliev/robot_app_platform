@@ -82,7 +82,8 @@ class WorkpieceLibraryController(IApplicationController):
         ok, msg = self._model.delete(workpiece_id)
         self._view.set_status(msg)
         if ok:
-            self._view.set_records(self._model.get_all())
+            self._all_records = self._model.get_all()
+            self._view.set_records(self._all_records)
             self._view.set_detail(None)
         else:
             show_warning(self._view, self._t("Delete Failed"), msg)
