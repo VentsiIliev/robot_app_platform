@@ -75,8 +75,18 @@ class ModbusRegisterTransport(IRegisterTransport):
 
     def write_register(self, address: int, value: int) -> None:
         with self._session() as inst:
-            self._logger.debug(f"Writing register {address} (value={value})")
+            self._logger.debug(
+                "Writing FC6 register=%d value=%d port=%s slave=%d serial=%d,%d%s%d",
+                address, value, self._port, self._slave_address,
+                self._baudrate, self._bytesize, self._parity, self._stopbits,
+            )
+            if self._logger.isEnabledFor(logging.DEBUG):
+                inst.debug = True
             inst.write_register(address, value, functioncode=6)
+            self._logger.debug(
+                "FC6 write acknowledged register=%d value=%d slave=%d",
+                address, value, self._slave_address,
+            )
 
     def write_registers(self, address: int, values: List[int]) -> None:
         with self._session() as inst:
@@ -114,4 +124,5 @@ class ModbusRegisterTransport(IRegisterTransport):
         inst.serial.parity   = self._parity
         inst.serial.timeout  = self._timeout
         inst.mode            = minimalmodbus.MODE_RTU
+        inst.debug           = self._logger.isEnabledFor(logging.DEBUG)
         return inst

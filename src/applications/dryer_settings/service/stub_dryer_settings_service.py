@@ -85,6 +85,9 @@ class StubDryerSettingsService(IDryerSettingsService):
     def open_plate(self, config: DryerConfig, data: DryerWriteData) -> bool:
         return self._controller(config).open_plate(data)
 
+    def close_plate(self, config: DryerConfig, data: DryerWriteData) -> bool:
+        return self._controller(config).close_plate(data)
+
     def next_position(self, config: DryerConfig, data: DryerWriteData) -> bool:
         return self._controller(config).next_position(data)
 

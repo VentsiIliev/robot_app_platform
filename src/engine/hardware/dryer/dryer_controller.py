@@ -61,6 +61,13 @@ class DryerController(IDryerController):
     def open_plate(self, data: DryerWriteData | None = None) -> bool:
         return self._write_command(DryerCommand.OPEN_PLATE, data)
 
+    def close_plage(self, data: DryerWriteData | None = None) -> bool:
+        return self._write_command(DryerCommand.CLOSE_PLATE, data)
+
+    def close_plate(self, data: DryerWriteData | None = None) -> bool:
+        """Compatibility-correct alias for the historical close_plage method."""
+        return self.close_plage(data)
+
     def next_position(self, data: DryerWriteData | None = None) -> bool:
         return self._write_command(DryerCommand.NEXT_POSITION, data)
 

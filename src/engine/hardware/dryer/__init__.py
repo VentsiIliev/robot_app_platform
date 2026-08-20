@@ -5,6 +5,9 @@ from src.engine.hardware.dryer.models.dryer_commands import DryerCommand, DryerS
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig, DryerConfigSerializer
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
+from src.engine.hardware.dryer.modbus.modbus_plate_dryer_controller import (
+    ModbusPlateDryerController,
+)
 
 __all__ = [
     "DryerController",
@@ -16,4 +19,5 @@ __all__ = [
     "DryerConfigSerializer",
     "DryerState",
     "DryerWriteData",
+    "ModbusPlateDryerController",
 ]

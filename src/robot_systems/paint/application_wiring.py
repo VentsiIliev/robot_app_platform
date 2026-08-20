@@ -1024,6 +1024,7 @@ def _build_dryer_settings_application(robot_app):
         settings_service=robot_app._settings_service,
         dryer_config_key=SettingsID.DRYER_CONFIG,
         modbus_config_key=CommonSettingsID.MODBUS_CONFIG,
+        peripherals_config_key=SettingsID.PERIPHERALS,
     )
     return WidgetApplication(
         widget_factory=lambda _ms: DryerSettingsFactory().build(service)

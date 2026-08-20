@@ -20,6 +20,7 @@ class DryerSettingsController(IApplicationController, BackgroundWorker):
         self._view.refresh_status_requested.connect(self._on_refresh_status)
         self._view.move_servos_requested.connect(self._on_move_servos)
         self._view.open_plate_requested.connect(self._on_open_plate)
+        self._view.close_plate_requested.connect(self._on_close_plate)
         self._view.next_position_requested.connect(self._on_next_position)
         self._view.destroyed.connect(self.stop)
 
@@ -53,6 +54,9 @@ class DryerSettingsController(IApplicationController, BackgroundWorker):
     def _on_open_plate(self) -> None:
         self._run_action("Open Plate", self._open_plate_pending)
 
+    def _on_close_plate(self) -> None:
+        self._run_action("Close Plate", self._close_plate_pending)
+
     def _on_next_position(self) -> None:
         self._run_action("Next Position", self._next_position_pending)
 
@@ -74,6 +78,9 @@ class DryerSettingsController(IApplicationController, BackgroundWorker):
 
     def _open_plate_pending(self) -> bool:
         return self._model.open_plate(self._pending_values)
+
+    def _close_plate_pending(self) -> bool:
+        return self._model.close_plate(self._pending_values)
 
     def _next_position_pending(self) -> bool:
         return self._model.next_position(self._pending_values)

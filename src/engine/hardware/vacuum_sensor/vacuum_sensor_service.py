@@ -32,6 +32,7 @@ class VacuumSensorService(IVacuumSensorService):
             else XinjeMA8X8YR.resolve_output(point)
         )
         self._last_read_ok = False
+        self._last_raw_value: int | None = None
 
     # ── IVacuumSensorService ───────────────────────────────────────────
 
@@ -53,6 +54,7 @@ class VacuumSensorService(IVacuumSensorService):
                     )
                 continue
             self._last_read_ok = True
+            self._last_raw_value = int(raw)
             detected = raw == self._config.detected_value
             _logger.debug(
                 "Vacuum sensor register=%d raw=%d -> detected=%s",
@@ -63,6 +65,11 @@ class VacuumSensorService(IVacuumSensorService):
             return detected
         self._last_read_ok = False
         return False
+
+    @property
+    def last_raw_value(self) -> int | None:
+        """Raw value returned by the most recent read, if any."""
+        return self._last_raw_value
 
     # ── IHealthCheckable ───────────────────────────────────────────────
 

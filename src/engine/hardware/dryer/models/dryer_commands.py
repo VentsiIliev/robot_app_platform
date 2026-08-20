@@ -9,5 +9,6 @@ class DryerStatus(IntFlag):
 
 class DryerCommand(IntFlag):
     MOVE_SERVOS = 0x01
-    OPEN_PLATE = 0x02
+    OPEN_PLATE = 2
+    CLOSE_PLATE= 0
     NEXT_POSITION = 0x04

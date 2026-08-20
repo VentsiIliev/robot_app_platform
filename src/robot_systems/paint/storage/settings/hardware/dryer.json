@@ -1,14 +1,17 @@
 {
-  "status_register": 1,
-  "command_register": 2,
-  "delay_move_up_register": 3,
-  "delay_move_down_register": 4,
-  "delay_move_in_register": 5,
-  "delay_move_out_register": 6,
-  "speed_of_plates_register": 7,
+  "status_register": 0,
+  "command_register": 1,
+  "delay_move_up_register": 2,
+  "delay_move_down_register": 3,
+  "delay_move_in_register": 4,
+  "delay_move_out_register": 5,
+  "speed_of_plates_register": 6,
   "default_delay_move_up": 0,
   "default_delay_move_down": 0,
   "default_delay_move_in": 0,
   "default_delay_move_out": 0,
-  "default_speed_of_plates": 0
+  "default_speed_of_plates": 0,
+  "plate_register": 1,
+  "open_plate_value": 2,
+  "close_plate_value": 0
 }

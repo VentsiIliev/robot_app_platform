@@ -3,6 +3,7 @@ import os
 
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.hardware.dryer.models.dryer_config import DryerConfigSerializer
+from src.engine.hardware.dryer.interfaces.i_dryer_controller import IDryerController
 from src.engine.hardware.fan.interfaces.i_fan_control import IFanControl
 from src.engine.hardware.physical_control_buttons.interfaces.i_physical_control_buttons import IPhysicalControlButtons
 from src.engine.hardware.peripherals import PeripheralConfigSerializer
@@ -38,6 +39,7 @@ from src.robot_systems.paint.processes.paint.paint_process_config_serializer imp
 )
 from src.robot_systems.paint.service_builders import (
     build_fan_service,
+    build_dryer_service,
     build_physical_control_buttons_service,
     build_vacuum_pump_service,
 )
@@ -302,6 +304,13 @@ class PaintRobotSystem(BaseRobotSystem):
             required=False,
             description="Physical start, pause, and reset buttons",
             builder=build_physical_control_buttons_service,
+        ),
+        ServiceSpec(
+            name=ServiceID.DRYER,
+            service_type=IDryerController,
+            required=False,
+            description="Dryer plate controller",
+            builder=build_dryer_service,
         ),
 
     ]

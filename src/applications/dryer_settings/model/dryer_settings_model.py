@@ -47,6 +47,13 @@ class DryerSettingsModel(IApplicationModel):
             DryerSettingsMapper.write_data_from_flat(flat),
         )
 
+    def close_plate(self, flat: dict) -> bool:
+        config = self.config_from_flat(flat)
+        return self._service.close_plate(
+            config,
+            DryerSettingsMapper.write_data_from_flat(flat),
+        )
+
     def next_position(self, flat: dict) -> bool:
         config = self.config_from_flat(flat)
         return self._service.next_position(

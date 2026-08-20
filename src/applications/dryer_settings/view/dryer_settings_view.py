@@ -88,6 +88,7 @@ class DryerSettingsView(IApplicationView):
     refresh_status_requested = pyqtSignal()
     move_servos_requested = pyqtSignal()
     open_plate_requested = pyqtSignal()
+    close_plate_requested = pyqtSignal()
     next_position_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -185,22 +186,25 @@ class DryerSettingsView(IApplicationView):
         self._refresh_btn = QPushButton("Refresh Status")
         self._move_btn = QPushButton("Move Servos")
         self._open_btn = QPushButton("Open Plate")
+        self._close_btn = QPushButton("Close Plate")
         self._next_btn = QPushButton("Next Position")
 
         self._refresh_btn.setStyleSheet(GHOST_BTN_STYLE)
-        for button in (self._move_btn, self._open_btn, self._next_btn):
+        for button in (self._move_btn, self._open_btn, self._close_btn, self._next_btn):
             button.setStyleSheet(ACTION_BTN_STYLE)
-        for button in (self._refresh_btn, self._move_btn, self._open_btn, self._next_btn):
+        for button in (self._refresh_btn, self._move_btn, self._open_btn, self._close_btn, self._next_btn):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._refresh_btn.clicked.connect(self._on_refresh_status)
         self._move_btn.clicked.connect(self._on_move_servos)
         self._open_btn.clicked.connect(self._on_open_plate)
+        self._close_btn.clicked.connect(self._on_close_plate)
         self._next_btn.clicked.connect(self._on_next_position)
 
         layout.addWidget(self._refresh_btn)
         layout.addWidget(self._move_btn)
         layout.addWidget(self._open_btn)
+        layout.addWidget(self._close_btn)
         layout.addWidget(self._next_btn)
         layout.addStretch()
         return panel
@@ -235,6 +239,9 @@ class DryerSettingsView(IApplicationView):
 
     def _on_open_plate(self) -> None:
         self.open_plate_requested.emit()
+
+    def _on_close_plate(self) -> None:
+        self.close_plate_requested.emit()
 
     def _on_next_position(self) -> None:
         self.next_position_requested.emit()
@@ -271,6 +278,7 @@ class DryerSettingsView(IApplicationView):
             self._refresh_btn,
             self._move_btn,
             self._open_btn,
+            self._close_btn,
             self._next_btn,
         ):
             button.setEnabled(not busy)

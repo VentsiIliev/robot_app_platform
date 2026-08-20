@@ -77,3 +77,32 @@ def build_physical_control_buttons_service(ctx):
     except Exception:
         _logger.exception("Physical control buttons could not be built; continuing without them")
         return None
+
+
+def build_dryer_service(ctx):
+    from src.engine.hardware.dryer.modbus.modbus_plate_dryer_factory import (
+        build_modbus_plate_dryer_controller,
+    )
+
+    try:
+        modbus_config = ctx.settings.get(CommonSettingsID.MODBUS_CONFIG)
+        peripheral_config = ctx.settings.get(SettingsID.PERIPHERALS)
+        if not isinstance(modbus_config, ModbusConfig):
+            return None
+        if not isinstance(peripheral_config, PeripheralConfig):
+            return None
+        binding = peripheral_config.get("dryer")
+        if binding is None:
+            return None
+        slave_name = modbus_config.find_slave_name(binding.slave_id)
+        plate_register = int(binding.outputs.get("plate", "2"))
+        return build_modbus_plate_dryer_controller(
+            modbus_config=modbus_config,
+            slave_name=slave_name,
+            plate_register=plate_register,
+            open_value=2,
+            close_value=0,
+        )
+    except Exception:
+        _logger.exception("Dryer service could not be built; continuing without it")
+        return None

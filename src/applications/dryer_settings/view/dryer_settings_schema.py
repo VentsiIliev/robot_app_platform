@@ -2,19 +2,11 @@ from pl_gui.settings.settings_view.schema import SettingField, SettingGroup
 
 
 REGISTER_GROUP = SettingGroup("Registers", [
-    SettingField("status_register", "Status Register", "spinbox", default=100,
+    SettingField("plate_register", "Plate Register", "spinbox", default=2,
                  min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("command_register", "Command Register", "spinbox", default=101,
+    SettingField("open_plate_value", "Open Plate Value", "spinbox", default=2,
                  min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("delay_move_up_register", "Move Up Register", "spinbox", default=102,
-                 min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("delay_move_down_register", "Move Down Register", "spinbox", default=103,
-                 min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("delay_move_in_register", "Move In Register", "spinbox", default=104,
-                 min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("delay_move_out_register", "Move Out Register", "spinbox", default=105,
-                 min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
-    SettingField("speed_of_plates_register", "Plate Speed Register", "spinbox", default=106,
+    SettingField("close_plate_value", "Close Plate Value", "spinbox", default=0,
                  min_val=0, max_val=65535, step=1, step_options=[1, 10, 100]),
 ])
 

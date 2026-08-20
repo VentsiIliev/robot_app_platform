@@ -28,6 +28,9 @@ class DryerConfig:
     default_delay_move_in: int = 0
     default_delay_move_out: int = 0
     default_speed_of_plates: int = 0
+    plate_register: int = 2
+    open_plate_value: int = 2
+    close_plate_value: int = 0
 
     @property
     def block_start_register(self) -> int:
@@ -73,6 +76,9 @@ class DryerConfig:
             default_delay_move_in=int(data.get("default_delay_move_in", 0)),
             default_delay_move_out=int(data.get("default_delay_move_out", 0)),
             default_speed_of_plates=int(data.get("default_speed_of_plates", 0)),
+            plate_register=int(data.get("plate_register", 2)),
+            open_plate_value=int(data.get("open_plate_value", 2)),
+            close_plate_value=int(data.get("close_plate_value", 0)),
         )
 
     def to_dict(self) -> Dict[str, Any]:

@@ -11,7 +11,7 @@
     "enabled": true,
     "slave_id": 1,
     "inputs": {
-      "sensor": "X5"
+      "sensor": "X3"
     }
   },
   "laser": {
@@ -39,6 +39,17 @@
     "outputs": {
       "start": "Y0",
       "pause": "Y1"
+    }
+  },
+  "dryer": {
+    "enabled": true,
+    "slave_id": 10,
+    "outputs": {
+      "plate": "1"
+    },
+    "commands": {
+      "open_plate": 2,
+      "close_plate": 0
     }
   }
 }

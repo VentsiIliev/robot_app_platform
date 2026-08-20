@@ -26,5 +26,9 @@ class IDryerController(ABC):
         """Start the open-plate command."""
 
     @abstractmethod
+    def close_plate(self, data: DryerWriteData | None = None) -> bool:
+        """Start the close-plate command."""
+
+    @abstractmethod
     def next_position(self, data: DryerWriteData | None = None) -> bool:
         """Start the move-to-next-position command."""
