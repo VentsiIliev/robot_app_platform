@@ -1174,6 +1174,20 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("set_active_tool error: %s", e, exc_info=True)
             return False
 
+    def get_tool_registry(self):
+        logger.debug("get_tool_registry → GET /tool/registry")
+        try:
+            response = requests.get(f"{self.server_url}/tool/registry", timeout=5)
+            raw = response.json()
+            if self._response_failed("get_tool_registry", response, raw):
+                return None
+            self._mark_available()
+            return raw
+        except Exception as e:
+            self._mark_unavailable(e)
+            logger.error("get_tool_registry error: %s", e, exc_info=True)
+            return None
+
     def set_active_workobject(self, user: int) -> bool:
         try:
             user_id = int(user)

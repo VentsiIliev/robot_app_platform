@@ -165,6 +165,10 @@ class RobotService(IRobotService):
                     self._logger.warning("State refresh after set_active_workobject failed", exc_info=True)
         return ok
 
+    def get_tool_registry(self):
+        getter = getattr(self._robot, "get_tool_registry", None)
+        return getter() if callable(getter) else None
+
     def get_workobject_registry(self):
         getter = getattr(self._robot, "get_workobject_registry", None)
         return getter() if callable(getter) else None

@@ -83,6 +83,9 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     @abstractmethod
     def set_active_tool(self, tool: int) -> bool: ...
 
+    def get_tool_registry(self):
+        return None
+
     def set_active_workobject(self, user: int) -> bool:
         return True
 

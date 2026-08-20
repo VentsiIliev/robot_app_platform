@@ -217,6 +217,10 @@ class IRobot(ABC):
         """Optional remote active TCP selection for status/current-pose reporting."""
         return False
 
+    def get_tool_registry(self):
+        """Return the remote tool registry payload when supported."""
+        return None
+
     def prefers_incremental_jog(self) -> bool:
         """Whether jog should prefer the robot's native incremental jog API over synthesized move commands."""
         return False

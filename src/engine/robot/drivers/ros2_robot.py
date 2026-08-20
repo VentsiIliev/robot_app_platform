@@ -138,6 +138,10 @@ class Ros2Robot(IRobot):
     def set_active_tool(self, tool: int) -> bool:
         return self._client.set_active_tool(tool)
 
+    def get_tool_registry(self):
+        getter = getattr(self._client, "get_tool_registry", None)
+        return getter() if callable(getter) else None
+
     def set_active_workobject(self, user: int) -> bool:
         setter = getattr(self._client, "set_active_workobject", None)
         if not callable(setter):

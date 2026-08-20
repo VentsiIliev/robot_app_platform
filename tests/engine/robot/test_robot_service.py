@@ -75,6 +75,13 @@ class TestRobotService(unittest.TestCase):
 
         self.state.refresh_once.assert_not_called()
 
+    def test_registry_reads_delegate_to_robot_driver(self):
+        self.robot.get_tool_registry.return_value = {"tool_registry": {"TOOL_0": [0, 0, 0, 0, 0, 0]}}
+        self.robot.get_workobject_registry.return_value = {"workobject_registry": {"WOBJ_0": [0, 0, 0, 0, 0, 0]}}
+
+        self.assertEqual(self.service.get_tool_registry(), self.robot.get_tool_registry.return_value)
+        self.assertEqual(self.service.get_workobject_registry(), self.robot.get_workobject_registry.return_value)
+
     # --- lifecycle delegation ---
 
     def test_enable_robot_delegates_to_robot(self):
