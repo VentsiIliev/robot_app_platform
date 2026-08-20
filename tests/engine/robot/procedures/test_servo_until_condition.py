@@ -7,6 +7,7 @@ from src.engine.robot.procedures import (
     ServoUntilConditionConfig,
     ServoUntilConditionProcedure,
     TimedDummyPickupCondition,
+    VacuumPickupCondition,
 )
 
 
@@ -69,6 +70,14 @@ class FailsAfterStartCondition:
         raise RuntimeError("sensor disconnected")
 
 
+class UnhealthyVacuumSensor:
+    def is_vacuum_detected(self):
+        return False
+
+    def is_healthy(self):
+        return False
+
+
 class TestServoUntilConditionProcedure(unittest.TestCase):
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
@@ -122,6 +131,47 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertTrue(result.timed_out)
         self.assertEqual(robot.stopped, 1)
 
+    def test_stops_servo_when_stop_guard_triggers(self):
+        robot = FakeRobot()
+        guard_calls = 0
+
+        def z_limit_reached():
+            nonlocal guard_calls
+            guard_calls += 1
+            return guard_calls >= 2
+
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=1.0,
+            ),
+            stop_guard=z_limit_reached,
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.guard_triggered)
+        self.assertEqual(result.message, "stop_guard_triggered")
+        self.assertEqual(robot.stopped, 1)
+
+    def test_stops_servo_when_stop_guard_cannot_be_read(self):
+        robot = FakeRobot()
+
+        def unreadable_guard():
+            raise RuntimeError("position unavailable")
+
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=1.0,
+            ),
+            stop_guard=unreadable_guard,
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.guard_triggered)
+        self.assertEqual(result.message, "stop_guard_unreadable")
+        self.assertEqual(robot.stopped, 1)
+
     def test_does_not_start_servo_when_condition_already_active(self):
         robot = FakeRobot()
         procedure = ServoUntilConditionProcedure(robot, lambda: True)
@@ -151,6 +201,24 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "condition_unreadable_before_motion")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.stopped, 0)
+
+    def test_unhealthy_vacuum_sensor_blocks_servo_start(self):
+        robot = FakeRobot()
+        result = ServoUntilConditionProcedure(
+            robot,
+            VacuumPickupCondition(UnhealthyVacuumSensor()),
+        ).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=0.02,
+                preflight_condition_read_attempts=1,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.condition_failed)
+        self.assertEqual(result.message, "condition_unreadable_before_motion")
+        self.assertEqual(robot.started, [])
 
     def test_stops_servo_when_condition_becomes_unreadable_during_motion(self):
         robot = FakeRobot()

@@ -41,6 +41,7 @@ class ServoUntilConditionResult:
     elapsed_s: float
     message: str
     condition_failed: bool = False
+    guard_triggered: bool = False
 
 
 class ServoUntilConditionProcedure:
@@ -66,6 +67,7 @@ class ServoUntilConditionProcedure:
         approach_pose: Sequence[float] | None = None,
         config: ServoUntilConditionConfig | None = None,
         cancel_requested: Callable[[], bool] | None = None,
+        stop_guard: Callable[[], bool] | None = None,
     ) -> ServoUntilConditionResult:
         cfg = config or ServoUntilConditionConfig()
         started = False
@@ -81,6 +83,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=False,
                     condition_failed=False,
+                    guard_triggered=False,
                     message=message,
                 )
 
@@ -93,6 +96,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=False,
                     condition_failed=True,
+                    guard_triggered=False,
                     message="condition_unreadable_before_motion",
                 )
             if preflight:
@@ -103,6 +107,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=False,
                     condition_failed=False,
+                    guard_triggered=False,
                     message="condition_already_active",
                 )
 
@@ -115,6 +120,7 @@ class ServoUntilConditionProcedure:
                         timed_out=False,
                         start_failed=True,
                         condition_failed=False,
+                        guard_triggered=False,
                         message="approach_failed",
                     )
 
@@ -127,6 +133,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=False,
                     condition_failed=True,
+                    guard_triggered=False,
                     message="condition_unreadable_after_approach",
                 )
             if active:
@@ -137,6 +144,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=False,
                     condition_failed=False,
+                    guard_triggered=False,
                     message="condition_already_active",
                 )
 
@@ -157,6 +165,7 @@ class ServoUntilConditionProcedure:
                     timed_out=False,
                     start_failed=True,
                     condition_failed=False,
+                    guard_triggered=False,
                     message=f"servo_start_failed:{start_ret}",
                 )
 
@@ -176,6 +185,7 @@ class ServoUntilConditionProcedure:
                         timed_out=False,
                         start_failed=False,
                         condition_failed=False,
+                        guard_triggered=False,
                         message="cancelled",
                     )
 
@@ -195,6 +205,7 @@ class ServoUntilConditionProcedure:
                             timed_out=False,
                             start_failed=False,
                             condition_failed=True,
+                            guard_triggered=False,
                             message="condition_unreadable_during_servo",
                         )
                 else:
@@ -208,8 +219,36 @@ class ServoUntilConditionProcedure:
                         timed_out=False,
                         start_failed=False,
                         condition_failed=False,
+                        guard_triggered=False,
                         message="condition_detected",
                     )
+
+                if stop_guard is not None:
+                    try:
+                        guard_active = bool(stop_guard())
+                    except Exception:
+                        _logger.exception("[SERVO_UNTIL_CONDITION] stop guard read failed")
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=True,
+                            message="stop_guard_unreadable",
+                        )
+                    if guard_active:
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=True,
+                            message="stop_guard_triggered",
+                        )
 
                 if time.monotonic() >= deadline:
                     return self._result(
@@ -219,6 +258,7 @@ class ServoUntilConditionProcedure:
                         timed_out=True,
                         start_failed=False,
                         condition_failed=False,
+                        guard_triggered=False,
                         message="timeout",
                     )
 
@@ -333,6 +373,7 @@ class ServoUntilConditionProcedure:
         timed_out: bool,
         start_failed: bool,
         condition_failed: bool,
+        guard_triggered: bool,
         message: str,
     ) -> ServoUntilConditionResult:
         return ServoUntilConditionResult(
@@ -341,6 +382,7 @@ class ServoUntilConditionProcedure:
             timed_out=bool(timed_out),
             start_failed=bool(start_failed),
             condition_failed=bool(condition_failed),
+            guard_triggered=bool(guard_triggered),
             elapsed_s=max(0.0, time.monotonic() - started_at),
             message=str(message),
         )
