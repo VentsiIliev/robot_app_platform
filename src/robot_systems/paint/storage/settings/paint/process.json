@@ -94,27 +94,27 @@
   "safe_travel": {
     "enabled": true,
     "position": [
-      -96.129,
-      546.0,
-      198.359,
-      -178.775,
-      -0.015,
-      -0.049
+      -29.024,
+      126.781,
+      200.047,
+      -178.166,
+      -0.028,
+      0.099
     ],
     "positions": [
       {
         "position": [
-          -96.129,
-          546.0,
-          198.359,
-          -178.775,
-          -0.015,
-          -0.049
+          -29.024,
+          126.781,
+          200.047,
+          -178.166,
+          -0.028,
+          0.099
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 60.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       }
     ],
     "movement_group_id": "Magazine"
@@ -122,111 +122,139 @@
   "dropoff_safe_travel": {
     "enabled": true,
     "position": [
-      225.0,
-      440.0,
-      240.0,
-      -178.748,
-      -0.019,
-      -0.081
+      250.242,
+      158.075,
+      244.328,
+      -178.133,
+      -0.047,
+      0.091
     ],
     "positions": [
       {
         "position": [
-          225.0,
-          440.0,
-          240.0,
-          -178.748,
-          -0.019,
-          -0.081
+          250.242,
+          158.075,
+          244.328,
+          -178.133,
+          -0.047,
+          0.091
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          195.0,
-          400.0,
-          240.0,
-          -178.751,
-          0.004,
-          -0.063
+          250.242,
+          58.047,
+          244.303,
+          -178.138,
+          -0.042,
+          0.088
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          160.0,
-          360.0,
-          240.0,
-          -178.741,
-          -0.023,
-          -0.085
+          150.23,
+          58.015,
+          244.298,
+          -178.139,
+          -0.043,
+          0.077
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          125.0,
-          330.0,
-          240.0,
-          -178.756,
-          -0.013,
-          -0.098
+          150.252,
+          88.049,
+          244.309,
+          -178.135,
+          -0.047,
+          0.076
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          95.0,
-          305.0,
-          240.0,
-          -178.756,
-          -0.013,
-          -0.098
+          130.271,
+          88.066,
+          244.319,
+          -178.134,
+          -0.051,
+          0.069
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          20.0,
-          312.0,
-          240.0,
-          -178.765,
-          -0.014,
-          -0.07
+          130.28,
+          88.08,
+          194.332,
+          -178.13,
+          -0.05,
+          0.066
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
       },
       {
         "position": [
-          -26.042,
-          311.744,
-          240.0,
-          -178.77,
-          -0.015,
-          -0.061
+          130.281,
+          88.093,
+          144.309,
+          -178.126,
+          -0.054,
+          0.067
         ],
-        "vel_percent": 90.0,
-        "acc_percent": 50.0,
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
         "motion_type": "ptp",
-        "blendR": 20.0
+        "blendR": 0.0
+      },
+      {
+        "position": [
+          130.279,
+          88.057,
+          94.299,
+          -178.133,
+          -0.049,
+          0.062
+        ],
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
+        "motion_type": "ptp",
+        "blendR": 0.0
+      },
+      {
+        "position": [
+          130.268,
+          88.047,
+          44.301,
+          -178.134,
+          -0.047,
+          0.062
+        ],
+        "vel_percent": 10.0,
+        "acc_percent": 10.0,
+        "motion_type": "ptp",
+        "blendR": 0.0
       }
     ]
   },

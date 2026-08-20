@@ -10,13 +10,13 @@
       "position": "[-7.120, 366.715, 99.870, -178.876, 0.003, -0.008]"
     },
     "CALIBRATION": {
-      "velocity": 90,
-      "acceleration": 50,
+      "velocity": 10,
+      "acceleration": 10,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-96.039, 560.555, 100.433, -178.785, -0.012, -0.049]"
+      "position": "[-29.075, 217.269, 200.076, -178.170, -0.028, 0.098]"
     },
     "JOG": {
       "velocity": 10,
@@ -42,7 +42,7 @@
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[223.800, 576.902, 245.258, -178.794, -0.046, -0.115]"
+      "position": "[250.185, 258.083, 244.247, -178.146, -0.046, 0.097]"
     },
     "Clean": {
       "velocity": 10,
@@ -54,22 +54,22 @@
       "position": "[265.622, 606.445, 183.224, -178.752, -0.073, -0.149]"
     },
     "Dropoff": {
-      "velocity": 90,
-      "acceleration": 50,
+      "velocity": 10,
+      "acceleration": 10,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-26.042, 311.744, 35.857, -178.770, -0.015, -0.061]"
+      "position": "[129.542, 82.796, 24.506, -178.144, -0.051, 0.083]"
     },
     "Magazine": {
-      "velocity": 90,
-      "acceleration": 50,
+      "velocity": 10,
+      "acceleration": 10,
       "motion_type": "ptp",
       "iterations": 1,
       "has_iterations": false,
       "has_trajectory_execution": true,
-      "position": "[-186.163, 290.663, 94.833, -178.758, -0.007, -0.061]"
+      "position": "[-100.332, -14.783, 200.165, -178.154, -0.027, 0.099]"
     }
   }
 }
