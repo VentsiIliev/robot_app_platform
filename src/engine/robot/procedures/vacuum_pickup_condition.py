@@ -12,4 +12,7 @@ class VacuumPickupCondition:
         self._vacuum_sensor = vacuum_sensor
 
     def is_active(self) -> bool:
-        return bool(self._vacuum_sensor.is_vacuum_detected())
+        detected = bool(self._vacuum_sensor.is_vacuum_detected())
+        if not self._vacuum_sensor.is_healthy():
+            raise RuntimeError("Vacuum sensor read failed")
+        return detected
