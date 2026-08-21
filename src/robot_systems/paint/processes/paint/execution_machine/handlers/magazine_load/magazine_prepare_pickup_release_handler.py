@@ -44,6 +44,7 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
     ctx.magazine_release_pose = load_service._resolve_work_area_center_release_pose(
         base_pose=base_release_pose,
         frame=getattr(ctx.magazine_snapshot, "frame", None),
+        release_z_mm=float(ctx.magazine_config.release_z_mm),
     )
     release_elapsed = perf_counter() - release_started
     if ctx.magazine_release_pose is None:

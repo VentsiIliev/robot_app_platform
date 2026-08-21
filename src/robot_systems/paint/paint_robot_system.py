@@ -340,7 +340,17 @@ class PaintRobotSystem(BaseRobotSystem):
             return TimedDummyPickupCondition(
                 detect_after_s=float(pickup_motion.servo_contact_dummy_detect_after_s)
             )
-        return None
+        vacuum_sensor = self.get_optional_service(ServiceID.VACUUM_SENSOR)
+        if vacuum_sensor is None:
+            _logger.warning(
+                "[PICKUP] Vacuum sensor service is unavailable; "
+                "servo-contact pickup has no stop condition"
+            )
+            return None
+
+        from src.engine.robot.procedures import VacuumPickupCondition
+
+        return VacuumPickupCondition(vacuum_sensor)
 
     def _get_pickup_condition(self):
         self._pickup_condition = self._build_pickup_condition()

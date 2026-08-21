@@ -132,6 +132,7 @@ class PaintMagazineLoadConfig:
     transfer_to_calibration_acc_percent: float = 30.0  # [LIVE SETTINGS]
     transfer_to_calibration_motion_type: str = "ptp"  # [LIVE SETTINGS]
     transfer_to_calibration_blendR: float = 0.0  # [LIVE SETTINGS]
+    release_z_mm: float = 50.0  # [LIVE SETTINGS]
     camera_settle_s: float = 0.5
     release_settle_s: float = 0.5
 

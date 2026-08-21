@@ -113,6 +113,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertTrue(flat["enable_execution_state_timing"])
         self.assertEqual(0.5, flat["magazine_camera_settle_s"])
         self.assertEqual(0.5, flat["magazine_release_settle_s"])
+        self.assertEqual(50.0, flat["magazine_release_z_mm"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_vel_percent"])
         self.assertEqual(30.0, flat["magazine_move_to_magazine_acc_percent"])
         self.assertEqual(30.0, flat["magazine_transfer_to_calibration_vel_percent"])
@@ -126,6 +127,7 @@ class TestPaintProcessConfig(unittest.TestCase):
                 "enable_execution_state_timing": False,
                 "magazine_camera_settle_s": 0.25,
                 "magazine_release_settle_s": 0.75,
+                "magazine_release_z_mm": 55.0,
                 "magazine_move_to_magazine_vel_percent": 11.0,
                 "magazine_move_to_magazine_acc_percent": 12.0,
                 "magazine_transfer_to_calibration_vel_percent": 13.0,
@@ -139,6 +141,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertFalse(restored.enable_execution_state_timing)
         self.assertEqual(0.25, restored.magazine_load.camera_settle_s)
         self.assertEqual(0.75, restored.magazine_load.release_settle_s)
+        self.assertEqual(55.0, restored.magazine_load.release_z_mm)
         self.assertEqual(11.0, restored.magazine_load.move_to_magazine_vel_percent)
         self.assertEqual(12.0, restored.magazine_load.move_to_magazine_acc_percent)
         self.assertEqual(13.0, restored.magazine_load.transfer_to_calibration_vel_percent)
@@ -207,6 +210,7 @@ class TestPaintProcessConfig(unittest.TestCase):
                 move_to_magazine_acc_percent=22.0,
                 transfer_to_calibration_vel_percent=23.0,
                 transfer_to_calibration_acc_percent=24.0,
+                release_z_mm=50.0,
                 camera_settle_s=1.25,
                 release_settle_s=0.75,
             )
@@ -222,6 +226,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(22.0, restored.magazine_load.move_to_magazine_acc_percent)
         self.assertEqual(23.0, restored.magazine_load.transfer_to_calibration_vel_percent)
         self.assertEqual(24.0, restored.magazine_load.transfer_to_calibration_acc_percent)
+        self.assertEqual(50.0, restored.magazine_load.release_z_mm)
         self.assertEqual(1.25, restored.magazine_load.camera_settle_s)
         self.assertEqual(0.75, restored.magazine_load.release_settle_s)
 
@@ -268,6 +273,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertIn("run_while_workpiece_found", keys)
         self.assertIn("enable_execution_state_timing", keys)
         self.assertIn("magazine_load_enabled", keys)
+        self.assertIn("magazine_release_z_mm", keys)
         self.assertIn("magazine_camera_settle_s", keys)
         self.assertIn("magazine_release_settle_s", keys)
         self.assertIn("safe_travel_enabled", keys)

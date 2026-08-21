@@ -76,6 +76,7 @@
     "Pause": "Pause"
   },
   "PaintProcessSettings": {
+    "Release Z": "Release Z",
     "Dropoff Not Configured": "Dropoff Not Configured",
     "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.",
     "Reason": "Reason",

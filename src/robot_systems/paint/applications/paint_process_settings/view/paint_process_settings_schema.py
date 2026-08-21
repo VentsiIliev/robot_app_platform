@@ -148,6 +148,7 @@ def build_process_groups() -> list[SettingGroup]:
         ]),
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
+            _mm_field("magazine_release_z_mm", "Release Z", 50.0, min_val=0.0),
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
         ]),

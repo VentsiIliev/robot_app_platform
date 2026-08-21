@@ -153,6 +153,7 @@ def handle_resolve_pickup(ctx: MagazineLoadContext) -> MagazineLoadState:
     ctx.release_pose = service._resolve_work_area_center_release_pose(
         base_pose=base_release_pose,
         frame=getattr(ctx.snapshot, "frame", None),
+        release_z_mm=float(ctx.config.release_z_mm),
     )
     release_elapsed = perf_counter() - release_started
     if ctx.release_pose is None:

@@ -124,6 +124,17 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["blendR"], 0.0)
 
+    def test_pickup_chain_removes_redundant_alignment_pose(self):
+        pose = [10, 20, 30, 180, 0, 45]
+        segments = build_paint_pickup_segments([
+            PickupWaypoint("lift", pose, 10, 10, "ptp", 20.0),
+            PickupWaypoint("Aligning workpiece to paint axis", list(pose), 10, 10, "ptp", 12.0),
+            PickupWaypoint("stage", [20, 20, 30, 180, 0, 45], 10, 10, "ptp", 0.0),
+        ])
+
+        self.assertEqual([segment["label"] for segment in segments], ["lift", "stage"])
+        self.assertEqual(segments[0]["blendR"], 12.0)
+
     def test_height_measure_pickup_mode_fails_fast_until_wired(self):
         robot = _FakeRobot()
         motion = _FakeMotion()

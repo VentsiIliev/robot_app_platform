@@ -31,6 +31,9 @@ _LOGGER = logging.getLogger("paint_servo_pickup_test")
 _Z_LIMIT_MM = 50.0
 _SERVO_SPEED_MM_S = 250.0
 _TIMEOUT_S = 30.0
+_RETRACT_DISTANCE_MM = 10.0
+_RETRACT_SPEED_MM_S = 50.0
+_RETRACT_TIMEOUT_S = 5.0
 
 
 def _current_z(robot_service) -> float:
@@ -38,6 +41,43 @@ def _current_z(robot_service) -> float:
     if pose is None or len(pose) < 3:
         raise RuntimeError("Robot position is unavailable; refusing to continue motion")
     return float(pose[2])
+
+
+def _retract_after_detection(robot, *, tool: int, user: int) -> bool:
+    contact_z = _current_z(robot)
+    target_z = contact_z + _RETRACT_DISTANCE_MM
+    _LOGGER.warning(
+        "Vacuum detected; retracting Z+: start_z=%.3f mm target_z=%.3f mm "
+        "distance=%.3f mm speed=%.3f mm/s",
+        contact_z,
+        target_z,
+        _RETRACT_DISTANCE_MM,
+        _RETRACT_SPEED_MM_S,
+    )
+    result = ServoUntilConditionProcedure(
+        robot,
+        lambda: _current_z(robot) >= target_z,
+    ).run(
+        config=ServoUntilConditionConfig(
+            axis=RobotAxis.Z,
+            direction=Direction.PLUS,
+            linear_mm_s=_RETRACT_SPEED_MM_S,
+            frame="user",
+            tool=tool,
+            user=user,
+            poll_interval_s=0.02,
+            timeout_s=_RETRACT_TIMEOUT_S,
+        ),
+    )
+    final_z = _current_z(robot)
+    _LOGGER.warning(
+        "Z retract finished: success=%s message=%s elapsed=%.3fs final_z=%.3f mm",
+        result.success,
+        result.message,
+        result.elapsed_s,
+        final_z,
+    )
+    return bool(result.success)
 
 
 def main() -> int:
@@ -107,7 +147,12 @@ def main() -> int:
             result.elapsed_s,
             final_z,
         )
-        return 0 if result.success else 1
+        if not result.success:
+            return 1
+        if result.detected and not _retract_after_detection(robot, tool=tool, user=user):
+            _LOGGER.error("Vacuum was detected, but the 10 mm Z retract failed")
+            return 1
+        return 0
     except KeyboardInterrupt:
         _LOGGER.warning("Interrupted by operator; stopping")
         return 130

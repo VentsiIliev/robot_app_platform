@@ -88,6 +88,7 @@
     "transfer_to_calibration_acc_percent": 80.0,
     "transfer_to_calibration_motion_type": "ptp",
     "transfer_to_calibration_blendR": 0.0,
+    "release_z_mm": 50.0,
     "camera_settle_s": 0.2,
     "release_settle_s": 0.2
   },

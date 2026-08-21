@@ -378,7 +378,7 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
         is_last_pickup_waypoint = waypoint_index == len(waypoints) - 1
         is_pickup_contact = waypoint.label == "Descending to pickup pose"
         move_type = "linear" if is_pickup_contact else "ptp"
-        configured_type = str(waypoint.motion_type or "").strip().lower()
+        configured_type = str(getattr(waypoint, "motion_type", None) or "").strip().lower()
         if configured_type in {"ptp", "linear"}:
             move_type = configured_type
         default_blend_r = (
@@ -389,20 +389,40 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
             )
             else 20.0
         )
-        blend_r = default_blend_r if waypoint.blendR is None else float(waypoint.blendR)
+        configured_blend_r = getattr(waypoint, "blendR", None)
+        blend_r = default_blend_r if configured_blend_r is None else float(configured_blend_r)
         if is_last_pickup_waypoint:
             blend_r = 0.0
-        segments.append(
-            {
-                "type": move_type,
-                "label": waypoint.label,
-                "position": list(waypoint.pose),
-                "vel": float(waypoint.vel_percent),
-                "acc": float(waypoint.acc_percent),
-                "blendR": max(0.0, blend_r),
-            }
-        )
+        segment = {
+            "type": move_type,
+            "label": waypoint.label,
+            "position": list(waypoint.pose),
+            "vel": float(waypoint.vel_percent),
+            "acc": float(waypoint.acc_percent),
+            "blendR": max(0.0, blend_r),
+        }
+        if segments and _equivalent_pickup_poses(segments[-1]["position"], segment["position"]):
+            _logger.info(
+                "[PICKUP] Removing redundant no-op waypoint %r at the same pose as %r",
+                segment["label"],
+                segments[-1]["label"],
+            )
+            segments[-1]["blendR"] = segment["blendR"]
+            continue
+        segments.append(segment)
     return segments
+
+
+def _equivalent_pickup_poses(first: list[float], second: list[float]) -> bool:
+    if len(first) < 6 or len(second) < 6:
+        return False
+    if any(abs(float(first[index]) - float(second[index])) > 1e-3 for index in range(3)):
+        return False
+    for index in range(3, 6):
+        delta = (float(first[index]) - float(second[index]) + 180.0) % 360.0 - 180.0
+        if abs(delta) > 1e-3:
+            return False
+    return True
 
 
 def build_ordered_paint_contact_segments(

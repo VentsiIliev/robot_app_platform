@@ -146,7 +146,13 @@ class PaintMagazineLoadService:
     def _wait_after_pause_resume(self, context: MagazineLoadContext) -> bool:
         return self._wait(1.0, context.motion_cancel_requested)
 
-    def _resolve_work_area_center_release_pose(self, *, base_pose: list[float], frame) -> list[float] | None:
+    def _resolve_work_area_center_release_pose(
+        self,
+        *,
+        base_pose: list[float],
+        frame,
+        release_z_mm: float,
+    ) -> list[float] | None:
         started = monotonic()
         if len(base_pose) < 6:
             return None
@@ -168,7 +174,7 @@ class PaintMagazineLoadService:
             VisionPoseRequest(
                 x_pixels=float(center_px[0]),
                 y_pixels=float(center_px[1]),
-                z_mm=float(base_pose[2]),
+                z_mm=float(release_z_mm),
                 rx_degrees=float(base_pose[3]),
                 ry_degrees=float(base_pose[4]),
                 rz_degrees=float(base_pose[5]),
@@ -180,14 +186,17 @@ class PaintMagazineLoadService:
         release_pose = list(base_pose)
         release_pose[0] = float(result.final_xy[0])
         release_pose[1] = float(result.final_xy[1])
+        release_pose[2] = float(release_z_mm)
         _logger.info(
-            "[MAGAZINE_LOAD] release target work_area=%s frame=%s center_px=(%.3f, %.3f) release_xy=(%.3f, %.3f)",
+            "[MAGAZINE_LOAD] release target work_area=%s frame=%s center_px=(%.3f, %.3f) "
+            "release_xyz=(%.3f, %.3f, %.3f)",
             self._release_work_area_id,
             self._release_frame_name,
             float(center_px[0]),
             float(center_px[1]),
             float(release_pose[0]),
             float(release_pose[1]),
+            float(release_pose[2]),
         )
         _logger.info(
             "[MAGAZINE_LOAD_TIMING] release_pose center_px_s=%.3f resolver_s=%.3f registry_s=%.3f "

@@ -263,6 +263,7 @@ class PaintProcessSettingsMapper:
                 ),
             ],
             "magazine_load_enabled": magazine.enabled,
+            "magazine_release_z_mm": magazine.release_z_mm,
             "magazine_camera_settle_s": magazine.camera_settle_s,
             "magazine_release_settle_s": magazine.release_settle_s,
             "magazine_move_to_magazine_vel_percent": magazine.move_to_magazine_vel_percent,
@@ -455,6 +456,7 @@ class PaintProcessSettingsMapper:
         magazine = replace(
             base.magazine_load,
             enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
+            release_z_mm=float(flat.get("magazine_release_z_mm", base.magazine_load.release_z_mm)),
             camera_settle_s=float(flat.get("magazine_camera_settle_s", base.magazine_load.camera_settle_s)),
             release_settle_s=float(flat.get("magazine_release_settle_s", base.magazine_load.release_settle_s)),
             move_to_magazine_vel_percent=float(
