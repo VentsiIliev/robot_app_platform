@@ -3,11 +3,50 @@ from unittest.mock import MagicMock
 
 from src.engine.hardware.dryer.dryer_controller import DryerController
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
+from src.engine.hardware.dryer.models.dryer_status import DryerStatus
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 from src.engine.hardware.dryer.models.dryer_modbus_registers import DryerRegisterMap
 
 
 class TestDryerController(unittest.TestCase):
+    def test_robot_system_can_override_commands_and_statuses(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = 0x80
+        controller = DryerController(
+            transport,
+            commands={"eject": 9},
+            statuses={"ready": 0x80},
+        )
+
+        self.assertTrue(controller.eject())
+        self.assertEqual(transport.write_registers.call_args.args[1][1], 9)
+        self.assertTrue(controller.get_state().is_ready)
+
+    def test_decodes_current_firmware_status_flags(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = int(
+            DryerStatus.READY
+            | DryerStatus.HOMED
+            | DryerStatus.EJECT_DONE
+            | DryerStatus.NEXT_POS_MOVING
+        )
+        state = DryerController(transport).get_state()
+
+        self.assertTrue(state.is_ready)
+        self.assertTrue(state.is_homed)
+        self.assertTrue(state.eject_done)
+        self.assertTrue(state.next_position_moving)
+        self.assertFalse(state.homed_done)
+
+    def test_command_replaces_stale_payload_command(self) -> None:
+        transport = MagicMock()
+        controller = DryerController(transport)
+
+        self.assertTrue(controller.execute_command(0, DryerWriteData(command=2)))
+
+        values = transport.write_registers.call_args.args[1]
+        self.assertEqual(values[1], 0)
+
     def test_execute_command_uses_configured_numeric_value(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport)

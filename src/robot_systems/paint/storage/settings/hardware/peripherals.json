@@ -10,7 +10,8 @@
     "commands": {
       "on": 1,
       "off": 0
-    }
+    },
+    "statuses": {}
   },
   "vacuum_sensor": {
     "enabled": false,
@@ -19,7 +20,8 @@
       "sensor": "X3"
     },
     "outputs": {},
-    "commands": {}
+    "commands": {},
+    "statuses": {}
   },
   "fan": {
     "enabled": false,
@@ -31,7 +33,8 @@
     "commands": {
       "on": 1,
       "off": 0
-    }
+    },
+    "statuses": {}
   },
   "physical_control_buttons": {
     "enabled": false,
@@ -49,7 +52,8 @@
       "start_off": 0,
       "pause_on": 1,
       "pause_off": 0
-    }
+    },
+    "statuses": {}
   },
   "dryer": {
     "enabled": false,
@@ -77,10 +81,10 @@
       "target_position_next_position": "17"
     },
     "commands": {
-      "move_servos": 1,
-      "open_plate": 2,
-      "close_plate": 0,
-      "next_position": 4
-    }
+      "next_position": 0,
+      "eject": 1,
+      "close_plate": 2
+    },
+    "statuses": {}
   }
 }

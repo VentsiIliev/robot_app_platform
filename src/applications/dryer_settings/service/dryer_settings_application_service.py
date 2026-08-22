@@ -87,7 +87,13 @@ class DryerSettingsApplicationService(IDryerSettingsService):
         slave_name = modbus.find_slave_name(binding.slave_id)
         transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus, slave_name)
         register_map = DryerRegisterMap.from_mapping({**binding.inputs, **binding.outputs})
-        return DryerController(transport, config, register_map)  # type: ignore[arg-type]
+        return DryerController(
+            transport,
+            config,
+            register_map,
+            commands=binding.commands,
+            statuses=binding.statuses,
+        )  # type: ignore[arg-type]
 
     def _peripherals(self) -> PeripheralConfig:
         peripherals = self._settings.get(self._peripherals_config_key)
@@ -117,6 +123,7 @@ class DryerSettingsApplicationService(IDryerSettingsService):
             inputs=current.inputs,
             outputs=current.outputs,
             commands=current.commands,
+            statuses=current.statuses,
         )
         self._settings.save(
             self._peripherals_config_key,

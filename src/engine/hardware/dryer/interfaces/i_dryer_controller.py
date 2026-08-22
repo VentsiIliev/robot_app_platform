@@ -36,11 +36,15 @@ class IDryerController(ABC):
 
     @abstractmethod
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
-        """Start the servo movement command."""
+        """Compatibility alias for eject()."""
+
+    @abstractmethod
+    def eject(self, data: DryerWriteData | None = None) -> bool:
+        """Eject the loaded detail."""
 
     @abstractmethod
     def open_plate(self, data: DryerWriteData | None = None) -> bool:
-        """Start the open-plate command."""
+        """Compatibility alias for close_plate()."""
 
     @abstractmethod
     def close_plate(self, data: DryerWriteData | None = None) -> bool:

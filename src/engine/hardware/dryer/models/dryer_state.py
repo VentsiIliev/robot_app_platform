@@ -1,30 +1,52 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Mapping
 
-from src.engine.hardware.dryer.models.dryer_commands import DryerStatus
+from src.engine.hardware.dryer.models.dryer_status import dryer_statuses
 
 
 @dataclass(frozen=True)
 class DryerState:
     raw_status: int = 0
     is_ready: bool = False
-    servos_moving: bool = False
-    plate_on_position: bool = False
+    is_homed: bool = False
+    homed_done: bool = False
+    ejecting: bool = False
+    eject_done: bool = False
+    next_position_moving: bool = False
+    next_position_done: bool = False
     is_healthy: bool = False
     communication_errors: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_raw_status(cls, raw_status: int) -> "DryerState":
-        status = DryerStatus(raw_status)
+    def from_raw_status(
+        cls,
+        raw_status: int,
+        statuses: Mapping[str, int] | None = None,
+    ) -> "DryerState":
+        masks = dryer_statuses(statuses)
         return cls(
             raw_status=raw_status,
-            is_ready=bool(status & DryerStatus.READY),
-            servos_moving=bool(status & DryerStatus.SERVOS_MOVING),
-            plate_on_position=bool(status & DryerStatus.PLATE_ON_POSITION),
+            is_ready=bool(raw_status & masks["ready"]),
+            is_homed=bool(raw_status & masks["homed"]),
+            homed_done=bool(raw_status & masks["homed_done"]),
+            ejecting=bool(raw_status & masks["eject"]),
+            eject_done=bool(raw_status & masks["eject_done"]),
+            next_position_moving=bool(raw_status & masks["next_pos_moving"]),
+            next_position_done=bool(raw_status & masks["next_pos_done"]),
             is_healthy=True,
         )
+
+    @property
+    def servos_moving(self) -> bool:
+        """Compatibility view of either firmware movement status."""
+        return self.ejecting or self.next_position_moving
+
+    @property
+    def plate_on_position(self) -> bool:
+        """Compatibility view of the firmware's completed-position status."""
+        return self.next_position_done
 
     @property
     def has_errors(self) -> bool:

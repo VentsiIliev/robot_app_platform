@@ -19,7 +19,7 @@ from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.communication.transport_registry import (
     DEFAULT_TRANSPORT_REGISTRY,
 )
-from src.engine.hardware.dryer.models.dryer_commands import DryerStatus
+from src.engine.hardware.dryer.models.dryer_status import DryerStatus
 from src.engine.hardware.dryer.models.dryer_modbus_registers import (
     DryerRegisterMap,
 )

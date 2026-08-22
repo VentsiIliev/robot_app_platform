@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.dryer.dryer_controller import DryerController
 from src.engine.hardware.dryer.interfaces.i_dryer_transport import IDryerTransport
-from src.engine.hardware.dryer.models.dryer_commands import DryerStatus
+from src.engine.hardware.dryer.models.dryer_status import DryerStatus
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
 
@@ -89,7 +89,7 @@ def run_mock() -> None:
     )
 
     transport.registers[0] = int(
-        DryerStatus.READY | DryerStatus.PLATE_ON_POSITION
+        DryerStatus.READY | DryerStatus.NEXT_POS_DONE
     )
 
     _print_dataclass("Modbus Config", modbus_config)

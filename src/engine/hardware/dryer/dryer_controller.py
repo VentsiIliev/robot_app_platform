@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from typing import Mapping
 
 from src.engine.hardware.dryer.interfaces.i_dryer_controller import IDryerController
 from src.engine.hardware.dryer.interfaces.i_dryer_transport import IDryerTransport
-from src.engine.hardware.dryer.models.dryer_commands import DryerCommand
+from src.engine.hardware.dryer.models.dryer_commands import DryerCommand, dryer_commands
+from src.engine.hardware.dryer.models.dryer_status import dryer_statuses
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
@@ -19,10 +21,14 @@ class DryerController(IDryerController):
         transport: IDryerTransport,
         config: DryerConfig | None = None,
         register_map: DryerRegisterMap | None = None,
+        commands: Mapping[str, int] | None = None,
+        statuses: Mapping[str, int] | None = None,
     ) -> None:
         self._transport = transport
         self._config = config or DryerConfig()
         self._register_map = register_map or DryerRegisterMap()
+        self._commands = dryer_commands(commands)
+        self._statuses = dryer_statuses(statuses)
         self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -68,23 +74,26 @@ class DryerController(IDryerController):
                 is_healthy=False,
                 communication_errors=[str(exc)],
             )
-        return DryerState.from_raw_status(int(raw_status))
+        return DryerState.from_raw_status(int(raw_status), self._statuses)
 
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(DryerCommand.MOVE_SERVOS, data)
+        return self.eject(data)
+
+    def eject(self, data: DryerWriteData | None = None) -> bool:
+        return self._write_command(self._commands["eject"], data)
 
     def open_plate(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(DryerCommand.OPEN_PLATE, data)
+        return self._write_command(self._commands["close_plate"], data)
 
     def close_plage(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(DryerCommand.CLOSE_PLATE, data)
+        return self._write_command(self._commands["close_plate"], data)
 
     def close_plate(self, data: DryerWriteData | None = None) -> bool:
         """Compatibility-correct alias for the historical close_plage method."""
         return self.close_plage(data)
 
     def next_position(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(DryerCommand.NEXT_POSITION, data)
+        return self._write_command(self._commands["next_position"], data)
 
     def execute_command(self, command: int, data: DryerWriteData | None = None) -> bool:
         """Write a command supplied by the robot-system peripheral config."""
@@ -96,7 +105,7 @@ class DryerController(IDryerController):
         data: DryerWriteData | None,
     ) -> bool:
         payload = data or self._default_write_data()
-        values = {**payload.__dict__, "command": int(payload.command) | int(command)}
+        values = {**payload.__dict__, "command": int(command)}
         return self.write_data(DryerWriteData(**values))
 
     def _default_write_data(self) -> DryerWriteData:

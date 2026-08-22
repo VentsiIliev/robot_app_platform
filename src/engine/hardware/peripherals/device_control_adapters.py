@@ -238,9 +238,8 @@ class DryerDeviceAdapter:
 
     def actions(self) -> Mapping[str, str]:
         labels = {
-            "open_plate": "Open Plate",
+            "eject": "Eject",
             "close_plate": "Close Plate",
-            "move_servos": "Move Servos",
             "next_position": "Next Position",
         }
         return {command: labels[command] for command in self._commands if command in labels}
@@ -257,7 +256,12 @@ class DryerDeviceAdapter:
         return {
             "healthy": bool(state.is_healthy),
             "ready": bool(state.is_ready),
-            "plate_on_position": bool(state.plate_on_position),
+            "homed": bool(state.is_homed),
+            "homed_done": bool(state.homed_done),
+            "eject": bool(state.ejecting),
+            "eject_done": bool(state.eject_done),
+            "next_pos_moving": bool(state.next_position_moving),
+            "next_pos_done": bool(state.next_position_done),
             "raw": state.raw_status,
             "error": state.communication_errors[0] if state.communication_errors else "",
         }

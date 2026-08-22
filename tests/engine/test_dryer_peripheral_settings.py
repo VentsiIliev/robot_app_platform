@@ -5,10 +5,32 @@ from src.applications.dryer_settings.service.dryer_settings_application_service 
     DryerSettingsApplicationService,
 )
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
-from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
+from src.engine.hardware.peripherals import (
+    PeripheralBinding,
+    PeripheralConfig,
+    PeripheralConfigSerializer,
+)
 
 
 class TestDryerSettingsPersistence(unittest.TestCase):
+    def test_dryer_status_masks_survive_settings_round_trip(self) -> None:
+        serializer = PeripheralConfigSerializer()
+        config = serializer.from_dict({
+            "dryer": {
+                "slave_id": 10,
+                "statuses": {"ready": 1, "next_pos_done": 64},
+            },
+        })
+
+        self.assertEqual(
+            config.peripherals["dryer"].statuses,
+            {"ready": 1, "next_pos_done": 64},
+        )
+        self.assertEqual(
+            serializer.to_dict(config)["dryer"]["statuses"],
+            {"ready": 1, "next_pos_done": 64},
+        )
+
     def test_load_and_save_use_dedicated_dryer_settings(self) -> None:
         settings = MagicMock()
         live_controller = MagicMock()

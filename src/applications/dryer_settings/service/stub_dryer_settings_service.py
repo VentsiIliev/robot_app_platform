@@ -6,7 +6,7 @@ from src.applications.dryer_settings.service.i_dryer_settings_service import IDr
 from src.engine.hardware.communication.modbus.modbus import ModbusConfig
 from src.engine.hardware.dryer.dryer_controller import DryerController
 from src.engine.hardware.dryer.interfaces.i_dryer_transport import IDryerTransport
-from src.engine.hardware.dryer.models.dryer_commands import DryerStatus
+from src.engine.hardware.dryer.models.dryer_status import DryerStatus
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 from src.engine.hardware.dryer.models.dryer_state import DryerState
 from src.engine.hardware.dryer.models.dryer_write_data import DryerWriteData
@@ -51,7 +51,7 @@ class StubDryerSettingsService(IDryerSettingsService):
         self.transport = MockDryerTransport()
         self._enabled = True
         self.transport.registers[0] = int(
-            DryerStatus.READY | DryerStatus.PLATE_ON_POSITION
+            DryerStatus.READY | DryerStatus.NEXT_POS_DONE
         )
 
     def load_config(self) -> DryerConfig:
@@ -67,7 +67,7 @@ class StubDryerSettingsService(IDryerSettingsService):
         self._config = config
         self.transport.registers.setdefault(
             0,
-            int(DryerStatus.READY | DryerStatus.PLATE_ON_POSITION),
+            int(DryerStatus.READY | DryerStatus.NEXT_POS_DONE),
         )
 
     def get_state(self, config: DryerConfig) -> DryerState:

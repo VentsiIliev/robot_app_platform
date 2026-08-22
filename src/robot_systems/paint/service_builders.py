@@ -106,7 +106,13 @@ def build_dryer_service(ctx):
 
         def build_controller(config):
             transport = DEFAULT_TRANSPORT_REGISTRY.build_for_slave(modbus_config, slave_name)
-            return DryerController(transport, config, register_map)
+            return DryerController(
+                transport,
+                config,
+                register_map,
+                commands=binding.commands,
+                statuses=binding.statuses,
+            )
 
         service = DryerService(build_controller, dryer_config)
         if binding.enabled and not service.enable():
@@ -118,6 +124,7 @@ def build_dryer_service(ctx):
                 inputs=binding.inputs,
                 outputs=binding.outputs,
                 commands=binding.commands,
+                statuses=binding.statuses,
             )
             ctx.settings.save(
                 SettingsID.PERIPHERALS,

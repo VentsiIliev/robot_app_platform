@@ -88,6 +88,9 @@ class DryerService(IDryerService):
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
         return self._call("move_servos", data)
 
+    def eject(self, data: DryerWriteData | None = None) -> bool:
+        return self._call("eject", data)
+
     def open_plate(self, data: DryerWriteData | None = None) -> bool:
         return self._call("open_plate", data)
 

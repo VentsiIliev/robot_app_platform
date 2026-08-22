@@ -15,6 +15,7 @@ class PeripheralBinding:
     inputs: dict[str, str] = field(default_factory=dict)
     outputs: dict[str, str] = field(default_factory=dict)
     commands: dict[str, int] = field(default_factory=dict)
+    statuses: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PeripheralBinding":
@@ -24,6 +25,7 @@ class PeripheralBinding:
             inputs={str(key): str(value) for key, value in data.get("inputs", {}).items()},
             outputs={str(key): str(value) for key, value in data.get("outputs", {}).items()},
             commands={str(key): int(value) for key, value in data.get("commands", {}).items()},
+            statuses={str(key): int(value) for key, value in data.get("statuses", {}).items()},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -33,6 +35,7 @@ class PeripheralBinding:
             "inputs": dict(self.inputs),
             "outputs": dict(self.outputs),
             "commands": dict(self.commands),
+            "statuses": dict(self.statuses),
         }
         return result
 
