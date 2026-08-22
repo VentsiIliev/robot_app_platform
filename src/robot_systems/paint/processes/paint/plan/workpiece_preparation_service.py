@@ -38,14 +38,22 @@ class PaintWorkpiecePreparationService:
             return self._transformer_getter()
         return self._transformer
 
-    def prepare_workpiece(self, captured_contour, frame) -> tuple[dict, str]:
+    def prepare_workpiece(
+        self,
+        captured_contour,
+        frame,
+        *,
+        enable_matching: bool = True,
+    ) -> tuple[dict, str]:
         """Choose between a matched saved workpiece and a raw captured-contour fallback."""
+        can_match = bool(enable_matching and self._can_match_fn())
         _logger.info(
-            "[PREP] start captured=%s can_match=%s",
+            "[PREP] start captured=%s matching_enabled=%s can_match=%s",
             describe_contour(_normalize_contour_points(captured_contour)),
-            bool(self._can_match_fn()),
+            bool(enable_matching),
+            can_match,
         )
-        if self._can_match_fn():
+        if can_match:
             ok, payload, _ = self._match_workpiece_fn(captured_contour)
             if ok and payload:
                 _logger.info(
@@ -59,17 +67,17 @@ class PaintWorkpiecePreparationService:
                     return raw, f"Executed {label}"
             else:
                 return None, "No matched workpiece"
-
-        _logger.info("[PREP] fallback to captured contour")
-        return (
-            contour_to_workpiece_raw(
-                captured_contour,
-                workpiece_id="captured",
-                name="Captured contour",
-                default_settings=self._default_settings,
-            ),
-            "Executed captured contour",
-        )
+        else:
+            _logger.info("[PREP] Paint workpiece matching is disabled or not available; using captured contour")
+            return (
+                contour_to_workpiece_raw(
+                    captured_contour,
+                    workpiece_id="captured",
+                    name="Captured contour",
+                    default_settings=self._default_settings,
+                ),
+                "Executed captured contour",
+            )
 
     def _build_matched_workpiece_raw(self, payload: dict, captured_contour, frame) -> dict | None:
         """Build an executable raw workpiece from matched storage data and the live contour."""

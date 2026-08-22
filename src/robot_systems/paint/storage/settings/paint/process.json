@@ -14,6 +14,7 @@
   "pickup_axis_alignment_sign_value": 1.0,
   "enable_vacuum_pump": true,
   "run_while_workpiece_found": true,
+  "enable_workpiece_matching": true,
   "enable_execution_state_timing": true,
   "pause_dashboard_live_view_after_capture": true,
   "apply_camera_to_tcp_for_pickup": true,

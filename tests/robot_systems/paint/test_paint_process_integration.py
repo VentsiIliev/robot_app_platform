@@ -63,6 +63,25 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertIs(service._path_executor.execute_paint_process.call_args.args[0], execution_plan)
         self.assertIsNotNone(service._path_executor.execute_paint_process.call_args.kwargs.get("control"))
 
+    def test_run_once_stops_before_planning_when_matching_returns_no_workpiece(self):
+        service = self._make_service()
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame",
+            contours=[_square(2.0)],
+            source="paint_process",
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = (
+            None,
+            "No matched workpiece",
+        )
+
+        ok, msg = service.run_once()
+
+        self.assertFalse(ok)
+        self.assertEqual(msg, "No matched workpiece")
+        service._path_preparation_service.build_execution_plan.assert_not_called()
+        service._path_executor.execute_paint_process.assert_not_called()
+
     def test_run_once_freezes_brightness_after_capture_when_auto_enabled(self):
         vision = MagicMock()
         vision.get_auto_brightness_enabled.return_value = True

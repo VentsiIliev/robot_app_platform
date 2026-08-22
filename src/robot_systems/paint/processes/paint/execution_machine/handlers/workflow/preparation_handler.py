@@ -25,9 +25,15 @@ def handle_prepare_workpiece(ctx: PaintExecutionContext) -> PaintExecutionState:
     ctx.raw_workpiece, ctx.workpiece_description = service._workpiece_preparation.prepare_workpiece(
         ctx.contour,
         ctx.snapshot.frame,
+        enable_matching=bool(
+            getattr(ctx.process_config, "enable_workpiece_matching", True)
+        ),
     )
     service._log_phase_timing("workpiece_preparation", phase_start, cycle=ctx.cycle_index)
     if ctx.should_stop():
         ctx.set_result(False, "Paint process stopped")
         return PaintExecutionState.STOPPED
+    if ctx.raw_workpiece is None:
+        ctx.set_result(False, ctx.workpiece_description or "No matched workpiece")
+        return PaintExecutionState.ERROR
     return PaintExecutionState.BUILD_EXECUTION_PLAN

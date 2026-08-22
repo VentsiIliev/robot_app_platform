@@ -127,6 +127,7 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("General"), [
             _toggle("enable_vacuum_pump", "Enable Vacuum Pump"),
             _toggle("run_while_workpiece_found", "Run While Workpiece Found", True),
+            _toggle("enable_workpiece_matching", "Enable Workpiece Matching", True),
             _toggle("enable_execution_state_timing", "Enable Execution State Timing", True),
             _toggle("pause_dashboard_live_view_after_capture", "Pause Dashboard Live View After Capture", True),
             _toggle("apply_camera_to_tcp_for_pickup", "Apply Camera-to-TCP Pickup Offset", True),

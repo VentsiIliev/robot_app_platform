@@ -58,6 +58,25 @@ class TestContourToWorkpieceRaw(unittest.TestCase):
 
 class TestPaintWorkpiecePreparationService(unittest.TestCase):
 
+    def test_prepare_workpiece_skips_matching_when_disabled(self):
+        matching_calls = []
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda contour: matching_calls.append(contour),
+            default_settings={"velocity": "10"},
+        )
+
+        raw, description = service.prepare_workpiece(
+            _square(2.0),
+            frame=None,
+            enable_matching=False,
+        )
+
+        self.assertEqual(matching_calls, [])
+        self.assertEqual(description, "Executed captured contour")
+        self.assertEqual(raw["workpieceId"], "captured")
+        self.assertEqual(raw["velocity"], "10")
+
     def test_prepare_workpiece_falls_back_to_captured_contour_when_matching_unavailable(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: False,

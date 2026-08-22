@@ -76,6 +76,7 @@
     "Pause": "Пауза"
   },
   "PaintProcessSettings": {
+    "Enable Workpiece Matching": "Активиране на съпоставянето на детайли",
     "Release Z": "Z височина за освобождаване",
     "Dropoff Not Configured": "Dropoff не е конфигуриран",
     "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Задайте и запазете Dropoff групата за движение в Robot Settings, преди да използвате dropoff чрез група за движение.",

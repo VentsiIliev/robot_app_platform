@@ -286,6 +286,9 @@ class PaintProcessConfig:
     enable_vacuum_pump: bool = True
     # Repeat production cycles until the active source no longer yields a workpiece.
     run_while_workpiece_found: bool = True  # [LIVE SETTINGS]
+    # Match the captured contour against the saved workpiece library. When disabled,
+    # execute the captured contour directly with the default process settings.
+    enable_workpiece_matching: bool = True  # [LIVE SETTINGS]
     # Log one end-of-cycle timing table for every paint execution state.
     enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
     # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.
