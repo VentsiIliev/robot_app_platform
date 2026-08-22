@@ -109,6 +109,9 @@ class TestRobotCalibrationService(unittest.TestCase):
         )
         live_robot_config = SimpleNamespace(robot_tool=3, robot_user=7)
         live_vision_calibration = SimpleNamespace(
+            chessboard_width=31,
+            chessboard_height=19,
+            square_size_mm=24.5,
             reference_board_mode="charuco",
             charuco_board_width=33,
             charuco_board_height=21,
@@ -139,6 +142,9 @@ class TestRobotCalibrationService(unittest.TestCase):
             robot_config_key="robot_config",
             camera_tcp_offset_config=SimpleNamespace(iterations=6),
             axis_mapping_config=SimpleNamespace(marker_id=4),
+            chessboard_width=25,
+            chessboard_height=16,
+            chessboard_square_size_mm=12.5,
             reference_board_mode="auto",
             charuco_board_width=27,
             charuco_board_height=18,
@@ -169,6 +175,9 @@ class TestRobotCalibrationService(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertEqual(message, "ok")
+        self.assertEqual(captured["config"].chessboard_width, 31)
+        self.assertEqual(captured["config"].chessboard_height, 19)
+        self.assertEqual(captured["config"].chessboard_square_size_mm, 24.5)
         self.assertEqual(captured["config"].reference_board_mode, "charuco")
         self.assertEqual(captured["config"].charuco_board_width, 33)
         self.assertEqual(captured["config"].charuco_board_height, 21)
