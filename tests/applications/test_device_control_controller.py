@@ -1,6 +1,6 @@
 import logging
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.applications.device_control.controller.device_control_controller import (
     DeviceControlController,
@@ -37,11 +37,30 @@ class TestDeviceControlController(unittest.TestCase):
         controller._on_device_enabled("fan", True)
 
         self.assertEqual(controller._pending_device_enabled, {"fan": True})
+        controller._view.set_device_enabled.assert_called_once_with("fan", True)
         controller._device_executor.submit.assert_called_once_with(
             controller._model.set_device_enabled,
             "fan",
             True,
         )
+
+    def test_failed_enable_rolls_optimistic_toggle_back_to_inactive(self) -> None:
+        controller = self._controller()
+        controller._pending_device_enabled = {"fan": True}
+
+        with patch(
+            "src.applications.device_control.controller.device_control_controller.QTimer.singleShot"
+        ) as single_shot:
+            controller._on_device_enabled_done("fan", False)
+
+        delay, finish = single_shot.call_args.args
+        self.assertEqual(delay, controller._FAILED_ENABLE_ROLLBACK_MS)
+        controller._view.set_device_enabled.assert_not_called()
+
+        finish()
+
+        controller._view.set_device_enabled.assert_called_once_with("fan", False)
+        controller._view.set_device_action_result.assert_called_once_with("fan", False)
 
 
 if __name__ == "__main__":

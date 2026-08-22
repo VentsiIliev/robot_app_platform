@@ -3,7 +3,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from functools import partial
 import logging
 
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
 
 from src.applications.base.background_worker import BackgroundWorker
 from src.applications.base.i_application_controller import IApplicationController
@@ -33,6 +33,7 @@ class _DeviceUiRelay(QObject):
 
 
 class DeviceControlController(IApplicationController, BackgroundWorker):
+    _FAILED_ENABLE_ROLLBACK_MS = 500
 
     def __init__(self, model: DeviceControlModel, view: DeviceControlView) -> None:
         BackgroundWorker.__init__(self)
@@ -190,6 +191,10 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
             return
         self._device_action_in_flight = True
         self._pending_device_enabled[device_key] = bool(enabled)
+        # Reflect the user's requested state immediately. The completion path
+        # reconciles this optimistic state with the device's actual state and
+        # rolls it back when enabling fails.
+        self._view.set_device_enabled(device_key, bool(enabled))
         self._view.set_device_busy(device_key, True)
         future = self._device_executor.submit(
             self._model.set_device_enabled,
@@ -210,8 +215,24 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         self._device_relay.enabled_finished.emit(device_key, enabled)
 
     def _on_device_enabled_done(self, device_key: str, enabled: bool) -> None:
-        self._device_action_in_flight = False
         requested = self._pending_device_enabled.pop(device_key, enabled)
+        if requested and not enabled:
+            QTimer.singleShot(
+                self._FAILED_ENABLE_ROLLBACK_MS,
+                partial(self._finish_device_enabled, device_key, enabled, requested),
+            )
+            return
+        self._finish_device_enabled(device_key, enabled, requested)
+
+    def _finish_device_enabled(
+        self,
+        device_key: str,
+        enabled: bool,
+        requested: bool,
+    ) -> None:
+        if self._device_stopped:
+            return
+        self._device_action_in_flight = False
         self._view.set_device_busy(device_key, False)
         self._view.set_device_enabled(device_key, enabled)
         self._view.set_device_action_result(device_key, enabled == requested)
