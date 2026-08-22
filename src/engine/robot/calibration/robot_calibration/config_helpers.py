@@ -82,6 +82,9 @@ class RobotCalibrationConfig:
                  robot_config_key: str | None = None,
                  camera_tcp_offset_config=None,
                  axis_mapping_config=None,
+                 chessboard_width: int | None = None,
+                 chessboard_height: int | None = None,
+                 chessboard_square_size_mm: float | None = None,
                  reference_board_mode: str = "auto",
                  charuco_board_width: int | None = None,
                  charuco_board_height: int | None = None,
@@ -123,6 +126,9 @@ class RobotCalibrationConfig:
         self.unreachable_marker_failure_counts = dict(unreachable_marker_failure_counts or {})
         self.z_target = z_target
         self.axis_mapping_config = axis_mapping_config
+        self.chessboard_width = chessboard_width
+        self.chessboard_height = chessboard_height
+        self.chessboard_square_size_mm = chessboard_square_size_mm
         self.reference_board_mode = reference_board_mode
         self.charuco_board_width = charuco_board_width
         self.charuco_board_height = charuco_board_height

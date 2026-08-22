@@ -95,8 +95,9 @@ class DryerDefaults:
 
     rev_minute: int = 5                        # Register 13
 
-    # TODO: This is a float value, but we are using a 16-bit register. We need to convert it to an integer representation.
-    acceleration: float = 0.1             # Register 14
+    # Converted to integer tenths by DryerWriteData before the register write
+    # (for example, a UI value of 0.1 is transmitted as 1).
+    acceleration: float = 0.1                  # Register 14
 
     target_position_backword: int = 500        # Register 15
     target_position_forword: int = 500         # Register 16
