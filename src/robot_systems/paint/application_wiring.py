@@ -4,6 +4,7 @@ from time import perf_counter
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
+from src.robot_systems.paint.component_ids import ServiceID
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PAINT_PROJECTION_RULES,
@@ -305,6 +306,7 @@ def _build_paint_path_executor(robot_system):
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+        vacuum_sensor=robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
         pickup_condition=getattr(robot_system, "_pickup_condition", None),
         pickup_condition_provider=getattr(robot_system, "_get_pickup_condition", None),
         paint_process_config_service=getattr(robot_system, "_paint_process_config_service", None),

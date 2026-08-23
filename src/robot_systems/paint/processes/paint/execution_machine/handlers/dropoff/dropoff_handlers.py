@@ -152,12 +152,48 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                     elapsed_s(started),
                 )
                 return False, msg
+            ok, msg = _verify_workpiece_released(executor)
+            if not ok:
+                _logger.info(
+                    "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release_verification elapsed_s=%.3f total_elapsed_s=%.3f",
+                    plan.strategy_name,
+                    index,
+                    elapsed_s(waypoint_started),
+                    elapsed_s(started),
+                )
+                return False, msg
 
     _logger.info(
         "[DROPOFF] strategy=%s completed elapsed_s=%.3f",
         plan.strategy_name,
         elapsed_s(started),
     )
+    return True, ""
+
+
+def _verify_workpiece_released(executor: object) -> tuple[bool, str]:
+    """Verify that vacuum cleared after pump-off at the dropoff waypoint."""
+    if not bool(getattr(executor, "_enable_vacuum_pump", True)):
+        _logger.info("[DROPOFF] Release verification skipped: vacuum pump disabled")
+        return True, ""
+
+    sensor = getattr(executor, "_vacuum_sensor", None)
+    if sensor is None:
+        _logger.warning("[DROPOFF] Release verification skipped: vacuum sensor not configured")
+        return True, ""
+
+    _logger.info("[DROPOFF] Verifying workpiece release with vacuum sensor")
+    try:
+        vacuum_detected = bool(sensor.is_vacuum_detected())
+    except Exception:
+        _logger.exception("[DROPOFF] Vacuum sensor read raised during release verification")
+        return False, "Vacuum pump turned off, but workpiece release verification failed: sensor read unavailable"
+    if not bool(sensor.is_healthy()):
+        return False, "Vacuum pump turned off, but workpiece release verification failed: sensor read unavailable"
+    if vacuum_detected:
+        return False, "Vacuum pump turned off, but the vacuum sensor still detects the workpiece"
+
+    _logger.info("[DROPOFF] Workpiece release verified: vacuum is no longer detected")
     return True, ""
 
 

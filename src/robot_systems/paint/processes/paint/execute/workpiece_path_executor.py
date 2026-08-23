@@ -144,6 +144,7 @@ class PaintExecutorDependencies:
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
+    vacuum_sensor: object | None = None
     pickup_condition: object | None = None
     pickup_condition_provider: Optional[Callable[[], object | None]] = None
     paint_process_config_service: object | None = None
@@ -264,6 +265,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
+            vacuum_sensor=legacy_options.get("vacuum_sensor"),
             pickup_condition=legacy_options.get("pickup_condition"),
             pickup_condition_provider=legacy_options.get("pickup_condition_provider"),
             paint_process_config_service=legacy_options.get("paint_process_config_service"),
@@ -301,6 +303,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
+        self._vacuum_sensor = dependencies.vacuum_sensor
         self._pickup_condition = dependencies.pickup_condition
         self._pickup_condition_provider = dependencies.pickup_condition_provider
         self._paint_process_config_service = dependencies.paint_process_config_service

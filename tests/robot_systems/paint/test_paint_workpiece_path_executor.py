@@ -20,6 +20,9 @@ from src.robot_systems.paint.processes.paint.execution_control import PaintExecu
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     execute_magazine_pickup_release,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    _verify_workpiece_released,
+)
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
 )
@@ -43,6 +46,42 @@ def _execution_plan(*jobs, workpiece=None):
         execution_jobs=list(jobs),
         total_spline_pts=0,
     )
+
+
+class TestDropoffReleaseVerification(unittest.TestCase):
+    def test_release_verification_succeeds_when_vacuum_clears(self):
+        sensor = MagicMock()
+        sensor.is_vacuum_detected.return_value = False
+        sensor.is_healthy.return_value = True
+        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+
+        ok, message = _verify_workpiece_released(executor)
+
+        self.assertTrue(ok, message)
+        sensor.is_vacuum_detected.assert_called_once_with()
+        sensor.is_healthy.assert_called_once_with()
+
+    def test_release_verification_fails_when_vacuum_remains_detected(self):
+        sensor = MagicMock()
+        sensor.is_vacuum_detected.return_value = True
+        sensor.is_healthy.return_value = True
+        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+
+        ok, message = _verify_workpiece_released(executor)
+
+        self.assertFalse(ok)
+        self.assertIn("still detects the workpiece", message)
+
+    def test_release_verification_fails_when_sensor_read_is_unhealthy(self):
+        sensor = MagicMock()
+        sensor.is_vacuum_detected.return_value = False
+        sensor.is_healthy.return_value = False
+        executor = SimpleNamespace(_enable_vacuum_pump=True, _vacuum_sensor=sensor)
+
+        ok, message = _verify_workpiece_released(executor)
+
+        self.assertFalse(ok)
+        self.assertIn("sensor read unavailable", message)
 
 
 class TestNormalizePivotConfig(unittest.TestCase):
