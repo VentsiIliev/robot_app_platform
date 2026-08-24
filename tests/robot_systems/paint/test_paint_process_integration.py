@@ -15,6 +15,9 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORK
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 from src.robot_systems.paint.processes.paint.paint_process import PaintProcess
 from src.robot_systems.paint.processes.paint.paint_production_service import PaintProductionService
+from src.robot_systems.paint.processes.paint.plan.workpiece_preparation_service import (
+    PaintWorkpiecePreparationService,
+)
 from src.shared_contracts.events.process_events import ProcessState, ProcessTopics
 
 
@@ -574,6 +577,52 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual("No workpiece detected after 2 paint cycle(s)", msg)
         self.assertEqual(3, navigation.move_to_calibration_position.call_count)
         self.assertEqual(3, service._capture_snapshot_service.capture_snapshot.call_count)
+        self.assertEqual(2, service._path_executor.execute_paint_process.call_count)
+
+    def test_manual_loop_uses_any_captured_contour_when_matching_is_disabled(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            run_while_workpiece_found=True,
+            enable_workpiece_matching=False,
+            magazine_load=PaintMagazineLoadConfig(enabled=False),
+        )
+        match_workpiece = MagicMock(return_value=(False, None, "No matched workpiece"))
+        preparation = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=match_workpiece,
+        )
+        navigation = MagicMock()
+        navigation.move_to_calibration_position.return_value = True
+        service = PaintProductionService(
+            workpiece_preparation_service=preparation,
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=MagicMock(),
+            navigation_service=navigation,
+        )
+        contour = _square(2.0)
+        service._capture_snapshot_service.capture_snapshot.side_effect = [
+            VisionCaptureSnapshot(frame="frame-1", contours=[contour], source="paint_process"),
+            VisionCaptureSnapshot(frame="frame-2", contours=[contour], source="paint_process"),
+            VisionCaptureSnapshot(frame="frame-empty", contours=[], source="paint_process"),
+        ]
+        service._path_preparation_service.build_execution_plan.side_effect = [{"plan": 1}, {"plan": 2}]
+        service._path_executor.execute_paint_process.return_value = (True, "Paint completed")
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual("No workpiece detected after 2 paint cycle(s)", msg)
+        match_workpiece.assert_not_called()
+        self.assertEqual(3, service._capture_snapshot_service.capture_snapshot.call_count)
+        self.assertEqual(2, service._path_preparation_service.build_execution_plan.call_count)
+        prepared_workpieces = [
+            call.args[0]
+            for call in service._path_preparation_service.build_execution_plan.call_args_list
+        ]
+        self.assertEqual(["captured", "captured"], [item["workpieceId"] for item in prepared_workpieces])
         self.assertEqual(2, service._path_executor.execute_paint_process.call_count)
 
     def test_run_once_loops_magazine_cycles_until_empty(self):
