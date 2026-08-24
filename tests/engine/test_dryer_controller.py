@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.engine.hardware.dryer.dryer_controller import DryerController
 from src.engine.hardware.dryer.models.dryer_config import DryerConfig
@@ -26,17 +26,14 @@ class TestDryerController(unittest.TestCase):
         transport = MagicMock()
         transport.read_register.return_value = int(
             DryerStatus.READY
-            | DryerStatus.HOMED
             | DryerStatus.EJECT_DONE
             | DryerStatus.NEXT_POS_MOVING
         )
         state = DryerController(transport).get_state()
 
         self.assertTrue(state.is_ready)
-        self.assertTrue(state.is_homed)
         self.assertTrue(state.eject_done)
         self.assertTrue(state.next_position_moving)
-        self.assertFalse(state.homed_done)
 
     def test_command_replaces_stale_payload_command(self) -> None:
         transport = MagicMock()
@@ -87,7 +84,7 @@ class TestDryerController(unittest.TestCase):
             DryerConfig(pwm_open_vrytka=777),
             commands={"next_position": 1},
         )
-        transport.read_register.return_value = int(DryerStatus.HOMED | DryerStatus.HOMED_DONE)
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
 
         self.assertTrue(controller.initialize())
 
@@ -108,33 +105,21 @@ class TestDryerController(unittest.TestCase):
 
         transport.write_registers.assert_called_once()
 
-    def test_initialize_fails_when_homing_status_is_not_confirmed(self) -> None:
+    def test_initialize_fails_when_next_position_done_is_not_confirmed(self) -> None:
         transport = MagicMock()
         transport.read_register.return_value = int(DryerStatus.READY)
         controller = DryerController(
             transport,
             commands={"next_position": 1},
-            homing_timeout_s=0.0,
-            homing_poll_interval_s=0.0,
+            next_position_timeout_s=0.0,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
         )
 
         self.assertFalse(controller.initialize())
 
         self.assertEqual(transport.write_registers.call_args_list[-1].args, (1, [1]))
         transport.read_register.assert_called_once_with(0)
-
-    def test_initialize_requires_both_homing_status_flags(self) -> None:
-        for incomplete_status in (DryerStatus.HOMED, DryerStatus.HOMED_DONE):
-            with self.subTest(status=incomplete_status):
-                transport = MagicMock()
-                transport.read_register.return_value = int(incomplete_status)
-                controller = DryerController(
-                    transport,
-                    homing_timeout_s=0.0,
-                    homing_poll_interval_s=0.0,
-                )
-
-                self.assertFalse(controller.initialize())
 
     def test_decodes_every_firmware_status_flag(self) -> None:
         transport = MagicMock()
@@ -143,8 +128,6 @@ class TestDryerController(unittest.TestCase):
         state = DryerController(transport).get_state()
 
         self.assertTrue(state.is_ready)
-        self.assertTrue(state.is_homed)
-        self.assertTrue(state.homed_done)
         self.assertTrue(state.ejecting)
         self.assertTrue(state.eject_done)
         self.assertTrue(state.next_position_moving)
@@ -172,12 +155,21 @@ class TestDryerController(unittest.TestCase):
     def test_rev_minute_is_transmitted_without_scaling(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig(rev_minute=7))
-        transport.read_register.return_value = int(DryerStatus.HOMED | DryerStatus.HOMED_DONE)
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
 
         self.assertTrue(controller.initialize())
 
         values = transport.write_registers.call_args_list[0].args[1]
         self.assertEqual(values[13], 7)
+
+    def test_successful_commands_wait_before_status_can_be_checked(self) -> None:
+        transport = MagicMock()
+        controller = DryerController(transport, command_settle_s=0.03)
+
+        with patch("src.engine.hardware.dryer.dryer_controller.time.sleep") as sleep:
+            self.assertTrue(controller.eject())
+
+        sleep.assert_called_once_with(0.03)
 
     def test_acceleration_is_transmitted_in_integer_tenths(self) -> None:
         transport = MagicMock()

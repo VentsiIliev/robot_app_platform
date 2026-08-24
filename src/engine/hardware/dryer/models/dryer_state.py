@@ -10,8 +10,6 @@ from src.engine.hardware.dryer.models.dryer_status import dryer_statuses
 class DryerState:
     raw_status: int = 0
     is_ready: bool = False
-    is_homed: bool = False
-    homed_done: bool = False
     ejecting: bool = False
     eject_done: bool = False
     next_position_moving: bool = False
@@ -29,8 +27,6 @@ class DryerState:
         return cls(
             raw_status=raw_status,
             is_ready=bool(raw_status & masks["ready"]),
-            is_homed=bool(raw_status & masks["homed"]),
-            homed_done=bool(raw_status & masks["homed_done"]),
             ejecting=bool(raw_status & masks["eject"]),
             eject_done=bool(raw_status & masks["eject_done"]),
             next_position_moving=bool(raw_status & masks["next_pos_moving"]),

@@ -259,8 +259,6 @@ class DryerDeviceAdapter:
         return {
             "healthy": bool(state.is_healthy),
             "ready": bool(state.is_ready),
-            "homed": bool(state.is_homed),
-            "homed_done": bool(state.homed_done),
             "eject": bool(state.ejecting),
             "eject_done": bool(state.eject_done),
             "next_pos_moving": bool(state.next_position_moving),

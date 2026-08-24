@@ -24,16 +24,18 @@ class DryerController(IDryerController):
         register_map: DryerRegisterMap | None = None,
         commands: Mapping[str, int] | None = None,
         statuses: Mapping[str, int] | None = None,
-        homing_timeout_s: float = 10.0,
-        homing_poll_interval_s: float = 0.1,
+        next_position_timeout_s: float = 10.0,
+        status_poll_interval_s: float = 0.1,
+        command_settle_s: float = 0.03,
     ) -> None:
         self._transport = transport
         self._config = config or DryerConfig()
         self._register_map = register_map or DryerRegisterMap()
         self._commands = dryer_commands(commands)
         self._statuses = dryer_statuses(statuses)
-        self._homing_timeout_s = max(0.0, float(homing_timeout_s))
-        self._homing_poll_interval_s = max(0.0, float(homing_poll_interval_s))
+        self._next_position_timeout_s = max(0.0, float(next_position_timeout_s))
+        self._status_poll_interval_s = max(0.0, float(status_poll_interval_s))
+        self._command_settle_s = max(0.0, float(command_settle_s))
         self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -43,30 +45,30 @@ class DryerController(IDryerController):
             return False
         if not self.next_position():
             return False
-        return self._wait_until_homed()
+        return self._wait_until_next_position_done()
 
-    def _wait_until_homed(self) -> bool:
-        """Wait for both firmware homing flags before reporting initialization success."""
-        deadline = time.monotonic() + self._homing_timeout_s
+    def _wait_until_next_position_done(self) -> bool:
+        """Wait for NEXT_POS_DONE before reporting initialization success."""
+        deadline = time.monotonic() + self._next_position_timeout_s
         while True:
             state = self.get_state()
             self._logger.info(
-                "[DRYER] Homing status raw=%#06x healthy=%s homed=%s homed_done=%s",
+                "[DRYER] Initialization status raw=%#06x healthy=%s ready=%s next_pos_done=%s",
                 int(state.raw_status),
                 state.is_healthy,
-                state.is_homed,
-                state.homed_done,
+                state.is_ready,
+                state.next_position_done,
             )
-            if state.is_healthy and state.is_homed and state.homed_done:
-                self._logger.info("[DRYER] Initialization completed: homing confirmed")
+            if state.is_healthy and state.next_position_done:
+                self._logger.info("[DRYER] Initialization completed: next position confirmed")
                 return True
             if time.monotonic() >= deadline:
                 self._logger.error(
-                    "[DRYER] Initialization failed: homing was not confirmed within %.1f s",
-                    self._homing_timeout_s,
+                    "[DRYER] Initialization failed: next position was not confirmed within %.1f s",
+                    self._next_position_timeout_s,
                 )
                 return False
-            time.sleep(self._homing_poll_interval_s)
+            time.sleep(self._status_poll_interval_s)
 
     def shutdown(self) -> None:
         self._transport.disconnect()
@@ -142,6 +144,8 @@ class DryerController(IDryerController):
                 command,
             )
             ok = False
+        if ok:
+            time.sleep(self._command_settle_s)
         self._logger.info(
             "[DRYER] NEXT_POSITION FC16 write completed success=%s command_register=%d command=%#04x",
             ok,
@@ -161,7 +165,10 @@ class DryerController(IDryerController):
     ) -> bool:
         payload = data or self._default_write_data()
         values = {**payload.__dict__, "command": int(command)}
-        return self.write_data(DryerWriteData(**values))
+        ok = self.write_data(DryerWriteData(**values))
+        if ok:
+            time.sleep(self._command_settle_s)
+        return ok
 
     def _default_write_data(self) -> DryerWriteData:
         return DryerWriteData.from_config(self._config)

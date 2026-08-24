@@ -6,7 +6,7 @@ from src.engine.hardware.dryer.models.dryer_config import DryerConfig
 
 
 class TestDryerService(unittest.TestCase):
-    def test_failed_homing_keeps_service_disabled(self) -> None:
+    def test_failed_next_position_verification_keeps_service_disabled(self) -> None:
         controller = MagicMock()
         controller.initialize.return_value = False
         service = DryerService(lambda _config: controller, DryerConfig())
