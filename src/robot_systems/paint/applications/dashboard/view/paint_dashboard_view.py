@@ -8,6 +8,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QVBoxLayout,
@@ -30,6 +31,7 @@ from src.robot_systems.paint.applications.dashboard.config import PaintDashboard
 _MAX_MESSAGE_ROWS = 50
 _MESSAGE_SCROLL_MIN_HEIGHT = 60
 _CONTROLS_DRAWER_WIDTH = 400
+_MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
     background: white;
@@ -81,6 +83,38 @@ QLabel {{
     background: transparent;
     border: none;
     padding: 2px 0;
+}}
+"""
+_MESSAGE_SCROLL_STYLE = f"""
+QScrollArea {{
+    background: transparent;
+    border: none;
+}}
+QScrollBar:vertical {{
+    background: {BG_COLOR};
+    width: 24px;
+    margin: 0;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+QScrollBar::handle:vertical {{
+    background: {PRIMARY};
+    min-height: 48px;
+    border-radius: 8px;
+    margin: 2px;
+}}
+QScrollBar::handle:vertical:pressed {{
+    background: {PRIMARY};
+}}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    height: 0;
+    border: none;
+    background: transparent;
+}}
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {{
+    background: transparent;
 }}
 """
 
@@ -251,7 +285,15 @@ class PaintDashboardView(IApplicationView):
             side_panel = top_section.itemAt(1).widget()
             if side_panel is not None:
                 side_panel.setStyleSheet(f"background-color: {BG_COLOR};")
-                side_panel.setFixedHeight(self._config.trajectory_height + 8)
+                side_panel.setFixedHeight(
+                    int(
+                        getattr(
+                            self._config,
+                            "status_column_height",
+                            int(getattr(self._config, "trajectory_height", 450)) + 8,
+                        )
+                    )
+                )
                 top_section.setAlignment(side_panel, Qt.AlignmentFlag.AlignTop)
         except Exception:
             pass
@@ -262,19 +304,32 @@ class PaintDashboardView(IApplicationView):
             top_section = main_layout.itemAt(0).layout()
             preview_container = top_section.itemAt(0).widget()
             aux_grid = preview_container.layout().itemAt(1).widget()
-            layout = aux_grid.layout()
+            self._clear_layout(aux_grid.layout())
+            aux_grid.hide()
+            side_panel = top_section.itemAt(1).widget()
+            layout = side_panel.layout()
             if layout is None:
                 return
-            self._clear_layout(layout)
             panel = self._build_message_panel()
-            rows = max(1, layout.rowCount())
-            cols = max(1, layout.columnCount())
-            layout.addWidget(panel, 0, 0, rows, cols)
-            for row in range(rows):
-                layout.setRowStretch(row, 1)
-            for col in range(cols):
-                layout.setColumnStretch(col, 1)
-            aux_grid.show()
+            panel_host = QWidget()
+            panel_host.setStyleSheet("background: transparent; border: none;")
+            panel_host_layout = QHBoxLayout(panel_host)
+            panel_host_layout.setContentsMargins(
+                0,
+                0,
+                _MESSAGE_DRAWER_HANDLE_CLEARANCE,
+                0,
+            )
+            panel_host_layout.addWidget(panel)
+            message_row = max(4, layout.rowCount())
+            layout.addWidget(panel_host, message_row, 0)
+            for row in range(3):
+                layout.setRowMinimumHeight(row, 75)
+                layout.setRowStretch(row, 0)
+            layout.setRowMinimumHeight(3, 52)
+            layout.setRowStretch(3, 0)
+            layout.setRowStretch(message_row, 1)
+            layout.setColumnStretch(0, 1)
             self._message_panel = panel
             self._render_messages()
         except Exception:
@@ -296,9 +351,7 @@ class PaintDashboardView(IApplicationView):
         self._message_scroll.setWidgetResizable(True)
         self._message_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._message_scroll.setMinimumHeight(_MESSAGE_SCROLL_MIN_HEIGHT)
-        self._message_scroll.setStyleSheet(
-            "QScrollArea { background: transparent; border: none; }"
-        )
+        self._message_scroll.setStyleSheet(_MESSAGE_SCROLL_STYLE)
 
         rows_container = QWidget()
         rows_container.setStyleSheet("background: transparent; border: none;")
@@ -339,6 +392,7 @@ class PaintDashboardView(IApplicationView):
             reset_button = self._dashboard._action_buttons.get("reset_errors")
             if reset_button is None:
                 return
+            reset_button.setFixedHeight(52)
             main_layout = self._dashboard.layout_manager.main_layout
             top_section = main_layout.itemAt(0).layout()
             side_panel = top_section.itemAt(1).widget()

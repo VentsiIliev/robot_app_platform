@@ -40,6 +40,7 @@ class PaintDashboardConfig(DashboardConfig):
     action_grid_rows: int = 1
     action_grid_cols: int = 1
     bottom_section_height: int = 380
+    status_column_height: int = 458
 
 
 

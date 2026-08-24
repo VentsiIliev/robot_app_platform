@@ -39,8 +39,8 @@ class PaintInfoCard(QWidget):
         outer.addWidget(frame)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(4)
 
         self._title_label = QLabel(title)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -48,7 +48,7 @@ class PaintInfoCard(QWidget):
 
         self._value_label = QLabel(value)
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._value_label.setStyleSheet("font-size: 18pt; font-weight: bold;")
+        self._value_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
 
         self._note_label = QLabel(note)
         self._note_label.setWordWrap(True)
