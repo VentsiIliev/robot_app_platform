@@ -12,14 +12,23 @@ The change is limited to the servo operation, which currently sits outside the o
 Existing ordered approach
     -> servo down until pickup condition
     -> stop downward servo
-    -> servo up to a known retract pose
-    -> existing ordered continuation
+    -> servo up to the selected retract reference pose
+    -> ordered continuation built from that pose
 ```
 
-The known retract pose is also the planning start pose for the existing continuation:
+The caller supplies an explicit, configured retract reference pose. For the
+initial implementation:
 
-- Magazine pickup uses the magazine approach pose.
-- Calibration pickup uses the calibration approach pose.
+- Magazine pickup uses the configured magazine pose.
+- Paint/calibration-table pickup uses the configured calibration pose.
+
+These are intentionally simple first choices. Smarter retract-pose selection
+may be added later without changing the servo procedure contract.
+
+For this Z-axis servo strategy, the selected reference contributes the retract
+Z only. The live pickup X, Y, Rx, Ry, and Rz remain unchanged. The continuation
+must be built or trimmed from that resulting live pose; it must not execute an
+older lift waypoint that would move the robot downward again after retraction.
 
 ## Procedure contract
 
@@ -30,28 +39,29 @@ Extend `ServoUntilConditionProcedure` with optional retract configuration. A suc
 3. Upward servo retraction completed.
 4. The configured retract position was reached within tolerance.
 
-The caller must not execute the existing continuation unless the procedure returns success.
+The caller must not execute the continuation unless the procedure returns success.
 
 Conceptual caller flow:
 
 ```python
 result = procedure.run(
     config=servo_config,
-    retract_pose=approach_pose,
+    retract_pose=retract_reference_pose,
 )
 
 if not result.success:
     stop_motion()
     return False
 
-return execute_existing_continuation()
+return execute_continuation_from(retract_reference_pose)
 ```
 
 ## Retract behavior
 
 For the current Z-axis pickup:
 
-- Use the Z coordinate of the supplied retract pose as the servo retract target.
+- Use the Z coordinate of the caller-supplied retract reference pose as the
+  servo retract target.
 - Keep X, Y, Rx, Ry, and Rz unchanged throughout downward and upward servo motion.
 - Start upward servo motion immediately after successful contact detection and downward servo stop.
 - Monitor the live robot Z position while retracting.
@@ -60,11 +70,15 @@ For the current Z-axis pickup:
 - Enforce a maximum retract distance and retract timeout.
 - Keep vacuum enabled throughout a successful pickup and retract.
 
-The procedure must not attempt Cartesian correction of X, Y, or orientation. If those coordinates no longer match the known approach pose, return failure and leave recovery to the existing process error handling.
+The procedure must not attempt Cartesian correction of X, Y, or orientation.
+Before retracting, verify that the target Z is above the detected contact Z and
+that the retract distance is within the configured maximum. The configured
+reference pose's X, Y, and orientation are not servo targets and must not cause
+Cartesian correction during this procedure.
 
 ## Failure handling
 
-Any failure must prevent the existing continuation from executing.
+Any failure must prevent the continuation from executing.
 
 Failure cases include:
 
@@ -92,18 +106,22 @@ On failure:
 
 The default policy should be to stop at the current position and enter the existing error/recovery flow.
 
-An optional controlled upward recovery may return the robot to the approach pose, but it must still return pickup failure. Successful recovery motion must never authorize the continuation because pickup contact was not confirmed.
+An optional controlled upward recovery may return the robot to the selected
+retract reference pose, but it must still return pickup failure. Successful
+recovery motion must never authorize the continuation because pickup contact
+was not confirmed.
 
 ## Continuation preplanning
 
 Preplanning is an optimization to add after safe servo retraction works reliably.
 
-- Prepare the existing continuation from the known retract pose while servo pickup is active.
+- Prepare the continuation from the selected retract reference pose while servo
+  pickup is active.
 - The preparation API must be plan-only: it must not queue, authorize, or start robot execution.
 - Keep the prepared result local to the active pickup call when practical.
 - If servo pickup or retract fails, cancel or discard the prepared result.
 - If servo pickup and retract succeed, execute the prepared continuation.
-- If preparation is incomplete, wait at the known retract pose.
+- If preparation is incomplete, wait at the selected retract reference pose.
 
 The existing ordered-motion gates and endpoint verification remain unchanged.
 
@@ -128,9 +146,9 @@ Add focused timing and result logs for:
 
 Verify:
 
-1. Successful contact retracts to the configured known pose.
-2. Magazine pickup uses the magazine approach pose.
-3. Calibration pickup uses the calibration approach pose.
+1. Successful contact retracts to the configured retract reference pose.
+2. Magazine pickup uses the configured magazine pose.
+3. Paint/calibration-table pickup uses the configured calibration pose.
 4. Contact timeout never starts the continuation.
 5. Sensor-read failure never starts the continuation.
 6. Downward or upward servo failure never starts the continuation.
@@ -138,15 +156,17 @@ Verify:
 8. Stop or pause during descent stops servo motion.
 9. Stop or pause during retract stops servo motion.
 10. A discarded preplan cannot be reused by a later pickup.
+11. The first continuation segment starts from the selected retract reference
+    pose and does not descend to an obsolete lift waypoint.
 
 ### Hardware verification order
 
 1. Test downward servo stop without retraction.
 2. Test upward servo retraction at reduced speed and clearance.
-3. Verify stopping accuracy at the known retract Z.
+3. Verify stopping accuracy at the selected retract reference Z.
 4. Test magazine pickup without continuation execution.
 5. Test calibration pickup without continuation execution.
-6. Enable the existing continuation after successful retract verification.
+6. Enable the continuation after successful retract verification.
 7. Add concurrent plan-only preparation and measure the remaining idle time.
 8. Inject or simulate failures and confirm that no continuation motion starts.
 
@@ -154,9 +174,12 @@ Verify:
 
 1. Define retract configuration and extend the servo procedure result contract.
 2. Implement guarded upward servo retraction and final-position verification.
-3. Pass the magazine approach pose from the magazine pickup caller.
-4. Pass the calibration approach pose from the calibration pickup caller.
-5. Verify every servo/retract failure returns before the existing continuation.
-6. Add targeted tests and controlled hardware checks.
-7. Add plan-only continuation preparation if an idle interval remains.
-8. Update engine and paint robot-system documentation for the final implemented behavior.
+3. Pass the configured magazine pose from the magazine pickup caller.
+4. Pass the configured calibration pose from the paint/calibration pickup
+   caller.
+5. Build or trim each continuation from its selected retract reference pose and
+   remove any obsolete post-contact lift that would command downward motion.
+6. Verify every servo/retract failure returns before the continuation.
+7. Add targeted tests and controlled hardware checks.
+8. Add plan-only continuation preparation if an idle interval remains.
+9. Update engine and paint robot-system documentation for the final implemented behavior.

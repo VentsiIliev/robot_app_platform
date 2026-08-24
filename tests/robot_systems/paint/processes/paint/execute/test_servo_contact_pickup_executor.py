@@ -19,6 +19,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
 )
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+    PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SERVO_CONTACT,
 )
 
@@ -35,6 +36,13 @@ class _FakeRobot:
     def stop_servo_jog(self):
         self.stopped += 1
         return 0
+
+    def stop_motion(self):
+        return True
+
+    def get_current_position(self):
+        z = 100.0 if self.started and self.started[-1][0][1].name == "PLUS" else 0.0
+        return [0.0, 0.0, z, 0.0, 0.0, 0.0]
 
 
 class _FakeMotion:
@@ -62,6 +70,28 @@ class _ConditionAfterStart:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
+        motion = _FakeMotion()
+        owner = SimpleNamespace(_motion=motion)
+        plan = PickupPlan(
+            strategy_name="planned-test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10),
+                PickupWaypoint("descend", [0, 0, 0, 0, 0, 0], 10, 10),
+                PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
+                PickupWaypoint("stage", [10, 0, 50, 0, 0, 0], 10, 10),
+            ),
+            vacuum_on_before_moves=False,
+            contact_mode=PICKUP_CONTACT_MODE_PLANNED,
+        )
+
+        self.assertTrue(PaintPickupExecutor(owner)._execute_custom_pickup_sequence(plan))
+        self.assertEqual(
+            ["approach", "descend", "lift", "stage"],
+            [segment["label"] for segment in motion.sequences[0][1]],
+        )
+
     def test_servo_contact_pickup_splits_approach_and_remaining_segments(self):
         robot = _FakeRobot()
         motion = _FakeMotion()
@@ -94,18 +124,19 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             vacuum_on_before_moves=True,
             contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
             contact_waypoint_index=1,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
         )
 
         self.assertTrue(executor._execute_servo_contact_pickup_sequence(plan))
 
         self.assertEqual(motion.vacuum_on, 1)
         self.assertTrue(motion.vacuum_required)
-        self.assertEqual(robot.stopped, 1)
+        self.assertEqual(robot.stopped, 2)
         self.assertEqual(
             [label for label, _segments in motion.sequences],
             [
                 "Pickup approach before servo contact",
-                "Pickup lift and staging after servo contact",
+                "Pickup continuation after servo retract",
             ],
         )
         moved_labels = [
@@ -113,10 +144,12 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             for _label, segments in motion.sequences
             for segment in segments
         ]
-        self.assertEqual(moved_labels, ["approach", "lift", "stage"])
+        self.assertEqual(moved_labels, ["approach", "stage"])
+        self.assertEqual(motion.sequences[1][1][0]["position"][2], 100.0)
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
+        self.assertEqual(robot.started[1][0][1].name, "PLUS")
 
     def test_servo_contact_does_not_move_when_vacuum_on_fails(self):
         robot = _FakeRobot()

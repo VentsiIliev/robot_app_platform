@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
@@ -33,6 +34,16 @@ class ServoUntilConditionConfig:
 
 
 @dataclass(frozen=True)
+class ServoRetractConfig:
+    target_pose: Sequence[float]
+    linear_mm_s: float = 25.0
+    poll_interval_s: float = 0.02
+    timeout_s: float = 10.0
+    position_tolerance_mm: float = 2.0
+    maximum_distance_mm: float = 500.0
+
+
+@dataclass(frozen=True)
 class ServoUntilConditionResult:
     success: bool
     detected: bool
@@ -42,6 +53,9 @@ class ServoUntilConditionResult:
     message: str
     condition_failed: bool = False
     guard_triggered: bool = False
+    retracted: bool = False
+    retract_failed: bool = False
+    stop_failed: bool = False
 
 
 class ServoUntilConditionProcedure:
@@ -66,6 +80,7 @@ class ServoUntilConditionProcedure:
         *,
         approach_pose: Sequence[float] | None = None,
         config: ServoUntilConditionConfig | None = None,
+        retract: ServoRetractConfig | None = None,
         cancel_requested: Callable[[], bool] | None = None,
         stop_guard: Callable[[], bool] | None = None,
     ) -> ServoUntilConditionResult:
@@ -100,6 +115,17 @@ class ServoUntilConditionProcedure:
                     message="condition_unreadable_before_motion",
                 )
             if preflight:
+                if retract is not None:
+                    return self._result(
+                        started_at,
+                        success=False,
+                        detected=False,
+                        timed_out=False,
+                        start_failed=False,
+                        condition_failed=False,
+                        guard_triggered=False,
+                        message="condition_already_active_before_motion",
+                    )
                 return self._result(
                     started_at,
                     success=True,
@@ -137,6 +163,17 @@ class ServoUntilConditionProcedure:
                     message="condition_unreadable_after_approach",
                 )
             if active:
+                if retract is not None:
+                    return self._result(
+                        started_at,
+                        success=False,
+                        detected=False,
+                        timed_out=False,
+                        start_failed=False,
+                        condition_failed=False,
+                        guard_triggered=False,
+                        message="condition_already_active_before_servo",
+                    )
                 return self._result(
                     started_at,
                     success=True,
@@ -212,6 +249,40 @@ class ServoUntilConditionProcedure:
                     read_failure_count = 0
 
                 if active:
+                    stop_ret = self._stop_servo()
+                    started = False
+                    if not self._return_code_ok(stop_ret):
+                        self._stop_motion()
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=True,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=False,
+                            stop_failed=True,
+                            message=f"servo_stop_failed:{stop_ret}",
+                        )
+                    if retract is not None:
+                        retract_ok, retract_message = self._retract(
+                            retract,
+                            cfg,
+                            cancel_requested=cancel_requested,
+                            stop_guard=stop_guard,
+                        )
+                        if not retract_ok:
+                            return self._result(
+                                started_at,
+                                success=False,
+                                detected=True,
+                                timed_out=retract_message == "retract_timeout",
+                                start_failed=False,
+                                condition_failed=False,
+                                guard_triggered=retract_message.startswith("stop_guard"),
+                                retract_failed=True,
+                                message=retract_message,
+                            )
                     return self._result(
                         started_at,
                         success=True,
@@ -220,7 +291,8 @@ class ServoUntilConditionProcedure:
                         start_failed=False,
                         condition_failed=False,
                         guard_triggered=False,
-                        message="condition_detected",
+                        retracted=retract is not None,
+                        message="condition_detected_and_retracted" if retract is not None else "condition_detected",
                     )
 
                 if stop_guard is not None:
@@ -265,10 +337,122 @@ class ServoUntilConditionProcedure:
                 time.sleep(poll_interval_s)
         finally:
             if started:
+                stop_ret = self._stop_servo()
+                if not self._return_code_ok(stop_ret):
+                    self._stop_motion()
+
+    def _retract(
+        self,
+        retract: ServoRetractConfig,
+        cfg: ServoUntilConditionConfig,
+        *,
+        cancel_requested: Callable[[], bool] | None,
+        stop_guard: Callable[[], bool] | None,
+    ) -> tuple[bool, str]:
+        target_pose = self._valid_pose(retract.target_pose)
+        current_pose = self._read_current_pose()
+        if target_pose is None:
+            return False, "invalid_retract_pose"
+        if current_pose is None:
+            return False, "retract_position_unreadable"
+
+        target_z = target_pose[2]
+        start_z = current_pose[2]
+        tolerance = max(0.0, float(retract.position_tolerance_mm))
+        maximum_distance = max(0.0, float(retract.maximum_distance_mm))
+        requested_distance = target_z - start_z
+        if not math.isfinite(float(retract.linear_mm_s)) or float(retract.linear_mm_s) <= 0.0:
+            return False, "invalid_retract_linear_speed"
+        if requested_distance <= tolerance:
+            return False, "retract_target_not_above_contact"
+        if requested_distance > maximum_distance:
+            return False, "retract_maximum_distance_exceeded"
+
+        start_ret = self._robot.start_servo_jog(
+            RobotAxis.Z,
+            Direction.PLUS,
+            linear_mm_s=float(retract.linear_mm_s),
+            angular_deg_s=None,
+            frame=cfg.frame,
+            tool=cfg.tool,
+            user=cfg.user,
+        )
+        if not self._return_code_ok(start_ret):
+            return False, f"retract_servo_start_failed:{start_ret}"
+
+        deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
+        poll_interval = max(0.005, float(retract.poll_interval_s))
+        failure = ""
+        while not failure:
+            if cancel_requested is not None and cancel_requested():
+                failure = "cancelled_during_retract"
+                break
+            if stop_guard is not None:
                 try:
-                    self._robot.stop_servo_jog()
+                    if bool(stop_guard()):
+                        failure = "stop_guard_triggered_during_retract"
+                        break
                 except Exception:
-                    _logger.exception("[SERVO_UNTIL_CONDITION] stop_servo_jog failed")
+                    _logger.exception("[SERVO_UNTIL_CONDITION] retract stop guard read failed")
+                    failure = "stop_guard_unreadable_during_retract"
+                    break
+            current_pose = self._read_current_pose()
+            if current_pose is None:
+                failure = "retract_position_unreadable"
+                break
+            travelled = current_pose[2] - start_z
+            if travelled > maximum_distance + tolerance:
+                failure = "retract_maximum_distance_exceeded"
+                break
+            if current_pose[2] >= target_z - tolerance:
+                break
+            if time.monotonic() >= deadline:
+                failure = "retract_timeout"
+                break
+            time.sleep(poll_interval)
+
+        stop_ret = self._stop_servo()
+        if not self._return_code_ok(stop_ret):
+            self._stop_motion()
+            return False, f"retract_servo_stop_failed:{stop_ret}"
+        if failure:
+            return False, failure
+        final_pose = self._read_current_pose()
+        if final_pose is None:
+            return False, "retract_final_position_unreadable"
+        if abs(final_pose[2] - target_z) > tolerance:
+            return False, "retract_final_position_mismatch"
+        return True, ""
+
+    def _stop_servo(self):
+        try:
+            return self._robot.stop_servo_jog()
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] stop_servo_jog failed")
+            return -1
+
+    def _stop_motion(self) -> None:
+        try:
+            self._robot.stop_motion()
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] stop_motion failed")
+
+    def _read_current_pose(self) -> list[float] | None:
+        try:
+            return self._valid_pose(self._robot.get_current_position())
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] current position read failed")
+            return None
+
+    @staticmethod
+    def _valid_pose(pose: Sequence[float] | None) -> list[float] | None:
+        if pose is None or len(pose) < 6:
+            return None
+        try:
+            values = [float(value) for value in pose[:6]]
+        except (TypeError, ValueError):
+            return None
+        return values if all(math.isfinite(value) for value in values) else None
 
     def _move_to_approach(
         self,
@@ -375,6 +559,9 @@ class ServoUntilConditionProcedure:
         condition_failed: bool,
         guard_triggered: bool,
         message: str,
+        retracted: bool = False,
+        retract_failed: bool = False,
+        stop_failed: bool = False,
     ) -> ServoUntilConditionResult:
         return ServoUntilConditionResult(
             success=bool(success),
@@ -383,6 +570,9 @@ class ServoUntilConditionProcedure:
             start_failed=bool(start_failed),
             condition_failed=bool(condition_failed),
             guard_triggered=bool(guard_triggered),
+            retracted=bool(retracted),
+            retract_failed=bool(retract_failed),
+            stop_failed=bool(stop_failed),
             elapsed_s=max(0.0, time.monotonic() - started_at),
             message=str(message),
         )

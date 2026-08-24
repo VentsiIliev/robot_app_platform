@@ -34,6 +34,7 @@ class PickupTransferPlan:
     projected_pivot_path: list[list[float]] | None = None
     projected_snapshots: list[np.ndarray] | None = None
     projected_diagnostics: list[dict[str, float | int]] | None = None
+    pickup_retract_reference_pose: list[float] | None = None
 
 
 PickupToPivotPlan = PickupTransferPlan
@@ -250,6 +251,7 @@ class PaintPickupTransferPlanner:
             projected_pivot_path=projected_pivot_path,
             projected_snapshots=projected_snapshots,
             projected_diagnostics=projected_diagnostics,
+            pickup_retract_reference_pose=list(pickup_pivot_pose),
         )
 
     def _resolve_safe_travel_waypoints(self) -> list[dict]:

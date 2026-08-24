@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
-from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
+from src.engine.robot.procedures import ServoRetractConfig, ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -157,6 +157,7 @@ def execute_magazine_pickup_release(
             ok, msg = _execute_magazine_servo_contact_pickup_release(
                 executor,
                 transfer_waypoints,
+                retract_reference_pose=pickup_base_pose,
                 release_label=release_label,
             )
         elif contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
@@ -188,18 +189,12 @@ def _execute_magazine_servo_contact_pickup_release(
     executor,
     transfer_waypoints: tuple[tuple, ...],
     *,
+    retract_reference_pose: list[float],
     release_label: str,
 ) -> tuple[bool, str]:
     pickup_motion = executor._paint_process_config().pickup_motion
     condition = getattr(executor, "_pickup_condition", None)
     if condition is None:
-        if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
-            _logger.warning("[MAGAZINE_LOAD] Servo contact condition missing; falling back to planned descend")
-            ok = executor._motion.move_ordered_pickup_sequence(
-                "Ordered magazine pickup-to-release sequence",
-                build_magazine_pickup_release_segments(transfer_waypoints),
-            )
-            return bool(ok), "Planned magazine pickup fallback failed"
         _logger.error("[MAGAZINE_LOAD] Servo contact pickup requested, but no pickup condition is configured")
         return False, "Servo contact pickup condition is not configured"
 
@@ -218,6 +213,7 @@ def _execute_magazine_servo_contact_pickup_release(
         int(executor._pickup_tool),
         int(executor._pickup_user),
     )
+    control = getattr(executor, "_active_execution_control", None)
     result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
         config=ServoUntilConditionConfig(
             axis=RobotAxis.Z,
@@ -230,7 +226,18 @@ def _execute_magazine_servo_contact_pickup_release(
             timeout_s=float(pickup_motion.servo_contact_timeout_s),
             preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
             condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
-        )
+        ),
+        retract=ServoRetractConfig(
+            target_pose=retract_reference_pose,
+            linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+            timeout_s=float(pickup_motion.servo_contact_timeout_s),
+        ),
+        cancel_requested=(
+            None
+            if control is None
+            else lambda: bool(control.should_stop() or control.pause_requested())
+        ),
     )
     _logger.info(
         "[MAGAZINE_LOAD] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
@@ -241,15 +248,10 @@ def _execute_magazine_servo_contact_pickup_release(
         result.message,
     )
     if not result.success:
-        if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
-            _logger.warning("[MAGAZINE_LOAD] Servo contact pickup failed (%s); falling back to planned descend", result.message)
-            ok = executor._motion.move_ordered_pickup_sequence(
-                "Magazine planned descend fallback",
-                build_magazine_pickup_release_segments(transfer_waypoints[1:]),
-            )
-            return bool(ok), f"Magazine planned descend fallback failed after servo contact failure: {result.message}"
         return False, f"Magazine servo contact pickup failed: {result.message}"
 
+    # Servo retraction replaces the planned lift for servo-contact mode only.
+    remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
     if not remaining_segments:
         return True, ""
     ok = executor._motion.move_ordered_pickup_sequence(

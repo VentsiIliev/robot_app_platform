@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Protocol
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
-from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
+from src.engine.robot.procedures import ServoRetractConfig, ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
@@ -43,6 +43,7 @@ class PickupPlan:
     change_plane_combined_with_first_contact: bool = False
     contact_mode: str = PICKUP_CONTACT_MODE_PLANNED
     contact_waypoint_index: int | None = None
+    retract_reference_pose: list[float] | None = None
 
 
 def normalize_pickup_contact_mode(value: object) -> str:
@@ -184,6 +185,11 @@ class DefaultPickupStrategy:
             change_plane_combined_with_first_contact=bool(combine_change_plane),
             contact_mode=normalize_pickup_contact_mode(pickup_motion.pickup_contact_mode),
             contact_waypoint_index=1,
+            retract_reference_pose=(
+                list(motion_plan.pickup_retract_reference_pose)
+                if motion_plan.pickup_retract_reference_pose is not None
+                else None
+            ),
         )
 
 
@@ -261,9 +267,6 @@ class PaintPickupExecutor:
         pickup_motion = self._owner._paint_process_config().pickup_motion
         condition = getattr(self._owner, "_pickup_condition", None)
         if condition is None:
-            if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
-                _logger.warning("[PICKUP] Servo contact pickup condition missing; falling back to planned descend")
-                return self._execute_custom_pickup_sequence(pickup_plan)
             _logger.error("[PICKUP] Servo contact pickup requested, but no pickup condition is configured")
             return False
 
@@ -275,6 +278,10 @@ class PaintPickupExecutor:
 
         approach_waypoints = waypoints[:contact_index]
         remaining_waypoints = waypoints[contact_index + 1 :]
+        retract_reference_pose = pickup_plan.retract_reference_pose
+        if retract_reference_pose is None or len(retract_reference_pose) < 6:
+            _logger.error("[PICKUP] Servo contact pickup has no valid calibration retract reference pose")
+            return False
         if pickup_plan.vacuum_on_before_moves:
             ok, _msg = self._owner._motion.turn_vacuum_on(required=True)
             if not ok:
@@ -291,6 +298,7 @@ class PaintPickupExecutor:
             int(self._owner._pickup_user),
         )
         procedure = ServoUntilConditionProcedure(self._owner._robot_service, condition)
+        control = getattr(self._owner, "_active_execution_control", None)
         result = procedure.run(
             config=ServoUntilConditionConfig(
                 axis=RobotAxis.Z,
@@ -303,7 +311,18 @@ class PaintPickupExecutor:
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
-            )
+            ),
+            retract=ServoRetractConfig(
+                target_pose=retract_reference_pose,
+                linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+                poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+                timeout_s=float(pickup_motion.servo_contact_timeout_s),
+            ),
+            cancel_requested=(
+                None
+                if control is None
+                else lambda: bool(control.should_stop() or control.pause_requested())
+            ),
         )
         _logger.info(
             "[PICKUP] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
@@ -314,14 +333,26 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
-            if bool(pickup_motion.servo_contact_fallback_to_planned_descend):
-                _logger.warning("[PICKUP] Servo contact pickup failed (%s); falling back to planned descend", result.message)
-                return self._move_waypoint_sequence("Pickup planned descend fallback", waypoints[contact_index:])
             return False
 
+        # Servo retraction replaces the old planned lift. Keep planned-mode
+        # waypoint generation untouched and adjust only this servo continuation.
+        remaining_waypoints = remaining_waypoints[1:]
+        if remaining_waypoints:
+            first = remaining_waypoints[0]
+            first_pose = list(first.pose)
+            first_pose[2] = max(float(first_pose[2]), float(retract_reference_pose[2]))
+            remaining_waypoints[0] = PickupWaypoint(
+                first.label,
+                first_pose,
+                first.vel_percent,
+                first.acc_percent,
+                first.motion_type,
+                first.blendR,
+            )
         if not remaining_waypoints:
             return True
-        return self._move_waypoint_sequence("Pickup lift and staging after servo contact", remaining_waypoints)
+        return self._move_waypoint_sequence("Pickup continuation after servo retract", remaining_waypoints)
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = build_paint_pickup_segments(waypoints)

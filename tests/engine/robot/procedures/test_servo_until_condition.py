@@ -6,6 +6,7 @@ from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoUntilConditionConfig,
     ServoUntilConditionProcedure,
+    ServoRetractConfig,
     TimedDummyPickupCondition,
     VacuumPickupCondition,
 )
@@ -54,6 +55,16 @@ class ManualCondition:
         return self.active
 
 
+class _ConditionSequence:
+    def __init__(self, *values):
+        self._values = list(values)
+
+    def __call__(self):
+        if len(self._values) > 1:
+            return self._values.pop(0)
+        return self._values[0]
+
+
 class FailingCondition:
     def is_active(self):
         raise RuntimeError("sensor disconnected")
@@ -79,6 +90,42 @@ class UnhealthyVacuumSensor:
 
 
 class TestServoUntilConditionProcedure(unittest.TestCase):
+    def test_successful_detection_retracts_up_to_reference_z(self):
+        class RetractRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [10.0, 20.0, 40.0, 180.0, 0.0, 0.0]
+
+            def start_servo_jog(self, axis, direction, *args, **kwargs):
+                ret = super().start_servo_jog(axis, direction, *args, **kwargs)
+                if direction == Direction.PLUS:
+                    self.position[2] = 100.0
+                return ret
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def stop_motion(self):
+                return True
+
+        robot = RetractRobot()
+        condition = _ConditionSequence(False, False, True)
+        result = ServoUntilConditionProcedure(robot, condition).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                target_pose=[0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
+                linear_mm_s=10.0,
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+                position_tolerance_mm=0.5,
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.retracted)
+        self.assertEqual([Direction.MINUS, Direction.PLUS], [item["direction"] for item in robot.started])
+        self.assertEqual(2, robot.stopped)
+
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
         condition = ManualCondition()
