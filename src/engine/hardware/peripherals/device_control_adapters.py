@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping
 from typing import Any, Callable
 
@@ -251,8 +252,33 @@ class DryerDeviceAdapter:
             return False
         named_command = getattr(self._device, action, None)
         if callable(named_command):
+            if action == "next_position":
+                return self._execute_next_position(named_command)
             return bool(named_command())
         return bool(self._device.execute_command(self._commands[action]))
+
+    def _execute_next_position(self, command: Callable[[], object]) -> bool:
+        """Send NEXT_POSITION and wait for a fresh moving-to-done status cycle."""
+        initial = self._device.get_state()
+        initial_healthy = bool(getattr(initial, "is_healthy", False))
+        initial_done = bool(getattr(initial, "next_position_done", False))
+        movement_observed = initial_healthy and not initial_done
+        if not bool(command()):
+            return False
+
+        deadline = time.monotonic() + 10.0
+        while True:
+            state = self._device.get_state()
+            healthy = bool(getattr(state, "is_healthy", False))
+            moving = bool(getattr(state, "next_position_moving", False))
+            done = bool(getattr(state, "next_position_done", False))
+            if healthy and (moving or not done):
+                movement_observed = True
+            if healthy and movement_observed and done and not moving:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
 
     def read_state(self) -> Mapping[str, object]:
         state = self._device.get_state()

@@ -1,5 +1,6 @@
 import unittest
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
 from src.engine.hardware.peripherals.device_control_adapters import (
@@ -134,12 +135,34 @@ class DeviceControlAdaptersTest(unittest.TestCase):
         dryer = MagicMock()
         dryer.is_enabled.return_value = True
         dryer.next_position.return_value = True
+        dryer.get_state.side_effect = [
+            SimpleNamespace(is_healthy=True, next_position_done=True),
+            SimpleNamespace(is_healthy=True, next_position_moving=True, next_position_done=False),
+            SimpleNamespace(is_healthy=True, next_position_moving=False, next_position_done=True),
+        ]
         adapter = DryerDeviceAdapter(dryer, commands={"next_position": 0})
 
         self.assertTrue(adapter.execute("next_position"))
 
         dryer.next_position.assert_called_once_with()
         dryer.execute_command.assert_not_called()
+
+    def test_dryer_next_position_fails_when_no_fresh_status_cycle_is_seen(self):
+        dryer = MagicMock()
+        dryer.is_enabled.return_value = True
+        dryer.next_position.return_value = True
+        dryer.get_state.return_value = SimpleNamespace(
+            is_healthy=True,
+            next_position_moving=False,
+            next_position_done=True,
+        )
+        adapter = DryerDeviceAdapter(dryer, commands={"next_position": 1})
+
+        with patch(
+            "src.engine.hardware.peripherals.device_control_adapters.time.monotonic",
+            side_effect=[0.0, 10.0],
+        ):
+            self.assertFalse(adapter.execute("next_position"))
 
     def test_failed_register_read_keeps_binary_device_disabled(self):
         persisted = []
