@@ -3,7 +3,11 @@ from __future__ import annotations
 import logging
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
-from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
+from src.engine.robot.procedures import (
+    ServoRetractConfig,
+    ServoUntilConditionConfig,
+    ServoUntilConditionProcedure,
+)
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -236,6 +240,15 @@ def _execute_magazine_servo_contact_pickup_release(
             timeout_s=float(pickup_motion.servo_contact_timeout_s),
             preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
             condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
+        ),
+        retract=ServoRetractConfig(
+            distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),
+            motion_type="servo",
+            linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
+            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+            timeout_s=3.0,
+            position_tolerance_mm=2.0,
+            maximum_distance_mm=50.0,
         ),
         cancel_requested=(
             None

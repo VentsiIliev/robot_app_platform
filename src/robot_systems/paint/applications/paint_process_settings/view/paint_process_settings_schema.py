@@ -169,6 +169,8 @@ def build_process_groups() -> list[SettingGroup]:
                 choices=list(PICKUP_CONTACT_MODES),
             ),
             _mm_per_second_field("pickup_servo_contact_linear_mm_s", "Descent Speed", 10.0),
+            _mm_field("pickup_servo_contact_retract_distance_mm", "Servo Retract Distance", 10.0, min_val=0.0),
+            _mm_per_second_field("pickup_servo_contact_retract_linear_mm_s", "Servo Retract Speed", 25.0),
             _seconds_field("pickup_servo_contact_timeout_s", "Detection Timeout", 5.0),
             _seconds_field("pickup_servo_contact_poll_interval_s", "Sensor Poll Interval", 0.02),
             _count_field("pickup_servo_contact_preflight_read_attempts", "Preflight Read Attempts", 2),

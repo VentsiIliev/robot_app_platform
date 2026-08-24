@@ -35,7 +35,8 @@ class ServoUntilConditionConfig:
 
 @dataclass(frozen=True)
 class ServoRetractConfig:
-    target_pose: Sequence[float]
+    target_pose: Sequence[float] | None = None
+    distance_mm: float | None = None
     motion_type: str = "servo"
     linear_mm_s: float = 25.0
     ptp_velocity_percent: float = 30.0
@@ -353,15 +354,21 @@ class ServoUntilConditionProcedure:
         cancel_requested: Callable[[], bool] | None,
         stop_guard: Callable[[], bool] | None,
     ) -> tuple[bool, str]:
-        target_pose = self._valid_pose(retract.target_pose)
         current_pose = self._read_current_pose()
-        if target_pose is None:
-            return False, "invalid_retract_pose"
         if current_pose is None:
             return False, "retract_position_unreadable"
 
-        target_z = target_pose[2]
         start_z = current_pose[2]
+        if retract.distance_mm is not None:
+            distance_mm = float(retract.distance_mm)
+            if not math.isfinite(distance_mm) or distance_mm <= 0.0:
+                return False, "invalid_retract_distance"
+            target_z = start_z + distance_mm
+        else:
+            target_pose = self._valid_pose(retract.target_pose)
+            if target_pose is None:
+                return False, "invalid_retract_pose"
+            target_z = target_pose[2]
         tolerance = max(0.0, float(retract.position_tolerance_mm))
         maximum_distance = max(0.0, float(retract.maximum_distance_mm))
         requested_distance = target_z - start_z

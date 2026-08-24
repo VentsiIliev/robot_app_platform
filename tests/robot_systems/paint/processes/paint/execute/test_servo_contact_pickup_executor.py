@@ -36,6 +36,9 @@ class _FakeRobot:
 
     def start_servo_jog(self, *args, **kwargs):
         self.started.append((args, kwargs))
+        direction = kwargs.get("direction", args[1] if len(args) > 1 else None)
+        if getattr(direction, "name", "") == "PLUS":
+            self.position[2] += 10.0
         return 0
 
     def stop_servo_jog(self):
@@ -155,7 +158,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertEqual(motion.vacuum_on, 1)
         self.assertTrue(motion.vacuum_required)
-        self.assertEqual(robot.stopped, 1)
+        self.assertEqual(robot.stopped, 2)
         self.assertEqual(
             [label for label, _segments in motion.sequences],
             [
@@ -176,7 +179,9 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
-        self.assertEqual(len(robot.started), 1)
+        self.assertEqual(robot.started[1][1]["linear_mm_s"], 25.0)
+        self.assertEqual(robot.started[1][0][1].name, "PLUS")
+        self.assertEqual(len(robot.started), 2)
         self.assertEqual(robot.ptp_moves, [])
 
     def test_servo_contact_prepares_continuation_before_ptp_retract(self):

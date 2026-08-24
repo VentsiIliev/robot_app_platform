@@ -215,6 +215,8 @@ class PaintProcessSettingsMapper:
             "pickup_contact_mode": pickup.pickup_contact_mode,
             "magazine_pickup_contact_mode": pickup.magazine_pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
+            "pickup_servo_contact_retract_distance_mm": pickup.servo_contact_retract_distance_mm,
+            "pickup_servo_contact_retract_linear_mm_s": pickup.servo_contact_retract_linear_mm_s,
             "pickup_servo_contact_timeout_s": pickup.servo_contact_timeout_s,
             "pickup_servo_contact_poll_interval_s": pickup.servo_contact_poll_interval_s,
             "pickup_servo_contact_preflight_read_attempts": pickup.servo_contact_preflight_read_attempts,
@@ -349,6 +351,12 @@ class PaintProcessSettingsMapper:
             ),
             servo_contact_linear_mm_s=float(
                 flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)
+            ),
+            servo_contact_retract_distance_mm=float(
+                flat.get("pickup_servo_contact_retract_distance_mm", base.pickup_motion.servo_contact_retract_distance_mm)
+            ),
+            servo_contact_retract_linear_mm_s=float(
+                flat.get("pickup_servo_contact_retract_linear_mm_s", base.pickup_motion.servo_contact_retract_linear_mm_s)
             ),
             servo_contact_timeout_s=float(
                 flat.get("pickup_servo_contact_timeout_s", base.pickup_motion.servo_contact_timeout_s)
