@@ -11,6 +11,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import Pain
 def handle_completed(ctx: PaintExecutionContext) -> PaintExecutionState:
     if not ctx.result_message:
         ctx.set_result(True, "Paint process completed")
-    restore_cycle_resources(ctx)
+    restore_cycle_resources(
+        ctx,
+        defer_for_next_capture=bool(ctx.result_ok) and ctx.repeats_after_success,
+    )
     stop_machine(ctx)
     return PaintExecutionState.IDLE

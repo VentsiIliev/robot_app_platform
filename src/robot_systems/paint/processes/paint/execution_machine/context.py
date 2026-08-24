@@ -20,6 +20,7 @@ class PaintExecutionContext:
     process_config: PaintProcessConfig | None = None
     magazine_config: PaintMagazineLoadConfig | None = None
     cycle_index: int = 1
+    repeats_after_success: bool = False
     stop_event: threading.Event = field(default_factory=threading.Event)
     run_allowed: threading.Event = field(default_factory=threading.Event)
     state_machine: object | None = None

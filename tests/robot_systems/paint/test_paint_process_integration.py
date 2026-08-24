@@ -579,6 +579,56 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         self.assertEqual(3, service._capture_snapshot_service.capture_snapshot.call_count)
         self.assertEqual(2, service._path_executor.execute_paint_process.call_count)
 
+    def test_repeating_cycle_restores_brightness_after_reaching_calibration(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            run_while_workpiece_found=True,
+            magazine_load=PaintMagazineLoadConfig(enabled=False),
+        )
+        events = []
+        navigation = MagicMock()
+        navigation.move_to_calibration_position.side_effect = (
+            lambda **_kwargs: events.append("calibration") or True
+        )
+        vision = MagicMock()
+        vision.get_auto_brightness_enabled.return_value = True
+        vision.lock_auto_brightness_adjustment.side_effect = lambda: events.append("lock")
+        vision.unlock_auto_brightness_adjustment.side_effect = lambda: events.append("unlock")
+        service = PaintProductionService(
+            workpiece_preparation_service=MagicMock(),
+            capture_snapshot_service=MagicMock(),
+            path_preparation_service=MagicMock(),
+            path_executor=MagicMock(),
+            paint_process_config_service=config_service,
+            magazine_load_service=MagicMock(),
+            navigation_service=navigation,
+            vision_service=vision,
+        )
+        contour = _square(2.0)
+        snapshots = iter([
+            VisionCaptureSnapshot(frame="frame-1", contours=[contour], source="paint_process"),
+            VisionCaptureSnapshot(frame="frame-empty", contours=[], source="paint_process"),
+        ])
+        service._capture_snapshot_service.capture_snapshot.side_effect = (
+            lambda **_kwargs: events.append("capture") or next(snapshots)
+        )
+        service._workpiece_preparation.prepare_workpiece.return_value = ({"id": "wp-1"}, "Prepared")
+        service._path_preparation_service.build_execution_plan.return_value = {"plan": 1}
+        service._path_executor.execute_paint_process.side_effect = (
+            lambda *_args, **_kwargs: events.append("execute") or (True, "Paint completed")
+        )
+
+        ok, msg = service.run_once()
+
+        self.assertTrue(ok, msg)
+        self.assertEqual(
+            [
+                "calibration", "capture", "lock", "execute", "calibration",
+                "unlock", "capture", "lock", "unlock",
+            ],
+            events,
+        )
+
     def test_manual_loop_uses_any_captured_contour_when_matching_is_disabled(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(

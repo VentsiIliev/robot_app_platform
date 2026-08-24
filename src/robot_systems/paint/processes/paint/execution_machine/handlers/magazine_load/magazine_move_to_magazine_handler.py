@@ -50,4 +50,5 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             f"Move to magazine group '{ctx.magazine_group}' failed",
         )
     _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", ctx.magazine_group)
+    service._restore_capture_view("after reaching magazine pickup")
     return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE

@@ -142,11 +142,13 @@ class PaintProductionService:
                     completed_cycles=completed_cycles,
                 )
                 return False, msg
+            self._restore_capture_view("after reaching calibration pickup")
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
                 magazine_config=None,
                 cycle_index=completed_cycles + 1,
+                repeats_after_success=True,
             )
             if not ok and msg == "No usable contour detected":
                 self._log_phase_timing(
@@ -185,6 +187,7 @@ class PaintProductionService:
                 process_config=process_config,
                 magazine_config=magazine_config,
                 cycle_index=completed_cycles + 1,
+                repeats_after_success=True,
             )
 
             if not ok and msg == NO_WORKPIECE_AT_MAGAZINE:
@@ -222,6 +225,7 @@ class PaintProductionService:
         process_config,
         magazine_config,
         cycle_index: int,
+        repeats_after_success: bool = False,
     ) -> tuple[bool, str]:
         context = PaintExecutionContext(
             production_service=self,
@@ -230,6 +234,7 @@ class PaintProductionService:
             process_config=process_config,
             magazine_config=magazine_config,
             cycle_index=cycle_index,
+            repeats_after_success=repeats_after_success,
             total_started_at=perf_counter(),
         )
         with self._active_context_lock:
@@ -303,6 +308,11 @@ class PaintProductionService:
             return
         _logger.info("Restoring adaptive auto brightness adjustment %s", reason)
         self._restore_brightness()
+
+    def _restore_capture_view(self, reason: str) -> None:
+        """Resume live vision only after the robot reaches a camera capture location."""
+        self._set_dashboard_live_view_paused(False, reason=reason)
+        self._restore_brightness_for_capture(reason)
 
     def _get_process_config(self) -> tuple[bool, str, object | None]:
         config_service = self._paint_process_config_service

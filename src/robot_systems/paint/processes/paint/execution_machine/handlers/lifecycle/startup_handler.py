@@ -17,10 +17,10 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.is_resuming = False
         return resume_state
     service = ctx.production_service
-    service._set_dashboard_live_view_paused(False, reason="paint cycle started")
-    service._restore_brightness_for_capture("before magazine load")
     if ctx.magazine_config is not None and bool(getattr(ctx.magazine_config, "enabled", False)):
         if supports_fine_magazine_states(getattr(service, "_magazine_load_service", None)):
             return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
+        service._restore_capture_view("before legacy magazine load")
         return PaintExecutionState.MAGAZINE_LOAD
+    service._restore_capture_view("at paint capture location")
     return PaintExecutionState.CAPTURE_WORKPIECE

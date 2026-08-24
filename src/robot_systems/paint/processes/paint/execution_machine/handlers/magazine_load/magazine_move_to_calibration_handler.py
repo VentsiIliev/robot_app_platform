@@ -34,4 +34,5 @@ def handle_magazine_move_to_calibration(ctx: PaintExecutionContext) -> PaintExec
     mark_verified = getattr(load_service._navigation, "mark_group_observed_area_verified", None)
     if callable(mark_verified):
         mark_verified(ctx.calibration_group)
+    ctx.production_service._restore_capture_view("after reaching calibration pickup")
     return PaintExecutionState.CALIBRATION_WAIT_CAMERA_SETTLE
