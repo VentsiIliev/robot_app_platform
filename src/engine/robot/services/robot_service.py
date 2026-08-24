@@ -280,6 +280,18 @@ class RobotService(IRobotService):
     def get_execution_status(self):
         return self._robot.get_execution_status()
 
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user):
+        return self._robot.prepare_ordered_motion_chain(segments, start_position, tool, user)
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.execute_prepared_ordered_motion_chain(plan_id)
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.discard_prepared_ordered_motion_chain(plan_id)
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return self._robot.get_prepared_ordered_motion_chain(plan_id)
+
     def get_last_trajectory_command_info(self):
         return self._robot.get_last_trajectory_command_info()
 

@@ -43,6 +43,18 @@ class IRobotService(IMotionService, IRobotLifecycle, IHealthCheckable, ABC):
     ):
         return -1
 
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user):
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return None
+
     def get_execution_status(self):
         return None
 

@@ -865,6 +865,52 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("execute_ordered_motion_chain error: %s", e, exc_info=True)
             return -1
 
+    def prepare_ordered_motion_chain(self, segments, start_position, tool=0, user=0,
+                                     trajectory_optimizer="TOTG"):
+        payload = {
+            "segments": segments or [],
+            "start_position": list(start_position),
+            "tool": int(tool),
+            "user": int(user),
+            "trajectory_optimizer": trajectory_optimizer,
+        }
+        try:
+            response = requests.post(
+                f"{self.server_url}/execute/ordered_motion_chain/prepare",
+                json=payload,
+                timeout=10,
+            )
+            data = response.json()
+            if self._response_failed("prepare_ordered_motion_chain", response, data):
+                return None
+            return data
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("prepare_ordered_motion_chain error: %s", exc, exc_info=True)
+            return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("post", plan_id, "/execute", timeout=300)
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("delete", plan_id)
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return self._prepared_ordered_request("get", plan_id)
+
+    def _prepared_ordered_request(self, method, plan_id, suffix="", timeout=5):
+        url = f"{self.server_url}/execute/ordered_motion_chain/prepared/{plan_id}{suffix}"
+        try:
+            response = getattr(requests, method)(url, timeout=timeout)
+            data = response.json()
+            if self._response_failed(f"{method}_prepared_ordered_motion_chain", response, data):
+                return None
+            return data
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("prepared ordered motion request error: %s", exc, exc_info=True)
+            return None
+
     def unwind_joint6(self, blocking=True, queue_if_busy=True, vel=None, acc=None):
         if not self._drive_enabled and self.enable() != 0:
             return -1

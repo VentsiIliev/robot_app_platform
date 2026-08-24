@@ -382,6 +382,18 @@ class Ros2Robot(IRobot):
         logger.info("reset_all_errors ← ret=%s", ret)
         return ret
 
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user):
+        return self._client.prepare_ordered_motion_chain(segments, start_position, tool, user)
+
+    def execute_prepared_ordered_motion_chain(self, plan_id):
+        return self._client.execute_prepared_ordered_motion_chain(plan_id)
+
+    def discard_prepared_ordered_motion_chain(self, plan_id):
+        return self._client.discard_prepared_ordered_motion_chain(plan_id)
+
+    def get_prepared_ordered_motion_chain(self, plan_id):
+        return self._client.get_prepared_ordered_motion_chain(plan_id)
+
     def set_digital_output(self, port_id: int, value: bool) -> None:
         logger.debug("set_digital_output → port=%s value=%s", port_id, value)
         self._client.setDigitalOutput(port_id, int(value))

@@ -144,6 +144,19 @@ class IRobot(ABC):
         """Optional ordered motion chain with mixed segment types."""
         return -1
 
+    def prepare_ordered_motion_chain(self, segments: list[dict], start_position: list[float],
+                                     tool: int, user: int) -> dict | None:
+        return None
+
+    def execute_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def discard_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
+    def get_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:
+        return None
+
     @abstractmethod
     def enable(self) -> None:
         ...
