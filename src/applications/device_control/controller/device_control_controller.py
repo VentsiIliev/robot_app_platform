@@ -183,7 +183,7 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         self._logger.info("Device action completed: %s ok=%s", device_key, ok)
         if not ok:
             self._view.set_device_state(device_key, {"healthy": False, "error": "Command failed"})
-        self._on_device_state_poll()
+        self._on_device_state_poll(device_key)
 
     def _on_device_enabled(self, device_key: str, enabled: bool) -> None:
         if self._device_stopped or self._device_action_in_flight:
@@ -243,14 +243,19 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
         if enabled:
             self._on_device_state_poll()
 
-    def _on_device_state_poll(self) -> None:
+    def _on_device_state_poll(self, device_key: str | None = None) -> None:
         if self._device_stopped or self._device_poll_in_flight or self._device_action_in_flight:
             return
         devices = self._model.get_devices()
         if not devices:
             return
+        device_keys = (
+            [device_key]
+            if device_key is not None
+            else [device.key for device in devices]
+        )
         self._device_poll_in_flight = True
-        future = self._device_executor.submit(self._read_all_device_states)
+        future = self._device_executor.submit(self._read_device_states, device_keys)
         future.add_done_callback(self._emit_device_states_result)
 
     def _emit_device_states_result(self, future: Future) -> None:
@@ -263,10 +268,10 @@ class DeviceControlController(IApplicationController, BackgroundWorker):
             states = {}
         self._device_relay.states_finished.emit(states)
 
-    def _read_all_device_states(self) -> dict[str, dict[str, object]]:
+    def _read_device_states(self, device_keys: list[str]) -> dict[str, dict[str, object]]:
         return {
-            device.key: dict(self._model.read_device_state(device.key))
-            for device in self._model.get_devices()
+            device_key: dict(self._model.read_device_state(device_key))
+            for device_key in device_keys
         }
 
     def _on_device_states_read(self, states: dict[str, dict[str, object]]) -> None:

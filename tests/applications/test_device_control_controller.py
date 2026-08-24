@@ -15,6 +15,7 @@ class TestDeviceControlController(unittest.TestCase):
         controller = DeviceControlController.__new__(DeviceControlController)
         controller._device_stopped = False
         controller._device_action_in_flight = False
+        controller._device_poll_in_flight = False
         controller._pending_device_enabled = {}
         controller._view = MagicMock()
         controller._model = MagicMock()
@@ -64,6 +65,20 @@ class TestDeviceControlController(unittest.TestCase):
 
         controller._view.set_device_enabled.assert_called_once_with("fan", False)
         controller._view.set_device_action_result.assert_called_once_with("fan", False)
+
+    def test_completed_action_refreshes_only_the_acted_device(self) -> None:
+        controller = self._controller()
+        controller._model.get_devices.return_value = [
+            MagicMock(key="vacuum_sensor"),
+            MagicMock(key="dryer"),
+        ]
+
+        controller._on_device_action_done("dryer", True)
+
+        controller._device_executor.submit.assert_called_once_with(
+            controller._read_device_states,
+            ["dryer"],
+        )
 
 
 class TestDeviceControlView(unittest.TestCase):
