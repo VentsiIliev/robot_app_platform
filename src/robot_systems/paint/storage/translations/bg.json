@@ -109,6 +109,7 @@
     "Unmatched Workpiece Painting": "Боядисване на несъпоставен детайл",
     "Default Paint Velocity": "Скорост на боядисване по подразбиране",
     "Default Paint Acceleration": "Ускорение на боядисване по подразбиране",
+    "Default Paint Offset": "Отместване при боядисване по подразбиране",
     "Release Z": "Z височина за освобождаване",
     "Allow Sub-Zero Dropoff": "Разреши разтоварване под Z=0",
     "Dropoff Not Configured": "Dropoff не е конфигуриран",

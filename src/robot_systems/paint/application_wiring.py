@@ -515,6 +515,7 @@ def _build_paint_workpiece_preparation_service(robot_system):
             **segment_defaults,
             "velocity": float(config.default_paint_velocity_percent),
             "acceleration": float(config.default_paint_acceleration_percent),
+            "offset": float(config.default_paint_offset_mm),
         }
 
     return PaintWorkpiecePreparationService(

@@ -294,6 +294,9 @@ class PaintProcessConfig:
     enable_workpiece_matching: bool = True  # [LIVE SETTINGS]
     default_paint_velocity_percent: float = 10.0  # [LIVE SETTINGS]
     default_paint_acceleration_percent: float = 10.0  # [LIVE SETTINGS]
+    # Pivot/contact offset used only for captured contours executed without matching.
+    # Matched workpieces keep the offset stored in their segment settings.
+    default_paint_offset_mm: float = 0.0  # [LIVE SETTINGS]
     # Log one end-of-cycle timing table for every paint execution state.
     enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
     # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.

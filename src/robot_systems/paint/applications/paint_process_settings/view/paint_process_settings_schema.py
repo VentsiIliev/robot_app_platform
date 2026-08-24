@@ -212,6 +212,10 @@ def build_motion_speed_groups() -> list[SettingGroup]:
                 "Default Paint Acceleration",
                 10.0,
             ),
+            _mm_field(
+                "default_paint_offset_mm",
+                "Default Paint Offset",
+            ),
         ]),
         SettingGroup(_t("Pickup"), [
             _profile_table("pickup_motion_profiles", "Pickup Motion Profiles", [

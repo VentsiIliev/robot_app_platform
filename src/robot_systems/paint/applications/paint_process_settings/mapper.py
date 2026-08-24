@@ -206,6 +206,7 @@ class PaintProcessSettingsMapper:
             "enable_workpiece_matching": settings.enable_workpiece_matching,
             "default_paint_velocity_percent": settings.default_paint_velocity_percent,
             "default_paint_acceleration_percent": settings.default_paint_acceleration_percent,
+            "default_paint_offset_mm": settings.default_paint_offset_mm,
             "enable_execution_state_timing": settings.enable_execution_state_timing,
             "pause_dashboard_live_view_after_capture": settings.pause_dashboard_live_view_after_capture,
             "combine_change_plane_with_first_contact": pickup.combine_change_plane_with_first_contact,
@@ -599,6 +600,9 @@ class PaintProcessSettingsMapper:
                     "default_paint_acceleration_percent",
                     base.default_paint_acceleration_percent,
                 )
+            ),
+            default_paint_offset_mm=float(
+                flat.get("default_paint_offset_mm", base.default_paint_offset_mm)
             ),
             enable_execution_state_timing=bool(
                 flat.get("enable_execution_state_timing", base.enable_execution_state_timing)
