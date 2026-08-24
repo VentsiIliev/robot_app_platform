@@ -102,4 +102,4 @@ class DryerDefaults:
 
     target_position_backword: int = 500        # Register 15
     target_position_forword: int = 500         # Register 16
-    # target_position_next_position: int = 1000  # Register 17
+    target_position_next_position: int = 1000  # Register 17
