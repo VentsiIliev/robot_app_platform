@@ -31,6 +31,10 @@ class IDryerController(ABC):
         """Read and decode the dryer status register."""
 
     @abstractmethod
+    def home(self, data: DryerWriteData | None = None) -> bool:
+        """Start the dryer homing command."""
+
+    @abstractmethod
     def execute_command(self, command: int, data: DryerWriteData | None = None) -> bool:
         """Execute a configured numeric dryer command."""
 

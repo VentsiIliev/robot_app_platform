@@ -55,7 +55,7 @@ class TestDryerController(unittest.TestCase):
         values = transport.write_registers.call_args.args[1]
         self.assertEqual(values[1], 7)
 
-    def test_initialize_writes_current_config_with_neutral_command(self) -> None:
+    def test_initialize_writes_current_config_with_home_command(self) -> None:
         transport = MagicMock()
         controller = DryerController(
             transport,
@@ -68,6 +68,29 @@ class TestDryerController(unittest.TestCase):
         self.assertEqual(address, 0)
         self.assertEqual(values[1], 0)
         self.assertEqual(values[2], 777)
+
+    def test_home_uses_configured_home_command(self) -> None:
+        transport = MagicMock()
+        controller = DryerController(transport, commands={"home": 7})
+
+        self.assertTrue(controller.home())
+
+        values = transport.write_registers.call_args.args[1]
+        self.assertEqual(values[1], 7)
+
+    def test_decodes_every_firmware_status_flag(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = sum(int(status) for status in DryerStatus)
+
+        state = DryerController(transport).get_state()
+
+        self.assertTrue(state.is_ready)
+        self.assertTrue(state.is_homed)
+        self.assertTrue(state.homed_done)
+        self.assertTrue(state.ejecting)
+        self.assertTrue(state.eject_done)
+        self.assertTrue(state.next_position_moving)
+        self.assertTrue(state.next_position_done)
 
     def test_writes_current_eighteen_register_block(self) -> None:
         transport = MagicMock()

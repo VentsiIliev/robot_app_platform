@@ -349,6 +349,23 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         vacuum.turn_on.assert_not_called()
         vacuum.turn_off.assert_not_called()
 
+    def test_live_peripheral_disable_blocks_vacuum_pump_commands(self):
+        vacuum = MagicMock()
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=None,
+            vacuum_pump=vacuum,
+            vacuum_pump_enabled_provider=lambda: False,
+            enable_vacuum_pump=True,
+        )
+
+        on_ok, on_msg = executor._motion.turn_vacuum_on()
+        off_ok, off_msg = executor._motion.turn_vacuum_off()
+
+        self.assertTrue(on_ok, on_msg)
+        self.assertTrue(off_ok, off_msg)
+        vacuum.turn_on.assert_not_called()
+        vacuum.turn_off.assert_not_called()
+
     def test_execute_pickup_and_release_at_position_uses_pickup_lift_then_release_pose(self):
         events = []
         robot_service = MagicMock()

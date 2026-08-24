@@ -3,7 +3,8 @@ from typing import Mapping
 
 
 class DryerCommand(IntFlag):
-    NEXT_POSITION = 0x00
+    HOME = 0x00
+    NEXT_POSITION = HOME
     EJECT = 0x01
     CLOSE_PLATE = 0x02
 
@@ -13,6 +14,7 @@ class DryerCommand(IntFlag):
 
 
 DEFAULT_DRYER_COMMANDS: dict[str, int] = {
+    "home": int(DryerCommand.HOME),
     "next_position": int(DryerCommand.NEXT_POSITION),
     "eject": int(DryerCommand.EJECT),
     "close_plate": int(DryerCommand.CLOSE_PLATE),

@@ -173,7 +173,13 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
 
 def _verify_workpiece_released(executor: object) -> tuple[bool, str]:
     """Verify that vacuum cleared after pump-off at the dropoff waypoint."""
-    if not bool(getattr(executor, "_enable_vacuum_pump", True)):
+    is_pump_enabled = getattr(executor, "_is_vacuum_pump_enabled", None)
+    pump_enabled = (
+        bool(is_pump_enabled())
+        if callable(is_pump_enabled)
+        else bool(getattr(executor, "_enable_vacuum_pump", True))
+    )
+    if not pump_enabled:
         _logger.info("[DROPOFF] Release verification skipped: vacuum pump disabled")
         return True, ""
 

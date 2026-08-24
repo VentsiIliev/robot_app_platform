@@ -85,6 +85,9 @@ class DryerService(IDryerService):
             return DryerState(is_healthy=False, communication_errors=[self._unavailable_error()])
         return self._controller.get_state()
 
+    def home(self, data: DryerWriteData | None = None) -> bool:
+        return self._call("home", data)
+
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
         return self._call("move_servos", data)
 

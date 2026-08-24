@@ -280,6 +280,12 @@ def _build_paint_path_executor(robot_system):
     debug_dump_dir = _build_paint_path_debug_dump_dir()
     paint_config = _get_paint_process_config(robot_system)
     pivot_profile = _get_pivot_profile(robot_system)
+
+    def vacuum_pump_enabled() -> bool:
+        peripheral_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
+        binding = peripheral_config.peripherals.get("vacuum_pump")
+        return bool(binding is not None and binding.enabled)
+
     dependencies = PaintExecutorDependencies(
         robot_service=robot_service,
         path_preparation_service=_build_paint_path_preparation_service(robot_system),
@@ -306,6 +312,7 @@ def _build_paint_path_executor(robot_system):
         ),
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         vacuum_pump=getattr(robot_system, "_vacuum_pump", None),
+        vacuum_pump_enabled_provider=vacuum_pump_enabled,
         vacuum_sensor=robot_system.get_optional_service(ServiceID.VACUUM_SENSOR),
         pickup_condition=getattr(robot_system, "_pickup_condition", None),
         pickup_condition_provider=getattr(robot_system, "_get_pickup_condition", None),

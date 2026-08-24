@@ -144,6 +144,7 @@ class PaintExecutorDependencies:
     post_execute_callback: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
+    vacuum_pump_enabled_provider: Optional[Callable[[], bool]] = None
     vacuum_sensor: object | None = None
     pickup_condition: object | None = None
     pickup_condition_provider: Optional[Callable[[], object | None]] = None
@@ -265,6 +266,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             post_execute_callback=legacy_options.get("post_execute_callback"),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
+            vacuum_pump_enabled_provider=legacy_options.get("vacuum_pump_enabled_provider"),
             vacuum_sensor=legacy_options.get("vacuum_sensor"),
             pickup_condition=legacy_options.get("pickup_condition"),
             pickup_condition_provider=legacy_options.get("pickup_condition_provider"),
@@ -303,6 +305,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._post_execute_callback = dependencies.post_execute_callback
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
+        self._vacuum_pump_enabled_provider = dependencies.vacuum_pump_enabled_provider
         self._vacuum_sensor = dependencies.vacuum_sensor
         self._pickup_condition = dependencies.pickup_condition
         self._pickup_condition_provider = dependencies.pickup_condition_provider
@@ -367,6 +370,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
         self._active_execution_control = None
+
+    def _is_vacuum_pump_enabled(self) -> bool:
+        """Return whether both process settings and live peripheral settings allow pump use."""
+        if not self._enable_vacuum_pump:
+            return False
+        if self._vacuum_pump_enabled_provider is None:
+            return True
+        try:
+            return bool(self._vacuum_pump_enabled_provider())
+        except Exception:
+            _logger.exception("[PICKUP] Failed to read live vacuum-pump enabled state")
+            return False
 
     # -------------------------------------------------------------------------
     # Runtime Configuration And Public Editor API

@@ -245,7 +245,7 @@ class PaintMotionExecutor:
     def turn_vacuum_on(self) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
         owner = self._owner
-        if not owner._enable_vacuum_pump:
+        if not owner._is_vacuum_pump_enabled():
             _logger.info("[PICKUP] Vacuum pump ON skipped: disabled by configuration")
             return True, ""
         if owner._vacuum_pump is None:
@@ -260,7 +260,7 @@ class PaintMotionExecutor:
     def turn_vacuum_off(self) -> tuple[bool, str]:
         """Disable the vacuum pump after staging if one is configured."""
         owner = self._owner
-        if not owner._enable_vacuum_pump:
+        if not owner._is_vacuum_pump_enabled():
             _logger.info("[PICKUP] Vacuum pump OFF skipped: disabled by configuration")
             return True, ""
         if owner._vacuum_pump is None:
