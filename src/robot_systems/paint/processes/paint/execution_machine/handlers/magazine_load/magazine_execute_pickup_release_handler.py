@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
-from src.engine.robot.procedures import ServoRetractConfig, ServoUntilConditionConfig, ServoUntilConditionProcedure
+from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_load_handler import (
@@ -227,15 +227,6 @@ def _execute_magazine_servo_contact_pickup_release(
             preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
             condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
         ),
-        retract=ServoRetractConfig(
-            target_pose=retract_reference_pose,
-            motion_type="ptp",
-            linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
-            ptp_velocity_percent=float(pickup_motion.lift_align_vel_percent),
-            ptp_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
-            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-            timeout_s=float(pickup_motion.servo_contact_timeout_s),
-        ),
         cancel_requested=(
             None
             if control is None
@@ -253,17 +244,48 @@ def _execute_magazine_servo_contact_pickup_release(
     if not result.success:
         return False, f"Magazine servo contact pickup failed: {result.message}"
 
-    # Servo retraction replaces the planned lift for servo-contact mode only.
-    remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    if not remaining_segments:
-        return True, ""
+    current_pose = _read_fresh_pose(executor._robot_service)
+    if current_pose is None:
+        return False, "Magazine current pose is unavailable after servo contact"
+    retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
+    if retract_distance <= 0.0 or retract_distance > 500.0:
+        return False, f"Magazine retract distance is invalid: {retract_distance:.3f} mm"
+    retract_pose = list(current_pose)
+    retract_pose[2] = float(retract_reference_pose[2])
+    retract_waypoint = (
+        "Retracting magazine workpiece to magazine reference Z",
+        retract_pose,
+        pickup_motion.lift_align_vel_percent,
+        pickup_motion.lift_align_acc_percent,
+        "ptp",
+        0.0,
+    )
+    remaining_segments = build_magazine_pickup_release_segments(
+        (retract_waypoint, *transfer_waypoints[3:])
+    )
     ok = executor._motion.move_ordered_pickup_sequence(
-        f"Magazine lift and {release_label} release after servo contact",
+        f"Magazine retract and {release_label} continuation after servo contact",
         remaining_segments,
     )
     if not ok:
         return False, f"Magazine lift/release after servo contact failed for {release_label}"
     return True, ""
+
+
+def _read_fresh_pose(robot_service) -> list[float] | None:
+    getter = getattr(robot_service, "get_current_position_fresh", None)
+    if not callable(getter):
+        getter = getattr(robot_service, "get_current_position", None)
+    if not callable(getter):
+        return None
+    try:
+        pose = getter()
+    except Exception:
+        _logger.exception("[MAGAZINE_LOAD] Failed to read current pose after servo contact")
+        return None
+    if pose is None or len(pose) < 6:
+        return None
+    return [float(value) for value in pose[:6]]
 
 
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:

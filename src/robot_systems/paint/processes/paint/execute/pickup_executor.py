@@ -6,7 +6,7 @@ from time import perf_counter
 from typing import Protocol
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
-from src.engine.robot.procedures import ServoRetractConfig, ServoUntilConditionConfig, ServoUntilConditionProcedure
+from src.engine.robot.procedures import ServoUntilConditionConfig, ServoUntilConditionProcedure
 from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
@@ -312,15 +312,6 @@ class PaintPickupExecutor:
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
             ),
-            retract=ServoRetractConfig(
-                target_pose=retract_reference_pose,
-                motion_type="ptp",
-                linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
-                ptp_velocity_percent=float(pickup_motion.lift_align_vel_percent),
-                ptp_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
-                poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-                timeout_s=float(pickup_motion.servo_contact_timeout_s),
-            ),
             cancel_requested=(
                 None
                 if control is None
@@ -338,8 +329,29 @@ class PaintPickupExecutor:
         if not result.success:
             return False
 
-        # Servo retraction replaces the old planned lift. Keep planned-mode
-        # waypoint generation untouched and adjust only this servo continuation.
+        current_pose = self._read_fresh_pose()
+        if current_pose is None:
+            _logger.error("[PICKUP] Current pose unavailable after servo contact")
+            return False
+        retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
+        if retract_distance <= 0.0 or retract_distance > 500.0:
+            _logger.error("[PICKUP] Invalid servo retract distance %.3f mm", retract_distance)
+            return False
+
+        retract_pose = list(current_pose)
+        retract_pose[2] = float(retract_reference_pose[2])
+        retract_waypoint = PickupWaypoint(
+            "Retracting picked workpiece to calibration reference Z",
+            retract_pose,
+            float(pickup_motion.lift_align_vel_percent),
+            float(pickup_motion.lift_align_acc_percent),
+            "ptp",
+            0.0,
+        )
+
+        # PTP retract and every remaining servo-contact move are submitted in
+        # one chain so the runtime can preplan following segments while retracting.
+        # Planned-mode waypoint generation remains untouched.
         remaining_waypoints = remaining_waypoints[1:]
         if remaining_waypoints:
             first = remaining_waypoints[0]
@@ -353,9 +365,25 @@ class PaintPickupExecutor:
                 first.motion_type,
                 first.blendR,
             )
-        if not remaining_waypoints:
-            return True
-        return self._move_waypoint_sequence("Pickup continuation after servo retract", remaining_waypoints)
+        return self._move_waypoint_sequence(
+            "Pickup retract and continuation after servo contact",
+            [retract_waypoint, *remaining_waypoints],
+        )
+
+    def _read_fresh_pose(self) -> list[float] | None:
+        getter = getattr(self._owner._robot_service, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = getattr(self._owner._robot_service, "get_current_position", None)
+        if not callable(getter):
+            return None
+        try:
+            pose = getter()
+        except Exception:
+            _logger.exception("[PICKUP] Failed to read current pose after servo contact")
+            return None
+        if pose is None or len(pose) < 6:
+            return None
+        return [float(value) for value in pose[:6]]
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = build_paint_pickup_segments(waypoints)

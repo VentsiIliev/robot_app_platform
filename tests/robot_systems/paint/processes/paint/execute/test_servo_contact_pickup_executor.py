@@ -144,7 +144,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             [label for label, _segments in motion.sequences],
             [
                 "Pickup approach before servo contact",
-                "Pickup continuation after servo retract",
+                "Pickup retract and continuation after servo contact",
             ],
         )
         moved_labels = [
@@ -152,13 +152,16 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             for _label, segments in motion.sequences
             for segment in segments
         ]
-        self.assertEqual(moved_labels, ["approach", "stage"])
+        self.assertEqual(
+            moved_labels,
+            ["approach", "Retracting picked workpiece to calibration reference Z", "stage"],
+        )
         self.assertEqual(motion.sequences[1][1][0]["position"][2], 100.0)
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
         self.assertEqual(len(robot.started), 1)
-        self.assertEqual(robot.ptp_moves[0][0][2], 100.0)
+        self.assertEqual(robot.ptp_moves, [])
 
     def test_servo_contact_does_not_move_when_vacuum_on_fails(self):
         robot = _FakeRobot()

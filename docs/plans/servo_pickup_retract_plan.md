@@ -12,8 +12,9 @@ The change is limited to the servo operation, which currently sits outside the o
 Existing ordered approach
     -> servo down until pickup condition
     -> stop downward servo
-    -> blocking PTP retract to the selected retract reference Z
-    -> ordered continuation built from that pose
+    -> submit one ordered chain:
+         PTP retract to the selected retract reference Z
+         -> all remaining continuation moves
 ```
 
 The caller supplies an explicit, configured retract reference pose. For the
@@ -26,34 +27,41 @@ These are intentionally simple first choices. Smarter retract-pose selection
 may be added later without changing the servo procedure contract.
 
 For this Z-axis servo strategy, the selected reference contributes the retract
-Z only. The live pickup X, Y, Rx, Ry, and Rz remain unchanged. The continuation
-must be built or trimmed from that resulting live pose; it must not execute an
-older lift waypoint that would move the robot downward again after retraction.
+Z only. The live pickup X, Y, Rx, Ry, and Rz remain unchanged. The PTP retract
+is the first segment of the servo-contact continuation chain, allowing the
+runtime to preplan later segments while retracting. The chain must not include
+the older lift waypoint that the retract replaces.
 
 ## Procedure contract
 
-Extend `ServoUntilConditionProcedure` with optional retract configuration. A successful result must mean all of the following:
+`ServoUntilConditionProcedure` owns contact descent and the confirmed servo
+stop. The servo-contact caller then builds and executes the guarded retract and
+continuation chain. Overall pickup success must mean all of the following:
 
 1. The pickup condition was detected.
 2. Downward servo motion was stopped.
-3. Blocking PTP retraction completed.
-4. The configured retract position was reached within tolerance.
+3. The ordered chain was accepted with PTP retract as its first segment.
+4. PTP retraction and the remaining continuation completed successfully.
 
-The caller must not execute the continuation unless the procedure returns success.
+The caller must not submit the retract/continuation chain unless the procedure
+returns success.
 
 Conceptual caller flow:
 
 ```python
 result = procedure.run(
     config=servo_config,
-    retract_pose=retract_reference_pose,
 )
 
 if not result.success:
     stop_motion()
     return False
 
-return execute_continuation_from(retract_reference_pose)
+chain = build_servo_continuation(
+    first_segment=build_ptp_retract(retract_reference_pose),
+    remaining_segments=remaining_continuation,
+)
+return execute_ordered_chain(chain)
 ```
 
 ## Retract behavior
