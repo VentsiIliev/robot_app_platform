@@ -375,6 +375,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
         self._dropoff_unwind_prepared: bool = False
+        self._last_pickup_contact_mode: str | None = None
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
         self._active_execution_control = None

@@ -53,6 +53,25 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
         return True, ""
 
+    if getattr(executor, "_last_pickup_contact_mode", None) == "servo_contact":
+        segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
+        if not segments:
+            return False, "Pivot paint finished, but ordered dropoff preparation could not be built"
+        _logger.info(
+            "[DROPOFF] Executing servo-contact dropoff preparation as one ordered chain segments=%d blendR=%s",
+            len(segments),
+            [segment.get("blendR") for segment in segments],
+        )
+        if not executor._motion.move_ordered_pickup_sequence(
+            "Servo-contact ordered dropoff preparation",
+            segments,
+        ):
+            return False, "Pivot paint finished, but ordered dropoff preparation failed"
+        executor._dropoff_unwind_prepared = True
+        if final_pose is not None:
+            executor._last_process_end_pose = list(final_pose)
+        return True, ""
+
     config = executor._paint_process_config()
     safe_waypoints = _resolve_dropoff_safe_travel_waypoints(executor)
     if bool(config.dropoff_safe_travel.enabled):

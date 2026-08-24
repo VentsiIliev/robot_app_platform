@@ -204,7 +204,12 @@ class PaintPickupExecutor:
         return self._strategy.build_plan(self._owner, prepared_workpiece)
 
     @timed_step(_logger, "pickup_to_pivot")
-    def execute(self, prepared_workpiece: WorkpieceExecutionPlan) -> tuple[bool, str]:
+    def execute(
+        self,
+        prepared_workpiece: WorkpieceExecutionPlan,
+        *,
+        pickup_plan: PickupPlan | None = None,
+    ) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
         _logger.info("[TIMING] pickup_to_pivot entered")
@@ -212,13 +217,15 @@ class PaintPickupExecutor:
             return False, "Robot service is not available"
 
         plan_started = perf_counter()
-        with timed_block(_logger, "pickup_to_pivot_prepare", label="build_paint_pickup_plan"):
-            pickup_plan = self.build_plan(prepared_workpiece)
+        if pickup_plan is None:
+            with timed_block(_logger, "pickup_to_pivot_prepare", label="build_paint_pickup_plan"):
+                pickup_plan = self.build_plan(prepared_workpiece)
 
         if pickup_plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
             return False, getattr(self._owner, "_last_safe_travel_error", "") or "Could not compute pickup-to-pivot poses"
         self._owner._last_pickup_plan = pickup_plan.motion_plan
+        self._owner._last_pickup_contact_mode = pickup_plan.contact_mode
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
         if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:

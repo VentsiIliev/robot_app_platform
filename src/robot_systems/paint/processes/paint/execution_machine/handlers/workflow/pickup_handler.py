@@ -34,7 +34,21 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         finish_paint_motion(ctx, success=False)
         return guarded
 
-    ctx.paint_ordered_result = try_execute_ordered_pickup_and_paint_contact(executor, ctx.execution_plan)
+    build_plan = getattr(executor._pickup, "build_plan", None)
+    pickup_plan = build_plan(ctx.execution_plan) if callable(build_plan) else None
+    if callable(build_plan) and pickup_plan is None:
+        fail_paint_motion(ctx, "Could not compute pickup-to-pivot poses")
+        return PaintExecutionState.ERROR
+
+    ctx.paint_ordered_result = (
+        try_execute_ordered_pickup_and_paint_contact(
+            executor,
+            ctx.execution_plan,
+            pickup_plan=pickup_plan,
+        )
+        if pickup_plan is not None
+        else None
+    )
     if ctx.paint_ordered_result is not None:
         ok, msg, total_waypoints = ctx.paint_ordered_result
         ctx.paint_total_waypoints = int(total_waypoints)
@@ -44,7 +58,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.paint_contact_executed_in_ordered_chain = True
         return PaintExecutionState.PAINT_CONTACT
 
-    ok, msg = executor._pickup.execute(ctx.execution_plan)
+    if pickup_plan is None:
+        ok, msg = executor._pickup.execute(ctx.execution_plan)
+    else:
+        ok, msg = executor._pickup.execute(ctx.execution_plan, pickup_plan=pickup_plan)
     if not ok:
         _logger.info(
             "[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f",
@@ -59,13 +76,16 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
 def try_execute_ordered_pickup_and_paint_contact(
     executor: object,
     prepared_workpiece,
+    *,
+    pickup_plan=None,
 ) -> tuple[bool, str, int] | None:
     """Execute pickup/staging and primary paint contact as one preplanned ordered chain."""
     execute_chain = getattr(executor._robot_service, "execute_ordered_motion_chain", None)
     if not callable(execute_chain):
         return None
 
-    pickup_plan = executor._pickup.build_plan(prepared_workpiece)
+    if pickup_plan is None:
+        pickup_plan = executor._pickup.build_plan(prepared_workpiece)
     if pickup_plan is None:
         return False, "Could not compute pickup-to-pivot poses", 0
     if pickup_plan.contact_mode != PICKUP_CONTACT_MODE_PLANNED:
