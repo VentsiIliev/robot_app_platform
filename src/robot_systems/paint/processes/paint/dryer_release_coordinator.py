@@ -81,11 +81,12 @@ class DryerReleaseCoordinator:
             if not self._wait_for_next_position_cycle(initial_state):
                 error = "NEXT_POSITION completion was not confirmed"
                 return
+            eject_initial_state = self._dryer.get_state()
             if not bool(self._dryer.eject()):
                 error = "EJECT command failed"
                 self._logger.error("[DRYER_RELEASE] EJECT command failed")
                 return
-            if not self._wait_for_status("eject_done", "EJECT"):
+            if not self._wait_for_eject_cycle(eject_initial_state):
                 error = "EJECT completion was not confirmed"
                 return
             succeeded = True
@@ -127,20 +128,37 @@ class DryerReleaseCoordinator:
                 return False
             time.sleep(self._status_poll_interval_s)
 
-    def _wait_for_status(self, attribute: str, label: str) -> bool:
+    def _wait_for_eject_cycle(self, initial_state: object) -> bool:
+        """Accept a fresh EJECT_DONE edge or an eject-active-to-ready cycle."""
+        initial_done = bool(getattr(initial_state, "eject_done", False))
+        activity_observed = bool(getattr(initial_state, "ejecting", False))
+        last_raw = None
         deadline = time.monotonic() + self._status_timeout_s
         while True:
             with self._lock:
                 if self._stopped:
                     return False
             state = self._dryer.get_state()
-            if bool(getattr(state, "is_healthy", False)) and bool(getattr(state, attribute, False)):
-                self._logger.info("[DRYER_RELEASE] %s completed", label)
+            healthy = bool(getattr(state, "is_healthy", False))
+            ready = bool(getattr(state, "is_ready", True))
+            ejecting = bool(getattr(state, "ejecting", False))
+            done = bool(getattr(state, "eject_done", False))
+            raw = int(getattr(state, "raw_status", 0) or 0)
+            if raw != last_raw:
+                self._logger.info(
+                    "[DRYER_RELEASE] EJECT status raw=%#06x healthy=%s ready=%s ejecting=%s eject_done=%s",
+                    raw, healthy, ready, ejecting, done,
+                )
+                last_raw = raw
+            if healthy and (ejecting or not ready or (done and not initial_done)):
+                activity_observed = True
+            if healthy and activity_observed and not ejecting and (done or ready):
+                completion = "EJECT_DONE" if done else "return-to-ready"
+                self._logger.info("[DRYER_RELEASE] EJECT completed via %s", completion)
                 return True
             if time.monotonic() >= deadline:
                 self._logger.error(
-                    "[DRYER_RELEASE] %s status was not confirmed within %.1f s",
-                    label,
+                    "[DRYER_RELEASE] EJECT fresh status cycle was not confirmed within %.1f s",
                     self._status_timeout_s,
                 )
                 return False

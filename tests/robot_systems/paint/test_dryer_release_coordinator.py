@@ -34,6 +34,25 @@ class TestDryerReleaseCoordinator(unittest.TestCase):
         self.assertEqual(["next_position", "eject"], events)
         self.assertEqual(5, dryer.get_state.call_count)
 
+    def test_eject_completion_accepts_return_to_ready_after_physical_activity(self) -> None:
+        dryer = MagicMock()
+        dryer.next_position.return_value = True
+        dryer.eject.return_value = True
+        dryer.get_state.side_effect = [
+            SimpleNamespace(is_healthy=True, next_position_done=True),
+            SimpleNamespace(is_healthy=True, next_position_moving=True, next_position_done=False),
+            SimpleNamespace(is_healthy=True, next_position_moving=False, next_position_done=True),
+            SimpleNamespace(is_healthy=True, is_ready=True, ejecting=False, eject_done=False),
+            SimpleNamespace(is_healthy=True, is_ready=False, ejecting=True, eject_done=False, raw_status=0x08),
+            SimpleNamespace(is_healthy=True, is_ready=True, ejecting=False, eject_done=False, raw_status=0x01),
+        ]
+        coordinator = DryerReleaseCoordinator(dryer, status_timeout_s=0.1, status_poll_interval_s=0.0)
+
+        coordinator._run_sequence()
+
+        self.assertEqual((True, ""), coordinator.wait_until_ready_for_release())
+        coordinator.shutdown()
+
     def test_stale_next_position_done_does_not_trigger_eject(self) -> None:
         dryer = MagicMock()
         stale_done = SimpleNamespace(

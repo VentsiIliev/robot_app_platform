@@ -123,16 +123,7 @@ def try_execute_ordered_pickup_and_paint_contact(
         return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
     paint_segments = build_ordered_paint_contact_segments(paint_paths, paint_jobs)
-    if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
-        ok, msg = executor._pickup.execute(
-            prepared_workpiece,
-            pickup_plan=pickup_plan,
-            prepared_continuation_segments=paint_segments,
-        )
-        return ok, msg, total_waypoints
-
-    segments: list[dict] = build_ordered_pickup_segments(pickup_plan)
-    segments.extend(paint_segments)
+    post_pickup_segments = list(paint_segments)
 
     dropoff_prepared_in_chain = False
     final_pose: list[float] | None = list(paint_paths[-1][-1])
@@ -151,9 +142,31 @@ def try_execute_ordered_pickup_and_paint_contact(
                 "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment",
                 total_waypoints,
             )
-        segments.extend(dropoff_segments)
+        post_pickup_segments.extend(dropoff_segments)
         dropoff_prepared_in_chain = True
         final_pose = dropoff_final_pose or final_pose
+
+    if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        _logger.info(
+            "[ORDERED_CHAIN] preparing complete post-retract servo chain: "
+            "segments=%d paint_paths=%d dropoff_prep=%s",
+            len(post_pickup_segments),
+            len(paint_paths),
+            dropoff_prepared_in_chain,
+        )
+        ok, msg = executor._pickup.execute(
+            prepared_workpiece,
+            pickup_plan=pickup_plan,
+            prepared_continuation_segments=post_pickup_segments,
+        )
+        if ok and dropoff_prepared_in_chain:
+            executor._dropoff_unwind_prepared = True
+        if ok and final_pose is not None:
+            executor._last_process_end_pose = list(final_pose)
+        return ok, msg, total_waypoints
+
+    segments: list[dict] = build_ordered_pickup_segments(pickup_plan)
+    segments.extend(post_pickup_segments)
 
     if pickup_plan.vacuum_on_before_moves:
         ok, msg = executor._motion.turn_vacuum_on()
