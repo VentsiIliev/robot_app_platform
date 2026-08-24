@@ -280,6 +280,8 @@ def _build_paint_path_executor(robot_system):
     debug_dump_dir = _build_paint_path_debug_dump_dir()
     paint_config = _get_paint_process_config(robot_system)
     pivot_profile = _get_pivot_profile(robot_system)
+    dryer = robot_system.get_optional_service(ServiceID.DRYER)
+    dryer_eject = getattr(dryer, "eject", None)
 
     def vacuum_pump_enabled() -> bool:
         peripheral_config = robot_system._settings_service.get(SettingsID.PERIPHERALS)
@@ -306,6 +308,7 @@ def _build_paint_path_executor(robot_system):
             if getattr(robot_system, "_navigation", None) is not None else None
         ),
         post_execute_callback=None,
+        on_workpiece_release_verified=(dryer_eject if callable(dryer_eject) else None),
         calibration_position_provider=lambda: (
             getattr(robot_system, "_navigation", None).get_group_position("CALIBRATION")
             if getattr(robot_system, "_navigation", None) is not None else None

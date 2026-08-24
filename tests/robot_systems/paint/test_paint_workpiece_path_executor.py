@@ -21,6 +21,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
     execute_magazine_pickup_release,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    _on_workpiece_release_verified,
     _verify_workpiece_released,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
@@ -49,6 +50,23 @@ def _execution_plan(*jobs, workpiece=None):
 
 
 class TestDropoffReleaseVerification(unittest.TestCase):
+    def test_release_verified_callback_sends_dryer_eject(self):
+        callback = MagicMock(return_value=True)
+        executor = SimpleNamespace(_on_workpiece_release_verified=callback)
+
+        ok, message = _on_workpiece_release_verified(executor)
+
+        self.assertTrue(ok, message)
+        callback.assert_called_once_with()
+
+    def test_release_verified_callback_failure_is_reported(self):
+        executor = SimpleNamespace(_on_workpiece_release_verified=lambda: False)
+
+        ok, message = _on_workpiece_release_verified(executor)
+
+        self.assertFalse(ok)
+        self.assertIn("dryer eject command failed", message)
+
     def test_release_verification_succeeds_when_vacuum_clears(self):
         sensor = MagicMock()
         sensor.is_vacuum_detected.return_value = False

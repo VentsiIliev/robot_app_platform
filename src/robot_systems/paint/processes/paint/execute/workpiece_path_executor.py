@@ -142,6 +142,7 @@ class PaintExecutorDependencies:
     dropoff_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     calibration_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     post_execute_callback: Optional[Callable[[], bool]] = None
+    on_workpiece_release_verified: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
     vacuum_pump_enabled_provider: Optional[Callable[[], bool]] = None
@@ -264,6 +265,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             dropoff_position_provider=legacy_options.get("dropoff_position_provider"),
             calibration_position_provider=legacy_options.get("calibration_position_provider"),
             post_execute_callback=legacy_options.get("post_execute_callback"),
+            on_workpiece_release_verified=legacy_options.get(
+                "on_workpiece_release_verified"
+            ),
             robot_config_provider=legacy_options.get("robot_config_provider"),
             vacuum_pump=legacy_options.get("vacuum_pump"),
             vacuum_pump_enabled_provider=legacy_options.get("vacuum_pump_enabled_provider"),
@@ -303,6 +307,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._dropoff_position_provider = dependencies.dropoff_position_provider
         self._calibration_position_provider = dependencies.calibration_position_provider
         self._post_execute_callback = dependencies.post_execute_callback
+        self._on_workpiece_release_verified = dependencies.on_workpiece_release_verified
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump
         self._vacuum_pump_enabled_provider = dependencies.vacuum_pump_enabled_provider

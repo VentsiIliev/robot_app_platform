@@ -162,12 +162,40 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                     elapsed_s(started),
                 )
                 return False, msg
+            ok, msg = _on_workpiece_release_verified(executor)
+            if not ok:
+                _logger.info(
+                    "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d "
+                    "stage=release_verified_callback elapsed_s=%.3f total_elapsed_s=%.3f",
+                    plan.strategy_name,
+                    index,
+                    elapsed_s(waypoint_started),
+                    elapsed_s(started),
+                )
+                return False, msg
 
     _logger.info(
         "[DROPOFF] strategy=%s completed elapsed_s=%.3f",
         plan.strategy_name,
         elapsed_s(started),
     )
+    return True, ""
+
+
+def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
+    """Notify the composed system after release verification succeeds."""
+    callback = getattr(executor, "_on_workpiece_release_verified", None)
+    if callback is None:
+        return True, ""
+    try:
+        ok = bool(callback())
+    except Exception:
+        _logger.exception("[DROPOFF] Workpiece-release callback raised")
+        return False, "Workpiece released, but the dryer eject command failed"
+    if not ok:
+        _logger.error("[DROPOFF] Dryer eject command was rejected after workpiece release")
+        return False, "Workpiece released, but the dryer eject command failed"
+    _logger.info("[DROPOFF] Dryer eject command sent after workpiece release verification")
     return True, ""
 
 
