@@ -142,6 +142,7 @@ class PaintExecutorDependencies:
     dropoff_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     calibration_position_provider: Optional[Callable[[], Optional[list[float]]]] = None
     post_execute_callback: Optional[Callable[[], bool]] = None
+    dryer_ready_for_release: Optional[Callable[[], tuple[bool, str]]] = None
     on_workpiece_release_verified: Optional[Callable[[], bool]] = None
     robot_config_provider: Optional[Callable[[], object]] = None
     vacuum_pump: object | None = None
@@ -265,6 +266,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             dropoff_position_provider=legacy_options.get("dropoff_position_provider"),
             calibration_position_provider=legacy_options.get("calibration_position_provider"),
             post_execute_callback=legacy_options.get("post_execute_callback"),
+            dryer_ready_for_release=legacy_options.get("dryer_ready_for_release"),
             on_workpiece_release_verified=legacy_options.get(
                 "on_workpiece_release_verified"
             ),
@@ -307,6 +309,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._dropoff_position_provider = dependencies.dropoff_position_provider
         self._calibration_position_provider = dependencies.calibration_position_provider
         self._post_execute_callback = dependencies.post_execute_callback
+        self._dryer_ready_for_release = dependencies.dryer_ready_for_release
         self._on_workpiece_release_verified = dependencies.on_workpiece_release_verified
         self._robot_config_provider = dependencies.robot_config_provider
         self._vacuum_pump = dependencies.vacuum_pump

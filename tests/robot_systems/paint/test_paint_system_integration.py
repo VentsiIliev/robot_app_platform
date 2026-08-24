@@ -131,6 +131,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         )
         dryer_release = MagicMock()
         dryer_release.on_workpiece_release_verified.return_value = True
+        dryer_release.wait_until_ready_for_release.return_value = (True, "")
         robot_system = SimpleNamespace(
             _robot_config=robot_config,
             _navigation=navigation,
@@ -160,7 +161,9 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual("pump", dependencies.vacuum_pump)
         self.assertEqual("live_robot_config", dependencies.robot_config_provider())
         self.assertIsNone(dependencies.post_execute_callback)
+        self.assertEqual((True, ""), dependencies.dryer_ready_for_release())
         self.assertTrue(dependencies.on_workpiece_release_verified())
+        dryer_release.wait_until_ready_for_release.assert_called_once_with()
         dryer_release.on_workpiece_release_verified.assert_called_once_with()
         navigation.move_to_calibration_position.assert_not_called()
         self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], dependencies.pickup_base_position_provider())

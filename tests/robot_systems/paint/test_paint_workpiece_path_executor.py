@@ -23,6 +23,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _on_workpiece_release_verified,
     _verify_workpiece_released,
+    execute_dropoff_preparation_for_executor,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
     build_executed_snapshot_series,
@@ -50,6 +51,22 @@ def _execution_plan(*jobs, workpiece=None):
 
 
 class TestDropoffReleaseVerification(unittest.TestCase):
+    def test_failed_previous_eject_cancels_before_dropoff_motion_with_reason(self):
+        motion = MagicMock()
+        executor = SimpleNamespace(
+            _dryer_ready_for_release=lambda: (False, "EJECT completion was not confirmed"),
+            _motion=motion,
+        )
+
+        ok, message = execute_dropoff_preparation_for_executor(executor)
+
+        self.assertFalse(ok)
+        self.assertEqual(
+            "Dropoff cancelled: EJECT completion was not confirmed",
+            message,
+        )
+        motion.move_pickup_phase.assert_not_called()
+
     def test_release_verified_callback_queues_dryer_sequence(self):
         callback = MagicMock(return_value=True)
         executor = SimpleNamespace(_on_workpiece_release_verified=callback)

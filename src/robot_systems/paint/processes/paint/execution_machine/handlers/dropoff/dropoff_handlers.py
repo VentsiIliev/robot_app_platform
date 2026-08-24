@@ -38,6 +38,17 @@ class DropoffReleasePlan:
 @timed_step(_logger, "prepare_dropoff_unwind")
 def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, str]:
     """Build and execute paint-to-dropoff safe travel, align, and Joint 6 unwind."""
+    dryer_ready = getattr(executor, "_dryer_ready_for_release", None)
+    if callable(dryer_ready):
+        try:
+            ready, reason = dryer_ready()
+        except Exception:
+            _logger.exception("[DROPOFF] Failed to verify dryer readiness before dropoff")
+            return False, "Dropoff cancelled: dryer readiness could not be verified"
+        if not ready:
+            detail = str(reason or "the previous dryer sequence failed")
+            return False, f"Dropoff cancelled: {detail}"
+
     if executor._dropoff_unwind_prepared:
         _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
         return True, ""
