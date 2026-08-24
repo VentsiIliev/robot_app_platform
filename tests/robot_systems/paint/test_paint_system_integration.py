@@ -129,16 +129,16 @@ class TestPaintApplicationWiring(unittest.TestCase):
         config_service.get_snapshot.return_value = PaintProcessConfig(
             safe_travel=PaintSafeTravelConfig(enabled=True, position=[70.0, 80.0, 190.0, 180.0, 0.0, 5.0])
         )
-        dryer = MagicMock()
+        dryer_release = MagicMock()
+        dryer_release.on_workpiece_release_verified.return_value = True
         robot_system = SimpleNamespace(
             _robot_config=robot_config,
             _navigation=navigation,
             _settings_service=settings_service,
             _vacuum_pump="pump",
+            _dryer_release_coordinator=dryer_release,
             _paint_process_config_service=config_service,
-            get_optional_service=MagicMock(
-                side_effect=lambda service_id: dryer if service_id == ServiceID.DRYER else robot_service
-            ),
+            get_optional_service=MagicMock(return_value=robot_service),
         )
         built_executor = object()
 
@@ -161,7 +161,7 @@ class TestPaintApplicationWiring(unittest.TestCase):
         self.assertEqual("live_robot_config", dependencies.robot_config_provider())
         self.assertIsNone(dependencies.post_execute_callback)
         self.assertTrue(dependencies.on_workpiece_release_verified())
-        dryer.eject.assert_called_once_with()
+        dryer_release.on_workpiece_release_verified.assert_called_once_with()
         navigation.move_to_calibration_position.assert_not_called()
         self.assertEqual([application_wiring._get_pickup_base_group_id(), "pose"], dependencies.pickup_base_position_provider())
         self.assertEqual([application_wiring._get_paint_base_group_id(), "pose"], dependencies.base_position_provider())

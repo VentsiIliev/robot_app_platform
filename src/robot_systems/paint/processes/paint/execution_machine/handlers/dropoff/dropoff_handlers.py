@@ -191,11 +191,11 @@ def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
         ok = bool(callback())
     except Exception:
         _logger.exception("[DROPOFF] Workpiece-release callback raised")
-        return False, "Workpiece released, but the dryer eject command failed"
+        return False, "Workpiece released, but the dryer sequence could not be queued"
     if not ok:
-        _logger.error("[DROPOFF] Dryer eject command was rejected after workpiece release")
-        return False, "Workpiece released, but the dryer eject command failed"
-    _logger.info("[DROPOFF] Dryer eject command sent after workpiece release verification")
+        _logger.error("[DROPOFF] Dryer sequence was rejected after workpiece release")
+        return False, "Workpiece released, but the dryer sequence could not be queued"
+    _logger.info("[DROPOFF] Dryer sequence queued after workpiece release verification")
     return True, ""
 
 

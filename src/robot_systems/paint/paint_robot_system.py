@@ -428,6 +428,9 @@ class PaintRobotSystem(BaseRobotSystem):
         self._paint_workpiece_editor_service = application_wiring._build_paint_workpiece_editor_service(self)
         self._paint_capture_snapshot_service = application_wiring._build_capture_snapshot_service(self)
         self._paint_path_preparation_service = application_wiring._build_paint_path_preparation_service(self)
+        self._dryer_release_coordinator = application_wiring._build_dryer_release_coordinator(self)
+        if self._dryer_release_coordinator is not None:
+            self.register_managed_resource(self._dryer_release_coordinator)
         self._paint_path_executor = application_wiring._build_paint_path_executor(self)
         self._paint_matching_service = application_wiring._build_paint_matching_service(
             self,

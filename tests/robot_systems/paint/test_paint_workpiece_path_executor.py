@@ -50,7 +50,7 @@ def _execution_plan(*jobs, workpiece=None):
 
 
 class TestDropoffReleaseVerification(unittest.TestCase):
-    def test_release_verified_callback_sends_dryer_eject(self):
+    def test_release_verified_callback_queues_dryer_sequence(self):
         callback = MagicMock(return_value=True)
         executor = SimpleNamespace(_on_workpiece_release_verified=callback)
 
@@ -65,7 +65,7 @@ class TestDropoffReleaseVerification(unittest.TestCase):
         ok, message = _on_workpiece_release_verified(executor)
 
         self.assertFalse(ok)
-        self.assertIn("dryer eject command failed", message)
+        self.assertIn("dryer sequence could not be queued", message)
 
     def test_release_verification_succeeds_when_vacuum_clears(self):
         sensor = MagicMock()
