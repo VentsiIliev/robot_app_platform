@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Mapping
 
 from src.engine.hardware.dryer.interfaces.i_dryer_controller import IDryerController
@@ -23,12 +24,16 @@ class DryerController(IDryerController):
         register_map: DryerRegisterMap | None = None,
         commands: Mapping[str, int] | None = None,
         statuses: Mapping[str, int] | None = None,
+        homing_timeout_s: float = 10.0,
+        homing_poll_interval_s: float = 0.1,
     ) -> None:
         self._transport = transport
         self._config = config or DryerConfig()
         self._register_map = register_map or DryerRegisterMap()
         self._commands = dryer_commands(commands)
         self._statuses = dryer_statuses(statuses)
+        self._homing_timeout_s = max(0.0, float(homing_timeout_s))
+        self._homing_poll_interval_s = max(0.0, float(homing_poll_interval_s))
         self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -36,7 +41,32 @@ class DryerController(IDryerController):
         """Write persisted defaults, then command the dryer to its next position."""
         if not self.write_data(DryerWriteData.from_config(self._config)):
             return False
-        return self.next_position()
+        if not self.next_position():
+            return False
+        return self._wait_until_homed()
+
+    def _wait_until_homed(self) -> bool:
+        """Wait for both firmware homing flags before reporting initialization success."""
+        deadline = time.monotonic() + self._homing_timeout_s
+        while True:
+            state = self.get_state()
+            self._logger.info(
+                "[DRYER] Homing status raw=%#06x healthy=%s homed=%s homed_done=%s",
+                int(state.raw_status),
+                state.is_healthy,
+                state.is_homed,
+                state.homed_done,
+            )
+            if state.is_healthy and state.is_homed and state.homed_done:
+                self._logger.info("[DRYER] Initialization completed: homing confirmed")
+                return True
+            if time.monotonic() >= deadline:
+                self._logger.error(
+                    "[DRYER] Initialization failed: homing was not confirmed within %.1f s",
+                    self._homing_timeout_s,
+                )
+                return False
+            time.sleep(self._homing_poll_interval_s)
 
     def shutdown(self) -> None:
         self._transport.disconnect()

@@ -34,7 +34,7 @@ class DryerService(IDryerService):
         try:
             controller = self._controller_factory(self._config)
             if not controller.initialize():
-                raise RuntimeError("Dryer initialization write failed")
+                raise RuntimeError("Dryer initialization or homing verification failed")
             self._controller = controller
             self._last_error = None
             return True

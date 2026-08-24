@@ -87,6 +87,7 @@ class TestDryerController(unittest.TestCase):
             DryerConfig(pwm_open_vrytka=777),
             commands={"next_position": 1},
         )
+        transport.read_register.return_value = int(DryerStatus.HOMED | DryerStatus.HOMED_DONE)
 
         self.assertTrue(controller.initialize())
 
@@ -96,6 +97,7 @@ class TestDryerController(unittest.TestCase):
         self.assertEqual(values[1], 0)
         self.assertEqual(values[2], 777)
         self.assertEqual(transport.write_registers.call_args_list[1].args, (1, [1]))
+        transport.read_register.assert_called_once_with(0)
 
     def test_initialize_does_not_send_next_position_when_config_write_fails(self) -> None:
         transport = MagicMock()
@@ -105,6 +107,34 @@ class TestDryerController(unittest.TestCase):
         self.assertFalse(controller.initialize())
 
         transport.write_registers.assert_called_once()
+
+    def test_initialize_fails_when_homing_status_is_not_confirmed(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = int(DryerStatus.READY)
+        controller = DryerController(
+            transport,
+            commands={"next_position": 1},
+            homing_timeout_s=0.0,
+            homing_poll_interval_s=0.0,
+        )
+
+        self.assertFalse(controller.initialize())
+
+        self.assertEqual(transport.write_registers.call_args_list[-1].args, (1, [1]))
+        transport.read_register.assert_called_once_with(0)
+
+    def test_initialize_requires_both_homing_status_flags(self) -> None:
+        for incomplete_status in (DryerStatus.HOMED, DryerStatus.HOMED_DONE):
+            with self.subTest(status=incomplete_status):
+                transport = MagicMock()
+                transport.read_register.return_value = int(incomplete_status)
+                controller = DryerController(
+                    transport,
+                    homing_timeout_s=0.0,
+                    homing_poll_interval_s=0.0,
+                )
+
+                self.assertFalse(controller.initialize())
 
     def test_decodes_every_firmware_status_flag(self) -> None:
         transport = MagicMock()
@@ -142,6 +172,7 @@ class TestDryerController(unittest.TestCase):
     def test_rev_minute_is_transmitted_without_scaling(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig(rev_minute=7))
+        transport.read_register.return_value = int(DryerStatus.HOMED | DryerStatus.HOMED_DONE)
 
         self.assertTrue(controller.initialize())
 
