@@ -45,6 +45,17 @@ class IPaintDashboardService(ABC):
     def reset_errors(self) -> None: ...
 
     @abstractmethod
+    def get_unmatched_paint_settings(self) -> dict[str, float | bool]: ...
+
+    @abstractmethod
+    def save_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ) -> DashboardCommandResult: ...
+
+    @abstractmethod
     def relieve_cable(self) -> DashboardCommandResult: ...
 
     @abstractmethod

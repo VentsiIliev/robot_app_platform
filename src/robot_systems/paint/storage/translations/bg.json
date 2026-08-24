@@ -7,6 +7,12 @@
   },
   "PaintControlsDrawer": {
     "Manual Controls": "Ръчно управление",
+    "Unmatched Painting": "Боядисване без съпоставяне",
+    "Velocity": "Скорост",
+    "Acceleration": "Ускорение",
+    "Press Offset": "Отместване на притискане",
+    "Used only when workpiece matching is off.": "Използва се само когато съпоставянето на детайли е изключено.",
+    "Apply": "Приложи",
     "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
     "Vacuum Pump": "Вакуумна помпа",
     "Fan": "Вентилатор",
@@ -15,7 +21,24 @@
     "Application Shortcuts": "Преки пътища към приложения",
     "Other": "Други"
   },
+  "PaintQuickControlsPanel": {
+    "Quick Paint Controls": "Бързи контроли за боядисване",
+    "Velocity": "Скорост",
+    "Acceleration": "Ускорение",
+    "Press Offset": "Отместване на притискане",
+    "Apply": "Приложи",
+    "Vacuum Pump": "Вакуумна помпа",
+    "Fan": "Вентилатор",
+    "OFF": "ИЗКЛ.",
+    "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)"
+  },
   "PaintDashboard": {
+    "Unmatched Painting": "Боядисване без съпоставяне",
+    "Paint process settings are not available.": "Настройките на процеса за боядисване не са налични.",
+    "Stop the paint process before changing unmatched paint settings.": "Спрете процеса за боядисване, преди да промените настройките без съпоставяне.",
+    "Velocity and acceleration must be greater than 0 and at most 100 percent.": "Скоростта и ускорението трябва да са над 0 и най-много 100 процента.",
+    "Unmatched paint settings saved.": "Настройките за боядисване без съпоставяне са запазени.",
+    "Could not save unmatched paint settings: {error}": "Настройките за боядисване без съпоставяне не можаха да бъдат запазени: {error}",
     "Messages": "Съобщения",
     "No process messages": "Няма съобщения от процеса",
     "Cable Relief": "Освобождаване на кабела",

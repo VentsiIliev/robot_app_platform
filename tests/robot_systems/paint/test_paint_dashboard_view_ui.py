@@ -271,9 +271,12 @@ class TestPaintDashboardUi(unittest.TestCase):
                 ui_config=PaintDashboardUiConfig(
                     show_left_drawer=True,
                     show_manual_controls=False,
+                    show_unmatched_paint_controls=False,
                     show_application_shortcuts=True,
                 ),
             )
+
+        self.assertTrue(view._controls_widget._unmatched_box.isHidden())
 
         callback = MagicMock()
         view.application_shortcut_requested.connect(callback)

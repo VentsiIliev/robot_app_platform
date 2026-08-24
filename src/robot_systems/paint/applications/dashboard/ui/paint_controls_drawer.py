@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QCoreApplication, QSize, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QFrame,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -20,6 +22,7 @@ from pl_gui.settings.settings_view.styles import (
     GROUP_STYLE,
     LABEL_STYLE,
 )
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox
 
 class PaintControlsDrawer(QWidget):
     """Data-driven manual controls hosted by the dashboard drawer."""
@@ -27,12 +30,14 @@ class PaintControlsDrawer(QWidget):
     cable_relief_requested = pyqtSignal()
     device_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
+    unmatched_paint_settings_requested = pyqtSignal(float, float, float)
 
     def __init__(
         self,
         toggle_configs: list,
         *,
         show_manual_controls: bool = True,
+        show_unmatched_paint_controls: bool = True,
         show_shortcuts: bool = True,
         parent=None,
     ) -> None:
@@ -61,6 +66,48 @@ class PaintControlsDrawer(QWidget):
         layout = QVBoxLayout(content_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
+
+        self._unmatched_box = QGroupBox()
+        self._unmatched_box.setStyleSheet(GROUP_STYLE)
+        self._unmatched_box.setVisible(show_unmatched_paint_controls)
+        self._unmatched_box.setMinimumHeight(430)
+        unmatched_layout = QVBoxLayout(self._unmatched_box)
+        unmatched_layout.setContentsMargins(14, 20, 14, 14)
+        unmatched_layout.setSpacing(10)
+        self._unmatched_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
+        self._unmatched_acceleration = self._make_spin_box(0.1, 100.0, 1.0, "%")
+        self._unmatched_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
+        self._unmatched_step_buttons: list[QPushButton] = []
+        self._unmatched_velocity_label = QLabel()
+        self._unmatched_acceleration_label = QLabel()
+        self._unmatched_offset_label = QLabel()
+        for label in (
+            self._unmatched_velocity_label,
+            self._unmatched_acceleration_label,
+            self._unmatched_offset_label,
+        ):
+            label.setMinimumHeight(24)
+        unmatched_layout.addWidget(self._unmatched_velocity_label)
+        unmatched_layout.addWidget(
+            self._build_touch_spin_row("velocity", self._unmatched_velocity)
+        )
+        unmatched_layout.addWidget(self._unmatched_acceleration_label)
+        unmatched_layout.addWidget(
+            self._build_touch_spin_row("acceleration", self._unmatched_acceleration)
+        )
+        unmatched_layout.addWidget(self._unmatched_offset_label)
+        unmatched_layout.addWidget(
+            self._build_touch_spin_row("offset", self._unmatched_offset)
+        )
+        self._unmatched_note = QLabel()
+        self._unmatched_note.setWordWrap(True)
+        unmatched_layout.addWidget(self._unmatched_note)
+        self._unmatched_apply = QPushButton()
+        self._unmatched_apply.setStyleSheet(ACTION_BTN_STYLE)
+        self._unmatched_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._unmatched_apply.clicked.connect(self._on_unmatched_paint_settings)
+        unmatched_layout.addWidget(self._unmatched_apply)
+        layout.addWidget(self._unmatched_box)
 
         self._relief_box = QGroupBox()
         self._relief_box.setStyleSheet(GROUP_STYLE)
@@ -97,6 +144,85 @@ class PaintControlsDrawer(QWidget):
         self._scroll.setWidget(content_widget)
         root.addWidget(self._scroll, 1)
         self.retranslateUi()
+
+    @staticmethod
+    def _make_spin_box(minimum: float, maximum: float, value: float, suffix: str) -> KeyboardDoubleSpinBox:
+        field = KeyboardDoubleSpinBox()
+        field.setRange(minimum, maximum)
+        field.setDecimals(1)
+        field.setSingleStep(1.0)
+        field.setValue(value)
+        field.setSuffix(suffix)
+        field.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        field.setMinimumHeight(48)
+        return field
+
+    def _build_touch_spin_row(
+        self,
+        field_id: str,
+        field: KeyboardDoubleSpinBox,
+    ) -> QWidget:
+        row = QWidget()
+        row.setStyleSheet("background: transparent;")
+        row.setFixedHeight(52)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.addWidget(self._make_step_button(field_id, -1.0, "−"))
+        layout.addWidget(field, 1)
+        layout.addWidget(self._make_step_button(field_id, 1.0, "+"))
+        return row
+
+    def _make_step_button(self, field_id: str, direction: float, text: str) -> QPushButton:
+        button = QPushButton(text)
+        button.setProperty("field_id", field_id)
+        button.setProperty("step_direction", direction)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFixedSize(48, 48)
+        button.setStyleSheet(GHOST_BTN_STYLE)
+        button.setAutoRepeat(True)
+        button.setAutoRepeatDelay(400)
+        button.setAutoRepeatInterval(50)
+        button.clicked.connect(self._on_touch_step)
+        self._unmatched_step_buttons.append(button)
+        return button
+
+    def _on_touch_step(self) -> None:
+        button = self.sender()
+        fields = {
+            "velocity": self._unmatched_velocity,
+            "acceleration": self._unmatched_acceleration,
+            "offset": self._unmatched_offset,
+        }
+        field = fields.get(str(button.property("field_id")))
+        if field is None:
+            return
+        direction = float(button.property("step_direction") or 0.0)
+        field.setValue(field.value() + direction * field.singleStep())
+
+    def _on_unmatched_paint_settings(self) -> None:
+        self.unmatched_paint_settings_requested.emit(
+            self._unmatched_velocity.value(),
+            self._unmatched_acceleration.value(),
+            self._unmatched_offset.value(),
+        )
+
+    def set_unmatched_paint_settings(self, settings: dict) -> None:
+        if not settings:
+            self._unmatched_box.setEnabled(False)
+            return
+        self._unmatched_velocity.setValue(float(settings.get("velocity_percent", 10.0)))
+        self._unmatched_acceleration.setValue(float(settings.get("acceleration_percent", 10.0)))
+        self._unmatched_offset.setValue(float(settings.get("offset_mm", 0.0)))
+        self._unmatched_box.setEnabled(True)
+
+    def set_unmatched_paint_settings_editable(self, editable: bool) -> None:
+        self._unmatched_velocity.setEnabled(editable)
+        self._unmatched_acceleration.setEnabled(editable)
+        self._unmatched_offset.setEnabled(editable)
+        self._unmatched_apply.setEnabled(editable)
+        for button in self._unmatched_step_buttons:
+            button.setEnabled(editable)
 
     def _on_device_toggle(self, checked: bool) -> None:
         button = self.sender()
@@ -176,6 +302,12 @@ class PaintControlsDrawer(QWidget):
 
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Controls"))
+        self._unmatched_box.setTitle(self.tr("Unmatched Painting"))
+        self._unmatched_velocity_label.setText(self.tr("Velocity"))
+        self._unmatched_acceleration_label.setText(self.tr("Acceleration"))
+        self._unmatched_offset_label.setText(self.tr("Press Offset"))
+        self._unmatched_note.setText(self.tr("Used only when workpiece matching is off."))
+        self._unmatched_apply.setText(self.tr("Apply"))
         self._relief_button.setText(self.tr("Relieve Cable (Unwind J6)"))
         self._shortcuts_box.setTitle(self.tr("Application Shortcuts"))
         for item in self._configs:

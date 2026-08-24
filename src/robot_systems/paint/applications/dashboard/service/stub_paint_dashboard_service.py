@@ -23,6 +23,12 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._process_id = process_id
         self._state = "idle"
         self._auxiliary_states = {"pump": False, "fan": False}
+        self._unmatched_paint_settings = {
+            "velocity_percent": 10.0,
+            "acceleration_percent": 10.0,
+            "offset_mm": 0.0,
+            "matching_enabled": False,
+        }
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -63,6 +69,22 @@ class StubPaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         self._state = "idle"
+
+    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+        return dict(self._unmatched_paint_settings)
+
+    def save_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ) -> DashboardCommandResult:
+        self._unmatched_paint_settings.update({
+            "velocity_percent": float(velocity_percent),
+            "acceleration_percent": float(acceleration_percent),
+            "offset_mm": float(offset_mm),
+        })
+        return DashboardCommandResult(True, "Unmatched paint settings saved.")
 
     def relieve_cable(self) -> DashboardCommandResult:
         return DashboardCommandResult(True, "Cable relief completed.")

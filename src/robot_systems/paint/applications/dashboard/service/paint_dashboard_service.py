@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +36,7 @@ class PaintDashboardService(IPaintDashboardService):
         vision_service=None,
         vacuum_pump=None,
         fan_control=None,
+        paint_process_config_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
     ) -> None:
@@ -44,6 +46,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._resolver_getter = resolver_getter
         self._robot_service = robot_service
         self._vision_service = vision_service
+        self._paint_process_config_service = paint_process_config_service
         self._auxiliary_devices = {
             "pump": vacuum_pump,
             "fan": fan_control,
@@ -91,6 +94,54 @@ class PaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         self._process.reset_errors()
+
+    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+        service = self._paint_process_config_service
+        if service is None:
+            return {}
+        config = service.get_snapshot()
+        return {
+            "velocity_percent": float(config.default_paint_velocity_percent),
+            "acceleration_percent": float(config.default_paint_acceleration_percent),
+            "offset_mm": float(config.default_paint_offset_mm),
+            "matching_enabled": bool(config.enable_workpiece_matching),
+        }
+
+    def save_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False,
+                "Stop the paint process before changing unmatched paint settings.",
+            )
+        velocity = float(velocity_percent)
+        acceleration = float(acceleration_percent)
+        offset = float(offset_mm)
+        if not 0.0 < velocity <= 100.0 or not 0.0 < acceleration <= 100.0:
+            return DashboardCommandResult(
+                False,
+                "Velocity and acceleration must be greater than 0 and at most 100 percent.",
+            )
+        try:
+            updated = replace(
+                service.get_snapshot(),
+                default_paint_velocity_percent=velocity,
+                default_paint_acceleration_percent=acceleration,
+                default_paint_offset_mm=offset,
+            )
+            service.save(updated)
+        except Exception as exc:
+            self._logger.exception("Could not save unmatched paint settings")
+            return DashboardCommandResult(False, f"Could not save unmatched paint settings: {exc}")
+        return DashboardCommandResult(True, "Unmatched paint settings saved.")
 
     def relieve_cable(self) -> DashboardCommandResult:
         if self._robot_service is None:

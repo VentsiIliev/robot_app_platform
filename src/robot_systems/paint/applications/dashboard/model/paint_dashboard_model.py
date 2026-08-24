@@ -38,6 +38,21 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+        return self._service.get_unmatched_paint_settings()
+
+    def save_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ):
+        return self._service.save_unmatched_paint_settings(
+            velocity_percent,
+            acceleration_percent,
+            offset_mm,
+        )
+
     def relieve_cable(self):
         return self._service.relieve_cable()
 

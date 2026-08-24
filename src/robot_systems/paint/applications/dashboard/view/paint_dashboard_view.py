@@ -21,11 +21,15 @@ from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
+    PaintQuickControlsPanel,
+)
 from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
 _MAX_MESSAGE_ROWS = 50
 _MESSAGE_SCROLL_MIN_HEIGHT = 60
+_CONTROLS_DRAWER_WIDTH = 400
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
     background: white;
@@ -94,6 +98,7 @@ class PaintDashboardView(IApplicationView):
     cable_relief_requested = pyqtSignal()
     auxiliary_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
+    unmatched_paint_settings_requested = pyqtSignal(float, float, float)
 
     def __init__(
         self,
@@ -122,6 +127,7 @@ class PaintDashboardView(IApplicationView):
         self._auxiliary_toggles = list(auxiliary_toggles or [])
         self._controls_drawer = None
         self._controls_widget = None
+        self._quick_controls = None
         super().__init__("PaintDashboard", parent)
 
     @property
@@ -163,6 +169,7 @@ class PaintDashboardView(IApplicationView):
         self._align_preview_and_card_columns()
         self._install_message_panel()
         self._move_reset_below_cards()
+        self._install_bottom_quick_controls()
         self._expand_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
@@ -172,10 +179,15 @@ class PaintDashboardView(IApplicationView):
         self._install_controls_drawer()
 
     def _install_controls_drawer(self) -> None:
-        self._controls_drawer = DrawerToggle(self, side="left", width=320)
+        self._controls_drawer = DrawerToggle(
+            self,
+            side="left",
+            width=_CONTROLS_DRAWER_WIDTH,
+        )
         self._controls_widget = PaintControlsDrawer(
             self._auxiliary_toggles,
             show_manual_controls=self._ui_config.show_manual_controls,
+            show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
             show_shortcuts=self._ui_config.show_application_shortcuts,
         )
         self._controls_drawer.add_widget(self._controls_widget, fill_height=True)
@@ -184,7 +196,49 @@ class PaintDashboardView(IApplicationView):
         self._controls_widget.application_shortcut_requested.connect(
             self.application_shortcut_requested
         )
+        self._controls_widget.unmatched_paint_settings_requested.connect(
+            self.unmatched_paint_settings_requested
+        )
         self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
+
+    def _install_bottom_quick_controls(self) -> None:
+        if not self._ui_config.show_bottom_quick_controls:
+            return
+        try:
+            main_layout = self._dashboard.layout_manager.main_layout
+            bottom_container = main_layout.itemAt(1).widget()
+            bottom_layout = bottom_container.layout()
+            action_area = bottom_layout.itemAt(0).widget()
+            action_layout = action_area.layout()
+            self._quick_controls = PaintQuickControlsPanel(self._auxiliary_toggles)
+            action_layout.addWidget(self._quick_controls, 0, 0)
+            self._quick_controls.unmatched_paint_settings_requested.connect(
+                self._on_quick_unmatched_paint_settings
+            )
+            self._quick_controls.device_off_requested.connect(self._on_quick_device_off)
+            self._quick_controls.cable_relief_requested.connect(
+                self._on_quick_cable_relief
+            )
+        except Exception:
+            self._quick_controls = None
+
+    def _on_quick_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ) -> None:
+        self.unmatched_paint_settings_requested.emit(
+            velocity_percent,
+            acceleration_percent,
+            offset_mm,
+        )
+
+    def _on_quick_device_off(self, device_id: str) -> None:
+        self.auxiliary_toggle_requested.emit(device_id, False)
+
+    def _on_quick_cable_relief(self) -> None:
+        self.cable_relief_requested.emit()
 
     def _align_preview_and_card_columns(self) -> None:
         try:
@@ -300,9 +354,14 @@ class PaintDashboardView(IApplicationView):
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
-            action_area.hide()
-            bottom_layout.setStretchFactor(action_area, 0)
-            bottom_layout.setStretchFactor(controls, 1)
+            if self._quick_controls is None:
+                action_area.hide()
+                bottom_layout.setStretchFactor(action_area, 0)
+                bottom_layout.setStretchFactor(controls, 1)
+            else:
+                action_area.show()
+                bottom_layout.setStretchFactor(action_area, 1)
+                bottom_layout.setStretchFactor(controls, 1)
         except Exception:
             pass
 
@@ -347,15 +406,31 @@ class PaintDashboardView(IApplicationView):
 
     def set_auxiliary_state(self, device_id: str, enabled: bool) -> None:
         self._controls_widget.set_device_state(device_id, enabled)
+        if self._quick_controls is not None:
+            self._quick_controls.set_device_state(device_id, enabled)
 
     def set_auxiliary_busy(self, device_id: str, busy: bool) -> None:
         self._controls_widget.set_device_busy(device_id, busy)
+        if self._quick_controls is not None:
+            self._quick_controls.set_device_busy(device_id, busy)
 
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._controls_widget.set_cable_relief_busy(busy)
+        if self._quick_controls is not None:
+            self._quick_controls.set_cable_relief_busy(busy)
 
     def set_application_shortcuts(self, shortcuts: list) -> None:
         self._controls_widget.set_application_shortcuts(shortcuts)
+
+    def set_unmatched_paint_settings(self, settings: dict) -> None:
+        self._controls_widget.set_unmatched_paint_settings(settings)
+        if self._quick_controls is not None:
+            self._quick_controls.set_unmatched_paint_settings(settings)
+
+    def set_unmatched_paint_settings_editable(self, editable: bool) -> None:
+        self._controls_widget.set_unmatched_paint_settings_editable(editable)
+        if self._quick_controls is not None:
+            self._quick_controls.set_settings_editable(editable)
 
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
@@ -461,6 +536,9 @@ class PaintDashboardView(IApplicationView):
         self.set_stop_enabled(state.can_stop)
         self.set_pause_enabled(state.can_pause)
         self.set_pause_label(state.pause_label)
+        self.set_unmatched_paint_settings_editable(
+            state.process_state in ("idle", "stopped", "error")
+        )
 
     @staticmethod
     def _state_signature(state) -> tuple:
@@ -513,6 +591,8 @@ class PaintDashboardView(IApplicationView):
             self._message_empty_label.setText(self._translate_text("No process messages"))
         if self._controls_widget is not None:
             self._controls_widget.retranslateUi()
+        if self._quick_controls is not None:
+            self._quick_controls.retranslateUi()
         self._last_card_states.clear()
         self._last_state_signature = None
         if self._last_state is not None:
@@ -548,6 +628,7 @@ class PaintDashboardView(IApplicationView):
             ("Could not read vision state: ", "Could not read vision state: {error}", "error"),
             ("Failed to transform latest contour: ", "Failed to transform latest contour: {error}", "error"),
             ("Failed to create contour transform plot: ", "Failed to create contour transform plot: {error}", "error"),
+            ("Could not save unmatched paint settings: ", "Could not save unmatched paint settings: {error}", "error"),
             ("Saved contour transform debug plot to ", "Saved contour transform debug plot to {image_path}", "image_path"),
         )
         for prefix, template, field in templates:

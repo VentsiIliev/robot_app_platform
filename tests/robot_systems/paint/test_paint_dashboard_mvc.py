@@ -67,6 +67,17 @@ class TestPaintDashboardModel(unittest.TestCase):
         service.relieve_cable.assert_called_once_with()
         service.set_auxiliary_enabled.assert_called_once_with("fan", True)
 
+    def test_unmatched_paint_settings_delegate_through_service(self) -> None:
+        service = MagicMock()
+        settings = {"velocity_percent": 25.0, "acceleration_percent": 35.0, "offset_mm": -4.5}
+        service.get_unmatched_paint_settings.return_value = settings
+        model = PaintDashboardModel(service)
+
+        self.assertEqual(settings, model.get_unmatched_paint_settings())
+        model.save_unmatched_paint_settings(30.0, 40.0, -5.0)
+
+        service.save_unmatched_paint_settings.assert_called_once_with(30.0, 40.0, -5.0)
+
 
 class TestPaintDashboardController(unittest.TestCase):
     def _make_view(self) -> MagicMock:
@@ -167,6 +178,25 @@ class TestPaintDashboardController(unittest.TestCase):
                 unittest.mock.call(reset_state),
             ],
         )
+
+    def test_saved_unmatched_settings_are_reloaded_from_runtime_snapshot(self) -> None:
+        model = MagicMock()
+        result = SimpleNamespace(success=True, message="saved")
+        refreshed = {"velocity_percent": 30.0, "acceleration_percent": 40.0, "offset_mm": -5.0}
+        model.save_unmatched_paint_settings.return_value = result
+        model.get_unmatched_paint_settings.return_value = refreshed
+        view = self._make_view()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, MagicMock())
+
+        controller._on_unmatched_paint_settings(30.0, 40.0, -5.0)
+
+        model.save_unmatched_paint_settings.assert_called_once_with(30.0, 40.0, -5.0)
+        model.get_unmatched_paint_settings.assert_called_once_with()
+        view.set_unmatched_paint_settings.assert_called_once_with(refreshed)
 
     def test_shortcuts_use_visible_shell_apps_and_normal_navigation_topic(self) -> None:
         view = self._make_view()

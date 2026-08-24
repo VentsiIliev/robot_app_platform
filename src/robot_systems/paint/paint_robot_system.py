@@ -495,6 +495,7 @@ class PaintRobotSystem(BaseRobotSystem):
             vision_service=self._vision,
             vacuum_pump=self._vacuum_pump,
             fan_control=self._fan,
+            paint_process_config_service=self._paint_process_config_service,
             target_point_name="camera",
             frame_name="calibration",
         )

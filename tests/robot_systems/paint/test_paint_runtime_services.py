@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 
+from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+
 from src.shared_contracts.events.process_events import (
     ProcessBusyEvent,
     ProcessState,
@@ -33,6 +35,42 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_unmatched_paint_settings_persist_and_replace_runtime_snapshot(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            default_paint_velocity_percent=10.0,
+            default_paint_acceleration_percent=10.0,
+            default_paint_offset_mm=0.0,
+        )
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.save_unmatched_paint_settings(25.0, 35.0, -4.5)
+
+        self.assertTrue(result.success)
+        saved = config_service.save.call_args.args[0]
+        self.assertEqual(25.0, saved.default_paint_velocity_percent)
+        self.assertEqual(35.0, saved.default_paint_acceleration_percent)
+        self.assertEqual(-4.5, saved.default_paint_offset_mm)
+
+    def test_unmatched_paint_settings_cannot_change_while_running(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        config_service = MagicMock()
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.save_unmatched_paint_settings(25.0, 35.0, -4.5)
+
+        self.assertFalse(result.success)
+        config_service.save.assert_not_called()
+
     def test_load_state_maps_process_state_into_dashboard_contract(self) -> None:
         process = MagicMock(process_id="paint")
         robot = MagicMock()

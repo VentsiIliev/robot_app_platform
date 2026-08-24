@@ -18,7 +18,9 @@ class PaintDashboardUiConfig:
     show_jog_widget: bool = True
     show_left_drawer: bool = True
     show_manual_controls: bool = True
-    show_application_shortcuts: bool = True
+    show_unmatched_paint_controls: bool = True
+    show_bottom_quick_controls: bool = True
+    show_application_shortcuts: bool = False
     shortcut_application_names: tuple[str, ...] = ()
 
 

@@ -62,6 +62,9 @@ class PaintDashboardController(
         self._view.cable_relief_requested.connect(self._on_cable_relief)
         self._view.auxiliary_toggle_requested.connect(self._on_auxiliary_toggle)
         self._view.application_shortcut_requested.connect(self._on_application_shortcut)
+        self._view.unmatched_paint_settings_requested.connect(
+            self._on_unmatched_paint_settings
+        )
 
     def load(self) -> None:
         self._active = True
@@ -70,6 +73,9 @@ class PaintDashboardController(
         self._subscribe_dashboard_robot_state()
         self._subscribe_dashboard_live_view_state()
         self._view.apply_dashboard_state(self._model.load())
+        self._view.set_unmatched_paint_settings(
+            self._model.get_unmatched_paint_settings()
+        )
         self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
         self._load_application_shortcuts()
         self._retranslate()
@@ -97,6 +103,25 @@ class PaintDashboardController(
 
     def _on_reset(self) -> None:
         self._view.apply_dashboard_state(self._model.reset_errors())
+
+    def _on_unmatched_paint_settings(
+        self,
+        velocity_percent: float,
+        acceleration_percent: float,
+        offset_mm: float,
+    ) -> None:
+        result = self._model.save_unmatched_paint_settings(
+            velocity_percent,
+            acceleration_percent,
+            offset_mm,
+        )
+        if bool(getattr(result, "success", False)):
+            # Re-read the config-service snapshot after persistence so the controls
+            # reflect the same in-memory values consumed by the paint process.
+            self._view.set_unmatched_paint_settings(
+                self._model.get_unmatched_paint_settings()
+            )
+        self._show_command_result(self._t("Unmatched Painting"), result)
 
     def _on_cable_relief(self) -> None:
         self._view.set_cable_relief_busy(True)
