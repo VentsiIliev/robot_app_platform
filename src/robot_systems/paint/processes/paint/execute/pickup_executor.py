@@ -276,7 +276,7 @@ class PaintPickupExecutor:
         approach_waypoints = waypoints[:contact_index]
         remaining_waypoints = waypoints[contact_index + 1 :]
         if pickup_plan.vacuum_on_before_moves:
-            ok, _msg = self._owner._motion.turn_vacuum_on()
+            ok, _msg = self._owner._motion.turn_vacuum_on(required=True)
             if not ok:
                 return False
 

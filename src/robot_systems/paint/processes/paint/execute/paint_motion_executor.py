@@ -242,19 +242,30 @@ class PaintMotionExecutor:
         return float(np.linalg.norm(point - projection))
 
     @timed_step(_logger, "vacuum_on")
-    def turn_vacuum_on(self) -> tuple[bool, str]:
+    def turn_vacuum_on(self, *, required: bool = False) -> tuple[bool, str]:
         """Enable the vacuum pump before pickup if one is configured."""
         owner = self._owner
         if not owner._is_vacuum_pump_enabled():
+            if required:
+                _logger.error("[PICKUP] Vacuum pump is required but disabled; refusing to start motion")
+                return False, "Servo-contact pickup requires the vacuum pump to be enabled"
             _logger.info("[PICKUP] Vacuum pump ON skipped: disabled by configuration")
             return True, ""
         if owner._vacuum_pump is None:
+            if required:
+                _logger.error("[PICKUP] Vacuum pump is required but unavailable; refusing to start motion")
+                return False, "Servo-contact pickup requires an available vacuum pump"
             _logger.info("[PICKUP] Vacuum pump ON skipped: pump not configured")
             return True, ""
         _logger.info("[PICKUP] Turning vacuum pump ON before pickup")
-        if owner._vacuum_pump.turn_on():
+        try:
+            enabled = bool(owner._vacuum_pump.turn_on())
+        except Exception:
+            _logger.exception("[PICKUP] Vacuum pump ON command failed; refusing to start motion")
+            return False, "Vacuum pump ON command failed; pickup motion was not started"
+        if enabled:
             return True, ""
-        return False, "Pickup approach succeeded, but vacuum pump ON failed"
+        return False, "Vacuum pump failed to turn on; pickup motion was not started"
 
     @timed_step(_logger, "vacuum_off")
     def turn_vacuum_off(self) -> tuple[bool, str]:

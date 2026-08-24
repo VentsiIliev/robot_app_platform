@@ -42,8 +42,9 @@ class _FakeMotion:
         self.vacuum_on = 0
         self.sequences = []
 
-    def turn_vacuum_on(self):
+    def turn_vacuum_on(self, *, required=False):
         self.vacuum_on += 1
+        self.vacuum_required = required
         return True, ""
 
     def move_ordered_pickup_sequence(self, label, segments):
@@ -98,6 +99,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertTrue(executor._execute_servo_contact_pickup_sequence(plan))
 
         self.assertEqual(motion.vacuum_on, 1)
+        self.assertTrue(motion.vacuum_required)
         self.assertEqual(robot.stopped, 1)
         self.assertEqual(
             [label for label, _segments in motion.sequences],
@@ -115,6 +117,37 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
+
+    def test_servo_contact_does_not_move_when_vacuum_on_fails(self):
+        robot = _FakeRobot()
+        motion = _FakeMotion()
+        motion.turn_vacuum_on = lambda *, required=False: (False, "pump failed")
+        pickup_motion = SimpleNamespace(
+            servo_contact_fallback_to_planned_descend=False,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionAfterStart(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        plan = PickupPlan(
+            strategy_name="test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10),
+                PickupWaypoint("contact", [0, 0, 0, 0, 0, 0], 10, 10),
+            ),
+            vacuum_on_before_moves=True,
+            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_waypoint_index=1,
+        )
+
+        self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+        self.assertEqual([], motion.sequences)
+        self.assertEqual([], robot.started)
 
     def test_single_segment_pickup_chain_forces_terminal_blend_zero(self):
         segments = build_paint_pickup_segments([

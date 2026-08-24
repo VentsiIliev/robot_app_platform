@@ -148,7 +148,9 @@ def execute_magazine_pickup_release(
     if not ordered_segments:
         _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
     else:
-        ok, msg = executor._motion.turn_vacuum_on()
+        ok, msg = executor._motion.turn_vacuum_on(
+            required=contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT,
+        )
         if not ok:
             return False, msg
         if contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
