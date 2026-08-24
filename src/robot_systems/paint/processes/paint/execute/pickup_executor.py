@@ -209,6 +209,7 @@ class PaintPickupExecutor:
         prepared_workpiece: WorkpieceExecutionPlan,
         *,
         pickup_plan: PickupPlan | None = None,
+        prepared_continuation_segments: list[dict] | None = None,
     ) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
@@ -229,7 +230,10 @@ class PaintPickupExecutor:
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
         if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
-            ok = self._execute_servo_contact_pickup_sequence(pickup_plan)
+            ok = self._execute_servo_contact_pickup_sequence(
+                pickup_plan,
+                prepared_continuation_segments=prepared_continuation_segments,
+            )
         elif pickup_plan.contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
             _logger.error("[PICKUP] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet")
             return False, "Height-measured pickup Z mode is not wired yet"
@@ -264,7 +268,12 @@ class PaintPickupExecutor:
             return False
         return True
 
-    def _execute_servo_contact_pickup_sequence(self, pickup_plan: PickupPlan) -> bool:
+    def _execute_servo_contact_pickup_sequence(
+        self,
+        pickup_plan: PickupPlan,
+        *,
+        prepared_continuation_segments: list[dict] | None = None,
+    ) -> bool:
         waypoints = list(pickup_plan.waypoints)
         contact_index = 1 if pickup_plan.contact_waypoint_index is None else int(pickup_plan.contact_waypoint_index)
         if contact_index <= 0 or contact_index >= len(waypoints):
@@ -294,9 +303,6 @@ class PaintPickupExecutor:
             if not ok:
                 return False
 
-        if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
-            return False
-
         predicted_retract_pose = list(waypoints[contact_index].pose)
         predicted_retract_pose[2] = float(retract_reference_pose[2])
         continuation_waypoints = remaining_waypoints[1:]
@@ -309,12 +315,18 @@ class PaintPickupExecutor:
                 first.motion_type, first.blendR,
             )
         continuation_segments = build_paint_pickup_segments(continuation_waypoints)
+        continuation_segments.extend(prepared_continuation_segments or [])
         prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
         prepared = prepare_chain(
             continuation_segments, predicted_retract_pose,
             int(self._owner._pickup_tool), int(self._owner._pickup_user),
         ) if continuation_segments and callable(prepare_chain) else None
         prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
+
+        if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
+            if prepared_plan_id:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
+            return False
 
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
@@ -393,10 +405,17 @@ class PaintPickupExecutor:
             return bool(
                 self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
             )
-        return self._move_waypoint_sequence(
+        if not self._move_waypoint_sequence(
             "Pickup retract and continuation after servo contact",
             [retract_waypoint, *continuation_waypoints],
-        )
+        ):
+            return False
+        if prepared_continuation_segments:
+            return bool(self._owner._motion.move_ordered_pickup_sequence(
+                "Paint contact after servo pickup (prepare fallback)",
+                prepared_continuation_segments,
+            ))
+        return True
 
     def _read_fresh_pose(self) -> list[float] | None:
         getter = getattr(self._owner._robot_service, "get_current_position_fresh", None)

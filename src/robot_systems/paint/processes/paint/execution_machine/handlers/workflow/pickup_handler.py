@@ -7,7 +7,10 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
     build_ordered_pickup_segments,
 )
-from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODE_PLANNED
+from src.robot_systems.paint.processes.paint.config import (
+    PICKUP_CONTACT_MODE_PLANNED,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+)
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     fail_paint_motion,
@@ -88,7 +91,10 @@ def try_execute_ordered_pickup_and_paint_contact(
         pickup_plan = executor._pickup.build_plan(prepared_workpiece)
     if pickup_plan is None:
         return False, "Could not compute pickup-to-pivot poses", 0
-    if pickup_plan.contact_mode != PICKUP_CONTACT_MODE_PLANNED:
+    if pickup_plan.contact_mode not in {
+        PICKUP_CONTACT_MODE_PLANNED,
+        PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    }:
         _logger.info(
             "[ORDERED_CHAIN] pickup plus paint contact chain skipped: pickup contact mode=%s",
             pickup_plan.contact_mode,
@@ -116,8 +122,17 @@ def try_execute_ordered_pickup_and_paint_contact(
     if not paint_paths:
         return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
+    paint_segments = build_ordered_paint_contact_segments(paint_paths, paint_jobs)
+    if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        ok, msg = executor._pickup.execute(
+            prepared_workpiece,
+            pickup_plan=pickup_plan,
+            prepared_continuation_segments=paint_segments,
+        )
+        return ok, msg, total_waypoints
+
     segments: list[dict] = build_ordered_pickup_segments(pickup_plan)
-    segments.extend(build_ordered_paint_contact_segments(paint_paths, paint_jobs))
+    segments.extend(paint_segments)
 
     dropoff_prepared_in_chain = False
     final_pose: list[float] | None = list(paint_paths[-1][-1])
