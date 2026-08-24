@@ -16,7 +16,41 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     motion_failure_message,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    open_dropoff_passage_for_preparation,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
+
+
+class TestDropoffPassagePreparation(unittest.TestCase):
+    def test_opens_configured_passage_before_route_planning(self):
+        robot_service = MagicMock()
+        robot_service.set_motion_passage_closed.return_value = True
+        executor = SimpleNamespace(
+            _dropoff_motion_corridor_id="workpiece_drop_opening",
+            _robot_service=robot_service,
+        )
+
+        ok, message = open_dropoff_passage_for_preparation(executor)
+
+        self.assertTrue(ok)
+        self.assertEqual("", message)
+        robot_service.set_motion_passage_closed.assert_called_once_with(
+            "workpiece_drop_opening", False
+        )
+
+    def test_rejects_preparation_when_passage_cannot_open(self):
+        robot_service = MagicMock()
+        robot_service.set_motion_passage_closed.return_value = False
+        executor = SimpleNamespace(
+            _dropoff_motion_corridor_id="workpiece_drop_opening",
+            _robot_service=robot_service,
+        )
+
+        ok, message = open_dropoff_passage_for_preparation(executor)
+
+        self.assertFalse(ok)
+        self.assertIn("failed to open passage 'workpiece_drop_opening'", message)
 
 
 class TestPaintExecutionMachineScaffold(unittest.TestCase):
