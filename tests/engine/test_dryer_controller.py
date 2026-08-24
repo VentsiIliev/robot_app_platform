@@ -65,7 +65,21 @@ class TestDryerController(unittest.TestCase):
         output = "\n".join(captured.output)
         self.assertIn("Sending NEXT_POSITION command=0x00 command_register=1", output)
         self.assertIn("target_position=1000", output)
-        self.assertIn("NEXT_POSITION command write completed success=True", output)
+        self.assertIn("NEXT_POSITION FC6 write completed success=True", output)
+        transport.write_register.assert_called_once_with(1, 0)
+        transport.write_registers.assert_not_called()
+
+    def test_next_position_reports_single_register_write_failure(self) -> None:
+        transport = MagicMock()
+        transport.write_register.side_effect = IOError("write failed")
+        controller = DryerController(transport)
+
+        with self.assertLogs("DryerController", level="INFO") as captured:
+            self.assertFalse(controller.next_position())
+
+        output = "\n".join(captured.output)
+        self.assertIn("NEXT_POSITION single-register write failed", output)
+        self.assertIn("NEXT_POSITION FC6 write completed success=False", output)
 
     def test_initialize_writes_current_config_with_neutral_command(self) -> None:
         transport = MagicMock()
