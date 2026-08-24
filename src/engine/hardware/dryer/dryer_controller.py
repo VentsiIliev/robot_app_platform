@@ -102,17 +102,17 @@ class DryerController(IDryerController):
             int(payload.target_position_next_position),
         )
         try:
-            self._transport.write_register(self._register_map.command, command)
+            self._transport.write_registers(self._register_map.command, [command])
             ok = True
         except Exception:
             self._logger.exception(
-                "[DRYER] NEXT_POSITION single-register write failed command_register=%d command=%#04x",
+                "[DRYER] NEXT_POSITION FC16 single-register write failed command_register=%d command=%#04x",
                 int(self._register_map.command),
                 command,
             )
             ok = False
         self._logger.info(
-            "[DRYER] NEXT_POSITION FC6 write completed success=%s command_register=%d command=%#04x",
+            "[DRYER] NEXT_POSITION FC16 write completed success=%s command_register=%d command=%#04x",
             ok,
             int(self._register_map.command),
             command,
