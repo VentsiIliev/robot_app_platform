@@ -15,6 +15,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.context import Pa
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
     fail_paint_motion,
     finish_paint_motion,
+    motion_failure_message,
     start_paint_motion_if_needed,
     wait_or_guard,
 )
@@ -193,7 +194,10 @@ def try_execute_ordered_pickup_and_paint_contact(
             chain_completed = True
             break
         if not executor._motion.resume_after_interrupted_non_contact_motion("Ordered pickup plus paint contact chain"):
-            return False, f"Ordered pickup and paint contact chain failed with code {result}", total_waypoints
+            return False, motion_failure_message(
+                executor._robot_service,
+                f"Ordered pickup and paint contact chain failed with code {result}",
+            ), total_waypoints
         start_index = executor._motion.consume_ordered_chain_resume_start_index()
         if start_index is None:
             start_index = executor._motion.ordered_motion_chain_resume_index(

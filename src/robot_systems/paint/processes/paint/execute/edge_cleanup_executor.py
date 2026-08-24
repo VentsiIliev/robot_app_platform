@@ -14,6 +14,9 @@ from src.robot_systems.paint.processes.paint.execute.diagnostics import (
     execute_paint_trajectory_with_optional_trace,
     path_length_mm,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+    motion_failure_message,
+)
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _resolve_dropoff_align_pose,
     _resolve_dropoff_safe_travel_waypoints,
@@ -671,7 +674,10 @@ class PaintEdgeCleanupExecutor:
                 "[TIMING] paint_process success=false stage=edge_cleanup_ordered_chain total_elapsed_s=%.3f",
                 elapsed_s(started),
             )
-            return False, f"XY/RZ ordered cleanup chain failed with code {result}", len(command_path)
+            return False, motion_failure_message(
+                self._owner._robot_service,
+                f"XY/RZ ordered cleanup chain failed with code {result}",
+            ), len(command_path)
         self._owner._dropoff_unwind_prepared = True
         self._owner._last_process_end_pose = list(final_pose)
         return True, "", len(command_path)

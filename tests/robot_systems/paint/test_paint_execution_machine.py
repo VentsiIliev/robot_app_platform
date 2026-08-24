@@ -13,6 +13,9 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionState,
     PaintExecutionTransitions,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+    motion_failure_message,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_service import PaintMagazineLoadService
 
 
@@ -230,6 +233,37 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             events,
         )
         self.assertEqual(PaintExecutionState.IDLE, machine.current_state)
+
+class TestMotionFailureMessage(unittest.TestCase):
+    def test_uses_backend_error_from_latest_trajectory_response(self):
+        service = MagicMock()
+        service.get_last_trajectory_command_info.return_value = {
+            "raw": {
+                "error": (
+                    "ordered-chain planning failed: follow path direct contour IK failed: "
+                    "batch_ik_failed index=613"
+                ),
+                "result": -1,
+            }
+        }
+
+        message = motion_failure_message(service, "chain failed with code -1")
+
+        self.assertEqual(
+            "ordered-chain planning failed: follow path direct contour IK failed: "
+            "batch_ik_failed index=613",
+            message,
+        )
+
+    def test_uses_fallback_when_backend_has_no_detail(self):
+        service = MagicMock()
+        service.get_last_trajectory_command_info.return_value = {"raw": {"result": -1}}
+        service.get_connection_details.return_value = {}
+
+        message = motion_failure_message(service, "chain failed with code -1")
+
+        self.assertEqual("chain failed with code -1", message)
+
 
 class _FakePhasedPathExecutor:
     supports_paint_motion_states = True
