@@ -110,18 +110,21 @@ class TestPaintProcessConfig(unittest.TestCase):
 
         self.assertEqual(10.0, flat["default_paint_velocity_percent"])
         self.assertEqual(10.0, flat["default_paint_acceleration_percent"])
+        self.assertEqual(0.0, flat["default_paint_offset_mm"])
 
         restored = PaintProcessSettingsMapper.from_flat_dict(
             {
                 **flat,
                 "default_paint_velocity_percent": 25.0,
                 "default_paint_acceleration_percent": 35.0,
+                "default_paint_offset_mm": -4.5,
             },
             base,
         )
 
         self.assertEqual(25.0, restored.default_paint_velocity_percent)
         self.assertEqual(35.0, restored.default_paint_acceleration_percent)
+        self.assertEqual(-4.5, restored.default_paint_offset_mm)
 
     def test_process_settings_mapper_roundtrips_magazine_load_settings(self) -> None:
         base = PaintProcessConfig(magazine_load=PaintMagazineLoadConfig(enabled=False))
@@ -275,6 +278,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertNotIn("default_paint_velocity_percent", process_keys)
         self.assertNotIn("default_paint_acceleration_percent", process_keys)
         self.assertIn("default_paint_velocity_percent", motion_keys)
+        self.assertIn("default_paint_offset_mm", motion_keys)
         self.assertIn("default_paint_acceleration_percent", motion_keys)
 
     def test_process_settings_schema_has_magazine_load_motion_speed_controls(self) -> None:
