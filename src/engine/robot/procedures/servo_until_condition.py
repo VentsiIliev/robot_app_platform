@@ -359,7 +359,8 @@ class ServoUntilConditionProcedure:
             return False, "retract_position_unreadable"
 
         start_z = current_pose[2]
-        if retract.distance_mm is not None:
+        distance_based = retract.distance_mm is not None
+        if distance_based:
             distance_mm = float(retract.distance_mm)
             if not math.isfinite(distance_mm) or distance_mm <= 0.0:
                 return False, "invalid_retract_distance"
@@ -463,7 +464,12 @@ class ServoUntilConditionProcedure:
             if travelled > maximum_distance + tolerance:
                 failure = "retract_maximum_distance_exceeded"
                 break
-            if current_pose[2] >= target_z - tolerance:
+            reached_target = (
+                travelled >= requested_distance
+                if distance_based
+                else current_pose[2] >= target_z - tolerance
+            )
+            if reached_target:
                 break
             if now - last_forward_progress_at >= progress_timeout:
                 failure = "retract_progress_stalled"
@@ -482,6 +488,32 @@ class ServoUntilConditionProcedure:
         final_pose = self._read_current_pose()
         if final_pose is None:
             return False, "retract_final_position_unreadable"
+        final_travelled = final_pose[2] - start_z
+        if distance_based:
+            if final_travelled < requested_distance:
+                _logger.error(
+                    "[SERVO_UNTIL_CONDITION] retract final clearance insufficient "
+                    "travelled_mm=%.3f required_mm=%.3f",
+                    final_travelled,
+                    requested_distance,
+                )
+                return False, "retract_final_clearance_insufficient"
+            if final_travelled > maximum_distance:
+                _logger.error(
+                    "[SERVO_UNTIL_CONDITION] retract final clearance exceeded "
+                    "travelled_mm=%.3f maximum_mm=%.3f",
+                    final_travelled,
+                    maximum_distance,
+                )
+                return False, "retract_maximum_distance_exceeded"
+            _logger.info(
+                "[SERVO_UNTIL_CONDITION] retract clearance completed "
+                "travelled_mm=%.3f required_mm=%.3f maximum_mm=%.3f",
+                final_travelled,
+                requested_distance,
+                maximum_distance,
+            )
+            return True, ""
         if abs(final_pose[2] - target_z) > tolerance:
             _logger.error(
                 "[SERVO_UNTIL_CONDITION] retract final mismatch final_z=%.3f target_z=%.3f tolerance_mm=%.3f",

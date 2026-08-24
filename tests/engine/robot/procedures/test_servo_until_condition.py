@@ -126,6 +126,40 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual([Direction.MINUS, Direction.PLUS], [item["direction"] for item in robot.started])
         self.assertEqual(2, robot.stopped)
 
+    def test_distance_retract_accepts_overshoot_within_clearance_window(self):
+        class RetractRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 40.0, 0.0, 0.0, 0.0]
+
+            def start_servo_jog(self, axis, direction, *args, **kwargs):
+                ret = super().start_servo_jog(axis, direction, *args, **kwargs)
+                if direction == Direction.PLUS:
+                    self.position[2] += 25.0
+                return ret
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def stop_motion(self):
+                return True
+
+        result = ServoUntilConditionProcedure(
+            RetractRobot(), _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                distance_mm=10.0,
+                linear_mm_s=250.0,
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+                maximum_distance_mm=30.0,
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.retracted)
+
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
         condition = ManualCondition()
