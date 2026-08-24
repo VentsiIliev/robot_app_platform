@@ -4,7 +4,7 @@ from time import perf_counter
 from src.applications.workpiece_editor.editor_core.config import SegmentEditorConfig
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
-from src.robot_systems.paint.component_ids import ServiceID
+from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PAINT_PROJECTION_RULES,
