@@ -77,6 +77,9 @@
   },
   "PaintProcessSettings": {
     "Enable Workpiece Matching": "Активиране на съпоставянето на детайли",
+    "Unmatched Workpiece Painting": "Боядисване на несъпоставен детайл",
+    "Default Paint Velocity": "Скорост на боядисване по подразбиране",
+    "Default Paint Acceleration": "Ускорение на боядисване по подразбиране",
     "Release Z": "Z височина за освобождаване",
     "Dropoff Not Configured": "Dropoff не е конфигуриран",
     "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Задайте и запазете Dropoff групата за движение в Robot Settings, преди да използвате dropoff чрез група за движение.",

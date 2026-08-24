@@ -23,6 +23,7 @@ class PaintWorkpiecePreparationService:
         can_match_fn: Callable[[], bool],
         match_workpiece_fn: Callable,
         default_settings: Optional[dict] = None,
+        default_settings_getter: Optional[Callable[[], dict]] = None,
         transformer=None,
         transformer_getter: Optional[Callable[[], object]] = None,
     ) -> None:
@@ -30,6 +31,7 @@ class PaintWorkpiecePreparationService:
         self._can_match_fn = can_match_fn
         self._match_workpiece_fn = match_workpiece_fn
         self._default_settings = dict(default_settings or {})
+        self._default_settings_getter = default_settings_getter
         self._transformer = transformer
         self._transformer_getter = transformer_getter
 
@@ -69,15 +71,25 @@ class PaintWorkpiecePreparationService:
                 return None, "No matched workpiece"
         else:
             _logger.info("[PREP] Paint workpiece matching is disabled or not available; using captured contour")
+            default_settings = self._current_default_settings()
             return (
                 contour_to_workpiece_raw(
                     captured_contour,
                     workpiece_id="captured",
                     name="Captured contour",
-                    default_settings=self._default_settings,
+                    default_settings=default_settings,
                 ),
                 "Executed captured contour",
             )
+
+    def _current_default_settings(self) -> dict:
+        if self._default_settings_getter is None:
+            return dict(self._default_settings)
+        try:
+            return dict(self._default_settings_getter() or {})
+        except Exception:
+            _logger.exception("[PREP] Failed to read live default paint settings")
+            return dict(self._default_settings)
 
     def _build_matched_workpiece_raw(self, payload: dict, captured_contour, frame) -> dict | None:
         """Build an executable raw workpiece from matched storage data and the live contour."""

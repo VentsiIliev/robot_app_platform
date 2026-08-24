@@ -289,6 +289,8 @@ class PaintProcessConfig:
     # Match the captured contour against the saved workpiece library. When disabled,
     # execute the captured contour directly with the default process settings.
     enable_workpiece_matching: bool = True  # [LIVE SETTINGS]
+    default_paint_velocity_percent: float = 10.0  # [LIVE SETTINGS]
+    default_paint_acceleration_percent: float = 10.0  # [LIVE SETTINGS]
     # Log one end-of-cycle timing table for every paint execution state.
     enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
     # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.

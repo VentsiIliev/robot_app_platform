@@ -77,6 +77,42 @@ class TestPaintWorkpiecePreparationService(unittest.TestCase):
         self.assertEqual(raw["workpieceId"], "captured")
         self.assertEqual(raw["velocity"], "10")
 
+    def test_disabled_matching_uses_live_default_motion_settings(self):
+        defaults = {"velocity": 25.0, "acceleration": 35.0}
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda _contour: None,
+            default_settings={"velocity": 10.0, "acceleration": 10.0},
+            default_settings_getter=lambda: defaults,
+        )
+
+        raw, _description = service.prepare_workpiece(
+            _square(2.0),
+            frame=None,
+            enable_matching=False,
+        )
+
+        self.assertEqual(25.0, raw["velocity"])
+        self.assertEqual(35.0, raw["acceleration"])
+
+    def test_matched_workpiece_keeps_its_own_motion_settings(self):
+        payload = _matched_payload()
+        payload["raw"]["velocity"] = 91.0
+        payload["raw"]["acceleration"] = 42.0
+        service = PaintWorkpiecePreparationService(
+            can_match_fn=lambda: True,
+            match_workpiece_fn=lambda _contour: (True, payload, "matched"),
+            default_settings_getter=lambda: {
+                "velocity": 25.0,
+                "acceleration": 35.0,
+            },
+        )
+
+        raw, _description = service.prepare_workpiece(_square(2.0), frame=None)
+
+        self.assertEqual(91.0, raw["velocity"])
+        self.assertEqual(42.0, raw["acceleration"])
+
     def test_prepare_workpiece_falls_back_to_captured_contour_when_matching_unavailable(self):
         service = PaintWorkpiecePreparationService(
             can_match_fn=lambda: False,

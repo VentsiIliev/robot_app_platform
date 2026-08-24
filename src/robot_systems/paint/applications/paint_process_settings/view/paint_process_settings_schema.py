@@ -198,6 +198,18 @@ def build_process_groups() -> list[SettingGroup]:
 
 def build_motion_speed_groups() -> list[SettingGroup]:
     return [
+        SettingGroup(_t("Unmatched Workpiece Painting"), [
+            _percent_field(
+                "default_paint_velocity_percent",
+                "Default Paint Velocity",
+                10.0,
+            ),
+            _percent_field(
+                "default_paint_acceleration_percent",
+                "Default Paint Acceleration",
+                10.0,
+            ),
+        ]),
         SettingGroup(_t("Pickup"), [
             _profile_table("pickup_motion_profiles", "Pickup Motion Profiles", [
                 _profile("approach", "Approach", 60.0, 50.0, "ptp", 20.0),

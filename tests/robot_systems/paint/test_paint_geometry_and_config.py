@@ -104,6 +104,25 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(restored.interpolation.path_tangent_lookahead_mm, 22.5)
         self.assertEqual(restored.interpolation.path_tangent_deadband_deg, 3.5)
 
+    def test_process_settings_mapper_roundtrips_default_paint_motion(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+
+        self.assertEqual(10.0, flat["default_paint_velocity_percent"])
+        self.assertEqual(10.0, flat["default_paint_acceleration_percent"])
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(
+            {
+                **flat,
+                "default_paint_velocity_percent": 25.0,
+                "default_paint_acceleration_percent": 35.0,
+            },
+            base,
+        )
+
+        self.assertEqual(25.0, restored.default_paint_velocity_percent)
+        self.assertEqual(35.0, restored.default_paint_acceleration_percent)
+
     def test_process_settings_mapper_roundtrips_magazine_load_settings(self) -> None:
         base = PaintProcessConfig(magazine_load=PaintMagazineLoadConfig(enabled=False))
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
@@ -247,6 +266,16 @@ class TestPaintProcessConfig(unittest.TestCase):
         keys = [field.key for group in interpolation for field in group.fields]
 
         self.assertEqual(keys, ["path_tangent_lookahead_mm", "path_tangent_deadband_deg"])
+
+    def test_default_paint_motion_controls_are_under_motion_speeds(self) -> None:
+        tabs = dict(build_paint_process_settings_tabs())
+        process_keys = [field.key for group in tabs["Process"] for field in group.fields]
+        motion_keys = [field.key for group in tabs["Motion Speeds"] for field in group.fields]
+
+        self.assertNotIn("default_paint_velocity_percent", process_keys)
+        self.assertNotIn("default_paint_acceleration_percent", process_keys)
+        self.assertIn("default_paint_velocity_percent", motion_keys)
+        self.assertIn("default_paint_acceleration_percent", motion_keys)
 
     def test_process_settings_schema_has_magazine_load_motion_speed_controls(self) -> None:
         tabs = build_paint_process_settings_tabs()

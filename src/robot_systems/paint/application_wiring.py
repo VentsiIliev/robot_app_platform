@@ -482,10 +482,21 @@ def _build_paint_workpiece_preparation_service(robot_system):
     from src.robot_systems.paint.processes.paint.plan import PaintWorkpiecePreparationService
     from src.robot_systems.paint.domain.contour_editor_schema import build_paint_segment_settings_schema
 
+    segment_defaults = build_paint_segment_settings_schema().get_defaults()
+
+    def live_segment_defaults() -> dict:
+        config = robot_system._paint_process_config_service.get_snapshot()
+        return {
+            **segment_defaults,
+            "velocity": float(config.default_paint_velocity_percent),
+            "acceleration": float(config.default_paint_acceleration_percent),
+        }
+
     return PaintWorkpiecePreparationService(
         can_match_fn=_build_paint_matching_service(robot_system).can_match_saved_workpieces,
         match_workpiece_fn=_build_paint_matching_service(robot_system).match_saved_workpieces,
-        default_settings=build_paint_segment_settings_schema().get_defaults(),
+        default_settings=segment_defaults,
+        default_settings_getter=live_segment_defaults,
         transformer=None,
         transformer_getter=lambda: robot_system.get_shared_vision_resolver()[0],
     )
