@@ -33,8 +33,8 @@ class DryerController(IDryerController):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def initialize(self) -> bool:
-        """Synchronize persisted defaults and command the dryer to home."""
-        return self.home()
+        """Synchronize the dryer firmware with the current persisted defaults."""
+        return self.write_data(DryerWriteData.from_config(self._config))
 
     def shutdown(self) -> None:
         self._transport.disconnect()
@@ -78,9 +78,6 @@ class DryerController(IDryerController):
 
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
         return self.eject(data)
-
-    def home(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(self._commands["home"], data)
 
     def eject(self, data: DryerWriteData | None = None) -> bool:
         return self._write_command(self._commands["eject"], data)

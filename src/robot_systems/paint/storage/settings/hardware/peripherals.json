@@ -81,7 +81,6 @@
       "target_position_next_position": "17"
     },
     "commands": {
-      "home": 0,
       "next_position": 0,
       "eject": 1,
       "close_plate": 2
