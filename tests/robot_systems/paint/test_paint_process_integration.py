@@ -545,7 +545,7 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
             run_while_workpiece_found=True,
-            magazine_load=PaintMagazineLoadConfig(enabled=False),
+            magazine_load=PaintMagazineLoadConfig(enabled=False, release_settle_s=0.5),
         )
         navigation = MagicMock()
         navigation.move_to_calibration_position.return_value = True
@@ -617,16 +617,23 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
         service._path_executor.execute_paint_process.side_effect = (
             lambda *_args, **_kwargs: events.append("execute") or (True, "Paint completed")
         )
+        service._wait_for_capture_settle = MagicMock(
+            side_effect=lambda *_args: events.append("settle") or True
+        )
 
         ok, msg = service.run_once()
 
         self.assertTrue(ok, msg)
         self.assertEqual(
             [
-                "calibration", "capture", "lock", "execute", "calibration",
-                "unlock", "capture", "lock", "unlock",
+                "calibration", "settle", "capture", "lock", "execute",
+                "calibration", "unlock", "settle", "capture", "lock", "unlock",
             ],
             events,
+        )
+        self.assertEqual(
+            [0.5, 0.5],
+            [call.args[0] for call in service._wait_for_capture_settle.call_args_list],
         )
 
     def test_manual_loop_uses_any_captured_contour_when_matching_is_disabled(self):

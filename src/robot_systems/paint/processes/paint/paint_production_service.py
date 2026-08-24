@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 from typing import Callable, Optional
 
 from src.engine.hardware.vacuum_pump.interfaces.i_vacuum_pump_controller import IVacuumPumpController
@@ -142,7 +142,6 @@ class PaintProductionService:
                     completed_cycles=completed_cycles,
                 )
                 return False, msg
-            self._restore_capture_view("after reaching calibration pickup")
             ok, msg = self._run_single_cycle(
                 should_stop,
                 process_config=process_config,
@@ -345,7 +344,32 @@ class PaintProductionService:
         if not ok:
             group_id = getattr(magazine_config, "calibration_group_id", "CALIBRATION")
             return False, f"Failed to move to calibration position '{group_id}'"
+        self._restore_capture_view("after reaching calibration pickup")
+        settle_s = float(getattr(magazine_config, "release_settle_s", 0.0) or 0.0)
+        settle_start = perf_counter()
+        if not self._wait_for_capture_settle(settle_s, should_stop):
+            return False, "Paint process stopped"
+        self._log_phase_timing(
+            "calibration_camera_settle",
+            settle_start,
+            configured_s=settle_s,
+            cycle=1,
+        )
         return True, ""
+
+    def _wait_for_capture_settle(
+        self,
+        seconds: float,
+        should_stop: Callable[[], bool],
+    ) -> bool:
+        deadline = monotonic() + max(0.0, seconds)
+        while monotonic() < deadline:
+            if should_stop() or self._paint_control.should_stop():
+                return False
+            if not self._paint_control.wait_if_paused():
+                return False
+            sleep(min(0.05, max(0.0, deadline - monotonic())))
+        return not should_stop() and not self._paint_control.should_stop()
 
     def _path_debug_plots_enabled(self) -> bool:
         config_service = self._paint_process_config_service
