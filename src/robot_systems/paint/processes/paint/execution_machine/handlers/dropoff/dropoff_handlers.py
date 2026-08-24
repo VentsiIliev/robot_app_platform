@@ -36,6 +36,20 @@ class DropoffReleasePlan:
     waypoints: tuple[DropoffReleaseWaypoint, ...]
 
 
+def open_dropoff_passage_for_preparation(executor: object) -> tuple[bool, str]:
+    """Open the configured passage before planning any route that crosses its lid."""
+    passage_id = str(getattr(executor, "_dropoff_motion_corridor_id", "") or "")
+    if not passage_id:
+        return True, ""
+    setter = getattr(executor._robot_service, "set_motion_passage_closed", None)
+    if not callable(setter):
+        return False, f"Dropoff preparation cancelled: passage control is unavailable for '{passage_id}'"
+    if not setter(passage_id, False):
+        return False, f"Dropoff preparation cancelled: failed to open passage '{passage_id}'"
+    _logger.info("[DROPOFF] Opened motion passage '%s' before dropoff-route planning", passage_id)
+    return True, ""
+
+
 @timed_step(_logger, "prepare_dropoff_unwind")
 def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, str]:
     """Build and execute paint-to-dropoff safe travel, align, and Joint 6 unwind."""
@@ -53,6 +67,11 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
     if executor._dropoff_unwind_prepared:
         _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
         return True, ""
+
+    if _should_prepare_dropoff_align_before_unwind(executor):
+        opened, message = open_dropoff_passage_for_preparation(executor)
+        if not opened:
+            return False, message
 
     if getattr(executor, "_last_pickup_contact_mode", None) == "servo_contact":
         segments, final_pose = build_ordered_dropoff_preparation_segments(executor)

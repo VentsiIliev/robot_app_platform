@@ -45,6 +45,9 @@ class RobotService(IRobotService):
     def register_motion_corridor(self, corridor) -> None:
         self._motion.register_motion_corridor(corridor)
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        return self._motion.set_motion_passage_closed(passage_id, closed)
+
     def move_linear_in_corridor(
         self, corridor_id, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False
     ) -> bool:

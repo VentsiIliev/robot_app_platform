@@ -118,6 +118,10 @@ class IMotionService(ABC):
         """Register one installation-specific constrained passage."""
         raise NotImplementedError
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Add or remove a configured planning-scene passage lid."""
+        return False
+
     def move_linear_in_corridor(
         self,
         corridor_id: str,

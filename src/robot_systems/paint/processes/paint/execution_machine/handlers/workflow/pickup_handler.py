@@ -21,6 +21,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.m
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     build_ordered_dropoff_preparation_segments,
+    open_dropoff_passage_for_preparation,
     _resolve_dropoff_safe_travel_waypoints,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
@@ -146,6 +147,11 @@ def try_execute_ordered_pickup_and_paint_contact(
         post_pickup_segments.extend(dropoff_segments)
         dropoff_prepared_in_chain = True
         final_pose = dropoff_final_pose or final_pose
+
+    if dropoff_prepared_in_chain:
+        opened, message = open_dropoff_passage_for_preparation(executor)
+        if not opened:
+            return False, message, total_waypoints
 
     if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
         _logger.info(

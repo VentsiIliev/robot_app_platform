@@ -50,6 +50,22 @@ class MotionService(IMotionService):
         if self._last_jog_target and self._positions_close(position, self._last_jog_target):
             self._last_jog_target = list(position)
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Forward planning-scene passage state changes to the robot driver."""
+        setter = getattr(self._robot, "set_motion_passage_closed", None)
+        if not callable(setter):
+            self._logger.error("Motion passage control is unavailable passage_id=%s", passage_id)
+            return False
+        try:
+            return bool(setter(str(passage_id), bool(closed)))
+        except Exception:
+            self._logger.exception(
+                "Failed to set motion passage state passage_id=%s closed=%s",
+                passage_id,
+                closed,
+            )
+            return False
+
     def move_ptp(
             self,
             position,
