@@ -27,7 +27,6 @@ class DryerModbusRegister(IntEnum):
 
     TARGET_POSITION_BACKWORD = 15
     TARGET_POSITION_FORWORD = 16
-    TARGET_POSITION_NEXT_POSITION = 17
 
 
 @dataclass(frozen=True)
@@ -51,7 +50,6 @@ class DryerRegisterMap:
     acceleration: int = DryerModbusRegister.ACCELERATION
     target_position_backword: int = DryerModbusRegister.TARGET_POSITION_BACKWORD
     target_position_forword: int = DryerModbusRegister.TARGET_POSITION_FORWORD
-    target_position_next_position: int = DryerModbusRegister.TARGET_POSITION_NEXT_POSITION
 
     @classmethod
     def from_mapping(cls, addresses: Mapping[str, str | int]) -> "DryerRegisterMap":
@@ -78,8 +76,8 @@ class DryerDefaults:
     status: int = 0                           # Register 0
     command: int = 0                          # Register 1
 
-    pwm_open_vrytka: int = 600                # Register 2
-    pwm_close_vrytka: int = 150               # Register 3
+    pwm_open_vrytka: int = 150                # Register 2
+    pwm_close_vrytka: int = 600               # Register 3
     pwm_open_izbutvatel: int = 600            # Register 4
     pwm_close_izbutvatel: int = 180           # Register 5
 
@@ -88,13 +86,12 @@ class DryerDefaults:
     time_delay_move_servo_in: int = 30         # Register 8
     time_delay_move_servo_out: int = 50        # Register 9
 
-    time_delay_move_plate_in: int = 300        # Register 10
-    time_delay_move_plate_out: int = 350       # Register 11
+    time_delay_move_plate_in: int = 520        # Register 10
+    time_delay_move_plate_out: int = 550       # Register 11
 
     time_delay_start_servo_move: int = 50      # Register 12
 
-    # Converted to integer tenths by DryerWriteData before register write.
-    rev_minute: int = 5                        # Register 13 (5 RPM -> 50)
+    rev_minute: int = 50                       # Register 13
 
     # Converted to integer tenths by DryerWriteData before the register write
     # (for example, a UI value of 0.1 is transmitted as 1).
@@ -102,4 +99,3 @@ class DryerDefaults:
 
     target_position_backword: int = 500        # Register 15
     target_position_forword: int = 500         # Register 16
-    target_position_next_position: int = 1000  # Register 17

@@ -26,7 +26,6 @@ class DryerConfig:
     acceleration: float = DryerDefaults.acceleration
     target_position_backword: int = DryerDefaults.target_position_backword
     target_position_forword: int = DryerDefaults.target_position_forword
-    target_position_next_position: int = DryerDefaults.target_position_next_position
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DryerConfig":

@@ -26,16 +26,14 @@ class DryerWriteData:
     acceleration: float = DryerDefaults.acceleration
     target_position_backword: int = DryerDefaults.target_position_backword
     target_position_forword: int = DryerDefaults.target_position_forword
-    target_position_next_position: int = DryerDefaults.target_position_next_position
 
     @classmethod
     def from_config(cls, config: DryerConfig, command: int | DryerCommand = 0) -> "DryerWriteData":
         return cls(command=command, **config.to_dict())
 
     def to_register_values(self) -> list[int]:
-        # The firmware stores speed and acceleration in tenths in integer
-        # Modbus holding registers (for example, 5 RPM -> 50 and 0.1 -> 1).
-        rev_minute_tenths = round(float(self.rev_minute) * 10)
+        # Acceleration is stored in tenths in an integer Modbus holding
+        # register (for example, 0.1 -> 1). rev_minute is already a raw word.
         acceleration_tenths = round(float(self.acceleration) * 10)
         return [
             int(self.status), int(self.command),
@@ -44,8 +42,7 @@ class DryerWriteData:
             int(self.time_delay_move_servo_up), int(self.time_delay_move_servo_down),
             int(self.time_delay_move_servo_in), int(self.time_delay_move_servo_out),
             int(self.time_delay_move_plate_in), int(self.time_delay_move_plate_out),
-            int(self.time_delay_start_servo_move), rev_minute_tenths,
+            int(self.time_delay_start_servo_move), int(self.rev_minute),
             acceleration_tenths,
             int(self.target_position_backword), int(self.target_position_forword),
-            int(self.target_position_next_position),
         ]

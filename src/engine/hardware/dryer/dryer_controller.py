@@ -96,10 +96,9 @@ class DryerController(IDryerController):
         payload = data or self._default_write_data()
         command = int(self._commands["next_position"])
         self._logger.info(
-            "[DRYER] Sending NEXT_POSITION command=%#04x command_register=%d target_position=%d",
+            "[DRYER] Sending NEXT_POSITION command=%#04x command_register=%d",
             command,
             int(self._register_map.command),
-            int(payload.target_position_next_position),
         )
         try:
             self._transport.write_registers(self._register_map.command, [command])

@@ -12,12 +12,11 @@ REGISTER_GROUP = SettingGroup("Servo and Plate Values", [
     _int_field("pwm_close_vrytka", "Gate Close PWM", 150),
     _int_field("pwm_open_izbutvatel", "Ejector Open PWM", 600),
     _int_field("pwm_close_izbutvatel", "Ejector Close PWM", 180),
-    _int_field("rev_minute", "Revolutions per Minute", 5),
+    _int_field("rev_minute", "Revolutions per Minute", 50),
     SettingField("acceleration", "Acceleration", "double_spinbox", default=0.1,
                  min_val=0.0, max_val=6553.5, step=0.1, decimals=1),
     _int_field("target_position_backword", "Target Position Backward", 500),
     _int_field("target_position_forword", "Target Position Forward", 500),
-    _int_field("target_position_next_position", "Target Next Position", 1000),
 ])
 
 TIMING_GROUP = SettingGroup("Timing Values", [

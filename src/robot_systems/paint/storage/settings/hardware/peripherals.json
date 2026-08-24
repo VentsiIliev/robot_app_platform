@@ -77,8 +77,7 @@
       "rev_minute": "13",
       "acceleration": "14",
       "target_position_backword": "15",
-      "target_position_forword": "16",
-      "target_position_next_position": "17"
+      "target_position_forword": "16"
     },
     "commands": {
       "next_position": 1,

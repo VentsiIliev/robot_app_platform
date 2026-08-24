@@ -64,7 +64,6 @@ class TestDryerController(unittest.TestCase):
 
         output = "\n".join(captured.output)
         self.assertIn("Sending NEXT_POSITION command=0x00 command_register=1", output)
-        self.assertIn("target_position=1000", output)
         self.assertIn("NEXT_POSITION FC16 write completed success=True", output)
         transport.write_registers.assert_called_once_with(1, [0])
         transport.write_register.assert_not_called()
@@ -109,27 +108,33 @@ class TestDryerController(unittest.TestCase):
         self.assertTrue(state.next_position_moving)
         self.assertTrue(state.next_position_done)
 
-    def test_writes_current_eighteen_register_block(self) -> None:
+    def test_writes_current_seventeen_register_block(self) -> None:
         transport = MagicMock()
-        controller = DryerController(transport, DryerConfig())
+        config = DryerConfig()
+        controller = DryerController(transport, config)
 
         self.assertTrue(controller.write_data(DryerWriteData()))
 
         address, values = transport.write_registers.call_args.args
         self.assertEqual(address, 0)
-        self.assertEqual(len(values), 18)
-        self.assertEqual(values[2:6], [600, 150, 600, 180])
+        self.assertEqual(len(values), 17)
+        self.assertEqual(values[2:6], [
+            config.pwm_open_vrytka,
+            config.pwm_close_vrytka,
+            config.pwm_open_izbutvatel,
+            config.pwm_close_izbutvatel,
+        ])
         self.assertEqual(values[13], 50)
         self.assertEqual(values[14], 1)
 
-    def test_rev_minute_is_transmitted_in_integer_tenths(self) -> None:
+    def test_rev_minute_is_transmitted_without_scaling(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig(rev_minute=7))
 
         self.assertTrue(controller.initialize())
 
         values = transport.write_registers.call_args.args[1]
-        self.assertEqual(values[13], 70)
+        self.assertEqual(values[13], 7)
 
     def test_acceleration_is_transmitted_in_integer_tenths(self) -> None:
         transport = MagicMock()
