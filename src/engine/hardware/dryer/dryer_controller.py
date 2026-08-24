@@ -33,8 +33,10 @@ class DryerController(IDryerController):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def initialize(self) -> bool:
-        """Synchronize the dryer firmware with the current persisted defaults."""
-        return self.write_data(DryerWriteData.from_config(self._config))
+        """Write persisted defaults, then command the dryer to its next position."""
+        if not self.write_data(DryerWriteData.from_config(self._config)):
+            return False
+        return self.next_position()
 
     def shutdown(self) -> None:
         self._transport.disconnect()

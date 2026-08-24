@@ -80,19 +80,31 @@ class TestDryerController(unittest.TestCase):
         self.assertIn("NEXT_POSITION FC16 single-register write failed", output)
         self.assertIn("NEXT_POSITION FC16 write completed success=False", output)
 
-    def test_initialize_writes_current_config_with_neutral_command(self) -> None:
+    def test_initialize_writes_config_then_sends_next_position(self) -> None:
         transport = MagicMock()
         controller = DryerController(
             transport,
             DryerConfig(pwm_open_vrytka=777),
+            commands={"next_position": 1},
         )
 
         self.assertTrue(controller.initialize())
 
-        address, values = transport.write_registers.call_args.args
+        self.assertEqual(transport.write_registers.call_count, 2)
+        address, values = transport.write_registers.call_args_list[0].args
         self.assertEqual(address, 0)
         self.assertEqual(values[1], 0)
         self.assertEqual(values[2], 777)
+        self.assertEqual(transport.write_registers.call_args_list[1].args, (1, [1]))
+
+    def test_initialize_does_not_send_next_position_when_config_write_fails(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = IOError("config write failed")
+        controller = DryerController(transport, commands={"next_position": 1})
+
+        self.assertFalse(controller.initialize())
+
+        transport.write_registers.assert_called_once()
 
     def test_decodes_every_firmware_status_flag(self) -> None:
         transport = MagicMock()
@@ -133,7 +145,7 @@ class TestDryerController(unittest.TestCase):
 
         self.assertTrue(controller.initialize())
 
-        values = transport.write_registers.call_args.args[1]
+        values = transport.write_registers.call_args_list[0].args[1]
         self.assertEqual(values[13], 7)
 
     def test_acceleration_is_transmitted_in_integer_tenths(self) -> None:
