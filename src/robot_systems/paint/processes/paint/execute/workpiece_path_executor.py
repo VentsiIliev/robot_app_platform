@@ -151,6 +151,7 @@ class PaintExecutorDependencies:
     pickup_condition: object | None = None
     pickup_condition_provider: Optional[Callable[[], object | None]] = None
     paint_process_config_service: object | None = None
+    dropoff_motion_corridor_id: str | None = None
 
 @dataclass(frozen=True)
 class PaintExecutorMotionConfig:
@@ -277,6 +278,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             pickup_condition=legacy_options.get("pickup_condition"),
             pickup_condition_provider=legacy_options.get("pickup_condition_provider"),
             paint_process_config_service=legacy_options.get("paint_process_config_service"),
+            dropoff_motion_corridor_id=legacy_options.get("dropoff_motion_corridor_id"),
         )
         motion_config = motion_config or PaintExecutorMotionConfig(
             enable_vacuum_pump=legacy_options.get("enable_vacuum_pump", True),
@@ -318,6 +320,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._pickup_condition = dependencies.pickup_condition
         self._pickup_condition_provider = dependencies.pickup_condition_provider
         self._paint_process_config_service = dependencies.paint_process_config_service
+        self._dropoff_motion_corridor_id = dependencies.dropoff_motion_corridor_id
 
         # Motion settings.
         self._enable_vacuum_pump = bool(motion_config.enable_vacuum_pump)

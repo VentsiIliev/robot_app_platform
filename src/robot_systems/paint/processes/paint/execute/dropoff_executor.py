@@ -37,6 +37,7 @@ class DropoffWaypoint:
     motion_type: str = "ptp"
     blendR: float = 0.0
     release_here: bool = False
+    corridor_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,47 @@ class MovementGroupDropoffStrategy:
         if pose is None:
             _logger.info("[DROPOFF] movement_group has no configured pose for group '%s'", group_id)
             return DropoffPlan(strategy_name=self.name, waypoints=())
+        if float(pose[2]) < 0.0:
+            if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+                _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
+                return DropoffPlan(strategy_name=self.name, waypoints=())
+            approach_pose = list(pose)
+            approach_pose[2] = 50.0
+            corridor_id = getattr(owner, "_dropoff_motion_corridor_id", None)
+            return DropoffPlan(
+                strategy_name=self.name,
+                waypoints=(
+                    DropoffWaypoint(
+                        label=f"Moving above dropoff group '{group_id}'",
+                        pose=approach_pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="ptp",
+                        blendR=0.0,
+                        release_here=False,
+                    ),
+                    DropoffWaypoint(
+                        label=f"Descending through dropoff group '{group_id}' passage",
+                        pose=pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        blendR=0.0,
+                        release_here=True,
+                        corridor_id=corridor_id,
+                    ),
+                    DropoffWaypoint(
+                        label=f"Retracting through dropoff group '{group_id}' passage",
+                        pose=approach_pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        blendR=0.0,
+                        release_here=False,
+                        corridor_id=corridor_id,
+                    ),
+                ),
+            )
         return DropoffPlan(
             strategy_name=self.name,
             waypoints=(
@@ -190,8 +232,9 @@ class PaintDropoffExecutor:
                     list(waypoint.pose),
                     velocity=waypoint.vel_percent,
                     acceleration=waypoint.acc_percent,
-                    motion_type=waypoint.motion_type,
+                    motion_type="linear" if waypoint.corridor_id else waypoint.motion_type,
                     blendR=waypoint.blendR,
+                    corridor_id=waypoint.corridor_id,
                 ):
                     _logger.info(
                         "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",

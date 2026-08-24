@@ -146,6 +146,7 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("Dropoff Strategy"), [
             SettingField("dropoff_strategy", _t("Strategy"), "combo",
                          default="pickup_origin", choices=["pickup_origin", "movement_group"]),
+            _toggle("dropoff_allow_sub_zero", "Allow Sub-Zero Dropoff"),
         ]),
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),

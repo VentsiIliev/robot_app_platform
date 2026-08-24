@@ -256,6 +256,7 @@ class PaintProcessSettingsMapper:
             "cleanup_z_offset_mm": cleanup.z_offset_mm,
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
+            "dropoff_allow_sub_zero": dropoff.allow_sub_zero_dropoff,
             "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
             "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
             "dropoff_motion_profiles": [
@@ -455,6 +456,9 @@ class PaintProcessSettingsMapper:
         dropoff = replace(
             base.dropoff,
             strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
+            allow_sub_zero_dropoff=bool(
+                flat.get("dropoff_allow_sub_zero", base.dropoff.allow_sub_zero_dropoff)
+            ),
             release_align_vel_percent=float(
                 PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "vel_percent", flat, "dropoff_release_align_vel_percent", base.dropoff.release_align_vel_percent)
             ),

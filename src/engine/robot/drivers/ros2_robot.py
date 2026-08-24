@@ -92,6 +92,10 @@ class Ros2Robot(IRobot):
         logger.debug("stop_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        setter = getattr(self._client, "set_motion_passage_closed", None)
+        return bool(callable(setter) and setter(passage_id, closed))
+
     def stop_motion(self) -> int:
         logger.debug("stop_motion →")
         ret = self._client.stop_motion()

@@ -1069,6 +1069,33 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("stop_servo_jog error: %s", e, exc_info=True)
             return -1
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        try:
+            response = requests.post(
+                f"{self.server_url}/safety/passages/{passage_id}",
+                json={"closed": bool(closed)},
+                timeout=5,
+            )
+            raw = response.json()
+            success = bool(
+                response.ok
+                and raw.get("success")
+                and raw.get("closed") == bool(closed)
+            )
+            if success:
+                self._mark_available()
+            else:
+                logger.error(
+                    "set_motion_passage_closed rejected: http=%s raw=%s",
+                    response.status_code,
+                    raw,
+                )
+            return success
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("set_motion_passage_closed error: %s", exc, exc_info=True)
+            return False
+
 
     def stop_motion(self):
         logger.debug("stop_motion → POST /stop")

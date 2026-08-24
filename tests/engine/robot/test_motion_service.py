@@ -1,9 +1,11 @@
 import unittest
+import time
 from unittest.mock import MagicMock, patch
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.motion_sequence import MotionSequenceSegment
 from src.engine.robot.services.motion_service import MotionService
+from src.engine.robot.safety import MotionCorridor
 
 
 class TestMotionService(unittest.TestCase):
@@ -87,6 +89,109 @@ class TestMotionService(unittest.TestCase):
         self.robot.move_linear.side_effect = ConnectionError
         result = self.service.move_linear([100, 0, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)
+
+    def test_regular_linear_move_below_zero_is_blocked(self):
+        result = self.service.move_linear([100, 50, -1, 0, 0, 0], 0, 0, 20, 20)
+        self.assertFalse(result)
+        self.robot.move_linear.assert_not_called()
+
+    def test_ptp_move_below_zero_is_blocked(self):
+        result = self.service.move_ptp([100, 50, -1, 0, 0, 0], 0, 0, 20, 20)
+        self.assertFalse(result)
+        self.robot.move_ptp.assert_not_called()
+
+    def test_regular_move_cannot_escape_from_sub_zero_pose(self):
+        self.robot.get_current_position_fresh.return_value = [100, 50, -50, 0, 0, 0]
+
+        result = self.service.move_linear([100, 50, 25, 0, 0, 0], 0, 0, 20, 20)
+
+        self.assertFalse(result)
+        self.robot.move_linear.assert_not_called()
+
+    def test_registered_corridor_allows_bounded_sub_zero_linear_move(self):
+        self.robot.get_current_position.return_value = [100, 50, 25, 0, 0, 0]
+        self.robot.move_linear.return_value = 0
+        self.robot.set_motion_passage_closed.return_value = True
+        self.service.register_motion_corridor(MotionCorridor(
+            corridor_id="test_passage",
+            x_min=90,
+            x_max=110,
+            y_min=40,
+            y_max=60,
+            z_min=-100,
+            entry_z_max=50,
+            maximum_velocity=25,
+            maximum_acceleration=20,
+        ))
+
+        result = self.service.move_linear_in_corridor(
+            "test_passage", [100, 50, -50, 0, 0, 0], 0, 0, 25, 20, wait_to_reach=False
+        )
+
+        self.assertTrue(result)
+        self.robot.move_linear.assert_called_once()
+        self.robot.set_motion_passage_closed.assert_called_once_with("test_passage", False)
+
+    def test_corridor_rejects_ptp_by_not_exposing_a_ptp_corridor_operation(self):
+        self.assertFalse(hasattr(self.service, "move_ptp_in_corridor"))
+
+    def test_corridor_rejects_target_outside_xy_tunnel(self):
+        self.robot.get_current_position.return_value = [100, 50, 25, 0, 0, 0]
+        self.service.register_motion_corridor(MotionCorridor(
+            corridor_id="test_passage",
+            x_min=90,
+            x_max=110,
+            y_min=40,
+            y_max=60,
+            z_min=-100,
+            entry_z_max=50,
+            maximum_velocity=25,
+            maximum_acceleration=20,
+        ))
+
+        result = self.service.move_linear_in_corridor(
+            "test_passage", [120, 50, -50, 0, 0, 0], 0, 0, 25, 20
+        )
+
+        self.assertFalse(result)
+        self.robot.move_linear.assert_not_called()
+
+    def test_corridor_allows_linear_retract_back_above_zero(self):
+        self.robot.get_current_position.return_value = [100, 50, -50, 0, 0, 0]
+        self.robot.move_linear.return_value = 0
+        self.robot.set_motion_passage_closed.return_value = True
+        self.service.register_motion_corridor(MotionCorridor(
+            corridor_id="test_passage",
+            x_min=90,
+            x_max=110,
+            y_min=40,
+            y_max=60,
+            z_min=-100,
+            entry_z_max=50,
+            maximum_velocity=25,
+            maximum_acceleration=20,
+        ))
+
+        result = self.service.move_linear_in_corridor(
+            "test_passage", [100, 50, 25, 0, 0, 0], 0, 0, 25, 20
+        )
+
+        self.assertTrue(result)
+        self.robot.move_linear.assert_called_once()
+        self.robot.set_motion_passage_closed.assert_called_once_with("test_passage", True)
+
+    def test_servo_jog_is_stopped_when_live_pose_reaches_zero_floor(self):
+        self.robot.start_servo_jog.return_value = 0
+        self.robot.get_current_position_fresh.return_value = [100, 50, -0.1, 0, 0, 0]
+        self.robot.stop_servo_jog.return_value = 0
+
+        result = self.service.start_servo_jog(RobotAxis.Z, Direction.MINUS, linear_mm_s=10)
+
+        self.assertEqual(result, 0)
+        deadline = time.monotonic() + 0.3
+        while not self.robot.stop_servo_jog.called and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.robot.stop_servo_jog.assert_called_once_with()
 
     # ------------------------------------------------------------------
     # move_sequence

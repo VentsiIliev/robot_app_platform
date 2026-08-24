@@ -1,6 +1,7 @@
 import math
 import logging
 import time
+from threading import Event, Thread
 from typing import Callable, List, Optional
 
 from ..interfaces.i_motion_service import IMotionService
@@ -8,6 +9,7 @@ from ..interfaces.i_robot import IRobot
 from ..interfaces.i_safety_checker import ISafetyChecker
 from ..enums.axis import RobotAxis, Direction
 from ..motion_sequence import MotionSequenceSegment
+from ..safety.motion_corridor import MotionCorridor, MotionCorridorRegistry
 from src.shared_contracts.events.robot_events import RobotTopics
 
 
@@ -20,6 +22,7 @@ class MotionService(IMotionService):
     _STOP_ATTEMPTS = 3
     _JOG_TARGET_REUSE_POS_MM = 5.0
     _JOG_TARGET_REUSE_ANG_DEG = 2.0
+    _SERVO_FLOOR_POLL_S = 0.02
 
     def __init__(
             self,
@@ -36,6 +39,9 @@ class MotionService(IMotionService):
         self._last_jog_target: List[float] = []
         self._logger = logging.getLogger(self.__class__.__name__)
         self._cached_position: List[float] = []
+        self._motion_corridors = MotionCorridorRegistry()
+        self._servo_floor_stop = Event()
+        self._servo_floor_thread: Thread | None = None
         if messaging_service:
             messaging_service.subscribe(RobotTopics.POSITION, self._on_position)
 
@@ -57,7 +63,7 @@ class MotionService(IMotionService):
         self._last_jog_target = []
         started = time.perf_counter()
         safety_started = time.perf_counter()
-        violations = self._safety.get_violations(position)
+        violations = self._motion_violations(position)
         self._logger.info(
             "[TIMING] move_ptp_safety_check elapsed_s=%.3f violations=%d",
             time.perf_counter() - safety_started,
@@ -71,12 +77,13 @@ class MotionService(IMotionService):
                                acceleration)
             driver_started = time.perf_counter()
 
-            ret = self._robot.move_ptp(
+            ret = self._robot.move_linear(
                 position,
                 tool,
                 user,
                 velocity,
                 acceleration,
+                0.0,
                 blocking=wait_to_reach
             )
 
@@ -121,9 +128,9 @@ class MotionService(IMotionService):
             wait_cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         self._last_jog_target = []
-        violations = self._safety.get_violations(position)
+        violations = self._motion_violations(position)
         if violations:
-            self._logger.warning("move_ptp blocked by safety limits: %s", ", ".join(violations))
+            self._logger.warning("move_linear blocked by safety limits: %s", ", ".join(violations))
             return False
         try:
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
@@ -162,7 +169,7 @@ class MotionService(IMotionService):
 
         safety_started = time.perf_counter()
         for index, segment in enumerate(segments):
-            violations = self._safety.get_violations(segment.position)
+            violations = self._motion_violations(segment.position)
             if violations:
                 self._logger.warning(
                     "move_sequence blocked by safety limits at segment %d: %s",
@@ -223,7 +230,7 @@ class MotionService(IMotionService):
 
         safety_started = time.perf_counter()
         for index, segment in enumerate(segments):
-            violations = self._safety.get_violations(segment.position)
+            violations = self._motion_violations(segment.position)
             if violations:
                 self._logger.warning(
                     "move_custom_sequence blocked by safety limits at segment %d: %s",
@@ -304,7 +311,7 @@ class MotionService(IMotionService):
                     else:
                         target[idx] += direction.value * step
                 self._logger.info(f"Target -> {target}")
-                violations = self._safety.get_violations(target)
+                violations = self._motion_violations(target)
                 if violations:
                     self._logger.warning(
                         "start_jog blocked by safety limits: axis=%s dir=%s step=%s → %s",
@@ -339,7 +346,7 @@ class MotionService(IMotionService):
             starter = getattr(self._robot, "start_servo_jog", None)
             if not callable(starter):
                 return -1
-            return int(starter(
+            result = int(starter(
                 axis,
                 direction,
                 linear_mm_s=linear_mm_s,
@@ -348,6 +355,9 @@ class MotionService(IMotionService):
                 tool=tool,
                 user=user,
             ))
+            if result == 0:
+                self._start_servo_floor_supervisor()
+            return result
         except Exception:
             self._logger.exception("start_servo_jog failed")
             return -1
@@ -374,6 +384,7 @@ class MotionService(IMotionService):
 
     def stop_servo_jog(self) -> int:
         self._last_jog_target = []
+        self._servo_floor_stop.set()
         try:
             stopper = getattr(self._robot, "stop_servo_jog", None)
             if not callable(stopper):
@@ -386,6 +397,7 @@ class MotionService(IMotionService):
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
         self._last_jog_target = []
+        self._servo_floor_stop.set()
         for attempt in range(1, self._STOP_ATTEMPTS + 1):
             try:
                 success = self._robot.stop_motion() == 0
@@ -409,9 +421,134 @@ class MotionService(IMotionService):
             return get_status()
         return None
 
+    def register_motion_corridor(self, corridor: MotionCorridor) -> None:
+        self._motion_corridors.register(corridor)
+
+    def move_linear_in_corridor(
+            self,
+            corridor_id: str,
+            position: List[float],
+            tool: int,
+            user: int,
+            velocity: float,
+            acceleration: float,
+            blendR: float = 0.0,
+            wait_to_reach: bool = False,
+    ) -> bool:
+        corridor = self._motion_corridors.get(corridor_id)
+        if corridor is None:
+            self._logger.error("Corridor LIN rejected: unknown corridor_id=%s", corridor_id)
+            return False
+        target = list(position or [])
+        current_getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(current_getter):
+            current_getter = self._robot.get_current_position
+        current_value = current_getter()
+        if not isinstance(current_value, (list, tuple)) or len(current_value) < 3:
+            current_value = self._robot.get_current_position()
+        current = list(current_value or self._cached_position or [])
+        violations = []
+        if len(target) < 3 or len(current) < 3:
+            violations.append("current and target poses must contain XYZ")
+        else:
+            if not corridor.contains_xy(current):
+                violations.append("current pose is outside corridor XY bounds")
+            if not corridor.contains_xy(target):
+                violations.append("target pose is outside corridor XY bounds")
+            current_z = float(current[2])
+            target_z = float(target[2])
+            descending = 0.0 <= current_z <= corridor.entry_z_max and corridor.z_min <= target_z < 0.0
+            retracting = corridor.z_min <= current_z < 0.0 and 0.0 <= target_z <= corridor.entry_z_max
+            if not (descending or retracting):
+                violations.append("move must be a corridor descent or retract across Z=0")
+            if float(velocity) > corridor.maximum_velocity:
+                violations.append("velocity exceeds corridor limit")
+            if float(acceleration) > corridor.maximum_acceleration:
+                violations.append("acceleration exceeds corridor limit")
+        if violations:
+            self._logger.error(
+                "Corridor LIN rejected corridor_id=%s: %s",
+                corridor_id,
+                ", ".join(violations),
+            )
+            return False
+        passage_setter = getattr(self._robot, "set_motion_passage_closed", None)
+        if not callable(passage_setter):
+            self._logger.error("Corridor LIN rejected: ROS passage-lid control is unavailable")
+            return False
+        if descending and not passage_setter(corridor_id, False):
+            self._logger.error("Corridor LIN rejected: failed to open passage lid corridor_id=%s", corridor_id)
+            return False
+        try:
+            ret = self._robot.move_linear(
+                target,
+                tool,
+                user,
+                velocity,
+                acceleration,
+                max(0.0, float(blendR)),
+                blocking=wait_to_reach,
+            )
+            success = ret >= 0
+            if wait_to_reach and success:
+                success = self._wait_for_position(target)
+            if descending and not success:
+                passage_setter(corridor_id, True)
+            if retracting and success and not passage_setter(corridor_id, True):
+                self._logger.error("Corridor retract completed but passage lid failed to close corridor_id=%s", corridor_id)
+                return False
+            return bool(success)
+        except Exception:
+            self._logger.exception("Corridor LIN failed corridor_id=%s", corridor_id)
+            if descending:
+                passage_setter(corridor_id, True)
+            return False
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _start_servo_floor_supervisor(self) -> None:
+        """Stop unrestricted continuous Servo before it can continue below Z=0."""
+        self._servo_floor_stop.set()
+        previous = self._servo_floor_thread
+        if previous is not None and previous.is_alive():
+            previous.join(timeout=self._SERVO_FLOOR_POLL_S * 2.0)
+        self._servo_floor_stop = Event()
+        stop_event = self._servo_floor_stop
+        self._servo_floor_thread = Thread(
+            target=self._supervise_servo_floor,
+            args=(stop_event,),
+            name="robot-servo-z-floor",
+            daemon=True,
+        )
+        self._servo_floor_thread.start()
+
+    def _supervise_servo_floor(self, stop_event: Event) -> None:
+        getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = self._robot.get_current_position
+        while not stop_event.wait(self._SERVO_FLOOR_POLL_S):
+            try:
+                position = list(getter() or self._cached_position or [])
+                if len(position) >= 3 and float(position[2]) <= 0.0:
+                    self._logger.error(
+                        "Servo stopped by platform Z floor at z=%.3f; sub-zero motion requires corridor LIN",
+                        float(position[2]),
+                    )
+                    stopper = getattr(self._robot, "stop_servo_jog", None)
+                    if callable(stopper):
+                        stopper()
+                    return
+            except Exception:
+                self._logger.exception("Servo Z-floor supervision failed; stopping Servo fail-safe")
+                stopper = getattr(self._robot, "stop_servo_jog", None)
+                if callable(stopper):
+                    try:
+                        stopper()
+                    except Exception:
+                        self._logger.exception("Failed to stop Servo after supervision failure")
+                return
 
     @staticmethod
     def _tool_frame_delta(position: List[float], axis_idx: int,
@@ -538,3 +675,21 @@ class MotionService(IMotionService):
             (sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx),
             (-sy, cy * sx, cy * cx),
         )
+    def _motion_violations(self, position: List[float]) -> List[str]:
+        violations = list(self._safety.get_violations(position))
+        current_getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(current_getter):
+            current_getter = self._robot.get_current_position
+        current = current_getter()
+        if not isinstance(current, (list, tuple)) or len(current) < 3:
+            current = self._robot.get_current_position()
+        current = current or self._cached_position or []
+        if current and len(current) >= 3 and isinstance(current[2], (int, float)) and float(current[2]) < 0.0:
+            violations.append(
+                "Platform Z floor violation: a sub-zero pose may only retract through its registered corridor LIN"
+            )
+        if position and len(position) >= 3 and float(position[2]) < 0.0:
+            violations.append(
+                "Platform Z floor violation: sub-zero motion requires a registered corridor LIN"
+            )
+        return violations

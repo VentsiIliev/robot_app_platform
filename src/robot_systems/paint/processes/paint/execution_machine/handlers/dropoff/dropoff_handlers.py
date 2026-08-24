@@ -25,6 +25,7 @@ class DropoffReleaseWaypoint:
     motion_type: str = "ptp"
     blendR: float = 0.0
     release_here: bool = False
+    corridor_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -158,8 +159,9 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                 list(waypoint.pose),
                 velocity=waypoint.vel_percent,
                 acceleration=waypoint.acc_percent,
-                motion_type=waypoint.motion_type,
+                motion_type="linear" if waypoint.corridor_id else waypoint.motion_type,
                 blendR=waypoint.blendR,
+                corridor_id=waypoint.corridor_id,
             ):
                 _logger.info(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -317,6 +319,41 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
         if pose is None:
             _logger.info("[DROPOFF] movement_group has no configured pose for group 'Dropoff'")
             return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
+        if float(pose[2]) < 0.0:
+            if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+                _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
+                return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
+            approach_pose = list(pose)
+            approach_pose[2] = 50.0
+            corridor_id = getattr(executor, "_dropoff_motion_corridor_id", None)
+            return DropoffReleasePlan(
+                strategy_name=strategy_name,
+                waypoints=(
+                    DropoffReleaseWaypoint(
+                        label="Moving above dropoff group 'Dropoff'",
+                        pose=approach_pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                    ),
+                    DropoffReleaseWaypoint(
+                        label="Descending through dropoff group 'Dropoff' passage",
+                        pose=pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        release_here=True,
+                        corridor_id=corridor_id,
+                    ),
+                    DropoffReleaseWaypoint(
+                        label="Retracting through dropoff group 'Dropoff' passage",
+                        pose=approach_pose,
+                        vel_percent=dropoff.release_align_vel_percent,
+                        acc_percent=dropoff.release_align_acc_percent,
+                        motion_type="linear",
+                        corridor_id=corridor_id,
+                    ),
+                ),
+            )
         return DropoffReleasePlan(
             strategy_name=strategy_name,
             waypoints=(

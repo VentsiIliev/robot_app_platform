@@ -42,6 +42,16 @@ class RobotService(IRobotService):
     def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
         return self._motion.move_linear(position, tool, user, velocity, acceleration, blendR, wait_to_reach)
 
+    def register_motion_corridor(self, corridor) -> None:
+        self._motion.register_motion_corridor(corridor)
+
+    def move_linear_in_corridor(
+        self, corridor_id, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False
+    ) -> bool:
+        return self._motion.move_linear_in_corridor(
+            corridor_id, position, tool, user, velocity, acceleration, blendR, wait_to_reach
+        )
+
     def move_sequence(
         self,
         segments: List[MotionSequenceSegment],

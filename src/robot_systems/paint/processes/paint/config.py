@@ -113,6 +113,7 @@ class PaintDropoffConfig:
 
     # Return from pivot completion back to the pickup align pose before release.
     strategy: str = "pickup_origin"
+    allow_sub_zero_dropoff: bool = False  # [LIVE SETTINGS]
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
     release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]

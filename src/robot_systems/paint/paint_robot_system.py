@@ -357,6 +357,7 @@ class PaintRobotSystem(BaseRobotSystem):
         return self._pickup_condition
 
     def on_start(self) -> None:
+        from src.engine.robot.safety import MotionCorridor
         from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service import (
             PaintDashboardService,
         )
@@ -388,6 +389,25 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  calibration_move_blendR=PAINT_PROCESS_CONFIG.navigation_return.calibration_move_blendR,
                                                  paint_process_config_service=self._paint_process_config_service)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
+        self._dropoff_motion_corridor_id = "workpiece_drop_opening"
+        dropoff_pose = self._navigation.get_group_position("Dropoff")
+        if dropoff_pose is None or len(dropoff_pose) < 3:
+            logging.getLogger(__name__).warning(
+                "Dropoff corridor was not registered because movement group 'Dropoff' has no pose"
+            )
+        else:
+            dropoff_x, dropoff_y = float(dropoff_pose[0]), float(dropoff_pose[1])
+            self._robot.register_motion_corridor(MotionCorridor(
+                corridor_id=self._dropoff_motion_corridor_id,
+                x_min=dropoff_x - 70.0,
+                x_max=dropoff_x + 70.0,
+                y_min=dropoff_y - 70.0,
+                y_max=dropoff_y + 70.0,
+                z_min=-200.0,
+                entry_z_max=100.0,
+                maximum_velocity=80.0,
+                maximum_acceleration=60.0,
+            ))
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)

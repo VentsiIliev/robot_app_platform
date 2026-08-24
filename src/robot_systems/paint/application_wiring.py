@@ -331,6 +331,7 @@ def _build_paint_path_executor(robot_system):
         pickup_condition=getattr(robot_system, "_pickup_condition", None),
         pickup_condition_provider=getattr(robot_system, "_get_pickup_condition", None),
         paint_process_config_service=getattr(robot_system, "_paint_process_config_service", None),
+        dropoff_motion_corridor_id=getattr(robot_system, "_dropoff_motion_corridor_id", None),
     )
     motion_config = PaintExecutorMotionConfig(
         enable_vacuum_pump=paint_config.enable_vacuum_pump,

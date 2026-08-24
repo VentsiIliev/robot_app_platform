@@ -74,6 +74,10 @@ class IRobot(ABC):
         """Optional stop for continuous ServoJog."""
         return -1
 
+    def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
+        """Optionally add/remove a configured ROS planning-scene passage lid."""
+        return False
+
     def set_active_workobject(self, user: int) -> bool:
         """Optional active workobject selection for state/current-position reporting."""
         return True

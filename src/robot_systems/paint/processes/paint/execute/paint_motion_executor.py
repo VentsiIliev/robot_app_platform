@@ -29,6 +29,7 @@ class PaintMotionExecutor:
         acceleration: float,
         motion_type: str = "ptp",
         blendR: float = 0.0,
+        corridor_id: str | None = None,
     ) -> bool:
         """Execute one carried-workpiece robot move with explicit motion limits."""
         if velocity is None or acceleration is None:
@@ -42,7 +43,22 @@ class PaintMotionExecutor:
             [round(v, 3) for v in pose],
         )
         while True:
-            if str(motion_type or "ptp").strip().lower() == "linear":
+            if corridor_id is not None:
+                corridor_move = getattr(owner._robot_service, "move_linear_in_corridor", None)
+                if not callable(corridor_move):
+                    _logger.error("[PICKUP] Corridor LIN unavailable corridor_id=%s", corridor_id)
+                    return False
+                ok = corridor_move(
+                    corridor_id=corridor_id,
+                    position=pose,
+                    tool=owner._pickup_tool,
+                    user=owner._pickup_user,
+                    velocity=velocity,
+                    acceleration=acceleration,
+                    blendR=max(0.0, float(blendR)),
+                    wait_to_reach=True,
+                )
+            elif str(motion_type or "ptp").strip().lower() == "linear":
                 ok = owner._robot_service.move_linear(
                     position=pose,
                     tool=owner._pickup_tool,

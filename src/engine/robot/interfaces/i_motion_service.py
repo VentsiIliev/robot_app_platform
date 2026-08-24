@@ -113,3 +113,21 @@ class IMotionService(ABC):
     def get_current_position_fresh(self) -> List[float]:
         """Return a fresh pose when a safety-critical motion loop requires it."""
         return self.get_current_position()
+
+    def register_motion_corridor(self, corridor) -> None:
+        """Register one installation-specific constrained passage."""
+        raise NotImplementedError
+
+    def move_linear_in_corridor(
+        self,
+        corridor_id: str,
+        position: List[float],
+        tool: int,
+        user: int,
+        velocity: float,
+        acceleration: float,
+        blendR: float = 0.0,
+        wait_to_reach: bool = False,
+    ) -> bool:
+        """Execute a bounded LIN move that may cross the platform Z=0 floor."""
+        return False

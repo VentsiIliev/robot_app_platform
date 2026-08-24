@@ -86,6 +86,7 @@
     "Default Paint Velocity": "Default Paint Velocity",
     "Default Paint Acceleration": "Default Paint Acceleration",
     "Release Z": "Release Z",
+    "Allow Sub-Zero Dropoff": "Allow Sub-Zero Dropoff",
     "Dropoff Not Configured": "Dropoff Not Configured",
     "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.": "Set and save the Dropoff movement group in Robot Settings before using movement-group dropoff.",
     "Reason": "Reason",
