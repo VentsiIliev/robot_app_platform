@@ -13,6 +13,14 @@ class ContourTransformDebugResult:
     image_path: str | None = None
 
 
+@dataclass(frozen=True)
+class DashboardCommandResult:
+    success: bool
+    message: str
+    device_id: str | None = None
+    enabled: bool | None = None
+
+
 class IPaintDashboardService(ABC):
 
     @abstractmethod
@@ -35,6 +43,15 @@ class IPaintDashboardService(ABC):
 
     @abstractmethod
     def reset_errors(self) -> None: ...
+
+    @abstractmethod
+    def relieve_cable(self) -> DashboardCommandResult: ...
+
+    @abstractmethod
+    def get_auxiliary_states(self) -> dict[str, bool]: ...
+
+    @abstractmethod
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult: ...
 
     @abstractmethod
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult: ...

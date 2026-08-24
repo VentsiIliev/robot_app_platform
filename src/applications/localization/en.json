@@ -30,5 +30,24 @@
     "Email": "Email",
     "Logout": "Logout",
     "Not logged in": "Not logged in"
+  },
+  "RobotJogWidget": {
+    "Cartesian": "Cartesian",
+    "Joint": "Joint",
+    "Current Position": "Current Position",
+    "Joint Positions": "Joint Positions",
+    "Linear Step": "Linear Step",
+    "Linear Speed": "Linear Speed",
+    "Rotation Step": "Rotation Step",
+    "Rotation Speed": "Rotation Speed",
+    "Joint Step": "Joint Step",
+    "Linear": "Linear",
+    "Rotational": "Rotational",
+    "Joints": "Joints",
+    "Invert Z": "Invert Z",
+    "Mode": "Mode",
+    "Frame": "Frame",
+    "Step": "Step",
+    "Servo": "Servo"
   }
 }

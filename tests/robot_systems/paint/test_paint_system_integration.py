@@ -11,24 +11,42 @@ from src.robot_systems.paint import application_wiring
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
 from src.robot_systems.paint.paint_robot_system import PaintRobotSystem
 from src.robot_systems.paint.processes.paint.config import PaintProcessConfig, PaintSafeTravelConfig
+from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
 class TestPaintApplicationWiring(unittest.TestCase):
 
     def test_build_dashboard_application_passes_dashboard_service_and_messaging(self):
-        robot_system = SimpleNamespace(_dashboard_service=object())
+        dashboard_ui_config = PaintDashboardUiConfig()
+        robot_system = SimpleNamespace(
+            _dashboard_service=object(),
+            ui_config=dashboard_ui_config,
+        )
         messaging = object()
         built_widget = object()
+        jog_service = object()
         factory = MagicMock()
         factory.build.return_value = built_widget
+        factory_cls = MagicMock(return_value=factory)
 
-        with patch("src.robot_systems.paint.applications.dashboard.PaintDashboardFactory", return_value=factory):
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.PaintDashboardFactory",
+            factory_cls,
+        ), patch(
+            "src.applications.base.robot_jog_service_builder.build_robot_system_jog_service",
+            return_value=jog_service,
+        ):
             app = application_wiring._build_dashboard_application(robot_system)
             app.register(messaging)
             widget = app.create_widget()
 
         self.assertIs(widget, built_widget)
-        factory.build.assert_called_once_with(robot_system._dashboard_service, messaging=messaging)
+        factory_cls.assert_called_once_with(ui_config=dashboard_ui_config)
+        factory.build.assert_called_once_with(
+            robot_system._dashboard_service,
+            messaging=messaging,
+            jog_service=jog_service,
+        )
 
     def test_build_paint_path_preparation_service_wires_vision_robot_and_navigation_context(self):
         transformer = object()

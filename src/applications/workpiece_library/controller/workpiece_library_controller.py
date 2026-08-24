@@ -11,6 +11,7 @@ from src.applications.base.styled_message_box import ask_yes_no, show_warning
 
 from src.engine.core.i_messaging_service import IMessagingService
 from src.shared_contracts.events.workpiece_events import WorkpieceTopics
+from src.shared_contracts.events.shell_events import ShellTopics
 _logger = logging.getLogger(__name__)
 
 class WorkpieceLibraryController(IApplicationController):
@@ -117,7 +118,7 @@ class WorkpieceLibraryController(IApplicationController):
             return
         payload = {"raw": raw, "storage_id": storage_id}
         self._broker.publish(WorkpieceTopics.OPEN_IN_EDITOR, payload)
-        self._broker.publish("shell/navigate", {"app": "WorkpieceEditor"})
+        self._broker.publish(ShellTopics.NAVIGATE, {"app": "WorkpieceEditor"})
         self._pending_open_payload = payload
         QTimer.singleShot(100, self._publish_pending_open_in_editor)
         _logger.info("Published OPEN_IN_EDITOR storage_id=%s", storage_id)

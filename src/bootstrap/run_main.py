@@ -198,15 +198,45 @@ def main() -> None:
     # Wire broker → shell navigation
     # Used to automatically open the workpiece editor when the "open in editor"
     # button is clicked in the library
+    from src.shared_contracts.events.shell_events import ApplicationShortcut, ShellTopics
+
     def _on_navigate(payload: dict) -> None:
         if not session.is_authenticated():
             _LOGGER.warning("Ignoring shell navigation while logged out")
             return
         app_name = payload.get("app") if isinstance(payload, dict) else str(payload)
-        if app_name:
+        visible_names = {item.name for item in getattr(shell, "_app_descriptors", [])}
+        if app_name in visible_names:
             shell.show_app(app_name)
+        elif app_name:
+            _LOGGER.warning("Ignoring navigation to non-visible application '%s'", app_name)
 
-    ctx.messaging_service.subscribe("shell/navigate", _on_navigate)
+    def _visible_applications(payload: object) -> list[ApplicationShortcut]:
+        excluded = set()
+        if isinstance(payload, dict):
+            excluded = {str(name) for name in payload.get("exclude", [])}
+        folder_specs = {
+            item.folder_id: item for item in robot_app.__class__.shell.folders
+        }
+        return [
+            ApplicationShortcut(
+                app_name=item.name,
+                label=item.name,
+                icon=item.icon_str,
+                folder_id=item.folder_id,
+                folder_name=folder_specs[item.folder_id].display_name
+                if item.folder_id in folder_specs
+                else "",
+                folder_translation_key=folder_specs[item.folder_id].translation_key
+                if item.folder_id in folder_specs
+                else "",
+            )
+            for item in getattr(shell, "_app_descriptors", [])
+            if item.name not in excluded
+        ]
+
+    ctx.messaging_service.subscribe(ShellTopics.NAVIGATE, _on_navigate)
+    ctx.messaging_service.subscribe(ShellTopics.VISIBLE_APPLICATIONS, _visible_applications)
     if fullscreen:
         shell.showFullScreen()
     else:

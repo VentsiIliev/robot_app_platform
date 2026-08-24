@@ -227,13 +227,23 @@ def _get_paint_pivot_side(robot_system=None) -> str:
 
 
 def _build_dashboard_application(robot_system):
+    from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service
     from src.applications.base.widget_application import WidgetApplication
     from src.robot_systems.paint.applications.dashboard import PaintDashboardFactory
 
+    dashboard_ui_config = robot_system.ui_config
+    jog_service = (
+        build_robot_system_jog_service(robot_system)
+        if dashboard_ui_config.show_jog_widget
+        else None
+    )
     return WidgetApplication(
-        widget_factory=lambda ms: PaintDashboardFactory().build(
+        widget_factory=lambda ms: PaintDashboardFactory(
+            ui_config=dashboard_ui_config,
+        ).build(
             robot_system._dashboard_service,
             messaging=ms,
+            jog_service=jog_service,
         )
     )
 

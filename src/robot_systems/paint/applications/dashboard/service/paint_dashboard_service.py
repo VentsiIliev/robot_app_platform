@@ -17,6 +17,7 @@ from src.shared_contracts.events.process_events import ProcessState
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState, DashboardState
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
+    DashboardCommandResult,
     IPaintDashboardService,
 )
 
@@ -32,6 +33,8 @@ class PaintDashboardService(IPaintDashboardService):
         resolver_getter=None,
         robot_service=None,
         vision_service=None,
+        vacuum_pump=None,
+        fan_control=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
     ) -> None:
@@ -41,6 +44,10 @@ class PaintDashboardService(IPaintDashboardService):
         self._resolver_getter = resolver_getter
         self._robot_service = robot_service
         self._vision_service = vision_service
+        self._auxiliary_devices = {
+            "pump": vacuum_pump,
+            "fan": fan_control,
+        }
         self._target_point_name = str(target_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "calibration").strip().lower()
         self._geometry_scale_cache = GeometryScaleCache()
@@ -84,6 +91,43 @@ class PaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         self._process.reset_errors()
+
+    def relieve_cable(self) -> DashboardCommandResult:
+        if self._robot_service is None:
+            return DashboardCommandResult(False, "Robot service is not available.")
+        try:
+            success = bool(self._robot_service.unwind_joint6())
+        except Exception as exc:
+            self._logger.exception("Dashboard cable relief failed")
+            return DashboardCommandResult(False, f"Cable relief failed: {exc}")
+        return DashboardCommandResult(
+            success,
+            "Cable relief completed." if success else "Cable relief command was rejected.",
+        )
+
+    def get_auxiliary_states(self) -> dict[str, bool]:
+        states = {}
+        for device_id, device in self._auxiliary_devices.items():
+            if device is None:
+                continue
+            try:
+                states[device_id] = bool(device.read_state())
+            except Exception:
+                self._logger.exception("Could not read %s state", device_id)
+        return states
+
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
+        device = self._auxiliary_devices.get(device_id)
+        if device is None:
+            return DashboardCommandResult(False, f"{device_id.title()} is not available.", device_id)
+        try:
+            result = device.turn_on() if enabled else device.turn_off()
+            success = result is not False
+        except Exception as exc:
+            self._logger.exception("Could not switch %s", device_id)
+            return DashboardCommandResult(False, f"Could not switch {device_id}: {exc}", device_id)
+        state = "ON" if enabled else "OFF"
+        return DashboardCommandResult(success, f"{device_id.title()} switched {state}.", device_id, enabled)
 
     def _robot_status_card(self) -> DashboardCardState:
         robot = self._robot_service

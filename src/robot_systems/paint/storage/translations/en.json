@@ -5,9 +5,33 @@
   "DeviceControlView": {
     "Manage availability, inspect state, and run device commands.": "Manage availability, inspect state, and run device commands."
   },
+  "PaintControlsDrawer": {
+    "Manual Controls": "Manual Controls",
+    "Relieve Cable (Unwind J6)": "Relieve Cable (Unwind J6)",
+    "Vacuum Pump": "Vacuum Pump",
+    "Fan": "Fan",
+    "ON": "ON",
+    "OFF": "OFF",
+    "Application Shortcuts": "Application Shortcuts",
+    "Other": "Other"
+  },
   "PaintDashboard": {
     "Messages": "Messages",
     "No process messages": "No process messages",
+    "Cable Relief": "Cable Relief",
+    "Manual Control": "Manual Control",
+    "Command failed.": "Command failed.",
+    "Robot service is not available.": "Robot service is not available.",
+    "Cable relief completed.": "Cable relief completed.",
+    "Cable relief command was rejected.": "Cable relief command was rejected.",
+    "Cable relief failed: {error}": "Cable relief failed: {error}",
+    "Pump is not available.": "Pump is not available.",
+    "Fan is not available.": "Fan is not available.",
+    "Pump switched ON.": "Pump switched ON.",
+    "Pump switched OFF.": "Pump switched OFF.",
+    "Fan switched ON.": "Fan switched ON.",
+    "Fan switched OFF.": "Fan switched OFF.",
+    "Could not switch {device}: {error}": "Could not switch {device}: {error}",
     "Reset Errors": "Reset Errors",
     "Pause": "Pause",
     "Resume": "Resume",

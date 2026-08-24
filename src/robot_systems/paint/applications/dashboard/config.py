@@ -5,6 +5,29 @@ from dataclasses import dataclass
 from pl_gui.dashboard.config import ActionButtonConfig, CardConfig, DashboardConfig
 
 
+@dataclass(frozen=True)
+class AuxiliaryToggleConfig:
+    device_id: str
+    label: str
+
+
+@dataclass(frozen=True)
+class PaintDashboardUiConfig:
+    """Feature visibility supplied by the owning robot system."""
+
+    show_jog_widget: bool = True
+    show_left_drawer: bool = True
+    show_manual_controls: bool = True
+    show_application_shortcuts: bool = True
+    shortcut_application_names: tuple[str, ...] = ()
+
+
+PAINT_DASHBOARD_AUXILIARY_TOGGLES = [
+    AuxiliaryToggleConfig(device_id="pump", label="Vacuum Pump"),
+    AuxiliaryToggleConfig(device_id="fan", label="Fan"),
+]
+
+
 @dataclass
 class PaintDashboardConfig(DashboardConfig):
     show_placeholders: bool = False

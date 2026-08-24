@@ -5,9 +5,33 @@
   "DeviceControlView": {
     "Manage availability, inspect state, and run device commands.": "Управлявайте наличността, преглеждайте състоянието и изпълнявайте команди."
   },
+  "PaintControlsDrawer": {
+    "Manual Controls": "Ръчно управление",
+    "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
+    "Vacuum Pump": "Вакуумна помпа",
+    "Fan": "Вентилатор",
+    "ON": "ВКЛ.",
+    "OFF": "ИЗКЛ.",
+    "Application Shortcuts": "Преки пътища към приложения",
+    "Other": "Други"
+  },
   "PaintDashboard": {
     "Messages": "Съобщения",
     "No process messages": "Няма съобщения от процеса",
+    "Cable Relief": "Освобождаване на кабела",
+    "Manual Control": "Ръчно управление",
+    "Command failed.": "Командата е неуспешна.",
+    "Robot service is not available.": "Услугата за робота не е налична.",
+    "Cable relief completed.": "Освобождаването на кабела завърши.",
+    "Cable relief command was rejected.": "Командата за освобождаване на кабела беше отхвърлена.",
+    "Cable relief failed: {error}": "Освобождаването на кабела е неуспешно: {error}",
+    "Pump is not available.": "Помпата не е налична.",
+    "Fan is not available.": "Вентилаторът не е наличен.",
+    "Pump switched ON.": "Помпата е включена.",
+    "Pump switched OFF.": "Помпата е изключена.",
+    "Fan switched ON.": "Вентилаторът е включен.",
+    "Fan switched OFF.": "Вентилаторът е изключен.",
+    "Could not switch {device}: {error}": "Неуспешно превключване на {device}: {error}",
     "Reset Errors": "Нулирай грешките",
     "Pause": "Пауза",
     "Resume": "Продължи",

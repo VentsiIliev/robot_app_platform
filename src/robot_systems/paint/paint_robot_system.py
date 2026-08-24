@@ -46,6 +46,7 @@ from src.robot_systems.paint.service_builders import (
     build_vacuum_sensor_service,
 )
 from src.robot_systems.paint.targeting.provider import PaintRobotSystemTargetingProvider
+from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 from src.shared_contracts.declarations import (
     ApplicationSpec,
     FolderSpec,
@@ -70,6 +71,8 @@ _logger = logging.getLogger(__name__)
 
 
 class PaintRobotSystem(BaseRobotSystem):
+
+    ui_config = PaintDashboardUiConfig()
 
 
     movement_groups = [
@@ -413,6 +416,8 @@ class PaintRobotSystem(BaseRobotSystem):
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
         self._vacuum_pump = self.get_optional_service(ServiceID.VACUUM_PUMP)
         self.register_managed_resource(self._vacuum_pump)
+        self._fan = self.get_optional_service(ServiceID.FAN)
+        self.register_managed_resource(self._fan)
         self._dryer = self.get_optional_service(ServiceID.DRYER)
         self.register_managed_resource(self._dryer)
         self._pickup_condition = self._build_pickup_condition()
@@ -488,6 +493,8 @@ class PaintRobotSystem(BaseRobotSystem):
             resolver_getter=lambda: self.get_shared_vision_resolver()[1],
             robot_service=self._robot,
             vision_service=self._vision,
+            vacuum_pump=self._vacuum_pump,
+            fan_control=self._fan,
             target_point_name="camera",
             frame_name="calibration",
         )

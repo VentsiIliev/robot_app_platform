@@ -6,6 +6,7 @@ from src.robot_systems.paint.applications.dashboard.dashboard_state import (
 )
 from src.robot_systems.paint.applications.dashboard.service.i_paint_dashboard_service import (
     ContourTransformDebugResult,
+    DashboardCommandResult,
     IPaintDashboardService,
 )
 
@@ -21,6 +22,7 @@ class StubPaintDashboardService(IPaintDashboardService):
     def __init__(self, process_id: str = "paint") -> None:
         self._process_id = process_id
         self._state = "idle"
+        self._auxiliary_states = {"pump": False, "fan": False}
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -61,6 +63,18 @@ class StubPaintDashboardService(IPaintDashboardService):
 
     def reset_errors(self) -> None:
         self._state = "idle"
+
+    def relieve_cable(self) -> DashboardCommandResult:
+        return DashboardCommandResult(True, "Cable relief completed.")
+
+    def get_auxiliary_states(self) -> dict[str, bool]:
+        return dict(self._auxiliary_states)
+
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
+        if device_id not in self._auxiliary_states:
+            return DashboardCommandResult(False, f"{device_id.title()} is not available.", device_id)
+        self._auxiliary_states[device_id] = enabled
+        return DashboardCommandResult(True, f"{device_id.title()} switched {'ON' if enabled else 'OFF'}.", device_id, enabled)
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return ContourTransformDebugResult(False, "No usable contour detected (stub service).")

@@ -16,6 +16,7 @@ from src.robot_systems.paint.processes.paint.dashboard_live_view_events import (
     PaintDashboardLiveViewTopics,
 )
 from src.shared_contracts.events.robot_events import RobotTopics
+from src.shared_contracts.events.shell_events import ApplicationShortcut, ShellTopics
 
 
 def _signal() -> MagicMock:
@@ -53,6 +54,18 @@ class TestPaintDashboardModel(unittest.TestCase):
         service.pause.assert_called_once_with()
         service.resume.assert_called_once_with()
         service.reset_errors.assert_called_once_with()
+
+    def test_manual_controls_delegate_through_service(self) -> None:
+        service = MagicMock()
+        service.get_auxiliary_states.return_value = {"pump": True, "fan": False}
+        model = PaintDashboardModel(service)
+
+        self.assertEqual(model.get_auxiliary_states(), {"pump": True, "fan": False})
+        model.relieve_cable()
+        model.set_auxiliary_enabled("fan", True)
+
+        service.relieve_cable.assert_called_once_with()
+        service.set_auxiliary_enabled.assert_called_once_with("fan", True)
 
 
 class TestPaintDashboardController(unittest.TestCase):
@@ -153,6 +166,33 @@ class TestPaintDashboardController(unittest.TestCase):
                 unittest.mock.call(pause_state),
                 unittest.mock.call(reset_state),
             ],
+        )
+
+    def test_shortcuts_use_visible_shell_apps_and_normal_navigation_topic(self) -> None:
+        view = self._make_view()
+        view.application_shortcuts_enabled = True
+        view.shortcut_application_names = ("RobotSettings",)
+        broker = MagicMock()
+        robot_settings = ApplicationShortcut("RobotSettings", "RobotSettings", "mdi.robot-industrial")
+        hidden_by_config = ApplicationShortcut("CameraSettings", "CameraSettings", "fa5s.camera")
+        broker.request.return_value = [robot_settings, hidden_by_config]
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(MagicMock(), view, broker)
+
+        controller._load_application_shortcuts()
+        controller._on_application_shortcut("RobotSettings")
+
+        broker.request.assert_called_once_with(
+            ShellTopics.VISIBLE_APPLICATIONS,
+            {"exclude": ["PaintDashboard"]},
+        )
+        view.set_application_shortcuts.assert_called_once_with([robot_settings])
+        broker.publish.assert_called_once_with(
+            ShellTopics.NAVIGATE,
+            {"app": "RobotSettings"},
         )
 
     def test_view_ok_requires_active_visible_view(self) -> None:

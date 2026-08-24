@@ -30,5 +30,24 @@
     "Email": "Имейл",
     "Logout": "Изход",
     "Not logged in": "Не сте влезли"
+  },
+  "RobotJogWidget": {
+    "Cartesian": "Декартово",
+    "Joint": "Стави",
+    "Current Position": "Текуща позиция",
+    "Joint Positions": "Позиции на ставите",
+    "Linear Step": "Линейна стъпка",
+    "Linear Speed": "Линейна скорост",
+    "Rotation Step": "Стъпка на въртене",
+    "Rotation Speed": "Скорост на въртене",
+    "Joint Step": "Стъпка на става",
+    "Linear": "Линейно движение",
+    "Rotational": "Въртеливо движение",
+    "Joints": "Стави",
+    "Invert Z": "Обърни Z",
+    "Mode": "Режим",
+    "Frame": "Координатна система",
+    "Step": "Стъпка",
+    "Servo": "Серво"
   }
 }

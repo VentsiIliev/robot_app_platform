@@ -19,6 +19,11 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
     PaintDashboardView,
     _MAX_MESSAGE_ROWS,
 )
+from src.robot_systems.paint.applications.dashboard.config import (
+    AuxiliaryToggleConfig,
+    PaintDashboardUiConfig,
+)
+from src.shared_contracts.events.shell_events import ApplicationShortcut
 
 
 class _Signal:
@@ -211,6 +216,108 @@ class TestPaintDashboardUi(unittest.TestCase):
             )
 
         self.assertIsInstance(view._dashboard, _FakeDashboardWidget)
+
+    def test_controls_drawer_emits_cable_and_data_driven_device_actions(self) -> None:
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+                auxiliary_toggles=[AuxiliaryToggleConfig("fan", "Fan")],
+            )
+
+        cable_callback = MagicMock()
+        toggle_callback = MagicMock()
+        view.cable_relief_requested.connect(cable_callback)
+        view.auxiliary_toggle_requested.connect(toggle_callback)
+
+        view._controls_widget._relief_button.click()
+        view._controls_widget._buttons["fan"].click()
+
+        cable_callback.assert_called_once_with()
+        toggle_callback.assert_called_once_with("fan", True)
+
+    def test_system_ui_config_controls_dashboard_drawer_visibility(self) -> None:
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+                ui_config=PaintDashboardUiConfig(
+                    show_jog_widget=False,
+                    show_left_drawer=False,
+                    show_manual_controls=False,
+                ),
+            )
+
+        self.assertFalse(view.SHOW_JOG_WIDGET)
+        self.assertTrue(view._controls_drawer._btn.isHidden())
+
+    def test_manual_controls_and_shortcuts_are_independently_visible(self) -> None:
+        with patch(
+            "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",
+            _FakeDashboardWidget,
+        ):
+            view = PaintDashboardView(
+                config=SimpleNamespace(preview_aux_rows=1, preview_aux_cols=1),
+                action_buttons=[],
+                cards=[],
+                ui_config=PaintDashboardUiConfig(
+                    show_left_drawer=True,
+                    show_manual_controls=False,
+                    show_application_shortcuts=True,
+                ),
+            )
+
+        callback = MagicMock()
+        view.application_shortcut_requested.connect(callback)
+        view.set_application_shortcuts(
+            [
+                ApplicationShortcut(
+                    "RobotSettings",
+                    "RobotSettings",
+                    "mdi.robot-industrial",
+                    folder_id=2,
+                    folder_name="Service",
+                    folder_translation_key="folder.service",
+                ),
+                ApplicationShortcut(
+                    "CameraSettings",
+                    "CameraSettings",
+                    "fa5s.camera",
+                    folder_id=2,
+                    folder_name="Service",
+                    folder_translation_key="folder.service",
+                ),
+                ApplicationShortcut(
+                    "UserManagement",
+                    "UserManagement",
+                    "fa5s.users-cog",
+                    folder_id=3,
+                    folder_name="Administration",
+                    folder_translation_key="folder.admin",
+                ),
+            ]
+        )
+        view._controls_widget._shortcut_buttons["RobotSettings"].click()
+
+        self.assertTrue(view._controls_widget._relief_box.isHidden())
+        self.assertTrue(view._controls_widget._devices_box.isHidden())
+        self.assertFalse(view._controls_widget._shortcuts_box.isHidden())
+        self.assertEqual(view._controls_drawer._content.stretch(0), 1)
+        self.assertEqual(view._controls_drawer._content.stretch(1), 0)
+        self.assertEqual(len(view._controls_widget._folder_boxes), 2)
+        self.assertEqual(
+            [box.title() for box in view._controls_widget._folder_boxes],
+            ["Service", "Administration"],
+        )
+        callback.assert_called_once_with("RobotSettings")
 
     def test_info_and_warning_are_added_to_dashboard_message_queue(self) -> None:
         with patch(

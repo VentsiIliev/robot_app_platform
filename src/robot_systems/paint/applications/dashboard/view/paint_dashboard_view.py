@@ -15,8 +15,13 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
+from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
+    PaintControlsDrawer,
+)
+from src.robot_systems.paint.applications.dashboard.config import PaintDashboardUiConfig
 
 
 _MAX_MESSAGE_ROWS = 50
@@ -77,14 +82,30 @@ QLabel {{
 
 
 class PaintDashboardView(IApplicationView):
+    SHOW_JOG_WIDGET = True
+    JOG_DRAWER_SIDE = "right"
+
     start_requested = pyqtSignal()
     stop_requested = pyqtSignal()
     pause_requested = pyqtSignal()
     reset_requested = pyqtSignal()
 
     action_requested = pyqtSignal(str)
+    cable_relief_requested = pyqtSignal()
+    auxiliary_toggle_requested = pyqtSignal(str, bool)
+    application_shortcut_requested = pyqtSignal(str)
 
-    def __init__(self, config, action_buttons: list, cards: list, parent=None):
+    def __init__(
+        self,
+        config,
+        action_buttons: list,
+        cards: list,
+        auxiliary_toggles=None,
+        ui_config: PaintDashboardUiConfig | None = None,
+        parent=None,
+    ):
+        self._ui_config = ui_config or PaintDashboardUiConfig()
+        self.SHOW_JOG_WIDGET = self._ui_config.show_jog_widget
         self._config = config
         self._action_buttons = action_buttons
         self._cards_input = cards
@@ -98,11 +119,22 @@ class PaintDashboardView(IApplicationView):
         self._message_panel: QFrame | None = None
         self._message_scroll: QScrollArea | None = None
         self._last_state = None
+        self._auxiliary_toggles = list(auxiliary_toggles or [])
+        self._controls_drawer = None
+        self._controls_widget = None
         super().__init__("PaintDashboard", parent)
 
     @property
     def action_button_configs(self) -> list:
         return list(self._action_buttons)
+
+    @property
+    def application_shortcuts_enabled(self) -> bool:
+        return self._ui_config.show_application_shortcuts
+
+    @property
+    def shortcut_application_names(self) -> tuple[str, ...]:
+        return self._ui_config.shortcut_application_names
 
     @staticmethod
     def _index_cards_by_id(cards: list) -> dict[int, object]:
@@ -137,6 +169,22 @@ class PaintDashboardView(IApplicationView):
         self._dashboard.stop_requested.connect(self.stop_requested)
         self._dashboard.pause_requested.connect(self.pause_requested)
         self._dashboard.action_requested.connect(self._on_inner_action)
+        self._install_controls_drawer()
+
+    def _install_controls_drawer(self) -> None:
+        self._controls_drawer = DrawerToggle(self, side="left", width=320)
+        self._controls_widget = PaintControlsDrawer(
+            self._auxiliary_toggles,
+            show_manual_controls=self._ui_config.show_manual_controls,
+            show_shortcuts=self._ui_config.show_application_shortcuts,
+        )
+        self._controls_drawer.add_widget(self._controls_widget, fill_height=True)
+        self._controls_widget.cable_relief_requested.connect(self.cable_relief_requested)
+        self._controls_widget.device_toggle_requested.connect(self.auxiliary_toggle_requested)
+        self._controls_widget.application_shortcut_requested.connect(
+            self.application_shortcut_requested
+        )
+        self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
 
     def _align_preview_and_card_columns(self) -> None:
         try:
@@ -297,6 +345,18 @@ class PaintDashboardView(IApplicationView):
     def set_action_button_text(self, action_id: str, text: str) -> None:
         self._dashboard.set_action_button_text(action_id, self._translate_text(text))
 
+    def set_auxiliary_state(self, device_id: str, enabled: bool) -> None:
+        self._controls_widget.set_device_state(device_id, enabled)
+
+    def set_auxiliary_busy(self, device_id: str, busy: bool) -> None:
+        self._controls_widget.set_device_busy(device_id, busy)
+
+    def set_cable_relief_busy(self, busy: bool) -> None:
+        self._controls_widget.set_cable_relief_busy(busy)
+
+    def set_application_shortcuts(self, shortcuts: list) -> None:
+        self._controls_widget.set_application_shortcuts(shortcuts)
+
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
 
@@ -451,6 +511,8 @@ class PaintDashboardView(IApplicationView):
             self._message_title_label.setText(self._translate_text("Messages"))
         if self._message_empty_label is not None:
             self._message_empty_label.setText(self._translate_text("No process messages"))
+        if self._controls_widget is not None:
+            self._controls_widget.retranslateUi()
         self._last_card_states.clear()
         self._last_state_signature = None
         if self._last_state is not None:
@@ -468,6 +530,18 @@ class PaintDashboardView(IApplicationView):
 
     @staticmethod
     def _translate_dynamic_text(text: str) -> str:
+        if text.startswith("Cable relief failed: "):
+            error = text.removeprefix("Cable relief failed: ")
+            template = QCoreApplication.translate(
+                "PaintDashboard", "Cable relief failed: {error}"
+            ) or "Cable relief failed: {error}"
+            return template.format(error=error)
+        if text.startswith("Could not switch ") and ": " in text:
+            device, error = text.removeprefix("Could not switch ").split(": ", 1)
+            template = QCoreApplication.translate(
+                "PaintDashboard", "Could not switch {device}: {error}"
+            ) or "Could not switch {device}: {error}"
+            return template.format(device=device, error=error)
         templates = (
             ("Runtime startup phase: ", "Runtime startup phase: {phase}", "phase"),
             ("Drive state: ", "Drive state: {state}", "state"),

@@ -58,8 +58,11 @@ class DrawerToggle(QObject):
         self._update_arrow()
         self._reposition()
 
-    def add_widget(self, widget):
-        self._content.insertWidget(self._content.count() - 1, widget)
+    def add_widget(self, widget, *, fill_height: bool = False):
+        insert_index = self._content.count() - 1
+        self._content.insertWidget(insert_index, widget, 1 if fill_height else 0)
+        if fill_height:
+            self._content.setStretch(self._content.count() - 1, 0)
 
     def set_visible(self, visible: bool) -> None:
         if not visible:

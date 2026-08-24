@@ -38,5 +38,14 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
+    def relieve_cable(self):
+        return self._service.relieve_cable()
+
+    def get_auxiliary_states(self) -> dict[str, bool]:
+        return self._service.get_auxiliary_states()
+
+    def set_auxiliary_enabled(self, device_id: str, enabled: bool):
+        return self._service.set_auxiliary_enabled(device_id, enabled)
+
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return self._service.capture_latest_contour_transform_debug()

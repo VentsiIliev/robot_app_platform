@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 from PyQt6.QtCore import QCoreApplication, QObject, QThread, QTimer, pyqtSignal
 
 from src.applications.base.dashboard_camera_feed_mixin import DashboardCameraFeedMixin
@@ -16,6 +18,7 @@ from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view im
 from src.robot_systems.paint.applications.dashboard.dashboard_state import DashboardCardState
 from src.robot_systems.paint.processes.paint.dashboard_live_view_events import PaintDashboardLiveViewTopics
 from src.shared_contracts.events.robot_events import RobotTopics
+from src.shared_contracts.events.shell_events import ShellTopics
 
 
 class _Worker(QObject):
@@ -43,6 +46,7 @@ class PaintDashboardController(
         self._active = False
         self._dashboard_live_view_paused = False
         self._workers: list[tuple[QThread, _Worker]] = []
+        self._pending_auxiliary: dict[str, bool] = {}
         timer_parent = self._view if isinstance(self._view, QObject) else None
         self._status_timer = QTimer(timer_parent)
         self._status_timer.setInterval(1000)
@@ -55,6 +59,9 @@ class PaintDashboardController(
         self._view.reset_requested.connect(self._on_reset)
         self._view.action_requested.connect(self._on_action)
         self._view.language_changed.connect(self._retranslate)
+        self._view.cable_relief_requested.connect(self._on_cable_relief)
+        self._view.auxiliary_toggle_requested.connect(self._on_auxiliary_toggle)
+        self._view.application_shortcut_requested.connect(self._on_application_shortcut)
 
     def load(self) -> None:
         self._active = True
@@ -63,6 +70,8 @@ class PaintDashboardController(
         self._subscribe_dashboard_robot_state()
         self._subscribe_dashboard_live_view_state()
         self._view.apply_dashboard_state(self._model.load())
+        self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
+        self._load_application_shortcuts()
         self._retranslate()
         if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
             self._status_timer.start()
@@ -88,6 +97,64 @@ class PaintDashboardController(
 
     def _on_reset(self) -> None:
         self._view.apply_dashboard_state(self._model.reset_errors())
+
+    def _on_cable_relief(self) -> None:
+        self._view.set_cable_relief_busy(True)
+        self._run_background(self._model.relieve_cable, self._on_cable_relief_finished)
+
+    def _on_auxiliary_toggle(self, device_id: str, enabled: bool) -> None:
+        self._pending_auxiliary[device_id] = enabled
+        self._view.set_auxiliary_busy(device_id, True)
+        self._run_background(
+            partial(self._model.set_auxiliary_enabled, device_id, enabled),
+            self._on_auxiliary_finished,
+        )
+
+    def _on_auxiliary_states_loaded(self, states: object) -> None:
+        if not self._view_ok() or not isinstance(states, dict):
+            return
+        for device_id, enabled in states.items():
+            self._view.set_auxiliary_state(device_id, bool(enabled))
+
+    def _on_cable_relief_finished(self, result: object) -> None:
+        if not self._view_ok():
+            return
+        self._view.set_cable_relief_busy(False)
+        self._show_command_result(self._t("Cable Relief"), result)
+
+    def _on_auxiliary_finished(self, result: object) -> None:
+        if not self._view_ok():
+            return
+        device_id = str(getattr(result, "device_id", "") or "")
+        desired = self._pending_auxiliary.pop(device_id, False)
+        success = bool(getattr(result, "success", False))
+        self._view.set_auxiliary_state(device_id, desired if success else not desired)
+        self._view.set_auxiliary_busy(device_id, False)
+        self._show_command_result(self._t("Manual Control"), result)
+
+    def _show_command_result(self, title: str, result: object) -> None:
+        message = str(getattr(result, "message", "") or self._t("Command failed."))
+        if bool(getattr(result, "success", False)):
+            self._view.show_info(title, message)
+        else:
+            self._view.show_warning(title, message)
+
+    def _load_application_shortcuts(self) -> None:
+        if not self._view.application_shortcuts_enabled:
+            return
+        shortcuts = self._broker.request(
+            ShellTopics.VISIBLE_APPLICATIONS,
+            {"exclude": ["PaintDashboard"]},
+        )
+        if not isinstance(shortcuts, (list, tuple)):
+            return
+        selected_names = set(self._view.shortcut_application_names)
+        if selected_names:
+            shortcuts = [item for item in shortcuts if item.app_name in selected_names]
+        self._view.set_application_shortcuts(list(shortcuts))
+
+    def _on_application_shortcut(self, app_name: str) -> None:
+        self._broker.publish(ShellTopics.NAVIGATE, {"app": app_name})
 
     def _subscribe_dashboard_robot_state(self) -> None:
         self._subscribe(RobotTopics.STATE, self._on_dashboard_robot_state_raw)

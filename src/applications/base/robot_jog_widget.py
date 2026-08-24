@@ -1,11 +1,11 @@
 from functools import partial
 from typing import List, Optional, Sequence
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QSlider, QSizePolicy, QSpacerItem,
-    QComboBox, QWidget, QTabWidget,
+    QButtonGroup, QComboBox, QWidget, QTabWidget,
 )
 
 from pl_gui.settings.settings_view.styles import (
@@ -89,11 +89,13 @@ class RobotJogWidget(QFrame):
         self._joint_btns:     dict[str, QPushButton]     = {}
         self._frame_label: Optional[QLabel]     = None
         self._frame_combo: Optional[QComboBox]  = None
-        self._jog_mode_combo: Optional[QComboBox] = None
+        self._jog_mode_group: Optional[QButtonGroup] = None
         self._linear_title_label: Optional[QLabel] = None
         self._rotation_title_label: Optional[QLabel] = None
+        self._joint_step_title_label: Optional[QLabel] = None
         self._setup_ui()
         self._setup_timers()
+        self.retranslateUi()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
@@ -194,9 +196,9 @@ class RobotJogWidget(QFrame):
         outer.setContentsMargins(10, 8, 10, 8)
         outer.setSpacing(6)
 
-        title = QLabel("Current Position")
-        title.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};")
-        outer.addWidget(title)
+        self._position_title_label = QLabel()
+        self._position_title_label.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};")
+        outer.addWidget(self._position_title_label)
 
         self._pos_labels: dict[str, QLabel] = {}
         grid = QGridLayout()
@@ -237,9 +239,9 @@ class RobotJogWidget(QFrame):
         outer.setContentsMargins(10, 8, 10, 8)
         outer.setSpacing(6)
 
-        title = QLabel("Joint Positions")
-        title.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};")
-        outer.addWidget(title)
+        self._joint_positions_title_label = QLabel()
+        self._joint_positions_title_label.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR};")
+        outer.addWidget(self._joint_positions_title_label)
 
         self._joint_pos_labels: dict[str, QLabel] = {}
         grid = QGridLayout()
@@ -366,6 +368,8 @@ class RobotJogWidget(QFrame):
             self._linear_title_label = lbl
         elif slider_attr == "_rotation_slider":
             self._rotation_title_label = lbl
+        elif slider_attr == "_joint_slider":
+            self._joint_step_title_label = lbl
 
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setMinimum(0)
@@ -404,7 +408,7 @@ class RobotJogWidget(QFrame):
             bottom_attr="btn_y_minus", bottom_text="Y−",
         )
 
-        self._invert_z_btn = QPushButton("⇅  Invert Z")
+        self._invert_z_btn = QPushButton()
         self._invert_z_btn.setCheckable(True)
         self._invert_z_btn.setFixedHeight(36)
         self._invert_z_btn.setStyleSheet(f"""
@@ -461,11 +465,16 @@ class RobotJogWidget(QFrame):
         outer = QVBoxLayout()
         outer.setSpacing(8)
 
-        header = QLabel(title)
+        header = QLabel()
+        header.setProperty("translation_source", title)
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet(
             f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR}; letter-spacing: 0.5px;"
         )
+        if title == "Linear":
+            self._linear_section_label = header
+        elif title == "Rotational":
+            self._rotational_section_label = header
         outer.addWidget(header)
 
         body = QHBoxLayout()
@@ -524,7 +533,8 @@ class RobotJogWidget(QFrame):
         outer = QVBoxLayout()
         outer.setSpacing(10)
 
-        header = QLabel("Joints")
+        self._joints_section_label = QLabel()
+        header = self._joints_section_label
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header.setStyleSheet(
             f"font-size: 11px; font-weight: 700; color: {TEXT_COLOR}; letter-spacing: 0.5px;"
@@ -560,36 +570,74 @@ class RobotJogWidget(QFrame):
         outer.addLayout(grid)
         return outer
 
-    def _build_bottom_row(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    def _build_bottom_row(self) -> QVBoxLayout:
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
 
-        mode_label = QLabel("Mode:")
-        mode_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
-        layout.addWidget(mode_label)
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        mode_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self._jog_mode_combo = QComboBox()
-        self._jog_mode_combo.setFixedHeight(32)
-        self._jog_mode_combo.setStyleSheet(f"""
-            QComboBox {{
+        self._mode_label = QLabel()
+        self._mode_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
+        mode_row.addWidget(self._mode_label)
+
+        mode_selector = QFrame()
+        mode_selector.setObjectName("JogModeSelector")
+        mode_selector.setStyleSheet(f"""
+            QFrame#JogModeSelector {{
+                background: {SECONDARY_BG};
                 border: 1px solid {BORDER};
-                border-radius: 4px;
-                padding: 2px 8px;
-                font-size: 11px;
-                background: white;
-                color: {TEXT_COLOR};
+                border-radius: 8px;
             }}
-            QComboBox::drop-down {{ border: none; }}
+            QFrame#JogModeSelector QPushButton {{
+                background: transparent;
+                color: {TEXT_COLOR};
+                border: none;
+                border-radius: 6px;
+                min-height: 44px;
+                min-width: 88px;
+                padding: 0 14px;
+                font-size: 11pt;
+                font-weight: bold;
+            }}
+            QFrame#JogModeSelector QPushButton:hover:!checked {{
+                background: {SECONDARY_HOVER};
+            }}
+            QFrame#JogModeSelector QPushButton:checked {{
+                background: {PRIMARY};
+                color: white;
+            }}
         """)
-        self._jog_mode_combo.addItem("Step", "JOG_ROBOT")
-        self._jog_mode_combo.addItem("Servo", "SERVO_JOG")
-        self._jog_mode_combo.currentIndexChanged.connect(self._on_jog_mode_changed)
-        layout.addWidget(self._jog_mode_combo)
-        layout.addSpacing(12)
+        selector_layout = QHBoxLayout(mode_selector)
+        selector_layout.setContentsMargins(3, 3, 3, 3)
+        selector_layout.setSpacing(3)
+
+        self._step_mode_btn = QPushButton()
+        self._step_mode_btn.setCheckable(True)
+        self._step_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._servo_mode_btn = QPushButton()
+        self._servo_mode_btn.setCheckable(True)
+        self._servo_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        selector_layout.addWidget(self._step_mode_btn)
+        selector_layout.addWidget(self._servo_mode_btn)
+
+        self._jog_mode_group = QButtonGroup(self)
+        self._jog_mode_group.setExclusive(True)
+        self._jog_mode_group.addButton(self._step_mode_btn, 0)
+        self._jog_mode_group.addButton(self._servo_mode_btn, 1)
+        self._step_mode_btn.setChecked(True)
+        self._jog_mode_group.idClicked.connect(self._on_jog_mode_selected)
+        mode_row.addWidget(mode_selector)
+        mode_row.addStretch(1)
+        layout.addLayout(mode_row)
+
+        frame_row = QHBoxLayout()
+        frame_row.setSpacing(8)
 
         self._frame_label = QLabel("Frame:")
         self._frame_label.setStyleSheet(f"font-size: 11px; font-weight: 600; color: {TEXT_COLOR};")
-        layout.addWidget(self._frame_label)
+        frame_row.addWidget(self._frame_label)
 
         self._frame_combo = QComboBox()
         self._frame_combo.setFixedHeight(32)
@@ -605,8 +653,8 @@ class RobotJogWidget(QFrame):
             QComboBox::drop-down {{ border: none; }}
         """)
         self._frame_combo.currentTextChanged.connect(self._on_frame_combo_changed)
-        layout.addWidget(self._frame_combo)
-        layout.addStretch()
+        frame_row.addWidget(self._frame_combo, 1)
+        layout.addLayout(frame_row)
         self.enable_frame_selector(False)
         return layout
 
@@ -741,17 +789,21 @@ class RobotJogWidget(QFrame):
         self.jog_requested.emit(self._current_jog_command(), axis, direction, step)
 
     def _current_jog_command(self) -> str:
-        if self._jog_mode_combo is None:
+        if self._jog_mode_group is None:
             return "JOG_ROBOT"
-        data = self._jog_mode_combo.currentData()
-        return str(data or "JOG_ROBOT").strip().upper()
+        return "SERVO_JOG" if self._jog_mode_group.checkedId() == 1 else "JOG_ROBOT"
+
+    def _on_jog_mode_selected(self, _button_id: int) -> None:
+        self._on_jog_mode_changed()
 
     def _on_jog_mode_changed(self) -> None:
         servo_mode = self._current_jog_command() == "SERVO_JOG"
         if self._linear_title_label is not None:
-            self._linear_title_label.setText("Linear Speed:" if servo_mode else "Linear Step:")
+            source = "Linear Speed" if servo_mode else "Linear Step"
+            self._linear_title_label.setText(f"{self._t(source)}:")
         if self._rotation_title_label is not None:
-            self._rotation_title_label.setText("Rotation Speed:" if servo_mode else "Rotation Step:")
+            source = "Rotation Speed" if servo_mode else "Rotation Step"
+            self._rotation_title_label.setText(f"{self._t(source)}:")
         self._on_slider_changed(_LINEAR_STEPS, "mm", self._linear_label, self._linear_slider.value())
         self._on_slider_changed(_ROTATION_STEPS, "°", self._rotation_label, self._rotation_slider.value())
 
@@ -768,6 +820,32 @@ class RobotJogWidget(QFrame):
         joint, direction = self._joint_axis_map[key]
         step = _JOINT_STEPS[self._joint_slider.value()]
         self.joint_jog_requested.emit("JOG_JOINT", joint, direction, step)
+
+    def retranslateUi(self) -> None:
+        self._tabs.setTabText(0, self._t("Cartesian"))
+        self._tabs.setTabText(1, self._t("Joint"))
+        self._position_title_label.setText(self._t("Current Position"))
+        self._joint_positions_title_label.setText(self._t("Joint Positions"))
+        self._joint_step_title_label.setText(f"{self._t('Joint Step')}:")
+        self._linear_section_label.setText(self._t("Linear"))
+        self._rotational_section_label.setText(self._t("Rotational"))
+        self._joints_section_label.setText(self._t("Joints"))
+        self._invert_z_btn.setText(f"⇅  {self._t('Invert Z')}")
+        self._mode_label.setText(f"{self._t('Mode')}:")
+        self._frame_label.setText(f"{self._t('Frame')}:")
+        self._step_mode_btn.setText(self._t("Step"))
+        self._servo_mode_btn.setText(self._t("Servo"))
+        self._on_jog_mode_changed()
+
+    def changeEvent(self, event) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
+
+    @staticmethod
+    def _t(text: str) -> str:
+        translated = QCoreApplication.translate("RobotJogWidget", text)
+        return translated or text
 
 
 if __name__ == "__main__":
