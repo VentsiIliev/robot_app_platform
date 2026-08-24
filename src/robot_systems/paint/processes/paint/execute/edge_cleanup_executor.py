@@ -18,7 +18,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.m
     motion_failure_message,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
-    _resolve_dropoff_align_pose,
+    _resolve_dropoff_preparation_pose,
     _resolve_dropoff_safe_travel_waypoints,
     _should_prepare_dropoff_align_before_unwind,
 )
@@ -695,7 +695,7 @@ class PaintEdgeCleanupExecutor:
         config = self._owner._paint_process_config()
         post_cleanup_align_pose = None
         if _should_prepare_dropoff_align_before_unwind(self._owner):
-            post_cleanup_align_pose = _resolve_dropoff_align_pose(self._owner, command_path[-1])
+            post_cleanup_align_pose = _resolve_dropoff_preparation_pose(self._owner, command_path[-1])
         segments = [
             {
                 "type": self._dropoff_motion_type(),

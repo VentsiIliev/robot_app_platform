@@ -23,6 +23,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _on_workpiece_release_verified,
     _verify_workpiece_released,
+    build_ordered_dropoff_preparation_segments,
     execute_dropoff_preparation_for_executor,
 )
 from src.robot_systems.paint.processes.paint.execute.paint_debug_artifacts import (
@@ -1346,6 +1347,31 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], segments[0]["position"])
         self.assertEqual(12.0, segments[0]["vel"])
         self.assertEqual(13.0, segments[0]["acc"])
+
+    def test_sub_zero_dropoff_preparation_stops_at_corridor_approach(self):
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            pivot_motion_plane="xy_z_rz",
+            dropoff=PaintDropoffConfig(
+                strategy="movement_group",
+                allow_sub_zero_dropoff=True,
+                release_align_vel_percent=12.0,
+                release_align_acc_percent=13.0,
+            ),
+        )
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=MagicMock(),
+            pivot_motion_plane="xy_z_rz",
+            dropoff_position_provider=lambda: [1.0, 2.0, -25.0, 4.0, 5.0, 6.0],
+            paint_process_config_service=config_service,
+        )
+        executor._configured_contact_motion_plane = "xy_z_rz"
+        executor._refresh_paint_process_config_snapshot()
+
+        segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
+
+        self.assertEqual(50.0, segments[0]["position"][2])
+        self.assertEqual(50.0, final_pose[2])
 
     def test_paint_to_dropoff_safe_travel_precedes_dropoff_align_before_unwind(self):
         safe_pose = [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]

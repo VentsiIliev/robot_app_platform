@@ -9,6 +9,9 @@ import numpy as np
 from src.engine.geometry.planar import unwrap_degrees
 from src.robot_systems.paint.processes.paint.config import PAINT_PROCESS_CONFIG
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.motion_handlers import (
+    motion_failure_message,
+)
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -109,7 +112,7 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
                 return False, "Pivot paint finished, but paint-to-dropoff safe travel move failed"
 
     if _should_prepare_dropoff_align_before_unwind(executor):
-        align_pose = _resolve_dropoff_align_pose(executor)
+        align_pose = _resolve_dropoff_preparation_pose(executor)
         if align_pose is None:
             return False, "Pivot paint finished, but no dropoff pose is available for safe pre-dropoff unwind alignment"
         if not executor._motion.move_pickup_phase(
@@ -190,7 +193,10 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                     elapsed_s(waypoint_started),
                     elapsed_s(started),
                 )
-                return False, f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release"
+                return False, motion_failure_message(
+                    executor._robot_service,
+                    f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release",
+                )
 
         if waypoint.release_here:
             ok, msg = executor._motion.turn_vacuum_off()
@@ -424,7 +430,7 @@ def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[d
 
     if _should_prepare_dropoff_align_before_unwind(executor):
         reference_pose = route_items[-1]["position"] if route_items else executor._last_process_end_pose
-        align_pose = _resolve_dropoff_align_pose(executor, reference_pose)
+        align_pose = _resolve_dropoff_preparation_pose(executor, reference_pose)
         if align_pose is None:
             return [], None
 
@@ -605,6 +611,22 @@ def _resolve_dropoff_align_pose(executor: object, reference_pose: list[float] | 
     if pose is None:
         return None
     return _dropoff_align_pose_near_reference(executor, pose, reference_pose)
+
+
+def _resolve_dropoff_preparation_pose(
+    executor: object,
+    reference_pose: list[float] | None = None,
+) -> list[float] | None:
+    """Resolve the safe above-floor endpoint used before a corridor dropoff."""
+    pose = _resolve_dropoff_align_pose(executor, reference_pose)
+    if pose is None or len(pose) < 3 or float(pose[2]) >= 0.0:
+        return pose
+    dropoff = executor._paint_process_config().dropoff
+    if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
+        return pose
+    approach_pose = list(pose)
+    approach_pose[2] = 50.0
+    return approach_pose
 
 
 def _dropoff_align_pose_near_reference(

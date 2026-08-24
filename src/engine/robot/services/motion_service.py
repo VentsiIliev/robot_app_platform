@@ -328,6 +328,15 @@ class MotionService(IMotionService):
                         target[idx] += direction.value * step
                 self._logger.info(f"Target -> {target}")
                 violations = self._motion_violations(target)
+                if violations and self._is_recovery_jog(current, target):
+                    escape_check = getattr(self._safety, "is_escape_move", None)
+                    if not callable(escape_check) or bool(escape_check(current, target)):
+                        self._logger.warning(
+                            "Allowing upward recovery jog from sub-zero pose: current_z=%.3f target_z=%.3f",
+                            float(current[2]),
+                            float(target[2]),
+                        )
+                        violations = []
                 if violations:
                     self._logger.warning(
                         "start_jog blocked by safety limits: axis=%s dir=%s step=%s → %s",
@@ -372,7 +381,16 @@ class MotionService(IMotionService):
                 user=user,
             ))
             if result == 0:
-                self._start_servo_floor_supervisor()
+                current_getter = getattr(self._robot, "get_current_position_fresh", None)
+                if not callable(current_getter):
+                    current_getter = self._robot.get_current_position
+                current = list(current_getter() or self._cached_position or [])
+                recovery = (
+                    len(current) >= 3
+                    and float(current[2]) < 0.0
+                    and self._servo_jog_raises_z(current, axis, direction, frame)
+                )
+                self._start_servo_floor_supervisor(allow_subzero_recovery=recovery)
             return result
         except Exception:
             self._logger.exception("start_servo_jog failed")
@@ -524,7 +542,7 @@ class MotionService(IMotionService):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _start_servo_floor_supervisor(self) -> None:
+    def _start_servo_floor_supervisor(self, *, allow_subzero_recovery: bool = False) -> None:
         """Stop unrestricted continuous Servo before it can continue below Z=0."""
         self._servo_floor_stop.set()
         previous = self._servo_floor_thread
@@ -534,20 +552,24 @@ class MotionService(IMotionService):
         stop_event = self._servo_floor_stop
         self._servo_floor_thread = Thread(
             target=self._supervise_servo_floor,
-            args=(stop_event,),
+            args=(stop_event, allow_subzero_recovery),
             name="robot-servo-z-floor",
             daemon=True,
         )
         self._servo_floor_thread.start()
 
-    def _supervise_servo_floor(self, stop_event: Event) -> None:
+    def _supervise_servo_floor(self, stop_event: Event, allow_subzero_recovery: bool = False) -> None:
         getter = getattr(self._robot, "get_current_position_fresh", None)
         if not callable(getter):
             getter = self._robot.get_current_position
         while not stop_event.wait(self._SERVO_FLOOR_POLL_S):
             try:
                 position = list(getter() or self._cached_position or [])
-                if len(position) >= 3 and float(position[2]) <= 0.0:
+                if (
+                    len(position) >= 3
+                    and float(position[2]) <= 0.0
+                    and not allow_subzero_recovery
+                ):
                     self._logger.error(
                         "Servo stopped by platform Z floor at z=%.3f; sub-zero motion requires corridor LIN",
                         float(position[2]),
@@ -565,6 +587,38 @@ class MotionService(IMotionService):
                     except Exception:
                         self._logger.exception("Failed to stop Servo after supervision failure")
                 return
+
+    @staticmethod
+    def _is_recovery_jog(current: List[float], target: List[float]) -> bool:
+        """Allow jog steps that strictly raise an already sub-zero TCP."""
+        return (
+            len(current) >= 3
+            and len(target) >= 3
+            and float(current[2]) < 0.0
+            and float(target[2]) > float(current[2])
+        )
+
+    @classmethod
+    def _servo_jog_raises_z(
+        cls,
+        current: List[float],
+        axis: RobotAxis,
+        direction: Direction,
+        frame: str | int,
+    ) -> bool:
+        if axis not in (RobotAxis.X, RobotAxis.Y, RobotAxis.Z):
+            return False
+        if str(frame).strip().lower() != "tool":
+            return axis == RobotAxis.Z and direction == Direction.PLUS
+        if len(current) < 6:
+            return False
+        _, _, dz = cls._tool_frame_delta(
+            current,
+            axis.value - 1,
+            direction.value,
+            1.0,
+        )
+        return dz > 1e-9
 
     @staticmethod
     def _tool_frame_delta(position: List[float], axis_idx: int,

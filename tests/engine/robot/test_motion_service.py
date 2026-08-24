@@ -193,6 +193,18 @@ class TestMotionService(unittest.TestCase):
             time.sleep(0.01)
         self.robot.stop_servo_jog.assert_called_once_with()
 
+    def test_upward_servo_jog_can_recover_from_below_zero(self):
+        self.robot.start_servo_jog.return_value = 0
+        self.robot.get_current_position_fresh.return_value = [100, 50, -10.0, 0, 0, 0]
+        self.robot.stop_servo_jog.return_value = 0
+
+        result = self.service.start_servo_jog(RobotAxis.Z, Direction.PLUS, linear_mm_s=10)
+
+        self.assertEqual(result, 0)
+        time.sleep(0.06)
+        self.robot.stop_servo_jog.assert_not_called()
+        self.service.stop_servo_jog()
+
     # ------------------------------------------------------------------
     # move_sequence
     # ------------------------------------------------------------------
@@ -240,6 +252,17 @@ class TestMotionService(unittest.TestCase):
             RobotAxis.Z, Direction.PLUS, 5.0,
             self.service._jog_vel, self.service._jog_acc
         )
+
+    def test_start_jog_allows_upward_recovery_step_from_below_zero(self):
+        self.robot.get_current_position.return_value = [100, 50, -10.0, 0, 0, 0]
+        self.robot.get_current_position_fresh.return_value = [100, 50, -10.0, 0, 0, 0]
+        self.robot.start_jog.return_value = 0
+        self.safety.is_escape_move.return_value = True
+
+        result = self.service.start_jog(RobotAxis.Z, Direction.PLUS, 5.0)
+
+        self.assertEqual(result, 0)
+        self.robot.start_jog.assert_called_once()
 
     def test_start_jog_exception_returns_minus_one(self):
         self.robot.start_jog.side_effect = RuntimeError
