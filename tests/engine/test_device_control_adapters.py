@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import MagicMock
 
 from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
 from src.engine.hardware.peripherals.device_control_adapters import (
+    DryerDeviceAdapter,
     build_device_control_adapters,
 )
 
@@ -127,6 +129,17 @@ class DeviceControlAdaptersTest(unittest.TestCase):
         self.assertEqual(self.fan.read_count, 1)
         self.assertTrue(fan.execute("on"))
         self.assertTrue(self.fan.active)
+
+    def test_dryer_named_action_uses_named_controller_method(self):
+        dryer = MagicMock()
+        dryer.is_enabled.return_value = True
+        dryer.next_position.return_value = True
+        adapter = DryerDeviceAdapter(dryer, commands={"next_position": 0})
+
+        self.assertTrue(adapter.execute("next_position"))
+
+        dryer.next_position.assert_called_once_with()
+        dryer.execute_command.assert_not_called()
 
     def test_failed_register_read_keeps_binary_device_disabled(self):
         persisted = []

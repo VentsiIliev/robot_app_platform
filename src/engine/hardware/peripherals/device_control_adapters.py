@@ -249,6 +249,9 @@ class DryerDeviceAdapter:
             return False
         if action not in self._commands:
             return False
+        named_command = getattr(self._device, action, None)
+        if callable(named_command):
+            return bool(named_command())
         return bool(self._device.execute_command(self._commands[action]))
 
     def read_state(self) -> Mapping[str, object]:
