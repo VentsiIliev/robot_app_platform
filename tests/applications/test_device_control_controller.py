@@ -2,9 +2,12 @@ import logging
 import unittest
 from unittest.mock import MagicMock, patch
 
+from PyQt6.QtWidgets import QApplication
+
 from src.applications.device_control.controller.device_control_controller import (
     DeviceControlController,
 )
+from src.applications.device_control.view.device_control_view import DeviceControlView
 
 
 class TestDeviceControlController(unittest.TestCase):
@@ -61,6 +64,30 @@ class TestDeviceControlController(unittest.TestCase):
 
         controller._view.set_device_enabled.assert_called_once_with("fan", False)
         controller._view.set_device_action_result.assert_called_once_with("fan", False)
+
+
+class TestDeviceControlView(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._app = QApplication.instance() or QApplication([])
+
+    def test_setup_does_not_emit_enable_request_for_enabled_device(self) -> None:
+        device = MagicMock()
+        device.key = "dryer"
+        device.label = "Dryer"
+        device.is_enabled.return_value = True
+        device.actions.return_value = {"next_position": "Next Position"}
+        view = DeviceControlView()
+        requests = []
+
+        def record_request(device_key: str, enabled: bool) -> None:
+            requests.append((device_key, enabled))
+
+        view.device_enabled_requested.connect(record_request)
+
+        view.setup_devices([device])
+
+        self.assertEqual([], requests)
 
 
 if __name__ == "__main__":
