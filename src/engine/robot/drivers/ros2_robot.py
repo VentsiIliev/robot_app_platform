@@ -128,6 +128,11 @@ class Ros2Robot(IRobot):
         # logger.debug("get_current_position ← raw=%s resolved=%s", result, position)
         return position
 
+    def get_current_position_fresh(self) -> List[float]:
+        """Bypass websocket/state caches and query the runtime pose endpoint."""
+        result = self._client.get_current_position()
+        return result if result is not None else []
+
     def get_current_flange_position(self) -> List[float] | None:
         return self._client.get_current_flange_position()
 

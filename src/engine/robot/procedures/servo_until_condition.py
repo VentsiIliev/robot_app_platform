@@ -368,6 +368,17 @@ class ServoUntilConditionProcedure:
         if requested_distance > maximum_distance:
             return False, "retract_maximum_distance_exceeded"
 
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] retract starting start_z=%.3f target_z=%.3f distance_mm=%.3f "
+            "speed_mm_s=%.3f timeout_s=%.3f tolerance_mm=%.3f",
+            start_z,
+            target_z,
+            requested_distance,
+            float(retract.linear_mm_s),
+            float(retract.timeout_s),
+            tolerance,
+        )
+
         start_ret = self._robot.start_servo_jog(
             RobotAxis.Z,
             Direction.PLUS,
@@ -382,6 +393,7 @@ class ServoUntilConditionProcedure:
 
         deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
         poll_interval = max(0.005, float(retract.poll_interval_s))
+        next_progress_log_at = time.monotonic()
         failure = ""
         while not failure:
             if cancel_requested is not None and cancel_requested():
@@ -401,6 +413,15 @@ class ServoUntilConditionProcedure:
                 failure = "retract_position_unreadable"
                 break
             travelled = current_pose[2] - start_z
+            now = time.monotonic()
+            if now >= next_progress_log_at:
+                _logger.info(
+                    "[SERVO_UNTIL_CONDITION] retract progress live_z=%.3f target_z=%.3f travelled_mm=%.3f",
+                    current_pose[2],
+                    target_z,
+                    travelled,
+                )
+                next_progress_log_at = now + 0.5
             if travelled > maximum_distance + tolerance:
                 failure = "retract_maximum_distance_exceeded"
                 break
@@ -421,7 +442,18 @@ class ServoUntilConditionProcedure:
         if final_pose is None:
             return False, "retract_final_position_unreadable"
         if abs(final_pose[2] - target_z) > tolerance:
+            _logger.error(
+                "[SERVO_UNTIL_CONDITION] retract final mismatch final_z=%.3f target_z=%.3f tolerance_mm=%.3f",
+                final_pose[2],
+                target_z,
+                tolerance,
+            )
             return False, "retract_final_position_mismatch"
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] retract completed final_z=%.3f target_z=%.3f",
+            final_pose[2],
+            target_z,
+        )
         return True, ""
 
     def _stop_servo(self):
@@ -439,7 +471,10 @@ class ServoUntilConditionProcedure:
 
     def _read_current_pose(self) -> list[float] | None:
         try:
-            return self._valid_pose(self._robot.get_current_position())
+            getter = getattr(self._robot, "get_current_position_fresh", None)
+            if not callable(getter):
+                getter = self._robot.get_current_position
+            return self._valid_pose(getter())
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] current position read failed")
             return None

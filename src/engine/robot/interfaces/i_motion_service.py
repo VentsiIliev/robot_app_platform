@@ -109,3 +109,7 @@ class IMotionService(ABC):
     @abstractmethod
     def get_current_position(self) -> List[float]:
         ...
+
+    def get_current_position_fresh(self) -> List[float]:
+        """Return a fresh pose when a safety-critical motion loop requires it."""
+        return self.get_current_position()

@@ -125,6 +125,13 @@ class RobotService(IRobotService):
     def get_current_position(self) -> List[float]:
         return list(self._state.position)
 
+    def get_current_position_fresh(self) -> List[float]:
+        """Bypass the state-manager cache for safety-critical live monitoring."""
+        getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = self._robot.get_current_position
+        return list(getter())
+
     def get_current_flange_position(self) -> List[float]:
         return self._robot.get_current_flange_position()
 
