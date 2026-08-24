@@ -93,7 +93,21 @@ class DryerController(IDryerController):
         return self.close_plage(data)
 
     def next_position(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(self._commands["next_position"], data)
+        payload = data or self._default_write_data()
+        command = int(self._commands["next_position"])
+        self._logger.info(
+            "[DRYER] Sending NEXT_POSITION command=%#04x command_register=%d target_position=%d",
+            command,
+            int(self._register_map.command),
+            int(payload.target_position_next_position),
+        )
+        ok = self._write_command(command, payload)
+        self._logger.info(
+            "[DRYER] NEXT_POSITION command write completed success=%s command=%#04x",
+            ok,
+            command,
+        )
+        return ok
 
     def execute_command(self, command: int, data: DryerWriteData | None = None) -> bool:
         """Write a command supplied by the robot-system peripheral config."""

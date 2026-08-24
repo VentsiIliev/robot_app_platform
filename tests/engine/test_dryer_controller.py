@@ -55,6 +55,18 @@ class TestDryerController(unittest.TestCase):
         values = transport.write_registers.call_args.args[1]
         self.assertEqual(values[1], 7)
 
+    def test_next_position_logs_command_register_target_and_result(self) -> None:
+        transport = MagicMock()
+        controller = DryerController(transport)
+
+        with self.assertLogs("DryerController", level="INFO") as captured:
+            self.assertTrue(controller.next_position())
+
+        output = "\n".join(captured.output)
+        self.assertIn("Sending NEXT_POSITION command=0x00 command_register=1", output)
+        self.assertIn("target_position=1000", output)
+        self.assertIn("NEXT_POSITION command write completed success=True", output)
+
     def test_initialize_writes_current_config_with_neutral_command(self) -> None:
         transport = MagicMock()
         controller = DryerController(
