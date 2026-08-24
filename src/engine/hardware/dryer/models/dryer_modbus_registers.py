@@ -93,7 +93,8 @@ class DryerDefaults:
 
     time_delay_start_servo_move: int = 50      # Register 12
 
-    rev_minute: int = 5                        # Register 13
+    # Converted to integer tenths by DryerWriteData before register write.
+    rev_minute: int = 5                        # Register 13 (5 RPM -> 50)
 
     # Converted to integer tenths by DryerWriteData before the register write
     # (for example, a UI value of 0.1 is transmitted as 1).
@@ -101,4 +102,4 @@ class DryerDefaults:
 
     target_position_backword: int = 500        # Register 15
     target_position_forword: int = 500         # Register 16
-    target_position_next_position: int = 1000  # Register 17
+    # target_position_next_position: int = 1000  # Register 17

@@ -33,8 +33,9 @@ class DryerWriteData:
         return cls(command=command, **config.to_dict())
 
     def to_register_values(self) -> list[int]:
-        # The firmware models acceleration as a decimal but Modbus holding
-        # registers are integer words. Store it in tenths (0.1 -> 1).
+        # The firmware stores speed and acceleration in tenths in integer
+        # Modbus holding registers (for example, 5 RPM -> 50 and 0.1 -> 1).
+        rev_minute_tenths = round(float(self.rev_minute) * 10)
         acceleration_tenths = round(float(self.acceleration) * 10)
         return [
             int(self.status), int(self.command),
@@ -43,7 +44,7 @@ class DryerWriteData:
             int(self.time_delay_move_servo_up), int(self.time_delay_move_servo_down),
             int(self.time_delay_move_servo_in), int(self.time_delay_move_servo_out),
             int(self.time_delay_move_plate_in), int(self.time_delay_move_plate_out),
-            int(self.time_delay_start_servo_move), int(self.rev_minute),
+            int(self.time_delay_start_servo_move), rev_minute_tenths,
             acceleration_tenths,
             int(self.target_position_backword), int(self.target_position_forword),
             int(self.target_position_next_position),

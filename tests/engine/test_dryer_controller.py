@@ -119,7 +119,17 @@ class TestDryerController(unittest.TestCase):
         self.assertEqual(address, 0)
         self.assertEqual(len(values), 18)
         self.assertEqual(values[2:6], [600, 150, 600, 180])
+        self.assertEqual(values[13], 50)
         self.assertEqual(values[14], 1)
+
+    def test_rev_minute_is_transmitted_in_integer_tenths(self) -> None:
+        transport = MagicMock()
+        controller = DryerController(transport, DryerConfig(rev_minute=7))
+
+        self.assertTrue(controller.initialize())
+
+        values = transport.write_registers.call_args.args[1]
+        self.assertEqual(values[13], 70)
 
     def test_acceleration_is_transmitted_in_integer_tenths(self) -> None:
         transport = MagicMock()
