@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from src.engine.robot.configuration.robot_settings import MovementGroup
@@ -13,10 +14,16 @@ from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
 
 
 class _FakeModel:
-    def __init__(self, dropoff_configured: bool, error: str = ""):
+    def __init__(
+        self,
+        dropoff_configured: bool,
+        error: str = "",
+        pickup_safety_enabled: tuple[bool, bool] = (True, True),
+    ):
         self.current_settings = PaintProcessConfig()
         self._dropoff_configured = dropoff_configured
         self._error = error
+        self._pickup_safety_enabled = pickup_safety_enabled
         self.save = MagicMock()
         self.get_current_robot_position = MagicMock(return_value=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
 
@@ -25,6 +32,9 @@ class _FakeModel:
 
     def dropoff_movement_group_configuration_error(self) -> str:
         return self._error
+
+    def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
+        return self._pickup_safety_enabled
 
 
 class _FakeView:
@@ -49,6 +59,74 @@ class _FakeView:
 
 
 class TestPaintProcessSettingsController(unittest.TestCase):
+    def test_selecting_servo_contact_requires_pump_and_sensor(self):
+        cases = [
+            ((False, False), ("Vacuum Pump in Device Control", "Vacuum Sensor in Device Control")),
+            ((False, True), ("Vacuum Pump in Device Control",)),
+            ((True, False), ("Vacuum Sensor in Device Control",)),
+        ]
+        for enabled, expected in cases:
+            with self.subTest(enabled=enabled):
+                model = _FakeModel(True, pickup_safety_enabled=enabled)
+                view = _FakeView()
+                view.values_set = {"pickup_contact_mode": "servo_contact"}
+                controller = PaintProcessSettingsController(model, view)
+                with patch(
+                    "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
+                ) as show_warning:
+                    controller._on_value_changed("pickup_contact_mode", "servo_contact")
+
+                show_warning.assert_called_once()
+                for missing in expected:
+                    self.assertIn(missing, show_warning.call_args.args[2])
+                self.assertEqual("planned", view.values_set["pickup_contact_mode"])
+
+    def test_selecting_servo_contact_requires_process_vacuum_pump(self):
+        model = _FakeModel(True, pickup_safety_enabled=(True, True))
+        view = _FakeView()
+        view.values_set = {
+            "enable_vacuum_pump": False,
+            "pickup_contact_mode": "servo_contact",
+        }
+        controller = PaintProcessSettingsController(model, view)
+        with patch(
+            "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
+        ) as show_warning:
+            controller._on_value_changed("pickup_contact_mode", "servo_contact")
+
+        self.assertIn(
+            "Enable Vacuum Pump in Paint Process Settings",
+            show_warning.call_args.args[2],
+        )
+        self.assertEqual("planned", view.values_set["pickup_contact_mode"])
+
+    def test_selecting_servo_contact_is_allowed_when_pump_and_sensor_are_enabled(self):
+        model = _FakeModel(True, pickup_safety_enabled=(True, True))
+        view = _FakeView()
+        view.values_set = {"magazine_pickup_contact_mode": "servo_contact"}
+        controller = PaintProcessSettingsController(model, view)
+        with patch(
+            "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
+        ) as show_warning:
+            controller._on_value_changed("magazine_pickup_contact_mode", "servo_contact")
+
+        show_warning.assert_not_called()
+        self.assertEqual("servo_contact", view.values_set["magazine_pickup_contact_mode"])
+
+    def test_save_does_not_proceed_with_unsafe_servo_contact(self):
+        model = _FakeModel(True, pickup_safety_enabled=(True, False))
+        view = _FakeView()
+        controller = PaintProcessSettingsController(model, view)
+        flat = PaintProcessSettingsMapper.to_flat_dict(model.current_settings)
+        flat["pickup_contact_mode"] = "servo_contact"
+        with patch(
+            "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
+        ):
+            controller._on_save(flat)
+
+        model.save.assert_not_called()
+        self.assertEqual("planned", view.values_set["pickup_contact_mode"])
+
     def test_motion_profile_tables_round_trip_type_and_blendr(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
@@ -165,6 +243,20 @@ class TestPaintProcessSettingsController(unittest.TestCase):
 
 
 class TestPaintProcessSettingsApplicationService(unittest.TestCase):
+    def test_pickup_safety_reads_persisted_peripheral_enable_flags(self):
+        peripherals = SimpleNamespace(
+            peripherals={
+                "vacuum_pump": SimpleNamespace(enabled=True),
+                "vacuum_sensor": SimpleNamespace(enabled=False),
+            }
+        )
+        service = PaintProcessSettingsApplicationService(
+            process_config_service=MagicMock(),
+            peripherals_provider=lambda: peripherals,
+        )
+
+        self.assertEqual((True, False), service.get_pickup_safety_enabled())
+
     def test_dropoff_group_validation_requires_position_velocity_and_acceleration(self):
         process_config_service = MagicMock()
         cases = [

@@ -76,6 +76,11 @@
     "Pause": "Пауза"
   },
   "PaintProcessSettings": {
+    "Servo Contact Unavailable": "Servo Contact не е наличен",
+    "Vacuum Pump in Device Control": "Вакуумна помпа в Device Control",
+    "Vacuum Sensor in Device Control": "Вакуумен сензор в Device Control",
+    "Enable Vacuum Pump in Paint Process Settings": "Enable Vacuum Pump в Paint Process Settings",
+    "Enable the following before selecting servo-contact pickup: {items}.": "Активирайте следното, преди да изберете servo-contact вземане: {items}.",
     "Enable Workpiece Matching": "Активиране на съпоставянето на детайли",
     "Unmatched Workpiece Painting": "Боядисване на несъпоставен детайл",
     "Default Paint Velocity": "Скорост на боядисване по подразбиране",

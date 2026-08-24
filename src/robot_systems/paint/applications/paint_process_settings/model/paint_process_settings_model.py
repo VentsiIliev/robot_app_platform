@@ -30,6 +30,9 @@ class PaintProcessSettingsModel(IApplicationModel):
     def move_to_waypoint(self, waypoint: dict) -> bool:
         return self._service.move_to_waypoint(waypoint)
 
+    def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
+        return self._service.get_pickup_safety_enabled()
+
     @property
     def current_settings(self) -> PaintProcessConfig:
         if self._settings is None:

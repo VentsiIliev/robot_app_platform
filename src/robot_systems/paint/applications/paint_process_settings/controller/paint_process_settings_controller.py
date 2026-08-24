@@ -12,6 +12,9 @@ from src.robot_systems.paint.applications.paint_process_settings.model.paint_pro
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view import (
     PaintProcessSettingsView,
 )
+from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODE_SERVO_CONTACT
+
+_CONTACT_MODE_KEYS = ("pickup_contact_mode", "magazine_pickup_contact_mode")
 
 
 class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
@@ -21,6 +24,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view = view
         self._reverting_invalid_dropoff_strategy = False
         self._reverting_invalid_safe_travel = False
+        self._reverting_invalid_contact_strategy = False
 
     def load(self) -> None:
         settings = self._model.load()
@@ -55,6 +59,9 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
 
     def _on_save(self, flat: dict) -> None:
+        if not self._servo_contact_is_allowed(flat):
+            self._reject_servo_contact(flat)
+            return
         if not self._dropoff_strategy_is_allowed(flat):
             self._reject_movement_group_dropoff()
             return
@@ -69,6 +76,13 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_status(self._t("Saved. Changes will be used by the next Paint cycle."))
 
     def _on_value_changed(self, key: str, value: object) -> None:
+        if self._reverting_invalid_contact_strategy:
+            return
+        if key in _CONTACT_MODE_KEYS and self._is_servo_contact(value):
+            current_values = {**self._view.values(), key: value}
+            if not self._servo_contact_is_allowed(current_values):
+                self._reject_servo_contact(current_values, changed_key=key)
+            return
         if self._reverting_invalid_safe_travel:
             return
         if key == "safe_travel_enabled" and bool(value):
@@ -86,6 +100,66 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         if self._model.is_dropoff_movement_group_configured():
             return
         self._reject_movement_group_dropoff()
+
+    def _servo_contact_is_allowed(self, flat: dict) -> bool:
+        servo_selected = any(
+            self._is_servo_contact(
+                flat.get(key, self._current_contact_mode(key))
+            )
+            for key in _CONTACT_MODE_KEYS
+        )
+        if not servo_selected:
+            return True
+        pump_enabled, sensor_enabled = self._model.get_pickup_safety_enabled()
+        process_pump_enabled = bool(
+            flat.get(
+                "enable_vacuum_pump",
+                self._model.current_settings.enable_vacuum_pump,
+            )
+        )
+        return pump_enabled and sensor_enabled and process_pump_enabled
+
+    @staticmethod
+    def _is_servo_contact(value: object) -> bool:
+        return str(value or "").strip().lower() == PICKUP_CONTACT_MODE_SERVO_CONTACT
+
+    def _current_contact_mode(self, key: str) -> str:
+        pickup = self._model.current_settings.pickup_motion
+        if key == "magazine_pickup_contact_mode":
+            return str(pickup.magazine_pickup_contact_mode)
+        return str(pickup.pickup_contact_mode)
+
+    def _reject_servo_contact(self, flat: dict, changed_key: str | None = None) -> None:
+        pump_enabled, sensor_enabled = self._model.get_pickup_safety_enabled()
+        process_pump_enabled = bool(
+            flat.get(
+                "enable_vacuum_pump",
+                self._model.current_settings.enable_vacuum_pump,
+            )
+        )
+        missing = []
+        if not pump_enabled:
+            missing.append(self._t("Vacuum Pump in Device Control"))
+        if not sensor_enabled:
+            missing.append(self._t("Vacuum Sensor in Device Control"))
+        if not process_pump_enabled:
+            missing.append(self._t("Enable Vacuum Pump in Paint Process Settings"))
+        template = self._t(
+            "Enable the following before selecting servo-contact pickup: {items}."
+        )
+        message = template.format(items=", ".join(missing))
+        show_warning(self._view, self._t("Servo Contact Unavailable"), message)
+        reverted = dict(flat)
+        keys = (changed_key,) if changed_key is not None else _CONTACT_MODE_KEYS
+        for key in keys:
+            if key is not None and self._is_servo_contact(reverted.get(key)):
+                reverted[key] = self._current_contact_mode(key)
+        self._reverting_invalid_contact_strategy = True
+        try:
+            self._view.set_values(reverted)
+        finally:
+            self._reverting_invalid_contact_strategy = False
+        self._view.set_status(message)
 
     def _dropoff_strategy_is_allowed(self, flat: dict) -> bool:
         strategy = str(flat.get("dropoff_strategy", self._model.current_settings.dropoff.strategy)).strip().lower()

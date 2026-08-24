@@ -19,6 +19,7 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         robot_config_provider: Callable[[], object | None] | None = None,
         robot_tool: int = 0,
         robot_user: int = 0,
+        peripherals_provider: Callable[[], object | None] | None = None,
     ):
         self._process_config_service = process_config_service
         self._dropoff_group_provider = dropoff_group_provider
@@ -27,6 +28,7 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         self._robot_config_provider = robot_config_provider
         self._robot_tool = int(robot_tool)
         self._robot_user = int(robot_user)
+        self._peripherals_provider = peripherals_provider
 
     def load_settings(self) -> PaintProcessConfig:
         return self._process_config_service.get_snapshot()
@@ -84,6 +86,21 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         except (TypeError, ValueError):
             return None
         return values if len(values) >= 6 else None
+
+    def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
+        if self._peripherals_provider is None:
+            return False, False
+        try:
+            config = self._peripherals_provider()
+            peripherals = getattr(config, "peripherals", {})
+            pump = peripherals.get("vacuum_pump")
+            sensor = peripherals.get("vacuum_sensor")
+            return (
+                bool(pump is not None and pump.enabled),
+                bool(sensor is not None and sensor.enabled),
+            )
+        except Exception:
+            return False, False
 
     def move_to_waypoint(self, waypoint: dict) -> bool:
         if self._robot_service_provider is None:

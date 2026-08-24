@@ -634,6 +634,7 @@ def _build_paint_process_settings_application(robot_system):
         robot_config_provider=lambda: robot_system._settings_service.get(CommonSettingsID.ROBOT_CONFIG),
         robot_tool=int(getattr(getattr(robot_system, "_robot_config", None), "robot_tool", 0)),
         robot_user=int(getattr(getattr(robot_system, "_robot_config", None), "robot_user", 0)),
+        peripherals_provider=lambda: robot_system._settings_service.get(SettingsID.PERIPHERALS),
     )
     jog_service = build_robot_system_jog_service(robot_system)
     return WidgetApplication(

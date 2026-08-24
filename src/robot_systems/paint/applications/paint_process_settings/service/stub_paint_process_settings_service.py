@@ -10,10 +10,14 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
         initial_settings: PaintProcessConfig | None = None,
         dropoff_movement_group_configured: bool = True,
         current_position: list[float] | None = None,
+        vacuum_pump_enabled: bool = True,
+        vacuum_sensor_enabled: bool = True,
     ):
         self._settings = initial_settings or PAINT_PROCESS_CONFIG
         self._dropoff_movement_group_configured = bool(dropoff_movement_group_configured)
         self._current_position = list(current_position or [0.0, 0.0, 200.0, 180.0, 0.0, 0.0])
+        self._vacuum_pump_enabled = bool(vacuum_pump_enabled)
+        self._vacuum_sensor_enabled = bool(vacuum_sensor_enabled)
         self.last_moved_waypoint: dict | None = None
 
     def load_settings(self) -> PaintProcessConfig:
@@ -38,3 +42,6 @@ class StubPaintProcessSettingsService(IPaintProcessSettingsService):
         self.last_moved_waypoint = dict(waypoint)
         print(f"Stub: Move to paint safe travel waypoint {waypoint}")
         return True
+
+    def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
+        return self._vacuum_pump_enabled, self._vacuum_sensor_enabled

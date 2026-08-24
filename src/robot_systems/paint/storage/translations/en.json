@@ -76,6 +76,11 @@
     "Pause": "Pause"
   },
   "PaintProcessSettings": {
+    "Servo Contact Unavailable": "Servo Contact Unavailable",
+    "Vacuum Pump in Device Control": "Vacuum Pump in Device Control",
+    "Vacuum Sensor in Device Control": "Vacuum Sensor in Device Control",
+    "Enable Vacuum Pump in Paint Process Settings": "Enable Vacuum Pump in Paint Process Settings",
+    "Enable the following before selecting servo-contact pickup: {items}.": "Enable the following before selecting servo-contact pickup: {items}.",
     "Enable Workpiece Matching": "Enable Workpiece Matching",
     "Unmatched Workpiece Painting": "Unmatched Workpiece Painting",
     "Default Paint Velocity": "Default Paint Velocity",
