@@ -12,7 +12,7 @@ The change is limited to the servo operation, which currently sits outside the o
 Existing ordered approach
     -> servo down until pickup condition
     -> stop downward servo
-    -> servo up to the selected retract reference pose
+    -> blocking PTP retract to the selected retract reference Z
     -> ordered continuation built from that pose
 ```
 
@@ -36,7 +36,7 @@ Extend `ServoUntilConditionProcedure` with optional retract configuration. A suc
 
 1. The pickup condition was detected.
 2. Downward servo motion was stopped.
-3. Upward servo retraction completed.
+3. Blocking PTP retraction completed.
 4. The configured retract position was reached within tolerance.
 
 The caller must not execute the continuation unless the procedure returns success.
@@ -62,10 +62,11 @@ For the current Z-axis pickup:
 
 - Use the Z coordinate of the caller-supplied retract reference pose as the
   servo retract target.
-- Keep X, Y, Rx, Ry, and Rz unchanged throughout downward and upward servo motion.
-- Start upward servo motion immediately after successful contact detection and downward servo stop.
-- Monitor the live robot Z position while retracting.
-- Stop upward servo motion when the retract Z is reached.
+- Keep X, Y, Rx, Ry, and Rz unchanged throughout servo descent and the PTP retract.
+- Start a blocking PTP retract immediately after successful contact detection
+  and confirmed downward servo stop.
+- Build the PTP target from the live contact pose, replacing only its Z with the
+  selected retract reference Z.
 - Verify the final Z against a configurable tolerance.
 - Enforce a maximum retract distance and retract timeout.
 - Keep vacuum enabled throughout a successful pickup and retract.
@@ -87,11 +88,10 @@ Failure cases include:
 - pickup-condition read failure;
 - cancellation, pause, or stop request;
 - downward servo-stop failure or unconfirmed stop;
-- upward servo start failure;
+- PTP retract start/execution failure;
 - current-position read failure during retract;
 - retract timeout;
 - maximum retract distance exceeded;
-- upward servo-stop failure;
 - final retract-position mismatch.
 
 On failure:
@@ -113,7 +113,7 @@ was not confirmed.
 
 ## Continuation preplanning
 
-Preplanning is an optimization to add after safe servo retraction works reliably.
+Preplanning is an optimization to add after safe PTP retraction works reliably.
 
 - Prepare the continuation from the selected retract reference pose while servo
   pickup is active.
@@ -135,7 +135,7 @@ Add focused timing and result logs for:
 - retract start;
 - retract target Z;
 - live/final retract Z;
-- upward servo-stop result;
+- PTP retract result;
 - total procedure time;
 - final success or precise failure reason;
 - whether a prepared continuation was used or discarded.
@@ -151,7 +151,7 @@ Verify:
 3. Paint/calibration-table pickup uses the configured calibration pose.
 4. Contact timeout never starts the continuation.
 5. Sensor-read failure never starts the continuation.
-6. Downward or upward servo failure never starts the continuation.
+6. Downward servo or PTP retract failure never starts the continuation.
 7. Retract timeout or position mismatch never starts the continuation.
 8. Stop or pause during descent stops servo motion.
 9. Stop or pause during retract stops servo motion.
@@ -162,7 +162,7 @@ Verify:
 ### Hardware verification order
 
 1. Test downward servo stop without retraction.
-2. Test upward servo retraction at reduced speed and clearance.
+2. Test blocking PTP retraction at reduced speed and clearance.
 3. Verify stopping accuracy at the selected retract reference Z.
 4. Test magazine pickup without continuation execution.
 5. Test calibration pickup without continuation execution.
@@ -173,7 +173,7 @@ Verify:
 ## Implementation order
 
 1. Define retract configuration and extend the servo procedure result contract.
-2. Implement guarded upward servo retraction and final-position verification.
+2. Implement guarded blocking PTP retraction and final-position verification.
 3. Pass the configured magazine pose from the magazine pickup caller.
 4. Pass the configured calibration pose from the paint/calibration pickup
    caller.

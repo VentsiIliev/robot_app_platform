@@ -314,7 +314,10 @@ class PaintPickupExecutor:
             ),
             retract=ServoRetractConfig(
                 target_pose=retract_reference_pose,
+                motion_type="ptp",
                 linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+                ptp_velocity_percent=float(pickup_motion.lift_align_vel_percent),
+                ptp_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
             ),

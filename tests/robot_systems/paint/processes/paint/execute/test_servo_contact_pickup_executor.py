@@ -28,6 +28,8 @@ class _FakeRobot:
     def __init__(self):
         self.started = []
         self.stopped = 0
+        self.ptp_moves = []
+        self.position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
     def start_servo_jog(self, *args, **kwargs):
         self.started.append((args, kwargs))
@@ -41,8 +43,12 @@ class _FakeRobot:
         return True
 
     def get_current_position(self):
-        z = 100.0 if self.started and self.started[-1][0][1].name == "PLUS" else 0.0
-        return [0.0, 0.0, z, 0.0, 0.0, 0.0]
+        return list(self.position)
+
+    def move_ptp(self, position, **kwargs):
+        self.ptp_moves.append((list(position), kwargs))
+        self.position = list(position)
+        return True
 
 
 class _FakeMotion:
@@ -102,6 +108,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
             servo_contact_fallback_to_planned_descend=False,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
         )
         owner = SimpleNamespace(
             _robot_service=robot,
@@ -131,7 +139,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertEqual(motion.vacuum_on, 1)
         self.assertTrue(motion.vacuum_required)
-        self.assertEqual(robot.stopped, 2)
+        self.assertEqual(robot.stopped, 1)
         self.assertEqual(
             [label for label, _segments in motion.sequences],
             [
@@ -149,7 +157,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
-        self.assertEqual(robot.started[1][0][1].name, "PLUS")
+        self.assertEqual(len(robot.started), 1)
+        self.assertEqual(robot.ptp_moves[0][0][2], 100.0)
 
     def test_servo_contact_does_not_move_when_vacuum_on_fails(self):
         robot = _FakeRobot()

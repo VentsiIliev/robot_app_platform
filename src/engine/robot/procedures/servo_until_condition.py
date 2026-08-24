@@ -36,11 +36,15 @@ class ServoUntilConditionConfig:
 @dataclass(frozen=True)
 class ServoRetractConfig:
     target_pose: Sequence[float]
+    motion_type: str = "servo"
     linear_mm_s: float = 25.0
+    ptp_velocity_percent: float = 30.0
+    ptp_acceleration_percent: float = 30.0
     poll_interval_s: float = 0.02
     timeout_s: float = 10.0
     position_tolerance_mm: float = 2.0
     maximum_distance_mm: float = 500.0
+    progress_timeout_s: float = 1.5
 
 
 @dataclass(frozen=True)
@@ -368,14 +372,35 @@ class ServoUntilConditionProcedure:
         if requested_distance > maximum_distance:
             return False, "retract_maximum_distance_exceeded"
 
+        motion_type = str(retract.motion_type or "servo").strip().lower()
+        if motion_type == "ptp":
+            return self._retract_ptp(
+                current_pose=current_pose,
+                target_z=target_z,
+                tolerance=tolerance,
+                retract=retract,
+                cfg=cfg,
+                cancel_requested=cancel_requested,
+            )
+        if motion_type != "servo":
+            return False, "invalid_retract_motion_type"
+
+        # The configured jog speed is an upper command value; acceleration,
+        # controller scaling, and transport sampling can make a long retract
+        # take materially longer than distance / commanded speed. Keep the
+        # explicit timeout as a floor and derive a conservative distance-aware
+        # deadline. The independent progress watchdog still stops stalled motion.
+        distance_aware_timeout = requested_distance / float(retract.linear_mm_s) * 4.0 + 1.0
+        effective_timeout = max(float(retract.timeout_s), distance_aware_timeout)
         _logger.info(
             "[SERVO_UNTIL_CONDITION] retract starting start_z=%.3f target_z=%.3f distance_mm=%.3f "
-            "speed_mm_s=%.3f timeout_s=%.3f tolerance_mm=%.3f",
+            "speed_mm_s=%.3f configured_timeout_s=%.3f effective_timeout_s=%.3f tolerance_mm=%.3f",
             start_z,
             target_z,
             requested_distance,
             float(retract.linear_mm_s),
             float(retract.timeout_s),
+            effective_timeout,
             tolerance,
         )
 
@@ -391,9 +416,12 @@ class ServoUntilConditionProcedure:
         if not self._return_code_ok(start_ret):
             return False, f"retract_servo_start_failed:{start_ret}"
 
-        deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
+        deadline = time.monotonic() + max(0.0, effective_timeout)
         poll_interval = max(0.005, float(retract.poll_interval_s))
         next_progress_log_at = time.monotonic()
+        best_z = start_z
+        last_forward_progress_at = time.monotonic()
+        progress_timeout = max(0.5, float(retract.progress_timeout_s))
         failure = ""
         while not failure:
             if cancel_requested is not None and cancel_requested():
@@ -414,6 +442,9 @@ class ServoUntilConditionProcedure:
                 break
             travelled = current_pose[2] - start_z
             now = time.monotonic()
+            if current_pose[2] > best_z + 0.5:
+                best_z = current_pose[2]
+                last_forward_progress_at = now
             if now >= next_progress_log_at:
                 _logger.info(
                     "[SERVO_UNTIL_CONDITION] retract progress live_z=%.3f target_z=%.3f travelled_mm=%.3f",
@@ -426,6 +457,9 @@ class ServoUntilConditionProcedure:
                 failure = "retract_maximum_distance_exceeded"
                 break
             if current_pose[2] >= target_z - tolerance:
+                break
+            if now - last_forward_progress_at >= progress_timeout:
+                failure = "retract_progress_stalled"
                 break
             if time.monotonic() >= deadline:
                 failure = "retract_timeout"
@@ -451,6 +485,81 @@ class ServoUntilConditionProcedure:
             return False, "retract_final_position_mismatch"
         _logger.info(
             "[SERVO_UNTIL_CONDITION] retract completed final_z=%.3f target_z=%.3f",
+            final_pose[2],
+            target_z,
+        )
+        return True, ""
+
+    def _retract_ptp(
+        self,
+        *,
+        current_pose: list[float],
+        target_z: float,
+        tolerance: float,
+        retract: ServoRetractConfig,
+        cfg: ServoUntilConditionConfig,
+        cancel_requested: Callable[[], bool] | None,
+    ) -> tuple[bool, str]:
+        if cancel_requested is not None and cancel_requested():
+            return False, "cancelled_before_retract"
+        velocity = float(retract.ptp_velocity_percent)
+        acceleration = float(retract.ptp_acceleration_percent)
+        if not math.isfinite(velocity) or velocity <= 0.0:
+            return False, "invalid_retract_ptp_velocity"
+        if not math.isfinite(acceleration) or acceleration <= 0.0:
+            return False, "invalid_retract_ptp_acceleration"
+
+        target_pose = list(current_pose)
+        target_pose[2] = target_z
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] PTP retract starting start_z=%.3f target_z=%.3f vel=%.3f acc=%.3f",
+            current_pose[2],
+            target_z,
+            velocity,
+            acceleration,
+        )
+        try:
+            ret = self._robot.move_ptp(
+                target_pose,
+                tool=cfg.tool,
+                user=cfg.user,
+                velocity=velocity,
+                acceleration=acceleration,
+                wait_to_reach=True,
+            )
+        except TypeError:
+            ret = self._robot.move_ptp(
+                target_pose,
+                tool=cfg.tool,
+                user=cfg.user,
+                vel=velocity,
+                acc=acceleration,
+                blocking=True,
+            )
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] PTP retract failed")
+            self._stop_motion()
+            return False, "retract_ptp_failed"
+        if not self._return_code_ok(ret):
+            self._stop_motion()
+            return False, f"retract_ptp_failed:{ret}"
+        if cancel_requested is not None and cancel_requested():
+            self._stop_motion()
+            return False, "cancelled_during_retract"
+
+        final_pose = self._read_current_pose()
+        if final_pose is None:
+            return False, "retract_final_position_unreadable"
+        if abs(final_pose[2] - target_z) > tolerance:
+            _logger.error(
+                "[SERVO_UNTIL_CONDITION] PTP retract final mismatch final_z=%.3f target_z=%.3f tolerance_mm=%.3f",
+                final_pose[2],
+                target_z,
+                tolerance,
+            )
+            return False, "retract_final_position_mismatch"
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] PTP retract completed final_z=%.3f target_z=%.3f",
             final_pose[2],
             target_z,
         )
