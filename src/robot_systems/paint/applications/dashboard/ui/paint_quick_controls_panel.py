@@ -156,14 +156,14 @@ class PaintQuickControlsPanel(QWidget):
 
     def set_device_state(self, device_id: str, enabled: bool) -> None:
         self._device_states[device_id] = bool(enabled)
-        button = self._off_buttons.get(device_id)
-        if button is not None:
-            button.setEnabled(bool(enabled))
+        # OFF is a safe command and must remain available even when process
+        # cleanup has already switched the output off or its live state is
+        # uncertain after an error.
 
     def set_device_busy(self, device_id: str, busy: bool) -> None:
         button = self._off_buttons.get(device_id)
         if button is not None:
-            button.setEnabled(not busy and self._device_states.get(device_id, False))
+            button.setEnabled(not busy)
 
     def set_cable_relief_busy(self, busy: bool) -> None:
         self._cable_relief.setEnabled(not busy)

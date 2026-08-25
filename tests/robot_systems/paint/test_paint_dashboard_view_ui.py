@@ -15,6 +15,9 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_card_factory import
 from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
     PaintInfoCard,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
+    PaintQuickControlsPanel,
+)
 from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view import (
     PaintDashboardView,
     _MAX_MESSAGE_ROWS,
@@ -239,6 +242,27 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         cable_callback.assert_called_once_with()
         toggle_callback.assert_called_once_with("fan", True)
+
+    def test_quick_off_command_remains_available_when_device_is_off(self) -> None:
+        panel = PaintQuickControlsPanel(
+            [AuxiliaryToggleConfig("pump", "Vacuum Pump")]
+        )
+
+        panel.set_device_state("pump", False)
+
+        self.assertTrue(panel._off_buttons["pump"].isEnabled())
+
+    def test_quick_off_command_is_disabled_only_while_command_is_busy(self) -> None:
+        panel = PaintQuickControlsPanel(
+            [AuxiliaryToggleConfig("fan", "Fan")]
+        )
+
+        panel.set_device_state("fan", False)
+        panel.set_device_busy("fan", True)
+        self.assertFalse(panel._off_buttons["fan"].isEnabled())
+
+        panel.set_device_busy("fan", False)
+        self.assertTrue(panel._off_buttons["fan"].isEnabled())
 
     def test_system_ui_config_controls_dashboard_drawer_visibility(self) -> None:
         with patch(
