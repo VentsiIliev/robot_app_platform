@@ -365,7 +365,7 @@ class Ros2Robot(IRobot):
         blocking: bool = False,
     ) -> int:
         logger.debug(
-            "execute_ordered_motion_chain → segments=%d tool=%s user=%s blocking=%s",
+            "execute_ordered_motion_chain → segments=%d tool=%s user=%s blocking=%s optimizer=Ruckig",
             len(segments) if segments else 0,
             tool,
             user,
@@ -376,6 +376,7 @@ class Ros2Robot(IRobot):
             tool=tool,
             user=user,
             blocking=blocking,
+            trajectory_optimizer="Ruckig",
         )
         logger.debug("execute_ordered_motion_chain ← result=%s", result)
         return result
