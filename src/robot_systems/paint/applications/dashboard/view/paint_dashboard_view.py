@@ -18,15 +18,7 @@ from PyQt6.QtWidgets import (
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from pl_gui.settings.settings_view.styles import (
-    ACTION_BTN_STYLE,
-    BG_COLOR,
-    BORDER,
-    ERROR_COLOR,
-    GHOST_BTN_STYLE,
-    PRIMARY,
-    TEXT_COLOR,
-)
+from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
@@ -40,6 +32,21 @@ _MAX_MESSAGE_ROWS = 50
 _MESSAGE_SCROLL_MIN_HEIGHT = 60
 _CONTROLS_DRAWER_WIDTH = 400
 _MESSAGE_DRAWER_HANDLE_CLEARANCE = 38
+_PROCESS_CONTROLS_TOP_MARGIN = 19
+_PROCESS_CONTROLS_BOTTOM_MARGIN = 5
+_PROCESS_CONTROLS_PANEL_STYLE = f"""
+QFrame#paintProcessControlsPanel {{
+    background-color: white;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+}}
+"""
+_PROCESS_CONTROLS_CONTENT_STYLE = """
+QWidget#paintProcessControls {
+    background-color: transparent;
+    border: none;
+}
+"""
 _MESSAGE_PANEL_STYLE = f"""
 QFrame {{
     background: white;
@@ -125,22 +132,6 @@ QScrollBar::sub-page:vertical {{
     background: transparent;
 }}
 """
-_STOP_BTN_STYLE = f"""
-QPushButton {{
-    background-color: {ERROR_COLOR};
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 0 16px;
-    font-size: 11pt;
-    font-weight: bold;
-    min-height: 44px;
-}}
-QPushButton:hover   {{ background-color: {ERROR_COLOR}; }}
-QPushButton:pressed {{ background-color: {ERROR_COLOR}; }}
-"""
-
-
 class PaintDashboardView(IApplicationView):
     SHOW_JOG_WIDGET = True
     JOG_DRAWER_SIDE = "right"
@@ -227,7 +218,6 @@ class PaintDashboardView(IApplicationView):
         self._move_reset_below_cards()
         self._install_bottom_quick_controls()
         self._expand_process_controls()
-        self._style_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
         self._dashboard.stop_requested.connect(self.stop_requested)
@@ -431,6 +421,7 @@ class PaintDashboardView(IApplicationView):
             bottom_layout = bottom_container.layout()
             action_area = bottom_layout.itemAt(0).widget()
             controls = bottom_layout.itemAt(1).widget()
+            controls = self._wrap_process_controls(bottom_layout, controls)
             if self._quick_controls is None:
                 action_area.hide()
                 bottom_layout.setStretchFactor(action_area, 0)
@@ -442,17 +433,35 @@ class PaintDashboardView(IApplicationView):
         except Exception:
             pass
 
-    def _style_process_controls(self) -> None:
-        """Match the paint process buttons to the adjacent touch controls."""
-        controls = getattr(self._dashboard, "control_buttons", None)
-        if controls is None:
-            return
-        controls.start_btn.setStyleSheet(ACTION_BTN_STYLE)
-        controls.pause_btn.setStyleSheet(GHOST_BTN_STYLE)
-        controls.stop_btn.setStyleSheet(_STOP_BTN_STYLE)
-        for button in (controls.start_btn, controls.pause_btn, controls.stop_btn):
-            button.setFixedHeight(44)
-            button.setCursor(Qt.CursorShape.PointingHandCursor)
+    def _wrap_process_controls(self, bottom_layout, controls: QWidget) -> QWidget:
+        """Give the process controls their own card, independent of inherited styles."""
+        host = QWidget()
+        host.setStyleSheet("background-color: transparent;")
+        host_layout = QVBoxLayout(host)
+        host_layout.setContentsMargins(
+            0,
+            _PROCESS_CONTROLS_TOP_MARGIN,
+            0,
+            _PROCESS_CONTROLS_BOTTOM_MARGIN,
+        )
+        host_layout.setSpacing(0)
+
+        panel = QFrame()
+        panel.setObjectName("paintProcessControlsPanel")
+        panel.setStyleSheet(_PROCESS_CONTROLS_PANEL_STYLE)
+
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(5, 5, 5, 5)
+        panel_layout.setSpacing(0)
+
+        bottom_layout.replaceWidget(controls, host)
+        controls.setObjectName("paintProcessControls")
+        controls.setStyleSheet(_PROCESS_CONTROLS_CONTENT_STYLE)
+        panel_layout.addWidget(controls)
+        host_layout.addWidget(panel)
+        self._process_controls_host = host
+        self._process_controls_panel = panel
+        return host
 
     def _on_inner_action(self, action_id: str) -> None:
         if action_id == "reset_errors":
