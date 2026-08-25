@@ -19,7 +19,8 @@ class TestDryerReleaseCoordinator(unittest.TestCase):
             SimpleNamespace(is_healthy=True, next_position_moving=True, next_position_done=False),
             SimpleNamespace(is_healthy=True, next_position_moving=False, next_position_done=True),
             SimpleNamespace(is_healthy=True, next_position_done=True, eject_done=False),
-            SimpleNamespace(is_healthy=True, next_position_done=True, eject_done=True),
+            SimpleNamespace(is_healthy=True, next_position_done=True, ejecting=True, eject_done=False),
+            SimpleNamespace(is_healthy=True, next_position_done=True, ejecting=False, eject_done=True),
         ]
         coordinator = DryerReleaseCoordinator(
             dryer,
@@ -32,7 +33,7 @@ class TestDryerReleaseCoordinator(unittest.TestCase):
         coordinator.shutdown()
 
         self.assertEqual(["next_position", "eject"], events)
-        self.assertEqual(5, dryer.get_state.call_count)
+        self.assertEqual(6, dryer.get_state.call_count)
 
     def test_eject_completion_accepts_return_to_ready_after_physical_activity(self) -> None:
         dryer = MagicMock()
@@ -44,7 +45,7 @@ class TestDryerReleaseCoordinator(unittest.TestCase):
             SimpleNamespace(is_healthy=True, next_position_moving=False, next_position_done=True),
             SimpleNamespace(is_healthy=True, is_ready=True, ejecting=False, eject_done=False),
             SimpleNamespace(is_healthy=True, is_ready=False, ejecting=True, eject_done=False, raw_status=0x08),
-            SimpleNamespace(is_healthy=True, is_ready=True, ejecting=False, eject_done=False, raw_status=0x01),
+            SimpleNamespace(is_healthy=True, is_ready=True, ejecting=False, eject_done=True, raw_status=0x11),
         ]
         coordinator = DryerReleaseCoordinator(dryer, status_timeout_s=0.1, status_poll_interval_s=0.0)
 

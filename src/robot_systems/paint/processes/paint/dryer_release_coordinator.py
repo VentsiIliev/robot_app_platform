@@ -15,10 +15,12 @@ class DryerReleaseCoordinator:
         *,
         status_timeout_s: float = 10.0,
         status_poll_interval_s: float = 0.1,
+        eject_confirmation_delay_s: float = 1.0,
     ) -> None:
         self._dryer = dryer
         self._status_timeout_s = max(0.0, float(status_timeout_s))
         self._status_poll_interval_s = max(0.0, float(status_poll_interval_s))
+        self._eject_confirmation_delay_s = max(0.0, float(eject_confirmation_delay_s))
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PaintDryerRelease")
         self._lock = threading.Lock()
         self._stopped = False
@@ -64,7 +66,19 @@ class DryerReleaseCoordinator:
             ready = not self._sequence_active and self._last_sequence_succeeded
             reason = self._last_error
         if ready:
-            return True, ""
+            state = self._dryer.get_state()
+            eject_done = bool(getattr(state, "eject_done", False))
+            ejecting = bool(getattr(state, "ejecting", False))
+            healthy = bool(getattr(state, "is_healthy", False))
+            if healthy and eject_done and not ejecting:
+                self._logger.info("[DRYER_RELEASE] Final EJECT_DONE check passed before dropoff")
+                return True, ""
+            reason = "EJECT_DONE was not confirmed before dropoff"
+            self._logger.error(
+                "[DRYER_RELEASE] Dropoff refused: final EJECT_DONE check failed "
+                "healthy=%s ejecting=%s eject_done=%s",
+                healthy, ejecting, eject_done,
+            )
         reason = reason or "the previous dryer sequence failed"
         self._logger.error("[DRYER_RELEASE] Dropoff refused: %s", reason)
         return False, reason
@@ -97,8 +111,8 @@ class DryerReleaseCoordinator:
                 error = "EJECT command failed"
                 self._logger.error("[DRYER_RELEASE] EJECT command failed")
                 return
-            if not self._wait_for_eject_cycle(eject_initial_state):
-                error = "EJECT completion was not confirmed"
+            if not self._confirm_eject_started(eject_initial_state):
+                error = "EJECT start was not confirmed"
                 return
             succeeded = True
             error = ""
@@ -139,41 +153,21 @@ class DryerReleaseCoordinator:
                 return False
             time.sleep(self._status_poll_interval_s)
 
-    def _wait_for_eject_cycle(self, initial_state: object) -> bool:
-        """Accept a fresh EJECT_DONE edge or an eject-active-to-ready cycle."""
-        initial_done = bool(getattr(initial_state, "eject_done", False))
-        activity_observed = bool(getattr(initial_state, "ejecting", False))
-        last_raw = None
-        deadline = time.monotonic() + self._status_timeout_s
-        while True:
-            with self._lock:
-                if self._stopped:
-                    return False
-            state = self._dryer.get_state()
-            healthy = bool(getattr(state, "is_healthy", False))
-            ready = bool(getattr(state, "is_ready", True))
-            ejecting = bool(getattr(state, "ejecting", False))
-            done = bool(getattr(state, "eject_done", False))
-            raw = int(getattr(state, "raw_status", 0) or 0)
-            if raw != last_raw:
-                self._logger.info(
-                    "[DRYER_RELEASE] EJECT status raw=%#06x healthy=%s ready=%s ejecting=%s eject_done=%s",
-                    raw, healthy, ready, ejecting, done,
-                )
-                last_raw = raw
-            if healthy and (ejecting or not ready or (done and not initial_done)):
-                activity_observed = True
-            if healthy and activity_observed and not ejecting and (done or ready):
-                completion = "EJECT_DONE" if done else "return-to-ready"
-                self._logger.info("[DRYER_RELEASE] EJECT completed via %s", completion)
-                return True
-            if time.monotonic() >= deadline:
-                self._logger.error(
-                    "[DRYER_RELEASE] EJECT fresh status cycle was not confirmed within %.1f s",
-                    self._status_timeout_s,
-                )
+    def _confirm_eject_started(self, initial_state: object) -> bool:
+        """Confirm the slow EJECT operation started with one delayed status read."""
+        with self._lock:
+            if self._stopped:
                 return False
-            time.sleep(self._status_poll_interval_s)
+        time.sleep(self._eject_confirmation_delay_s)
+        state = self._dryer.get_state()
+        healthy = bool(getattr(state, "is_healthy", False))
+        ejecting = bool(getattr(state, "ejecting", False))
+        initial_ejecting = bool(getattr(initial_state, "ejecting", False))
+        self._logger.info(
+            "[DRYER_RELEASE] EJECT start check healthy=%s ejecting=%s previously_ejecting=%s",
+            healthy, ejecting, initial_ejecting,
+        )
+        return healthy and ejecting
 
     @staticmethod
     def _format_state(state: object) -> str:
