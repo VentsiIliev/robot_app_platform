@@ -149,6 +149,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.prepared[0][0][0]["position"], [1, 2, 100.0, 0, 0, 3])
         self.assertEqual(robot.prepared[0][0][0]["blendR"], 20.0)
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
+        self.assertEqual(robot.started[1][1]["linear_mm_s"], 100.0)
 
     def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
         motion = _FakeMotion()

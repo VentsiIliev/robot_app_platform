@@ -453,7 +453,8 @@ class ServoUntilConditionProcedure:
         tolerance = max(0.0, float(retract.position_tolerance_mm))
         maximum_distance = max(0.0, float(retract.maximum_distance_mm))
         requested_distance = target_z - start_z
-        if not math.isfinite(float(retract.linear_mm_s)) or float(retract.linear_mm_s) <= 0.0:
+        configured_linear_speed = float(retract.linear_mm_s)
+        if not math.isfinite(configured_linear_speed) or configured_linear_speed <= 0.0:
             return False, "invalid_retract_linear_speed"
         if requested_distance <= tolerance:
             return False, "retract_target_not_above_contact"
@@ -478,15 +479,26 @@ class ServoUntilConditionProcedure:
         # take materially longer than distance / commanded speed. Keep the
         # explicit timeout as a floor and derive a conservative distance-aware
         # deadline. The independent progress watchdog still stops stalled motion.
-        distance_aware_timeout = requested_distance / float(retract.linear_mm_s) * 4.0 + 1.0
+        # A continuous Servo command cannot stop instantaneously: pose feedback,
+        # the HTTP stop request, and the controller each add latency. At 250 mm/s
+        # even 100 ms represents 25 mm, which can consume the entire safety
+        # envelope of a short 10 mm retract. Treat the configured value as an
+        # upper bound and limit short automated retracts to roughly ten target
+        # distances per second. This keeps the stop observable without weakening
+        # maximum_distance_mm.
+        distance_aware_speed_limit = max(25.0, requested_distance * 10.0)
+        commanded_linear_speed = min(configured_linear_speed, distance_aware_speed_limit)
+        distance_aware_timeout = requested_distance / commanded_linear_speed * 4.0 + 1.0
         effective_timeout = max(float(retract.timeout_s), distance_aware_timeout)
         _logger.info(
             "[SERVO_UNTIL_CONDITION] retract starting start_z=%.3f target_z=%.3f distance_mm=%.3f "
-            "speed_mm_s=%.3f configured_timeout_s=%.3f effective_timeout_s=%.3f tolerance_mm=%.3f",
+            "configured_speed_mm_s=%.3f commanded_speed_mm_s=%.3f configured_timeout_s=%.3f "
+            "effective_timeout_s=%.3f tolerance_mm=%.3f",
             start_z,
             target_z,
             requested_distance,
-            float(retract.linear_mm_s),
+            configured_linear_speed,
+            commanded_linear_speed,
             float(retract.timeout_s),
             effective_timeout,
             tolerance,
@@ -495,7 +507,7 @@ class ServoUntilConditionProcedure:
         start_ret = self._robot.start_servo_jog(
             RobotAxis.Z,
             Direction.PLUS,
-            linear_mm_s=float(retract.linear_mm_s),
+            linear_mm_s=commanded_linear_speed,
             angular_deg_s=None,
             frame=cfg.frame,
             tool=cfg.tool,
