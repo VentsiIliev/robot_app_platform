@@ -23,6 +23,7 @@ class MotionService(IMotionService):
     _JOG_TARGET_REUSE_POS_MM = 5.0
     _JOG_TARGET_REUSE_ANG_DEG = 2.0
     _SERVO_FLOOR_POLL_S = 0.02
+    _SERVO_RECOVERY_MAX_LINEAR_MM_S = 5.0
 
     def __init__(
             self,
@@ -362,6 +363,18 @@ class MotionService(IMotionService):
             starter = getattr(self._robot, "start_servo_jog", None)
             if not callable(starter):
                 return -1
+            current_getter = getattr(self._robot, "get_current_position_fresh", None)
+            if not callable(current_getter):
+                current_getter = self._robot.get_current_position
+            current = list(current_getter() or self._cached_position or [])
+            recovery = (
+                axis == RobotAxis.Z
+                and direction == Direction.PLUS
+                and len(current) >= 3
+                and float(current[2]) < 0.0
+            )
+            if recovery and linear_mm_s is not None:
+                linear_mm_s = min(abs(float(linear_mm_s)), self._SERVO_RECOVERY_MAX_LINEAR_MM_S)
             result = int(starter(
                 axis,
                 direction,
@@ -372,7 +385,10 @@ class MotionService(IMotionService):
                 user=user,
             ))
             if result == 0:
-                self._start_servo_floor_supervisor()
+                self._start_servo_floor_supervisor(
+                    allow_subzero_recovery=recovery,
+                    initial_z=float(current[2]) if recovery else None,
+                )
             return result
         except Exception:
             self._logger.exception("start_servo_jog failed")
@@ -524,7 +540,12 @@ class MotionService(IMotionService):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _start_servo_floor_supervisor(self) -> None:
+    def _start_servo_floor_supervisor(
+            self,
+            *,
+            allow_subzero_recovery: bool = False,
+            initial_z: float | None = None,
+    ) -> None:
         """Stop unrestricted continuous Servo before it can continue below Z=0."""
         self._servo_floor_stop.set()
         previous = self._servo_floor_thread
@@ -534,20 +555,40 @@ class MotionService(IMotionService):
         stop_event = self._servo_floor_stop
         self._servo_floor_thread = Thread(
             target=self._supervise_servo_floor,
-            args=(stop_event,),
+            args=(stop_event, allow_subzero_recovery, initial_z),
             name="robot-servo-z-floor",
             daemon=True,
         )
         self._servo_floor_thread.start()
 
-    def _supervise_servo_floor(self, stop_event: Event) -> None:
+    def _supervise_servo_floor(
+            self,
+            stop_event: Event,
+            allow_subzero_recovery: bool = False,
+            initial_z: float | None = None,
+    ) -> None:
         getter = getattr(self._robot, "get_current_position_fresh", None)
         if not callable(getter):
             getter = self._robot.get_current_position
+        started = time.monotonic()
+        initial_z = float(initial_z) if initial_z is not None else None
         while not stop_event.wait(self._SERVO_FLOOR_POLL_S):
             try:
                 position = list(getter() or self._cached_position or [])
                 if len(position) >= 3 and float(position[2]) <= 0.0:
+                    z = float(position[2])
+                    if allow_subzero_recovery and initial_z is not None:
+                        if z >= 0.0:
+                            return
+                        if not (z < initial_z - 2.0 or (
+                            time.monotonic() - started > 1.0 and z <= initial_z + 0.2
+                        )):
+                            continue
+                        self._logger.error(
+                            "Servo recovery stopped: Z did not retract safely from z=%.3f (current z=%.3f)",
+                            initial_z,
+                            z,
+                        )
                     self._logger.error(
                         "Servo stopped by platform Z floor at z=%.3f; sub-zero motion requires corridor LIN",
                         float(position[2]),
