@@ -169,7 +169,7 @@ class PaintQuickControlsPanel(QWidget):
         self._cable_relief.setEnabled(not busy)
 
     def retranslateUi(self) -> None:
-        self._box.setTitle(self.tr("Quick Paint Controls"))
+        # self._box.setTitle(self.tr("Quick Paint Controls"))
         self._velocity_label.setText(self.tr("Velocity"))
         self._acceleration_label.setText(self.tr("Acceleration"))
         self._offset_label.setText(self.tr("Press Offset"))

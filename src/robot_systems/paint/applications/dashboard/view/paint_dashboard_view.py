@@ -18,7 +18,15 @@ from PyQt6.QtWidgets import (
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
-from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
+from pl_gui.settings.settings_view.styles import (
+    ACTION_BTN_STYLE,
+    BG_COLOR,
+    BORDER,
+    ERROR_COLOR,
+    GHOST_BTN_STYLE,
+    PRIMARY,
+    TEXT_COLOR,
+)
 from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
     PaintControlsDrawer,
 )
@@ -117,6 +125,20 @@ QScrollBar::sub-page:vertical {{
     background: transparent;
 }}
 """
+_STOP_BTN_STYLE = f"""
+QPushButton {{
+    background-color: {ERROR_COLOR};
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-size: 11pt;
+    font-weight: bold;
+    min-height: 44px;
+}}
+QPushButton:hover   {{ background-color: {ERROR_COLOR}; }}
+QPushButton:pressed {{ background-color: {ERROR_COLOR}; }}
+"""
 
 
 class PaintDashboardView(IApplicationView):
@@ -205,6 +227,7 @@ class PaintDashboardView(IApplicationView):
         self._move_reset_below_cards()
         self._install_bottom_quick_controls()
         self._expand_process_controls()
+        self._style_process_controls()
 
         self._dashboard.start_requested.connect(self.start_requested)
         self._dashboard.stop_requested.connect(self.stop_requested)
@@ -418,6 +441,18 @@ class PaintDashboardView(IApplicationView):
                 bottom_layout.setStretchFactor(controls, 1)
         except Exception:
             pass
+
+    def _style_process_controls(self) -> None:
+        """Match the paint process buttons to the adjacent touch controls."""
+        controls = getattr(self._dashboard, "control_buttons", None)
+        if controls is None:
+            return
+        controls.start_btn.setStyleSheet(ACTION_BTN_STYLE)
+        controls.pause_btn.setStyleSheet(GHOST_BTN_STYLE)
+        controls.stop_btn.setStyleSheet(_STOP_BTN_STYLE)
+        for button in (controls.start_btn, controls.pause_btn, controls.stop_btn):
+            button.setFixedHeight(44)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def _on_inner_action(self, action_id: str) -> None:
         if action_id == "reset_errors":
