@@ -97,6 +97,7 @@ class RobotService(IRobotService):
         frame: str | int = "user",
         tool: int = 0,
         user: int = 0,
+        allow_subzero_descent: bool = False,
     ) -> int:
         starter = getattr(self._motion, "start_servo_jog", None)
         if not callable(starter):
@@ -109,6 +110,7 @@ class RobotService(IRobotService):
             frame=frame,
             tool=tool,
             user=user,
+            allow_subzero_descent=allow_subzero_descent,
         )
 
     def start_joint_jog(

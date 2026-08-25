@@ -193,6 +193,21 @@ class TestMotionService(unittest.TestCase):
             time.sleep(0.01)
         self.robot.stop_servo_jog.assert_called_once_with()
 
+    def test_bounded_subzero_servo_descent_bypasses_generic_floor_supervisor(self):
+        self.robot.start_servo_jog.return_value = 0
+        self.robot.get_current_position_fresh.return_value = [100, 50, -5, 0, 0, 0]
+
+        result = self.service.start_servo_jog(
+            RobotAxis.Z,
+            Direction.MINUS,
+            linear_mm_s=10,
+            allow_subzero_descent=True,
+        )
+
+        self.assertEqual(result, 0)
+        time.sleep(0.05)
+        self.robot.stop_servo_jog.assert_not_called()
+
 
     # ------------------------------------------------------------------
     # move_sequence

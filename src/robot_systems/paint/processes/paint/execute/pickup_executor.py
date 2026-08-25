@@ -356,6 +356,7 @@ class PaintPickupExecutor:
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
+                allow_subzero_descent=True,
             ),
             retract=ServoRetractConfig(
                 distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),

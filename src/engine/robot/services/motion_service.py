@@ -380,6 +380,7 @@ class MotionService(IMotionService):
             frame: str | int = "user",
             tool: int = 0,
             user: int = 0,
+            allow_subzero_descent: bool = False,
     ) -> int:
         self._last_jog_target = []
         try:
@@ -408,10 +409,16 @@ class MotionService(IMotionService):
                 user=user,
             ))
             if result == 0:
-                self._start_servo_floor_supervisor(
-                    allow_subzero_recovery=recovery,
-                    initial_z=float(current[2]) if recovery else None,
-                )
+                if allow_subzero_descent:
+                    self._servo_floor_stop.set()
+                    self._logger.info(
+                        "Servo Z-floor bypassed for bounded sub-zero descent procedure"
+                    )
+                else:
+                    self._start_servo_floor_supervisor(
+                        allow_subzero_recovery=recovery,
+                        initial_z=float(current[2]) if recovery else None,
+                    )
             return result
         except Exception:
             self._logger.exception("start_servo_jog failed")

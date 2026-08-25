@@ -87,6 +87,7 @@ class IMotionService(ABC):
         frame: str | int = "user",
         tool: int = 0,
         user: int = 0,
+        allow_subzero_descent: bool = False,
     ) -> int:
         return -1
 

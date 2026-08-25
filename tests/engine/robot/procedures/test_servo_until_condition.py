@@ -28,6 +28,7 @@ class FakeRobot:
         frame="user",
         tool=0,
         user=0,
+        allow_subzero_descent=False,
     ):
         self.started.append(
             {
@@ -38,6 +39,7 @@ class FakeRobot:
                 "frame": frame,
                 "tool": tool,
                 "user": user,
+                "allow_subzero_descent": allow_subzero_descent,
             }
         )
         return self.start_return
@@ -195,6 +197,21 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(robot.started[0]["direction"], Direction.MINUS)
         self.assertEqual(robot.started[0]["linear_mm_s"], 12.5)
         self.assertEqual(robot.started[0]["tool"], 1)
+
+    def test_bounded_contact_search_can_authorize_subzero_descent(self):
+        robot = FakeRobot()
+        condition = _ConditionSequence(False, False, True)
+
+        result = ServoUntilConditionProcedure(robot, condition).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.001,
+                timeout_s=0.1,
+                allow_subzero_descent=True,
+            )
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(robot.started[0]["allow_subzero_descent"])
 
     def test_stops_servo_on_timeout(self):
         robot = FakeRobot()

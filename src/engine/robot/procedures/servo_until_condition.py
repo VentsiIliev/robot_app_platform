@@ -31,6 +31,7 @@ class ServoUntilConditionConfig:
     approach_acceleration: float = 10.0
     preflight_condition_read_attempts: int = 2
     condition_read_failure_limit: int = 3
+    allow_subzero_descent: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,15 +191,16 @@ class ServoUntilConditionProcedure:
                     message="condition_already_active",
                 )
 
-            start_ret = self._robot.start_servo_jog(
-                cfg.axis,
-                cfg.direction,
-                linear_mm_s=cfg.linear_mm_s if cfg.axis.value <= 3 else None,
-                angular_deg_s=cfg.angular_deg_s if cfg.axis.value > 3 else None,
-                frame=cfg.frame,
-                tool=cfg.tool,
-                user=cfg.user,
-            )
+            servo_kwargs = {
+                "linear_mm_s": cfg.linear_mm_s if cfg.axis.value <= 3 else None,
+                "angular_deg_s": cfg.angular_deg_s if cfg.axis.value > 3 else None,
+                "frame": cfg.frame,
+                "tool": cfg.tool,
+                "user": cfg.user,
+            }
+            if cfg.allow_subzero_descent:
+                servo_kwargs["allow_subzero_descent"] = True
+            start_ret = self._robot.start_servo_jog(cfg.axis, cfg.direction, **servo_kwargs)
             if not self._return_code_ok(start_ret):
                 return self._result(
                     started_at,
