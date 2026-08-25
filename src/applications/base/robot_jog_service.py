@@ -132,15 +132,24 @@ class RobotJogService:
                 target,
             )
             if target is not None:
-                self._robot.move_linear(
-                    target,
-                    tool=tool,
-                    user=user,
-                    velocity=self._current_move_velocity(),
-                    acceleration=self._current_move_acceleration(),
-                    blendR=0.0,
-                    wait_to_reach=True,
+                allow_subzero_recovery = (
+                    axis.upper() in {"X", "Y", "Z"}
+                    and abs(step_value) <= 1.0
+                    and isinstance(current, (list, tuple))
+                    and len(current) >= 3
+                    and float(current[2]) < 0.0
                 )
+                move_kwargs = {
+                    "tool": tool,
+                    "user": user,
+                    "velocity": self._current_move_velocity(),
+                    "acceleration": self._current_move_acceleration(),
+                    "blendR": 0.0,
+                    "wait_to_reach": True,
+                }
+                if allow_subzero_recovery:
+                    move_kwargs["allow_subzero_step_recovery"] = True
+                self._robot.move_linear(target, **move_kwargs)
             self._lock.release()
         except Exception:
             _logger.exception(

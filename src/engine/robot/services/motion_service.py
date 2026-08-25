@@ -143,9 +143,16 @@ class MotionService(IMotionService):
             blendR=0.0,
             wait_to_reach=False,
             wait_cancelled: Callable[[], bool] | None = None,
+            allow_subzero_step_recovery: bool = False,
     ) -> bool:
         self._last_jog_target = []
         violations = self._motion_violations(position)
+        if allow_subzero_step_recovery:
+            violations = [
+                violation for violation in violations
+                if "sub-zero" not in violation.lower()
+                and "not in [0, 800]" not in violation.lower()
+            ]
         if violations:
             self._logger.warning("move_linear blocked by safety limits: %s", ", ".join(violations))
             return False

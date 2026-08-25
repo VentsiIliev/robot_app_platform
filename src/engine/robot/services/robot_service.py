@@ -39,8 +39,12 @@ class RobotService(IRobotService):
     def move_ptp(self, position, tool, user, velocity, acceleration, wait_to_reach=False) -> bool:
         return self._motion.move_ptp(position, tool, user, velocity, acceleration, wait_to_reach)
 
-    def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False) -> bool:
-        return self._motion.move_linear(position, tool, user, velocity, acceleration, blendR, wait_to_reach)
+    def move_linear(self, position, tool, user, velocity, acceleration, blendR=0.0, wait_to_reach=False,
+                    allow_subzero_step_recovery=False) -> bool:
+        return self._motion.move_linear(
+            position, tool, user, velocity, acceleration, blendR, wait_to_reach,
+            allow_subzero_step_recovery=allow_subzero_step_recovery,
+        )
 
     def register_motion_corridor(self, corridor) -> None:
         self._motion.register_motion_corridor(corridor)
