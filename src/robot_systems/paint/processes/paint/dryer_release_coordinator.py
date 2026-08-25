@@ -16,11 +16,15 @@ class DryerReleaseCoordinator:
         status_timeout_s: float = 10.0,
         status_poll_interval_s: float = 0.1,
         eject_confirmation_delay_s: float = 1.0,
+        next_position_confirmation_delay_s: float = 0.1,
     ) -> None:
         self._dryer = dryer
         self._status_timeout_s = max(0.0, float(status_timeout_s))
         self._status_poll_interval_s = max(0.0, float(status_poll_interval_s))
         self._eject_confirmation_delay_s = max(0.0, float(eject_confirmation_delay_s))
+        self._next_position_confirmation_delay_s = max(
+            0.0, float(next_position_confirmation_delay_s)
+        )
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="PaintDryerRelease")
         self._lock = threading.Lock()
         self._stopped = False
@@ -110,7 +114,13 @@ class DryerReleaseCoordinator:
                 error = "NEXT_POSITION command failed"
                 self._logger.error("[DRYER_RELEASE] NEXT_POSITION command failed")
                 return
-            if not self._wait_for_next_position_cycle(initial_state):
+            time.sleep(self._next_position_confirmation_delay_s)
+            post_command_state = self._dryer.get_state()
+            self._logger.info(
+                "[DRYER_RELEASE] After NEXT_POSITION: state=%s",
+                self._format_state(post_command_state),
+            )
+            if not self._wait_for_next_position_cycle(initial_state, post_command_state):
                 error = "NEXT_POSITION completion was not confirmed"
                 return
             eject_initial_state = self._dryer.get_state()
@@ -133,17 +143,20 @@ class DryerReleaseCoordinator:
                 self._last_error = error
                 self._completion.set()
 
-    def _wait_for_next_position_cycle(self, initial_state: object) -> bool:
+    def _wait_for_next_position_cycle(
+        self,
+        initial_state: object,
+        first_state: object | None = None,
+    ) -> bool:
         """Require a fresh move transition before accepting NEXT_POSITION_DONE."""
-        initial_healthy = bool(getattr(initial_state, "is_healthy", False))
-        initial_done = bool(getattr(initial_state, "next_position_done", False))
-        movement_observed = initial_healthy and not initial_done
+        movement_observed = False
         deadline = time.monotonic() + self._status_timeout_s
+        states = ([first_state] if first_state is not None else [])
         while True:
             with self._lock:
                 if self._stopped:
                     return False
-            state = self._dryer.get_state()
+            state = states.pop(0) if states else self._dryer.get_state()
             healthy = bool(getattr(state, "is_healthy", False))
             moving = bool(getattr(state, "next_position_moving", False))
             done = bool(getattr(state, "next_position_done", False))

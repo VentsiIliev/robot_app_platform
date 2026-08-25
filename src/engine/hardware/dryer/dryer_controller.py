@@ -153,11 +153,15 @@ class DryerController(IDryerController):
         try:
             self._transport.write_registers(self._register_map.command, [command])
             ok = True
-        except Exception:
-            self._logger.exception(
-                "[DRYER] NEXT_POSITION FC16 single-register write failed command_register=%d command=%#04x",
+        except Exception as exc:
+            self._logger.error(
+                "[DRYER] NEXT_POSITION FC16 single-register write failed "
+                "command_register=%d command=%#04x error_type=%s error=%s",
                 int(self._register_map.command),
                 command,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
             )
             ok = False
         if ok:
