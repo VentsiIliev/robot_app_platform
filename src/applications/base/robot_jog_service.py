@@ -26,7 +26,7 @@ class RobotJogService:
         move_acceleration: float = 10.0,
         move_velocity_getter: Callable[[], float | None] | None = None,
         move_acceleration_getter: Callable[[], float | None] | None = None,
-        servo_linear_speed_mm_s: float = 10.0,
+            servo_linear_speed_mm_s: float = 250.0,
         servo_angular_speed_deg_s: float = 3.0,
         servo_linear_speed_getter: Callable[[], float | None] | None = None,
         servo_angular_speed_getter: Callable[[], float | None] | None = None,

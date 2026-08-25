@@ -844,9 +844,11 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         if trajectory_optimizer:
             payload["trajectory_optimizer"] = trajectory_optimizer
         logger.debug(
-            "execute_ordered_motion_chain → POST /execute/ordered_motion_chain segments=%d blocking=%s",
+            "execute_ordered_motion_chain → POST /execute/ordered_motion_chain "
+            "segments=%d blocking=%s optimizer=%s",
             len(payload["segments"]),
             blocking,
+            payload.get("trajectory_optimizer"),
         )
         try:
             request_started = self._mark_execution_request_sent("execute_ordered_motion_chain")
