@@ -294,6 +294,10 @@ class RobotService(IRobotService):
             blocking=blocking,
         )
 
+    def get_last_motion_error(self):
+        getter = getattr(self._robot, "get_last_motion_error", None)
+        return getter() if callable(getter) else None
+
     def get_execution_status(self):
         return self._robot.get_execution_status()
 

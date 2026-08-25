@@ -18,6 +18,7 @@ class PaintMotionExecutor:
         self._owner = owner
         self._ordered_chain_resume_start_index: int | None = None
         self._ordered_chain_interrupted_by_pause: bool = False
+        self.last_motion_error: str | None = None
 
     @timed_step(_logger, "pickup_phase", label_arg="label")
     def move_pickup_phase(
@@ -106,7 +107,12 @@ class PaintMotionExecutor:
                 blocking=True,
             )
             if result in (0, True, None):
+                self.last_motion_error = None
                 return True
+            error_getter = getattr(owner._robot_service, "get_last_motion_error", None)
+            self.last_motion_error = error_getter() if callable(error_getter) else None
+            if self.last_motion_error:
+                _logger.error("[PICKUP] Ordered motion chain rejected: %s", self.last_motion_error)
             if not self.resume_after_interrupted_non_contact_motion(label):
                 return False
             active_segments = self.trim_ordered_pickup_segments_from_current_pose(active_segments)

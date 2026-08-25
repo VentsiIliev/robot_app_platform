@@ -381,6 +381,10 @@ class Ros2Robot(IRobot):
         logger.debug("execute_ordered_motion_chain ← result=%s", result)
         return result
 
+    def get_last_motion_error(self):
+        getter = getattr(self._client, "get_last_motion_error", None)
+        return getter() if callable(getter) else None
+
     def reset_all_errors(self) -> int:
         logger.info("reset_all_errors →")
         ret = self._client.resetAllErrors()

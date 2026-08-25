@@ -108,7 +108,23 @@ class DryerController(IDryerController):
                 is_healthy=False,
                 communication_errors=[str(exc)],
             )
-        return DryerState.from_raw_status(int(raw_status), self._statuses)
+        raw_status = int(raw_status)
+        state = DryerState.from_raw_status(raw_status, self._statuses)
+        self._logger.debug(
+            "Dryer status read register=%d raw=%d (%#06x) "
+            "healthy=%s ready=%s ejecting=%s eject_done=%s "
+            "next_position_moving=%s next_position_done=%s",
+            int(self._register_map.status),
+            raw_status,
+            raw_status,
+            state.is_healthy,
+            state.is_ready,
+            state.ejecting,
+            state.eject_done,
+            state.next_position_moving,
+            state.next_position_done,
+        )
+        return state
 
     def move_servos(self, data: DryerWriteData | None = None) -> bool:
         return self.eject(data)

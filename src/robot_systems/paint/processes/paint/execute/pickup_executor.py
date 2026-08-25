@@ -249,6 +249,9 @@ class PaintPickupExecutor:
         if ok:
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
         _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
+        detail = getattr(self._owner._motion, "last_motion_error", None)
+        if detail:
+            return False, f"Ordered pickup sequence failed: {detail}"
         return False, "Ordered pickup sequence failed"
 
     def _execute_custom_pickup_sequence(self, pickup_plan: PickupPlan) -> bool:

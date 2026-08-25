@@ -35,6 +35,23 @@ class TestDryerController(unittest.TestCase):
         self.assertTrue(state.eject_done)
         self.assertTrue(state.next_position_moving)
 
+    def test_status_read_logs_raw_register_and_decoded_flags(self) -> None:
+        transport = MagicMock()
+        transport.read_register.return_value = int(
+            DryerStatus.READY | DryerStatus.EJECT | DryerStatus.NEXT_POS_DONE
+        )
+        controller = DryerController(transport)
+
+        with self.assertLogs("DryerController", level="DEBUG") as captured:
+            controller.get_state()
+
+        output = "\n".join(captured.output)
+        self.assertIn("raw=73 (0x0049)", output)
+        self.assertIn("ready=True", output)
+        self.assertIn("ejecting=True", output)
+        self.assertIn("eject_done=False", output)
+        self.assertIn("next_position_done=True", output)
+
     def test_command_replaces_stale_payload_command(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport)

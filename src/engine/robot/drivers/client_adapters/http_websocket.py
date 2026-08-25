@@ -534,6 +534,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         return {
             "http_status": response.status_code,
             "result_code": result_code,
+            "error": raw.get("error") or raw.get("message"),
             "task_id": raw.get("task_id"),
             "queued": bool(raw.get("queued", False)),
             "queue_position": raw.get("queue_position"),
@@ -773,6 +774,13 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
 
     def get_last_execute_path_response(self):
         return self._last_execute_path_response
+
+    def get_last_motion_error(self):
+        """Return the backend's latest motion error text, when available."""
+        response = self._last_execute_path_response
+        if isinstance(response, dict):
+            return response.get("error")
+        return self._last_command_error or self._last_error
 
     def execute_sequence(self, segments, tool=0, user=0, blocking=False):
         if not self._drive_enabled and self.enable() != 0:
