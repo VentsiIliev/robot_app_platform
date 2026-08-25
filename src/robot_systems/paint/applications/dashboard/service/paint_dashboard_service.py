@@ -170,12 +170,30 @@ class PaintDashboardService(IPaintDashboardService):
     def set_auxiliary_enabled(self, device_id: str, enabled: bool) -> DashboardCommandResult:
         device = self._auxiliary_devices.get(device_id)
         if device is None:
+            self._logger.error(
+                "[DASHBOARD_AUX] %s command=%s rejected: device unavailable",
+                device_id,
+                "ON" if enabled else "OFF",
+            )
             return DashboardCommandResult(False, f"{device_id.title()} is not available.", device_id)
         try:
+            self._logger.info(
+                "[DASHBOARD_AUX] Sending %s command to %s (%s)",
+                "ON" if enabled else "OFF",
+                device_id,
+                type(device).__name__,
+            )
             result = device.turn_on() if enabled else device.turn_off()
             success = result is not False
+            self._logger.info(
+                "[DASHBOARD_AUX] %s command=%s returned=%r success=%s",
+                device_id,
+                "ON" if enabled else "OFF",
+                result,
+                success,
+            )
         except Exception as exc:
-            self._logger.exception("Could not switch %s", device_id)
+            self._logger.exception("[DASHBOARD_AUX] Could not switch %s", device_id)
             return DashboardCommandResult(False, f"Could not switch {device_id}: {exc}", device_id)
         state = "ON" if enabled else "OFF"
         return DashboardCommandResult(success, f"{device_id.title()} switched {state}.", device_id, enabled)
