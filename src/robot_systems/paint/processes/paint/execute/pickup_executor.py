@@ -324,7 +324,7 @@ class PaintPickupExecutor:
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
 
-        contact_speed_mm_s = min(float(pickup_motion.servo_contact_linear_mm_s), 25.0)
+        contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         maximum_contact_travel_mm = float(getattr(pickup_motion, "approach_offset_mm", 100.0))
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",

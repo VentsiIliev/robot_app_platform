@@ -212,7 +212,7 @@ def _execute_magazine_servo_contact_pickup_release(
 
     predicted_retract_pose = list(transfer_waypoints[1][1])
     predicted_retract_pose[2] = float(retract_reference_pose[2])
-    contact_speed_mm_s = min(float(pickup_motion.servo_contact_linear_mm_s), 25.0)
+    contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
     maximum_contact_travel_mm = float(getattr(pickup_motion, "approach_offset_mm", 100.0))
     _logger.info(
         "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",

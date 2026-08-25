@@ -121,7 +121,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         robot = _FakeRobot()
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
-            servo_contact_linear_mm_s=12.0,
+            servo_contact_linear_mm_s=100.0,
             servo_contact_timeout_s=1.0,
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
@@ -177,7 +177,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
-        self.assertEqual(robot.started[0][1]["linear_mm_s"], 12.0)
+        self.assertEqual(robot.started[0][1]["linear_mm_s"], 100.0)
         self.assertEqual(robot.started[1][1]["linear_mm_s"], 25.0)
         self.assertEqual(robot.started[1][0][1].name, "PLUS")
         self.assertEqual(len(robot.started), 2)
