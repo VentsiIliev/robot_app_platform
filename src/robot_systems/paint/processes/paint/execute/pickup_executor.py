@@ -386,6 +386,17 @@ class PaintPickupExecutor:
             return False
 
         retract_pose = predicted_retract_pose
+        continuation_segments = build_paint_pickup_segments(continuation_waypoints)
+        continuation_segments.extend(prepared_continuation_segments or [])
+        prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
+        prepared = prepare_chain(
+            continuation_segments,
+            retract_pose,
+            int(self._owner._pickup_tool),
+            int(self._owner._pickup_user),
+        ) if continuation_segments and callable(prepare_chain) else None
+        prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
+
         if not self._owner._robot_service.move_ptp(
             retract_pose,
             int(self._owner._pickup_tool),
@@ -394,10 +405,14 @@ class PaintPickupExecutor:
             float(pickup_motion.lift_align_acc_percent),
             True,
         ):
+            if prepared_plan_id:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
-        # Servo is stopped and the calibrated retract has completed. Do not
-        # plan or submit any continuation against a predicted contact pose.
+        if prepared_plan_id:
+            return bool(
+                self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+            )
         if continuation_waypoints and not self._move_waypoint_sequence(
             "Pickup continuation after completed servo retract",
             continuation_waypoints,

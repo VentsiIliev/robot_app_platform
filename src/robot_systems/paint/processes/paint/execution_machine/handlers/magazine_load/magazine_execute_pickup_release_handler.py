@@ -270,6 +270,16 @@ def _execute_magazine_servo_contact_pickup_release(
     if retract_distance <= 0.0 or retract_distance > 500.0:
         return False, f"Magazine retract distance is invalid: {retract_distance:.3f} mm"
     retract_pose = predicted_retract_pose
+    continuation_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
+    prepare_chain = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
+    prepared = prepare_chain(
+        continuation_segments,
+        retract_pose,
+        int(executor._pickup_tool),
+        int(executor._pickup_user),
+    ) if continuation_segments and callable(prepare_chain) else None
+    prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
+
     if not executor._robot_service.move_ptp(
         retract_pose,
         int(executor._pickup_tool),
@@ -278,16 +288,19 @@ def _execute_magazine_servo_contact_pickup_release(
         float(pickup_motion.lift_align_acc_percent),
         True,
     ):
+        if prepared_plan_id:
+            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
         return False, "Magazine PTP retract after servo contact failed"
 
-    # Servo is stopped and the reference retract has completed. Only now plan
-    # and submit the continuation, using the reached pose as its real start.
-    remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    if not remaining_segments:
+    if prepared_plan_id:
+        if not executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id):
+            return False, f"Magazine prepared continuation failed for {release_label}"
+        return True, ""
+    if not continuation_segments:
         return True, ""
     ok = executor._motion.move_ordered_pickup_sequence(
         f"Magazine {release_label} continuation after completed servo retract",
-        remaining_segments,
+        continuation_segments,
     )
     if not ok:
         return False, f"Magazine lift/release after servo contact failed for {release_label}"
