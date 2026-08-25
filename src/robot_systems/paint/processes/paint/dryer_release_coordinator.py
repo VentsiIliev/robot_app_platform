@@ -25,6 +25,7 @@ class DryerReleaseCoordinator:
         self._lock = threading.Lock()
         self._stopped = False
         self._sequence_active = False
+        self._sequence_ever_queued = False
         self._last_sequence_succeeded = True
         self._last_error = ""
         self._completion = threading.Event()
@@ -37,6 +38,7 @@ class DryerReleaseCoordinator:
             if self._stopped or self._sequence_active or not self._last_sequence_succeeded:
                 return False
             self._sequence_active = True
+            self._sequence_ever_queued = True
             self._completion.clear()
             try:
                 self._executor.submit(self._run_sequence)
@@ -65,6 +67,9 @@ class DryerReleaseCoordinator:
         with self._lock:
             ready = not self._sequence_active and self._last_sequence_succeeded
             reason = self._last_error
+            has_previous_sequence = self._sequence_ever_queued
+        if not has_previous_sequence:
+            return True, ""
         if ready:
             state = self._dryer.get_state()
             eject_done = bool(getattr(state, "eject_done", False))
@@ -84,6 +89,8 @@ class DryerReleaseCoordinator:
         return False, reason
 
     def _run_sequence(self) -> None:
+        with self._lock:
+            self._sequence_ever_queued = True
         succeeded = False
         error = "Dryer sequence did not complete"
         try:
