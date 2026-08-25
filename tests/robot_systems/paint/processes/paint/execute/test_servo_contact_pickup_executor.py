@@ -122,6 +122,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
             servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=-5.0,
             servo_contact_timeout_s=1.0,
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
@@ -189,6 +190,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
             servo_contact_linear_mm_s=12.0,
+            servo_contact_min_z_mm=-5.0,
             servo_contact_timeout_s=1.0,
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,

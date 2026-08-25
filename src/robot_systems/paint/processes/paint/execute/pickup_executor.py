@@ -325,7 +325,7 @@ class PaintPickupExecutor:
             return False
 
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
-        maximum_contact_travel_mm = float(getattr(pickup_motion, "approach_offset_mm", 100.0))
+        minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -348,7 +348,7 @@ class PaintPickupExecutor:
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
-                maximum_travel_mm=maximum_contact_travel_mm,
+                minimum_z_mm=minimum_contact_z_mm,
             ),
             retract=ServoRetractConfig(
                 distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),

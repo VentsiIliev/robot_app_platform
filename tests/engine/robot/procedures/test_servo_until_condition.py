@@ -278,6 +278,33 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "maximum_travel_reached")
         self.assertEqual(robot.stopped, 1)
 
+    def test_stops_servo_at_configured_minimum_z(self):
+        class DescendingRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 5.0, 0.0, 0.0, 0.0]
+
+            def get_current_position(self):
+                position = list(self.position)
+                if self.started:
+                    self.position[2] -= 3.0
+                return position
+
+        robot = DescendingRobot()
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.001,
+                timeout_s=1.0,
+                minimum_z_mm=-1.0,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.guard_triggered)
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.message, "minimum_z_reached")
+        self.assertEqual(robot.stopped, 1)
+
     def test_stops_servo_when_stop_guard_cannot_be_read(self):
         robot = FakeRobot()
 

@@ -33,6 +33,7 @@ class ServoUntilConditionConfig:
     condition_read_failure_limit: int = 3
     allow_subzero_descent: bool = False
     maximum_travel_mm: float | None = None
+    minimum_z_mm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -193,7 +194,7 @@ class ServoUntilConditionProcedure:
                 )
 
             travel_start_pose = None
-            if cfg.maximum_travel_mm is not None:
+            if cfg.maximum_travel_mm is not None or cfg.minimum_z_mm is not None:
                 travel_start_pose = self._read_current_pose()
                 if travel_start_pose is None:
                     return self._result(
@@ -205,6 +206,17 @@ class ServoUntilConditionProcedure:
                         condition_failed=False,
                         guard_triggered=True,
                         message="travel_guard_position_unreadable_before_servo",
+                    )
+                if cfg.minimum_z_mm is not None and travel_start_pose[2] <= float(cfg.minimum_z_mm):
+                    return self._result(
+                        started_at,
+                        success=False,
+                        detected=False,
+                        timed_out=False,
+                        start_failed=False,
+                        condition_failed=False,
+                        guard_triggered=True,
+                        message="minimum_z_reached_before_servo",
                     )
 
             servo_kwargs = {
@@ -331,9 +343,25 @@ class ServoUntilConditionProcedure:
                             guard_triggered=True,
                             message="travel_guard_position_unreadable",
                         )
+                    if cfg.minimum_z_mm is not None and current_pose[2] <= float(cfg.minimum_z_mm):
+                        _logger.error(
+                            "[SERVO_UNTIL_CONDITION] minimum Z reached: live_z=%.3f limit_z=%.3f",
+                            current_pose[2],
+                            float(cfg.minimum_z_mm),
+                        )
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=True,
+                            message="minimum_z_reached",
+                        )
                     axis_index = int(cfg.axis.value) - 1
                     travelled = abs(current_pose[axis_index] - travel_start_pose[axis_index])
-                    if travelled >= float(cfg.maximum_travel_mm):
+                    if cfg.maximum_travel_mm is not None and travelled >= float(cfg.maximum_travel_mm):
                         _logger.error(
                             "[SERVO_UNTIL_CONDITION] maximum travel reached: axis=%s "
                             "travelled=%.3f limit=%.3f",
@@ -779,6 +807,13 @@ class ServoUntilConditionProcedure:
                 return False, "invalid_maximum_travel"
             if not math.isfinite(maximum_travel) or maximum_travel <= 0.0:
                 return False, "invalid_maximum_travel"
+        if cfg.minimum_z_mm is not None:
+            try:
+                minimum_z = float(cfg.minimum_z_mm)
+            except (TypeError, ValueError):
+                return False, "invalid_minimum_z"
+            if not math.isfinite(minimum_z):
+                return False, "invalid_minimum_z"
         return True, ""
 
     @staticmethod

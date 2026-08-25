@@ -127,6 +127,16 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         model.save.assert_not_called()
         self.assertEqual("planned", view.values_set["pickup_contact_mode"])
 
+    def test_servo_contact_minimum_z_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        self.assertEqual(0.0, flat["pickup_servo_contact_min_z_mm"])
+
+        flat["pickup_servo_contact_min_z_mm"] = -5.0
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(-5.0, restored.pickup_motion.servo_contact_min_z_mm)
+
     def test_motion_profile_tables_round_trip_type_and_blendr(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

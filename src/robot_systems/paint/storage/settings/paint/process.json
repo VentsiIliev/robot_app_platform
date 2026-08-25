@@ -53,6 +53,7 @@
     "pickup_contact_mode": "planned",
     "magazine_pickup_contact_mode": "planned",
     "servo_contact_linear_mm_s": 100.0,
+    "servo_contact_min_z_mm": 0.0,
     "servo_contact_retract_distance_mm": 10.0,
     "servo_contact_retract_linear_mm_s": 25.0,
     "servo_contact_timeout_s": 5.0,
