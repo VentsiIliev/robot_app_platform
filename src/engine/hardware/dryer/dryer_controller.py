@@ -48,10 +48,13 @@ class DryerController(IDryerController):
         return self._wait_until_next_position_done()
 
     def _wait_until_next_position_done(self) -> bool:
-        """Wait for NEXT_POS_DONE before reporting initialization success."""
-        deadline = time.monotonic() + self._next_position_timeout_s
+        """Wait for acknowledged movement to finish, regardless of its duration."""
+        acknowledgement_deadline = time.monotonic() + self._next_position_timeout_s
+        fresh_cycle_observed = False
+        unhealthy_since: float | None = None
         while True:
             state = self.get_state()
+            now = time.monotonic()
             self._logger.info(
                 "[DRYER] Initialization status raw=%#06x healthy=%s ready=%s next_pos_done=%s",
                 int(state.raw_status),
@@ -59,12 +62,26 @@ class DryerController(IDryerController):
                 state.is_ready,
                 state.next_position_done,
             )
-            if state.is_healthy and state.next_position_done:
+            moving = bool(state.next_position_moving)
+            done = bool(state.next_position_done)
+            if state.is_healthy and fresh_cycle_observed and done and not moving:
                 self._logger.info("[DRYER] Initialization completed: next position confirmed")
                 return True
-            if time.monotonic() >= deadline:
+            if state.is_healthy:
+                unhealthy_since = None
+                if moving or not done:
+                    fresh_cycle_observed = True
+            elif unhealthy_since is None:
+                unhealthy_since = now
+            if not fresh_cycle_observed and now >= acknowledgement_deadline:
                 self._logger.error(
-                    "[DRYER] Initialization failed: next position was not confirmed within %.1f s",
+                    "[DRYER] Initialization failed: next-position movement was not acknowledged within %.1f s",
+                    self._next_position_timeout_s,
+                )
+                return False
+            if unhealthy_since is not None and now - unhealthy_since >= self._next_position_timeout_s:
+                self._logger.error(
+                    "[DRYER] Initialization failed: status remained unhealthy for %.1f s",
                     self._next_position_timeout_s,
                 )
                 return False

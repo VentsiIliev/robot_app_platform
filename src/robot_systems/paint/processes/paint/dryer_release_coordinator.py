@@ -63,11 +63,7 @@ class DryerReleaseCoordinator:
 
     def wait_until_ready_for_release(self) -> tuple[bool, str]:
         """Wait for the previous sequence so another dropoff cannot overfill the dryer."""
-        wait_s = (2.0 * self._status_timeout_s) + 1.0
-        if not self._completion.wait(timeout=wait_s):
-            reason = "the previous dryer sequence is still running"
-            self._logger.error("[DRYER_RELEASE] Dropoff refused: %s", reason)
-            return False, reason
+        self._completion.wait()
         with self._lock:
             ready = not self._sequence_active and self._last_sequence_succeeded
             reason = self._last_error
@@ -150,7 +146,8 @@ class DryerReleaseCoordinator:
     ) -> bool:
         """Require a fresh move transition before accepting NEXT_POSITION_DONE."""
         movement_observed = False
-        deadline = time.monotonic() + self._status_timeout_s
+        acknowledgement_deadline = time.monotonic() + self._status_timeout_s
+        unhealthy_since: float | None = None
         states = ([first_state] if first_state is not None else [])
         while True:
             with self._lock:
@@ -160,14 +157,25 @@ class DryerReleaseCoordinator:
             healthy = bool(getattr(state, "is_healthy", False))
             moving = bool(getattr(state, "next_position_moving", False))
             done = bool(getattr(state, "next_position_done", False))
+            now = time.monotonic()
             if healthy and (moving or not done):
                 movement_observed = True
+            if healthy:
+                unhealthy_since = None
+            elif unhealthy_since is None:
+                unhealthy_since = now
             if healthy and movement_observed and done and not moving:
                 self._logger.info("[DRYER_RELEASE] NEXT_POSITION completed after fresh movement transition")
                 return True
-            if time.monotonic() >= deadline:
+            if not movement_observed and now >= acknowledgement_deadline:
                 self._logger.error(
-                    "[DRYER_RELEASE] NEXT_POSITION fresh status cycle was not confirmed within %.1f s",
+                    "[DRYER_RELEASE] NEXT_POSITION movement was not acknowledged within %.1f s",
+                    self._status_timeout_s,
+                )
+                return False
+            if unhealthy_since is not None and now - unhealthy_since >= self._status_timeout_s:
+                self._logger.error(
+                    "[DRYER_RELEASE] NEXT_POSITION status remained unhealthy for %.1f s",
                     self._status_timeout_s,
                 )
                 return False

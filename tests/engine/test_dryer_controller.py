@@ -101,7 +101,10 @@ class TestDryerController(unittest.TestCase):
             DryerConfig(pwm_open_vrytka=777),
             commands={"next_position": 1},
         )
-        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
+        transport.read_register.side_effect = [
+            int(DryerStatus.NEXT_POS_MOVING),
+            int(DryerStatus.NEXT_POS_DONE),
+        ]
 
         self.assertTrue(controller.initialize())
 
@@ -111,7 +114,7 @@ class TestDryerController(unittest.TestCase):
         self.assertEqual(values[1], 0)
         self.assertEqual(values[2], 777)
         self.assertEqual(transport.write_registers.call_args_list[1].args, (1, [1]))
-        transport.read_register.assert_called_once_with(0)
+        self.assertEqual(transport.read_register.call_count, 2)
 
     def test_initialize_does_not_send_next_position_when_config_write_fails(self) -> None:
         transport = MagicMock()
@@ -124,7 +127,7 @@ class TestDryerController(unittest.TestCase):
 
     def test_initialize_fails_when_next_position_done_is_not_confirmed(self) -> None:
         transport = MagicMock()
-        transport.read_register.return_value = int(DryerStatus.READY)
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
         controller = DryerController(
             transport,
             commands={"next_position": 1},
@@ -172,7 +175,10 @@ class TestDryerController(unittest.TestCase):
     def test_rev_minute_is_transmitted_without_scaling(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig(rev_minute=7))
-        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
+        transport.read_register.side_effect = [
+            int(DryerStatus.NEXT_POS_MOVING),
+            int(DryerStatus.NEXT_POS_DONE),
+        ]
 
         self.assertTrue(controller.initialize())
 
