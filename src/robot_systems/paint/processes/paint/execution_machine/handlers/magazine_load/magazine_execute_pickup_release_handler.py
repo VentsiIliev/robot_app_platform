@@ -220,9 +220,11 @@ def _execute_magazine_servo_contact_pickup_release(
     ) if continuation_segments and callable(prepare_chain) else None
     prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
 
+    contact_speed_mm_s = min(float(pickup_motion.servo_contact_linear_mm_s), 25.0)
+    maximum_contact_travel_mm = float(pickup_motion.approach_offset_mm)
     _logger.info(
         "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
-        float(pickup_motion.servo_contact_linear_mm_s),
+        contact_speed_mm_s,
         float(pickup_motion.servo_contact_timeout_s),
         int(executor._pickup_tool),
         int(executor._pickup_user),
@@ -232,7 +234,7 @@ def _execute_magazine_servo_contact_pickup_release(
         config=ServoUntilConditionConfig(
             axis=RobotAxis.Z,
             direction=Direction.MINUS,
-            linear_mm_s=float(pickup_motion.servo_contact_linear_mm_s),
+            linear_mm_s=contact_speed_mm_s,
             frame="user",
             tool=int(executor._pickup_tool),
             user=int(executor._pickup_user),
@@ -241,6 +243,7 @@ def _execute_magazine_servo_contact_pickup_release(
             preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
             condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
             allow_subzero_descent=True,
+            maximum_travel_mm=maximum_contact_travel_mm,
         ),
         retract=ServoRetractConfig(
             distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),

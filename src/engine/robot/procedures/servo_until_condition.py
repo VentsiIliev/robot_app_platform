@@ -32,6 +32,7 @@ class ServoUntilConditionConfig:
     preflight_condition_read_attempts: int = 2
     condition_read_failure_limit: int = 3
     allow_subzero_descent: bool = False
+    maximum_travel_mm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -191,6 +192,21 @@ class ServoUntilConditionProcedure:
                     message="condition_already_active",
                 )
 
+            travel_start_pose = None
+            if cfg.maximum_travel_mm is not None:
+                travel_start_pose = self._read_current_pose()
+                if travel_start_pose is None:
+                    return self._result(
+                        started_at,
+                        success=False,
+                        detected=False,
+                        timed_out=False,
+                        start_failed=True,
+                        condition_failed=False,
+                        guard_triggered=True,
+                        message="travel_guard_position_unreadable_before_servo",
+                    )
+
             servo_kwargs = {
                 "linear_mm_s": cfg.linear_mm_s if cfg.axis.value <= 3 else None,
                 "angular_deg_s": cfg.angular_deg_s if cfg.axis.value > 3 else None,
@@ -301,6 +317,40 @@ class ServoUntilConditionProcedure:
                         retracted=retract is not None,
                         message="condition_detected_and_retracted" if retract is not None else "condition_detected",
                     )
+
+                if travel_start_pose is not None:
+                    current_pose = self._read_current_pose()
+                    if current_pose is None:
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=True,
+                            message="travel_guard_position_unreadable",
+                        )
+                    axis_index = int(cfg.axis.value) - 1
+                    travelled = abs(current_pose[axis_index] - travel_start_pose[axis_index])
+                    if travelled >= float(cfg.maximum_travel_mm):
+                        _logger.error(
+                            "[SERVO_UNTIL_CONDITION] maximum travel reached: axis=%s "
+                            "travelled=%.3f limit=%.3f",
+                            cfg.axis,
+                            travelled,
+                            float(cfg.maximum_travel_mm),
+                        )
+                        return self._result(
+                            started_at,
+                            success=False,
+                            detected=False,
+                            timed_out=False,
+                            start_failed=False,
+                            condition_failed=False,
+                            guard_triggered=True,
+                            message="maximum_travel_reached",
+                        )
 
                 if stop_guard is not None:
                     try:
@@ -722,6 +772,13 @@ class ServoUntilConditionProcedure:
                 return False, "invalid_angular_speed"
             if speed <= 0.0:
                 return False, "invalid_angular_speed"
+        if cfg.maximum_travel_mm is not None:
+            try:
+                maximum_travel = float(cfg.maximum_travel_mm)
+            except (TypeError, ValueError):
+                return False, "invalid_maximum_travel"
+            if not math.isfinite(maximum_travel) or maximum_travel <= 0.0:
+                return False, "invalid_maximum_travel"
         return True, ""
 
     @staticmethod

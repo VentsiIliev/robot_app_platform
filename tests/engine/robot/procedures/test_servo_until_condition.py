@@ -251,6 +251,33 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "stop_guard_triggered")
         self.assertEqual(robot.stopped, 1)
 
+    def test_stops_servo_at_maximum_travel(self):
+        class MovingRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 50.0, 0.0, 0.0, 0.0]
+
+            def get_current_position(self):
+                position = list(self.position)
+                if self.started:
+                    self.position[2] -= 6.0
+                return position
+
+        robot = MovingRobot()
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.001,
+                timeout_s=1.0,
+                maximum_travel_mm=10.0,
+            )
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.guard_triggered)
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.message, "maximum_travel_reached")
+        self.assertEqual(robot.stopped, 1)
+
     def test_stops_servo_when_stop_guard_cannot_be_read(self):
         robot = FakeRobot()
 
@@ -351,6 +378,16 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(result.message, "invalid_linear_speed")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.stopped, 0)
+
+    def test_invalid_maximum_travel_blocks_servo_start(self):
+        robot = FakeRobot()
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(maximum_travel_mm=0.0)
+        )
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "invalid_maximum_travel")
+        self.assertEqual(robot.started, [])
 
     def test_timed_dummy_condition_arms_only_after_servo_start(self):
         robot = FakeRobot()
