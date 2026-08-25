@@ -1,6 +1,6 @@
 {
   "vacuum_pump": {
-    "enabled": false,
+    "enabled": true,
     "slave_id": 1,
     "inputs": {},
     "outputs": {
@@ -24,7 +24,7 @@
     "statuses": {}
   },
   "fan": {
-    "enabled": false,
+    "enabled": true,
     "slave_id": 1,
     "inputs": {},
     "outputs": {

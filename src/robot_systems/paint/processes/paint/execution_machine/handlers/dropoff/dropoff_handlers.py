@@ -41,6 +41,20 @@ class DropoffReleasePlan:
 
 def open_dropoff_passage_for_preparation(executor: object) -> tuple[bool, str]:
     """Open the configured passage before planning any route that crosses its lid."""
+    # Validate the configured release target before changing the planning scene.
+    # A disabled sub-zero dropoff must not open the paint passage or allow an
+    # ordered cleanup chain containing that target to execute.
+    if _dropoff_strategy_name(executor) == "movement_group":
+        dropoff = executor._paint_process_config().dropoff
+        pose = _resolve_dropoff_align_pose(executor)
+        if pose is not None and float(pose[2]) < 0.0 and not bool(
+            getattr(dropoff, "allow_sub_zero_dropoff", False)
+        ):
+            _logger.error(
+                "[DROPOFF] Refusing preparation before opening passage: "
+                "negative target with Allow Sub-Zero Dropoff disabled"
+            )
+            return False, "Dropoff cancelled: Allow Sub-Zero Dropoff is disabled"
     passage_id = str(getattr(executor, "_dropoff_motion_corridor_id", "") or "")
     if not passage_id:
         return True, ""
