@@ -244,7 +244,9 @@ def _execute_magazine_servo_contact_pickup_release(
             poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
             timeout_s=3.0,
             position_tolerance_mm=2.0,
-            maximum_distance_mm=30.0,
+            maximum_distance_mm=float(
+                getattr(pickup_motion, "servo_contact_retract_maximum_distance_mm", 50.0)
+            ),
         ),
         cancel_requested=(
             None
