@@ -50,7 +50,15 @@ class RobotJogService:
         self._active_servo_jog_key: tuple[str, str] | None = None
         self._servo_jog_stop_expected = False
         self._servo_jog_stop_requested = False
+        self._recovery_mode = False
         self._lock = threading.Lock()
+
+    def set_recovery_mode(self, enabled: bool) -> None:
+        self._recovery_mode = bool(enabled)
+        _logger.warning("[JOG] recovery mode %s", "ENABLED" if self._recovery_mode else "disabled")
+
+    def recovery_mode_enabled(self) -> bool:
+        return self._recovery_mode
 
     def set_frame(self, frame_name: str) -> None:
         self._frame_name = str(frame_name or "").strip()
@@ -132,13 +140,7 @@ class RobotJogService:
                 target,
             )
             if target is not None:
-                allow_subzero_recovery = (
-                    axis.upper() in {"X", "Y", "Z"}
-                    and abs(step_value) <= 1.0
-                    and isinstance(current, (list, tuple))
-                    and len(current) >= 3
-                    and float(current[2]) < 0.0
-                )
+                allow_subzero_recovery = self._recovery_mode
                 move_kwargs = {
                     "tool": tool,
                     "user": user,

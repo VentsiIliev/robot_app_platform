@@ -146,6 +146,8 @@ class JogController:
         view.jog_stopped.connect(self._on_jog_stop)
         if hasattr(view, "joint_jog_requested"):
             view.joint_jog_requested.connect(self._on_joint_jog)
+        if hasattr(view, "recovery_mode_changed"):
+            view.recovery_mode_changed.connect(self._on_recovery_mode_changed)
 
     def start(self) -> None:
         if bool(getattr(self._view, "JOG_LIVE_POSITION_ENABLED", True)):
@@ -177,8 +179,18 @@ class JogController:
                 self._view.joint_jog_requested.disconnect(self._on_joint_jog)
             except (RuntimeError, TypeError):
                 pass
+        if hasattr(self._view, "recovery_mode_changed"):
+            try:
+                self._view.recovery_mode_changed.disconnect(self._on_recovery_mode_changed)
+            except (RuntimeError, TypeError):
+                pass
         self._bridge.stop()
         self._bridge.deleteLater()
+
+    def _on_recovery_mode_changed(self, enabled: bool) -> None:
+        setter = getattr(self._service, "set_recovery_mode", None)
+        if callable(setter):
+            setter(bool(enabled))
 
     def _on_position(self, pos: list) -> None:
         self._bridge.ingest_position(pos if pos else [])

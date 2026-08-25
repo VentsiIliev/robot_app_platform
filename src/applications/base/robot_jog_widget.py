@@ -79,6 +79,7 @@ class RobotJogWidget(QFrame):
     joint_jog_requested  = pyqtSignal(str, str, str, float)  # command, joint, direction, step
     joint_jog_started    = pyqtSignal(str)
     joint_jog_stopped    = pyqtSignal(str)
+    recovery_mode_changed = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -621,6 +622,11 @@ class RobotJogWidget(QFrame):
         self._servo_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         selector_layout.addWidget(self._step_mode_btn)
         selector_layout.addWidget(self._servo_mode_btn)
+        self._recovery_mode_btn = QPushButton()
+        self._recovery_mode_btn.setCheckable(True)
+        self._recovery_mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._recovery_mode_btn.toggled.connect(self.recovery_mode_changed)
+        selector_layout.addWidget(self._recovery_mode_btn)
 
         self._jog_mode_group = QButtonGroup(self)
         self._jog_mode_group.setExclusive(True)
@@ -835,6 +841,7 @@ class RobotJogWidget(QFrame):
         self._frame_label.setText(f"{self._t('Frame')}:")
         self._step_mode_btn.setText(self._t("Step"))
         self._servo_mode_btn.setText(self._t("Servo"))
+        self._recovery_mode_btn.setText(self._t("Recovery"))
         self._on_jog_mode_changed()
 
     def changeEvent(self, event) -> None:

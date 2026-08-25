@@ -28,6 +28,7 @@ class IApplicationView(AppWidget):
     joint_jog_requested = pyqtSignal(str, str, str, float)
     jog_started = pyqtSignal(str)
     jog_stopped = pyqtSignal(str)
+    recovery_mode_changed = pyqtSignal(bool)
     language_changed = pyqtSignal()
 
     def __init__(self, title: str, parent=None):
@@ -49,6 +50,7 @@ class IApplicationView(AppWidget):
         self._jog_widget.joint_jog_requested.connect(self.joint_jog_requested)
         self._jog_widget.jog_started.connect(self.jog_started)
         self._jog_widget.jog_stopped.connect(self.jog_stopped)
+        self._jog_widget.recovery_mode_changed.connect(self.recovery_mode_changed)
 
         frame_changed = getattr(self, "_on_jog_frame_changed", None)
         if callable(frame_changed):

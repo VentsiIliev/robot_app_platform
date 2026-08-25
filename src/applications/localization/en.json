@@ -48,6 +48,7 @@
     "Mode": "Mode",
     "Frame": "Frame",
     "Step": "Step",
-    "Servo": "Servo"
+    "Servo": "Servo",
+    "Recovery": "Recovery"
   }
 }
