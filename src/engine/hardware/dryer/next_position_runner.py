@@ -1,4 +1,4 @@
-"""Run and verify one real dryer NEXT_POSITION cycle without starting the robot.
+"""Run and verify consecutive real dryer NEXT_POSITION cycles without the robot.
 
 This uses the same Modbus, peripheral/register, command/status, and dryer settings
 as the paint platform. It requires a fresh movement cycle before accepting DONE.
@@ -11,6 +11,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 
@@ -38,6 +39,8 @@ def run_next_position(
     peripherals_path: Path,
     dryer_settings_path: Path,
     *,
+    cycles: int,
+    cycle_delay_s: float,
     acknowledgement_timeout_s: float,
     poll_interval_s: float,
 ) -> bool:
@@ -62,17 +65,43 @@ def run_next_position(
     )
 
     try:
-        initial = controller.get_state()
-        print(
-            "Initial status: "
-            f"raw=0x{initial.raw_status:04x} healthy={initial.is_healthy} "
-            f"moving={initial.next_position_moving} done={initial.next_position_done}"
-        )
-        if not controller.next_position():
-            print("NEXT_POSITION command write failed", file=sys.stderr)
-            return False
-        print("NEXT_POSITION accepted; waiting for a fresh cycle and DONE (no movement timeout)")
-        return controller._wait_until_next_position_done()
+        for cycle in range(1, cycles + 1):
+            initial = controller.get_state()
+            print(
+                f"cycle={cycle}/{cycles} before_command "
+                f"raw=0x{initial.raw_status:04x} healthy={initial.is_healthy} "
+                f"moving={initial.next_position_moving} done={initial.next_position_done}"
+            )
+            if not initial.is_healthy:
+                print(f"cycle={cycle} initial dryer status is unhealthy", file=sys.stderr)
+                return False
+            if not controller.next_position():
+                print(f"cycle={cycle} NEXT_POSITION command write failed", file=sys.stderr)
+                return False
+            print(
+                f"cycle={cycle} command accepted; stale DONE is ignored until a fresh "
+                "MOVING or DONE-cleared transition is observed"
+            )
+            if not controller._wait_until_next_position_done():
+                print(f"cycle={cycle} fresh NEXT_POSITION cycle verification failed", file=sys.stderr)
+                return False
+            final = controller.get_state()
+            final_ok = bool(
+                final.is_healthy
+                and final.next_position_done
+                and not final.next_position_moving
+            )
+            print(
+                f"cycle={cycle}/{cycles} completed "
+                f"raw=0x{final.raw_status:04x} healthy={final.is_healthy} "
+                f"moving={final.next_position_moving} done={final.next_position_done} "
+                f"verified={final_ok}"
+            )
+            if not final_ok:
+                return False
+            if cycle < cycles and cycle_delay_s > 0.0:
+                time.sleep(cycle_delay_s)
+        return True
     finally:
         controller.shutdown()
 
@@ -82,6 +111,8 @@ def main() -> int:
     parser.add_argument("--modbus-config", type=Path, default=SETTINGS_ROOT / "hardware/modbus.json")
     parser.add_argument("--peripherals-config", type=Path, default=SETTINGS_ROOT / "hardware/peripherals.json")
     parser.add_argument("--dryer-settings", type=Path, default=SETTINGS_ROOT / "dryer/settings.json")
+    parser.add_argument("--cycles", type=int, default=3, help="Number of real NEXT_POSITION cycles")
+    parser.add_argument("--cycle-delay", type=float, default=0.5, help="Delay between completed cycles")
     parser.add_argument("--ack-timeout", type=float, default=10.0)
     parser.add_argument("--poll-interval", type=float, default=0.1)
     args = parser.parse_args()
@@ -91,6 +122,8 @@ def main() -> int:
             args.modbus_config,
             args.peripherals_config,
             args.dryer_settings,
+            cycles=max(1, args.cycles),
+            cycle_delay_s=max(0.0, args.cycle_delay),
             acknowledgement_timeout_s=args.ack_timeout,
             poll_interval_s=args.poll_interval,
         )
@@ -101,7 +134,11 @@ def main() -> int:
         logging.exception("Standalone dryer NEXT_POSITION test failed")
         print(str(exc), file=sys.stderr)
         return 1
-    print("NEXT_POSITION fresh cycle completed successfully" if success else "NEXT_POSITION verification failed")
+    print(
+        f"All {max(1, args.cycles)} real NEXT_POSITION cycles completed successfully"
+        if success
+        else "NEXT_POSITION cycle verification failed"
+    )
     return 0 if success else 1
 
 
