@@ -217,6 +217,22 @@ class TestRobotJogService(unittest.TestCase):
         self.assertEqual(kwargs["tool"], 1)
         self.assertEqual(kwargs["user"], 2)
 
+    def test_servo_jog_caps_slider_speed_to_configured_maximum(self):
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.set_active_workobject.return_value = True
+        robot.start_servo_jog.return_value = 0
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 2,
+            servo_linear_speed_getter=lambda: 10.0,
+        )
+
+        service.jog("SERVO_JOG", "Z", "PLUS", 100.0)
+
+        self.assertEqual(robot.start_servo_jog.call_args.kwargs["linear_mm_s"], 10.0)
+
     def test_jog_aborts_when_configured_workobject_cannot_be_activated(self):
         robot = MagicMock()
         robot.set_active_tool.return_value = True

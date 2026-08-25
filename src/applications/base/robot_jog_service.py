@@ -53,7 +53,7 @@ class RobotJogService:
         self._lock = threading.Lock()
 
     def set_frame(self, frame_name: str) -> None:
-        self._frame_name = ""
+        self._frame_name = str(frame_name or "").strip()
 
     def get_available_frames(self) -> list[str]:
         return []
@@ -211,16 +211,34 @@ class RobotJogService:
             self._servo_jog_stop_expected = True
 
         requested_speed = self._positive_float_or_none(speed_value)
+        configured_linear_speed = self._current_servo_linear_speed_mm_s()
+        configured_angular_speed = self._current_servo_angular_speed_deg_s()
         linear_mm_s = (
-            requested_speed or self._current_servo_linear_speed_mm_s()
+            (
+                min(requested_speed, configured_linear_speed)
+                if requested_speed is not None
+                else configured_linear_speed
+            )
             if robot_axis.value <= 3
             else None
         )
         angular_deg_s = (
-            requested_speed or self._current_servo_angular_speed_deg_s()
+            (
+                min(requested_speed, configured_angular_speed)
+                if requested_speed is not None
+                else configured_angular_speed
+            )
             if robot_axis.value > 3
             else None
         )
+        if requested_speed is not None:
+            applied_speed = linear_mm_s if linear_mm_s is not None else angular_deg_s
+            if applied_speed is not None and requested_speed > applied_speed:
+                _logger.warning(
+                    "[SERVO_JOG] requested speed %.3f capped to configured maximum %.3f",
+                    requested_speed,
+                    applied_speed,
+                )
         result = starter(
             robot_axis,
             robot_direction,
