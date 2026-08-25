@@ -321,22 +321,11 @@ class PaintPickupExecutor:
                 first.label, first_pose, first.vel_percent, first.acc_percent,
                 first.motion_type, first.blendR,
             )
-        continuation_segments = build_paint_pickup_segments(continuation_waypoints)
-        continuation_segments.extend(prepared_continuation_segments or [])
-        prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
-        prepared = prepare_chain(
-            continuation_segments, predicted_retract_pose,
-            int(self._owner._pickup_tool), int(self._owner._pickup_user),
-        ) if continuation_segments and callable(prepare_chain) else None
-        prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
-
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
         contact_speed_mm_s = min(float(pickup_motion.servo_contact_linear_mm_s), 25.0)
-        maximum_contact_travel_mm = float(pickup_motion.approach_offset_mm)
+        maximum_contact_travel_mm = float(getattr(pickup_motion, "approach_offset_mm", 100.0))
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -385,8 +374,6 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
         current_pose = self._read_fresh_pose()
@@ -399,40 +386,26 @@ class PaintPickupExecutor:
             return False
 
         retract_pose = predicted_retract_pose
-        retract_waypoint = PickupWaypoint(
-            "Retracting picked workpiece to calibration reference Z",
+        if not self._owner._robot_service.move_ptp(
             retract_pose,
+            int(self._owner._pickup_tool),
+            int(self._owner._pickup_user),
             float(pickup_motion.lift_align_vel_percent),
             float(pickup_motion.lift_align_acc_percent),
-            "ptp",
-            0.0,
-        )
+            True,
+        ):
+            return False
 
-        # PTP retract and every remaining servo-contact move are submitted in
-        # one chain so the runtime can preplan following segments while retracting.
-        # Planned-mode waypoint generation remains untouched.
-        if prepared_plan_id:
-            if not self._owner._robot_service.move_ptp(
-                retract_pose,
-                int(self._owner._pickup_tool),
-                int(self._owner._pickup_user),
-                float(pickup_motion.lift_align_vel_percent),
-                float(pickup_motion.lift_align_acc_percent),
-                True,
-            ):
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
-                return False
-            return bool(
-                self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
-            )
-        if not self._move_waypoint_sequence(
-            "Pickup retract and continuation after servo contact",
-            [retract_waypoint, *continuation_waypoints],
+        # Servo is stopped and the calibrated retract has completed. Do not
+        # plan or submit any continuation against a predicted contact pose.
+        if continuation_waypoints and not self._move_waypoint_sequence(
+            "Pickup continuation after completed servo retract",
+            continuation_waypoints,
         ):
             return False
         if prepared_continuation_segments:
             return bool(self._owner._motion.move_ordered_pickup_sequence(
-                "Paint contact after servo pickup (prepare fallback)",
+                "Paint contact after completed servo pickup retract",
                 prepared_continuation_segments,
             ))
         return True

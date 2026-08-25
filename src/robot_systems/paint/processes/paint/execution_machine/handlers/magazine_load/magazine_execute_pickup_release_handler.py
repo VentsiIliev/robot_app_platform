@@ -212,16 +212,8 @@ def _execute_magazine_servo_contact_pickup_release(
 
     predicted_retract_pose = list(transfer_waypoints[1][1])
     predicted_retract_pose[2] = float(retract_reference_pose[2])
-    continuation_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    prepare_chain = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
-    prepared = prepare_chain(
-        continuation_segments, predicted_retract_pose,
-        int(executor._pickup_tool), int(executor._pickup_user),
-    ) if continuation_segments and callable(prepare_chain) else None
-    prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
-
     contact_speed_mm_s = min(float(pickup_motion.servo_contact_linear_mm_s), 25.0)
-    maximum_contact_travel_mm = float(pickup_motion.approach_offset_mm)
+    maximum_contact_travel_mm = float(getattr(pickup_motion, "approach_offset_mm", 100.0))
     _logger.info(
         "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
         contact_speed_mm_s,
@@ -269,8 +261,6 @@ def _execute_magazine_servo_contact_pickup_release(
         result.message,
     )
     if not result.success:
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
         return False, f"Magazine servo contact pickup failed: {result.message}"
 
     current_pose = _read_fresh_pose(executor._robot_service)
@@ -280,34 +270,23 @@ def _execute_magazine_servo_contact_pickup_release(
     if retract_distance <= 0.0 or retract_distance > 500.0:
         return False, f"Magazine retract distance is invalid: {retract_distance:.3f} mm"
     retract_pose = predicted_retract_pose
-    retract_waypoint = (
-        "Retracting magazine workpiece to magazine reference Z",
+    if not executor._robot_service.move_ptp(
         retract_pose,
-        pickup_motion.lift_align_vel_percent,
-        pickup_motion.lift_align_acc_percent,
-        "ptp",
-        0.0,
-    )
-    if prepared_plan_id:
-        if not executor._robot_service.move_ptp(
-            retract_pose,
-            int(executor._pickup_tool),
-            int(executor._pickup_user),
-            float(pickup_motion.lift_align_vel_percent),
-            float(pickup_motion.lift_align_acc_percent),
-            True,
-        ):
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
-            return False, "Magazine PTP retract after servo contact failed"
-        if not executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id):
-            return False, f"Magazine prepared continuation failed for {release_label}"
-        return True, ""
+        int(executor._pickup_tool),
+        int(executor._pickup_user),
+        float(pickup_motion.lift_align_vel_percent),
+        float(pickup_motion.lift_align_acc_percent),
+        True,
+    ):
+        return False, "Magazine PTP retract after servo contact failed"
 
-    remaining_segments = build_magazine_pickup_release_segments(
-        (retract_waypoint, *transfer_waypoints[3:])
-    )
+    # Servo is stopped and the reference retract has completed. Only now plan
+    # and submit the continuation, using the reached pose as its real start.
+    remaining_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
+    if not remaining_segments:
+        return True, ""
     ok = executor._motion.move_ordered_pickup_sequence(
-        f"Magazine retract and {release_label} continuation after servo contact",
+        f"Magazine {release_label} continuation after completed servo retract",
         remaining_segments,
     )
     if not ok:
