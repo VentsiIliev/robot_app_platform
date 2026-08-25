@@ -159,14 +159,11 @@ class MotionService(IMotionService):
         try:
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
                                velocity, acceleration, blendR)
+            driver_kwargs = {"blocking": wait_to_reach}
+            if allow_subzero_step_recovery:
+                driver_kwargs["allow_collision_recovery"] = True
             ret = self._robot.move_linear(
-                position,
-                tool,
-                user,
-                velocity,
-                acceleration,
-                blendR,
-                blocking=wait_to_reach,
+                position, tool, user, velocity, acceleration, blendR, **driver_kwargs
             )
             success = ret >= 0
             if wait_to_reach and success:

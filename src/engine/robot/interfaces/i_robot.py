@@ -30,6 +30,7 @@ class IRobot(ABC):
         acc: float,
         blend_radius: float = 0.0,
         blocking: bool = True,
+        allow_collision_recovery: bool = False,
     ) -> int:
         """Straight-line TCP motion. Returns 0 on success."""
         ...

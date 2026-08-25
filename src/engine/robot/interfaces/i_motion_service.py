@@ -35,6 +35,7 @@ class IMotionService(ABC):
         blendR: float,
         wait_to_reach: bool = False,
         wait_cancelled: Callable[[], bool] | None = None,
+        allow_subzero_step_recovery: bool = False,
     ) -> bool:
         """
         Linear TCP motion (straight-line in Cartesian space).

@@ -641,7 +641,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("move_cartesian error: %s", e, exc_info=True)
             return -1
 
-    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG"):
+    def move_liner(self, position, tool=0, user=0, vel=30, acc=30, blendR=0, blocking=True, trajectory_optimizer="TOTG",
+                   allow_collision_recovery=False):
         if not self.set_active_tool(tool):
             return -1
         if not self._drive_enabled and self.enable() != 0:
@@ -658,6 +659,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             "blocking": blocking,
             "trajectory_optimizer": trajectory_optimizer,
         }
+        if allow_collision_recovery:
+            payload["allow_collision_recovery"] = True
         logger.debug("move_liner → POST /move/linear payload=%s", payload)
         try:
             request_started = self._mark_execution_request_sent("move_liner")
