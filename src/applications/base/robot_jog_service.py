@@ -73,6 +73,13 @@ class RobotJogService:
         try:
             step_value = float(step)
         except (TypeError, ValueError):
+            _logger.warning(
+                "[JOG] rejected non-numeric step: command=%s axis=%s direction=%s step=%r",
+                command,
+                axis,
+                direction,
+                step,
+            )
             return
         try:
             if not self._lock.acquire(blocking=False):
@@ -136,9 +143,15 @@ class RobotJogService:
                 )
             self._lock.release()
         except Exception:
+            _logger.exception(
+                "[JOG] failed: command=%s axis=%s direction=%s step=%s",
+                command_name,
+                axis,
+                direction,
+                step_value,
+            )
             if self._lock.locked():
                 self._lock.release()
-            pass
 
     def joint_jog(
         self,
