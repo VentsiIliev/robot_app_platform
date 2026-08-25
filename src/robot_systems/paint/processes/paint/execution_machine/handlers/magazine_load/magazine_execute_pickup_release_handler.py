@@ -210,8 +210,8 @@ def _execute_magazine_servo_contact_pickup_release(
     ):
         return False, "Magazine pickup approach before servo contact failed"
 
-    predicted_retract_pose = list(transfer_waypoints[1][1])
-    predicted_retract_pose[2] = float(retract_reference_pose[2])
+    safe_clearance_pose = list(transfer_waypoints[1][1])
+    safe_clearance_pose[2] = float(retract_reference_pose[2])
     contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
     minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
     _logger.info(
@@ -266,44 +266,44 @@ def _execute_magazine_servo_contact_pickup_release(
     current_pose = _read_fresh_pose(executor._robot_service)
     if current_pose is None:
         return False, "Magazine current pose is unavailable after servo contact"
-    retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
-    if retract_distance <= 0.0 or retract_distance > 500.0:
-        return False, f"Magazine retract distance is invalid: {retract_distance:.3f} mm"
-    retract_pose = predicted_retract_pose
-    continuation_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
+    clearance_distance = float(retract_reference_pose[2]) - float(current_pose[2])
+    if clearance_distance <= 0.0 or clearance_distance > 500.0:
+        return False, f"Magazine clearance distance is invalid: {clearance_distance:.3f} mm"
+
+    # Keep the known magazine Z as a safe cross-workspace clearance, but make it
+    # the first waypoint of the release chain.  A separate blocking PTP here
+    # introduces a full stop (and the driver's post-move settle delay) before
+    # the already-planned release can start.
+    lift_waypoint = transfer_waypoints[2]
+    safe_clearance_waypoint = (
+        "Raising magazine workpiece to safe transfer clearance",
+        safe_clearance_pose,
+        lift_waypoint[2],
+        lift_waypoint[3],
+        lift_waypoint[4],
+        lift_waypoint[5],
+    )
+    continuation_waypoints = (safe_clearance_waypoint,) + transfer_waypoints[3:]
+    continuation_segments = build_magazine_pickup_release_segments(continuation_waypoints)
     prepare_chain = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
     prepared = prepare_chain(
         continuation_segments,
-        retract_pose,
+        current_pose,
         int(executor._pickup_tool),
         int(executor._pickup_user),
     ) if continuation_segments and callable(prepare_chain) else None
     prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
 
-    if not executor._robot_service.move_ptp(
-        retract_pose,
-        int(executor._pickup_tool),
-        int(executor._pickup_user),
-        float(pickup_motion.lift_align_vel_percent),
-        float(pickup_motion.lift_align_acc_percent),
-        True,
-    ):
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
-        return False, "Magazine PTP retract after servo contact failed"
-
     if prepared_plan_id:
         if not executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id):
-            return False, f"Magazine prepared continuation failed for {release_label}"
-        return True, ""
-    if not continuation_segments:
+            return False, f"Magazine prepared clearance/release failed for {release_label}"
         return True, ""
     ok = executor._motion.move_ordered_pickup_sequence(
-        f"Magazine {release_label} continuation after completed servo retract",
+        f"Magazine safe clearance and {release_label} release after completed servo retract",
         continuation_segments,
     )
     if not ok:
-        return False, f"Magazine lift/release after servo contact failed for {release_label}"
+        return False, f"Magazine clearance/release after servo contact failed for {release_label}"
     return True, ""
 
 

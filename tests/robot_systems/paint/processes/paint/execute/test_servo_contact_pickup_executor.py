@@ -22,6 +22,9 @@ from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SERVO_CONTACT,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+    _execute_magazine_servo_contact_pickup_release,
+)
 
 
 class _FakeRobot:
@@ -98,6 +101,55 @@ class _ConditionAfterStart:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
+        robot = _FakeRobot()
+        robot.support_prepared = True
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=-5.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            servo_contact_retract_distance_mm=10.0,
+            servo_contact_retract_linear_mm_s=250.0,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionAfterStart(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        waypoints = (
+            ("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
+            ("contact", [1, 2, 0, 0, 0, 3], 10, 10, "linear", 0),
+            ("lift", [1, 2, 50, 0, 0, 3], 30, 30, "ptp", 20),
+            ("release", [20, 30, 40, 0, 0, 0], 25, 25, "ptp", 0),
+        )
+
+        ok, message = _execute_magazine_servo_contact_pickup_release(
+            owner,
+            waypoints,
+            retract_reference_pose=[9, 9, 100, 0, 0, 0],
+            release_label="calibration",
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(robot.ptp_moves, [])
+        self.assertEqual(robot.prepared[0][1], [0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+        self.assertEqual(
+            [segment["label"] for segment in robot.prepared[0][0]],
+            ["Raising magazine workpiece to safe transfer clearance", "release"],
+        )
+        self.assertEqual(robot.prepared[0][0][0]["position"], [1, 2, 100.0, 0, 0, 3])
+        self.assertEqual(robot.prepared[0][0][0]["blendR"], 20.0)
+        self.assertEqual(robot.executed_prepared, ["prepared-1"])
+
     def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
         motion = _FakeMotion()
         owner = SimpleNamespace(_motion=motion)
