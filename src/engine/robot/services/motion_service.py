@@ -329,6 +329,25 @@ class MotionService(IMotionService):
                         target[idx] += direction.value * step
                 self._logger.info(f"Target -> {target}")
                 violations = self._motion_violations(target)
+                # Recovery from an accidental sub-zero opening collision must
+                # remain possible with the physical step jog controls.  Keep
+                # this exception deliberately narrow: only Cartesian X/Y/Z,
+                # positive/negative 1 mm steps, and only while the measured
+                # pose is already below the platform floor.  Remove only the
+                # synthetic sub-zero floor/corridor messages; all workspace,
+                # collision, drive, and joint-limit checks remain enforced.
+                if (
+                    axis in (RobotAxis.X, RobotAxis.Y, RobotAxis.Z)
+                    and abs(float(step)) <= 1.0
+                    and base_position
+                    and len(base_position) >= 3
+                    and float(base_position[2]) < 0.0
+                ):
+                    violations = [
+                        violation for violation in violations
+                        if "sub-zero" not in violation.lower()
+                        and "not in [0, 800]" not in violation.lower()
+                    ]
                 if violations:
                     self._logger.warning(
                         "start_jog blocked by safety limits: axis=%s dir=%s step=%s → %s",
