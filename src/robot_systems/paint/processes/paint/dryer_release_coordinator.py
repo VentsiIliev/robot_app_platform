@@ -74,7 +74,18 @@ class DryerReleaseCoordinator:
         error = "Dryer sequence did not complete"
         try:
             initial_state = self._dryer.get_state()
-            if not bool(self._dryer.next_position()):
+            self._logger.info(
+                "[DRYER_RELEASE] Before NEXT_POSITION: state=%s",
+                self._format_state(initial_state),
+            )
+            command_started = time.monotonic()
+            command_result = self._dryer.next_position()
+            self._logger.info(
+                "[DRYER_RELEASE] NEXT_POSITION returned=%r elapsed_s=%.3f",
+                command_result,
+                time.monotonic() - command_started,
+            )
+            if not bool(command_result):
                 error = "NEXT_POSITION command failed"
                 self._logger.error("[DRYER_RELEASE] NEXT_POSITION command failed")
                 return
@@ -163,3 +174,17 @@ class DryerReleaseCoordinator:
                 )
                 return False
             time.sleep(self._status_poll_interval_s)
+
+    @staticmethod
+    def _format_state(state: object) -> str:
+        if state is None:
+            return "<none>"
+        fields = (
+            "is_healthy", "is_ready", "raw_status", "next_position_moving",
+            "next_position_done", "ejecting", "eject_done", "communication_errors",
+        )
+        values = []
+        for field in fields:
+            if hasattr(state, field):
+                values.append(f"{field}={getattr(state, field)!r}")
+        return "{" + ", ".join(values) + "}" if values else repr(state)
