@@ -177,17 +177,29 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
         plan.strategy_name,
         len(plan.waypoints),
     )
+    release_index, release_waypoint = next(
+        (index, waypoint)
+        for index, waypoint in enumerate(plan.waypoints, start=1)
+        if waypoint.release_here
+    )
+    ordered_release_pose_completed = (
+        bool(getattr(executor, "_dropoff_unwind_prepared", False))
+        and release_waypoint.pose is not None
+        and _poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
+    )
     for index, waypoint in enumerate(plan.waypoints, start=1):
         waypoint_started = perf_counter()
         if waypoint.pose is not None:
-            already_at_release_pose = (
-                bool(getattr(executor, "_dropoff_unwind_prepared", False))
-                and waypoint.release_here
-                and _poses_close(waypoint.pose, getattr(executor, "_last_process_end_pose", None))
-            )
+            already_at_release_pose = ordered_release_pose_completed and waypoint.release_here
+            superseded_approach = ordered_release_pose_completed and index < release_index
             if already_at_release_pose:
                 _logger.info(
                     "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
+                    waypoint.label,
+                )
+            elif superseded_approach:
+                _logger.info(
+                    "[DROPOFF] waypoint '%s' superseded by ordered descent to release pose",
                     waypoint.label,
                 )
             elif not executor._motion.move_pickup_phase(
@@ -493,6 +505,32 @@ def build_ordered_dropoff_preparation_segments(executor: object) -> tuple[list[d
             "protected": True,
         }
     )
+
+    release_pose = _resolve_dropoff_align_pose(executor, final_pose)
+    if (
+        release_pose is not None
+        and len(release_pose) >= 3
+        and float(release_pose[2]) < 0.0
+        and bool(getattr(config.dropoff, "allow_sub_zero_dropoff", False))
+    ):
+        # Unwind above the opening, then make the corridor descent the final
+        # protected segment. The ordered chain therefore hard-stops exactly at
+        # the configured release pose; DROPOFF releases there and retracts.
+        descent_pose = list(final_pose) if final_pose is not None else list(release_pose)
+        descent_pose[2] = float(release_pose[2])
+        segments.append(
+            {
+                "type": "linear",
+                "label": "prepare_dropoff_descend_to_release",
+                "position": descent_pose,
+                "vel": float(config.dropoff.release_align_vel_percent),
+                "acc": float(config.dropoff.release_align_acc_percent),
+                "blendR": 0.0,
+                "protected": True,
+            }
+        )
+        final_pose = list(descent_pose)
+
     return segments, final_pose
 
 

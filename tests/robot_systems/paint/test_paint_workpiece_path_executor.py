@@ -1348,7 +1348,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(12.0, segments[0]["vel"])
         self.assertEqual(13.0, segments[0]["acc"])
 
-    def test_sub_zero_dropoff_preparation_stops_at_corridor_approach(self):
+    def test_sub_zero_dropoff_preparation_stops_at_configured_release_pose(self):
         config_service = MagicMock()
         config_service.get_snapshot.return_value = PaintProcessConfig(
             pivot_motion_plane="xy_z_rz",
@@ -1371,7 +1371,15 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
 
         self.assertEqual(50.0, segments[0]["position"][2])
-        self.assertEqual(50.0, final_pose[2])
+        self.assertEqual(
+            ["prepare_dropoff_align", "prepare_dropoff_unwind", "prepare_dropoff_descend_to_release"],
+            [segment["label"] for segment in segments],
+        )
+        self.assertEqual("linear", segments[-1]["type"])
+        self.assertEqual(0.0, segments[-1]["blendR"])
+        self.assertTrue(segments[-1]["protected"])
+        self.assertEqual(-25.0, segments[-1]["position"][2])
+        self.assertEqual(-25.0, final_pose[2])
 
     def test_paint_to_dropoff_safe_travel_precedes_dropoff_align_before_unwind(self):
         safe_pose = [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
