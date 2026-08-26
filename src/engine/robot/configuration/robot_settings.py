@@ -129,6 +129,8 @@ class GlobalMotionSettings:
     global_acceleration: int = 100
     emergency_decel: int = 500
     max_jog_step: int = 50
+    recovery_servo_linear_mm_s: float = 25.0
+    recovery_servo_angular_deg_s: float = 5.0
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'GlobalMotionSettings':
@@ -137,6 +139,8 @@ class GlobalMotionSettings:
             global_acceleration=data.get("global_acceleration", 100),
             emergency_decel=data.get("emergency_decel", 500),
             max_jog_step=data.get("max_jog_step", 50),
+            recovery_servo_linear_mm_s=data.get("recovery_servo_linear_mm_s", 25.0),
+            recovery_servo_angular_deg_s=data.get("recovery_servo_angular_deg_s", 5.0),
         )
 
     def to_dict(self) -> Dict:
@@ -145,6 +149,8 @@ class GlobalMotionSettings:
             "global_acceleration": self.global_acceleration,
             "emergency_decel": self.emergency_decel,
             "max_jog_step": self.max_jog_step,
+            "recovery_servo_linear_mm_s": self.recovery_servo_linear_mm_s,
+            "recovery_servo_angular_deg_s": self.recovery_servo_angular_deg_s,
         }
 
 

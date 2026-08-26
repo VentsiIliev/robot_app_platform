@@ -56,6 +56,15 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
             return default
         return value if value > 0 else default
 
+    def _global_motion_value(name: str, default: float) -> float:
+        config = _current_robot_config()
+        motion = getattr(config, "global_motion_settings", None)
+        try:
+            value = float(getattr(motion, name))
+        except (AttributeError, TypeError, ValueError):
+            return default
+        return value if value > 0 else default
+
     return RobotJogService(
         robot_service=_robot_service(),
         tool_getter=_tool_id,
@@ -73,5 +82,11 @@ def build_robot_system_jog_service(robot_system, reference_rz_provider=None) -> 
         servo_angular_speed_getter=lambda: _jog_group_value(
             "servo_angular_deg_s",
             _DEFAULT_SERVO_ANGULAR_DEG_S,
+        ),
+        recovery_servo_linear_speed_getter=lambda: _global_motion_value(
+            "recovery_servo_linear_mm_s", 25.0,
+        ),
+        recovery_servo_angular_speed_getter=lambda: _global_motion_value(
+            "recovery_servo_angular_deg_s", 5.0,
         ),
     )

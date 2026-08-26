@@ -17,6 +17,8 @@ GLOBAL_MOTION_GROUP = SettingGroup("Global Motion Settings", [
     SettingField("global_acceleration", "Global Acceleration",    "spinbox", default=100, min_val=1, max_val=1000, suffix=" mm/s²", step=1, step_options=[1, 5, 10, 50]),
     SettingField("emergency_decel",     "Emergency Deceleration", "spinbox", default=500, min_val=1, max_val=1000, suffix=" mm/s²", step=1, step_options=[1, 5, 10, 50]),
     SettingField("max_jog_step",        "Max Jog Step",           "spinbox", default=50,  min_val=1, max_val=100,  suffix=" mm",   step=1, step_options=[1, 5, 10]),
+    SettingField("recovery_servo_linear_mm_s", "Recovery Servo Linear Limit", "double_spinbox", default=25.0, min_val=1.0, max_val=250.0, decimals=1, suffix=" mm/s", step=1.0, step_options=[1, 5, 10, 25]),
+    SettingField("recovery_servo_angular_deg_s", "Recovery Servo Angular Limit", "double_spinbox", default=5.0, min_val=0.1, max_val=30.0, decimals=1, suffix=" °/s", step=0.5, step_options=[0.5, 1, 2, 5]),
 ])
 
 TCP_STEP_GROUP = SettingGroup("TCP Step Settings", [

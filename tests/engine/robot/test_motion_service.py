@@ -208,6 +208,22 @@ class TestMotionService(unittest.TestCase):
         time.sleep(0.05)
         self.robot.stop_servo_jog.assert_not_called()
 
+    def test_pickup_collision_override_does_not_apply_recovery_speed_cap(self):
+        self.robot.start_servo_jog.return_value = 0
+        self.robot.get_current_position_fresh.return_value = [100, 50, 10, 0, 0, 0]
+
+        result = self.service.start_servo_jog(
+            RobotAxis.Z,
+            Direction.MINUS,
+            linear_mm_s=150.0,
+            disable_collision_checking=True,
+        )
+
+        self.assertEqual(0, result)
+        self.assertEqual(
+            150.0, self.robot.start_servo_jog.call_args.kwargs["linear_mm_s"]
+        )
+
     def test_recovery_step_allows_pure_upward_move_while_target_remains_subzero(self):
         current = [100, 50, -1.5, 0, 0, 0]
         target = [100, 50, -0.5, 0, 0, 0]

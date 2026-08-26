@@ -23,8 +23,6 @@ class MotionService(IMotionService):
     _JOG_TARGET_REUSE_POS_MM = 5.0
     _JOG_TARGET_REUSE_ANG_DEG = 2.0
     _SERVO_FLOOR_POLL_S = 0.02
-    _SERVO_RECOVERY_MAX_LINEAR_MM_S = 5.0
-    _SERVO_RECOVERY_MAX_ANGULAR_DEG_S = 2.0
 
     def __init__(
             self,
@@ -409,15 +407,6 @@ class MotionService(IMotionService):
                 and len(current) >= 3
                 and float(current[2]) < 0.0
             )
-            if recovery and linear_mm_s is not None:
-                linear_mm_s = min(abs(float(linear_mm_s)), self._SERVO_RECOVERY_MAX_LINEAR_MM_S)
-            if disable_collision_checking:
-                if linear_mm_s is not None:
-                    linear_mm_s = min(abs(float(linear_mm_s)), self._SERVO_RECOVERY_MAX_LINEAR_MM_S)
-                if angular_deg_s is not None:
-                    angular_deg_s = min(
-                        abs(float(angular_deg_s)), self._SERVO_RECOVERY_MAX_ANGULAR_DEG_S
-                    )
             result = int(starter(
                 axis,
                 direction,

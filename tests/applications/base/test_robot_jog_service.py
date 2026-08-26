@@ -254,6 +254,24 @@ class TestRobotJogService(unittest.TestCase):
             robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
         )
 
+    def test_recovery_servo_uses_configured_recovery_speed_limit(self):
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.set_active_workobject.return_value = True
+        robot.start_servo_jog.return_value = 0
+        service = RobotJogService(
+            robot_service=robot,
+            servo_linear_speed_mm_s=250.0,
+            recovery_servo_linear_speed_getter=lambda: 40.0,
+        )
+        service.set_recovery_mode(True)
+
+        service.jog("SERVO_JOG", "X", "PLUS", 150.0)
+
+        self.assertEqual(
+            40.0, robot.start_servo_jog.call_args.kwargs["linear_mm_s"]
+        )
+
     def test_recovery_step_above_zero_requests_collision_recovery_without_floor_bypass(self):
         robot = MagicMock()
         robot.set_active_tool.return_value = True

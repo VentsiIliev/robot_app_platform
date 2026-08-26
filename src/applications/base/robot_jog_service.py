@@ -30,6 +30,8 @@ class RobotJogService:
         servo_angular_speed_deg_s: float = 3.0,
         servo_linear_speed_getter: Callable[[], float | None] | None = None,
         servo_angular_speed_getter: Callable[[], float | None] | None = None,
+        recovery_servo_linear_speed_getter: Callable[[], float | None] | None = None,
+        recovery_servo_angular_speed_getter: Callable[[], float | None] | None = None,
     ):
         self._robot = robot_service
         self._pose_resolver = pose_resolver
@@ -46,6 +48,8 @@ class RobotJogService:
         self._default_servo_angular_speed_deg_s = float(servo_angular_speed_deg_s)
         self._servo_linear_speed_getter = servo_linear_speed_getter
         self._servo_angular_speed_getter = servo_angular_speed_getter
+        self._recovery_servo_linear_speed_getter = recovery_servo_linear_speed_getter
+        self._recovery_servo_angular_speed_getter = recovery_servo_angular_speed_getter
         self._frame_name = ""
         self._active_servo_jog_key: tuple[str, str] | None = None
         self._servo_jog_stop_expected = False
@@ -263,6 +267,17 @@ class RobotJogService:
             if robot_axis.value > 3
             else None
         )
+        if self._recovery_mode:
+            if linear_mm_s is not None:
+                linear_mm_s = min(
+                    linear_mm_s,
+                    self._current_positive_float(self._recovery_servo_linear_speed_getter, 25.0),
+                )
+            if angular_deg_s is not None:
+                angular_deg_s = min(
+                    angular_deg_s,
+                    self._current_positive_float(self._recovery_servo_angular_speed_getter, 5.0),
+                )
         if requested_speed is not None:
             applied_speed = linear_mm_s if linear_mm_s is not None else angular_deg_s
             if applied_speed is not None and requested_speed > applied_speed:

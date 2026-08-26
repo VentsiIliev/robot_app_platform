@@ -24,6 +24,8 @@ class RobotSettingsMapper:
             "global_acceleration": gm.global_acceleration,
             "emergency_decel":     gm.emergency_decel,
             "max_jog_step":        gm.max_jog_step,
+            "recovery_servo_linear_mm_s": gm.recovery_servo_linear_mm_s,
+            "recovery_servo_angular_deg_s": gm.recovery_servo_angular_deg_s,
             "tcp_x_step_distance": settings.tcp_x_step_distance,
             "tcp_x_step_offset":   settings.tcp_x_step_offset,
             "tcp_y_step_distance": settings.tcp_y_step_distance,
@@ -76,6 +78,12 @@ class RobotSettingsMapper:
         gm.global_acceleration = int(flat.get("global_acceleration", gm.global_acceleration))
         gm.emergency_decel     = int(flat.get("emergency_decel",     gm.emergency_decel))
         gm.max_jog_step        = int(flat.get("max_jog_step",        gm.max_jog_step))
+        gm.recovery_servo_linear_mm_s = float(flat.get(
+            "recovery_servo_linear_mm_s", gm.recovery_servo_linear_mm_s
+        ))
+        gm.recovery_servo_angular_deg_s = float(flat.get(
+            "recovery_servo_angular_deg_s", gm.recovery_servo_angular_deg_s
+        ))
 
         sl.x_min  = int(flat.get("safety_x_min",  sl.x_min))
         sl.x_max  = int(flat.get("safety_x_max",  sl.x_max))
