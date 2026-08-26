@@ -321,7 +321,11 @@ class PaintPickupExecutor:
             first_pose[2] = max(float(first_pose[2]), float(retract_reference_pose[2]))
             continuation_waypoints[0] = PickupWaypoint(
                 first.label, first_pose, first.vel_percent, first.acc_percent,
-                first.motion_type, first.blendR,
+                # End the initial post-Servo blend at the first continuation
+                # move. This keeps lift→alignment smooth without forcing the
+                # planner to build the later safe-travel/staging group before
+                # any motion can start.
+                first.motion_type, 0.0,
             )
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
