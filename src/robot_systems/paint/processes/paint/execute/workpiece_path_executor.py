@@ -62,7 +62,7 @@ _logger = logging.getLogger(__name__)
 
 _STAGING_Z_OFFSET_MM = 0
 _STAGING_PAINT_AXIS_OFFSET_MM = 20.0
-_STAGING_PERPENDICULAR_AXIS_OFFSET_MM = 20.0
+_STAGING_PERPENDICULAR_AXIS_OFFSET_MM = -20.0
 
 def _camera_to_tcp_delta(
     x_offset: float,
