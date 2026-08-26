@@ -26,6 +26,21 @@ from src.robot_systems.paint.timing import timed_block, timed_step
 _logger = logging.getLogger(__name__)
 
 
+def pickup_condition_is_active_after_retract(condition: object) -> bool:
+    """Return whether the picked workpiece remains detected after Servo retract."""
+    try:
+        reader = getattr(condition, "is_active", None)
+        active = reader() if callable(reader) else condition()
+    except Exception:
+        _logger.exception("[PICKUP] Pickup condition read failed after Servo retract")
+        return False
+    if not bool(active):
+        _logger.error("[PICKUP] Workpiece is no longer detected after Servo retract")
+        return False
+    _logger.info("[PICKUP] Workpiece detection verified after Servo retract")
+    return True
+
+
 @dataclass(frozen=True)
 class PickupWaypoint:
     """One carried-part pickup or staging move."""
@@ -383,6 +398,8 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
+            return False
+        if not pickup_condition_is_active_after_retract(condition):
             return False
 
         current_pose = self._wait_for_stable_pose()

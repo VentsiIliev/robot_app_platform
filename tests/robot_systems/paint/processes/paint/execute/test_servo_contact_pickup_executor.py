@@ -100,6 +100,15 @@ class _ConditionAfterStart:
         return self.calls >= 3
 
 
+class _ConditionLostAfterDetection:
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        return self.calls == 3
+
+
 class ServoContactPickupExecutorTest(unittest.TestCase):
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
         robot = _FakeRobot()
@@ -240,6 +249,44 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.started[1][0][1].name, "PLUS")
         self.assertEqual(len(robot.started), 2)
         self.assertEqual(robot.ptp_moves, [])
+
+    def test_servo_contact_pickup_stops_when_workpiece_is_lost_after_retract(self):
+        robot = _FakeRobot()
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=-5.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionLostAfterDetection(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        plan = PickupPlan(
+            strategy_name="test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10),
+                PickupWaypoint("contact", [0, 0, 0, 0, 0, 0], 10, 10),
+                PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
+                PickupWaypoint("stage", [10, 0, 50, 0, 0, 0], 10, 10),
+            ),
+            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_waypoint_index=1,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+        )
+
+        self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+        self.assertEqual(["Pickup approach before servo contact"], [label for label, _ in motion.sequences])
 
     def test_servo_contact_preplans_after_servo_and_executes_after_ptp_retract(self):
         robot = _FakeRobot()

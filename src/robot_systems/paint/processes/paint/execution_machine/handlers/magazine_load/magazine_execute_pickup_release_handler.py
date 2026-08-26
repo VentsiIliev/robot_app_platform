@@ -24,6 +24,7 @@ from src.robot_systems.paint.processes.paint.config import (
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     normalize_pickup_contact_mode,
+    pickup_condition_is_active_after_retract,
 )
 from src.robot_systems.paint.timing import timed_step
 
@@ -266,6 +267,8 @@ def _execute_magazine_servo_contact_pickup_release(
     )
     if not result.success:
         return False, f"Magazine servo contact pickup failed: {result.message}"
+    if not pickup_condition_is_active_after_retract(condition):
+        return False, "Magazine workpiece is no longer detected after Servo retract"
 
     current_pose = _wait_for_stable_pose(executor._robot_service)
     if current_pose is None:
