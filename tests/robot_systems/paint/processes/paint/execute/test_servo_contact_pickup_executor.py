@@ -46,7 +46,7 @@ class _FakeRobot:
             self.position[2] += 10.0
         return 0
 
-    def stop_servo_jog(self):
+    def stop_servo_jog(self, *, restore_collision_checking=True):
         self.stopped += 1
         return 0
 

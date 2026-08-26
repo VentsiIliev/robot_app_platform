@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+import time
 
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
@@ -266,9 +268,9 @@ def _execute_magazine_servo_contact_pickup_release(
     if not result.success:
         return False, f"Magazine servo contact pickup failed: {result.message}"
 
-    current_pose = _read_fresh_pose(executor._robot_service)
+    current_pose = _wait_for_stable_pose(executor._robot_service)
     if current_pose is None:
-        return False, "Magazine current pose is unavailable after servo contact"
+        return False, "Magazine post-retract pose did not become stable"
     clearance_distance = float(retract_reference_pose[2]) - float(current_pose[2])
     if clearance_distance <= 0.0 or clearance_distance > 500.0:
         return False, f"Magazine clearance distance is invalid: {clearance_distance:.3f} mm"
@@ -324,6 +326,54 @@ def _read_fresh_pose(robot_service) -> list[float] | None:
     if pose is None or len(pose) < 6:
         return None
     return [float(value) for value in pose[:6]]
+
+
+def _wait_for_stable_pose(
+    robot_service,
+    *,
+    timeout_s: float = 1.0,
+    sample_interval_s: float = 0.05,
+    required_stable_samples: int = 3,
+    xyz_tolerance_mm: float = 0.5,
+    angular_tolerance_deg: float = 0.2,
+) -> list[float] | None:
+    """Confirm the Servo stop has physically settled before planning from it."""
+    deadline = time.monotonic() + max(0.1, float(timeout_s))
+    previous = None
+    stable_samples = 0
+    while time.monotonic() < deadline:
+        pose = _read_fresh_pose(robot_service)
+        if pose is None:
+            stable_samples = 0
+            previous = None
+        elif previous is not None:
+            xyz_delta = math.sqrt(sum(
+                (pose[index] - previous[index]) ** 2 for index in range(3)
+            ))
+            angular_delta = max(
+                abs((pose[index] - previous[index] + 180.0) % 360.0 - 180.0)
+                for index in range(3, 6)
+            )
+            if xyz_delta <= xyz_tolerance_mm and angular_delta <= angular_tolerance_deg:
+                stable_samples += 1
+                if stable_samples >= max(1, int(required_stable_samples)):
+                    _logger.info(
+                        "[MAGAZINE_LOAD] Post-retract pose stable: xyz_delta_mm=%.3f "
+                        "angular_delta_deg=%.3f samples=%d pose=%s",
+                        xyz_delta,
+                        angular_delta,
+                        stable_samples,
+                        [round(value, 3) for value in pose],
+                    )
+                    return pose
+            else:
+                stable_samples = 0
+            previous = pose
+        else:
+            previous = pose
+        time.sleep(max(0.01, float(sample_interval_s)))
+    _logger.error("[MAGAZINE_LOAD] Post-retract pose stability timeout")
+    return None
 
 
 def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintExecutionState:
