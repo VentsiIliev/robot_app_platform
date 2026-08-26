@@ -589,6 +589,7 @@ def build_ordered_paint_contact_segments(
                 "vel": float(job.get("vel", 10.0)),
                 "acc": float(job.get("acc", 30.0)),
                 "protected": True,
+                "limit_profile": "paint_contact",
             }
         )
     return segments
