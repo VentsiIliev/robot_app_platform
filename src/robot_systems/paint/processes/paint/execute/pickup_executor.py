@@ -326,18 +326,6 @@ class PaintPickupExecutor:
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
 
-        continuation_segments = build_paint_pickup_segments(continuation_waypoints)
-        continuation_segments.extend(prepared_continuation_segments or [])
-        prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
-        prepared = prepare_chain(
-            continuation_segments,
-            predicted_retract_pose,
-            int(self._owner._pickup_tool),
-            int(self._owner._pickup_user),
-            allow_servo_during_prepare=True,
-        ) if continuation_segments and callable(prepare_chain) else None
-        prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
-
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
         _logger.info(
@@ -391,58 +379,35 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
         current_pose = self._wait_for_stable_pose()
         if current_pose is None:
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
         retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
         if retract_distance <= 0.0 or retract_distance > 500.0:
             _logger.error("[PICKUP] Invalid servo retract distance %.3f mm", retract_distance)
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
-        retract_pose = predicted_retract_pose
-
-        if not self._owner._robot_service.move_ptp(
-            retract_pose,
-            int(self._owner._pickup_tool),
-            int(self._owner._pickup_user),
+        lift_waypoint = PickupWaypoint(
+            "Raising workpiece after Servo retract",
+            list(predicted_retract_pose),
             float(pickup_motion.lift_align_vel_percent),
             float(pickup_motion.lift_align_acc_percent),
-            True,
-        ):
-            if prepared_plan_id:
-                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
-            return False
-
-        if prepared_plan_id:
-            prepared_result = self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
-            if isinstance(prepared_result, dict):
-                if prepared_result.get("error"):
-                    self._owner._motion.last_motion_error = str(prepared_result["error"])
-                return bool(
-                    prepared_result.get("state") == "completed"
-                    and prepared_result.get("result") == 0
-                )
-            return bool(prepared_result)
-        if continuation_waypoints and not self._move_waypoint_sequence(
-            "Pickup continuation after completed servo retract",
-            continuation_waypoints,
-        ):
-            return False
-        if prepared_continuation_segments:
-            return bool(self._owner._motion.move_ordered_pickup_sequence(
-                "Paint contact after completed servo pickup retract",
-                prepared_continuation_segments,
-            ))
-        return True
+            "ptp",
+            10.0,
+        )
+        combined_waypoints = [lift_waypoint] + continuation_waypoints
+        combined_segments = build_paint_pickup_segments(combined_waypoints)
+        combined_segments.extend(prepared_continuation_segments or [])
+        if not combined_segments:
+            return True
+        ok = self._owner._motion.move_ordered_pickup_sequence(
+            "Pickup lift and continuation after completed Servo retract",
+            combined_segments,
+        )
+        return bool(ok)
 
     def _read_fresh_pose(self) -> list[float] | None:
         getter = getattr(self._owner._robot_service, "get_current_position_fresh", None)

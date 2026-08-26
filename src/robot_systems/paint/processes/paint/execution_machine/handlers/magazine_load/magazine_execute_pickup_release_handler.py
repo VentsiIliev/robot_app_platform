@@ -213,20 +213,6 @@ def _execute_magazine_servo_contact_pickup_release(
     ):
         return False, "Magazine pickup approach before servo contact failed"
 
-    # Prepare only the endpoint-independent transfer suffix. Its authorization
-    # remains locked while Servo runs; the live bridge to safe_clearance_pose
-    # is planned only from the measured, stable post-retract pose.
-    suffix_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    prepare_chain = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
-    prepared = prepare_chain(
-        suffix_segments,
-        safe_clearance_pose,
-        int(executor._pickup_tool),
-        int(executor._pickup_user),
-        allow_servo_during_prepare=True,
-    ) if suffix_segments and callable(prepare_chain) else None
-    prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
-
     contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
     minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
     _logger.info(
@@ -279,55 +265,37 @@ def _execute_magazine_servo_contact_pickup_release(
         result.message,
     )
     if not result.success:
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
         return False, f"Magazine servo contact pickup failed: {result.message}"
 
     current_pose = _wait_for_stable_pose(executor._robot_service)
     if current_pose is None:
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
         return False, "Magazine post-retract pose did not become stable"
     clearance_distance = float(retract_reference_pose[2]) - float(current_pose[2])
     if clearance_distance <= 0.0 or clearance_distance > 500.0:
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
         return False, f"Magazine clearance distance is invalid: {clearance_distance:.3f} mm"
 
-    # Bridge from the measured, stable pose to the known clearance target. The
-    # prepared suffix cannot be authorized until this live-state move succeeds.
+    # Plan the lift and release together from the measured post-Servo pose.
+    # The first target is known, but the chain start is always live; this keeps
+    # the blend safe without executing from an expected Servo endpoint.
     lift_waypoint = transfer_waypoints[2]
-    if not executor._robot_service.move_ptp(
+    lift_segment = (
+        "Raising magazine workpiece to safe transfer clearance",
         safe_clearance_pose,
-        int(executor._pickup_tool),
-        int(executor._pickup_user),
-        float(lift_waypoint[2]),
-        float(lift_waypoint[3]),
-        True,
-    ):
-        if prepared_plan_id:
-            executor._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
-        return False, "Magazine live-state bridge to safe clearance failed"
-
-    if prepared_plan_id:
-        prepared_result = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
-        prepared_ok = (
-            isinstance(prepared_result, dict)
-            and prepared_result.get("state") == "completed"
-            and prepared_result.get("result") == 0
-        ) if isinstance(prepared_result, dict) else bool(prepared_result)
-        if not prepared_ok:
-            reason = prepared_result.get("error") if isinstance(prepared_result, dict) else None
-            if not reason:
-                reason = f"result={prepared_result!r}"
-            return False, f"Magazine {release_label} failed: {reason}"
-        return True, ""
+        lift_waypoint[2],
+        lift_waypoint[3],
+        lift_waypoint[4],
+        10.0,
+    )
+    continuation_segments = build_magazine_pickup_release_segments(
+        (lift_segment,) + transfer_waypoints[3:]
+    )
     ok = executor._motion.move_ordered_pickup_sequence(
-        f"Magazine safe clearance and {release_label} release after completed servo retract",
-        suffix_segments,
+        f"Magazine lift and {release_label} release after completed servo retract",
+        continuation_segments,
     )
     if not ok:
-        return False, f"Magazine clearance/release after servo contact failed for {release_label}"
+        reason = getattr(executor._motion, "last_motion_error", None)
+        return False, f"Magazine {release_label} failed: {reason or 'ordered motion failed'}"
     return True, ""
 
 
