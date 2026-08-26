@@ -85,6 +85,7 @@ class TestDryerController(unittest.TestCase):
     def test_next_position_reports_single_register_write_failure(self) -> None:
         transport = MagicMock()
         transport.write_registers.side_effect = IOError("write failed")
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
         controller = DryerController(transport)
 
         with self.assertLogs("DryerController", level="INFO") as captured:
@@ -93,6 +94,54 @@ class TestDryerController(unittest.TestCase):
         output = "\n".join(captured.output)
         self.assertIn("NEXT_POSITION FC16 single-register write failed", output)
         self.assertIn("NEXT_POSITION FC16 write completed success=False", output)
+
+    def test_next_position_retries_using_configured_max_retries(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = [IOError("no answer"), None]
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
+        )
+
+        self.assertTrue(controller.next_position())
+
+        self.assertEqual(transport.write_registers.call_count, 2)
+        transport.read_register.assert_called_once_with(0)
+
+    def test_next_position_stops_after_configured_retries_are_exhausted(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = IOError("no answer")
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_DONE)
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
+        )
+
+        self.assertFalse(controller.next_position())
+
+        self.assertEqual(transport.write_registers.call_count, 3)
+        self.assertEqual(transport.read_register.call_count, 3)
+
+    def test_next_position_does_not_retry_when_movement_confirms_lost_ack(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = IOError("ack lost")
+        transport.read_register.return_value = int(DryerStatus.NEXT_POS_MOVING)
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
+        )
+
+        self.assertTrue(controller.next_position())
+
+        transport.write_registers.assert_called_once_with(1, [0])
+        transport.read_register.assert_called_once_with(0)
 
     def test_initialize_writes_config_then_sends_next_position(self) -> None:
         transport = MagicMock()

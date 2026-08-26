@@ -23,4 +23,5 @@ def build_modbus_dryer_controller(
     return DryerController(
         transport=transport,
         config=dryer_config or DryerConfig(),
+        max_retries=modbus_config.max_retries,
     )

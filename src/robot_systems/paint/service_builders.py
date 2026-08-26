@@ -102,6 +102,7 @@ def build_dryer_service(ctx):
         if binding is None:
             return None
         slave_name = modbus_config.find_slave_name(binding.slave_id)
+        slave = modbus_config.get_slave(slave_name)
         register_map = DryerRegisterMap.from_mapping({**binding.inputs, **binding.outputs})
 
         def build_controller(config):
@@ -112,6 +113,7 @@ def build_dryer_service(ctx):
                 register_map,
                 commands=binding.commands,
                 statuses=binding.statuses,
+                max_retries=slave.max_retries,
             )
 
         service = DryerService(build_controller, dryer_config)

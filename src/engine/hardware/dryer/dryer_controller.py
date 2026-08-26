@@ -27,6 +27,7 @@ class DryerController(IDryerController):
         next_position_timeout_s: float = 10.0,
         status_poll_interval_s: float = 0.1,
         command_settle_s: float = 0.03,
+        max_retries: int = 0,
     ) -> None:
         self._transport = transport
         self._config = config or DryerConfig()
@@ -36,6 +37,7 @@ class DryerController(IDryerController):
         self._next_position_timeout_s = max(0.0, float(next_position_timeout_s))
         self._status_poll_interval_s = max(0.0, float(status_poll_interval_s))
         self._command_settle_s = max(0.0, float(command_settle_s))
+        self._max_retries = max(0, int(max_retries))
         self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -167,20 +169,39 @@ class DryerController(IDryerController):
             command,
             int(self._register_map.command),
         )
-        try:
-            self._transport.write_registers(self._register_map.command, [command])
-            ok = True
-        except Exception as exc:
-            self._logger.error(
-                "[DRYER] NEXT_POSITION FC16 single-register write failed "
-                "command_register=%d command=%#04x error_type=%s error=%s",
-                int(self._register_map.command),
-                command,
-                type(exc).__name__,
-                exc,
-                exc_info=True,
-            )
-            ok = False
+        ok = False
+        total_attempts = self._max_retries + 1
+        for attempt in range(1, total_attempts + 1):
+            try:
+                self._transport.write_registers(self._register_map.command, [command])
+                ok = True
+                break
+            except Exception as exc:
+                self._logger.error(
+                    "[DRYER] NEXT_POSITION FC16 single-register write failed "
+                    "attempt=%d/%d command_register=%d command=%#04x "
+                    "error_type=%s error=%s",
+                    attempt,
+                    total_attempts,
+                    int(self._register_map.command),
+                    command,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+                if self._command_was_accepted_without_acknowledgement():
+                    self._logger.warning(
+                        "[DRYER] NEXT_POSITION acknowledgement missing, but fresh "
+                        "movement status confirms command acceptance"
+                    )
+                    ok = True
+                    break
+                if attempt < total_attempts:
+                    self._logger.warning(
+                        "[DRYER] Retrying NEXT_POSITION FC16 write attempt=%d/%d",
+                        attempt + 1,
+                        total_attempts,
+                    )
         if ok:
             time.sleep(self._command_settle_s)
         self._logger.info(
@@ -190,6 +211,16 @@ class DryerController(IDryerController):
             command,
         )
         return ok
+
+    def _command_was_accepted_without_acknowledgement(self) -> bool:
+        """Avoid sending a duplicate command when only its Modbus ACK was lost."""
+        if self._status_poll_interval_s:
+            time.sleep(self._status_poll_interval_s)
+        state = self.get_state()
+        return bool(
+            state.is_healthy
+            and (state.next_position_moving or not state.next_position_done)
+        )
 
     def execute_command(self, command: int, data: DryerWriteData | None = None) -> bool:
         """Write a command supplied by the robot-system peripheral config."""
