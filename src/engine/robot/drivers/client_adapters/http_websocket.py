@@ -1065,10 +1065,13 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("start_servo_jog error: %s", e, exc_info=True)
             return -1
 
-    def stop_servo_jog(self):
-        logger.debug("stop_servo_jog → POST /servojog/stop")
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True):
+        payload = {"restore_collision_checking": bool(restore_collision_checking)}
+        logger.debug("stop_servo_jog → POST /servojog/stop payload=%s", payload)
         try:
-            response = requests.post(f"{self.server_url}/servojog/stop", timeout=5)
+            response = requests.post(
+                f"{self.server_url}/servojog/stop", json=payload, timeout=5
+            )
             if response.status_code == 404:
                 logger.info("stop_servo_jog unsupported by runtime")
                 return -404

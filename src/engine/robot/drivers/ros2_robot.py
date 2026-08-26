@@ -85,12 +85,12 @@ class Ros2Robot(IRobot):
         logger.debug("start_joint_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
-    def stop_servo_jog(self) -> int:
-        logger.debug("stop_servo_jog →")
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
+        logger.debug("stop_servo_jog → restore_collision_checking=%s", restore_collision_checking)
         stopper = getattr(self._client, "stop_servo_jog", None)
         if not callable(stopper):
             return -1
-        ret = stopper()
+        ret = stopper(restore_collision_checking=restore_collision_checking)
         ret = ret if isinstance(ret, int) and not isinstance(ret, bool) else -1
         logger.debug("stop_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret

@@ -89,6 +89,7 @@ class IMotionService(ABC):
         tool: int = 0,
         user: int = 0,
         allow_subzero_descent: bool = False,
+        allow_subzero_retract_settle: bool = False,
         disable_collision_checking: bool = False,
     ) -> int:
         return -1
@@ -103,7 +104,7 @@ class IMotionService(ABC):
     ) -> int:
         return -1
 
-    def stop_servo_jog(self) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
         return -1
 
     @abstractmethod

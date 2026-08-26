@@ -258,7 +258,7 @@ class FakeRobotClient(RobotClientAdapter):
         self._queue_size = 1
         return 0
 
-    def stop_servo_jog(self):
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True):
         logger.debug("FakeRobotClient.stop_servo_jog")
         self._motion_active = False
         self._queue_size = 0

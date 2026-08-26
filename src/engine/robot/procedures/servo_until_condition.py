@@ -95,6 +95,7 @@ class ServoUntilConditionProcedure:
     ) -> ServoUntilConditionResult:
         cfg = config or ServoUntilConditionConfig()
         started = False
+        collision_override_held = False
         started_at = time.monotonic()
 
         try:
@@ -287,8 +288,14 @@ class ServoUntilConditionProcedure:
                     read_failure_count = 0
 
                 if active:
-                    stop_ret = self._stop_servo()
+                    keep_override_for_retract = bool(
+                        cfg.disable_collision_checking and retract is not None
+                    )
+                    stop_ret = self._stop_servo(
+                        restore_collision_checking=not keep_override_for_retract
+                    )
                     started = False
+                    collision_override_held = keep_override_for_retract
                     if not self._return_code_ok(stop_ret):
                         self._stop_motion()
                         return self._result(
@@ -308,6 +315,10 @@ class ServoUntilConditionProcedure:
                             cfg,
                             cancel_requested=cancel_requested,
                             stop_guard=stop_guard,
+                        )
+                        collision_override_held = bool(
+                            retract_message.startswith("retract_servo_start_failed")
+                            or retract_message.startswith("retract_servo_stop_failed")
                         )
                         if not retract_ok:
                             return self._result(
@@ -428,6 +439,11 @@ class ServoUntilConditionProcedure:
                 stop_ret = self._stop_servo()
                 if not self._return_code_ok(stop_ret):
                     self._stop_motion()
+            elif collision_override_held:
+                # The contact stop may intentionally keep collision checking
+                # disabled for retract. Always restore it on every final exit,
+                # including retract-start and exception failures.
+                self._stop_servo(restore_collision_checking=True)
 
     def _retract(
         self,
@@ -503,6 +519,7 @@ class ServoUntilConditionProcedure:
             frame=cfg.frame,
             tool=cfg.tool,
             user=cfg.user,
+            allow_subzero_retract_settle=True,
             disable_collision_checking=cfg.disable_collision_checking,
         )
         if not self._return_code_ok(start_ret):
@@ -688,9 +705,11 @@ class ServoUntilConditionProcedure:
         )
         return True, ""
 
-    def _stop_servo(self):
+    def _stop_servo(self, *, restore_collision_checking: bool = True):
         try:
-            return self._robot.stop_servo_jog()
+            return self._robot.stop_servo_jog(
+                restore_collision_checking=restore_collision_checking
+            )
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] stop_servo_jog failed")
             return -1

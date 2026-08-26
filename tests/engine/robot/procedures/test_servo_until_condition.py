@@ -16,6 +16,7 @@ class FakeRobot:
     def __init__(self):
         self.started = []
         self.stopped = 0
+        self.stop_restore_collision = []
         self.start_return = 0
 
     def start_servo_jog(
@@ -29,6 +30,7 @@ class FakeRobot:
         tool=0,
         user=0,
         allow_subzero_descent=False,
+        allow_subzero_retract_settle=False,
         disable_collision_checking=False,
     ):
         self.started.append(
@@ -41,13 +43,15 @@ class FakeRobot:
                 "tool": tool,
                 "user": user,
                 "allow_subzero_descent": allow_subzero_descent,
+                "allow_subzero_retract_settle": allow_subzero_retract_settle,
                 "disable_collision_checking": disable_collision_checking,
             }
         )
         return self.start_return
 
-    def stop_servo_jog(self):
+    def stop_servo_jog(self, *, restore_collision_checking=True):
         self.stopped += 1
+        self.stop_restore_collision.append(restore_collision_checking)
         return 0
 
 
@@ -170,6 +174,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(2, len(robot.started))
         self.assertTrue(all(item["disable_collision_checking"] for item in robot.started))
         self.assertEqual(2, robot.stopped)
+        self.assertEqual([False, True], robot.stop_restore_collision)
 
     def test_distance_retract_accepts_overshoot_within_clearance_window(self):
         class RetractRobot(FakeRobot):

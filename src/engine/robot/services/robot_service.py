@@ -99,6 +99,7 @@ class RobotService(IRobotService):
         tool: int = 0,
         user: int = 0,
         allow_subzero_descent: bool = False,
+        allow_subzero_retract_settle: bool = False,
         disable_collision_checking: bool = False,
     ) -> int:
         starter = getattr(self._motion, "start_servo_jog", None)
@@ -113,6 +114,7 @@ class RobotService(IRobotService):
             tool=tool,
             user=user,
             allow_subzero_descent=allow_subzero_descent,
+            allow_subzero_retract_settle=allow_subzero_retract_settle,
             disable_collision_checking=disable_collision_checking,
         )
 
@@ -135,11 +137,11 @@ class RobotService(IRobotService):
             acceleration=acceleration,
         )
 
-    def stop_servo_jog(self) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
         stopper = getattr(self._motion, "stop_servo_jog", None)
         if not callable(stopper):
             return -1
-        return stopper()
+        return stopper(restore_collision_checking=restore_collision_checking)
 
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()

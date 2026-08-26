@@ -390,6 +390,7 @@ class MotionService(IMotionService):
             tool: int = 0,
             user: int = 0,
             allow_subzero_descent: bool = False,
+            allow_subzero_retract_settle: bool = False,
             disable_collision_checking: bool = False,
     ) -> int:
         self._last_jog_target = []
@@ -427,6 +428,9 @@ class MotionService(IMotionService):
                     self._start_servo_floor_supervisor(
                         allow_subzero_recovery=recovery,
                         initial_z=float(current[2]) if recovery else None,
+                        allow_initial_reverse_settle=(
+                            recovery and allow_subzero_retract_settle
+                        ),
                     )
             return result
         except Exception:
@@ -453,14 +457,14 @@ class MotionService(IMotionService):
             self._logger.exception("start_joint_jog failed")
             return -1
 
-    def stop_servo_jog(self) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
         self._last_jog_target = []
         self._servo_floor_stop.set()
         try:
             stopper = getattr(self._robot, "stop_servo_jog", None)
             if not callable(stopper):
                 return -1
-            return int(stopper())
+            return int(stopper(restore_collision_checking=restore_collision_checking))
         except Exception:
             self._logger.exception("stop_servo_jog failed")
             return -1
@@ -612,6 +616,7 @@ class MotionService(IMotionService):
             *,
             allow_subzero_recovery: bool = False,
             initial_z: float | None = None,
+            allow_initial_reverse_settle: bool = False,
     ) -> None:
         """Stop unrestricted continuous Servo before it can continue below Z=0."""
         self._servo_floor_stop.set()
@@ -622,7 +627,12 @@ class MotionService(IMotionService):
         stop_event = self._servo_floor_stop
         self._servo_floor_thread = Thread(
             target=self._supervise_servo_floor,
-            args=(stop_event, allow_subzero_recovery, initial_z),
+            args=(
+                stop_event,
+                allow_subzero_recovery,
+                initial_z,
+                allow_initial_reverse_settle,
+            ),
             name="robot-servo-z-floor",
             daemon=True,
         )
@@ -633,6 +643,7 @@ class MotionService(IMotionService):
             stop_event: Event,
             allow_subzero_recovery: bool = False,
             initial_z: float | None = None,
+            allow_initial_reverse_settle: bool = False,
     ) -> None:
         getter = getattr(self._robot, "get_current_position_fresh", None)
         if not callable(getter):
@@ -647,7 +658,11 @@ class MotionService(IMotionService):
                     if allow_subzero_recovery and initial_z is not None:
                         if z >= 0.0:
                             return
-                        if not (z < initial_z - 2.0 or (
+                        elapsed = time.monotonic() - started
+                        reverse_limit_mm = (
+                            10.0 if allow_initial_reverse_settle and elapsed <= 0.35 else 2.0
+                        )
+                        if not (z < initial_z - reverse_limit_mm or (
                             time.monotonic() - started > 1.0 and z <= initial_z + 0.2
                         )):
                             continue
