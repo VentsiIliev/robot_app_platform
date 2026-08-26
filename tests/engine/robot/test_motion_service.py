@@ -208,6 +208,29 @@ class TestMotionService(unittest.TestCase):
         time.sleep(0.05)
         self.robot.stop_servo_jog.assert_not_called()
 
+    def test_pickup_retract_settle_may_cross_floor_from_positive_start(self):
+        self.robot.start_servo_jog.return_value = 0
+        samples = iter((
+            [100, 50, 4.6, 0, 0, 0],
+            [100, 50, -0.6, 0, 0, 0],
+        ))
+        self.robot.get_current_position_fresh.side_effect = lambda: next(
+            samples, [100, 50, 0.5, 0, 0, 0]
+        )
+
+        result = self.service.start_servo_jog(
+            RobotAxis.Z,
+            Direction.PLUS,
+            linear_mm_s=250.0,
+            allow_subzero_retract_settle=True,
+            disable_collision_checking=True,
+        )
+
+        self.assertEqual(0, result)
+        time.sleep(0.08)
+        self.robot.stop_servo_jog.assert_not_called()
+        self.service.stop_servo_jog()
+
     def test_pickup_collision_override_does_not_apply_recovery_speed_cap(self):
         self.robot.start_servo_jog.return_value = 0
         self.robot.get_current_position_fresh.return_value = [100, 50, 10, 0, 0, 0]

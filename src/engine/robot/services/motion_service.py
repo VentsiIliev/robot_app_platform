@@ -402,12 +402,19 @@ class MotionService(IMotionService):
             if not callable(current_getter):
                 current_getter = self._robot.get_current_position
             current = list(current_getter() or self._cached_position or [])
-            recovery = (
+            subzero_recovery = (
                 axis == RobotAxis.Z
                 and direction == Direction.PLUS
                 and len(current) >= 3
                 and float(current[2]) < 0.0
             )
+            bounded_retract_settle = (
+                axis == RobotAxis.Z
+                and direction == Direction.PLUS
+                and len(current) >= 3
+                and allow_subzero_retract_settle
+            )
+            recovery = subzero_recovery or bounded_retract_settle
             result = int(starter(
                 axis,
                 direction,
@@ -428,9 +435,7 @@ class MotionService(IMotionService):
                     self._start_servo_floor_supervisor(
                         allow_subzero_recovery=recovery,
                         initial_z=float(current[2]) if recovery else None,
-                        allow_initial_reverse_settle=(
-                            recovery and allow_subzero_retract_settle
-                        ),
+                        allow_initial_reverse_settle=bounded_retract_settle,
                     )
             return result
         except Exception:
