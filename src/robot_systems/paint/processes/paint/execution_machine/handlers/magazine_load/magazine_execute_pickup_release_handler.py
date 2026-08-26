@@ -310,8 +310,17 @@ def _execute_magazine_servo_contact_pickup_release(
         return False, "Magazine live-state bridge to safe clearance failed"
 
     if prepared_plan_id:
-        if not executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id):
-            return False, f"Magazine prepared clearance/release failed for {release_label}"
+        prepared_result = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+        prepared_ok = (
+            isinstance(prepared_result, dict)
+            and prepared_result.get("state") == "completed"
+            and prepared_result.get("result") == 0
+        ) if isinstance(prepared_result, dict) else bool(prepared_result)
+        if not prepared_ok:
+            reason = prepared_result.get("error") if isinstance(prepared_result, dict) else None
+            if not reason:
+                reason = f"result={prepared_result!r}"
+            return False, f"Magazine {release_label} failed: {reason}"
         return True, ""
     ok = executor._motion.move_ordered_pickup_sequence(
         f"Magazine safe clearance and {release_label} release after completed servo retract",

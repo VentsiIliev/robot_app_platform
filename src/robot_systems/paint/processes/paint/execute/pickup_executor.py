@@ -423,9 +423,15 @@ class PaintPickupExecutor:
             return False
 
         if prepared_plan_id:
-            return bool(
-                self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
-            )
+            prepared_result = self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+            if isinstance(prepared_result, dict):
+                if prepared_result.get("error"):
+                    self._owner._motion.last_motion_error = str(prepared_result["error"])
+                return bool(
+                    prepared_result.get("state") == "completed"
+                    and prepared_result.get("result") == 0
+                )
+            return bool(prepared_result)
         if continuation_waypoints and not self._move_waypoint_sequence(
             "Pickup continuation after completed servo retract",
             continuation_waypoints,
