@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+import time
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
@@ -324,6 +326,18 @@ class PaintPickupExecutor:
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
 
+        continuation_segments = build_paint_pickup_segments(continuation_waypoints)
+        continuation_segments.extend(prepared_continuation_segments or [])
+        prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
+        prepared = prepare_chain(
+            continuation_segments,
+            predicted_retract_pose,
+            int(self._owner._pickup_tool),
+            int(self._owner._pickup_user),
+            allow_servo_during_prepare=True,
+        ) if continuation_segments and callable(prepare_chain) else None
+        prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
+
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
         _logger.info(
@@ -377,28 +391,24 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
+            if prepared_plan_id:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
-        current_pose = self._read_fresh_pose()
+        current_pose = self._wait_for_stable_pose()
         if current_pose is None:
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
+            if prepared_plan_id:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
         retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
         if retract_distance <= 0.0 or retract_distance > 500.0:
             _logger.error("[PICKUP] Invalid servo retract distance %.3f mm", retract_distance)
+            if prepared_plan_id:
+                self._owner._robot_service.discard_prepared_ordered_motion_chain(prepared_plan_id)
             return False
 
         retract_pose = predicted_retract_pose
-        continuation_segments = build_paint_pickup_segments(continuation_waypoints)
-        continuation_segments.extend(prepared_continuation_segments or [])
-        prepare_chain = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
-        prepared = prepare_chain(
-            continuation_segments,
-            retract_pose,
-            int(self._owner._pickup_tool),
-            int(self._owner._pickup_user),
-        ) if continuation_segments and callable(prepare_chain) else None
-        prepared_plan_id = prepared.get("plan_id") if isinstance(prepared, dict) else None
 
         if not self._owner._robot_service.move_ptp(
             retract_pose,
@@ -442,6 +452,28 @@ class PaintPickupExecutor:
         if pose is None or len(pose) < 6:
             return None
         return [float(value) for value in pose[:6]]
+
+    def _wait_for_stable_pose(self, timeout_s: float = 1.0) -> list[float] | None:
+        deadline = time.monotonic() + timeout_s
+        previous = None
+        stable = 0
+        while time.monotonic() < deadline:
+            pose = self._read_fresh_pose()
+            if pose is not None and previous is not None:
+                xyz_delta = math.sqrt(sum((pose[i] - previous[i]) ** 2 for i in range(3)))
+                angular_delta = max(
+                    abs((pose[i] - previous[i] + 180.0) % 360.0 - 180.0)
+                    for i in range(3, 6)
+                )
+                stable = stable + 1 if xyz_delta <= 0.5 and angular_delta <= 0.2 else 0
+                if stable >= 3:
+                    return pose
+            else:
+                stable = 0
+            previous = pose
+            time.sleep(0.05)
+        _logger.error("[PICKUP] Post-retract pose stability timeout")
+        return None
 
     def _move_waypoint_sequence(self, label: str, waypoints: list[PickupWaypoint]) -> bool:
         segments = build_paint_pickup_segments(waypoints)

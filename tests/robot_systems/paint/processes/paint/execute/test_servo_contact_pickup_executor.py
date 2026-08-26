@@ -61,10 +61,10 @@ class _FakeRobot:
         self.position = list(position)
         return self.ptp_return
 
-    def prepare_ordered_motion_chain(self, segments, start_position, tool, user):
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user, **kwargs):
         if not self.support_prepared:
             return None
-        self.prepared.append((segments, list(start_position), tool, user))
+        self.prepared.append((segments, list(start_position), tool, user, kwargs))
         return {"plan_id": "prepared-1"}
 
     def execute_prepared_ordered_motion_chain(self, plan_id):
@@ -140,14 +140,13 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         self.assertTrue(ok, message)
-        self.assertEqual(robot.ptp_moves, [])
-        self.assertEqual(robot.prepared[0][1], [0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+        self.assertEqual(robot.ptp_moves[0][0], [1, 2, 100.0, 0, 0, 3])
+        self.assertEqual(robot.prepared[0][1], [1, 2, 100.0, 0, 0, 3])
         self.assertEqual(
             [segment["label"] for segment in robot.prepared[0][0]],
-            ["Raising magazine workpiece to safe transfer clearance", "release"],
+            ["release"],
         )
-        self.assertEqual(robot.prepared[0][0][0]["position"], [1, 2, 100.0, 0, 0, 3])
-        self.assertEqual(robot.prepared[0][0][0]["blendR"], 20.0)
+        self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(robot.started[1][1]["linear_mm_s"], 250.0)
         self.assertTrue(robot.started[0][1]["disable_collision_checking"])
@@ -277,6 +276,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(robot.prepared[0][1], [1, 2, 100.0, 0, 0, 3])
         self.assertEqual([segment["label"] for segment in robot.prepared[0][0]], ["stage"])
+        self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
         self.assertEqual(robot.ptp_moves[0][0], [1, 2, 100.0, 0, 0, 3])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(

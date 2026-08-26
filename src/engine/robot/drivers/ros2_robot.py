@@ -394,8 +394,12 @@ class Ros2Robot(IRobot):
         logger.info("reset_all_errors ← ret=%s", ret)
         return ret
 
-    def prepare_ordered_motion_chain(self, segments, start_position, tool, user):
-        return self._client.prepare_ordered_motion_chain(segments, start_position, tool, user)
+    def prepare_ordered_motion_chain(self, segments, start_position, tool, user,
+                                     *, allow_servo_during_prepare=False):
+        return self._client.prepare_ordered_motion_chain(
+            segments, start_position, tool, user,
+            allow_servo_during_prepare=allow_servo_during_prepare,
+        )
 
     def execute_prepared_ordered_motion_chain(self, plan_id):
         return self._client.execute_prepared_ordered_motion_chain(plan_id)

@@ -151,7 +151,8 @@ class IRobot(ABC):
         return -1
 
     def prepare_ordered_motion_chain(self, segments: list[dict], start_position: list[float],
-                                     tool: int, user: int) -> dict | None:
+                                     tool: int, user: int, *,
+                                     allow_servo_during_prepare: bool = False) -> dict | None:
         return None
 
     def execute_prepared_ordered_motion_chain(self, plan_id: str) -> dict | None:

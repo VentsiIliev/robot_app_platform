@@ -879,13 +879,15 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             return -1
 
     def prepare_ordered_motion_chain(self, segments, start_position, tool=0, user=0,
-                                     trajectory_optimizer="TOTG"):
+                                     trajectory_optimizer="TOTG",
+                                     allow_servo_during_prepare=False):
         payload = {
             "segments": segments or [],
             "start_position": list(start_position),
             "tool": int(tool),
             "user": int(user),
             "trajectory_optimizer": trajectory_optimizer,
+            "allow_servo_during_prepare": bool(allow_servo_during_prepare),
         }
         try:
             response = requests.post(
