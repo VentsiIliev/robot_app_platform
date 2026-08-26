@@ -56,6 +56,7 @@ class IRobot(ABC):
         frame: str | int = "user",
         tool: int = 0,
         user: int = 0,
+        disable_collision_checking: bool = False,
     ) -> int:
         """Optional continuous ServoJog. Intended for UI press/release jog."""
         return -1

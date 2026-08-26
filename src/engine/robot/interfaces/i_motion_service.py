@@ -88,6 +88,7 @@ class IMotionService(ABC):
         tool: int = 0,
         user: int = 0,
         allow_subzero_descent: bool = False,
+        disable_collision_checking: bool = False,
     ) -> int:
         return -1
 

@@ -237,6 +237,7 @@ class FakeRobotClient(RobotClientAdapter):
         frame="user",
         tool=0,
         user=0,
+        disable_collision_checking=False,
     ):
         if not self._drive_enabled and self.enable() != 0:
             return -1

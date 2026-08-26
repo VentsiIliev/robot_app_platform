@@ -348,6 +348,7 @@ class PaintPickupExecutor:
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
+                disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
             ),
             retract=ServoRetractConfig(

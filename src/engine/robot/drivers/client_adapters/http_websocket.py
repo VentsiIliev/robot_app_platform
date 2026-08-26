@@ -1023,6 +1023,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         frame="user",
         tool=0,
         user=0,
+        disable_collision_checking=False,
     ):
         if not self._drive_enabled and self.enable() != 0:
             return -1
@@ -1042,6 +1043,8 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             payload["linear_mm_s"] = float(linear_mm_s)
         if angular_deg_s is not None:
             payload["angular_deg_s"] = float(angular_deg_s)
+        if disable_collision_checking:
+            payload["disable_collision_checking"] = True
         logger.debug("start_servo_jog → POST /servojog/start payload=%s", payload)
         try:
             request_started = self._mark_execution_request_sent("start_servo_jog")

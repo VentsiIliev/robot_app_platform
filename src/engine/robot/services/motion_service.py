@@ -381,6 +381,7 @@ class MotionService(IMotionService):
             tool: int = 0,
             user: int = 0,
             allow_subzero_descent: bool = False,
+            disable_collision_checking: bool = False,
     ) -> int:
         self._last_jog_target = []
         try:
@@ -407,6 +408,7 @@ class MotionService(IMotionService):
                 frame=frame,
                 tool=tool,
                 user=user,
+                disable_collision_checking=disable_collision_checking,
             ))
             if result == 0:
                 if allow_subzero_descent:

@@ -29,6 +29,7 @@ class FakeRobot:
         tool=0,
         user=0,
         allow_subzero_descent=False,
+        disable_collision_checking=False,
     ):
         self.started.append(
             {
@@ -40,6 +41,7 @@ class FakeRobot:
                 "tool": tool,
                 "user": user,
                 "allow_subzero_descent": allow_subzero_descent,
+                "disable_collision_checking": disable_collision_checking,
             }
         )
         return self.start_return
@@ -126,6 +128,47 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertTrue(result.retracted)
         self.assertEqual([Direction.MINUS, Direction.PLUS], [item["direction"] for item in robot.started])
+        self.assertEqual(2, robot.stopped)
+
+    def test_scoped_collision_override_applies_to_descent_and_retract(self):
+        class RetractRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 40.0, 0.0, 0.0, 0.0]
+
+            def start_servo_jog(self, axis, direction, *args, **kwargs):
+                result = super().start_servo_jog(axis, direction, *args, **kwargs)
+                if direction == Direction.PLUS:
+                    self.position[2] += 10.0
+                return result
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def stop_motion(self):
+                return True
+
+        robot = RetractRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.001,
+                timeout_s=0.1,
+                disable_collision_checking=True,
+            ),
+            retract=ServoRetractConfig(
+                distance_mm=10.0,
+                linear_mm_s=25.0,
+                poll_interval_s=0.001,
+                timeout_s=0.1,
+                maximum_distance_mm=20.0,
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(2, len(robot.started))
+        self.assertTrue(all(item["disable_collision_checking"] for item in robot.started))
         self.assertEqual(2, robot.stopped)
 
     def test_distance_retract_accepts_overshoot_within_clearance_window(self):

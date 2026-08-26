@@ -32,6 +32,7 @@ class ServoUntilConditionConfig:
     preflight_condition_read_attempts: int = 2
     condition_read_failure_limit: int = 3
     allow_subzero_descent: bool = False
+    disable_collision_checking: bool = False
     maximum_travel_mm: float | None = None
     minimum_z_mm: float | None = None
 
@@ -228,6 +229,8 @@ class ServoUntilConditionProcedure:
             }
             if cfg.allow_subzero_descent:
                 servo_kwargs["allow_subzero_descent"] = True
+            if cfg.disable_collision_checking:
+                servo_kwargs["disable_collision_checking"] = True
             start_ret = self._robot.start_servo_jog(cfg.axis, cfg.direction, **servo_kwargs)
             if not self._return_code_ok(start_ret):
                 return self._result(
@@ -500,6 +503,7 @@ class ServoUntilConditionProcedure:
             frame=cfg.frame,
             tool=cfg.tool,
             user=cfg.user,
+            disable_collision_checking=cfg.disable_collision_checking,
         )
         if not self._return_code_ok(start_ret):
             return False, f"retract_servo_start_failed:{start_ret}"
