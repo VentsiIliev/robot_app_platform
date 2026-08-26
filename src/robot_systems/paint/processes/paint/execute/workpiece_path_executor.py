@@ -61,7 +61,7 @@ from src.robot_systems.paint.timing import timed_block, timed_step
 _logger = logging.getLogger(__name__)
 
 _STAGING_Z_OFFSET_MM = 0
-_STAGING_PAINT_AXIS_OFFSET_MM = 80.0
+_STAGING_PAINT_AXIS_OFFSET_MM = 20.0
 
 def _camera_to_tcp_delta(
     x_offset: float,
