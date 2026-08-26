@@ -148,10 +148,19 @@ class MotionService(IMotionService):
         self._last_jog_target = []
         violations = self._motion_violations(position)
         if allow_subzero_step_recovery:
+            current = self._fresh_position()
+            if not self._is_bounded_subzero_retract(current, position):
+                self._logger.warning(
+                    "move_linear recovery rejected: requires a pure upward move from sub-zero Z"
+                )
+                return False
             violations = [
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
-                and "not in [0, 800]" not in violation.lower()
+                and not (
+                    violation.lstrip().startswith("Z=")
+                    and "not in [0," in violation
+                )
             ]
         if violations:
             self._logger.warning("move_linear blocked by safety limits: %s", ", ".join(violations))
@@ -571,6 +580,34 @@ class MotionService(IMotionService):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _fresh_position(self) -> list[float]:
+        getter = getattr(self._robot, "get_current_position_fresh", None)
+        if not callable(getter):
+            getter = self._robot.get_current_position
+        try:
+            return list(getter() or self._cached_position or [])
+        except Exception:
+            self._logger.exception("Fresh robot position unavailable")
+            return []
+
+    @staticmethod
+    def _is_bounded_subzero_retract(current, target) -> bool:
+        """Allow only a pure +Z escape; never lateral, rotational, or downward motion."""
+        if len(current) < 6 or len(target) < 6:
+            return False
+        try:
+            current_values = [float(value) for value in current[:6]]
+            target_values = [float(value) for value in target[:6]]
+        except (TypeError, ValueError):
+            return False
+        if current_values[2] >= 0.0 or target_values[2] <= current_values[2]:
+            return False
+        unchanged_indices = (0, 1, 3, 4, 5)
+        return all(
+            abs(target_values[index] - current_values[index]) <= 0.05
+            for index in unchanged_indices
+        )
 
     def _start_servo_floor_supervisor(
             self,

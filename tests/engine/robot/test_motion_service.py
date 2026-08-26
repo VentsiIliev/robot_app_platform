@@ -208,6 +208,44 @@ class TestMotionService(unittest.TestCase):
         time.sleep(0.05)
         self.robot.stop_servo_jog.assert_not_called()
 
+    def test_recovery_step_allows_pure_upward_move_while_target_remains_subzero(self):
+        current = [100, 50, -1.5, 0, 0, 0]
+        target = [100, 50, -0.5, 0, 0, 0]
+        self.robot.get_current_position_fresh.return_value = current
+        self.robot.move_linear.return_value = 0
+
+        result = self.service.move_linear(
+            target, 1, 1, 5, 5,
+            allow_subzero_step_recovery=True,
+        )
+
+        self.assertTrue(result)
+        self.assertTrue(
+            self.robot.move_linear.call_args.kwargs["allow_collision_recovery"]
+        )
+
+    def test_recovery_step_rejects_lateral_subzero_move(self):
+        self.robot.get_current_position_fresh.return_value = [100, 50, -1.5, 0, 0, 0]
+
+        result = self.service.move_linear(
+            [101, 50, -0.5, 0, 0, 0], 1, 1, 5, 5,
+            allow_subzero_step_recovery=True,
+        )
+
+        self.assertFalse(result)
+        self.robot.move_linear.assert_not_called()
+
+    def test_recovery_step_rejects_downward_subzero_move(self):
+        self.robot.get_current_position_fresh.return_value = [100, 50, -1.5, 0, 0, 0]
+
+        result = self.service.move_linear(
+            [100, 50, -2.5, 0, 0, 0], 1, 1, 5, 5,
+            allow_subzero_step_recovery=True,
+        )
+
+        self.assertFalse(result)
+        self.robot.move_linear.assert_not_called()
+
 
     # ------------------------------------------------------------------
     # move_sequence
