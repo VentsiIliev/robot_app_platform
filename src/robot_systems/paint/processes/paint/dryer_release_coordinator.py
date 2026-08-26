@@ -38,6 +38,11 @@ class DryerReleaseCoordinator:
 
     def on_workpiece_release_verified(self) -> bool:
         """Queue next-position → eject processing and return immediately."""
+        if not self._dryer_enabled():
+            self._logger.info(
+                "[DRYER_RELEASE] Dryer disabled; skipping NEXT_POSITION/EJECT sequence"
+            )
+            return True
         with self._lock:
             if self._stopped or self._sequence_active or not self._last_sequence_succeeded:
                 return False
@@ -63,6 +68,9 @@ class DryerReleaseCoordinator:
 
     def wait_until_ready_for_release(self) -> tuple[bool, str]:
         """Wait for the previous sequence so another dropoff cannot overfill the dryer."""
+        if not self._dryer_enabled():
+            self._logger.info("[DRYER_RELEASE] Dryer disabled; readiness check bypassed")
+            return True, ""
         self._completion.wait()
         with self._lock:
             ready = not self._sequence_active and self._last_sequence_succeeded
@@ -94,6 +102,13 @@ class DryerReleaseCoordinator:
         succeeded = False
         error = "Dryer sequence did not complete"
         try:
+            if not self._dryer_enabled():
+                self._logger.info(
+                    "[DRYER_RELEASE] Dryer disabled before worker execution; commands skipped"
+                )
+                succeeded = True
+                error = ""
+                return
             initial_state = self._dryer.get_state()
             self._logger.info(
                 "[DRYER_RELEASE] Before NEXT_POSITION: state=%s",
@@ -138,6 +153,21 @@ class DryerReleaseCoordinator:
                 self._last_sequence_succeeded = succeeded
                 self._last_error = error
                 self._completion.set()
+
+    def _dryer_enabled(self) -> bool:
+        """Treat an explicit disabled state as simulation/bypass, never as failure."""
+        if self._dryer is None:
+            return False
+        getter = getattr(self._dryer, "is_enabled", None)
+        if not callable(getter):
+            # Legacy/test implementations without enable control remain strict.
+            return True
+        try:
+            return bool(getter())
+        except Exception:
+            self._logger.exception("[DRYER_RELEASE] Failed to read dryer enabled state")
+            # Fail closed when an enabled-state provider exists but is unreadable.
+            return True
 
     def _wait_for_next_position_cycle(
         self,

@@ -9,6 +9,19 @@ from src.robot_systems.paint.processes.paint.dryer_release_coordinator import (
 
 
 class TestDryerReleaseCoordinator(unittest.TestCase):
+    def test_disabled_dryer_skips_commands_and_readiness_validation(self) -> None:
+        dryer = MagicMock()
+        dryer.is_enabled.return_value = False
+        coordinator = DryerReleaseCoordinator(dryer)
+
+        self.assertTrue(coordinator.on_workpiece_release_verified())
+        self.assertEqual((True, ""), coordinator.wait_until_ready_for_release())
+        coordinator.shutdown()
+
+        dryer.next_position.assert_not_called()
+        dryer.eject.assert_not_called()
+        dryer.get_state.assert_not_called()
+
     def test_sequence_waits_for_next_position_before_eject_and_eject_done(self) -> None:
         events = []
         dryer = MagicMock()
