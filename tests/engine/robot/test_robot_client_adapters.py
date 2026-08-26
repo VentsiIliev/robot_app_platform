@@ -260,6 +260,33 @@ class TestRobotClientAdapters(unittest.TestCase):
         self.assertEqual(snapshot["velocity_magnitude"], 0.0)
         self.assertEqual(snapshot["acceleration"], 0.0)
 
+    def test_ros2_robot_forwards_scoped_servo_collision_override(self):
+        robot = object.__new__(Ros2Robot)
+        robot._client = MagicMock()
+        robot._client.start_servo_jog.return_value = 0
+
+        result = robot.start_servo_jog(
+            "Z",
+            "PLUS",
+            linear_mm_s=5.0,
+            frame="user",
+            tool=1,
+            user=1,
+            disable_collision_checking=True,
+        )
+
+        self.assertEqual(0, result)
+        robot._client.start_servo_jog.assert_called_once_with(
+            "Z",
+            "PLUS",
+            linear_mm_s=5.0,
+            angular_deg_s=None,
+            frame="user",
+            tool=1,
+            user=1,
+            disable_collision_checking=True,
+        )
+
     def test_health_check_error_logging_is_throttled_across_client_instances(self):
         HttpWebSocketRobotClient._GLOBAL_LAST_HEALTH_ERROR = None
         HttpWebSocketRobotClient._GLOBAL_LAST_HEALTH_ERROR_LOGGED_AT = 0.0

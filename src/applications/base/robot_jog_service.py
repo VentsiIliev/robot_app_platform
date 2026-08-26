@@ -271,6 +271,11 @@ class RobotJogService:
             frame="user",
             tool=tool,
             user=user,
+            disable_collision_checking=(
+                self._recovery_mode
+                and robot_axis == RobotAxis.Z
+                and robot_direction == Direction.PLUS
+            ),
         )
         if result == 0:
             if self._servo_jog_stop_requested:

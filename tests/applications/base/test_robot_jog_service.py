@@ -216,6 +216,43 @@ class TestRobotJogService(unittest.TestCase):
         self.assertEqual(kwargs["frame"], "user")
         self.assertEqual(kwargs["tool"], 1)
         self.assertEqual(kwargs["user"], 2)
+        self.assertFalse(kwargs["disable_collision_checking"])
+
+    def test_recovery_mode_scopes_collision_override_to_servo_z_plus(self):
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.set_active_workobject.return_value = True
+        robot.start_servo_jog.return_value = 0
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 1,
+        )
+        service.set_recovery_mode(True)
+
+        service.jog("SERVO_JOG", "Z", "PLUS", 5.0)
+
+        self.assertTrue(
+            robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
+        )
+
+    def test_recovery_mode_does_not_disable_collision_for_servo_z_minus(self):
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.set_active_workobject.return_value = True
+        robot.start_servo_jog.return_value = 0
+        service = RobotJogService(
+            robot_service=robot,
+            tool_getter=lambda: 1,
+            user_getter=lambda: 1,
+        )
+        service.set_recovery_mode(True)
+
+        service.jog("SERVO_JOG", "Z", "MINUS", 5.0)
+
+        self.assertFalse(
+            robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
+        )
 
     def test_servo_jog_caps_slider_speed_to_configured_maximum(self):
         robot = MagicMock()

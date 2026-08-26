@@ -48,6 +48,7 @@ class Ros2Robot(IRobot):
         frame: str | int = "user",
         tool: int = 0,
         user: int = 0,
+        disable_collision_checking: bool = False,
     ) -> int:
         logger.debug(
             "start_servo_jog → axis=%s direction=%s linear_mm_s=%s angular_deg_s=%s frame=%s tool=%s user=%s",
@@ -70,6 +71,7 @@ class Ros2Robot(IRobot):
             frame=frame,
             tool=tool,
             user=user,
+            disable_collision_checking=disable_collision_checking,
         ) or 0
         logger.debug("start_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
