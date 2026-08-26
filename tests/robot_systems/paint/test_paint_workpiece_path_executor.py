@@ -35,6 +35,7 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
     PaintWorkpiecePathExecutor,
     PickupTransferPlan,
     _normalize_contact_motion_config,
+    _paint_axis_staging_offset_pose,
     _shift_path_rotation,
 )
 
@@ -49,6 +50,44 @@ def _execution_plan(*jobs, workpiece=None):
         execution_jobs=list(jobs),
         total_spline_pts=0,
     )
+
+
+class TestPaintStagingOffsetPose(unittest.TestCase):
+    def test_offsets_axis_perpendicular_to_xy_paint_axis(self):
+        config = SimpleNamespace(
+            planar_axes=("x", "y"),
+            planar_coordinate_indices=(0, 1),
+            translation_axis="x",
+            direction_sign=1.0,
+        )
+
+        pose = _paint_axis_staging_offset_pose(
+            [100.0, 200.0, 300.0, 0.0, 0.0, 0.0],
+            config,
+            z_offset_mm=0.0,
+            paint_axis_offset_mm=20.0,
+            perpendicular_axis_offset_mm=15.0,
+        )
+
+        self.assertEqual([80.0, 215.0, 300.0, 0.0, 0.0, 0.0], pose)
+
+    def test_offsets_axis_perpendicular_to_xz_paint_axis(self):
+        config = SimpleNamespace(
+            planar_axes=("x", "z"),
+            planar_coordinate_indices=(0, 2),
+            translation_axis="x",
+            direction_sign=1.0,
+        )
+
+        pose = _paint_axis_staging_offset_pose(
+            [100.0, 200.0, 300.0, 0.0, 0.0, 0.0],
+            config,
+            z_offset_mm=0.0,
+            paint_axis_offset_mm=20.0,
+            perpendicular_axis_offset_mm=15.0,
+        )
+
+        self.assertEqual([80.0, 200.0, 315.0, 0.0, 0.0, 0.0], pose)
 
 
 class TestDropoffReleaseVerification(unittest.TestCase):

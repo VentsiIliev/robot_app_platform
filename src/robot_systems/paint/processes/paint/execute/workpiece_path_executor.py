@@ -62,6 +62,7 @@ _logger = logging.getLogger(__name__)
 
 _STAGING_Z_OFFSET_MM = 0
 _STAGING_PAINT_AXIS_OFFSET_MM = 20.0
+_STAGING_PERPENDICULAR_AXIS_OFFSET_MM = 20.0
 
 def _camera_to_tcp_delta(
     x_offset: float,
@@ -108,6 +109,7 @@ def _paint_axis_staging_offset_pose(
     *,
     z_offset_mm: float = _STAGING_Z_OFFSET_MM,
     paint_axis_offset_mm: float = _STAGING_PAINT_AXIS_OFFSET_MM,
+    perpendicular_axis_offset_mm: float = _STAGING_PERPENDICULAR_AXIS_OFFSET_MM,
 ) -> list[float]:
     """Return the pre-paint staging pose below and behind the first pivot contact."""
     offset_pose = list(contact_pose)
@@ -120,6 +122,12 @@ def _paint_axis_staging_offset_pose(
         return offset_pose
 
     axis_index = pivot_config.planar_coordinate_indices[axis_position]
+    perpendicular_axis_position = 1 - axis_position
+    perpendicular_axis_index = pivot_config.planar_coordinate_indices[perpendicular_axis_position]
+    if len(offset_pose) > perpendicular_axis_index:
+        offset_pose[perpendicular_axis_index] = (
+            float(offset_pose[perpendicular_axis_index]) + float(perpendicular_axis_offset_mm)
+        )
     if len(offset_pose) <= axis_index or abs(float(paint_axis_offset_mm)) <= 1e-9:
         return offset_pose
 
@@ -374,6 +382,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
         self._staging_z_offset_mm = _STAGING_Z_OFFSET_MM
         self._staging_paint_axis_offset_mm = _STAGING_PAINT_AXIS_OFFSET_MM
+        self._staging_perpendicular_axis_offset_mm = _STAGING_PERPENDICULAR_AXIS_OFFSET_MM
         self._active_contact_base_z_offset_mm: float = 0.0
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None

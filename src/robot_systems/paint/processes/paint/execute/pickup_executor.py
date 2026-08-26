@@ -179,10 +179,11 @@ class DefaultPickupStrategy:
         )
         staging_offset_pose = owner._paint_start_staging_offset_pose(staged_command_pose)
         _logger.info(
-            "[PICKUP] staging offset before pivot contact: z_offset_mm=%.3f paint_axis=%s paint_axis_offset_mm=%.3f direction=%s contact_pose=%s offset_pose=%s",
+            "[PICKUP] staging offset before pivot contact: z_offset_mm=%.3f paint_axis=%s paint_axis_offset_mm=%.3f perpendicular_axis_offset_mm=%.3f direction=%s contact_pose=%s offset_pose=%s",
             owner._staging_z_offset_mm,
             owner._contact_motion_config.translation_axis,
             owner._staging_paint_axis_offset_mm,
+            owner._staging_perpendicular_axis_offset_mm,
             owner._contact_motion_config.translation_direction,
             [round(float(v), 3) for v in staged_command_pose[:6]],
             [round(float(v), 3) for v in staging_offset_pose[:6]],
