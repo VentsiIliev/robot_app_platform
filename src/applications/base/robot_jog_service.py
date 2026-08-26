@@ -140,7 +140,13 @@ class RobotJogService:
                 target,
             )
             if target is not None:
-                allow_subzero_recovery = self._recovery_mode
+                allow_subzero_recovery = (
+                    self._recovery_mode
+                    and len(current) >= 3
+                    and float(current[2]) < 0.0
+                    and robot_axis == RobotAxis.Z
+                    and robot_direction == Direction.PLUS
+                )
                 move_kwargs = {
                     "tool": tool,
                     "user": user,
@@ -151,6 +157,8 @@ class RobotJogService:
                 }
                 if allow_subzero_recovery:
                     move_kwargs["allow_subzero_step_recovery"] = True
+                if self._recovery_mode:
+                    move_kwargs["allow_collision_recovery"] = True
                 self._robot.move_linear(target, **move_kwargs)
             self._lock.release()
         except Exception:
@@ -271,11 +279,7 @@ class RobotJogService:
             frame="user",
             tool=tool,
             user=user,
-            disable_collision_checking=(
-                self._recovery_mode
-                and robot_axis == RobotAxis.Z
-                and robot_direction == Direction.PLUS
-            ),
+            disable_collision_checking=self._recovery_mode,
         )
         if result == 0:
             if self._servo_jog_stop_requested:

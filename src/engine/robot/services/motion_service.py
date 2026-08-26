@@ -24,6 +24,7 @@ class MotionService(IMotionService):
     _JOG_TARGET_REUSE_ANG_DEG = 2.0
     _SERVO_FLOOR_POLL_S = 0.02
     _SERVO_RECOVERY_MAX_LINEAR_MM_S = 5.0
+    _SERVO_RECOVERY_MAX_ANGULAR_DEG_S = 2.0
 
     def __init__(
             self,
@@ -144,6 +145,7 @@ class MotionService(IMotionService):
             wait_to_reach=False,
             wait_cancelled: Callable[[], bool] | None = None,
             allow_subzero_step_recovery: bool = False,
+            allow_collision_recovery: bool = False,
     ) -> bool:
         self._last_jog_target = []
         violations = self._motion_violations(position)
@@ -169,7 +171,7 @@ class MotionService(IMotionService):
             self._logger.debug("move_linear → pos=%s tool=%s user=%s vel=%s acc=%s blendR=%s", position, tool, user,
                                velocity, acceleration, blendR)
             driver_kwargs = {"blocking": wait_to_reach}
-            if allow_subzero_step_recovery:
+            if allow_subzero_step_recovery or allow_collision_recovery:
                 driver_kwargs["allow_collision_recovery"] = True
             ret = self._robot.move_linear(
                 position, tool, user, velocity, acceleration, blendR, **driver_kwargs
@@ -409,6 +411,13 @@ class MotionService(IMotionService):
             )
             if recovery and linear_mm_s is not None:
                 linear_mm_s = min(abs(float(linear_mm_s)), self._SERVO_RECOVERY_MAX_LINEAR_MM_S)
+            if disable_collision_checking:
+                if linear_mm_s is not None:
+                    linear_mm_s = min(abs(float(linear_mm_s)), self._SERVO_RECOVERY_MAX_LINEAR_MM_S)
+                if angular_deg_s is not None:
+                    angular_deg_s = min(
+                        abs(float(angular_deg_s)), self._SERVO_RECOVERY_MAX_ANGULAR_DEG_S
+                    )
             result = int(starter(
                 axis,
                 direction,

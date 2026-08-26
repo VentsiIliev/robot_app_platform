@@ -246,6 +246,19 @@ class TestMotionService(unittest.TestCase):
         self.assertFalse(result)
         self.robot.move_linear.assert_not_called()
 
+    def test_general_collision_recovery_keeps_workspace_checks_and_reaches_driver(self):
+        self.robot.move_linear.return_value = 0
+
+        result = self.service.move_linear(
+            [101, 50, 25, 0, 0, 0], 1, 1, 5, 5,
+            allow_collision_recovery=True,
+        )
+
+        self.assertTrue(result)
+        self.assertTrue(
+            self.robot.move_linear.call_args.kwargs["allow_collision_recovery"]
+        )
+
 
     # ------------------------------------------------------------------
     # move_sequence

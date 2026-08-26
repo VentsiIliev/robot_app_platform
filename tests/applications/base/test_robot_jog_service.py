@@ -236,7 +236,7 @@ class TestRobotJogService(unittest.TestCase):
             robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
         )
 
-    def test_recovery_mode_does_not_disable_collision_for_servo_z_minus(self):
+    def test_recovery_mode_disables_collision_for_operator_selected_servo_axis(self):
         robot = MagicMock()
         robot.set_active_tool.return_value = True
         robot.set_active_workobject.return_value = True
@@ -250,9 +250,23 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("SERVO_JOG", "Z", "MINUS", 5.0)
 
-        self.assertFalse(
+        self.assertTrue(
             robot.start_servo_jog.call_args.kwargs["disable_collision_checking"]
         )
+
+    def test_recovery_step_above_zero_requests_collision_recovery_without_floor_bypass(self):
+        robot = MagicMock()
+        robot.set_active_tool.return_value = True
+        robot.set_active_workobject.return_value = True
+        robot.get_current_position.return_value = [10, 20, 30, 0, 0, 0]
+        service = RobotJogService(robot_service=robot, tool_getter=lambda: 1, user_getter=lambda: 1)
+        service.set_recovery_mode(True)
+
+        service.jog("JOG_ROBOT", "X", "PLUS", 1.0)
+
+        kwargs = robot.move_linear.call_args.kwargs
+        self.assertTrue(kwargs["allow_collision_recovery"])
+        self.assertNotIn("allow_subzero_step_recovery", kwargs)
 
     def test_servo_jog_caps_slider_speed_to_configured_maximum(self):
         robot = MagicMock()
