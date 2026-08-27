@@ -84,6 +84,7 @@
     "blendR": 0.0,
     "spacing_mm": 10.0,
     "z_offset_mm": 0.0,
+    "perpendicular_retreat_offset_mm": -50.0,
     "second_pass_pivot_z_offset_mm": -25.0
   },
   "dropoff": {

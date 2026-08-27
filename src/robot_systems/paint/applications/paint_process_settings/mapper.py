@@ -266,6 +266,7 @@ class PaintProcessSettingsMapper:
             ],
             "cleanup_spacing_mm": cleanup.spacing_mm,
             "cleanup_z_offset_mm": cleanup.z_offset_mm,
+            "cleanup_perpendicular_retreat_offset_mm": cleanup.perpendicular_retreat_offset_mm,
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
             "dropoff_allow_sub_zero": dropoff.allow_sub_zero_dropoff,
@@ -510,6 +511,12 @@ class PaintProcessSettingsMapper:
             blendR=float(PaintProcessSettingsMapper._profile_value(cleanup_profiles, "cleanup", "blendR", flat, "cleanup_blendR", base.edge_cleanup.blendR)),
             spacing_mm=float(flat.get("cleanup_spacing_mm", base.edge_cleanup.spacing_mm)),
             z_offset_mm=float(flat.get("cleanup_z_offset_mm", base.edge_cleanup.z_offset_mm)),
+            perpendicular_retreat_offset_mm=float(
+                flat.get(
+                    "cleanup_perpendicular_retreat_offset_mm",
+                    base.edge_cleanup.perpendicular_retreat_offset_mm,
+                )
+            ),
             second_pass_pivot_z_offset_mm=float(
                 flat.get("cleanup_second_pass_pivot_z_offset_mm", base.edge_cleanup.second_pass_pivot_z_offset_mm)
             ),

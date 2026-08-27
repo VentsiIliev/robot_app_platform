@@ -62,6 +62,43 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertIn("staging_attach_perpendicular_axis_offset_mm", keys)
         self.assertIn("staging_detach_perpendicular_axis_offset_mm", keys)
 
+    def test_cleanup_perpendicular_retreat_offset_roundtrips_and_is_exposed(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["cleanup_perpendicular_retreat_offset_mm"] = -37.5
+
+        mapped = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(mapped)
+        )
+        distance_groups = dict(build_paint_process_settings_tabs())["Distances & Offsets"]
+        keys = [field.key for group in distance_groups for field in group.fields]
+
+        self.assertEqual(restored.edge_cleanup.perpendicular_retreat_offset_mm, -37.5)
+        self.assertIn("cleanup_perpendicular_retreat_offset_mm", keys)
+
+    def test_cleanup_retreat_uses_axis_perpendicular_to_translation_axis(self) -> None:
+        config = PaintProcessConfig(
+            edge_cleanup=PaintEdgeCleanupConfig(perpendicular_retreat_offset_mm=-25.0)
+        )
+        owner = SimpleNamespace(
+            _contact_motion_config=SimpleNamespace(
+                planar_axes=("x", "y"),
+                translation_axis="y",
+            ),
+            _paint_process_config=lambda: config,
+        )
+
+        cleanup = PaintEdgeCleanupExecutor(owner)
+        offset_pose = cleanup._perpendicular_offset_pose([100.0, 200.0, 300.0, 0.0, 0.0, 0.0])
+
+        self.assertEqual(offset_pose[:3], [75.0, 200.0, 300.0])
+
+        owner._contact_motion_config.translation_axis = "x"
+        offset_pose = cleanup._perpendicular_offset_pose([100.0, 200.0, 300.0, 0.0, 0.0, 0.0])
+
+        self.assertEqual(offset_pose[:3], [100.0, 175.0, 300.0])
+
     def test_process_config_derived_properties_follow_motion_plane(self) -> None:
         default_config = PaintProcessConfig()
 

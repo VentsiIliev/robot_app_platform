@@ -127,6 +127,9 @@ class PaintEdgeCleanupConfig:
     spacing_mm: float = 3.0  # [LIVE SETTINGS]
     # Cleanup-only Z adjustment in robot coordinates. Negative lowers into the belt.
     z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    # Approach/retreat displacement along the cleanup plane axis perpendicular
+    # to the configured paint/translation axis.
+    perpendicular_retreat_offset_mm: float = -50.0  # [LIVE SETTINGS]
     # Additional paint-axis/base Z offset for the optional second cleanup pass.
     second_pass_pivot_z_offset_mm: float = -15.0  # [LIVE SETTINGS] 20mm below the belt !
 

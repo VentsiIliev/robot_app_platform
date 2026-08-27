@@ -313,6 +313,10 @@ def build_distance_offset_groups() -> list[SettingGroup]:
         ]),
         SettingGroup(_t("Cleanup Offsets"), [
             _mm_field("cleanup_z_offset_mm", "Cleanup Z Offset"),
+            _mm_field(
+                "cleanup_perpendicular_retreat_offset_mm",
+                "Perpendicular-Axis Approach/Retreat Offset",
+            ),
             _mm_field("cleanup_second_pass_pivot_z_offset_mm", "Second-Pass Pivot Z Offset"),
         ]),
     ]
