@@ -123,6 +123,12 @@
     "Pause": "Pause"
   },
   "PaintProcessSettings": {
+    "Magazine Pickup Target Mode": "Magazine Pickup Target Mode",
+    "Fixed Pickup Movement Group": "Fixed Pickup Movement Group",
+    "Fixed Pickup Position Tolerance": "Fixed Pickup Position Tolerance",
+    "Fixed Pickup Orientation Tolerance": "Fixed Pickup Orientation Tolerance",
+    "Fixed Magazine Pickup Unavailable": "Fixed Magazine Pickup Unavailable",
+    "Fixed-group magazine pickup requires a movement group and servo-contact mode.": "Fixed-group magazine pickup requires a movement group and servo-contact mode.",
     "Servo Contact Unavailable": "Servo Contact Unavailable",
     "Vacuum Pump in Device Control": "Vacuum Pump in Device Control",
     "Vacuum Sensor in Device Control": "Vacuum Sensor in Device Control",

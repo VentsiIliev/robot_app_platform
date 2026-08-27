@@ -12,7 +12,10 @@ from src.robot_systems.paint.applications.paint_process_settings.model.paint_pro
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_view import (
     PaintProcessSettingsView,
 )
-from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODE_SERVO_CONTACT
+from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+)
 
 _CONTACT_MODE_KEYS = ("pickup_contact_mode", "magazine_pickup_contact_mode")
 
@@ -59,6 +62,11 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
 
     def _on_save(self, flat: dict) -> None:
+        if not self._fixed_magazine_mode_is_allowed(flat):
+            message = self._t("Fixed-group magazine pickup requires a movement group and servo-contact mode.")
+            show_warning(self._view, self._t("Fixed Magazine Pickup Unavailable"), message)
+            self._view.set_status(message)
+            return
         if not self._servo_contact_is_allowed(flat):
             self._reject_servo_contact(flat)
             return
@@ -74,6 +82,27 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         updated = PaintProcessSettingsMapper.from_flat_dict(flat, self._model.current_settings)
         self._model.save(updated)
         self._view.set_status(self._t("Saved. Changes will be used by the next Paint cycle."))
+
+    def _fixed_magazine_mode_is_allowed(self, flat: dict) -> bool:
+        mode = str(
+            flat.get(
+                "magazine_pickup_target_mode",
+                self._model.current_settings.magazine_load.pickup_target_mode,
+            )
+        ).strip().lower()
+        if mode != MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP:
+            return True
+        group_id = str(
+            flat.get(
+                "magazine_fixed_pickup_group_id",
+                self._model.current_settings.magazine_load.fixed_pickup_group_id,
+            )
+        ).strip()
+        contact_mode = flat.get(
+            "magazine_pickup_contact_mode",
+            self._model.current_settings.pickup_motion.magazine_pickup_contact_mode,
+        )
+        return bool(group_id) and self._is_servo_contact(contact_mode)
 
     def _on_value_changed(self, key: str, value: object) -> None:
         if self._reverting_invalid_contact_strategy:

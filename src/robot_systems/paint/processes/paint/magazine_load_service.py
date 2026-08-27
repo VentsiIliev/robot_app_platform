@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from time import monotonic, sleep
 from typing import Callable
@@ -336,6 +337,16 @@ class PaintMagazineLoadService:
                 _logger.exception("[MAGAZINE_LOAD] Failed to get vision resolver")
                 return None
         return None
+
+    @staticmethod
+    def _validated_pose(pose) -> list[float] | None:
+        try:
+            values = [float(value) for value in list(pose)[:6]]
+        except (TypeError, ValueError):
+            return None
+        if len(values) != 6 or not all(math.isfinite(value) for value in values):
+            return None
+        return values
 
     @staticmethod
     def _wait(seconds: float, stop_requested: Callable[[], bool]) -> bool:

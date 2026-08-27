@@ -17,6 +17,8 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+    MAGAZINE_PICKUP_TARGET_MODE_VISION,
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SERVO_CONTACT,
@@ -42,6 +44,9 @@ def execute_magazine_pickup_release(
     workpiece_height_mm: float = 0.0,
     release_label: str = "release",
     resume_from_current_pose: bool = False,
+    fixed_approach_pose: list[float] | None = None,
+    fixed_position_tolerance_mm: float = 2.0,
+    fixed_orientation_tolerance_deg: float = 1.0,
 ) -> tuple[bool, str]:
     """Pick up a resolved magazine target and release it at an explicit pose."""
     executor = load_service._path_executor
@@ -69,14 +74,18 @@ def execute_magazine_pickup_release(
     pickup_rx = float(pickup_base_pose[3])
     pickup_ry = float(pickup_base_pose[4])
     pickup_rz = float(pickup_rz)
-    approach_pose = [
-        pickup_x,
-        pickup_y,
-        float(pickup_z) + pickup_motion.approach_offset_mm,
-        pickup_rx,
-        pickup_ry,
-        pickup_rz,
-    ]
+    approach_pose = (
+        list(fixed_approach_pose)
+        if fixed_approach_pose is not None
+        else [
+            pickup_x,
+            pickup_y,
+            float(pickup_z) + pickup_motion.approach_offset_mm,
+            pickup_rx,
+            pickup_ry,
+            pickup_rz,
+        ]
+    )
     pickup_pose = [pickup_x, pickup_y, float(pickup_z), pickup_rx, pickup_ry, pickup_rz]
     lift_pose = [
         pickup_x,
@@ -155,6 +164,25 @@ def execute_magazine_pickup_release(
     if not ordered_segments:
         _logger.info("[PICKUP] Ordered magazine pickup-to-release sequence already at final target")
     else:
+        if fixed_approach_pose is not None:
+            try:
+                fixed_start_z = float(fixed_approach_pose[2])
+                minimum_z = float(pickup_motion.servo_contact_min_z_mm)
+            except (IndexError, TypeError, ValueError):
+                return False, "Fixed magazine pickup group pose is invalid"
+            if not math.isfinite(fixed_start_z) or not math.isfinite(minimum_z) or fixed_start_z <= minimum_z:
+                return False, (
+                    "Fixed magazine pickup start Z must be above the servo-contact minimum Z "
+                    f"(start {fixed_start_z:.3f} mm, minimum {minimum_z:.3f} mm)"
+                )
+            ok, msg = _verify_fixed_pickup_start_pose(
+                executor._robot_service,
+                fixed_approach_pose,
+                position_tolerance_mm=fixed_position_tolerance_mm,
+                orientation_tolerance_deg=fixed_orientation_tolerance_deg,
+            )
+            if not ok:
+                return False, msg
         ok, msg = executor._motion.turn_vacuum_on(
             required=contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT,
         )
@@ -166,6 +194,9 @@ def execute_magazine_pickup_release(
                 transfer_waypoints,
                 retract_reference_pose=pickup_base_pose,
                 release_label=release_label,
+                expected_start_pose=fixed_approach_pose,
+                position_tolerance_mm=fixed_position_tolerance_mm,
+                orientation_tolerance_deg=fixed_orientation_tolerance_deg,
             )
         elif contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
             _logger.error(
@@ -198,6 +229,9 @@ def _execute_magazine_servo_contact_pickup_release(
     *,
     retract_reference_pose: list[float],
     release_label: str,
+    expected_start_pose: list[float] | None = None,
+    position_tolerance_mm: float = 2.0,
+    orientation_tolerance_deg: float = 1.0,
 ) -> tuple[bool, str]:
     pickup_motion = executor._paint_process_config().pickup_motion
     condition = getattr(executor, "_pickup_condition", None)
@@ -213,6 +247,16 @@ def _execute_magazine_servo_contact_pickup_release(
         approach_segments,
     ):
         return False, "Magazine pickup approach before servo contact failed"
+
+    if expected_start_pose is not None:
+        ok, msg = _verify_fixed_pickup_start_pose(
+            executor._robot_service,
+            expected_start_pose,
+            position_tolerance_mm=position_tolerance_mm,
+            orientation_tolerance_deg=orientation_tolerance_deg,
+        )
+        if not ok:
+            return False, msg
 
     contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
     minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
@@ -318,6 +362,65 @@ def _read_fresh_pose(robot_service) -> list[float] | None:
     return [float(value) for value in pose[:6]]
 
 
+def _verify_fixed_pickup_start_pose(
+    robot_service,
+    expected_pose: list[float],
+    *,
+    position_tolerance_mm: float,
+    orientation_tolerance_deg: float,
+) -> tuple[bool, str]:
+    expected = _finite_pose(expected_pose)
+    actual = _finite_pose(_read_fresh_pose(robot_service))
+    if expected is None:
+        return False, "Fixed magazine pickup group pose is invalid"
+    if actual is None:
+        return False, "Magazine servo descent refused: fresh robot pose is unavailable"
+    position_error = math.sqrt(sum((actual[index] - expected[index]) ** 2 for index in range(3)))
+    orientation_error = max(
+        abs((actual[index] - expected[index] + 180.0) % 360.0 - 180.0)
+        for index in range(3, 6)
+    )
+    try:
+        position_tolerance = float(position_tolerance_mm)
+        orientation_tolerance = float(orientation_tolerance_deg)
+    except (TypeError, ValueError):
+        return False, "Fixed magazine pickup pose tolerances are invalid"
+    if (
+        not math.isfinite(position_tolerance)
+        or not math.isfinite(orientation_tolerance)
+        or position_tolerance < 0.0
+        or orientation_tolerance < 0.0
+    ):
+        return False, "Fixed magazine pickup pose tolerances are invalid"
+    _logger.info(
+        "[MAGAZINE_LOAD] Fixed pickup start verification position_error_mm=%.3f "
+        "position_tolerance_mm=%.3f orientation_error_deg=%.3f orientation_tolerance_deg=%.3f",
+        position_error,
+        position_tolerance,
+        orientation_error,
+        orientation_tolerance,
+    )
+    if position_error > position_tolerance or orientation_error > orientation_tolerance:
+        return False, (
+            "Magazine servo descent refused: robot is not at the fixed pickup group "
+            f"(position error {position_error:.3f} mm, allowed {position_tolerance:.3f} mm; "
+            f"orientation error {orientation_error:.3f} deg, allowed {orientation_tolerance:.3f} deg)"
+        )
+    return True, ""
+
+
+def _finite_pose(pose) -> list[float] | None:
+    if pose is None:
+        return None
+    try:
+        values = [float(value) for value in list(pose)[:6]]
+    except (TypeError, ValueError):
+        return None
+    if len(values) != 6 or not all(math.isfinite(value) for value in values):
+        return None
+    return values
+
+
 def _wait_for_stable_pose(
     robot_service,
     *,
@@ -372,6 +475,17 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         return guarded
 
     load_service = ctx.production_service._magazine_load_service
+    target_mode = str(
+        ctx.magazine_config.pickup_target_mode or MAGAZINE_PICKUP_TARGET_MODE_VISION
+    ).strip().lower()
+    is_fixed_group = target_mode == MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP
+    resume_from_current_pose = ctx.consume_resume_retry()
+    if is_fixed_group and resume_from_current_pose:
+        _logger.info(
+            "[MAGAZINE_LOAD] Fixed pickup resume requires returning to and re-verifying group '%s'",
+            ctx.magazine_group,
+        )
+        return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
     ok, msg = execute_magazine_pickup_release(
         load_service,
         pickup_xy=ctx.magazine_target["pickup_xy"],
@@ -380,7 +494,10 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         release_pose=ctx.magazine_release_pose,
         workpiece_height_mm=0.0,
         release_label=f"{load_service._release_work_area_id} work area center",
-        resume_from_current_pose=ctx.consume_resume_retry(),
+        resume_from_current_pose=resume_from_current_pose,
+        fixed_approach_pose=ctx.magazine_fixed_pickup_pose if is_fixed_group else None,
+        fixed_position_tolerance_mm=float(ctx.magazine_config.fixed_pickup_position_tolerance_mm),
+        fixed_orientation_tolerance_deg=float(ctx.magazine_config.fixed_pickup_orientation_tolerance_deg),
     )
     if not ok:
         return interrupted_or_error(

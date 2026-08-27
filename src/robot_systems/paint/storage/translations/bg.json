@@ -123,6 +123,12 @@
     "Pause": "Пауза"
   },
   "PaintProcessSettings": {
+    "Magazine Pickup Target Mode": "Режим за целта при вземане от магазина",
+    "Fixed Pickup Movement Group": "Фиксирана група за движение при вземане",
+    "Fixed Pickup Position Tolerance": "Допуск за фиксираната позиция на вземане",
+    "Fixed Pickup Orientation Tolerance": "Допуск за ориентацията при фиксирано вземане",
+    "Fixed Magazine Pickup Unavailable": "Фиксираното вземане от магазина не е налично",
+    "Fixed-group magazine pickup requires a movement group and servo-contact mode.": "Фиксираното вземане от магазина изисква група за движение и режим servo-contact.",
     "Servo Contact Unavailable": "Servo Contact не е наличен",
     "Vacuum Pump in Device Control": "Вакуумна помпа в Device Control",
     "Vacuum Sensor in Device Control": "Вакуумен сензор в Device Control",

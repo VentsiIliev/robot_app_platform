@@ -96,6 +96,10 @@
   },
   "magazine_load": {
     "enabled": false,
+    "pickup_target_mode": "vision",
+    "fixed_pickup_group_id": "Magazine Fixed Pickup",
+    "fixed_pickup_position_tolerance_mm": 2.0,
+    "fixed_pickup_orientation_tolerance_deg": 1.0,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 60.0,

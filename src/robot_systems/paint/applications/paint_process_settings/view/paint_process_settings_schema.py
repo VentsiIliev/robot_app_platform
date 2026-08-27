@@ -5,7 +5,10 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR,
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
-from src.robot_systems.paint.processes.paint.config import PICKUP_CONTACT_MODES
+from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_TARGET_MODES,
+    PICKUP_CONTACT_MODES,
+)
 
 _CTX = "PaintProcessSettings"
 
@@ -150,6 +153,37 @@ def build_process_groups() -> list[SettingGroup]:
         ]),
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
+            SettingField(
+                "magazine_pickup_target_mode",
+                _t("Magazine Pickup Target Mode"),
+                "combo",
+                default="vision",
+                choices=list(MAGAZINE_PICKUP_TARGET_MODES),
+            ),
+            SettingField(
+                "magazine_fixed_pickup_group_id",
+                _t("Fixed Pickup Movement Group"),
+                "line_edit",
+                default="Magazine Fixed Pickup",
+            ),
+            _mm_field(
+                "magazine_fixed_pickup_position_tolerance_mm",
+                "Fixed Pickup Position Tolerance",
+                2.0,
+                min_val=0.0,
+            ),
+            SettingField(
+                "magazine_fixed_pickup_orientation_tolerance_deg",
+                _t("Fixed Pickup Orientation Tolerance"),
+                "double_spinbox",
+                default=1.0,
+                min_val=0.0,
+                max_val=180.0,
+                step=0.1,
+                decimals=1,
+                suffix=" deg",
+                step_options=[0.1, 0.5, 1.0],
+            ),
             _mm_field("magazine_release_z_mm", "Release Z", 50.0, min_val=0.0),
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),

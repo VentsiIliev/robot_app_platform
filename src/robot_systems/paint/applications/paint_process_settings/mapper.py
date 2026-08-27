@@ -281,6 +281,10 @@ class PaintProcessSettingsMapper:
                 ),
             ],
             "magazine_load_enabled": magazine.enabled,
+            "magazine_pickup_target_mode": magazine.pickup_target_mode,
+            "magazine_fixed_pickup_group_id": magazine.fixed_pickup_group_id,
+            "magazine_fixed_pickup_position_tolerance_mm": magazine.fixed_pickup_position_tolerance_mm,
+            "magazine_fixed_pickup_orientation_tolerance_deg": magazine.fixed_pickup_orientation_tolerance_deg,
             "magazine_release_z_mm": magazine.release_z_mm,
             "magazine_camera_settle_s": magazine.camera_settle_s,
             "magazine_release_settle_s": magazine.release_settle_s,
@@ -531,6 +535,24 @@ class PaintProcessSettingsMapper:
         magazine = replace(
             base.magazine_load,
             enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
+            pickup_target_mode=str(
+                flat.get("magazine_pickup_target_mode", base.magazine_load.pickup_target_mode)
+            ),
+            fixed_pickup_group_id=str(
+                flat.get("magazine_fixed_pickup_group_id", base.magazine_load.fixed_pickup_group_id)
+            ).strip(),
+            fixed_pickup_position_tolerance_mm=float(
+                flat.get(
+                    "magazine_fixed_pickup_position_tolerance_mm",
+                    base.magazine_load.fixed_pickup_position_tolerance_mm,
+                )
+            ),
+            fixed_pickup_orientation_tolerance_deg=float(
+                flat.get(
+                    "magazine_fixed_pickup_orientation_tolerance_deg",
+                    base.magazine_load.fixed_pickup_orientation_tolerance_deg,
+                )
+            ),
             release_z_mm=float(flat.get("magazine_release_z_mm", base.magazine_load.release_z_mm)),
             camera_settle_s=float(flat.get("magazine_camera_settle_s", base.magazine_load.camera_settle_s)),
             release_settle_s=float(flat.get("magazine_release_settle_s", base.magazine_load.release_settle_s)),

@@ -11,6 +11,13 @@ PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
 )
 
+MAGAZINE_PICKUP_TARGET_MODE_VISION = "vision"
+MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP = "fixed_group"
+MAGAZINE_PICKUP_TARGET_MODES = (
+    MAGAZINE_PICKUP_TARGET_MODE_VISION,
+    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+)
+
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process
 # settings service at runtime. Unmarked values are still static defaults or need
@@ -141,6 +148,10 @@ class PaintMagazineLoadConfig:
     """Optional pre-run transfer from magazine capture station to calibration table."""
 
     enabled: bool = False  # [LIVE SETTINGS]
+    pickup_target_mode: str = MAGAZINE_PICKUP_TARGET_MODE_VISION  # [LIVE SETTINGS]
+    fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
+    fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
+    fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]
     magazine_group_id: str = "Magazine"
     calibration_group_id: str = "CALIBRATION"
     move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]
