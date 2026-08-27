@@ -375,7 +375,7 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                 _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
                 return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
             approach_pose = list(pose)
-            approach_pose[2] = 50.0
+            approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
             corridor_id = getattr(executor, "_dropoff_motion_corridor_id", None)
             return DropoffReleasePlan(
                 strategy_name=strategy_name,
@@ -677,7 +677,7 @@ def _resolve_dropoff_preparation_pose(
     if not bool(getattr(dropoff, "allow_sub_zero_dropoff", False)):
         return pose
     approach_pose = list(pose)
-    approach_pose[2] = 50.0
+    approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
     return approach_pose
 
 

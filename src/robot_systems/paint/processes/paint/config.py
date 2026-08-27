@@ -148,6 +148,7 @@ class PaintDropoffConfig:
     corridor_entry_z_max_mm: float = 100.0
     corridor_maximum_velocity_percent: float = 80.0
     corridor_maximum_acceleration_percent: float = 60.0
+    sub_zero_approach_z_mm: float = 50.0  # [LIVE SETTINGS]
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
     release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]

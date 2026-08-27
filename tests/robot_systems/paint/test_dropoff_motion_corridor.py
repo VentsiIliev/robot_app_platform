@@ -92,6 +92,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
     def test_negative_dropoff_builds_approach_descent_release_and_retract(self):
         dropoff = SimpleNamespace(
             allow_sub_zero_dropoff=True,
+            sub_zero_approach_z_mm=65.0,
             release_align_vel_percent=20.0,
             release_align_acc_percent=15.0,
             release_align_motion_type="ptp",
@@ -111,13 +112,13 @@ class TestDropoffMotionCorridor(unittest.TestCase):
 
         self.assertEqual(len(plan.waypoints), 3)
         approach, descent, retract = plan.waypoints
-        self.assertEqual(approach.pose[2], 50.0)
+        self.assertEqual(approach.pose[2], 65.0)
         self.assertEqual(approach.motion_type, "ptp")
         self.assertEqual(descent.pose, target)
         self.assertTrue(descent.release_here)
         self.assertEqual(descent.motion_type, "linear")
         self.assertEqual(descent.corridor_id, "workpiece_drop_opening")
-        self.assertEqual(retract.pose[2], 50.0)
+        self.assertEqual(retract.pose[2], 65.0)
         self.assertFalse(retract.release_here)
         self.assertEqual(retract.motion_type, "linear")
         self.assertEqual(retract.corridor_id, "workpiece_drop_opening")
@@ -169,6 +170,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         dropoff = SimpleNamespace(
             strategy="movement_group",
             allow_sub_zero_dropoff=True,
+            sub_zero_approach_z_mm=50.0,
             release_align_vel_percent=20.0,
             release_align_acc_percent=15.0,
             release_align_motion_type="ptp",

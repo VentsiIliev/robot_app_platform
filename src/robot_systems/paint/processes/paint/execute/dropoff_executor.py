@@ -125,7 +125,7 @@ class MovementGroupDropoffStrategy:
                 _logger.error("[DROPOFF] Negative target rejected: Allow Sub-Zero Dropoff is disabled")
                 return DropoffPlan(strategy_name=self.name, waypoints=())
             approach_pose = list(pose)
-            approach_pose[2] = 50.0
+            approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
             corridor_id = getattr(owner, "_dropoff_motion_corridor_id", None)
             return DropoffPlan(
                 strategy_name=self.name,

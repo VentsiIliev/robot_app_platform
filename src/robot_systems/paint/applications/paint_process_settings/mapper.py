@@ -276,6 +276,7 @@ class PaintProcessSettingsMapper:
             "dropoff_corridor_entry_z_max_mm": dropoff.corridor_entry_z_max_mm,
             "dropoff_corridor_maximum_velocity_percent": dropoff.corridor_maximum_velocity_percent,
             "dropoff_corridor_maximum_acceleration_percent": dropoff.corridor_maximum_acceleration_percent,
+            "dropoff_sub_zero_approach_z_mm": dropoff.sub_zero_approach_z_mm,
             "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
             "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
             "dropoff_motion_profiles": [
@@ -555,6 +556,12 @@ class PaintProcessSettingsMapper:
                 flat.get(
                     "dropoff_corridor_maximum_acceleration_percent",
                     base.dropoff.corridor_maximum_acceleration_percent,
+                )
+            ),
+            sub_zero_approach_z_mm=float(
+                flat.get(
+                    "dropoff_sub_zero_approach_z_mm",
+                    base.dropoff.sub_zero_approach_z_mm,
                 )
             ),
             release_align_vel_percent=float(
