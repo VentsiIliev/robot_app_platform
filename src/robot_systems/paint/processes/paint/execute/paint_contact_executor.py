@@ -398,7 +398,7 @@ class PaintContactExecutor:
             return []
         path_with_retreat = [list(pose) for pose in command_path]
         final_contact_pose = list(path_with_retreat[-1])
-        retreat_pose = self._owner._paint_start_staging_offset_pose(final_contact_pose)
+        retreat_pose = self._owner._paint_detach_staging_offset_pose(final_contact_pose)
         if np.allclose(
             np.asarray(final_contact_pose[:3], dtype=float),
             np.asarray(retreat_pose[:3], dtype=float),

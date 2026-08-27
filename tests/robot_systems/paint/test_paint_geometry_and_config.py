@@ -15,6 +15,7 @@ from src.robot_systems.paint.applications.paint_motion_plane_setup.domain.plane_
 )
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
+    PaintContactStagingConfig,
     PaintEdgeCleanupConfig,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
@@ -32,6 +33,35 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
 
 
 class TestPaintProcessConfig(unittest.TestCase):
+    def test_contact_staging_settings_roundtrip_through_ui_and_serializer(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "staging_attach_z_offset_mm": 1.0,
+            "staging_attach_paint_axis_offset_mm": 2.0,
+            "staging_attach_perpendicular_axis_offset_mm": 3.0,
+            "staging_detach_z_offset_mm": 4.0,
+            "staging_detach_paint_axis_offset_mm": 5.0,
+            "staging_detach_perpendicular_axis_offset_mm": 6.0,
+        })
+
+        mapped = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(mapped)
+        )
+
+        self.assertEqual(
+            PaintContactStagingConfig(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+            restored.contact_staging,
+        )
+
+    def test_distance_offsets_tab_exposes_attach_and_detach_staging_offsets(self) -> None:
+        distance_groups = dict(build_paint_process_settings_tabs())["Distances & Offsets"]
+        keys = [field.key for group in distance_groups for field in group.fields]
+
+        self.assertIn("staging_attach_perpendicular_axis_offset_mm", keys)
+        self.assertIn("staging_detach_perpendicular_axis_offset_mm", keys)
+
     def test_process_config_derived_properties_follow_motion_plane(self) -> None:
         default_config = PaintProcessConfig()
 
@@ -477,6 +507,9 @@ class TestPaintProcessConfig(unittest.TestCase):
                 side_effect=lambda path: [list(pose) for pose in path]
             ),
             _paint_start_staging_offset_pose=MagicMock(
+                side_effect=lambda pose: list(pose)
+            ),
+            _paint_detach_staging_offset_pose=MagicMock(
                 side_effect=lambda pose: list(pose)
             ),
         )

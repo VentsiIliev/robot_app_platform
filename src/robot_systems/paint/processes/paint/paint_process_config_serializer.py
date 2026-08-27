@@ -9,6 +9,7 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintInterpolationConfig,
     PaintMagazineLoadConfig,
     PaintNavigationReturnConfig,
+    PaintContactStagingConfig,
     PaintProcessConfig,
     PaintSafeTravelConfig,
     PaintToDropoffSafeTravelConfig,
@@ -49,6 +50,7 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             for key, value in raw.items()
             if key in values and key not in {
                 "pickup_motion",
+                "contact_staging",
                 "edge_cleanup",
                 "dropoff",
                 "magazine_load",
@@ -62,6 +64,11 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             PickupMotionConfig,
             _section(raw, "pickup_motion"),
             default.pickup_motion,
+        )
+        values["contact_staging"] = _build_dataclass(
+            PaintContactStagingConfig,
+            _section(raw, "contact_staging"),
+            default.contact_staging,
         )
         values["edge_cleanup"] = _build_dataclass(
             PaintEdgeCleanupConfig,

@@ -60,10 +60,6 @@ from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
 
-_STAGING_Z_OFFSET_MM = 0
-_STAGING_PAINT_AXIS_OFFSET_MM = 20.0
-_STAGING_PERPENDICULAR_AXIS_OFFSET_MM = -20.0
-
 def _camera_to_tcp_delta(
     x_offset: float,
     y_offset: float,
@@ -107,9 +103,9 @@ def _paint_axis_staging_offset_pose(
     contact_pose: list[float],
     pivot_config: PaintSimulationConfig,
     *,
-    z_offset_mm: float = _STAGING_Z_OFFSET_MM,
-    paint_axis_offset_mm: float = _STAGING_PAINT_AXIS_OFFSET_MM,
-    perpendicular_axis_offset_mm: float = _STAGING_PERPENDICULAR_AXIS_OFFSET_MM,
+    z_offset_mm: float = 0.0,
+    paint_axis_offset_mm: float = 0.0,
+    perpendicular_axis_offset_mm: float = 0.0,
 ) -> list[float]:
     """Return the pre-paint staging pose below and behind the first pivot contact."""
     offset_pose = list(contact_pose)
@@ -380,9 +376,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._paint_contact = PaintContactExecutor(self)
         self._motion = PaintMotionExecutor(self)
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
-        self._staging_z_offset_mm = _STAGING_Z_OFFSET_MM
-        self._staging_paint_axis_offset_mm = _STAGING_PAINT_AXIS_OFFSET_MM
-        self._staging_perpendicular_axis_offset_mm = _STAGING_PERPENDICULAR_AXIS_OFFSET_MM
         self._active_contact_base_z_offset_mm: float = 0.0
         self._last_process_start_rz: float | None = None
         self._last_process_end_pose: list[float] | None = None
@@ -732,9 +725,34 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 pass
         return 0.0
 
-    def _paint_start_staging_offset_pose(self, contact_pose: list[float]) -> list[float]:
-        """Return the configured pre-paint staging offset pose."""
-        return _paint_axis_staging_offset_pose(contact_pose, self._contact_motion_config)
+    def _paint_start_staging_offset_pose(
+        self,
+        contact_pose: list[float],
+    ) -> list[float]:
+        """Return the configured plane-aware pre-contact staging pose."""
+        return self._paint_staging_offset_pose(contact_pose, detach=False)
+
+    def _paint_detach_staging_offset_pose(self, contact_pose: list[float]) -> list[float]:
+        """Return the configured plane-aware post-contact staging pose."""
+        return self._paint_staging_offset_pose(contact_pose, detach=True)
+
+    def _paint_staging_offset_pose(
+        self,
+        contact_pose: list[float],
+        *,
+        detach: bool,
+    ) -> list[float]:
+        staging = self._paint_process_config().contact_staging
+        prefix = "detach" if detach else "attach"
+        return _paint_axis_staging_offset_pose(
+            contact_pose,
+            self._contact_motion_config,
+            z_offset_mm=float(getattr(staging, f"{prefix}_z_offset_mm")),
+            paint_axis_offset_mm=float(getattr(staging, f"{prefix}_paint_axis_offset_mm")),
+            perpendicular_axis_offset_mm=float(
+                getattr(staging, f"{prefix}_perpendicular_axis_offset_mm")
+            ),
+        )
 
     def _resolve_pickup_base_position(self) -> Optional[list[float]]:
         """Resolve the pickup/staging base pose used for XY/RZ pickup alignment."""

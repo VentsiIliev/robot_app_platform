@@ -262,6 +262,22 @@ def build_distance_offset_groups() -> list[SettingGroup]:
             _mm_field("pickup_contact_offset_mm", "Contact Offset", min_val=0.0),
             _mm_field("pickup_initial_lift_clearance_mm", "Initial Lift Clearance", min_val=0.0),
         ]),
+        SettingGroup(_t("Paint Contact Attach Offsets"), [
+            _mm_field("staging_attach_z_offset_mm", "Attach Robot Z Offset"),
+            _mm_field("staging_attach_paint_axis_offset_mm", "Attach Paint-Axis Offset"),
+            _mm_field(
+                "staging_attach_perpendicular_axis_offset_mm",
+                "Attach Perpendicular-Axis Offset",
+            ),
+        ]),
+        SettingGroup(_t("Paint Contact Detach Offsets"), [
+            _mm_field("staging_detach_z_offset_mm", "Detach Robot Z Offset"),
+            _mm_field("staging_detach_paint_axis_offset_mm", "Detach Paint-Axis Offset"),
+            _mm_field(
+                "staging_detach_perpendicular_axis_offset_mm",
+                "Detach Perpendicular-Axis Offset",
+            ),
+        ]),
         SettingGroup(_t("Cleanup Offsets"), [
             _mm_field("cleanup_z_offset_mm", "Cleanup Z Offset"),
             _mm_field("cleanup_second_pass_pivot_z_offset_mm", "Second-Pass Pivot Z Offset"),

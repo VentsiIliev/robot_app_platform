@@ -86,6 +86,18 @@ class PickupMotionConfig:
     servo_contact_dummy_sensor_enabled: bool = False  # [LIVE SETTINGS]
     servo_contact_dummy_detect_after_s: float = 1.0  # [LIVE SETTINGS]
 
+
+@dataclass(frozen=True)
+class PaintContactStagingConfig:
+    """Plane-aware offsets used immediately before and after paint contact."""
+
+    attach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    attach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    attach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    detach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
+
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
     """Optional XY/RZ cleanup pass tuning used after XZ/RY paint."""
@@ -307,6 +319,8 @@ class PaintProcessConfig:
     apply_camera_to_tcp_for_pickup: bool = True
     # Pickup motion heights, speed, acceleration, and tool/user numbers.
     pickup_motion: PickupMotionConfig = field(default_factory=PickupMotionConfig)
+    # Plane-aware approach and retreat offsets around paint contact.
+    contact_staging: PaintContactStagingConfig = field(default_factory=PaintContactStagingConfig)
     # Optional XY/RZ cleanup pass tuning.
     edge_cleanup: PaintEdgeCleanupConfig = field(default_factory=PaintEdgeCleanupConfig)
     # Dropoff/release motion tuning.

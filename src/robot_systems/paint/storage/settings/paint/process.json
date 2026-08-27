@@ -64,6 +64,14 @@
     "servo_contact_dummy_sensor_enabled": false,
     "servo_contact_dummy_detect_after_s": 1.0
   },
+  "contact_staging": {
+    "attach_z_offset_mm": 0.0,
+    "attach_paint_axis_offset_mm": 0.0,
+    "attach_perpendicular_axis_offset_mm": 0.0,
+    "detach_z_offset_mm": 0.0,
+    "detach_paint_axis_offset_mm": 0.0,
+    "detach_perpendicular_axis_offset_mm": 0.0
+  },
   "edge_cleanup": {
     "enabled_after_xz_ry": false,
     "enabled_after_xy_rz": false,

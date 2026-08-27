@@ -181,6 +181,7 @@ class PaintProcessSettingsMapper:
     @staticmethod
     def to_flat_dict(settings: PaintProcessConfig) -> dict:
         pickup = settings.pickup_motion
+        staging = settings.contact_staging
         cleanup = settings.edge_cleanup
         dropoff = settings.dropoff
         magazine = settings.magazine_load
@@ -213,6 +214,12 @@ class PaintProcessSettingsMapper:
             "pickup_approach_offset_mm": pickup.approach_offset_mm,
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
             "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
+            "staging_attach_z_offset_mm": staging.attach_z_offset_mm,
+            "staging_attach_paint_axis_offset_mm": staging.attach_paint_axis_offset_mm,
+            "staging_attach_perpendicular_axis_offset_mm": staging.attach_perpendicular_axis_offset_mm,
+            "staging_detach_z_offset_mm": staging.detach_z_offset_mm,
+            "staging_detach_paint_axis_offset_mm": staging.detach_paint_axis_offset_mm,
+            "staging_detach_perpendicular_axis_offset_mm": staging.detach_perpendicular_axis_offset_mm,
             "pickup_contact_mode": pickup.pickup_contact_mode,
             "magazine_pickup_contact_mode": pickup.magazine_pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
@@ -450,6 +457,39 @@ class PaintProcessSettingsMapper:
             first_contact_motion_type=str(PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "motion_type", flat, "pickup_first_contact_motion_type", base.pickup_motion.first_contact_motion_type)),
             first_contact_blendR=float(PaintProcessSettingsMapper._profile_value(pickup_profiles, "first_contact", "blendR", flat, "pickup_first_contact_blendR", base.pickup_motion.first_contact_blendR)),
         )
+        staging = replace(
+            base.contact_staging,
+            attach_z_offset_mm=float(
+                flat.get("staging_attach_z_offset_mm", base.contact_staging.attach_z_offset_mm)
+            ),
+            attach_paint_axis_offset_mm=float(
+                flat.get(
+                    "staging_attach_paint_axis_offset_mm",
+                    base.contact_staging.attach_paint_axis_offset_mm,
+                )
+            ),
+            attach_perpendicular_axis_offset_mm=float(
+                flat.get(
+                    "staging_attach_perpendicular_axis_offset_mm",
+                    base.contact_staging.attach_perpendicular_axis_offset_mm,
+                )
+            ),
+            detach_z_offset_mm=float(
+                flat.get("staging_detach_z_offset_mm", base.contact_staging.detach_z_offset_mm)
+            ),
+            detach_paint_axis_offset_mm=float(
+                flat.get(
+                    "staging_detach_paint_axis_offset_mm",
+                    base.contact_staging.detach_paint_axis_offset_mm,
+                )
+            ),
+            detach_perpendicular_axis_offset_mm=float(
+                flat.get(
+                    "staging_detach_perpendicular_axis_offset_mm",
+                    base.contact_staging.detach_perpendicular_axis_offset_mm,
+                )
+            ),
+        )
         cleanup = replace(
             base.edge_cleanup,
             enabled_after_xz_ry=bool(flat.get("cleanup_enabled_after_xz_ry", base.edge_cleanup.enabled_after_xz_ry)),
@@ -628,6 +668,7 @@ class PaintProcessSettingsMapper:
                 flat.get("apply_camera_to_tcp_for_pickup", base.apply_camera_to_tcp_for_pickup)
             ),
             pickup_motion=pickup,
+            contact_staging=staging,
             edge_cleanup=cleanup,
             dropoff=dropoff,
             magazine_load=magazine,
