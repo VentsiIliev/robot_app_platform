@@ -537,12 +537,19 @@ def _build_paint_magazine_load_service(robot_system):
         path_executor=robot_system._paint_path_executor,
         resolver_getter=lambda: robot_system.get_shared_vision_resolver()[1],
         work_area_service=getattr(robot_system, "_work_area_service", None),
+        release_image_size_getter=lambda: _paint_camera_image_size(robot_system),
         target_point_name=_get_paint_execution_target_point_name(robot_system),
         camera_point_name="camera",
         frame_name="magazine",
         release_work_area_id="paint",
         release_frame_name="calibration",
     )
+
+
+def _paint_camera_image_size(robot_system) -> tuple[int, int]:
+    settings = robot_system._settings_service.get(CommonSettingsID.VISION_CAMERA_SETTINGS)
+    data = getattr(settings, "data", {}) or {}
+    return int(data.get("Width", 0)), int(data.get("Height", 0))
 
 
 def _build_paint_workpiece_editor_service(robot_system):

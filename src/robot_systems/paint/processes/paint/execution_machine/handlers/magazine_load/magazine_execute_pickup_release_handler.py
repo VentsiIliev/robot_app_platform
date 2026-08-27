@@ -312,6 +312,13 @@ def _execute_magazine_servo_contact_pickup_release(
         result.message,
     )
     if not result.success:
+        if result.message == "timeout":
+            off_ok, off_msg = executor._motion.turn_vacuum_off()
+            if not off_ok:
+                return False, (
+                    "Magazine servo contact pickup failed: timeout; "
+                    f"vacuum pump OFF also failed: {off_msg}"
+                )
         return False, f"Magazine servo contact pickup failed: {result.message}"
     if not pickup_condition_is_active_after_retract(condition):
         return False, "Magazine workpiece is no longer detected after Servo retract"

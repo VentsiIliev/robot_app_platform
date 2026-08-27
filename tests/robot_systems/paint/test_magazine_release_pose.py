@@ -8,6 +8,24 @@ from src.robot_systems.paint.processes.paint.magazine_load_service import (
 
 
 class TestMagazineReleasePose(unittest.TestCase):
+    def test_release_center_uses_configured_image_size_without_capture_frame(self) -> None:
+        work_areas = MagicMock()
+        work_areas.get_work_area.return_value = [
+            (0.25, 0.25),
+            (0.75, 0.25),
+            (0.75, 0.75),
+            (0.25, 0.75),
+        ]
+        service = PaintMagazineLoadService.__new__(PaintMagazineLoadService)
+        service._work_area_service = work_areas
+        service._release_work_area_id = "paint"
+        service._release_image_size_getter = lambda: (1280, 720)
+
+        center = service._release_work_area_center_px(frame=None)
+
+        self.assertEqual((640.0, 360.0), center)
+        work_areas.get_work_area.assert_called_once_with("paint")
+
     def test_release_z_overrides_calibration_pose_without_changing_orientation(self) -> None:
         service = PaintMagazineLoadService.__new__(PaintMagazineLoadService)
         service._release_work_area_id = "paint"

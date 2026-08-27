@@ -79,11 +79,16 @@ class _FakeRobot:
 class _FakeMotion:
     def __init__(self):
         self.vacuum_on = 0
+        self.vacuum_off = 0
         self.sequences = []
 
     def turn_vacuum_on(self, *, required=False):
         self.vacuum_on += 1
         self.vacuum_required = required
+        return True, ""
+
+    def turn_vacuum_off(self):
+        self.vacuum_off += 1
         return True, ""
 
     def move_ordered_pickup_sequence(self, label, segments):
@@ -110,6 +115,87 @@ class _ConditionLostAfterDetection:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_calibration_contact_timeout_turns_vacuum_off(self):
+        robot = _FakeRobot()
+        robot.position[2] = 100.0
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=0.0,
+            servo_contact_timeout_s=0.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            servo_contact_retract_distance_mm=10.0,
+            servo_contact_retract_linear_mm_s=25.0,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=lambda: False,
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        plan = PickupPlan(
+            strategy_name="timeout-test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [0, 0, 100, 0, 0, 0], 10, 10),
+                PickupWaypoint("contact", [0, 0, 0, 0, 0, 0], 10, 10),
+                PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
+            ),
+            vacuum_on_before_moves=True,
+            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_waypoint_index=1,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+        )
+
+        self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+        self.assertEqual(1, motion.vacuum_off)
+
+    def test_magazine_contact_timeout_turns_vacuum_off(self):
+        robot = _FakeRobot()
+        robot.position[2] = 100.0
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=0.0,
+            servo_contact_timeout_s=0.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            servo_contact_retract_distance_mm=10.0,
+            servo_contact_retract_linear_mm_s=25.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=lambda: False,
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        waypoints = (
+            ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
+            ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
+            ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
+            ("release", [20, 30, 40, 0, 0, 0], 10, 10, "ptp", 0),
+        )
+
+        ok, message = _execute_magazine_servo_contact_pickup_release(
+            owner,
+            waypoints,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+            release_label="calibration",
+        )
+
+        self.assertFalse(ok)
+        self.assertIn("timeout", message)
+        self.assertEqual(1, motion.vacuum_off)
+
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
         robot = _FakeRobot()
         robot.support_prepared = True

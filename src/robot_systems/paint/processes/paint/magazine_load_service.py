@@ -29,6 +29,7 @@ class PaintMagazineLoadService:
         path_executor,
         resolver_getter=None,
         work_area_service=None,
+        release_image_size_getter=None,
         target_point_name: str = "tool",
         camera_point_name: str = "camera",
         frame_name: str = "magazine",
@@ -40,6 +41,7 @@ class PaintMagazineLoadService:
         self._path_executor = path_executor
         self._resolver_getter = resolver_getter
         self._work_area_service = work_area_service
+        self._release_image_size_getter = release_image_size_getter
         self._target_point_name = str(target_point_name or "tool").strip().lower()
         self._camera_point_name = str(camera_point_name or "camera").strip().lower()
         self._frame_name = str(frame_name or "magazine").strip().lower()
@@ -212,12 +214,12 @@ class PaintMagazineLoadService:
 
     def _release_work_area_center_px(self, frame) -> tuple[float, float] | None:
         started = monotonic()
-        if self._work_area_service is None or frame is None or not hasattr(frame, "shape"):
+        if self._work_area_service is None:
             return None
-        try:
-            height, width = frame.shape[:2]
-        except Exception:
+        image_size = self._release_image_size(frame)
+        if image_size is None:
             return None
+        width, height = image_size
         if not width or not height:
             return None
         points = self._work_area_service.get_work_area(self._release_work_area_id)
@@ -239,6 +241,26 @@ class PaintMagazineLoadService:
             int(height),
         )
         return center
+
+    def _release_image_size(self, frame) -> tuple[int, int] | None:
+        if frame is not None and hasattr(frame, "shape"):
+            try:
+                height, width = frame.shape[:2]
+                if int(width) > 0 and int(height) > 0:
+                    return int(width), int(height)
+            except (TypeError, ValueError):
+                pass
+        getter = self._release_image_size_getter
+        if not callable(getter):
+            return None
+        try:
+            width, height = getter()
+            width = int(width)
+            height = int(height)
+        except (TypeError, ValueError, AttributeError):
+            _logger.exception("[MAGAZINE_LOAD] Failed to read configured release image size")
+            return None
+        return (width, height) if width > 0 and height > 0 else None
 
     def _resolve_pickup_target(self, contour, magazine_pose: list[float]) -> dict | None:
         started = monotonic()

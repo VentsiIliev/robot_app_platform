@@ -400,6 +400,13 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
+            if result.message == "timeout":
+                off_ok, off_msg = self._owner._motion.turn_vacuum_off()
+                if not off_ok:
+                    _logger.error(
+                        "[PICKUP] Vacuum pump OFF failed after servo-contact timeout: %s",
+                        off_msg,
+                    )
             return False
         if not pickup_condition_is_active_after_retract(condition):
             return False

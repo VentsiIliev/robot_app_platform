@@ -94,9 +94,11 @@ class TestFixedMagazinePickup(unittest.TestCase):
     def test_fixed_prepare_does_not_use_snapshot_or_vision_target_resolver(self):
         fixed_pose = [10.0, 20.0, 100.0, 179.0, 0.0, -179.0]
         calibration_pose = [30.0, 40.0, 200.0, 180.0, 0.0, 0.0]
+        resolved_release_pose = [35.0, 45.0, 50.0, 180.0, 0.0, 0.0]
         load_service = MagicMock()
         load_service._navigation.get_group_position.side_effect = [fixed_pose, calibration_pose]
         load_service._validated_pose.return_value = fixed_pose
+        load_service._resolve_work_area_center_release_pose.return_value = resolved_release_pose
         service = MagicMock()
         service._magazine_load_service = load_service
         config = PaintMagazineLoadConfig(
@@ -113,9 +115,17 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         self.assertEqual(PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE, next_state)
         self.assertEqual(fixed_pose, ctx.magazine_fixed_pickup_pose)
-        self.assertEqual([30.0, 40.0, 50.0, 180.0, 0.0, 0.0], ctx.magazine_release_pose)
+        self.assertEqual(resolved_release_pose, ctx.magazine_release_pose)
+        self.assertEqual(
+            "CALIBRATION",
+            load_service._navigation.get_group_position.call_args_list[1].args[0],
+        )
         load_service._resolve_pickup_target.assert_not_called()
-        load_service._resolve_work_area_center_release_pose.assert_not_called()
+        load_service._resolve_work_area_center_release_pose.assert_called_once_with(
+            base_pose=calibration_pose,
+            frame=None,
+            release_z_mm=50.0,
+        )
 
     def test_start_pose_verification_accepts_wrapped_angles(self):
         robot = MagicMock()
