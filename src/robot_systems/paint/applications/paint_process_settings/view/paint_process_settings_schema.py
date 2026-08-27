@@ -203,6 +203,10 @@ def build_process_groups() -> list[SettingGroup]:
 
 def build_motion_speed_groups() -> list[SettingGroup]:
     return [
+        SettingGroup(_t("Paint Contact"), [
+            _percent_field("staging_attach_vel_percent", "Attach Velocity", 10.0),
+            _percent_field("staging_attach_acc_percent", "Attach Acceleration", 5.0),
+        ]),
         SettingGroup(_t("Unmatched Workpiece Painting"), [
             _percent_field(
                 "default_paint_velocity_percent",

@@ -65,6 +65,8 @@
     "servo_contact_dummy_detect_after_s": 1.0
   },
   "contact_staging": {
+    "attach_vel_percent": 10.0,
+    "attach_acc_percent": 5.0,
     "attach_z_offset_mm": 0.0,
     "attach_paint_axis_offset_mm": 0.0,
     "attach_perpendicular_axis_offset_mm": 0.0,

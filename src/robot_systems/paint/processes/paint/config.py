@@ -91,6 +91,8 @@ class PickupMotionConfig:
 class PaintContactStagingConfig:
     """Plane-aware offsets used immediately before and after paint contact."""
 
+    attach_vel_percent: float = 10.0  # [LIVE SETTINGS]
+    attach_acc_percent: float = 5.0  # [LIVE SETTINGS]
     attach_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
     attach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
     attach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]

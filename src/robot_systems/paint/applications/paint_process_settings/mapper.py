@@ -215,6 +215,8 @@ class PaintProcessSettingsMapper:
             "pickup_contact_offset_mm": pickup.contact_offset_mm,
             "pickup_initial_lift_clearance_mm": pickup.initial_lift_clearance_mm,
             "staging_attach_z_offset_mm": staging.attach_z_offset_mm,
+            "staging_attach_vel_percent": staging.attach_vel_percent,
+            "staging_attach_acc_percent": staging.attach_acc_percent,
             "staging_attach_paint_axis_offset_mm": staging.attach_paint_axis_offset_mm,
             "staging_attach_perpendicular_axis_offset_mm": staging.attach_perpendicular_axis_offset_mm,
             "staging_detach_z_offset_mm": staging.detach_z_offset_mm,
@@ -459,6 +461,12 @@ class PaintProcessSettingsMapper:
         )
         staging = replace(
             base.contact_staging,
+            attach_vel_percent=float(
+                flat.get("staging_attach_vel_percent", base.contact_staging.attach_vel_percent)
+            ),
+            attach_acc_percent=float(
+                flat.get("staging_attach_acc_percent", base.contact_staging.attach_acc_percent)
+            ),
             attach_z_offset_mm=float(
                 flat.get("staging_attach_z_offset_mm", base.contact_staging.attach_z_offset_mm)
             ),

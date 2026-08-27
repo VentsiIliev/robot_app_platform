@@ -124,7 +124,11 @@ def try_execute_ordered_pickup_and_paint_contact(
     if not paint_paths:
         return False, "Pickup succeeded, but no paint contact path was generated", total_waypoints
 
-    paint_segments = build_ordered_paint_contact_segments(paint_paths, paint_jobs)
+    paint_segments = build_ordered_paint_contact_segments(
+        paint_paths,
+        paint_jobs,
+        executor._paint_process_config().contact_staging,
+    )
     post_pickup_segments = list(paint_segments)
 
     dropoff_prepared_in_chain = False

@@ -574,6 +574,7 @@ def _equivalent_pickup_poses(first: list[float], second: list[float]) -> bool:
 def build_ordered_paint_contact_segments(
     paint_paths: list[list[list[float]]],
     paint_jobs: list[dict],
+    contact_staging,
 ) -> list[dict]:
     """
     Build ordered paint-contact path segments.
@@ -582,7 +583,22 @@ def build_ordered_paint_contact_segments(
     """
     segments: list[dict] = []
     for path_index, command_path in enumerate(paint_paths):
+        if not command_path:
+            continue
         job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
+        readiness_group = f"paint_contact_{path_index + 1}"
+        segments.append(
+            {
+                "type": "linear",
+                "label": f"paint_attach_{path_index + 1}",
+                "position": list(command_path[0]),
+                "vel": float(contact_staging.attach_vel_percent),
+                "acc": float(contact_staging.attach_acc_percent),
+                "blendR": 0.0,
+                "protected": True,
+                "readiness_group": readiness_group,
+            }
+        )
         segments.append(
             {
                 "type": "path",
@@ -592,6 +608,7 @@ def build_ordered_paint_contact_segments(
                 "acc": float(job.get("acc", 30.0)),
                 "protected": True,
                 "limit_profile": "paint_contact",
+                "readiness_group": readiness_group,
             }
         )
     return segments
