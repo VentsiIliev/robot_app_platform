@@ -55,6 +55,7 @@ class PaintPickupTransferPlanner:
         from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import _camera_to_tcp_delta
 
         owner = self._owner
+        owner._last_pickup_plan_error = ""
         jobs = prepared_workpiece.execution_jobs
         with timed_block(_logger, "pickup_plan_build", label="refresh_process_config"):
             owner._refresh_paint_process_config_snapshot()
@@ -74,7 +75,11 @@ class PaintPickupTransferPlanner:
             paint_pivot_pose = owner._resolve_base_position()
         _logger.debug("paint_pivot_pose -> %s", paint_pivot_pose)
 
-        if pickup_pivot_pose is None or len(pickup_pivot_pose) < 3:
+        if pickup_pivot_pose is None or len(pickup_pivot_pose) < 6:
+            owner._last_pickup_plan_error = (
+                "Pickup movement-group pose must contain all six values: X, Y, Z, RX, RY, and RZ"
+            )
+            _logger.error("[PICKUP] %s; pose=%s", owner._last_pickup_plan_error, pickup_pivot_pose)
             return None
         if paint_pivot_pose is None or len(paint_pivot_pose) < 3:
             return None
@@ -140,8 +145,8 @@ class PaintPickupTransferPlanner:
 
         pickup_target_point_name = str(jobs[0].get("pickup_target_point_name", "") or "").strip().lower()
         workpiece_height_mm = float(jobs[0].get("workpiece_height_mm", 0.0) or 0.0)
-        pickup_rx = float(pickup_pivot_pose[3]) if len(pickup_pivot_pose) >= 4 else 180.0
-        pickup_ry = float(pickup_pivot_pose[4]) if len(pickup_pivot_pose) >= 5 else 0.0
+        pickup_rx = float(pickup_pivot_pose[3])
+        pickup_ry = float(pickup_pivot_pose[4])
         pickup_motion = owner._paint_process_config().pickup_motion
 
         pickup_z = owner._pickup_z_mm

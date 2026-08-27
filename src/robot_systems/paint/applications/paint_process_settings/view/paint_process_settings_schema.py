@@ -18,13 +18,15 @@ def _t(text: str) -> str:
     return translated or text
 
 
-def _percent_field(key: str, label: str, default: float = 0.0) -> SettingField:
+def _percent_field(
+    key: str, label: str, default: float = 0.0, min_val: float = 0.0
+) -> SettingField:
     return SettingField(
         key,
         _t(label),
         "double_spinbox",
         default=default,
-        min_val=0.0,
+        min_val=min_val,
         max_val=100.0,
         step=1.0,
         decimals=1,
@@ -150,6 +152,12 @@ def build_process_groups() -> list[SettingGroup]:
             SettingField("dropoff_strategy", _t("Strategy"), "combo",
                          default="pickup_origin", choices=["pickup_origin", "movement_group"]),
             _toggle("dropoff_allow_sub_zero", "Allow Sub-Zero Dropoff"),
+            _mm_field("dropoff_corridor_x_margin_mm", "Sub-Zero Corridor X Margin (Dropoff X +/-)", 70.0, min_val=0.1),
+            _mm_field("dropoff_corridor_y_margin_mm", "Sub-Zero Corridor Y Margin (Dropoff Y +/-)", 70.0, min_val=0.1),
+            _mm_field("dropoff_corridor_z_tolerance_mm", "Sub-Zero Corridor Z Tolerance Below Dropoff", 1.0, min_val=0.0),
+            _mm_field("dropoff_corridor_entry_z_max_mm", "Sub-Zero Corridor Entry Z Maximum", 100.0, min_val=0.0),
+            _percent_field("dropoff_corridor_maximum_velocity_percent", "Sub-Zero Corridor Maximum Velocity", 80.0, min_val=0.1),
+            _percent_field("dropoff_corridor_maximum_acceleration_percent", "Sub-Zero Corridor Maximum Acceleration", 60.0, min_val=0.1),
         ]),
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),

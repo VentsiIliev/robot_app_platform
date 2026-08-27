@@ -270,6 +270,12 @@ class PaintProcessSettingsMapper:
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
             "dropoff_allow_sub_zero": dropoff.allow_sub_zero_dropoff,
+            "dropoff_corridor_x_margin_mm": dropoff.corridor_x_margin_mm,
+            "dropoff_corridor_y_margin_mm": dropoff.corridor_y_margin_mm,
+            "dropoff_corridor_z_tolerance_mm": dropoff.corridor_z_tolerance_mm,
+            "dropoff_corridor_entry_z_max_mm": dropoff.corridor_entry_z_max_mm,
+            "dropoff_corridor_maximum_velocity_percent": dropoff.corridor_maximum_velocity_percent,
+            "dropoff_corridor_maximum_acceleration_percent": dropoff.corridor_maximum_acceleration_percent,
             "dropoff_release_align_vel_percent": dropoff.release_align_vel_percent,
             "dropoff_release_align_acc_percent": dropoff.release_align_acc_percent,
             "dropoff_motion_profiles": [
@@ -526,6 +532,30 @@ class PaintProcessSettingsMapper:
             strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
             allow_sub_zero_dropoff=bool(
                 flat.get("dropoff_allow_sub_zero", base.dropoff.allow_sub_zero_dropoff)
+            ),
+            corridor_x_margin_mm=float(
+                flat.get("dropoff_corridor_x_margin_mm", base.dropoff.corridor_x_margin_mm)
+            ),
+            corridor_y_margin_mm=float(
+                flat.get("dropoff_corridor_y_margin_mm", base.dropoff.corridor_y_margin_mm)
+            ),
+            corridor_z_tolerance_mm=float(
+                flat.get("dropoff_corridor_z_tolerance_mm", base.dropoff.corridor_z_tolerance_mm)
+            ),
+            corridor_entry_z_max_mm=float(
+                flat.get("dropoff_corridor_entry_z_max_mm", base.dropoff.corridor_entry_z_max_mm)
+            ),
+            corridor_maximum_velocity_percent=float(
+                flat.get(
+                    "dropoff_corridor_maximum_velocity_percent",
+                    base.dropoff.corridor_maximum_velocity_percent,
+                )
+            ),
+            corridor_maximum_acceleration_percent=float(
+                flat.get(
+                    "dropoff_corridor_maximum_acceleration_percent",
+                    base.dropoff.corridor_maximum_acceleration_percent,
+                )
             ),
             release_align_vel_percent=float(
                 PaintProcessSettingsMapper._profile_value(dropoff_profiles, "release_align", "vel_percent", flat, "dropoff_release_align_vel_percent", base.dropoff.release_align_vel_percent)

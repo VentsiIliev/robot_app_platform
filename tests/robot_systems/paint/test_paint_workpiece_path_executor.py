@@ -793,6 +793,30 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(len(plan.staged_pose), 6)
         self.assertEqual(plan.staged_pose[5], 15.0)
 
+    def test_incomplete_pickup_movement_group_pose_blocks_execution_without_orientation_fallback(self):
+        robot_service = MagicMock()
+        executor = PaintWorkpiecePathExecutor(
+            robot_service=robot_service,
+            base_position_provider=lambda: [100.0, 200.0, 300.0, 10.0, 20.0, 30.0],
+            pickup_base_position_provider=lambda: [10.0, 20.0, 30.0],
+            pivot_motion_plane="xy_z_rz",
+        )
+        execution_plan = _execution_plan(
+            {
+                "execution_path": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+                "pickup_xy": [11.0, 22.0],
+                "pickup_rz": 33.0,
+            }
+        )
+
+        ok, message = executor._pickup.execute(execution_plan)
+
+        self.assertFalse(ok)
+        self.assertIn("all six values", message)
+        self.assertIn("RX, RY, and RZ", message)
+        robot_service.move_ptp.assert_not_called()
+        robot_service.move_linear.assert_not_called()
+
     def test_pickup_plan_inserts_configured_safe_travel_waypoint_before_paint_staging(self):
         safe_pose = [70.0, 80.0, 190.0, 180.0, 0.0, 5.0]
         config_service = MagicMock()

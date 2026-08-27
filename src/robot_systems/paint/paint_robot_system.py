@@ -66,6 +66,34 @@ from src.shared_contracts.declarations import (
 _logger = logging.getLogger(__name__)
 
 
+def _build_sub_zero_dropoff_corridor(corridor_id, dropoff_pose, dropoff_config):
+    """Build the bounded passage corridor for a configured sub-zero Dropoff pose."""
+    from src.engine.robot.safety import MotionCorridor
+
+    if dropoff_pose is None or len(dropoff_pose) < 3 or float(dropoff_pose[2]) >= 0.0:
+        return None
+
+    dropoff_x, dropoff_y, dropoff_z = (float(value) for value in dropoff_pose[:3])
+    x_margin = max(0.1, float(dropoff_config.corridor_x_margin_mm))
+    y_margin = max(0.1, float(dropoff_config.corridor_y_margin_mm))
+    z_tolerance = max(0.0, float(dropoff_config.corridor_z_tolerance_mm))
+    return MotionCorridor(
+        corridor_id=corridor_id,
+        x_min=dropoff_x - x_margin,
+        x_max=dropoff_x + x_margin,
+        y_min=dropoff_y - y_margin,
+        y_max=dropoff_y + y_margin,
+        z_min=dropoff_z - z_tolerance,
+        entry_z_max=max(0.0, float(dropoff_config.corridor_entry_z_max_mm)),
+        maximum_velocity=max(
+            0.1, float(dropoff_config.corridor_maximum_velocity_percent)
+        ),
+        maximum_acceleration=max(
+            0.1, float(dropoff_config.corridor_maximum_acceleration_percent)
+        ),
+    )
+
+
 # ── System ───────────────────────────────────────────────────────────────────────
 
 
@@ -367,7 +395,6 @@ class PaintRobotSystem(BaseRobotSystem):
         return self._pickup_condition
 
     def on_start(self) -> None:
-        from src.engine.robot.safety import MotionCorridor
         from src.robot_systems.paint.applications.dashboard.service.paint_dashboard_service import (
             PaintDashboardService,
         )
@@ -400,24 +427,12 @@ class PaintRobotSystem(BaseRobotSystem):
                                                  paint_process_config_service=self._paint_process_config_service)
         self._robot_config = self.get_settings(CommonSettingsID.ROBOT_CONFIG)
         self._dropoff_motion_corridor_id = "workpiece_drop_opening"
-        dropoff_pose = self._navigation.get_group_position("Dropoff")
-        if dropoff_pose is None or len(dropoff_pose) < 3:
-            logging.getLogger(__name__).warning(
-                "Dropoff corridor was not registered because movement group 'Dropoff' has no pose"
-            )
-        else:
-            dropoff_x, dropoff_y = float(dropoff_pose[0]), float(dropoff_pose[1])
-            self._robot.register_motion_corridor(MotionCorridor(
-                corridor_id=self._dropoff_motion_corridor_id,
-                x_min=dropoff_x - 70.0,
-                x_max=dropoff_x + 70.0,
-                y_min=dropoff_y - 70.0,
-                y_max=dropoff_y + 70.0,
-                z_min=-200.0,
-                entry_z_max=100.0,
-                maximum_velocity=80.0,
-                maximum_acceleration=60.0,
-            ))
+        self._paint_process_config_service.add_change_listener(
+            self._refresh_dropoff_motion_corridor
+        )
+        self._refresh_dropoff_motion_corridor(
+            self._paint_process_config_service.get_snapshot()
+        )
         self._robot_calibration = self.get_settings(CommonSettingsID.ROBOT_CALIBRATION)
         self._paint_targeting = self.get_settings(CommonSettingsID.TARGETING)
         self._targeting_provider = PaintRobotSystemTargetingProvider(self)
@@ -508,6 +523,21 @@ class PaintRobotSystem(BaseRobotSystem):
         )
 
         self._robot.enable_robot()
+
+    def _refresh_dropoff_motion_corridor(self, process_config):
+        """Replace the registered corridor with values from the live settings snapshot."""
+        dropoff_pose = self._navigation.get_group_position("Dropoff")
+        dropoff_corridor = _build_sub_zero_dropoff_corridor(
+            self._dropoff_motion_corridor_id,
+            dropoff_pose,
+            process_config.dropoff,
+        )
+        if dropoff_pose is None or len(dropoff_pose) < 3:
+            logging.getLogger(__name__).warning(
+                "Dropoff corridor was not registered because movement group 'Dropoff' has no pose"
+            )
+        elif dropoff_corridor is not None:
+            self._robot.register_motion_corridor(dropoff_corridor)
 
     def on_stop(self) -> None:
         self._robot.stop_motion()

@@ -33,6 +33,41 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
 
 
 class TestPaintProcessConfig(unittest.TestCase):
+    def test_sub_zero_dropoff_corridor_settings_roundtrip_and_are_exposed(self) -> None:
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat.update({
+            "dropoff_corridor_x_margin_mm": 41.0,
+            "dropoff_corridor_y_margin_mm": 42.0,
+            "dropoff_corridor_z_tolerance_mm": 1.5,
+            "dropoff_corridor_entry_z_max_mm": 75.0,
+            "dropoff_corridor_maximum_velocity_percent": 33.0,
+            "dropoff_corridor_maximum_acceleration_percent": 22.0,
+        })
+
+        restored = PaintProcessConfigSerializer().from_dict(
+            PaintProcessConfigSerializer().to_dict(
+                PaintProcessSettingsMapper.from_flat_dict(flat, base)
+            )
+        )
+        process_groups = dict(build_paint_process_settings_tabs())["Process"]
+        keys = [field.key for group in process_groups for field in group.fields]
+
+        self.assertEqual(restored.dropoff.corridor_x_margin_mm, 41.0)
+        self.assertEqual(restored.dropoff.corridor_y_margin_mm, 42.0)
+        self.assertEqual(restored.dropoff.corridor_z_tolerance_mm, 1.5)
+        self.assertEqual(restored.dropoff.corridor_entry_z_max_mm, 75.0)
+        self.assertEqual(restored.dropoff.corridor_maximum_velocity_percent, 33.0)
+        self.assertEqual(restored.dropoff.corridor_maximum_acceleration_percent, 22.0)
+        self.assertTrue({
+            "dropoff_corridor_x_margin_mm",
+            "dropoff_corridor_y_margin_mm",
+            "dropoff_corridor_z_tolerance_mm",
+            "dropoff_corridor_entry_z_max_mm",
+            "dropoff_corridor_maximum_velocity_percent",
+            "dropoff_corridor_maximum_acceleration_percent",
+        }.issubset(keys))
+
     def test_contact_staging_settings_roundtrip_through_ui_and_serializer(self) -> None:
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

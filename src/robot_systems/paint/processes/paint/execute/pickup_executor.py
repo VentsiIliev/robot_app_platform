@@ -252,7 +252,11 @@ class PaintPickupExecutor:
 
         if pickup_plan is None:
             _logger.info("[TIMING] pickup_to_pivot success=false stage=build_poses total_elapsed_s=%.3f", elapsed_s(started))
-            return False, getattr(self._owner, "_last_safe_travel_error", "") or "Could not compute pickup-to-pivot poses"
+            return False, (
+                getattr(self._owner, "_last_pickup_plan_error", "")
+                or getattr(self._owner, "_last_safe_travel_error", "")
+                or "Could not compute pickup-to-pivot poses"
+            )
         self._owner._last_pickup_plan = pickup_plan.motion_plan
         self._owner._last_pickup_contact_mode = pickup_plan.contact_mode
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))

@@ -90,6 +90,12 @@
   "dropoff": {
     "strategy": "movement_group",
     "allow_sub_zero_dropoff": false,
+    "corridor_x_margin_mm": 70.0,
+    "corridor_y_margin_mm": 70.0,
+    "corridor_z_tolerance_mm": 1.0,
+    "corridor_entry_z_max_mm": 100.0,
+    "corridor_maximum_velocity_percent": 80.0,
+    "corridor_maximum_acceleration_percent": 60.0,
     "release_align_vel_percent": 80.0,
     "release_align_acc_percent": 60.0,
     "release_align_motion_type": "ptp",

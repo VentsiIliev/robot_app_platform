@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import logging
 from threading import RLock
+from typing import Callable
 
 from src.engine.repositories.interfaces.i_settings_service import ISettingsService
 from src.robot_systems.paint.component_ids import SettingsID
@@ -26,6 +28,7 @@ class PaintProcessConfigService(IPaintProcessConfigService):
         self._settings_service = settings_service
         self._lock = RLock()
         self._snapshot: PaintProcessConfig = self._settings_service.get(SettingsID.PAINT_PROCESS_CONFIG)
+        self._change_listeners: list[Callable[[PaintProcessConfig], None]] = []
 
     def get_snapshot(self) -> PaintProcessConfig:
         with self._lock:
@@ -41,3 +44,17 @@ class PaintProcessConfigService(IPaintProcessConfigService):
         self._settings_service.save(SettingsID.PAINT_PROCESS_CONFIG, settings)
         with self._lock:
             self._snapshot = settings
+            listeners = tuple(self._change_listeners)
+        for listener in listeners:
+            try:
+                listener(settings)
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "Paint process live-settings listener failed"
+                )
+
+    def add_change_listener(self, listener: Callable[[PaintProcessConfig], None]) -> None:
+        """Notify a runtime consumer immediately after settings are saved in memory."""
+        with self._lock:
+            if listener not in self._change_listeners:
+                self._change_listeners.append(listener)

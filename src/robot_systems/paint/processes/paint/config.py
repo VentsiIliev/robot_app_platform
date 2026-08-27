@@ -141,6 +141,13 @@ class PaintDropoffConfig:
     # Return from pivot completion back to the pickup align pose before release.
     strategy: str = "pickup_origin"
     allow_sub_zero_dropoff: bool = False  # [LIVE SETTINGS]
+    # Safety corridor used only when the configured Dropoff pose is below Z=0.
+    corridor_x_margin_mm: float = 70.0
+    corridor_y_margin_mm: float = 70.0
+    corridor_z_tolerance_mm: float = 1.0
+    corridor_entry_z_max_mm: float = 100.0
+    corridor_maximum_velocity_percent: float = 80.0
+    corridor_maximum_acceleration_percent: float = 60.0
     release_align_vel_percent: float = 60.0  # [LIVE SETTINGS]
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
     release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
