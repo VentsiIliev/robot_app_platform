@@ -123,6 +123,25 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
         self.assertEqual(payload["name"], "fixture")
         self.assertEqual(payload["transform"], [100.0, 200.0, 300.0, 0.0, 0.0, 90.0])
 
+    def test_workobject_solve_computes_full_orientation_for_tilted_surface(self):
+        settings_service = MagicMock()
+        settings_service.get.return_value = SimpleNamespace(robot_user=0)
+        service = CalibrationSettingsApplicationService(settings_service)
+        # Frame produced by XYZ Euler angles rx=-10, ry=20, rz=30 degrees.
+        service._workobject_points = {
+            "center": [10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+            "x": [91.37976813493738, 66.98463103929542, -4.20201433256687, 0.0, 0.0, 0.0],
+            "y": [-44.38381424823255, 102.31729446455009, 13.682408883346518, 0.0, 0.0, 0.0],
+        }
+
+        ok, msg, payload = service.solve_workobject(2, "tilted_fixture")
+
+        self.assertTrue(ok, msg)
+        self.assertIn("rx=-10.000", msg)
+        for actual, expected in zip(payload["transform"], [10.0, 20.0, 30.0, -10.0, 20.0, 30.0]):
+            self.assertAlmostEqual(actual, expected, places=5)
+        self.assertEqual(len(payload["surface_normal"]), 3)
+
     def test_workobject_capture_refuses_nonzero_workobject_user(self):
         settings_service = MagicMock()
         settings_service.get.return_value = SimpleNamespace(robot_tool=0, robot_user=2)

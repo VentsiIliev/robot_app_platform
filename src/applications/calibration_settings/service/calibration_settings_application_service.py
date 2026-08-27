@@ -13,6 +13,28 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 class CalibrationSettingsApplicationService(ICalibrationSettingsService):
 
+    @staticmethod
+    def _normalize_vector(vector: list[float]) -> list[float]:
+        length = math.sqrt(sum(component * component for component in vector))
+        if length < 1e-6:
+            raise ValueError("vector is too short")
+        return [component / length for component in vector]
+
+    @staticmethod
+    def _rotation_matrix_to_xyz_euler(rotation: list[list[float]]) -> list[float]:
+        """Convert Rz * Ry * Rx to the runtime's XYZ Euler angles in degrees."""
+        sin_ry = max(-1.0, min(1.0, -rotation[2][0]))
+        ry = math.asin(sin_ry)
+        cos_ry = math.cos(ry)
+        if abs(cos_ry) > 1e-9:
+            rx = math.atan2(rotation[2][1], rotation[2][2])
+            rz = math.atan2(rotation[1][0], rotation[0][0])
+        else:
+            # At gimbal lock choose rz=0 and retain the equivalent X rotation.
+            rx = math.atan2(-rotation[1][2], rotation[1][1])
+            rz = 0.0
+        return [math.degrees(rx), math.degrees(ry), math.degrees(rz)]
+
     def __init__(
         self,
         settings_service: ISettingsService,
@@ -132,21 +154,26 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         center = self._workobject_points["center"]
         x_point = self._workobject_points["x"]
         y_point = self._workobject_points["y"]
-        x_vec = [x_point[0] - center[0], x_point[1] - center[1]]
-        y_vec = [y_point[0] - center[0], y_point[1] - center[1]]
-        x_len = math.hypot(x_vec[0], x_vec[1])
-        y_len = math.hypot(y_vec[0], y_vec[1])
+        x_vec = [x_point[index] - center[index] for index in range(3)]
+        y_vec = [y_point[index] - center[index] for index in range(3)]
+        x_len = math.sqrt(sum(component * component for component in x_vec))
+        y_len = math.sqrt(sum(component * component for component in y_vec))
         if x_len < 1e-6:
             return False, "Center and X points are too close", {}
         if y_len < 1e-6:
             return False, "Center and Y points are too close", {}
-        cross_z = x_vec[0] * y_vec[1] - x_vec[1] * y_vec[0]
-        if abs(cross_z) < 1e-6:
+        cross = [
+            x_vec[1] * y_vec[2] - x_vec[2] * y_vec[1],
+            x_vec[2] * y_vec[0] - x_vec[0] * y_vec[2],
+            x_vec[0] * y_vec[1] - x_vec[1] * y_vec[0],
+        ]
+        cross_len = math.sqrt(sum(component * component for component in cross))
+        if cross_len < 1e-6:
             return False, "X and Y points are collinear", {}
 
-        dot = x_vec[0] * y_vec[0] + x_vec[1] * y_vec[1]
-        angle_deg = math.degrees(math.atan2(abs(cross_z), dot))
-        if cross_z < 0.0:
+        dot = sum(x_vec[index] * y_vec[index] for index in range(3))
+        angle_deg = math.degrees(math.atan2(cross_len, dot))
+        if cross[2] < 0.0:
             return (
                 False,
                 "Y point is on the -Y side of the selected X axis. "
@@ -161,8 +188,31 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
                 {},
             )
 
-        rz = math.degrees(math.atan2(x_vec[1], x_vec[0]))
-        transform = [center[0], center[1], center[2], 0.0, 0.0, rz]
+        x_axis = self._normalize_vector(x_vec)
+        y_projection = sum(y_vec[index] * x_axis[index] for index in range(3))
+        y_orthogonal = [
+            y_vec[index] - y_projection * x_axis[index]
+            for index in range(3)
+        ]
+        y_axis = self._normalize_vector(y_orthogonal)
+        z_axis = self._normalize_vector([
+            x_axis[1] * y_axis[2] - x_axis[2] * y_axis[1],
+            x_axis[2] * y_axis[0] - x_axis[0] * y_axis[2],
+            x_axis[0] * y_axis[1] - x_axis[1] * y_axis[0],
+        ])
+        # Recompute Y from the orthonormal X/Z axes to avoid capture noise.
+        y_axis = [
+            z_axis[1] * x_axis[2] - z_axis[2] * x_axis[1],
+            z_axis[2] * x_axis[0] - z_axis[0] * x_axis[2],
+            z_axis[0] * x_axis[1] - z_axis[1] * x_axis[0],
+        ]
+        rotation = [
+            [x_axis[0], y_axis[0], z_axis[0]],
+            [x_axis[1], y_axis[1], z_axis[1]],
+            [x_axis[2], y_axis[2], z_axis[2]],
+        ]
+        rx, ry, rz = self._rotation_matrix_to_xyz_euler(rotation)
+        transform = [center[0], center[1], center[2], rx, ry, rz]
         payload = {
             "user_id": int(user_id),
             "calibration_tool_id": self._workobject_tool_id,
@@ -173,10 +223,13 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
                 "x": list(x_point),
                 "y": list(y_point),
             },
-            "cross_z": cross_z,
+            "surface_normal": z_axis,
+            "cross_z": cross[2],
             "xy_angle_deg": angle_deg,
         }
-        return True, f"WorkObject solved: rz={rz:.3f} deg", payload
+        return True, (
+            f"WorkObject solved: rx={rx:.3f}, ry={ry:.3f}, rz={rz:.3f} deg"
+        ), payload
 
     def save_workobject(self, user_id: int, name: str = "", persist: bool = True) -> tuple[bool, str, dict]:
         frame_ok, frame_msg = self._validate_workobject_reference_frame()
