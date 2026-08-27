@@ -129,6 +129,12 @@ class PaintRobotSystem(BaseRobotSystem):
             has_trajectory_execution=True,
         ),
 
+        MovementGroupDefinition(
+            id="Magazine Fixed Pickup",
+            label="Magazine Fixed Pickup",
+            group_type=MovementGroupType.SINGLE_POSITION,
+        ),
+
 
     ]
 
