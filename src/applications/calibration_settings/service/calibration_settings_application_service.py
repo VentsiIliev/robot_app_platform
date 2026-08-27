@@ -1,4 +1,5 @@
 import math
+from datetime import datetime, timezone
 
 from src.applications.calibration_settings.calibration_settings_data import CalibrationSettingsData
 from src.applications.calibration_settings.service.i_calibration_settings_service import (
@@ -252,6 +253,26 @@ class CalibrationSettingsApplicationService(ICalibrationSettingsService):
         )
         if int(result) != 0:
             return False, "Failed to save WorkObject to robot runtime", payload
+
+        calibration_settings = self._settings_service.get(CommonSettingsID.ROBOT_CALIBRATION)
+        records = getattr(calibration_settings, "workobject_calibrations", None)
+        if not isinstance(records, dict):
+            records = {}
+            calibration_settings.workobject_calibrations = records
+        records[str(payload["user_id"])] = {
+            "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+            "user_id": payload["user_id"],
+            "name": payload["name"],
+            "calibration_tool_id": payload["calibration_tool_id"],
+            "transform": list(payload["transform"]),
+            "points": {
+                point_name: list(point_pose)
+                for point_name, point_pose in payload["points"].items()
+            },
+            "surface_normal": list(payload["surface_normal"]),
+            "xy_angle_deg": payload["xy_angle_deg"],
+        }
+        self._settings_service.save(CommonSettingsID.ROBOT_CALIBRATION, calibration_settings)
 
         robot_config = self._settings_service.get(CommonSettingsID.ROBOT_CONFIG)
         if robot_config is not None:

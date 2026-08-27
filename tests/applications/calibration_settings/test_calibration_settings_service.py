@@ -241,8 +241,12 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
 
     def test_workobject_save_updates_runtime_robot_settings_and_active_workobject(self):
         robot_config = SimpleNamespace(robot_user=0)
+        calibration_settings = SimpleNamespace(workobject_calibrations={})
         settings_service = MagicMock()
-        settings_service.get.return_value = robot_config
+        settings_service.get.side_effect = lambda key: {
+            CommonSettingsID.ROBOT_CONFIG: robot_config,
+            CommonSettingsID.ROBOT_CALIBRATION: calibration_settings,
+        }[key]
         robot_service = MagicMock()
         robot_service.get_current_base_tcp_position.side_effect = [
             [10.0, 20.0, 30.0, 0.0, 0.0, 0.0],
@@ -272,7 +276,17 @@ class TestCalibrationSettingsApplicationService(unittest.TestCase):
             persist=True,
         )
         self.assertEqual(robot_config.robot_user, 4)
-        settings_service.save.assert_called_once_with(CommonSettingsID.ROBOT_CONFIG, robot_config)
+        self.assertEqual(
+            settings_service.save.call_args_list[-1].args,
+            (CommonSettingsID.ROBOT_CONFIG, robot_config),
+        )
+        record = calibration_settings.workobject_calibrations["4"]
+        self.assertEqual(record["user_id"], 4)
+        self.assertEqual(record["name"], "WOBJ_FIXTURE")
+        self.assertEqual(record["calibration_tool_id"], 0)
+        self.assertEqual(record["transform"], [10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        self.assertEqual(record["points"]["center"], [10.0, 20.0, 30.0, 0.0, 0.0, 0.0])
+        self.assertIn("saved_at_utc", record)
         messaging.publish.assert_called_once_with(
             "robot/config_changed",
             {"robot_user": 4},
