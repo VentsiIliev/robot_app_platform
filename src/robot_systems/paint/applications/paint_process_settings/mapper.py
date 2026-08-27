@@ -224,7 +224,6 @@ class PaintProcessSettingsMapper:
             "staging_detach_paint_axis_offset_mm": staging.detach_paint_axis_offset_mm,
             "staging_detach_perpendicular_axis_offset_mm": staging.detach_perpendicular_axis_offset_mm,
             "pickup_contact_mode": pickup.pickup_contact_mode,
-            "magazine_pickup_contact_mode": pickup.magazine_pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
             "pickup_servo_contact_retract_distance_mm": pickup.servo_contact_retract_distance_mm,
@@ -282,7 +281,7 @@ class PaintProcessSettingsMapper:
                 ),
             ],
             "magazine_load_enabled": magazine.enabled,
-            "magazine_pickup_target_mode": magazine.pickup_target_mode,
+            "magazine_pickup_mode": magazine.pickup_mode,
             "magazine_fixed_pickup_group_id": magazine.fixed_pickup_group_id,
             "magazine_fixed_pickup_position_tolerance_mm": magazine.fixed_pickup_position_tolerance_mm,
             "magazine_fixed_pickup_orientation_tolerance_deg": magazine.fixed_pickup_orientation_tolerance_deg,
@@ -363,9 +362,6 @@ class PaintProcessSettingsMapper:
             ),
             pickup_contact_mode=str(
                 flat.get("pickup_contact_mode", base.pickup_motion.pickup_contact_mode)
-            ),
-            magazine_pickup_contact_mode=str(
-                flat.get("magazine_pickup_contact_mode", base.pickup_motion.magazine_pickup_contact_mode)
             ),
             servo_contact_linear_mm_s=float(
                 flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)
@@ -536,8 +532,8 @@ class PaintProcessSettingsMapper:
         magazine = replace(
             base.magazine_load,
             enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
-            pickup_target_mode=str(
-                flat.get("magazine_pickup_target_mode", base.magazine_load.pickup_target_mode)
+            pickup_mode=str(
+                flat.get("magazine_pickup_mode", base.magazine_load.pickup_mode)
             ),
             fixed_pickup_group_id=str(
                 flat.get("magazine_fixed_pickup_group_id", base.magazine_load.fixed_pickup_group_id)

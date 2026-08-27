@@ -52,7 +52,6 @@
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
     "pickup_contact_mode": "planned",
-    "magazine_pickup_contact_mode": "planned",
     "servo_contact_linear_mm_s": 100.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_retract_distance_mm": 10.0,
@@ -97,7 +96,7 @@
   },
   "magazine_load": {
     "enabled": false,
-    "pickup_target_mode": "vision",
+    "pickup_mode": "vision_planned",
     "fixed_pickup_group_id": "Magazine Fixed Pickup",
     "fixed_pickup_position_tolerance_mm": 2.0,
     "fixed_pickup_orientation_tolerance_deg": 1.0,

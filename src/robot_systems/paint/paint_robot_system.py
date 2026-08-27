@@ -133,6 +133,7 @@ class PaintRobotSystem(BaseRobotSystem):
             id="Magazine Fixed Pickup",
             label="Magazine Fixed Pickup",
             group_type=MovementGroupType.SINGLE_POSITION,
+            has_trajectory_execution=True,
         ),
 
 

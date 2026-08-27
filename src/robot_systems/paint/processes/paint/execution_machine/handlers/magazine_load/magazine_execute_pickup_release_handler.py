@@ -17,15 +17,14 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
-    MAGAZINE_PICKUP_TARGET_MODE_VISION,
-    PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
     PICKUP_CONTACT_MODE_PLANNED,
     PICKUP_CONTACT_MODE_SERVO_CONTACT,
 )
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
-    normalize_pickup_contact_mode,
     pickup_condition_is_active_after_retract,
 )
 from src.robot_systems.paint.timing import timed_step
@@ -47,6 +46,7 @@ def execute_magazine_pickup_release(
     fixed_approach_pose: list[float] | None = None,
     fixed_position_tolerance_mm: float = 2.0,
     fixed_orientation_tolerance_deg: float = 1.0,
+    magazine_pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED,
 ) -> tuple[bool, str]:
     """Pick up a resolved magazine target and release it at an explicit pose."""
     executor = load_service._path_executor
@@ -150,7 +150,15 @@ def execute_magazine_pickup_release(
         ),
     )
 
-    contact_mode = normalize_pickup_contact_mode(pickup_motion.magazine_pickup_contact_mode)
+    if magazine_pickup_mode == MAGAZINE_PICKUP_MODE_VISION_PLANNED:
+        contact_mode = PICKUP_CONTACT_MODE_PLANNED
+    elif magazine_pickup_mode in {
+        MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+        MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    }:
+        contact_mode = PICKUP_CONTACT_MODE_SERVO_CONTACT
+    else:
+        return False, f"Invalid magazine pickup mode: {magazine_pickup_mode}"
     ordered_segments = build_magazine_pickup_release_segments(transfer_waypoints)
 
     if resume_from_current_pose:
@@ -198,12 +206,6 @@ def execute_magazine_pickup_release(
                 position_tolerance_mm=fixed_position_tolerance_mm,
                 orientation_tolerance_deg=fixed_orientation_tolerance_deg,
             )
-        elif contact_mode == PICKUP_CONTACT_MODE_HEIGHT_MEASURE:
-            _logger.error(
-                "[MAGAZINE_LOAD] Height-measured pickup Z mode is selected, but height service wiring is not implemented yet"
-            )
-            ok = False
-            msg = "Magazine height-measured pickup Z mode is not wired yet"
         elif contact_mode == PICKUP_CONTACT_MODE_PLANNED:
             ok = executor._motion.move_ordered_pickup_sequence(
                 "Ordered magazine pickup-to-release sequence",
@@ -475,10 +477,8 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         return guarded
 
     load_service = ctx.production_service._magazine_load_service
-    target_mode = str(
-        ctx.magazine_config.pickup_target_mode or MAGAZINE_PICKUP_TARGET_MODE_VISION
-    ).strip().lower()
-    is_fixed_group = target_mode == MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP
+    pickup_mode = str(ctx.magazine_config.pickup_mode or "").strip().lower()
+    is_fixed_group = pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
     resume_from_current_pose = ctx.consume_resume_retry()
     if is_fixed_group and resume_from_current_pose:
         _logger.info(
@@ -498,6 +498,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         fixed_approach_pose=ctx.magazine_fixed_pickup_pose if is_fixed_group else None,
         fixed_position_tolerance_mm=float(ctx.magazine_config.fixed_pickup_position_tolerance_mm),
         fixed_orientation_tolerance_deg=float(ctx.magazine_config.fixed_pickup_orientation_tolerance_deg),
+        magazine_pickup_mode=pickup_mode,
     )
     if not ok:
         return interrupted_or_error(

@@ -11,11 +11,13 @@ PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
 )
 
-MAGAZINE_PICKUP_TARGET_MODE_VISION = "vision"
-MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP = "fixed_group"
-MAGAZINE_PICKUP_TARGET_MODES = (
-    MAGAZINE_PICKUP_TARGET_MODE_VISION,
-    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+MAGAZINE_PICKUP_MODE_VISION_PLANNED = "vision_planned"
+MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
+MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
+MAGAZINE_PICKUP_MODES = (
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
 )
 
 
@@ -79,7 +81,6 @@ class PickupMotionConfig:
     # Pickup contact strategy. Defaults preserve the fully planned
     # approach/descend/lift sequence. Valid values: planned | servo_contact | height_measure.
     pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
-    magazine_pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
     servo_contact_retract_distance_mm: float = 10.0  # [LIVE SETTINGS]
@@ -148,7 +149,7 @@ class PaintMagazineLoadConfig:
     """Optional pre-run transfer from magazine capture station to calibration table."""
 
     enabled: bool = False  # [LIVE SETTINGS]
-    pickup_target_mode: str = MAGAZINE_PICKUP_TARGET_MODE_VISION  # [LIVE SETTINGS]
+    pickup_mode: str = MAGAZINE_PICKUP_MODE_VISION_PLANNED  # [LIVE SETTINGS]
     fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
     fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
     fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]

@@ -3,6 +3,9 @@ from typing import Any, Dict, Type, TypeVar
 
 from src.engine.repositories.interfaces import ISettingsSerializer
 from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
     PAINT_PROCESS_CONFIG,
     PaintDropoffConfig,
     PaintEdgeCleanupConfig,
@@ -80,9 +83,21 @@ class PaintProcessConfigSerializer(ISettingsSerializer[PaintProcessConfig]):
             _section(raw, "dropoff"),
             default.dropoff,
         )
+        magazine_raw = dict(_section(raw, "magazine_load"))
+        if "pickup_mode" not in magazine_raw:
+            legacy_contact = str(
+                _section(raw, "pickup_motion").get("magazine_pickup_contact_mode", "planned")
+            ).strip().lower()
+            legacy_target = str(magazine_raw.get("pickup_target_mode", "vision")).strip().lower()
+            if legacy_contact == "servo_contact" and legacy_target == "fixed_group":
+                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+            elif legacy_contact == "servo_contact":
+                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT
+            else:
+                magazine_raw["pickup_mode"] = MAGAZINE_PICKUP_MODE_VISION_PLANNED
         values["magazine_load"] = _build_dataclass(
             PaintMagazineLoadConfig,
-            _section(raw, "magazine_load"),
+            magazine_raw,
             default.magazine_load,
         )
         values["safe_travel"] = _build_dataclass(

@@ -2,12 +2,11 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
-    MAGAZINE_PICKUP_TARGET_MODE_VISION,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_PLANNED,
+    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
-    PickupMotionConfig,
 )
 from src.robot_systems.paint.processes.paint.execution_control import PaintExecutionControl
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
@@ -33,13 +32,32 @@ class TestFixedMagazinePickup(unittest.TestCase):
     def test_old_settings_default_to_vision_targeting(self):
         restored = PaintProcessConfigSerializer().from_dict({"magazine_load": {"enabled": True}})
 
-        self.assertEqual(MAGAZINE_PICKUP_TARGET_MODE_VISION, restored.magazine_load.pickup_target_mode)
+        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_PLANNED, restored.magazine_load.pickup_mode)
+
+    def test_legacy_servo_and_fixed_target_migrate_to_combined_mode(self):
+        restored = PaintProcessConfigSerializer().from_dict({
+            "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+            "magazine_load": {"pickup_target_mode": "fixed_group"},
+        })
+
+        self.assertEqual(
+            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            restored.magazine_load.pickup_mode,
+        )
+
+    def test_legacy_servo_without_target_migrates_to_vision_servo(self):
+        restored = PaintProcessConfigSerializer().from_dict({
+            "pickup_motion": {"magazine_pickup_contact_mode": "servo_contact"},
+            "magazine_load": {},
+        })
+
+        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT, restored.magazine_load.pickup_mode)
 
     def test_fixed_group_settings_round_trip_through_ui_mapper(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
         flat.update({
-            "magazine_pickup_target_mode": MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+            "magazine_pickup_mode": MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
             "magazine_fixed_pickup_group_id": "Magazine Pickup Taught",
             "magazine_fixed_pickup_position_tolerance_mm": 1.5,
             "magazine_fixed_pickup_orientation_tolerance_deg": 0.75,
@@ -47,7 +65,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
 
-        self.assertEqual(MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP, restored.magazine_load.pickup_target_mode)
+        self.assertEqual(MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT, restored.magazine_load.pickup_mode)
         self.assertEqual("Magazine Pickup Taught", restored.magazine_load.fixed_pickup_group_id)
         self.assertEqual(1.5, restored.magazine_load.fixed_pickup_position_tolerance_mm)
         self.assertEqual(0.75, restored.magazine_load.fixed_pickup_orientation_tolerance_deg)
@@ -59,7 +77,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         service._magazine_load_service = load_service
         config = PaintMagazineLoadConfig(
             enabled=True,
-            pickup_target_mode=MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
             fixed_pickup_group_id="Magazine Fixed Pickup",
         )
         ctx = self._context(service, config)
@@ -83,15 +101,10 @@ class TestFixedMagazinePickup(unittest.TestCase):
         service._magazine_load_service = load_service
         config = PaintMagazineLoadConfig(
             enabled=True,
-            pickup_target_mode=MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
             release_z_mm=50.0,
         )
-        process_config = PaintProcessConfig(
-            magazine_load=config,
-            pickup_motion=PickupMotionConfig(
-                magazine_pickup_contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT
-            ),
-        )
+        process_config = PaintProcessConfig(magazine_load=config)
         ctx = self._context(service, config, process_config=process_config)
         ctx.magazine_group = "Magazine Fixed Pickup"
         ctx.calibration_group = "CALIBRATION"
@@ -103,27 +116,6 @@ class TestFixedMagazinePickup(unittest.TestCase):
         self.assertEqual([30.0, 40.0, 50.0, 180.0, 0.0, 0.0], ctx.magazine_release_pose)
         load_service._resolve_pickup_target.assert_not_called()
         load_service._resolve_work_area_center_release_pose.assert_not_called()
-
-    def test_fixed_prepare_rejects_non_servo_contact_mode(self):
-        load_service = MagicMock()
-        load_service._navigation.get_group_position.side_effect = [
-            [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 200.0, 0.0, 0.0, 0.0],
-        ]
-        service = MagicMock()
-        service._magazine_load_service = load_service
-        config = PaintMagazineLoadConfig(
-            enabled=True,
-            pickup_target_mode=MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
-        )
-        ctx = self._context(service, config, process_config=PaintProcessConfig(magazine_load=config))
-        ctx.magazine_group = "Magazine Fixed Pickup"
-        ctx.calibration_group = "CALIBRATION"
-
-        next_state = handle_magazine_prepare_pickup_release(ctx)
-
-        self.assertEqual(PaintExecutionState.ERROR, next_state)
-        self.assertIn("requires servo_contact", ctx.result_message)
 
     def test_start_pose_verification_accepts_wrapped_angles(self):
         robot = MagicMock()

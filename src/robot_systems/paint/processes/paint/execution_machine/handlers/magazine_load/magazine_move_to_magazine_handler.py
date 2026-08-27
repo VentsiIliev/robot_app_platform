@@ -9,8 +9,8 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP,
-    MAGAZINE_PICKUP_TARGET_MODE_VISION,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODES,
 )
 
 _logger = logging.getLogger(__name__)
@@ -27,14 +27,14 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     if guarded is not None:
         return guarded
 
-    target_mode = str(config.pickup_target_mode or MAGAZINE_PICKUP_TARGET_MODE_VISION).strip().lower()
-    if target_mode not in {MAGAZINE_PICKUP_TARGET_MODE_VISION, MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP}:
-        ctx.set_result(False, f"Invalid magazine pickup target mode: {target_mode}")
+    pickup_mode = str(config.pickup_mode or "").strip().lower()
+    if pickup_mode not in MAGAZINE_PICKUP_MODES:
+        ctx.set_result(False, f"Invalid magazine pickup mode: {pickup_mode}")
         return PaintExecutionState.ERROR
     if not ctx.magazine_group:
         group_id = (
             config.fixed_pickup_group_id
-            if target_mode == MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP
+            if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
             else config.magazine_group_id
         )
         ctx.magazine_group = str(group_id or "").strip()
@@ -63,7 +63,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             f"Move to magazine group '{ctx.magazine_group}' failed",
         )
     _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", ctx.magazine_group)
-    if target_mode == MAGAZINE_PICKUP_TARGET_MODE_FIXED_GROUP:
+    if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
     service._restore_capture_view("after reaching magazine pickup")
     return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE

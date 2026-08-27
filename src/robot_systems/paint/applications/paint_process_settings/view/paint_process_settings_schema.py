@@ -6,7 +6,7 @@ from src.engine.robot.path_preparation import (
     PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL,
 )
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_TARGET_MODES,
+    MAGAZINE_PICKUP_MODES,
     PICKUP_CONTACT_MODES,
 )
 
@@ -154,11 +154,11 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("Magazine Load"), [
             _toggle("magazine_load_enabled", "Load From Magazine Before Paint"),
             SettingField(
-                "magazine_pickup_target_mode",
-                _t("Magazine Pickup Target Mode"),
+                "magazine_pickup_mode",
+                _t("Magazine Pickup Mode"),
                 "combo",
-                default="vision",
-                choices=list(MAGAZINE_PICKUP_TARGET_MODES),
+                default="vision_planned",
+                choices=list(MAGAZINE_PICKUP_MODES),
             ),
             SettingField(
                 "magazine_fixed_pickup_group_id",
@@ -188,7 +188,7 @@ def build_process_groups() -> list[SettingGroup]:
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
         ]),
-        SettingGroup(_t("Pickup Contact Strategy"), [
+        SettingGroup(_t("Calibration Pickup"), [
             SettingField(
                 "pickup_contact_mode",
                 _t("Calibration Pickup Mode"),
@@ -196,13 +196,8 @@ def build_process_groups() -> list[SettingGroup]:
                 default="planned",
                 choices=list(PICKUP_CONTACT_MODES),
             ),
-            SettingField(
-                "magazine_pickup_contact_mode",
-                _t("Magazine Pickup Mode"),
-                "combo",
-                default="planned",
-                choices=list(PICKUP_CONTACT_MODES),
-            ),
+        ]),
+        SettingGroup(_t("Servo Contact Settings"), [
             _mm_per_second_field("pickup_servo_contact_linear_mm_s", "Descent Speed", 10.0),
             _mm_field("pickup_servo_contact_min_z_mm", "Minimum Allowed Z", 0.0, min_val=-100.0),
             _mm_field("pickup_servo_contact_retract_distance_mm", "Servo Retract Distance", 10.0, min_val=0.0),

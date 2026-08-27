@@ -100,18 +100,13 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         )
         self.assertEqual("planned", view.values_set["pickup_contact_mode"])
 
-    def test_selecting_servo_contact_is_allowed_when_pump_and_sensor_are_enabled(self):
+    def test_magazine_servo_mode_is_allowed_when_pump_and_sensor_are_enabled(self):
         model = _FakeModel(True, pickup_safety_enabled=(True, True))
         view = _FakeView()
-        view.values_set = {"magazine_pickup_contact_mode": "servo_contact"}
+        view.values_set = {"magazine_pickup_mode": "vision_servo_contact"}
         controller = PaintProcessSettingsController(model, view)
-        with patch(
-            "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
-        ) as show_warning:
-            controller._on_value_changed("magazine_pickup_contact_mode", "servo_contact")
 
-        show_warning.assert_not_called()
-        self.assertEqual("servo_contact", view.values_set["magazine_pickup_contact_mode"])
+        self.assertTrue(controller._servo_contact_is_allowed(view.values_set))
 
     def test_save_does_not_proceed_with_unsafe_servo_contact(self):
         model = _FakeModel(True, pickup_safety_enabled=(True, False))
