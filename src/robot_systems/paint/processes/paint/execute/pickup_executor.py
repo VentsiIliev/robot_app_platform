@@ -597,6 +597,8 @@ def build_ordered_paint_contact_segments(
                 "blendR": 0.0,
                 "protected": True,
                 "readiness_group": readiness_group,
+                "execution_group": readiness_group,
+                "execution_policy": "concatenate",
             }
         )
         segments.append(
@@ -609,6 +611,8 @@ def build_ordered_paint_contact_segments(
                 "protected": True,
                 "limit_profile": "paint_contact",
                 "readiness_group": readiness_group,
+                "execution_group": readiness_group,
+                "execution_policy": "concatenate",
             }
         )
     return segments
