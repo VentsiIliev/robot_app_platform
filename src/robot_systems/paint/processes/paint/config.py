@@ -324,6 +324,8 @@ class PaintProcessConfig:
     # Pivot/contact offset used only for captured contours executed without matching.
     # Matched workpieces keep the offset stored in their segment settings.
     default_paint_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    # Continue past the seam along the beginning of a closed paint contour.
+    closed_contour_overlap_mm: float = 0.0  # [LIVE SETTINGS]
     # Log one end-of-cycle timing table for every paint execution state.
     enable_execution_state_timing: bool = True  # [LIVE SETTINGS]
     # Freeze the paint dashboard preview on the calibration-area capture while the paint cycle runs.
@@ -368,6 +370,7 @@ class PaintSimulationConfig:
     camera_to_tcp_x_offset: float = 0.0
     camera_to_tcp_y_offset: float = 0.0
     rotation_direction_sign: float = 1.0
+    closed_contour_overlap_mm: float = 0.0
 
     rules: PaintProjectionRules = field(init=False, repr=False)
     plane_spec: PaintMotionPlaneSpec = field(init=False, repr=False)

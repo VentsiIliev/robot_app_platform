@@ -325,6 +325,9 @@ def build_distance_offset_groups() -> list[SettingGroup]:
 
 def build_paint_path_groups() -> list[SettingGroup]:
     return [
+        SettingGroup(_t("Closed Contour"), [
+            _mm_field("closed_contour_overlap_mm", "Paint Overlap", default=0.0, min_val=0.0),
+        ]),
         SettingGroup(_t("Pivot Setup"), [
             SettingField("pivot_axis", _t("Pivot Axis"), "combo", default="x", choices=["x", "y", "z"]),
             SettingField("pivot_direction", _t("Pivot Direction"), "combo",

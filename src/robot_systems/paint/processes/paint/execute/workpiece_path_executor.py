@@ -210,6 +210,7 @@ def _normalize_contact_motion_config(
     camera_to_tcp_x_offset: float = 0.0,
     camera_to_tcp_y_offset: float = 0.0,
     rotation_direction_sign: float = 1.0,
+    closed_contour_overlap_mm: float = 0.0,
 ) -> PaintSimulationConfig:
     """Normalize user-facing pivot settings into a validated simulation config."""
     rules = PaintSimulationConfig().rules
@@ -231,6 +232,7 @@ def _normalize_contact_motion_config(
         camera_to_tcp_x_offset=float(camera_to_tcp_x_offset),
         camera_to_tcp_y_offset=float(camera_to_tcp_y_offset),
         rotation_direction_sign=-1.0 if float(rotation_direction_sign) < 0.0 else 1.0,
+        closed_contour_overlap_mm=max(0.0, float(closed_contour_overlap_mm)),
     )
 
 
@@ -447,6 +449,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 self._contact_motion_config.motion_plane,
                 self._flip_xz_ry_execution_rotation_direction,
             ),
+            closed_contour_overlap_mm=self._contact_motion_config.closed_contour_overlap_mm,
         )
         self._pickup_contact_motion_config = _normalize_contact_motion_config(
             motion_plane="xy_z_rz",
@@ -506,6 +509,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 plane,
                 self._flip_xz_ry_execution_rotation_direction,
             ),
+            closed_contour_overlap_mm=config.closed_contour_overlap_mm,
         )
         self._pickup_contact_motion_config = _normalize_contact_motion_config(
             motion_plane="xy_z_rz",
@@ -533,6 +537,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 plane,
                 self._flip_xz_ry_execution_rotation_direction,
             ),
+            closed_contour_overlap_mm=self._contact_motion_config.closed_contour_overlap_mm,
         )
 
     def _set_runtime_contact_motion_config(self, pivot_config: PaintSimulationConfig) -> None:
