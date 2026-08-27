@@ -442,6 +442,12 @@ class PaintPickupExecutor:
                 )
             return False
         if not pickup_condition_is_active_after_retract(condition):
+            off_ok, off_msg = self._owner._motion.turn_vacuum_off()
+            if not off_ok:
+                self._last_failure_message = (
+                    "Workpiece is no longer detected after Servo retract; "
+                    f"vacuum pump OFF also failed: {off_msg}"
+                )
             return False
 
         current_pose = self._wait_for_stable_pose()

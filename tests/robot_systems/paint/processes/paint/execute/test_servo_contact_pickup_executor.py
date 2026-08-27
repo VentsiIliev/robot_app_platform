@@ -262,6 +262,45 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertTrue(robot.started[0][1]["disable_collision_checking"])
         self.assertTrue(robot.started[1][1]["disable_collision_checking"])
 
+    def test_magazine_lost_after_retract_turns_vacuum_off(self):
+        robot = _FakeRobot()
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=-5.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            servo_contact_retract_distance_mm=10.0,
+            servo_contact_retract_linear_mm_s=25.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionLostAfterDetection(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        waypoints = (
+            ("approach", [0, 0, 100, 0, 0, 0], 10, 10, "ptp", 0),
+            ("contact", [0, 0, 0, 0, 0, 0], 10, 10, "linear", 0),
+            ("lift", [0, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
+            ("release", [20, 30, 40, 0, 0, 0], 10, 10, "ptp", 0),
+        )
+
+        ok, message = _execute_magazine_servo_contact_pickup_release(
+            owner,
+            waypoints,
+            retract_reference_pose=[0, 0, 100, 0, 0, 0],
+            release_label="calibration",
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual("Magazine workpiece is no longer detected after Servo retract", message)
+        self.assertEqual(1, motion.vacuum_off)
+
     def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
         motion = _FakeMotion()
         owner = SimpleNamespace(_motion=motion)
@@ -387,6 +426,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+        self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["Pickup approach before servo contact"], [label for label, _ in motion.sequences])
 
     def test_servo_contact_preplans_after_servo_and_executes_after_ptp_retract(self):

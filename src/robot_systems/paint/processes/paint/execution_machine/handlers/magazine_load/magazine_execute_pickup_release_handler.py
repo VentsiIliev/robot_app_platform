@@ -343,6 +343,12 @@ def _execute_magazine_servo_contact_pickup_release(
             return False, NO_WORKPIECE_AT_MAGAZINE
         return False, f"Magazine servo contact pickup failed: {result.message}"
     if not pickup_condition_is_active_after_retract(condition):
+        off_ok, off_msg = executor._motion.turn_vacuum_off()
+        if not off_ok:
+            return False, (
+                "Magazine workpiece is no longer detected after Servo retract; "
+                f"vacuum pump OFF also failed: {off_msg}"
+            )
         return False, "Magazine workpiece is no longer detected after Servo retract"
 
     current_pose = _wait_for_stable_pose(executor._robot_service)
