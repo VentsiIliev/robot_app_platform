@@ -79,6 +79,20 @@ class TestMotionService(unittest.TestCase):
         self.assertFalse(result)
         self.robot.move_linear.assert_not_called()
 
+    def test_move_linear_recovery_can_explicitly_bypass_platform_safety_limits(self):
+        self.safety.get_violations.return_value = ["X=-284.08 not in [-250, 450]"]
+        self.robot.move_linear.return_value = 0
+
+        result = self.service.move_linear(
+            [-284.08, 0, 10, 0, 0, 0], 1, 0, 5, 5,
+            allow_collision_recovery=True,
+            bypass_safety_limits=True,
+        )
+
+        self.assertTrue(result)
+        self.robot.move_linear.assert_called_once()
+        self.assertTrue(self.robot.move_linear.call_args.kwargs["allow_collision_recovery"])
+
     def test_move_linear_passes_blend_radius(self):
         self.robot.move_linear.return_value = 0
         self.service.move_linear([100, 0, 300, 0, 0, 0], 0, 0, 20, 20, blendR=5.0)

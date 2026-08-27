@@ -163,6 +163,7 @@ class RobotJogService:
                     move_kwargs["allow_subzero_step_recovery"] = True
                 if self._recovery_mode:
                     move_kwargs["allow_collision_recovery"] = True
+                    move_kwargs["bypass_safety_limits"] = True
                 self._robot.move_linear(target, **move_kwargs)
             self._lock.release()
         except Exception:

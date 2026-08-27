@@ -284,6 +284,7 @@ class TestRobotJogService(unittest.TestCase):
 
         kwargs = robot.move_linear.call_args.kwargs
         self.assertTrue(kwargs["allow_collision_recovery"])
+        self.assertTrue(kwargs["bypass_safety_limits"])
         self.assertNotIn("allow_subzero_step_recovery", kwargs)
 
     def test_servo_jog_caps_slider_speed_to_configured_maximum(self):

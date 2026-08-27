@@ -144,9 +144,16 @@ class MotionService(IMotionService):
             wait_cancelled: Callable[[], bool] | None = None,
             allow_subzero_step_recovery: bool = False,
             allow_collision_recovery: bool = False,
+            bypass_safety_limits: bool = False,
     ) -> bool:
         self._last_jog_target = []
         violations = self._motion_violations(position)
+        if bypass_safety_limits and violations:
+            self._logger.warning(
+                "move_linear platform safety limits BYPASSED by Jog Recovery: %s",
+                ", ".join(violations),
+            )
+            violations = []
         if allow_subzero_step_recovery:
             current = self._fresh_position()
             if not self._is_bounded_subzero_retract(current, position):
