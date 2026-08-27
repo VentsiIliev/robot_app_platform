@@ -25,6 +25,9 @@ from src.robot_systems.paint.processes.paint.config import (
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     _execute_magazine_servo_contact_pickup_release,
 )
+from src.robot_systems.paint.processes.paint.magazine_load_result import (
+    NO_WORKPIECE_AT_MAGAZINE,
+)
 
 
 class _FakeRobot:
@@ -153,8 +156,15 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             retract_reference_pose=[0, 0, 100, 0, 0, 0],
         )
 
-        self.assertFalse(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+        executor = PaintPickupExecutor(owner)
+        self.assertFalse(executor._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(1, motion.vacuum_off)
+        self.assertEqual("No workpiece at calibration", executor._last_failure_message)
+        self.assertEqual(
+            "Returning to calibration pickup origin after no contact",
+            motion.sequences[-1][1][0]["label"],
+        )
+        self.assertEqual([0, 0, 100, 0, 0, 0], motion.sequences[-1][1][0]["position"])
 
     def test_magazine_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
@@ -193,8 +203,13 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         self.assertFalse(ok)
-        self.assertIn("timeout", message)
+        self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, message)
         self.assertEqual(1, motion.vacuum_off)
+        self.assertEqual(
+            "Returning to magazine pickup origin after no contact",
+            motion.sequences[-1][1][0]["label"],
+        )
+        self.assertEqual([0, 0, 100, 0, 0, 0], motion.sequences[-1][1][0]["position"])
 
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
         robot = _FakeRobot()

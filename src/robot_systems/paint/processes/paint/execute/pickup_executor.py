@@ -21,6 +21,9 @@ from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODES,
 )
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.magazine_load_result import (
+    NO_WORKPIECE_AT_CALIBRATION,
+)
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -222,6 +225,7 @@ class PaintPickupExecutor:
     def __init__(self, owner, strategy: PaintPickupStrategy | None = None) -> None:
         self._owner = owner
         self._strategy = strategy or DefaultPickupStrategy()
+        self._last_failure_message = ""
 
     def build_plan(self, prepared_workpiece: WorkpieceExecutionPlan) -> PickupPlan | None:
         return self._strategy.build_plan(self._owner, prepared_workpiece)
@@ -236,6 +240,7 @@ class PaintPickupExecutor:
     ) -> tuple[bool, str]:
         """Run pickup, align, and staging according to the configured strategy."""
         started = perf_counter()
+        self._last_failure_message = ""
         _logger.info("[TIMING] pickup_to_pivot entered")
         if self._owner._robot_service is None:
             return False, "Robot service is not available"
@@ -269,6 +274,8 @@ class PaintPickupExecutor:
             return True, "Pickup completed and robot is positioned before the first pivot contact pose"
         _logger.info("[TIMING] pickup_to_pivot success=false stage=ordered_pickup total_elapsed_s=%.3f", elapsed_s(started))
         detail = getattr(self._owner._motion, "last_motion_error", None)
+        if self._last_failure_message:
+            return False, self._last_failure_message
         if detail:
             return False, f"Ordered pickup sequence failed: {detail}"
         return False, "Ordered pickup sequence failed"
@@ -400,13 +407,35 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
-            if result.message == "timeout":
+            if result.timed_out or result.message == "timeout":
                 off_ok, off_msg = self._owner._motion.turn_vacuum_off()
                 if not off_ok:
                     _logger.error(
                         "[PICKUP] Vacuum pump OFF failed after servo-contact timeout: %s",
                         off_msg,
                     )
+                recovery_waypoint = PickupWaypoint(
+                    "Returning to calibration pickup origin after no contact",
+                    list(approach_waypoints[-1].pose),
+                    float(approach_waypoints[-1].vel_percent),
+                    float(approach_waypoints[-1].acc_percent),
+                    "linear",
+                    0.0,
+                )
+                recovered = self._move_waypoint_sequence(
+                    "Calibration pickup timeout recovery",
+                    [recovery_waypoint],
+                )
+                recovery_failures = []
+                if not off_ok:
+                    recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
+                if not recovered:
+                    recovery_failures.append("return to pickup origin failed")
+                self._last_failure_message = (
+                    "Calibration servo pickup timed out; " + "; ".join(recovery_failures)
+                    if recovery_failures
+                    else NO_WORKPIECE_AT_CALIBRATION
+                )
             return False
         if not pickup_condition_is_active_after_retract(condition):
             return False

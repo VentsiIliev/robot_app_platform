@@ -25,6 +25,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
     _resolve_dropoff_safe_travel_waypoints,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
+from src.robot_systems.paint.processes.paint.magazine_load_result import (
+    NO_WORKPIECE_AT_CALIBRATION,
+)
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -58,6 +61,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         ok, msg, total_waypoints = ctx.paint_ordered_result
         ctx.paint_total_waypoints = int(total_waypoints)
         if not ok:
+            if msg == NO_WORKPIECE_AT_CALIBRATION:
+                finish_paint_motion(ctx, success=False)
+                ctx.set_result(False, msg)
+                return PaintExecutionState.COMPLETED
             fail_paint_motion(ctx, msg)
             return PaintExecutionState.ERROR
         ctx.paint_contact_executed_in_ordered_chain = True
@@ -72,6 +79,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
             "[TIMING] paint_process success=false stage=pickup total_elapsed_s=%.3f",
             elapsed_s(ctx.paint_started_at),
         )
+        if msg == NO_WORKPIECE_AT_CALIBRATION:
+            finish_paint_motion(ctx, success=False)
+            ctx.set_result(False, msg)
+            return PaintExecutionState.COMPLETED
         fail_paint_motion(ctx, msg)
         return PaintExecutionState.ERROR
     return PaintExecutionState.PAINT_CONTACT

@@ -74,6 +74,7 @@ class PaintExecutionTransitions:
             S.MAGAZINE_EXECUTE_PICKUP_RELEASE: {
                 S.MAGAZINE_MOVE_TO_MAGAZINE,
                 S.MAGAZINE_MOVE_TO_CALIBRATION,
+                S.COMPLETED,
                 *active,
             },
             S.MAGAZINE_MOVE_TO_CALIBRATION: {S.CALIBRATION_WAIT_CAMERA_SETTLE, *active},
@@ -82,7 +83,7 @@ class PaintExecutionTransitions:
             S.PREPARE_WORKPIECE: {S.BUILD_EXECUTION_PLAN, S.STOPPED, S.ERROR},
             S.BUILD_EXECUTION_PLAN: {S.EXECUTE_PAINT, S.PICKUP, S.STOPPED, S.ERROR},
             S.EXECUTE_PAINT: {S.COMPLETED, *active},
-            S.PICKUP: {S.PAINT_CONTACT, *active},
+            S.PICKUP: {S.PAINT_CONTACT, S.COMPLETED, *active},
             S.PAINT_CONTACT: {S.EDGE_CLEANUP, *active},
             S.EDGE_CLEANUP: {S.PREPARE_DROPOFF, *active},
             S.PREPARE_DROPOFF: {S.DROPOFF, *active},

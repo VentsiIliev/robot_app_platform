@@ -27,6 +27,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     pickup_condition_is_active_after_retract,
 )
+from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
@@ -312,13 +313,34 @@ def _execute_magazine_servo_contact_pickup_release(
         result.message,
     )
     if not result.success:
-        if result.message == "timeout":
+        if result.timed_out or result.message == "timeout":
             off_ok, off_msg = executor._motion.turn_vacuum_off()
+            recovery_waypoint = transfer_waypoints[0]
+            recovery_segments = build_magazine_pickup_release_segments((
+                (
+                    "Returning to magazine pickup origin after no contact",
+                    list(recovery_waypoint[1]),
+                    recovery_waypoint[2],
+                    recovery_waypoint[3],
+                    "linear",
+                    0.0,
+                ),
+            ))
+            recovered = executor._motion.move_ordered_pickup_sequence(
+                "Magazine pickup timeout recovery",
+                recovery_segments,
+            )
+            recovery_failures = []
             if not off_ok:
-                return False, (
-                    "Magazine servo contact pickup failed: timeout; "
-                    f"vacuum pump OFF also failed: {off_msg}"
+                recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
+            if not recovered:
+                reason = getattr(executor._motion, "last_motion_error", None)
+                recovery_failures.append(
+                    f"return to pickup origin failed: {reason or 'ordered motion failed'}"
                 )
+            if recovery_failures:
+                return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
+            return False, NO_WORKPIECE_AT_MAGAZINE
         return False, f"Magazine servo contact pickup failed: {result.message}"
     if not pickup_condition_is_active_after_retract(condition):
         return False, "Magazine workpiece is no longer detected after Servo retract"
@@ -508,6 +530,9 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
         magazine_pickup_mode=pickup_mode,
     )
     if not ok:
+        if msg == NO_WORKPIECE_AT_MAGAZINE:
+            ctx.set_result(False, NO_WORKPIECE_AT_MAGAZINE)
+            return PaintExecutionState.COMPLETED
         return interrupted_or_error(
             ctx,
             PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE,
