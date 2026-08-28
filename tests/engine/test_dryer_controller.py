@@ -254,6 +254,32 @@ class TestDryerController(unittest.TestCase):
         self.assertEqual(values[13], 50)
         self.assertEqual(values[14], 1)
 
+    def test_write_data_retries_using_configured_max_retries(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = [IOError("no answer"), None]
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+        )
+
+        self.assertTrue(controller.write_data(DryerWriteData()))
+
+        self.assertEqual(transport.write_registers.call_count, 2)
+
+    def test_write_data_stops_after_configured_retries_are_exhausted(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = IOError("no answer")
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+        )
+
+        self.assertFalse(controller.write_data(DryerWriteData()))
+
+        self.assertEqual(transport.write_registers.call_count, 3)
+
     def test_rev_minute_is_transmitted_without_scaling(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig(rev_minute=7))

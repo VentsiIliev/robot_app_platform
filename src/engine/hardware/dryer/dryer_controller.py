@@ -99,21 +99,39 @@ class DryerController(IDryerController):
 
     def write_data(self, data: DryerWriteData) -> bool:
         values = data.to_register_values()
-        try:
-            self._transport.write_registers(self._register_map.status, values)
-        except Exception:
-            self._logger.exception(
-                "Dryer write failed start_register=%d values=%s",
+        total_attempts = self._max_retries + 1
+        for attempt in range(1, total_attempts + 1):
+            try:
+                self._transport.write_registers(self._register_map.status, values)
+            except Exception as exc:
+                if attempt < total_attempts:
+                    self._logger.warning(
+                        "Dryer write failed; retrying attempt=%d/%d start_register=%d "
+                        "error_type=%s error=%s",
+                        attempt + 1,
+                        total_attempts,
+                        self._register_map.status,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    if self._status_poll_interval_s:
+                        time.sleep(self._status_poll_interval_s)
+                    continue
+                self._logger.error(
+                    "Dryer write failed after %d attempts start_register=%d values=%s",
+                    total_attempts,
+                    self._register_map.status,
+                    values,
+                    exc_info=True,
+                )
+                return False
+            self._logger.info(
+                "Dryer write ok start_register=%d values=%s",
                 self._register_map.status,
                 values,
             )
-            return False
-        self._logger.info(
-            "Dryer write ok start_register=%d values=%s",
-            self._register_map.status,
-            values,
-        )
-        return True
+            return True
+        return False
 
     def get_state(self) -> DryerState:
         total_attempts = self._max_retries + 1
