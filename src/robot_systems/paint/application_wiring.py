@@ -5,6 +5,7 @@ from src.applications.workpiece_editor.editor_core.config import SegmentEditorCo
 from src.engine.common_service_ids import CommonServiceID
 from src.engine.common_settings_ids import CommonSettingsID
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
+from src.robot_systems.paint import paint_system_config
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PAINT_PROJECTION_RULES,
@@ -15,6 +16,8 @@ from src.robot_systems.paint.processes.paint.config import (
 _logger = logging.getLogger(__name__)
 _PAINT_PROCESS = PAINT_PROCESS_CONFIG
 _PAINT_EXECUTION_TARGET_POINT = "tool"
+def _bypass_contour_preparation_enabled() -> bool:
+    return bool(paint_system_config.BYPASS_CONTOUR_PREPARATION)
 
 
 def _get_paint_process_config(robot_system=None):
@@ -392,6 +395,13 @@ def _build_paint_path_preparation_service(robot_system):
     def _paint_source_contour_processor(pts_px, settings):
         started_at = perf_counter()
         _apply_process_interpolation_settings(settings)
+        if _bypass_contour_preparation_enabled():
+            _logger.warning(
+                "[PAINT_DIAGNOSTIC_BYPASS] Pixel contour interpolation, smoothing, "
+                "fairing, and cleanup are DISABLED; using %d captured points directly",
+                len(pts_px),
+            )
+            return np.asarray(pts_px, dtype=float)[:, :2].copy()
         include_debug_paths = not bool(settings.get("_skip_debug_plot", False))
         result = PaintContourInterpolation(
             PaintContourInterpolationConfig(
@@ -414,6 +424,13 @@ def _build_paint_path_preparation_service(robot_system):
     def _paint_mm_contour_processor(path_pts, settings):
         started_at = perf_counter()
         _apply_process_interpolation_settings(settings)
+        if _bypass_contour_preparation_enabled():
+            _logger.warning(
+                "[PAINT_DIAGNOSTIC_BYPASS] Robot-space 1 mm resampling and contour "
+                "cleanup are DISABLED; using %d transformed points directly",
+                len(path_pts),
+            )
+            return [list(point) for point in path_pts]
         resample_start = perf_counter()
         resampled_xy = resample_contour_xy(
             np.asarray(path_pts, dtype=float)[:, :2],

@@ -16,6 +16,13 @@ from src.robot_systems.paint.applications.dashboard.config import PaintDashboard
 
 class TestPaintApplicationWiring(unittest.TestCase):
 
+    def test_contour_preparation_bypass_is_explicit_and_disabled_by_default(self):
+        from src.robot_systems.paint import paint_system_config
+
+        self.assertFalse(application_wiring._bypass_contour_preparation_enabled())
+        with patch.object(paint_system_config, "BYPASS_CONTOUR_PREPARATION", True):
+            self.assertTrue(application_wiring._bypass_contour_preparation_enabled())
+
     def test_build_dashboard_application_passes_dashboard_service_and_messaging(self):
         dashboard_ui_config = PaintDashboardUiConfig()
         robot_system = SimpleNamespace(
