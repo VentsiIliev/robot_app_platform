@@ -194,6 +194,22 @@ class PaintContourInterpolation:
         )
 
         stage_start = perf_counter()
+        hairpin_stats: dict[str, int] = {}
+        execution_xy = remove_local_hairpin_reversals_xy(
+            execution_xy,
+            spacing=self._config.output_spacing,
+            closed=True,
+            stats=hairpin_stats,
+        )
+        _log_interpolation_timing(
+            "remove_local_hairpin_reversals_xy",
+            stage_start,
+            output_points=len(execution_xy),
+            passes=hairpin_stats.get("passes", 0),
+            removed=hairpin_stats.get("removed", 0),
+        )
+
+        stage_start = perf_counter()
         execution_path = rebuild_pose_path_from_xy(
             execution_xy,
             raw_path,
@@ -749,6 +765,96 @@ def _fair_resampled_contour_xy(
         stats["candidates"] = candidates_seen
         stats["removed"] = removed
         stats["vector_eval_s"] = vector_eval_s
+    return _close_if_needed(points, closed)
+
+
+def remove_local_hairpin_reversals_xy(
+    xy_points: np.ndarray,
+    *,
+    spacing: float,
+    closed: bool,
+    stats: dict[str, int] | None = None,
+) -> np.ndarray:
+    """Remove short A->B->nearly-A spikes that trajectory timing cannot handle.
+
+    Unlike general curve fairing, this targets only a near-retrace: both legs
+    must be local, their turn must be at least 170 degrees, and the two outer
+    points must be much closer to each other than either leg. Legitimate sharp
+    corners whose path continues away from the corner are therefore preserved.
+    """
+    points = _clean_xy(xy_points)
+    if closed and len(points) > 1 and float(np.linalg.norm(points[0] - points[-1])) <= 1e-6:
+        points = points[:-1]
+
+    spacing = max(0.05, float(spacing))
+    max_leg = spacing * 2.5
+    max_outer_gap = max(0.05, spacing * 0.40)
+    reversal_cosine = float(np.cos(np.radians(170.0)))
+    removed = 0
+    passes = 0
+
+    while len(points) >= (4 if closed else 3):
+        passes += 1
+        count = len(points)
+        if closed:
+            previous = np.roll(points, 1, axis=0)
+            following = np.roll(points, -1, axis=0)
+            candidate_mask = np.ones(count, dtype=bool)
+            # The closed-path seam can encode a deliberately preserved source
+            # boundary between the last sample and the first. Do not erase
+            # that boundary without access to its protected-corner metadata.
+            candidate_mask[:2] = False
+            candidate_mask[-2:] = False
+        else:
+            previous = points.copy()
+            following = points.copy()
+            previous[1:-1] = points[:-2]
+            following[1:-1] = points[2:]
+            candidate_mask = np.zeros(count, dtype=bool)
+            candidate_mask[1:-1] = True
+
+        incoming = points - previous
+        outgoing = following - points
+        incoming_len = np.linalg.norm(incoming, axis=1)
+        outgoing_len = np.linalg.norm(outgoing, axis=1)
+        outer_gap = np.linalg.norm(following - previous, axis=1)
+        denominator = incoming_len * outgoing_len
+        cosine = np.ones(count, dtype=float)
+        valid_length = denominator > 1e-12
+        cosine[valid_length] = (
+            np.einsum("ij,ij->i", incoming, outgoing)[valid_length]
+            / denominator[valid_length]
+        )
+
+        removable = (
+            candidate_mask
+            & valid_length
+            & (incoming_len <= max_leg)
+            & (outgoing_len <= max_leg)
+            & (cosine <= reversal_cosine)
+            & (outer_gap <= max_outer_gap)
+            & (outer_gap <= 0.35 * np.minimum(incoming_len, outgoing_len))
+        )
+        candidate_indices = np.flatnonzero(removable)
+        if len(candidate_indices) == 0:
+            break
+
+        selected = _non_adjacent_indices(candidate_indices, count, closed=closed)
+        if not selected:
+            break
+        remove_mask = np.zeros(count, dtype=bool)
+        remove_mask[np.asarray(selected, dtype=int)] = True
+        points = points[~remove_mask]
+        removed += int(np.count_nonzero(remove_mask))
+
+    if removed:
+        _logger.warning(
+            "[PAINT] Removed %d local hairpin reversal point(s) before trajectory projection",
+            removed,
+        )
+    if stats is not None:
+        stats["passes"] = passes
+        stats["removed"] = removed
     return _close_if_needed(points, closed)
 
 

@@ -376,6 +376,7 @@ def _build_paint_path_preparation_service(robot_system):
     from src.robot_systems.paint.processes.paint.plan.paint_contour_interpolation import (
         PaintContourInterpolation,
         PaintContourInterpolationConfig,
+        remove_local_hairpin_reversals_xy,
         resample_contour_xy,
     )
 
@@ -416,6 +417,11 @@ def _build_paint_path_preparation_service(robot_system):
         resample_start = perf_counter()
         resampled_xy = resample_contour_xy(
             np.asarray(path_pts, dtype=float)[:, :2],
+            spacing=1.0,
+            closed=True,
+        )
+        resampled_xy = remove_local_hairpin_reversals_xy(
+            resampled_xy,
             spacing=1.0,
             closed=True,
         )
