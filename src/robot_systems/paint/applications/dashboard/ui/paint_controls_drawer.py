@@ -77,6 +77,7 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_acceleration = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
+        self._unmatched_offset.setSingleStep(0.1)
         self._unmatched_step_buttons: list[QPushButton] = []
         self._unmatched_velocity_label = QLabel()
         self._unmatched_acceleration_label = QLabel()

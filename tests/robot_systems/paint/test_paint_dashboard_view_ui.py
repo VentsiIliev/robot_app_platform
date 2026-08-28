@@ -18,6 +18,9 @@ from src.robot_systems.paint.applications.dashboard.ui.paint_info_card import (
 from src.robot_systems.paint.applications.dashboard.ui.paint_quick_controls_panel import (
     PaintQuickControlsPanel,
 )
+from src.robot_systems.paint.applications.dashboard.ui.paint_controls_drawer import (
+    PaintControlsDrawer,
+)
 from src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view import (
     PaintDashboardView,
     _MAX_MESSAGE_ROWS,
@@ -251,6 +254,13 @@ class TestPaintDashboardUi(unittest.TestCase):
         panel.set_device_state("pump", False)
 
         self.assertTrue(panel._off_buttons["pump"].isEnabled())
+
+    def test_press_offset_uses_tenth_millimeter_step(self) -> None:
+        panel = PaintQuickControlsPanel([])
+        drawer = PaintControlsDrawer([])
+
+        self.assertEqual(panel._offset.singleStep(), 0.1)
+        self.assertEqual(drawer._unmatched_offset.singleStep(), 0.1)
 
     def test_quick_off_command_is_disabled_only_while_command_is_busy(self) -> None:
         panel = PaintQuickControlsPanel(

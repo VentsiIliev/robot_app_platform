@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock
@@ -250,6 +251,19 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(25.0, restored.default_paint_velocity_percent)
         self.assertEqual(35.0, restored.default_paint_acceleration_percent)
         self.assertEqual(-4.5, restored.default_paint_offset_mm)
+
+    def test_press_offset_serializer_preserves_tenth_millimeter_value(self) -> None:
+        serializer = PaintProcessConfigSerializer()
+        settings = PaintProcessConfig(default_paint_offset_mm=-4.1)
+
+        encoded = serializer.to_dict(settings)
+        json_data = json.loads(json.dumps(encoded))
+        restored = serializer.from_dict(json_data)
+
+        self.assertIsInstance(encoded["default_paint_offset_mm"], float)
+        self.assertEqual(encoded["default_paint_offset_mm"], -4.1)
+        self.assertIsInstance(json_data["default_paint_offset_mm"], float)
+        self.assertEqual(restored.default_paint_offset_mm, -4.1)
 
     def test_process_settings_mapper_roundtrips_magazine_load_settings(self) -> None:
         base = PaintProcessConfig(magazine_load=PaintMagazineLoadConfig(enabled=False))

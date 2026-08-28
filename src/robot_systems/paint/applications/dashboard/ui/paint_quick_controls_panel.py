@@ -42,6 +42,7 @@ class PaintQuickControlsPanel(QWidget):
         self._velocity = self._make_field(0.1, 100.0, 1.0, "%")
         self._acceleration = self._make_field(0.1, 100.0, 1.0, "%")
         self._offset = self._make_field(-100.0, 100.0, 0.0, " mm")
+        self._offset.setSingleStep(0.1)
         self._velocity_label = QLabel()
         self._acceleration_label = QLabel()
         self._offset_label = QLabel()
