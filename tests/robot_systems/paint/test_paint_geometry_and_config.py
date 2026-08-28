@@ -24,12 +24,32 @@ from src.robot_systems.paint.processes.paint.config import (
 )
 from src.robot_systems.paint.processes.paint.paint_process_config_serializer import PaintProcessConfigSerializer
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
-from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import PaintContactExecutor
+from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import (
+    PaintContactExecutor,
+    _remove_projected_local_reversals,
+)
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
     _normalize_contact_motion_config,
 )
+
+
+class TestProjectedPathSanitizer(unittest.TestCase):
+    def test_removes_short_fold_and_preserves_retreat(self) -> None:
+        path = [
+            [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
+            [1.0, 0.1, 10.0, 0.0, 0.0, 1.0],
+            [-1.0, 0.0, 10.0, 0.0, 0.0, 2.0],
+            [-2.0, 0.0, 10.0, 0.0, 0.0, 3.0],
+            [-32.0, -30.0, 10.0, 0.0, 0.0, 3.0],
+        ]
+
+        cleaned = _remove_projected_local_reversals(path)
+
+        self.assertNotIn(path[1], cleaned)
+        self.assertEqual(cleaned[-1], path[-1])
+        self.assertEqual(len(cleaned), len(path) - 1)
 
 
 class TestPaintProcessConfig(unittest.TestCase):

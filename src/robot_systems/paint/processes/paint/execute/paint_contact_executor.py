@@ -42,6 +42,61 @@ def _shift_path_rotation(path: list[list[float]], rotation_index: int, shift_deg
     return shifted
 
 
+def _remove_projected_local_reversals(
+    path: list[list[float]],
+    *,
+    max_leg_mm: float = 3.0,
+    minimum_turn_deg: float = 170.0,
+) -> list[list[float]]:
+    """Remove short folds introduced when tangent rotation is projected about a pivot.
+
+    Source-contour sanitization cannot see these folds because rotating an offset
+    workpiece about the fixed paint pivot changes TCP XY.  Only local, near-U-turn
+    triples are removed here; approach/retreat transitions have a long leg and are
+    deliberately left untouched.
+    """
+    cleaned = [list(pose) for pose in path]
+    removed = 0
+    cosine_limit = float(np.cos(np.radians(float(minimum_turn_deg))))
+
+    while len(cleaned) >= 3:
+        xyz = np.asarray([pose[:3] for pose in cleaned], dtype=float)
+        incoming = xyz[1:-1] - xyz[:-2]
+        outgoing = xyz[2:] - xyz[1:-1]
+        incoming_len = np.linalg.norm(incoming, axis=1)
+        outgoing_len = np.linalg.norm(outgoing, axis=1)
+        denominator = incoming_len * outgoing_len
+        cosine = np.ones(len(incoming), dtype=float)
+        valid = denominator > 1e-9
+        cosine[valid] = np.einsum("ij,ij->i", incoming, outgoing)[valid] / denominator[valid]
+        candidates = np.flatnonzero(
+            valid
+            & (incoming_len <= float(max_leg_mm))
+            & (outgoing_len <= float(max_leg_mm))
+            & (cosine <= cosine_limit)
+        )
+        if len(candidates) == 0:
+            break
+
+        # Removing non-adjacent middles in one pass avoids index coupling. Repeat
+        # until no new fold is exposed by the bridge segments.
+        selected: list[int] = []
+        for candidate in candidates.tolist():
+            middle = int(candidate) + 1
+            if not selected or middle - selected[-1] > 1:
+                selected.append(middle)
+        for middle in reversed(selected):
+            del cleaned[middle]
+        removed += len(selected)
+
+    if removed:
+        _logger.warning(
+            "[PAINT_CONTACT] Removed %d projected local reversal waypoint(s) before command execution",
+            removed,
+        )
+    return cleaned
+
+
 def _tcp_to_tool_local_xy(job: dict, paint_config: PaintSimulationConfig) -> tuple[float, float] | None:
     """Return the local vector from configured robot TCP to selected tool point."""
     target_name = str(job.get("execution_target_point_name", "") or "").strip().lower()
@@ -211,6 +266,7 @@ class PaintContactExecutor:
 
             with timed_block(_logger, "paint_contact_job_prepare", label=f"{job_label}:build_command_path"):
                 command_pivot_path = owner._paint_contact_command_path(pivot_path)
+                command_pivot_path = _remove_projected_local_reversals(command_pivot_path)
                 if retreat_fn is not None:
                     command_pivot_path = retreat_fn(command_pivot_path)
                 elif append_retreat:
