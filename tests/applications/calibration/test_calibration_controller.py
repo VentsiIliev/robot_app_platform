@@ -127,6 +127,21 @@ class TestCalibrationControllerLoad(unittest.TestCase):
         ctrl.load()
         view.load_calibration_settings.assert_called_once()
 
+    def test_repeated_load_does_not_connect_calibrate_robot_twice(self):
+        ctrl, _, view, broker = _make_ctrl()
+
+        ctrl.load()
+        ctrl.load()
+
+        view.calibrate_robot_requested.connect.assert_called_once_with(ctrl._on_calibrate_robot)
+        self.assertEqual(
+            1,
+            sum(
+                call.args[0] == VisionTopics.LATEST_IMAGE
+                for call in broker.subscribe.call_args_list
+            ),
+        )
+
 
 class TestCalibrationControllerStop(unittest.TestCase):
 

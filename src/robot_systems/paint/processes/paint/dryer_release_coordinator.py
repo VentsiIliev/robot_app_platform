@@ -16,7 +16,7 @@ class DryerReleaseCoordinator:
         status_timeout_s: float = 10.0,
         status_poll_interval_s: float = 0.1,
         eject_confirmation_delay_s: float = 1.0,
-        next_position_confirmation_delay_s: float = 0.1,
+        next_position_confirmation_delay_s: float = 0.3,
     ) -> None:
         self._dryer = dryer
         self._status_timeout_s = max(0.0, float(status_timeout_s))
