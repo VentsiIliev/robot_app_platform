@@ -211,6 +211,53 @@ class WorkpieceEditorController(IApplicationController):
     def _connect_signals(self) -> None:
         self._view.save_requested.connect(self._on_save)
         self._view.execute_requested.connect(self._on_execute)
+        self._view.process_contour_requested.connect(self._on_process_contour)
+
+    def _on_process_contour(self) -> None:
+        """Preview the production-processed pixel contour without changing editor data."""
+        try:
+            editor_frame = self._view._editor
+            inner = editor_frame.contourEditor.editor_with_rulers.editor
+            editor_data = inner.workpiece_manager.export_editor_data()
+            form = getattr(editor_frame, "additional_data_form", None)
+            form_data = form.get_data() if form is not None and hasattr(form, "get_data") else {}
+            form_data = self._augment_form_data_with_editor_context(form_data)
+        except Exception as exc:
+            self._logger.exception("Process contour: failed to read editor data")
+            show_warning(self._view, self._t("Process Contour"), str(exc))
+            return
+
+        ok, msg = self._model.execute_workpiece(
+            {"form_data": form_data, "editor_data": editor_data},
+            skip_debug_plot=True,
+        )
+        if not ok:
+            self._logger.warning("Process contour failed: %s", msg)
+            show_warning(self._view, self._t("Process Contour"), msg)
+            return
+
+        processed_paths = self._model.get_last_raw_pixel_preview_paths()
+        overlays = [
+            np.asarray(path, dtype=np.float64).reshape(-1, 2)
+            for path in processed_paths
+            if len(path) >= 2
+        ]
+        if not overlays:
+            show_warning(
+                self._view,
+                self._t("Process Contour"),
+                self._t("The contour processor produced no preview points."),
+            )
+            return
+
+        # Verification contours are display-only. The raw Workpiece layer remains
+        # untouched and is still what save/matching reads from the editor.
+        self._view._editor.set_verification_contours(overlays)
+        self._logger.info(
+            "Process contour preview: paths=%d points=%d (raw editor contour unchanged)",
+            len(overlays),
+            sum(len(path) for path in overlays),
+        )
 
     def _set_verification_overlay_from_raw(self, raw: dict) -> None:
         try:

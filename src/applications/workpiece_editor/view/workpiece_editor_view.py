@@ -1,6 +1,6 @@
 import logging
 
-from PyQt6.QtWidgets import QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import pyqtSignal
 from contour_editor import BezierSegmentManager
 
@@ -21,6 +21,7 @@ class WorkpieceEditorView(IApplicationView):
 
     save_requested    = pyqtSignal(dict)
     execute_requested = pyqtSignal(dict)
+    process_contour_requested = pyqtSignal()
 
     def __init__(self, schema: WorkpieceFormSchema, segment_config: SegmentEditorConfig, workpiece_data_adapter: IWorkpieceDataAdapter, parent=None):
         self._schema          = schema
@@ -36,6 +37,15 @@ class WorkpieceEditorView(IApplicationView):
         layout.setSpacing(0)
         try:
             self._editor = self._build_editor()
+            action_row = QHBoxLayout()
+            action_row.addStretch(1)
+            self._process_contour_button = QPushButton("Process Contour")
+            self._process_contour_button.setToolTip(
+                "Run the production paint contour preparation and preview its pixel points"
+            )
+            self._process_contour_button.clicked.connect(self.process_contour_requested.emit)
+            action_row.addWidget(self._process_contour_button)
+            layout.addLayout(action_row)
             layout.addWidget(self._editor)
         except Exception as exc:
             _logger.exception("WorkpieceEditorView: failed to build editor")
