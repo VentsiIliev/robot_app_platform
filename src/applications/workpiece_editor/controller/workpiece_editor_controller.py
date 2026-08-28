@@ -236,7 +236,9 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, self._t("Process Contour"), msg)
             return
 
-        processed_paths = self._model.get_last_raw_pixel_preview_paths()
+        # This is deliberately the plan's pivot_source_path converted back to
+        # camera pixels: the exact ordered contour consumed by paint projection.
+        processed_paths = self._model.get_last_projection_source_camera_paths()
         overlays = [
             np.asarray(path, dtype=np.float64).reshape(-1, 2)
             for path in processed_paths
@@ -246,7 +248,7 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(
                 self._view,
                 self._t("Process Contour"),
-                self._t("The contour processor produced no preview points."),
+                self._t("No paint-projection source contour is available to preview."),
             )
             return
 
@@ -254,7 +256,7 @@ class WorkpieceEditorController(IApplicationController):
         # untouched and is still what save/matching reads from the editor.
         self._view._editor.set_verification_contours(overlays)
         self._logger.info(
-            "Process contour preview: paths=%d points=%d (raw editor contour unchanged)",
+            "Paint projection source preview: paths=%d points=%d (raw editor contour unchanged)",
             len(overlays),
             sum(len(path) for path in overlays),
         )

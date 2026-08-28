@@ -239,6 +239,48 @@ class TestWorkpieceEditorServiceSave(unittest.TestCase):
 
 class TestWorkpieceEditorServiceExecute(unittest.TestCase):
 
+    def test_projection_source_preview_uses_exact_job_pivot_source_path(self):
+        execution_plan = WorkpieceExecutionPlan(
+            workpiece={},
+            raw_paths=[],
+            prepared_paths=[],
+            curve_paths=[],
+            sampled_paths=[],
+            execution_jobs=[{
+                "execution_path": [[1.0, 2.0, 3.0, 0.0, 0.0, 4.0]],
+                "pivot_source_path": [
+                    [10.0, 20.0, 3.0, 0.0, 0.0, 40.0],
+                    [11.0, 21.0, 3.0, 0.0, 0.0, 41.0],
+                ],
+            }],
+            total_spline_pts=2,
+        )
+        transformer = MagicMock()
+        transformer.inverse_transform.side_effect = lambda x, y: (x + 100.0, y + 200.0)
+        service = WorkpieceEditorService(
+            storage=WorkpieceEditorStorage(
+                save_fn=lambda d: (True, ""),
+                update_fn=lambda s, d: (True, ""),
+            ),
+            services=WorkpieceEditorServices(
+                path_preparation_service=MagicMock(),
+                transformer=transformer,
+            ),
+            form_schema=_schema(),
+            segment_config=MagicMock(),
+        )
+        service._last_execution_plan = execution_plan
+
+        preview = service.get_last_projection_source_camera_paths()
+
+        self.assertEqual(
+            preview,
+            [[
+                [110.0, 220.0, 3.0, 0.0, 0.0, 40.0],
+                [111.0, 221.0, 3.0, 0.0, 0.0, 41.0],
+            ]],
+        )
+
     def test_returns_true_with_success_message(self):
         execution_plan = WorkpieceExecutionPlan(
             workpiece={},

@@ -265,6 +265,23 @@ class WorkpieceEditorService(IWorkpieceEditorService):
             return []
         return execution_plan.execution_paths()
 
+    def get_last_projection_source_camera_paths(self) -> list:
+        """Return the exact ordered contours consumed by paint projection, in pixels."""
+        execution_plan = self._active_process_plan()
+        transformer = self._current_transformer()
+        if execution_plan is None or transformer is None or not hasattr(transformer, "inverse_transform"):
+            return []
+        projection_sources = [
+            [list(point) for point in (
+                job.get("pivot_source_path")
+                or job.get("paint_contact_source_path")
+                or job.get("execution_path")
+                or []
+            )]
+            for job in execution_plan.execution_jobs
+        ]
+        return self._inverse_transform_paths(projection_sources, transformer)
+
     def get_last_camera_preview_paths(self) -> dict[str, list]:
         execution_plan = self._active_process_plan()
         transformer = self._current_transformer()
