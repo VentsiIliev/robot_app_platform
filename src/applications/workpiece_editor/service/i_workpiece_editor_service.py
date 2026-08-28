@@ -52,6 +52,9 @@ class IWorkpieceEditorService(ABC):
     def get_last_projection_source_camera_paths(self) -> list: ...
 
     @abstractmethod
+    def get_last_projection_source_paths(self) -> list: ...
+
+    @abstractmethod
     def get_last_camera_preview_paths(self) -> dict[str, list]: ...
 
     @abstractmethod

@@ -236,30 +236,64 @@ class WorkpieceEditorController(IApplicationController):
             show_warning(self._view, self._t("Process Contour"), msg)
             return
 
-        # This is deliberately the plan's pivot_source_path converted back to
-        # camera pixels: the exact ordered contour consumed by paint projection.
-        processed_paths = self._model.get_last_projection_source_camera_paths()
-        overlays = [
-            np.asarray(path, dtype=np.float64).reshape(-1, 2)
-            for path in processed_paths
-            if len(path) >= 2
-        ]
-        if not overlays:
+        # Plot pivot_source_path directly in robot millimetres. No camera inverse
+        # conversion or preview approximation is involved.
+        processed_paths = self._model.get_last_projection_source_paths()
+        if not any(len(path) >= 2 for path in processed_paths):
             show_warning(
                 self._view,
                 self._t("Process Contour"),
                 self._t("No paint-projection source contour is available to preview."),
             )
             return
-
-        # Verification contours are display-only. The raw Workpiece layer remains
-        # untouched and is still what save/matching reads from the editor.
-        self._view._editor.set_verification_contours(overlays)
+        self._show_projection_source_plot(processed_paths)
         self._logger.info(
             "Paint projection source preview: paths=%d points=%d (raw editor contour unchanged)",
-            len(overlays),
-            sum(len(path) for path in overlays),
+            len(processed_paths),
+            sum(len(path) for path in processed_paths),
         )
+
+    def _show_projection_source_plot(self, paths: list[list[list[float]]]) -> None:
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+        from matplotlib.figure import Figure
+
+        dialog = QDialog(self._view)
+        dialog.setWindowTitle("Exact Paint Projection Source Contour")
+        dialog.resize(1000, 800)
+        layout = QVBoxLayout(dialog)
+
+        figure = Figure(figsize=(9, 7), tight_layout=True)
+        canvas = FigureCanvasQTAgg(figure)
+        axis = figure.add_subplot(111)
+        total_points = 0
+        for index, path in enumerate(paths, start=1):
+            points = np.asarray(path, dtype=float)
+            if points.ndim != 2 or len(points) < 2 or points.shape[1] < 2:
+                continue
+            total_points += len(points)
+            label = f"Projection source {index} ({len(points)} points)"
+            axis.plot(points[:, 0], points[:, 1], "-", linewidth=1.0, label=label)
+            axis.scatter(points[:, 0], points[:, 1], s=10, zorder=3)
+            axis.scatter(points[0, 0], points[0, 1], s=70, color="green", zorder=4, label=f"Start {index}")
+            axis.scatter(points[-1, 0], points[-1, 1], s=70, color="red", zorder=4, label=f"End {index}")
+
+        axis.set_title(f"Exact pivot_source_path passed to paint projection — {total_points} points")
+        axis.set_xlabel("Robot X (mm)")
+        axis.set_ylabel("Robot Y (mm)")
+        axis.set_aspect("equal", adjustable="datalim")
+        axis.grid(True, alpha=0.3)
+        axis.legend(loc="best")
+        layout.addWidget(canvas)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.accept)
+        button_row.addWidget(close_button)
+        layout.addLayout(button_row)
+        self._preview_dialog = dialog
+        dialog.finished.connect(lambda _result: setattr(self, "_preview_dialog", None))
+        dialog.show()
 
     def _set_verification_overlay_from_raw(self, raw: dict) -> None:
         try:

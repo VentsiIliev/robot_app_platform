@@ -87,6 +87,9 @@ class StubWorkpieceEditorService(IWorkpieceEditorService):
     def get_last_projection_source_camera_paths(self) -> list:
         return []
 
+    def get_last_projection_source_paths(self) -> list:
+        return []
+
     def get_last_camera_preview_paths(self) -> dict[str, list]:
         return {}
 

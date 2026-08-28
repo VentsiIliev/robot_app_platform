@@ -273,6 +273,8 @@ class TestWorkpieceEditorServiceExecute(unittest.TestCase):
 
         preview = service.get_last_projection_source_camera_paths()
 
+        robot_preview = service.get_last_projection_source_paths()
+
         self.assertEqual(
             preview,
             [[
@@ -280,6 +282,7 @@ class TestWorkpieceEditorServiceExecute(unittest.TestCase):
                 [111.0, 221.0, 3.0, 0.0, 0.0, 41.0],
             ]],
         )
+        self.assertEqual(robot_preview, [execution_plan.execution_jobs[0]["pivot_source_path"]])
 
     def test_returns_true_with_success_message(self):
         execution_plan = WorkpieceExecutionPlan(

@@ -282,6 +282,21 @@ class WorkpieceEditorService(IWorkpieceEditorService):
         ]
         return self._inverse_transform_paths(projection_sources, transformer)
 
+    def get_last_projection_source_paths(self) -> list:
+        """Return exact robot-space paths passed to paint-contact projection."""
+        execution_plan = self._active_process_plan()
+        if execution_plan is None:
+            return []
+        return [
+            [list(point) for point in (
+                job.get("pivot_source_path")
+                or job.get("paint_contact_source_path")
+                or job.get("execution_path")
+                or []
+            )]
+            for job in execution_plan.execution_jobs
+        ]
+
     def get_last_camera_preview_paths(self) -> dict[str, list]:
         execution_plan = self._active_process_plan()
         transformer = self._current_transformer()
@@ -300,6 +315,18 @@ class WorkpieceEditorService(IWorkpieceEditorService):
     def _inverse_transform_paths(paths: list[list[list[float]]], transformer) -> list[list[list[float]]]:
         inverse_paths: list[list[list[float]]] = []
         for path in paths:
+            batch_inverse = getattr(transformer, "inverse_transform_points", None)
+            if callable(batch_inverse) and path:
+                try:
+                    xy = np.asarray([[float(point[0]), float(point[1])] for point in path], dtype=float)
+                    pixels = np.asarray(batch_inverse(xy), dtype=float).reshape(-1, 2)
+                    inverse_paths.append([
+                        [float(pixel[0]), float(pixel[1]), *[float(value) for value in point[2:]]]
+                        for point, pixel in zip(path, pixels)
+                    ])
+                    continue
+                except Exception:
+                    _logger.debug("Batch inverse preview transform failed; using point fallback", exc_info=True)
             inverse_path: list[list[float]] = []
             for point in path:
                 if len(point) < 2:

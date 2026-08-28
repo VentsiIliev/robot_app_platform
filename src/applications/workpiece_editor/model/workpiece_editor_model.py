@@ -52,6 +52,9 @@ class WorkpieceEditorModel(IApplicationModel):
     def get_last_projection_source_camera_paths(self) -> list:
         return self._service.get_last_projection_source_camera_paths()
 
+    def get_last_projection_source_paths(self) -> list:
+        return self._service.get_last_projection_source_paths()
+
     def get_last_camera_preview_paths(self) -> dict[str, list]:
         return self._service.get_last_camera_preview_paths()
 

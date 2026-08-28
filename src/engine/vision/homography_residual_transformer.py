@@ -163,3 +163,46 @@ class HomographyResidualTransformer(ICoordinateTransformer):
 
         result = minimize(_sq_error, cam_init, method="L-BFGS-B", options={"ftol": 1e-14, "gtol": 1e-9})
         return float(result.x[0]), float(result.x[1])
+
+    def inverse_transform_points(self, robot_xy_points) -> np.ndarray:
+        """Batch inverse for dense editor previews without one optimizer per point."""
+        targets = np.asarray(robot_xy_points, dtype=np.float64).reshape(-1, 2)
+        if len(targets) == 0:
+            return np.empty((0, 2), dtype=np.float64)
+        if self._fake_mode:
+            return np.asarray([self._fake_inverse_transform(x, y) for x, y in targets], dtype=float)
+        if self._model is None:
+            raise RuntimeError("Homography residual model not loaded")
+
+        h_inv = np.linalg.inv(np.asarray(self._model.homography_matrix, dtype=np.float64))
+        homogeneous = np.column_stack([targets, np.ones(len(targets), dtype=float)])
+        initial = homogeneous @ h_inv.T
+        camera = initial[:, :2] / initial[:, 2:3]
+
+        def predict_many(points: np.ndarray) -> np.ndarray:
+            return np.asarray([self._model.predict(point) for point in points], dtype=np.float64)
+
+        # Independent damped Newton updates, vectorized across the entire contour.
+        epsilon_px = 0.05
+        for _ in range(8):
+            prediction = predict_many(camera)
+            error = prediction - targets
+            if float(np.max(np.linalg.norm(error, axis=1))) <= 1e-7:
+                break
+            shifted_x = camera.copy()
+            shifted_y = camera.copy()
+            shifted_x[:, 0] += epsilon_px
+            shifted_y[:, 1] += epsilon_px
+            jac_x = (predict_many(shifted_x) - prediction) / epsilon_px
+            jac_y = (predict_many(shifted_y) - prediction) / epsilon_px
+            determinant = jac_x[:, 0] * jac_y[:, 1] - jac_y[:, 0] * jac_x[:, 1]
+            valid = np.abs(determinant) > 1e-12
+            delta = np.zeros_like(camera)
+            delta[valid, 0] = (
+                jac_y[valid, 1] * error[valid, 0] - jac_y[valid, 0] * error[valid, 1]
+            ) / determinant[valid]
+            delta[valid, 1] = (
+                -jac_x[valid, 1] * error[valid, 0] + jac_x[valid, 0] * error[valid, 1]
+            ) / determinant[valid]
+            camera[valid] -= np.clip(delta[valid], -5.0, 5.0)
+        return camera
