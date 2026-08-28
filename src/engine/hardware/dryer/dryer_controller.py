@@ -116,17 +116,37 @@ class DryerController(IDryerController):
         return True
 
     def get_state(self) -> DryerState:
-        try:
-            raw_status = self._transport.read_register(self._register_map.status)
-        except Exception as exc:
-            self._logger.exception(
-                "Dryer status read failed register=%d",
-                self._register_map.status,
-            )
-            return DryerState(
-                is_healthy=False,
-                communication_errors=[str(exc)],
-            )
+        total_attempts = self._max_retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, total_attempts + 1):
+            try:
+                raw_status = self._transport.read_register(self._register_map.status)
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt < total_attempts:
+                    self._logger.warning(
+                        "Dryer status read failed; retrying attempt=%d/%d register=%d "
+                        "error_type=%s error=%s",
+                        attempt + 1,
+                        total_attempts,
+                        self._register_map.status,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    if self._status_poll_interval_s:
+                        time.sleep(self._status_poll_interval_s)
+                    continue
+                self._logger.error(
+                    "Dryer status read failed after %d attempts register=%d",
+                    total_attempts,
+                    self._register_map.status,
+                    exc_info=True,
+                )
+                return DryerState(
+                    is_healthy=False,
+                    communication_errors=[str(last_error)],
+                )
         raw_status = int(raw_status)
         state = DryerState.from_raw_status(raw_status, self._statuses)
         self._logger.debug(

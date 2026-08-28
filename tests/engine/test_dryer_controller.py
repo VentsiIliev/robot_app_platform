@@ -52,6 +52,39 @@ class TestDryerController(unittest.TestCase):
         self.assertIn("eject_done=False", output)
         self.assertIn("next_position_done=True", output)
 
+    def test_status_read_retries_using_configured_max_retries(self) -> None:
+        transport = MagicMock()
+        transport.read_register.side_effect = [
+            IOError("no answer"),
+            int(DryerStatus.READY | DryerStatus.EJECT_DONE),
+        ]
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+        )
+
+        state = controller.get_state()
+
+        self.assertTrue(state.is_healthy)
+        self.assertTrue(state.eject_done)
+        self.assertEqual(transport.read_register.call_count, 2)
+
+    def test_status_read_reports_unhealthy_after_retries_are_exhausted(self) -> None:
+        transport = MagicMock()
+        transport.read_register.side_effect = IOError("no answer")
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+        )
+
+        state = controller.get_state()
+
+        self.assertFalse(state.is_healthy)
+        self.assertEqual(state.communication_errors, ["no answer"])
+        self.assertEqual(transport.read_register.call_count, 3)
+
     def test_command_replaces_stale_payload_command(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport)
