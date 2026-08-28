@@ -108,6 +108,16 @@ class TestPaintApplicationWiring(unittest.TestCase):
         kwargs["source_contour_processor"](np.asarray([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], dtype=float), contour_settings)
         self.assertEqual(15.0, contour_settings["path_tangent_lookahead_mm"])
         self.assertEqual(5.0, contour_settings["path_tangent_deadband_deg"])
+        from src.robot_systems.paint import paint_system_config
+        raw_robot_path = np.asarray([
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
+        ])
+        with patch.object(paint_system_config, "BYPASS_CONTOUR_PREPARATION", True):
+            bypassed = kwargs["contour_processor"](raw_robot_path, {})
+        self.assertEqual("diagnostic_raw_transformed_points", bypassed["method"])
+        self.assertEqual([[1.0, 2.0], [7.0, 8.0]], bypassed["prepared_xy"])
+        self.assertEqual(bypassed["prepared_xy"], bypassed["curve_xy"])
         navigation.get_group_position.assert_called_once()
 
     def test_build_paint_path_preparation_service_falls_back_when_robot_config_values_are_unusable(self):

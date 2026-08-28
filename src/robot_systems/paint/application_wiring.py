@@ -430,7 +430,12 @@ def _build_paint_path_preparation_service(robot_system):
                 "cleanup are DISABLED; using %d transformed points directly",
                 len(path_pts),
             )
-            return [list(point) for point in path_pts]
+            unchanged_xy = np.asarray(path_pts, dtype=float)[:, :2].copy()
+            return {
+                "method": "diagnostic_raw_transformed_points",
+                "prepared_xy": unchanged_xy.tolist(),
+                "curve_xy": unchanged_xy.tolist(),
+            }
         resample_start = perf_counter()
         resampled_xy = resample_contour_xy(
             np.asarray(path_pts, dtype=float)[:, :2],
