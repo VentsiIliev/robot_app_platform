@@ -276,6 +276,38 @@ class TestDryerController(unittest.TestCase):
 
         sleep.assert_called_once_with(0.03)
 
+    def test_eject_retries_using_configured_max_retries(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = [IOError("no answer"), None]
+        transport.read_register.return_value = int(DryerStatus.READY)
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
+        )
+
+        self.assertTrue(controller.eject())
+
+        self.assertEqual(transport.write_registers.call_count, 2)
+        transport.read_register.assert_called_once_with(0)
+
+    def test_eject_does_not_retry_when_status_confirms_lost_ack(self) -> None:
+        transport = MagicMock()
+        transport.write_registers.side_effect = IOError("ack lost")
+        transport.read_register.return_value = int(DryerStatus.EJECT)
+        controller = DryerController(
+            transport,
+            max_retries=2,
+            status_poll_interval_s=0.0,
+            command_settle_s=0.0,
+        )
+
+        self.assertTrue(controller.eject())
+
+        self.assertEqual(transport.write_registers.call_count, 1)
+        transport.read_register.assert_called_once_with(0)
+
     def test_acceleration_is_transmitted_in_integer_tenths(self) -> None:
         transport = MagicMock()
         controller = DryerController(transport, DryerConfig())

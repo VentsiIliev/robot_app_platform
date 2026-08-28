@@ -169,7 +169,54 @@ class DryerController(IDryerController):
         return self.eject(data)
 
     def eject(self, data: DryerWriteData | None = None) -> bool:
-        return self._write_command(self._commands["eject"], data)
+        payload = data or self._default_write_data()
+        command = int(self._commands["eject"])
+        values = DryerWriteData(**{**payload.__dict__, "command": command}).to_register_values()
+        total_attempts = self._max_retries + 1
+        for attempt in range(1, total_attempts + 1):
+            try:
+                self._transport.write_registers(self._register_map.status, values)
+            except Exception as exc:
+                self._logger.error(
+                    "[DRYER] EJECT FC16 write failed attempt=%d/%d command=%#04x "
+                    "error_type=%s error=%s",
+                    attempt,
+                    total_attempts,
+                    command,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=True,
+                )
+                if self._eject_command_was_accepted_without_acknowledgement():
+                    self._logger.warning(
+                        "[DRYER] EJECT acknowledgement missing, but ejecting status "
+                        "confirms command acceptance"
+                    )
+                    return True
+                if attempt < total_attempts:
+                    self._logger.warning(
+                        "[DRYER] Retrying EJECT FC16 write attempt=%d/%d",
+                        attempt + 1,
+                        total_attempts,
+                    )
+                    continue
+                return False
+            self._logger.info(
+                "Dryer write ok start_register=%d values=%s",
+                self._register_map.status,
+                values,
+            )
+            if self._command_settle_s:
+                time.sleep(self._command_settle_s)
+            return True
+        return False
+
+    def _eject_command_was_accepted_without_acknowledgement(self) -> bool:
+        """Avoid repeating EJECT when only its Modbus acknowledgement was lost."""
+        if self._status_poll_interval_s:
+            time.sleep(self._status_poll_interval_s)
+        state = self.get_state()
+        return bool(state.is_healthy and state.ejecting)
 
     def open_plate(self, data: DryerWriteData | None = None) -> bool:
         return self._write_command(self._commands["close_plate"], data)
