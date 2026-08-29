@@ -21,6 +21,9 @@ from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODES,
 )
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
+from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
+    resolve_transition,
+)
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_CALIBRATION,
 )
@@ -360,6 +363,11 @@ class PaintPickupExecutor:
 
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
+        approach_strategy, speed_transition = resolve_transition(
+            self._owner,
+            source="calibration_vision",
+            approach_z_mm=float(approach_waypoints[-1].pose[2]),
+        )
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -384,6 +392,8 @@ class PaintPickupExecutor:
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
+                initial_linear_mm_s=speed_transition.initial_linear_mm_s,
+                slowdown_z_mm=speed_transition.slowdown_z_mm,
             ),
             retract=ServoRetractConfig(
                 distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),
@@ -449,7 +459,6 @@ class PaintPickupExecutor:
                     f"vacuum pump OFF also failed: {off_msg}"
                 )
             return False
-
         current_pose = self._wait_for_stable_pose()
         if current_pose is None:
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
@@ -471,11 +480,14 @@ class PaintPickupExecutor:
         combined_segments = build_paint_pickup_segments(combined_waypoints)
         combined_segments.extend(prepared_continuation_segments or [])
         if not combined_segments:
+            approach_strategy.record_success("calibration_vision", result.contact_pose)
             return True
         ok = self._owner._motion.move_ordered_pickup_sequence(
             "Pickup lift and continuation after completed Servo retract",
             combined_segments,
         )
+        if ok:
+            approach_strategy.record_success("calibration_vision", result.contact_pose)
         return bool(ok)
 
     def _read_fresh_pose(self) -> list[float] | None:

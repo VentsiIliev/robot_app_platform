@@ -35,6 +35,8 @@ class ServoUntilConditionConfig:
     disable_collision_checking: bool = False
     maximum_travel_mm: float | None = None
     minimum_z_mm: float | None = None
+    initial_linear_mm_s: float | None = None
+    slowdown_z_mm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class ServoUntilConditionResult:
     retracted: bool = False
     retract_failed: bool = False
     stop_failed: bool = False
+    contact_pose: tuple[float, ...] | None = None
 
 
 class ServoUntilConditionProcedure:
@@ -196,7 +199,11 @@ class ServoUntilConditionProcedure:
                 )
 
             travel_start_pose = None
-            if cfg.maximum_travel_mm is not None or cfg.minimum_z_mm is not None:
+            if (
+                cfg.maximum_travel_mm is not None
+                or cfg.minimum_z_mm is not None
+                or cfg.slowdown_z_mm is not None
+            ):
                 travel_start_pose = self._read_current_pose()
                 if travel_start_pose is None:
                     return self._result(
@@ -221,8 +228,11 @@ class ServoUntilConditionProcedure:
                         message="minimum_z_reached_before_servo",
                     )
 
+            fast_phase_active = cfg.initial_linear_mm_s is not None
             servo_kwargs = {
-                "linear_mm_s": cfg.linear_mm_s if cfg.axis.value <= 3 else None,
+                "linear_mm_s": (
+                    cfg.initial_linear_mm_s if fast_phase_active else cfg.linear_mm_s
+                ) if cfg.axis.value <= 3 else None,
                 "angular_deg_s": cfg.angular_deg_s if cfg.axis.value > 3 else None,
                 "frame": cfg.frame,
                 "tool": cfg.tool,
@@ -296,6 +306,7 @@ class ServoUntilConditionProcedure:
                     )
                     started = False
                     collision_override_held = keep_override_for_retract
+                    contact_pose = self._read_current_pose()
                     if not self._return_code_ok(stop_ret):
                         self._stop_motion()
                         return self._result(
@@ -307,6 +318,7 @@ class ServoUntilConditionProcedure:
                             condition_failed=False,
                             guard_triggered=False,
                             stop_failed=True,
+                            contact_pose=contact_pose,
                             message=f"servo_stop_failed:{stop_ret}",
                         )
                     if retract is not None:
@@ -330,6 +342,7 @@ class ServoUntilConditionProcedure:
                                 condition_failed=False,
                                 guard_triggered=retract_message.startswith("stop_guard"),
                                 retract_failed=True,
+                                contact_pose=contact_pose,
                                 message=retract_message,
                             )
                     return self._result(
@@ -341,6 +354,7 @@ class ServoUntilConditionProcedure:
                         condition_failed=False,
                         guard_triggered=False,
                         retracted=retract is not None,
+                        contact_pose=contact_pose,
                         message="condition_detected_and_retracted" if retract is not None else "condition_detected",
                     )
 
@@ -392,6 +406,51 @@ class ServoUntilConditionProcedure:
                             condition_failed=False,
                             guard_triggered=True,
                             message="maximum_travel_reached",
+                        )
+
+                    if fast_phase_active and self._slowdown_reached(cfg, current_pose):
+                        stop_ret = self._stop_servo(
+                            restore_collision_checking=not cfg.disable_collision_checking
+                        )
+                        started = False
+                        collision_override_held = bool(cfg.disable_collision_checking)
+                        if not self._return_code_ok(stop_ret):
+                            self._stop_motion()
+                            return self._result(
+                                started_at,
+                                success=False,
+                                detected=False,
+                                timed_out=False,
+                                start_failed=False,
+                                condition_failed=False,
+                                guard_triggered=False,
+                                stop_failed=True,
+                                message=f"slowdown_servo_stop_failed:{stop_ret}",
+                            )
+                        servo_kwargs["linear_mm_s"] = cfg.linear_mm_s
+                        start_ret = self._robot.start_servo_jog(
+                            cfg.axis, cfg.direction, **servo_kwargs
+                        )
+                        if not self._return_code_ok(start_ret):
+                            return self._result(
+                                started_at,
+                                success=False,
+                                detected=False,
+                                timed_out=False,
+                                start_failed=True,
+                                condition_failed=False,
+                                guard_triggered=False,
+                                message=f"slowdown_servo_start_failed:{start_ret}",
+                            )
+                        started = True
+                        collision_override_held = False
+                        fast_phase_active = False
+                        _logger.info(
+                            "[SERVO_UNTIL_CONDITION] switched to contact speed: "
+                            "live_z=%.3f slowdown_z=%.3f linear_mm_s=%.3f",
+                            current_pose[2],
+                            float(cfg.slowdown_z_mm),
+                            float(cfg.linear_mm_s),
                         )
 
                 if stop_guard is not None:
@@ -724,7 +783,9 @@ class ServoUntilConditionProcedure:
         try:
             getter = getattr(self._robot, "get_current_position_fresh", None)
             if not callable(getter):
-                getter = self._robot.get_current_position
+                getter = getattr(self._robot, "get_current_position", None)
+            if not callable(getter):
+                return None
             return self._valid_pose(getter())
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] current position read failed")
@@ -837,7 +898,35 @@ class ServoUntilConditionProcedure:
                 return False, "invalid_minimum_z"
             if not math.isfinite(minimum_z):
                 return False, "invalid_minimum_z"
+        if (cfg.initial_linear_mm_s is None) != (cfg.slowdown_z_mm is None):
+            return False, "incomplete_slowdown_config"
+        if cfg.initial_linear_mm_s is not None:
+            try:
+                initial_speed = float(cfg.initial_linear_mm_s)
+                slowdown_z = float(cfg.slowdown_z_mm)
+            except (TypeError, ValueError):
+                return False, "invalid_slowdown_config"
+            if (
+                axis_value != 3
+                or cfg.direction != Direction.MINUS
+                or not math.isfinite(initial_speed)
+                or initial_speed <= 0.0
+                or not math.isfinite(slowdown_z)
+            ):
+                return False, "invalid_slowdown_config"
         return True, ""
+
+    @staticmethod
+    def _slowdown_reached(
+        cfg: ServoUntilConditionConfig,
+        current_pose: Sequence[float],
+    ) -> bool:
+        return bool(
+            cfg.slowdown_z_mm is not None
+            and cfg.axis == RobotAxis.Z
+            and cfg.direction == Direction.MINUS
+            and float(current_pose[2]) <= float(cfg.slowdown_z_mm)
+        )
 
     @staticmethod
     def _return_code_ok(ret) -> bool:
@@ -862,6 +951,7 @@ class ServoUntilConditionProcedure:
         retracted: bool = False,
         retract_failed: bool = False,
         stop_failed: bool = False,
+        contact_pose: Sequence[float] | None = None,
     ) -> ServoUntilConditionResult:
         return ServoUntilConditionResult(
             success=bool(success),
@@ -873,6 +963,11 @@ class ServoUntilConditionProcedure:
             retracted=bool(retracted),
             retract_failed=bool(retract_failed),
             stop_failed=bool(stop_failed),
+            contact_pose=(
+                tuple(float(value) for value in contact_pose[:6])
+                if contact_pose is not None and len(contact_pose) >= 6
+                else None
+            ),
             elapsed_s=max(0.0, time.monotonic() - started_at),
             message=str(message),
         )

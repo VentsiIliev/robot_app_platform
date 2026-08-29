@@ -17,6 +17,10 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     build_paint_pickup_segments,
 )
+from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
+    LearnedHeightServoApproachStrategy,
+    ServoPickupApproachSelector,
+)
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
@@ -118,6 +122,49 @@ class _ConditionLostAfterDetection:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
+    def test_learned_height_strategy_uses_first_success_only_on_next_pickup(self):
+        strategy = LearnedHeightServoApproachStrategy()
+
+        first = strategy.resolve(
+            source="magazine_vision",
+            approach_z_mm=100.0,
+            minimum_z_mm=0.0,
+            contact_linear_mm_s=10.0,
+            fast_linear_mm_s=100.0,
+            clearance_mm=10.0,
+        )
+        strategy.record_success("magazine_vision", (1.0, 2.0, 30.0, 0.0, 0.0, 0.0))
+        second = strategy.resolve(
+            source="magazine_vision",
+            approach_z_mm=100.0,
+            minimum_z_mm=0.0,
+            contact_linear_mm_s=10.0,
+            fast_linear_mm_s=100.0,
+            clearance_mm=10.0,
+        )
+
+        self.assertIsNone(first.initial_linear_mm_s)
+        self.assertEqual(100.0, second.initial_linear_mm_s)
+        self.assertEqual(40.0, second.slowdown_z_mm)
+
+    def test_learned_height_is_isolated_by_source_and_reset_when_strategy_changes(self):
+        selector = ServoPickupApproachSelector()
+        learned = selector.select("learned_height")
+        learned.record_success("magazine_fixed", (0.0, 0.0, 20.0, 0.0, 0.0, 0.0))
+        vision = learned.resolve(
+            source="magazine_vision", approach_z_mm=100.0, minimum_z_mm=0.0,
+            contact_linear_mm_s=10.0, fast_linear_mm_s=100.0, clearance_mm=10.0,
+        )
+        selector.select("full_servo")
+        learned_again = selector.select("learned_height")
+        fixed = learned_again.resolve(
+            source="magazine_fixed", approach_z_mm=100.0, minimum_z_mm=0.0,
+            contact_linear_mm_s=10.0, fast_linear_mm_s=100.0, clearance_mm=10.0,
+        )
+
+        self.assertIsNone(vision.initial_linear_mm_s)
+        self.assertIsNone(fixed.initial_linear_mm_s)
+
     def test_calibration_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
         robot.position[2] = 100.0
@@ -384,6 +431,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
+        self.assertEqual(100.0, motion.sequences[1][1][0]["position"][2])
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 100.0)
         self.assertEqual(robot.started[1][1]["linear_mm_s"], 25.0)
         self.assertEqual(robot.started[1][0][1].name, "PLUS")

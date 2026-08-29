@@ -98,6 +98,44 @@ class UnhealthyVacuumSensor:
 
 
 class TestServoUntilConditionProcedure(unittest.TestCase):
+    def test_descending_servo_switches_from_fast_to_contact_speed_and_captures_pose(self):
+        class TransitionRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.positions = [
+                    [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 60.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 49.0, 0.0, 0.0, 0.0],
+                ]
+
+            def get_current_position(self):
+                if len(self.positions) > 1:
+                    return self.positions.pop(0)
+                return list(self.positions[0])
+
+            def stop_motion(self):
+                return True
+
+        robot = TransitionRobot()
+        result = ServoUntilConditionProcedure(
+            robot,
+            _ConditionSequence(False, False, False, False, True),
+        ).run(
+            config=ServoUntilConditionConfig(
+                linear_mm_s=10.0,
+                initial_linear_mm_s=100.0,
+                slowdown_z_mm=50.0,
+                minimum_z_mm=0.0,
+                poll_interval_s=0.001,
+                timeout_s=0.1,
+            )
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual([100.0, 10.0], [item["linear_mm_s"] for item in robot.started])
+        self.assertEqual(2, robot.stopped)
+        self.assertEqual(49.0, result.contact_pose[2])
+
     def test_successful_detection_retracts_up_to_reference_z(self):
         class RetractRobot(FakeRobot):
             def __init__(self):

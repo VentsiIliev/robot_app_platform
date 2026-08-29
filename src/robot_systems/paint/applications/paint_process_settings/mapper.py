@@ -225,6 +225,9 @@ class PaintProcessSettingsMapper:
             "staging_detach_perpendicular_axis_offset_mm": staging.detach_perpendicular_axis_offset_mm,
             "pickup_contact_mode": pickup.pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
+            "pickup_servo_contact_approach_strategy": pickup.servo_contact_approach_strategy,
+            "pickup_servo_contact_fast_linear_mm_s": pickup.servo_contact_fast_linear_mm_s,
+            "pickup_servo_contact_slowdown_clearance_mm": pickup.servo_contact_slowdown_clearance_mm,
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
             "pickup_servo_contact_retract_distance_mm": pickup.servo_contact_retract_distance_mm,
             "pickup_servo_contact_retract_linear_mm_s": pickup.servo_contact_retract_linear_mm_s,
@@ -373,6 +376,24 @@ class PaintProcessSettingsMapper:
             ),
             servo_contact_linear_mm_s=float(
                 flat.get("pickup_servo_contact_linear_mm_s", base.pickup_motion.servo_contact_linear_mm_s)
+            ),
+            servo_contact_approach_strategy=str(
+                flat.get(
+                    "pickup_servo_contact_approach_strategy",
+                    base.pickup_motion.servo_contact_approach_strategy,
+                )
+            ),
+            servo_contact_fast_linear_mm_s=float(
+                flat.get(
+                    "pickup_servo_contact_fast_linear_mm_s",
+                    base.pickup_motion.servo_contact_fast_linear_mm_s,
+                )
+            ),
+            servo_contact_slowdown_clearance_mm=float(
+                flat.get(
+                    "pickup_servo_contact_slowdown_clearance_mm",
+                    base.pickup_motion.servo_contact_slowdown_clearance_mm,
+                )
             ),
             servo_contact_min_z_mm=float(
                 flat.get("pickup_servo_contact_min_z_mm", base.pickup_motion.servo_contact_min_z_mm)
