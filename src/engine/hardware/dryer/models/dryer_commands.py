@@ -3,9 +3,9 @@ from typing import Mapping
 
 
 class DryerCommand(IntFlag):
-    NEXT_POSITION = 0
-    EJECT = 1
-    CLOSE_PLATE = 2
+    NEXT_POSITION = 1
+    EJECT = 2
+    CLOSE_PLATE = 4
 
     # Compatibility aliases for callers that still expose the former UI names.
     MOVE_SERVOS = EJECT
