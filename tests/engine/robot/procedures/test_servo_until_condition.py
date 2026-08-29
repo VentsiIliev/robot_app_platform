@@ -248,6 +248,41 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertTrue(result.retracted)
 
+    def test_target_pose_retract_computes_limit_from_required_distance_and_margin(self):
+        class RetractRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 42.9, 0.0, 0.0, 0.0]
+
+            def start_servo_jog(self, axis, direction, *args, **kwargs):
+                ret = super().start_servo_jog(axis, direction, *args, **kwargs)
+                if direction == Direction.PLUS:
+                    self.position[2] = 110.021
+                return ret
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def stop_motion(self):
+                return True
+
+        result = ServoUntilConditionProcedure(
+            RetractRobot(), _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                target_pose=[0.0, 0.0, 110.021, 0.0, 0.0, 0.0],
+                linear_mm_s=250.0,
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+                maximum_distance_mm=50.0,
+                safety_margin_mm=10.0,
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.retracted)
+
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
         condition = ManualCondition()

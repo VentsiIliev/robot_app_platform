@@ -51,6 +51,7 @@ class ServoRetractConfig:
     timeout_s: float = 10.0
     position_tolerance_mm: float = 2.0
     maximum_distance_mm: float = 500.0
+    safety_margin_mm: float | None = None
     progress_timeout_s: float = 1.5
 
 
@@ -529,8 +530,13 @@ class ServoUntilConditionProcedure:
                 return False, "invalid_retract_pose"
             target_z = target_pose[2]
         tolerance = max(0.0, float(retract.position_tolerance_mm))
-        maximum_distance = max(0.0, float(retract.maximum_distance_mm))
         requested_distance = target_z - start_z
+        safety_margin = retract.safety_margin_mm
+        if safety_margin is None:
+            maximum_distance = max(0.0, float(retract.maximum_distance_mm))
+        else:
+            safety_margin = max(0.0, float(safety_margin))
+            maximum_distance = requested_distance + safety_margin
         if not math.isfinite(float(retract.linear_mm_s)) or float(retract.linear_mm_s) <= 0.0:
             return False, "invalid_retract_linear_speed"
         if requested_distance <= tolerance:

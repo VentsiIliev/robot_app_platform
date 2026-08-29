@@ -129,6 +129,7 @@
     "Servo Approach Strategy": "Стратегия за серво приближаване",
     "Fast Descent Speed": "Скорост на бързо спускане",
     "Slowdown Clearance": "Отстояние за забавяне",
+    "Servo Retract Safety Margin": "Предпазен резерв при серво оттегляне",
     "Fixed Pickup Movement Group": "Фиксирана група за движение при вземане",
     "Fixed Pickup Position Tolerance": "Допуск за фиксираната позиция на вземане",
     "Fixed Pickup Orientation Tolerance": "Допуск за ориентацията при фиксирано вземане",
