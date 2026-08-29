@@ -215,6 +215,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
     def test_magazine_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
+        robot.support_prepared = True
         robot.position[2] = 100.0
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
@@ -252,6 +253,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(NO_WORKPIECE_AT_MAGAZINE, message)
         self.assertEqual(1, motion.vacuum_off)
+        self.assertEqual(["prepared-1"], robot.discarded_prepared)
         self.assertEqual(
             "Returning to magazine pickup origin after no contact",
             motion.sequences[-1][1][0]["label"],
@@ -261,6 +263,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
         robot = _FakeRobot()
         robot.support_prepared = True
+        robot.position = [1.0, 2.0, 90.0, 0.0, 0.0, 3.0]
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
             servo_contact_linear_mm_s=100.0,
@@ -298,19 +301,23 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertTrue(ok, message)
         self.assertEqual(robot.ptp_moves, [])
-        self.assertEqual(robot.prepared, [])
-        self.assertEqual(robot.executed_prepared, [])
-        self.assertEqual(
-            [segment["label"] for segment in motion.sequences[1][1]],
-            ["Raising magazine workpiece to safe transfer clearance", "release"],
-        )
-        self.assertEqual(motion.sequences[1][1][0]["blendR"], 10.0)
+        self.assertEqual(len(robot.prepared), 1)
+        prepared_segments, prepared_start, _tool, _user, prepared_kwargs = robot.prepared[0]
+        self.assertEqual([segment["label"] for segment in prepared_segments], ["release"])
+        self.assertEqual([1, 2, 100, 0, 0, 3], prepared_start)
+        self.assertTrue(prepared_kwargs["allow_servo_during_prepare"])
+        self.assertEqual(robot.executed_prepared, ["prepared-1"])
+        self.assertEqual([label for label, _segments in motion.sequences], [
+            "Magazine pickup approach before servo contact",
+        ])
         self.assertEqual(robot.started[1][1]["linear_mm_s"], 250.0)
         self.assertTrue(robot.started[0][1]["disable_collision_checking"])
         self.assertTrue(robot.started[1][1]["disable_collision_checking"])
 
     def test_magazine_lost_after_retract_turns_vacuum_off(self):
         robot = _FakeRobot()
+        robot.support_prepared = True
+        robot.position[2] = 90.0
         motion = _FakeMotion()
         pickup_motion = SimpleNamespace(
             servo_contact_linear_mm_s=100.0,
@@ -347,6 +354,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual("Magazine workpiece is no longer detected after Servo retract", message)
         self.assertEqual(1, motion.vacuum_off)
+        self.assertEqual(["prepared-1"], robot.discarded_prepared)
 
     def test_planned_pickup_keeps_full_existing_waypoint_sequence(self):
         motion = _FakeMotion()

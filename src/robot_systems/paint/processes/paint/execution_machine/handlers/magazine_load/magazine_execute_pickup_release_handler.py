@@ -264,134 +264,206 @@ def _execute_magazine_servo_contact_pickup_release(
         if not ok:
             return False, msg
 
-    contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
-    minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
-    source = "magazine_fixed" if expected_start_pose is not None else "magazine_vision"
-    approach_strategy, speed_transition = resolve_transition(
+    release_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
+    prepared_plan_id = _prepare_magazine_release(
         executor,
-        source=source,
-        approach_z_mm=float(transfer_waypoints[0][1][2]),
+        release_segments,
+        start_pose=safe_clearance_pose,
     )
-    _logger.info(
-        "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
-        contact_speed_mm_s,
-        float(pickup_motion.servo_contact_timeout_s),
-        int(executor._pickup_tool),
-        int(executor._pickup_user),
-    )
-    control = getattr(executor, "_active_execution_control", None)
-    result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
-        config=ServoUntilConditionConfig(
-            axis=RobotAxis.Z,
-            direction=Direction.MINUS,
-            linear_mm_s=contact_speed_mm_s,
-            frame="user",
+    if prepared_plan_id is None:
+        return False, "Magazine release motion could not be prepared before servo pickup"
+
+    def discard_prepared() -> None:
+        nonlocal prepared_plan_id
+        if prepared_plan_id is None:
+            return
+        _discard_prepared_magazine_release(executor, prepared_plan_id)
+        prepared_plan_id = None
+
+    try:
+        contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
+        minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
+        source = "magazine_fixed" if expected_start_pose is not None else "magazine_vision"
+        approach_strategy, speed_transition = resolve_transition(
+            executor,
+            source=source,
+            approach_z_mm=float(transfer_waypoints[0][1][2]),
+        )
+        _logger.info(
+            "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
+            contact_speed_mm_s,
+            float(pickup_motion.servo_contact_timeout_s),
+            int(executor._pickup_tool),
+            int(executor._pickup_user),
+        )
+        control = getattr(executor, "_active_execution_control", None)
+        result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
+            config=ServoUntilConditionConfig(
+                axis=RobotAxis.Z,
+                direction=Direction.MINUS,
+                linear_mm_s=contact_speed_mm_s,
+                frame="user",
+                tool=int(executor._pickup_tool),
+                user=int(executor._pickup_user),
+                poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+                timeout_s=float(pickup_motion.servo_contact_timeout_s),
+                preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
+                condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
+                allow_subzero_descent=True,
+                disable_collision_checking=True,
+                minimum_z_mm=minimum_contact_z_mm,
+                initial_linear_mm_s=speed_transition.initial_linear_mm_s,
+                slowdown_z_mm=speed_transition.slowdown_z_mm,
+            ),
+            retract=ServoRetractConfig(
+                target_pose=safe_clearance_pose,
+                motion_type="servo",
+                linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
+                poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+                timeout_s=3.0,
+                position_tolerance_mm=2.0,
+                maximum_distance_mm=float(
+                    getattr(pickup_motion, "servo_contact_retract_maximum_distance_mm", 50.0)
+                ),
+            ),
+            cancel_requested=(
+                None
+                if control is None
+                else lambda: bool(control.should_stop() or control.pause_requested())
+            ),
+        )
+        _logger.info(
+            "[MAGAZINE_LOAD] Servo contact descent result success=%s detected=%s "
+            "timeout=%s elapsed_s=%.3f message=%s",
+            result.success,
+            result.detected,
+            result.timed_out,
+            result.elapsed_s,
+            result.message,
+        )
+        if not result.success:
+            discard_prepared()
+            if result.timed_out or result.message == "timeout":
+                off_ok, off_msg = executor._motion.turn_vacuum_off()
+                recovery_waypoint = transfer_waypoints[0]
+                recovery_segments = build_magazine_pickup_release_segments(
+                    (
+                        (
+                            "Returning to magazine pickup origin after no contact",
+                            list(recovery_waypoint[1]),
+                            recovery_waypoint[2],
+                            recovery_waypoint[3],
+                            "linear",
+                            0.0,
+                        ),
+                    )
+                )
+                recovered = executor._motion.move_ordered_pickup_sequence(
+                    "Magazine pickup timeout recovery",
+                    recovery_segments,
+                )
+                recovery_failures = []
+                if not off_ok:
+                    recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
+                if not recovered:
+                    reason = getattr(executor._motion, "last_motion_error", None)
+                    recovery_failures.append(
+                        f"return to pickup origin failed: {reason or 'ordered motion failed'}"
+                    )
+                if recovery_failures:
+                    return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
+                return False, NO_WORKPIECE_AT_MAGAZINE
+            return False, f"Magazine servo contact pickup failed: {result.message}"
+        if not pickup_condition_is_active_after_retract(condition):
+            off_ok, off_msg = executor._motion.turn_vacuum_off()
+            if not off_ok:
+                return False, (
+                    "Magazine workpiece is no longer detected after Servo retract; "
+                    f"vacuum pump OFF also failed: {off_msg}"
+                )
+            return False, "Magazine workpiece is no longer detected after Servo retract"
+        current_pose = _wait_for_stable_pose(executor._robot_service)
+        if current_pose is None:
+            return False, "Magazine post-retract pose did not become stable"
+        if not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
+            return False, "Magazine servo retract did not reach the prepared release start pose"
+
+        execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+        if not _prepared_execution_succeeded(execution):
+            return False, f"Magazine {release_label} prepared release execution failed"
+        prepared_plan_id = None
+        approach_strategy.record_success(source, result.contact_pose)
+        return True, ""
+    finally:
+        discard_prepared()
+
+
+def _prepare_magazine_release(
+    executor,
+    segments: list[dict],
+    *,
+    start_pose: list[float],
+) -> str | None:
+    prepare = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
+    if not callable(prepare) or not segments:
+        return None
+    try:
+        result = prepare(
+            segments=segments,
+            start_position=list(start_pose),
             tool=int(executor._pickup_tool),
             user=int(executor._pickup_user),
-            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-            timeout_s=float(pickup_motion.servo_contact_timeout_s),
-            preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
-            condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
-            allow_subzero_descent=True,
-            disable_collision_checking=True,
-            minimum_z_mm=minimum_contact_z_mm,
-            initial_linear_mm_s=speed_transition.initial_linear_mm_s,
-            slowdown_z_mm=speed_transition.slowdown_z_mm,
-        ),
-        retract=ServoRetractConfig(
-            distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),
-            motion_type="servo",
-            linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
-            poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
-            timeout_s=3.0,
-            position_tolerance_mm=2.0,
-            maximum_distance_mm=float(
-                getattr(pickup_motion, "servo_contact_retract_maximum_distance_mm", 50.0)
-            ),
-        ),
-        cancel_requested=(
-            None
-            if control is None
-            else lambda: bool(control.should_stop() or control.pause_requested())
-        ),
-    )
-    _logger.info(
-        "[MAGAZINE_LOAD] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
-        result.success,
-        result.detected,
-        result.timed_out,
-        result.elapsed_s,
-        result.message,
-    )
-    if not result.success:
-        if result.timed_out or result.message == "timeout":
-            off_ok, off_msg = executor._motion.turn_vacuum_off()
-            recovery_waypoint = transfer_waypoints[0]
-            recovery_segments = build_magazine_pickup_release_segments((
-                (
-                    "Returning to magazine pickup origin after no contact",
-                    list(recovery_waypoint[1]),
-                    recovery_waypoint[2],
-                    recovery_waypoint[3],
-                    "linear",
-                    0.0,
-                ),
-            ))
-            recovered = executor._motion.move_ordered_pickup_sequence(
-                "Magazine pickup timeout recovery",
-                recovery_segments,
-            )
-            recovery_failures = []
-            if not off_ok:
-                recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
-            if not recovered:
-                reason = getattr(executor._motion, "last_motion_error", None)
-                recovery_failures.append(
-                    f"return to pickup origin failed: {reason or 'ordered motion failed'}"
-                )
-            if recovery_failures:
-                return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
-            return False, NO_WORKPIECE_AT_MAGAZINE
-        return False, f"Magazine servo contact pickup failed: {result.message}"
-    if not pickup_condition_is_active_after_retract(condition):
-        off_ok, off_msg = executor._motion.turn_vacuum_off()
-        if not off_ok:
-            return False, (
-                "Magazine workpiece is no longer detected after Servo retract; "
-                f"vacuum pump OFF also failed: {off_msg}"
-            )
-        return False, "Magazine workpiece is no longer detected after Servo retract"
-    current_pose = _wait_for_stable_pose(executor._robot_service)
-    if current_pose is None:
-        return False, "Magazine post-retract pose did not become stable"
-    clearance_distance = float(retract_reference_pose[2]) - float(current_pose[2])
-    if clearance_distance <= 0.0 or clearance_distance > 500.0:
-        return False, f"Magazine clearance distance is invalid: {clearance_distance:.3f} mm"
+            allow_servo_during_prepare=True,
+        )
+    except Exception:
+        _logger.exception("[MAGAZINE_LOAD] Failed to prepare release while Servo is idle")
+        return None
+    if not isinstance(result, dict):
+        return None
+    plan_id = result.get("plan_id")
+    if not plan_id:
+        return None
+    _logger.info("[MAGAZINE_LOAD] Prepared release plan_id=%s", plan_id)
+    return str(plan_id)
 
-    # Plan the lift and release together from the measured post-Servo pose.
-    # The first target is known, but the chain start is always live; this keeps
-    # the blend safe without executing from an expected Servo endpoint.
-    lift_waypoint = transfer_waypoints[2]
-    lift_segment = (
-        "Raising magazine workpiece to safe transfer clearance",
-        safe_clearance_pose,
-        lift_waypoint[2],
-        lift_waypoint[3],
-        lift_waypoint[4],
-        10.0,
+
+def _discard_prepared_magazine_release(executor, plan_id: str) -> None:
+    discard = getattr(executor._robot_service, "discard_prepared_ordered_motion_chain", None)
+    if not callable(discard):
+        return
+    try:
+        discard(plan_id)
+    except Exception:
+        _logger.exception("[MAGAZINE_LOAD] Failed to discard prepared release plan_id=%s", plan_id)
+
+
+def _prepared_execution_succeeded(result: object) -> bool:
+    return bool(
+        isinstance(result, dict)
+        and result.get("state") == "completed"
+        and result.get("result") == 0
     )
-    continuation_segments = build_magazine_pickup_release_segments(
-        (lift_segment,) + transfer_waypoints[3:]
+
+
+def _poses_match(
+    actual_pose: list[float],
+    expected_pose: list[float],
+    position_tolerance_mm: float,
+    orientation_tolerance_deg: float,
+) -> bool:
+    actual = _finite_pose(actual_pose)
+    expected = _finite_pose(expected_pose)
+    if actual is None or expected is None:
+        return False
+    position_error = math.sqrt(sum((actual[index] - expected[index]) ** 2 for index in range(3)))
+    orientation_error = max(
+        abs((actual[index] - expected[index] + 180.0) % 360.0 - 180.0)
+        for index in range(3, 6)
     )
-    ok = executor._motion.move_ordered_pickup_sequence(
-        f"Magazine lift and {release_label} release after completed servo retract",
-        continuation_segments,
+    return (
+        position_error <= float(position_tolerance_mm)
+        and orientation_error <= float(orientation_tolerance_deg)
     )
-    if not ok:
-        reason = getattr(executor._motion, "last_motion_error", None)
-        return False, f"Magazine {release_label} failed: {reason or 'ordered motion failed'}"
-    approach_strategy.record_success(source, result.contact_pose)
-    return True, ""
 
 
 def _read_fresh_pose(robot_service) -> list[float] | None:
