@@ -95,6 +95,14 @@ class Ros2Robot(IRobot):
         logger.debug("stop_servo_jog ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        mover = getattr(self._client, "servo_jog_to_z", None)
+        if not callable(mover):
+            return None
+        result = mover(**kwargs)
+        logger.debug("servo_jog_to_z ← %s", result)
+        return result if isinstance(result, dict) else None
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         setter = getattr(self._client, "set_motion_passage_closed", None)
         return bool(callable(setter) and setter(passage_id, closed))

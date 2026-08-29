@@ -481,6 +481,18 @@ class MotionService(IMotionService):
             self._logger.exception("stop_servo_jog failed")
             return -1
 
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        self._last_jog_target = []
+        self._servo_floor_stop.set()
+        mover = getattr(self._robot, "servo_jog_to_z", None)
+        if not callable(mover):
+            return None
+        try:
+            return mover(**kwargs)
+        except Exception:
+            self._logger.exception("servo_jog_to_z failed")
+            return {"success": False, "error": "platform_servo_jog_to_z_failed"}
+
     def stop_motion(self) -> bool:
         self._logger.debug("stop_motion →")
         self._last_jog_target = []

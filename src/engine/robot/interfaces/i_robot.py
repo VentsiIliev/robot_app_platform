@@ -76,6 +76,10 @@ class IRobot(ABC):
         """Optional stop for continuous ServoJog."""
         return -1
 
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        """Optional blocking target-bounded +Z ServoJog operation."""
+        return None
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         """Optionally add/remove a configured ROS planning-scene passage lid."""
         return False

@@ -108,6 +108,9 @@ class IMotionService(ABC):
     def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
         return -1
 
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        return None
+
     @abstractmethod
     def stop_motion(self) -> bool:
         ...

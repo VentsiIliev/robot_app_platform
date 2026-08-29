@@ -145,6 +145,10 @@ class RobotService(IRobotService):
             return -1
         return stopper(restore_collision_checking=restore_collision_checking)
 
+    def servo_jog_to_z(self, **kwargs) -> dict | None:
+        mover = getattr(self._motion, "servo_jog_to_z", None)
+        return mover(**kwargs) if callable(mover) else None
+
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
 

@@ -1095,6 +1095,28 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("stop_servo_jog error: %s", e, exc_info=True)
             return -1
 
+    def servo_jog_to_z(self, **kwargs):
+        payload = dict(kwargs)
+        logger.debug("servo_jog_to_z → POST /servojog/to-z payload=%s", payload)
+        try:
+            request_timeout = max(8.0, float(payload.get("timeout_s", 10.0)) + 5.0)
+            response = requests.post(
+                f"{self.server_url}/servojog/to-z",
+                json=payload,
+                timeout=request_timeout,
+            )
+            if response.status_code == 404:
+                logger.info("servo_jog_to_z unsupported by runtime")
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            self._mark_available()
+            logger.debug("servo_jog_to_z ← http=%s raw=%s", response.status_code, raw)
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("servo_jog_to_z error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         try:
             response = requests.post(

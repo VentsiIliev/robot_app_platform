@@ -570,15 +570,52 @@ class ServoUntilConditionProcedure:
         if motion_type != "servo":
             return False, "invalid_retract_motion_type"
 
+        minimum_speed = min(
+            float(retract.linear_mm_s),
+            float(retract.final_linear_mm_s) if two_speed else float(retract.linear_mm_s),
+        )
+
+        bounded_mover = getattr(self._robot, "servo_jog_to_z", None)
+        if not distance_based and callable(bounded_mover):
+            bounded_result = bounded_mover(
+                target_z_mm=float(target_z),
+                fast_linear_mm_s=float(retract.linear_mm_s),
+                final_linear_mm_s=float(
+                    retract.final_linear_mm_s
+                    if retract.final_linear_mm_s is not None
+                    else retract.linear_mm_s
+                ),
+                slowdown_distance_mm=float(
+                    retract.slowdown_distance_mm
+                    if retract.slowdown_distance_mm is not None
+                    else max(tolerance + 0.1, requested_distance)
+                ),
+                tolerance_mm=tolerance,
+                maximum_distance_mm=maximum_distance,
+                timeout_s=max(float(retract.timeout_s), requested_distance / minimum_speed * 4.0 + 1.0),
+                poll_interval_s=float(retract.poll_interval_s),
+                frame=cfg.frame,
+                tool=cfg.tool,
+                user=cfg.user,
+                disable_collision_checking=cfg.disable_collision_checking,
+            )
+            if isinstance(bounded_result, dict) and not bounded_result.get("unsupported"):
+                if bool(bounded_result.get("success")):
+                    _logger.info(
+                        "[SERVO_UNTIL_CONDITION] ROS2 target-bounded retract completed "
+                        "target_z=%.3f final_z=%s",
+                        target_z,
+                        bounded_result.get("final_z"),
+                    )
+                    return True, ""
+                error = str(bounded_result.get("error") or "failed")
+                return False, f"target_bounded_retract_{error}"
+
         # The configured jog speed is an upper command value; acceleration,
         # controller scaling, and transport sampling can make a long retract
         # take materially longer than distance / commanded speed. Keep the
         # explicit timeout as a floor and derive a conservative distance-aware
         # deadline. The independent progress watchdog still stops stalled motion.
-        minimum_speed = min(
-            float(retract.linear_mm_s),
-            float(retract.final_linear_mm_s) if two_speed else float(retract.linear_mm_s),
-        )
         distance_aware_timeout = requested_distance / minimum_speed * 4.0 + 1.0
         effective_timeout = max(float(retract.timeout_s), distance_aware_timeout)
         _logger.info(
