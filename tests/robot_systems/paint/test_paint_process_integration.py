@@ -38,6 +38,23 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
             path_executor=MagicMock(),
         )
 
+    def test_run_start_resets_learned_servo_pickup_height(self):
+        service = self._make_service()
+        service._capture_snapshot_service.capture_snapshot.return_value = VisionCaptureSnapshot(
+            frame="frame", contours=[], source="paint_process"
+        )
+
+        service.run_once()
+
+        service._path_executor.reset_learned_servo_pickup_height.assert_called_once_with()
+
+    def test_resume_resets_learned_servo_pickup_height(self):
+        service = self._make_service()
+
+        service.resume_current_phase()
+
+        service._path_executor.reset_learned_servo_pickup_height.assert_called_once_with()
+
     def test_run_once_executes_capture_prepare_plan_and_paint_flow(self):
         service = self._make_service()
         small = _square(1.0)

@@ -67,6 +67,7 @@ class PaintProductionService:
             pause_execution()
 
     def resume_current_phase(self) -> None:
+        self._reset_learned_servo_pickup_height()
         resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
         if callable(resume_load):
             resume_load()
@@ -89,6 +90,7 @@ class PaintProductionService:
 
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
         """Run production once, or repeat from the active source until no workpiece is found."""
+        self._reset_learned_servo_pickup_height()
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
         process_config_result = self._get_process_config()
@@ -128,6 +130,11 @@ class PaintProductionService:
             magazine_config=None,
             cycle_index=1,
         )
+
+    def _reset_learned_servo_pickup_height(self) -> None:
+        reset = getattr(self._path_executor, "reset_learned_servo_pickup_height", None)
+        if callable(reset):
+            reset()
 
     def _run_manual_loop(self, magazine_config, process_config, should_stop: Callable[[], bool]) -> tuple[bool, str]:
         total_start = perf_counter()
