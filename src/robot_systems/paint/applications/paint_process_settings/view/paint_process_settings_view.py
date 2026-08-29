@@ -34,6 +34,26 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardLineEd
 from src.robot_systems.paint.applications.paint_process_settings.view.paint_process_settings_schema import (
     build_paint_process_settings_tabs,
 )
+from src.robot_systems.paint.processes.paint.config import (
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT,
+)
+
+
+_SERVO_APPROACH_STRATEGY_KEY = "pickup_servo_contact_approach_strategy"
+_LEARNED_HEIGHT_ONLY_KEYS = {
+    "pickup_servo_contact_fast_linear_mm_s",
+    "pickup_servo_contact_slowdown_clearance_mm",
+}
+_MAGAZINE_PICKUP_MODE_KEY = "magazine_pickup_mode"
+_FIXED_MAGAZINE_ONLY_KEYS = {
+    "magazine_fixed_pickup_group_id",
+    "magazine_fixed_pickup_position_tolerance_mm",
+    "magazine_fixed_pickup_orientation_tolerance_deg",
+}
+_VISION_MAGAZINE_ONLY_KEYS = {
+    "magazine_camera_settle_s",
+}
 
 
 def _t(text: str) -> str:
@@ -712,6 +732,12 @@ class PaintProcessSettingsView(IApplicationView):
         self._current_values = dict(values)
         if self.settings_view is not None:
             self.settings_view.set_values(values)
+            self._update_servo_strategy_field_visibility(
+                values.get(_SERVO_APPROACH_STRATEGY_KEY, "full_servo")
+            )
+            self._update_magazine_mode_field_visibility(
+                values.get(_MAGAZINE_PICKUP_MODE_KEY, "vision_planned")
+            )
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -860,6 +886,10 @@ class PaintProcessSettingsView(IApplicationView):
         self.save_requested.emit(values)
 
     def _on_value_changed(self, key: str, value: object, _component_name: str) -> None:
+        if key == _SERVO_APPROACH_STRATEGY_KEY:
+            self._update_servo_strategy_field_visibility(value)
+        if key == _MAGAZINE_PICKUP_MODE_KEY:
+            self._update_magazine_mode_field_visibility(value)
         if key == "safe_travel_positions" and value == "safe_travel_positions_add_current":
             self.set_safe_travel_current_requested.emit()
             return
@@ -874,6 +904,35 @@ class PaintProcessSettingsView(IApplicationView):
                 return
         self._current_values = self.values()
         self.value_changed.emit(key, value)
+
+    def _update_servo_strategy_field_visibility(self, strategy: object) -> None:
+        learned_height = (
+            str(strategy or "").strip().lower()
+            == SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT
+        )
+        self._set_setting_fields_visible(_LEARNED_HEIGHT_ONLY_KEYS, learned_height)
+
+    def _update_magazine_mode_field_visibility(self, mode: object) -> None:
+        fixed_group = (
+            str(mode or "").strip().lower()
+            == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+        )
+        self._set_setting_fields_visible(_FIXED_MAGAZINE_ONLY_KEYS, fixed_group)
+        self._set_setting_fields_visible(_VISION_MAGAZINE_ONLY_KEYS, not fixed_group)
+
+    def _set_setting_fields_visible(self, keys: set[str], visible: bool) -> None:
+        if self.settings_view is None:
+            return
+        for group in self.settings_view._groups:
+            inner = getattr(group, "_inner", group)
+            widgets = getattr(inner, "_widgets", {})
+            for key in keys:
+                widget = widgets.get(key)
+                if widget is None:
+                    continue
+                field_cell = widget.parentWidget()
+                if field_cell is not None:
+                    field_cell.setVisible(visible)
 
     def _append_waypoint(self, key: str, position: list[float]) -> None:
         values = self.values()
