@@ -14,7 +14,7 @@
     "statuses": {}
   },
   "vacuum_sensor": {
-    "enabled": false,
+    "enabled": true,
     "slave_id": 1,
     "inputs": {
       "sensor": "X3"
@@ -37,7 +37,7 @@
     "statuses": {}
   },
   "physical_control_buttons": {
-    "enabled": false,
+    "enabled": true,
     "slave_id": 1,
     "inputs": {
       "start": "X1",

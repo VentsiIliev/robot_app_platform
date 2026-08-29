@@ -25,7 +25,7 @@
     "Erode iterations": 3
   },
   "Brightness Control": {
-    "Enable auto adjust": false,
+    "Enable auto adjust": true,
     "Kp": 0.7,
     "Ki": 0.2,
     "Kd": 0.05,
@@ -53,12 +53,12 @@
     "Flip image": false
   },
   "Calibration": {
-    "Chessboard width": 19,
-    "Chessboard height": 12,
+    "Chessboard width": 15,
+    "Chessboard height": 15,
     "Square size (mm)": 15.0,
     "Reference board mode": "auto",
-    "ChArUco board width": 19,
-    "ChArUco board height": 12,
+    "ChArUco board width": 15,
+    "ChArUco board height": 15,
     "ChArUco square size (mm)": 15.0,
     "ChArUco marker size (mm)": 11.0,
     "Skip frames": 30
