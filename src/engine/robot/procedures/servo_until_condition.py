@@ -52,6 +52,8 @@ class ServoRetractConfig:
     position_tolerance_mm: float = 2.0
     maximum_distance_mm: float = 500.0
     safety_margin_mm: float | None = None
+    final_linear_mm_s: float | None = None
+    slowdown_distance_mm: float | None = None
     progress_timeout_s: float = 1.5
 
 
@@ -539,6 +541,17 @@ class ServoUntilConditionProcedure:
             maximum_distance = requested_distance + safety_margin
         if not math.isfinite(float(retract.linear_mm_s)) or float(retract.linear_mm_s) <= 0.0:
             return False, "invalid_retract_linear_speed"
+        two_speed = retract.final_linear_mm_s is not None or retract.slowdown_distance_mm is not None
+        if two_speed:
+            if retract.final_linear_mm_s is None or retract.slowdown_distance_mm is None:
+                return False, "invalid_retract_speed_transition"
+            if (
+                not math.isfinite(float(retract.final_linear_mm_s))
+                or float(retract.final_linear_mm_s) <= 0.0
+                or not math.isfinite(float(retract.slowdown_distance_mm))
+                or float(retract.slowdown_distance_mm) <= tolerance
+            ):
+                return False, "invalid_retract_speed_transition"
         if requested_distance <= tolerance:
             return False, "retract_target_not_above_contact"
         if requested_distance > maximum_distance:
@@ -562,7 +575,11 @@ class ServoUntilConditionProcedure:
         # take materially longer than distance / commanded speed. Keep the
         # explicit timeout as a floor and derive a conservative distance-aware
         # deadline. The independent progress watchdog still stops stalled motion.
-        distance_aware_timeout = requested_distance / float(retract.linear_mm_s) * 4.0 + 1.0
+        minimum_speed = min(
+            float(retract.linear_mm_s),
+            float(retract.final_linear_mm_s) if two_speed else float(retract.linear_mm_s),
+        )
+        distance_aware_timeout = requested_distance / minimum_speed * 4.0 + 1.0
         effective_timeout = max(float(retract.timeout_s), distance_aware_timeout)
         _logger.info(
             "[SERVO_UNTIL_CONDITION] retract starting start_z=%.3f target_z=%.3f distance_mm=%.3f "
@@ -595,6 +612,7 @@ class ServoUntilConditionProcedure:
         next_progress_log_at = time.monotonic()
         best_z = start_z
         last_forward_progress_at = time.monotonic()
+        fast_phase_active = two_speed
         progress_timeout = max(0.5, float(retract.progress_timeout_s))
         failure = ""
         while not failure:
@@ -637,6 +655,37 @@ class ServoUntilConditionProcedure:
             )
             if reached_target:
                 break
+            remaining = target_z - current_pose[2]
+            if fast_phase_active and remaining <= float(retract.slowdown_distance_mm):
+                stop_ret = self._stop_servo()
+                if not self._return_code_ok(stop_ret):
+                    self._stop_motion()
+                    return False, f"retract_slowdown_servo_stop_failed:{stop_ret}"
+                stopped_pose = self._read_current_pose()
+                if stopped_pose is None:
+                    return False, "retract_position_unreadable"
+                if stopped_pose[2] < target_z - tolerance:
+                    start_ret = self._robot.start_servo_jog(
+                        RobotAxis.Z,
+                        Direction.PLUS,
+                        linear_mm_s=float(retract.final_linear_mm_s),
+                        angular_deg_s=None,
+                        frame=cfg.frame,
+                        tool=cfg.tool,
+                        user=cfg.user,
+                        allow_subzero_retract_settle=True,
+                        disable_collision_checking=cfg.disable_collision_checking,
+                    )
+                    if not self._return_code_ok(start_ret):
+                        return False, f"retract_slowdown_servo_start_failed:{start_ret}"
+                fast_phase_active = False
+                _logger.info(
+                    "[SERVO_UNTIL_CONDITION] switched to final retract speed: "
+                    "live_z=%.3f target_z=%.3f linear_mm_s=%.3f",
+                    stopped_pose[2],
+                    target_z,
+                    float(retract.final_linear_mm_s),
+                )
             if now - last_forward_progress_at >= progress_timeout:
                 failure = "retract_progress_stalled"
                 break

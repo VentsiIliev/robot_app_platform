@@ -231,6 +231,8 @@ class PaintProcessSettingsMapper:
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
             "pickup_servo_contact_retract_distance_mm": pickup.servo_contact_retract_distance_mm,
             "pickup_servo_contact_retract_linear_mm_s": pickup.servo_contact_retract_linear_mm_s,
+            "pickup_servo_contact_retract_final_linear_mm_s": pickup.servo_contact_retract_final_linear_mm_s,
+            "pickup_servo_contact_retract_slowdown_clearance_mm": pickup.servo_contact_retract_slowdown_clearance_mm,
             "pickup_servo_contact_retract_safety_margin_mm": pickup.servo_contact_retract_safety_margin_mm,
             "pickup_servo_contact_timeout_s": pickup.servo_contact_timeout_s,
             "pickup_servo_contact_poll_interval_s": pickup.servo_contact_poll_interval_s,
@@ -403,6 +405,18 @@ class PaintProcessSettingsMapper:
             ),
             servo_contact_retract_linear_mm_s=float(
                 flat.get("pickup_servo_contact_retract_linear_mm_s", base.pickup_motion.servo_contact_retract_linear_mm_s)
+            ),
+            servo_contact_retract_final_linear_mm_s=float(
+                flat.get(
+                    "pickup_servo_contact_retract_final_linear_mm_s",
+                    base.pickup_motion.servo_contact_retract_final_linear_mm_s,
+                )
+            ),
+            servo_contact_retract_slowdown_clearance_mm=float(
+                flat.get(
+                    "pickup_servo_contact_retract_slowdown_clearance_mm",
+                    base.pickup_motion.servo_contact_retract_slowdown_clearance_mm,
+                )
             ),
             servo_contact_retract_safety_margin_mm=float(
                 flat.get(

@@ -232,8 +232,9 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             def stop_motion(self):
                 return True
 
+        robot = RetractRobot()
         result = ServoUntilConditionProcedure(
-            RetractRobot(), _ConditionSequence(False, False, True)
+            robot, _ConditionSequence(False, False, True)
         ).run(
             config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
             retract=ServoRetractConfig(
@@ -257,7 +258,8 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             def start_servo_jog(self, axis, direction, *args, **kwargs):
                 ret = super().start_servo_jog(axis, direction, *args, **kwargs)
                 if direction == Direction.PLUS:
-                    self.position[2] = 110.021
+                    speed = float(kwargs["linear_mm_s"])
+                    self.position[2] = 95.0 if speed == 250.0 else 110.021
                 return ret
 
             def get_current_position(self):
@@ -266,8 +268,9 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             def stop_motion(self):
                 return True
 
+        robot = RetractRobot()
         result = ServoUntilConditionProcedure(
-            RetractRobot(), _ConditionSequence(False, False, True)
+            robot, _ConditionSequence(False, False, True)
         ).run(
             config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
             retract=ServoRetractConfig(
@@ -277,11 +280,19 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                 timeout_s=0.1,
                 maximum_distance_mm=50.0,
                 safety_margin_mm=10.0,
+                final_linear_mm_s=50.0,
+                slowdown_distance_mm=20.0,
             ),
         )
 
         self.assertTrue(result.success)
         self.assertTrue(result.retracted)
+        retract_speeds = [
+            item["linear_mm_s"]
+            for item in robot.started
+            if item["direction"] == Direction.PLUS
+        ]
+        self.assertEqual([250.0, 50.0], retract_speeds)
 
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()

@@ -399,6 +399,12 @@ class PaintPickupExecutor:
                 distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),
                 motion_type="servo",
                 linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
+                final_linear_mm_s=float(
+                    getattr(pickup_motion, "servo_contact_retract_final_linear_mm_s", 50.0)
+                ),
+                slowdown_distance_mm=float(
+                    getattr(pickup_motion, "servo_contact_retract_slowdown_clearance_mm", 20.0)
+                ),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
