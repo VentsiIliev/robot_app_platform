@@ -18,9 +18,72 @@ from src.robot_systems.paint.processes.paint.paint_process_config_service import
     PaintProcessConfigService,
 )
 from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
+    execute_dropoff_release_for_executor,
+)
 
 
 class TestDropoffMotionCorridor(unittest.TestCase):
+    def test_sub_zero_release_executes_prepared_retract_and_next_cycle_start_tail(self):
+        dropoff = SimpleNamespace(
+            strategy="movement_group",
+            allow_sub_zero_dropoff=True,
+            sub_zero_approach_z_mm=50.0,
+            release_align_vel_percent=20.0,
+            release_align_acc_percent=15.0,
+            release_align_motion_type="ptp",
+            release_align_blendR=0.0,
+        )
+        robot = MagicMock()
+        robot.prepare_ordered_motion_chain.return_value = {"plan_id": "next-cycle-1"}
+        robot.execute_prepared_ordered_motion_chain.return_value = {
+            "state": "completed", "result": 0,
+        }
+        motion = MagicMock()
+        motion.move_pickup_phase.return_value = True
+        motion.turn_vacuum_off.return_value = (True, "")
+        owner = SimpleNamespace(
+            _dropoff_motion_corridor_id="workpiece_drop_opening",
+            _dropoff_unwind_prepared=False,
+            _last_process_end_pose=None,
+            _last_prepositioned_start_group=None,
+            _robot_service=robot,
+            _pickup_tool=1,
+            _pickup_user=2,
+            _motion=motion,
+            _vacuum_sensor=None,
+            _enable_vacuum_pump=False,
+            _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
+        )
+        next_start = {
+            "group_id": "Magazine Fixed Pickup",
+            "position": [-147.0, 52.0, 110.0, -179.9, 0.0, 0.0],
+            "vel": 60.0,
+            "acc": 40.0,
+            "type": "ptp",
+        }
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
+            return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
+        ):
+            ok, message = execute_dropoff_release_for_executor(
+                owner, next_cycle_start=next_start
+            )
+
+        self.assertTrue(ok, message)
+        prepared = robot.prepare_ordered_motion_chain.call_args.kwargs
+        self.assertEqual(-80.0, prepared["start_position"][2])
+        self.assertEqual(
+            ["Retracting through dropoff group 'Dropoff' passage", "Moving to next-cycle start 'Magazine Fixed Pickup'"],
+            [segment["label"] for segment in prepared["segments"]],
+        )
+        self.assertEqual(50.0, prepared["segments"][0]["position"][2])
+        self.assertTrue(prepared["segments"][0]["protected"])
+        robot.execute_prepared_ordered_motion_chain.assert_called_once_with("next-cycle-1")
+        self.assertEqual("Magazine Fixed Pickup", owner._last_prepositioned_start_group)
+        self.assertEqual(2, motion.move_pickup_phase.call_count)
+
     def test_saved_settings_update_snapshot_and_notify_live_corridor_consumer(self):
         settings_repository = MagicMock()
         initial = PaintProcessConfig()

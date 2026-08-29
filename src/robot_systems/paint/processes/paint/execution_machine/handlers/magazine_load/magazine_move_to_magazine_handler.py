@@ -47,6 +47,27 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         ctx.set_result(False, "Calibration movement group is not configured")
         return PaintExecutionState.ERROR
 
+    position_tolerance = (
+        float(config.fixed_pickup_position_tolerance_mm)
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+        else 2.0
+    )
+    orientation_tolerance = (
+        float(config.fixed_pickup_orientation_tolerance_deg)
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+        else 2.0
+    )
+    if service._consume_verified_prepositioned_start_group(
+        ctx.magazine_group,
+        position_tolerance_mm=position_tolerance,
+        orientation_tolerance_deg=orientation_tolerance,
+    ) is True:
+        _logger.info("[MAGAZINE_LOAD] Reusing verified prepositioned group '%s'", ctx.magazine_group)
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+            return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
+        service._restore_capture_view("after verifying prepositioned magazine pickup")
+        return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
+
     ok = load_service._move_to_group_with_pause_resume_recovery(
         ctx,
         PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,

@@ -55,6 +55,29 @@ class TestPaintProductionServiceIntegration(unittest.TestCase):
 
         service._path_executor.reset_learned_servo_pickup_height.assert_called_once_with()
 
+    def test_preposition_marker_is_consumed_only_after_live_pose_verification(self):
+        service = self._make_service()
+        target = [1.0, 2.0, 3.0, 179.0, 0.0, -179.0]
+        navigation = SimpleNamespace(get_group_position=lambda _group: list(target))
+        service._magazine_load_service = SimpleNamespace(_navigation=navigation)
+        service._path_executor._robot_service.get_current_position_fresh.return_value = [
+            1.5, 2.0, 3.0, -181.0, 0.0, 181.0,
+        ]
+        service._mark_prepositioned_start_group("Magazine Fixed Pickup")
+
+        self.assertTrue(
+            service._consume_verified_prepositioned_start_group("Magazine Fixed Pickup")
+        )
+        self.assertIsNone(service._prepositioned_start_group)
+
+    def test_resume_clears_preposition_marker(self):
+        service = self._make_service()
+        service._mark_prepositioned_start_group("Magazine")
+
+        service.resume_current_phase()
+
+        self.assertIsNone(service._prepositioned_start_group)
+
     def test_run_once_executes_capture_prepare_plan_and_paint_flow(self):
         service = self._make_service()
         small = _square(1.0)

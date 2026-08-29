@@ -162,10 +162,15 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
 
 
 @timed_step(_logger, "pre_release_dropoff")
-def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
+def execute_dropoff_release_for_executor(
+    executor: object,
+    *,
+    next_cycle_start: dict | None = None,
+) -> tuple[bool, str]:
     """Build and execute the configured dropoff release strategy."""
     started = perf_counter()
     plan = _build_dropoff_release_plan(executor)
+    executor._last_prepositioned_start_group = None
     release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
     if release_count != 1:
         if plan.strategy_name == "movement_group":
@@ -182,6 +187,61 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
         for index, waypoint in enumerate(plan.waypoints, start=1)
         if waypoint.release_here
     )
+    prepared_start_plan_id = None
+    post_release_waypoints = list(plan.waypoints[release_index:])
+    if next_cycle_start is not None and post_release_waypoints:
+        release_start_pose = release_waypoint.pose
+        prepare = getattr(executor._robot_service, "prepare_ordered_motion_chain", None)
+        if release_start_pose is not None and callable(prepare):
+            tail_segments = [
+                {
+                    "type": "linear" if waypoint.corridor_id else str(waypoint.motion_type),
+                    "label": waypoint.label,
+                    "position": list(waypoint.pose),
+                    "vel": float(waypoint.vel_percent),
+                    "acc": float(waypoint.acc_percent),
+                    "blendR": float(waypoint.blendR),
+                    "protected": bool(waypoint.corridor_id),
+                    **({"corridor_id": waypoint.corridor_id} if waypoint.corridor_id else {}),
+                }
+                for waypoint in post_release_waypoints
+                if waypoint.pose is not None
+            ]
+            tail_segments.append({
+                "type": str(next_cycle_start.get("type", "ptp")),
+                "label": f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
+                "position": list(next_cycle_start["position"]),
+                "vel": float(next_cycle_start["vel"]),
+                "acc": float(next_cycle_start["acc"]),
+                "blendR": 0.0,
+            })
+            try:
+                prepared = prepare(
+                    segments=tail_segments,
+                    start_position=list(release_start_pose),
+                    tool=int(executor._pickup_tool),
+                    user=int(executor._pickup_user),
+                    allow_servo_during_prepare=True,
+                )
+                if isinstance(prepared, dict) and prepared.get("plan_id"):
+                    prepared_start_plan_id = str(prepared["plan_id"])
+                    _logger.info(
+                        "[NEXT_CYCLE] Prepared post-dropoff move group='%s' plan_id=%s",
+                        next_cycle_start["group_id"],
+                        prepared_start_plan_id,
+                    )
+            except Exception:
+                _logger.exception("[NEXT_CYCLE] Failed to prepare post-dropoff start move")
+
+    def discard_prepared_start() -> None:
+        if not prepared_start_plan_id:
+            return
+        discard = getattr(executor._robot_service, "discard_prepared_ordered_motion_chain", None)
+        if callable(discard):
+            try:
+                discard(prepared_start_plan_id)
+            except Exception:
+                _logger.exception("[NEXT_CYCLE] Failed to discard plan_id=%s", prepared_start_plan_id)
     ordered_release_pose_completed = (
         bool(getattr(executor, "_dropoff_unwind_prepared", False))
         and release_waypoint.pose is not None
@@ -192,6 +252,7 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
         if waypoint.pose is not None:
             already_at_release_pose = ordered_release_pose_completed and waypoint.release_here
             superseded_approach = ordered_release_pose_completed and index < release_index
+            prepared_post_release = bool(prepared_start_plan_id) and index > release_index
             if already_at_release_pose:
                 _logger.info(
                     "[DROPOFF] waypoint '%s' already completed by ordered cleanup chain; releasing in place",
@@ -200,6 +261,11 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
             elif superseded_approach:
                 _logger.info(
                     "[DROPOFF] waypoint '%s' superseded by ordered descent to release pose",
+                    waypoint.label,
+                )
+            elif prepared_post_release:
+                _logger.info(
+                    "[NEXT_CYCLE] waypoint '%s' deferred to prepared post-release tail",
                     waypoint.label,
                 )
             elif not executor._motion.move_pickup_phase(
@@ -211,6 +277,7 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                 blendR=waypoint.blendR,
                 corridor_id=waypoint.corridor_id,
             ):
+                discard_prepared_start()
                 _logger.info(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d label=%s elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
@@ -227,6 +294,7 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
         if waypoint.release_here:
             ok, msg = executor._motion.turn_vacuum_off()
             if not ok:
+                discard_prepared_start()
                 _logger.info(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
@@ -237,6 +305,7 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                 return False, msg
             ok, msg = _verify_workpiece_released(executor)
             if not ok:
+                discard_prepared_start()
                 _logger.info(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d stage=release_verification elapsed_s=%.3f total_elapsed_s=%.3f",
                     plan.strategy_name,
@@ -247,6 +316,7 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                 return False, msg
             ok, msg = _on_workpiece_release_verified(executor)
             if not ok:
+                discard_prepared_start()
                 _logger.info(
                     "[TIMING] pre_release_dropoff success=false strategy=%s waypoint=%d "
                     "stage=release_verified_callback elapsed_s=%.3f total_elapsed_s=%.3f",
@@ -256,6 +326,22 @@ def execute_dropoff_release_for_executor(executor: object) -> tuple[bool, str]:
                     elapsed_s(started),
                 )
                 return False, msg
+
+    if prepared_start_plan_id:
+        execute = getattr(executor._robot_service, "execute_prepared_ordered_motion_chain", None)
+        execution = execute(prepared_start_plan_id) if callable(execute) else None
+        if not (
+            isinstance(execution, dict)
+            and execution.get("state") == "completed"
+            and execution.get("result") == 0
+        ):
+            discard_prepared_start()
+            return False, "Dropoff retracted safely, but prepared move to next-cycle start failed"
+        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
+        _logger.info(
+            "[NEXT_CYCLE] Reached prepositioned start group='%s'",
+            executor._last_prepositioned_start_group,
+        )
 
     _logger.info(
         "[DROPOFF] strategy=%s completed elapsed_s=%.3f",

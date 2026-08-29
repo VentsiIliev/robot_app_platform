@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from time import monotonic, perf_counter, sleep
 from typing import Callable, Optional
@@ -51,6 +52,7 @@ class PaintProductionService:
         self._paint_control = PaintExecutionControl()
         self._active_context_lock = threading.Lock()
         self._active_execution_context: PaintExecutionContext | None = None
+        self._prepositioned_start_group: str | None = None
 
     def pause_current_phase(self) -> None:
         pause_load = getattr(self._magazine_load_service, "pause_current_load", None)
@@ -67,6 +69,7 @@ class PaintProductionService:
             pause_execution()
 
     def resume_current_phase(self) -> None:
+        self._clear_prepositioned_start_group()
         self._reset_learned_servo_pickup_height()
         resume_load = getattr(self._magazine_load_service, "resume_current_load", None)
         if callable(resume_load):
@@ -78,6 +81,7 @@ class PaintProductionService:
         self._paint_control.resume()
 
     def stop_current_phase(self) -> None:
+        self._clear_prepositioned_start_group()
         stop_load = getattr(self._magazine_load_service, "stop_current_load", None)
         if callable(stop_load):
             stop_load()
@@ -91,6 +95,7 @@ class PaintProductionService:
     def run_once(self, stop_requested: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
         """Run production once, or repeat from the active source until no workpiece is found."""
         self._reset_learned_servo_pickup_height()
+        self._clear_prepositioned_start_group()
         should_stop = stop_requested or (lambda: False)
         self._paint_control.reset()
         process_config_result = self._get_process_config()
@@ -256,11 +261,95 @@ class PaintProductionService:
 
         snapshot = machine.get_snapshot()
         if snapshot.last_error is not None:
+            self._clear_prepositioned_start_group()
             self._restore_brightness()
             self._set_dashboard_live_view_paused(False, reason="paint cycle finished")
             return False, snapshot.last_error
 
         return context.result_ok, context.result_message
+
+    def _next_cycle_start_target(self, ctx: PaintExecutionContext) -> dict | None:
+        if not ctx.repeats_after_success:
+            return None
+        magazine = ctx.magazine_config
+        configured_magazine = magazine or getattr(ctx.process_config, "magazine_load", None)
+        if magazine is not None and bool(getattr(magazine, "enabled", False)):
+            mode = str(getattr(magazine, "pickup_mode", "") or "").strip().lower()
+            group_id = (
+                magazine.fixed_pickup_group_id
+                if mode == "fixed_group_servo_contact"
+                else magazine.magazine_group_id
+            )
+            velocity = float(magazine.move_to_magazine_vel_percent)
+            acceleration = float(magazine.move_to_magazine_acc_percent)
+            motion_type = str(magazine.move_to_magazine_motion_type)
+        else:
+            group_id = str(
+                getattr(configured_magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION"
+            )
+            nav = ctx.process_config.navigation_return
+            velocity = float(nav.calibration_move_vel_percent)
+            acceleration = float(nav.calibration_move_acc_percent)
+            motion_type = str(nav.calibration_move_motion_type)
+        group_id = str(group_id or "").strip()
+        navigation = getattr(self._magazine_load_service, "_navigation", None)
+        if navigation is None:
+            navigation = getattr(self._navigation_service, "_nav", None)
+        getter = getattr(navigation, "get_group_position", None)
+        pose = getter(group_id) if callable(getter) and group_id else None
+        if pose is None or len(pose) < 6:
+            _logger.error("[NEXT_CYCLE] Cannot resolve start movement group '%s'", group_id)
+            return None
+        return {
+            "group_id": group_id,
+            "position": [float(value) for value in pose[:6]],
+            "vel": velocity,
+            "acc": acceleration,
+            "type": motion_type,
+        }
+
+    def _mark_prepositioned_start_group(self, group_id: str) -> None:
+        self._prepositioned_start_group = str(group_id or "").strip() or None
+
+    def _clear_prepositioned_start_group(self) -> None:
+        self._prepositioned_start_group = None
+
+    def _consume_verified_prepositioned_start_group(
+        self,
+        group_id: str,
+        *,
+        position_tolerance_mm: float = 2.0,
+        orientation_tolerance_deg: float = 2.0,
+    ) -> bool:
+        expected_group = str(group_id or "").strip()
+        if not expected_group or self._prepositioned_start_group != expected_group:
+            return False
+        self._prepositioned_start_group = None
+        navigation = getattr(self._magazine_load_service, "_navigation", None)
+        if navigation is None:
+            navigation = getattr(self._navigation_service, "_nav", None)
+        getter = getattr(navigation, "get_group_position", None)
+        expected = getter(expected_group) if callable(getter) else None
+        pose_getter = getattr(self._path_executor._robot_service, "get_current_position_fresh", None)
+        if not callable(pose_getter):
+            pose_getter = getattr(self._path_executor._robot_service, "get_current_position", None)
+        actual = pose_getter() if callable(pose_getter) else None
+        if expected is None or actual is None or len(expected) < 6 or len(actual) < 6:
+            return False
+        xyz_error = math.sqrt(sum((float(actual[i]) - float(expected[i])) ** 2 for i in range(3)))
+        angle_error = max(
+            abs((float(actual[i]) - float(expected[i]) + 180.0) % 360.0 - 180.0)
+            for i in range(3, 6)
+        )
+        verified = xyz_error <= float(position_tolerance_mm) and angle_error <= float(orientation_tolerance_deg)
+        _logger.info(
+            "[NEXT_CYCLE] Preposition verification group='%s' verified=%s xyz_error_mm=%.3f angle_error_deg=%.3f",
+            expected_group,
+            verified,
+            xyz_error,
+            angle_error,
+        )
+        return verified
 
     def _stop_active_magazine_navigation_motion(self) -> None:
         with self._active_context_lock:
@@ -343,13 +432,17 @@ class PaintProductionService:
         if not callable(move_to_calibration):
             return False, "Navigation service does not support calibration move"
 
+        group_id = str(getattr(magazine_config, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
+        if self._consume_verified_prepositioned_start_group(group_id):
+            self._restore_capture_view("after verifying prepositioned calibration pickup")
+            return True, ""
+
         phase_start = perf_counter()
         ok = bool(move_to_calibration(wait_cancelled=should_stop))
         self._log_phase_timing("move_to_calibration", phase_start, success=ok, cycle=1)
         if should_stop():
             return False, "Paint process stopped"
         if not ok:
-            group_id = getattr(magazine_config, "calibration_group_id", "CALIBRATION")
             return False, f"Failed to move to calibration position '{group_id}'"
         self._restore_capture_view("after reaching calibration pickup")
         settle_s = float(getattr(magazine_config, "release_settle_s", 0.0) or 0.0)
