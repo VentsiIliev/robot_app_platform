@@ -485,7 +485,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["Pickup approach before servo contact"], [label for label, _ in motion.sequences])
 
-    def test_servo_contact_preplans_after_servo_and_executes_after_ptp_retract(self):
+    def test_servo_contact_preplans_from_short_retract_and_executes_after_retract(self):
         robot = _FakeRobot()
         robot.support_prepared = True
         motion = _FakeMotion()
@@ -518,22 +518,22 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
-        self.assertEqual(robot.prepared, [])
+        self.assertEqual(len(robot.prepared), 1)
+        self.assertEqual(robot.prepared[0][1], [0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
+        self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
+        self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(
             [label for label, _ in motion.sequences],
-            [
-                "Pickup approach before servo contact",
-                "Pickup lift and continuation after completed Servo retract",
-            ],
+            ["Pickup approach before servo contact"],
         )
         self.assertEqual(
-            [segment["label"] for segment in motion.sequences[1][1]],
+            [segment["label"] for segment in robot.prepared[0][0]],
             ["Raising workpiece after Servo retract", "stage"],
         )
-        self.assertEqual(motion.sequences[1][1][0]["blendR"], 10.0)
+        self.assertEqual(robot.prepared[0][0][0]["blendR"], 10.0)
 
-    def test_servo_contact_discards_preplan_when_ptp_retract_fails(self):
+    def test_servo_contact_prepared_chain_replaces_separate_ptp_retract(self):
         robot = _FakeRobot()
         robot.support_prepared = True
         robot.ptp_return = False
@@ -568,7 +568,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(robot.discarded_prepared, [])
-        self.assertEqual(robot.executed_prepared, [])
+        self.assertEqual(robot.executed_prepared, ["prepared-1"])
+        self.assertEqual(robot.ptp_moves, [])
 
     def test_servo_contact_does_not_move_when_vacuum_on_fails(self):
         robot = _FakeRobot()

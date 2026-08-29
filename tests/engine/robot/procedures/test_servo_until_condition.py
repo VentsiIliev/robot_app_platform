@@ -331,6 +331,43 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertAlmostEqual(77.121, robot.bounded_request["maximum_distance_mm"])
         self.assertEqual([Direction.MINUS], [item["direction"] for item in robot.started])
 
+    def test_distance_retract_delegates_computed_target_and_notifies_planning_hook(self):
+        class BoundedRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [1.0, 2.0, 42.9, 0.0, 0.0, 3.0]
+                self.bounded_request = None
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def servo_jog_to_z(self, **kwargs):
+                self.bounded_request = kwargs
+                self.position[2] = kwargs["target_z_mm"]
+                return {"success": True, "final_z": self.position[2]}
+
+        robot = BoundedRobot()
+        planning_starts = []
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                distance_mm=20.0,
+                linear_mm_s=100.0,
+                final_linear_mm_s=20.0,
+                slowdown_distance_mm=10.0,
+                safety_margin_mm=5.0,
+            ),
+            on_retract_start=lambda pose, target_z: planning_starts.append((pose, target_z)),
+        )
+
+        self.assertTrue(result.success)
+        self.assertAlmostEqual(62.9, robot.bounded_request["target_z_mm"])
+        self.assertAlmostEqual(25.0, robot.bounded_request["maximum_distance_mm"])
+        self.assertEqual(1, len(planning_starts))
+        self.assertAlmostEqual(62.9, planning_starts[0][1])
+
     def test_stops_servo_when_condition_becomes_active(self):
         robot = FakeRobot()
         condition = ManualCondition()

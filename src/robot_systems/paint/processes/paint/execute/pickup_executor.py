@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from dataclasses import dataclass
 from time import perf_counter
@@ -361,6 +362,50 @@ class PaintPickupExecutor:
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
 
+        lift_waypoint = PickupWaypoint(
+            "Raising workpiece after Servo retract",
+            list(predicted_retract_pose),
+            float(pickup_motion.lift_align_vel_percent),
+            float(pickup_motion.lift_align_acc_percent),
+            "ptp",
+            10.0,
+        )
+        combined_waypoints = [lift_waypoint] + continuation_waypoints
+        combined_segments = build_paint_pickup_segments(combined_waypoints)
+        combined_segments.extend(prepared_continuation_segments or [])
+        preparation: dict[str, object] = {"plan_id": None, "thread": None}
+
+        def prepare_from_short_retract(retract_start_pose: tuple[float, ...], target_z: float) -> None:
+            if not combined_segments or preparation["thread"] is not None:
+                return
+            predicted_short_retract_pose = list(retract_start_pose)
+            predicted_short_retract_pose[2] = float(target_z)
+
+            def worker() -> None:
+                prepare = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
+                if not callable(prepare):
+                    return
+                try:
+                    prepared = prepare(
+                        segments=combined_segments,
+                        start_position=predicted_short_retract_pose,
+                        tool=int(self._owner._pickup_tool),
+                        user=int(self._owner._pickup_user),
+                        allow_servo_during_prepare=True,
+                    )
+                    if isinstance(prepared, dict) and prepared.get("plan_id"):
+                        preparation["plan_id"] = str(prepared["plan_id"])
+                except Exception:
+                    _logger.exception("[PICKUP] Failed to prepare continuation during short Servo retract")
+
+            thread = threading.Thread(
+                target=worker,
+                name="calibration-pickup-continuation-plan",
+                daemon=True,
+            )
+            preparation["thread"] = thread
+            thread.start()
+
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
         approach_strategy, speed_transition = resolve_transition(
@@ -417,7 +462,22 @@ class PaintPickupExecutor:
                 if control is None
                 else lambda: bool(control.should_stop() or control.pause_requested())
             ),
+            on_retract_start=prepare_from_short_retract,
         )
+        preparation_thread = preparation.get("thread")
+        if isinstance(preparation_thread, threading.Thread):
+            preparation_thread.join()
+        prepared_plan_id = preparation.get("plan_id")
+
+        def discard_prepared() -> None:
+            if not prepared_plan_id:
+                return
+            discard = getattr(self._owner._robot_service, "discard_prepared_ordered_motion_chain", None)
+            if callable(discard):
+                try:
+                    discard(prepared_plan_id)
+                except Exception:
+                    _logger.exception("[PICKUP] Failed to discard prepared continuation plan_id=%s", prepared_plan_id)
         _logger.info(
             "[PICKUP] Servo contact descent result success=%s detected=%s timeout=%s elapsed_s=%.3f message=%s",
             result.success,
@@ -427,6 +487,7 @@ class PaintPickupExecutor:
             result.message,
         )
         if not result.success:
+            discard_prepared()
             if result.timed_out or result.message == "timeout":
                 off_ok, off_msg = self._owner._motion.turn_vacuum_off()
                 if not off_ok:
@@ -458,6 +519,7 @@ class PaintPickupExecutor:
                 )
             return False
         if not pickup_condition_is_active_after_retract(condition):
+            discard_prepared()
             off_ok, off_msg = self._owner._motion.turn_vacuum_off()
             if not off_ok:
                 self._last_failure_message = (
@@ -467,6 +529,7 @@ class PaintPickupExecutor:
             return False
         current_pose = self._wait_for_stable_pose()
         if current_pose is None:
+            discard_prepared()
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
             return False
         retract_distance = float(retract_reference_pose[2]) - float(current_pose[2])
@@ -474,24 +537,23 @@ class PaintPickupExecutor:
             _logger.error("[PICKUP] Invalid servo retract distance %.3f mm", retract_distance)
             return False
 
-        lift_waypoint = PickupWaypoint(
-            "Raising workpiece after Servo retract",
-            list(predicted_retract_pose),
-            float(pickup_motion.lift_align_vel_percent),
-            float(pickup_motion.lift_align_acc_percent),
-            "ptp",
-            10.0,
-        )
-        combined_waypoints = [lift_waypoint] + continuation_waypoints
-        combined_segments = build_paint_pickup_segments(combined_waypoints)
-        combined_segments.extend(prepared_continuation_segments or [])
         if not combined_segments:
             approach_strategy.record_success("calibration_vision", result.contact_pose)
             return True
-        ok = self._owner._motion.move_ordered_pickup_sequence(
-            "Pickup lift and continuation after completed Servo retract",
-            combined_segments,
-        )
+        if prepared_plan_id:
+            execution = self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+            ok = bool(
+                isinstance(execution, dict)
+                and execution.get("state") == "completed"
+                and execution.get("result") == 0
+            )
+            if not ok:
+                discard_prepared()
+        else:
+            ok = self._owner._motion.move_ordered_pickup_sequence(
+                "Pickup lift and continuation after completed Servo retract",
+                combined_segments,
+            )
         if ok:
             approach_strategy.record_success("calibration_vision", result.contact_pose)
         return bool(ok)

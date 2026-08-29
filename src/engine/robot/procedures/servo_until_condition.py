@@ -98,6 +98,7 @@ class ServoUntilConditionProcedure:
         retract: ServoRetractConfig | None = None,
         cancel_requested: Callable[[], bool] | None = None,
         stop_guard: Callable[[], bool] | None = None,
+        on_retract_start: Callable[[tuple[float, ...], float], None] | None = None,
     ) -> ServoUntilConditionResult:
         cfg = config or ServoUntilConditionConfig()
         started = False
@@ -330,6 +331,7 @@ class ServoUntilConditionProcedure:
                             cfg,
                             cancel_requested=cancel_requested,
                             stop_guard=stop_guard,
+                            on_retract_start=on_retract_start,
                         )
                         collision_override_held = bool(
                             retract_message.startswith("retract_servo_start_failed")
@@ -514,6 +516,7 @@ class ServoUntilConditionProcedure:
         *,
         cancel_requested: Callable[[], bool] | None,
         stop_guard: Callable[[], bool] | None,
+        on_retract_start: Callable[[tuple[float, ...], float], None] | None = None,
     ) -> tuple[bool, str]:
         current_pose = self._read_current_pose()
         if current_pose is None:
@@ -556,6 +559,12 @@ class ServoUntilConditionProcedure:
             return False, "retract_target_not_above_contact"
         if requested_distance > maximum_distance:
             return False, "retract_maximum_distance_exceeded"
+        if on_retract_start is not None:
+            try:
+                on_retract_start(tuple(float(value) for value in current_pose[:6]), float(target_z))
+            except Exception:
+                _logger.exception("[SERVO_UNTIL_CONDITION] retract-start callback failed")
+                return False, "retract_start_callback_failed"
 
         motion_type = str(retract.motion_type or "servo").strip().lower()
         if motion_type == "ptp":
@@ -576,7 +585,7 @@ class ServoUntilConditionProcedure:
         )
 
         bounded_mover = getattr(self._robot, "servo_jog_to_z", None)
-        if not distance_based and callable(bounded_mover):
+        if callable(bounded_mover):
             bounded_result = bounded_mover(
                 target_z_mm=float(target_z),
                 fast_linear_mm_s=float(retract.linear_mm_s),
