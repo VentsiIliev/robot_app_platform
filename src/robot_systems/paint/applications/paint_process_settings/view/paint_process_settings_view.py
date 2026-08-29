@@ -37,13 +37,20 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
 from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
     SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT,
+    SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT_LIN,
 )
 
 
 _SERVO_APPROACH_STRATEGY_KEY = "pickup_servo_contact_approach_strategy"
-_LEARNED_HEIGHT_ONLY_KEYS = {
-    "pickup_servo_contact_fast_linear_mm_s",
+_LEARNED_HEIGHT_SHARED_KEYS = {
     "pickup_servo_contact_slowdown_clearance_mm",
+}
+_LEARNED_HEIGHT_SERVO_ONLY_KEYS = {
+    "pickup_servo_contact_fast_linear_mm_s",
+}
+_LEARNED_HEIGHT_LIN_ONLY_KEYS = {
+    "pickup_servo_contact_learned_lin_vel_percent",
+    "pickup_servo_contact_learned_lin_acc_percent",
 }
 _MAGAZINE_PICKUP_MODE_KEY = "magazine_pickup_mode"
 _FIXED_MAGAZINE_ONLY_KEYS = {
@@ -906,11 +913,12 @@ class PaintProcessSettingsView(IApplicationView):
         self.value_changed.emit(key, value)
 
     def _update_servo_strategy_field_visibility(self, strategy: object) -> None:
-        learned_height = (
-            str(strategy or "").strip().lower()
-            == SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT
-        )
-        self._set_setting_fields_visible(_LEARNED_HEIGHT_ONLY_KEYS, learned_height)
+        normalized = str(strategy or "").strip().lower()
+        learned_servo = normalized == SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT
+        learned_lin = normalized == SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT_LIN
+        self._set_setting_fields_visible(_LEARNED_HEIGHT_SHARED_KEYS, learned_servo or learned_lin)
+        self._set_setting_fields_visible(_LEARNED_HEIGHT_SERVO_ONLY_KEYS, learned_servo)
+        self._set_setting_fields_visible(_LEARNED_HEIGHT_LIN_ONLY_KEYS, learned_lin)
 
     def _update_magazine_mode_field_visibility(self, mode: object) -> None:
         fixed_group = (

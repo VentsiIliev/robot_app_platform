@@ -55,6 +55,8 @@
     "servo_contact_approach_strategy": "full_servo",
     "servo_contact_linear_mm_s": 350.0,
     "servo_contact_fast_linear_mm_s": 200.0,
+    "servo_contact_learned_lin_vel_percent": 80.0,
+    "servo_contact_learned_lin_acc_percent": 40.0,
     "servo_contact_slowdown_clearance_mm": 10.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_retract_distance_mm": 20.0,

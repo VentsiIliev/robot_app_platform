@@ -7,9 +7,11 @@ PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
 PICKUP_CONTACT_MODE_HEIGHT_MEASURE = "height_measure"
 SERVO_APPROACH_STRATEGY_FULL_SERVO = "full_servo"
 SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT = "learned_height"
+SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT_LIN = "learned_height_lin"
 SERVO_APPROACH_STRATEGIES = (
     SERVO_APPROACH_STRATEGY_FULL_SERVO,
     SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT,
+    SERVO_APPROACH_STRATEGY_LEARNED_HEIGHT_LIN,
 )
 PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_PLANNED,
@@ -90,6 +92,8 @@ class PickupMotionConfig:
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_approach_strategy: str = SERVO_APPROACH_STRATEGY_FULL_SERVO  # [LIVE SETTINGS]
     servo_contact_fast_linear_mm_s: float = 100.0  # [LIVE SETTINGS]
+    servo_contact_learned_lin_vel_percent: float = 80.0  # [LIVE SETTINGS]
+    servo_contact_learned_lin_acc_percent: float = 40.0  # [LIVE SETTINGS]
     servo_contact_slowdown_clearance_mm: float = 10.0  # [LIVE SETTINGS]
     servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
     servo_contact_retract_distance_mm: float = 10.0  # [LIVE SETTINGS]

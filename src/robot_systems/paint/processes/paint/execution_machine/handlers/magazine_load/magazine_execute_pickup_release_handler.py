@@ -28,6 +28,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     pickup_condition_is_active_after_retract,
 )
 from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
+    execute_learned_linear_approach,
     resolve_transition,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
@@ -289,6 +290,13 @@ def _execute_magazine_servo_contact_pickup_release(
             source=source,
             approach_z_mm=float(transfer_waypoints[0][1][2]),
         )
+        if not execute_learned_linear_approach(
+            executor,
+            speed_transition,
+            transfer_waypoints[0][1],
+        ):
+            discard_prepared()
+            return False, "Magazine LIN move to learned pickup clearance failed"
         _logger.info(
             "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,

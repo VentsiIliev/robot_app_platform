@@ -23,6 +23,7 @@ from src.robot_systems.paint.processes.paint.config import (
 )
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
+    execute_learned_linear_approach,
     resolve_transition,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
@@ -413,6 +414,12 @@ class PaintPickupExecutor:
             source="calibration_vision",
             approach_z_mm=float(approach_waypoints[-1].pose[2]),
         )
+        if not execute_learned_linear_approach(
+            self._owner,
+            speed_transition,
+            approach_waypoints[-1].pose,
+        ):
+            return False
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,

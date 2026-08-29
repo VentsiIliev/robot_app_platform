@@ -227,6 +227,8 @@ class PaintProcessSettingsMapper:
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
             "pickup_servo_contact_approach_strategy": pickup.servo_contact_approach_strategy,
             "pickup_servo_contact_fast_linear_mm_s": pickup.servo_contact_fast_linear_mm_s,
+            "pickup_servo_contact_learned_lin_vel_percent": pickup.servo_contact_learned_lin_vel_percent,
+            "pickup_servo_contact_learned_lin_acc_percent": pickup.servo_contact_learned_lin_acc_percent,
             "pickup_servo_contact_slowdown_clearance_mm": pickup.servo_contact_slowdown_clearance_mm,
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
             "pickup_servo_contact_retract_distance_mm": pickup.servo_contact_retract_distance_mm,
@@ -389,6 +391,18 @@ class PaintProcessSettingsMapper:
                 flat.get(
                     "pickup_servo_contact_fast_linear_mm_s",
                     base.pickup_motion.servo_contact_fast_linear_mm_s,
+                )
+            ),
+            servo_contact_learned_lin_vel_percent=float(
+                flat.get(
+                    "pickup_servo_contact_learned_lin_vel_percent",
+                    base.pickup_motion.servo_contact_learned_lin_vel_percent,
+                )
+            ),
+            servo_contact_learned_lin_acc_percent=float(
+                flat.get(
+                    "pickup_servo_contact_learned_lin_acc_percent",
+                    base.pickup_motion.servo_contact_learned_lin_acc_percent,
                 )
             ),
             servo_contact_slowdown_clearance_mm=float(

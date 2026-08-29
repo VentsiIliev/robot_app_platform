@@ -128,6 +128,8 @@
     "Servo Contact Settings": "Servo Contact Settings",
     "Servo Approach Strategy": "Servo Approach Strategy",
     "Fast Descent Speed": "Fast Descent Speed",
+    "Learned LIN Velocity": "Learned LIN Velocity",
+    "Learned LIN Acceleration": "Learned LIN Acceleration",
     "Slowdown Clearance": "Slowdown Clearance",
     "Servo Retract Safety Margin": "Servo Retract Safety Margin",
     "Fast Servo Retract Speed": "Fast Servo Retract Speed",
