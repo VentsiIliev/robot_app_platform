@@ -366,12 +366,12 @@ class PaintPickupExecutor:
             or ""
         ).strip().lower()
         combine_lift_with_alignment = motion_plane == "xy_z_rz"
-        if (
-            combine_lift_with_alignment
-            and len(continuation_waypoints) >= 2
+        combine_alignment_with_safe_travel = (
+            len(continuation_waypoints) >= 2
             and continuation_waypoints[0].label == "Aligning workpiece to paint axis"
             and continuation_waypoints[1].label.startswith("Safe travel waypoint ")
-        ):
+        )
+        if combine_alignment_with_safe_travel:
             align = continuation_waypoints[0]
             safe = continuation_waypoints[1]
             combined_safe_pose = list(safe.pose)
@@ -399,11 +399,10 @@ class PaintPickupExecutor:
                 # any motion can start.
                 first.motion_type, 0.0,
             )
-        if combine_lift_with_alignment:
-            # The bounded Servo retract has already established vertical
-            # clearance. For XY/RZ painting, the first continuation move
-            # completes the lift and alignment together; when safe travel is
-            # configured, that move targets its first waypoint directly.
+        if combine_lift_with_alignment or combine_alignment_with_safe_travel:
+            # The retract has already established vertical clearance. When a
+            # safe-travel waypoint exists, move there directly while applying
+            # the alignment orientation; do not revisit the calibration XY.
             combined_waypoints = continuation_waypoints
         else:
             lift_waypoint = PickupWaypoint(

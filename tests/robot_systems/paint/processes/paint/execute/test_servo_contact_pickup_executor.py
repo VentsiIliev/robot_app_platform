@@ -565,6 +565,54 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(prepared_segments[0]["acc"], 60.0)
         self.assertEqual(prepared_segments[0]["blendR"], 0.0)
 
+    def test_servo_pickup_with_safe_travel_never_revisits_calibration_xy(self):
+        robot = _FakeRobot()
+        robot.support_prepared = True
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=12.0,
+            servo_contact_min_z_mm=-5.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionAfterStart(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _contact_motion_config=SimpleNamespace(motion_plane="unexpected_mode"),
+            _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
+        )
+        plan = PickupPlan(
+            strategy_name="test",
+            motion_plan=object(),
+            waypoints=(
+                PickupWaypoint("approach", [1, 2, 100, 180, 0, 15], 10, 10, "ptp", 0),
+                PickupWaypoint("contact", [1, 2, 0, 180, 0, 15], 10, 10, "linear", 0),
+                PickupWaypoint("lift", [1, 2, 20, 180, 0, 15], 10, 10, "ptp", 0),
+                PickupWaypoint("Aligning workpiece to paint axis", [1, 2, 100, 180, 0, 0], 30, 30, "ptp", 10),
+                PickupWaypoint("Safe travel waypoint 1", [50, 60, 150, 170, 5, 25], 80, 60, "ptp", 20),
+                PickupWaypoint("Moving to staging offset before first pivot contact pose", [100, 120, 150, 180, 0, 0], 80, 60, "ptp", 0),
+            ),
+            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_waypoint_index=1,
+            retract_reference_pose=[1, 2, 20, 180, 0, 15],
+        )
+
+        self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
+
+        prepared_segments = robot.prepared[0][0]
+        self.assertEqual(
+            [segment["label"] for segment in prepared_segments],
+            ["Safe travel waypoint 1", "Moving to staging offset before first pivot contact pose"],
+        )
+        self.assertEqual(prepared_segments[0]["position"], [50, 60, 150, 180, 0, 0])
+
     def test_servo_contact_prepared_chain_replaces_separate_ptp_retract(self):
         robot = _FakeRobot()
         robot.support_prepared = True
