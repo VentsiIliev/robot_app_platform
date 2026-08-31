@@ -662,7 +662,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         vel = float(default_vel)
         acc = float(default_acc)
         motion_type = str(default_motion_type or "ptp").strip().lower()
-        if motion_type not in {"ptp", "linear"}:
+        if motion_type not in {"ptp", "linear", "fast_lin"}:
             motion_type = "ptp"
         blend_r = 0.0
         if isinstance(value, dict):
@@ -675,7 +675,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                 acc = float(default_acc)
                 blend_r = 0.0
             candidate = str(value.get("motion_type", value.get("type", "ptp")) or "ptp").strip().lower()
-            if candidate in {"ptp", "linear"}:
+            if candidate in {"ptp", "linear", "fast_lin"}:
                 motion_type = candidate
         else:
             try:
@@ -685,7 +685,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
                     acc = float(raw[7])
                 if len(raw) >= 9:
                     candidate = str(raw[8] or "ptp").strip().lower()
-                    if candidate in {"ptp", "linear"}:
+                    if candidate in {"ptp", "linear", "fast_lin"}:
                         motion_type = candidate
                 if len(raw) >= 10:
                     blend_r = float(raw[9])

@@ -229,6 +229,41 @@ class TestDropoffMotionCorridor(unittest.TestCase):
         robot.move_ptp.assert_not_called()
         robot.move_linear.assert_not_called()
 
+    def test_fast_lin_waypoint_calls_fast_linear_operation(self):
+        robot = MagicMock()
+        robot.move_fast_linear.return_value = {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _pickup_tool=1,
+            _pickup_user=2,
+        )
+
+        ok = PaintMotionExecutor(owner).move_pickup_phase(
+            "Fast travel",
+            [300.0, 120.0, 80.0, 180.0, 0.0, 0.0],
+            velocity=70.0,
+            acceleration=40.0,
+            motion_type="fast_lin",
+        )
+
+        self.assertTrue(ok)
+        robot.move_fast_linear.assert_called_once_with(
+            position=[300.0, 120.0, 80.0, 180.0, 0.0, 0.0],
+            tool=1,
+            user=2,
+            vel=70.0,
+            acc=40.0,
+            trajectory_optimizer="TOTG",
+        )
+        robot.move_ptp.assert_not_called()
+        robot.move_linear.assert_not_called()
+
     def test_failed_retract_fails_dropoff_before_any_next_phase_can_continue(self):
         dropoff = SimpleNamespace(
             strategy="movement_group",

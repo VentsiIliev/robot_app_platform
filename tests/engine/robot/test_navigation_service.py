@@ -132,6 +132,41 @@ class TestNavigationService(unittest.TestCase):
         )
         motion.move_ptp.assert_not_called()
 
+    def test_move_to_group_allows_fast_lin_override(self):
+        motion = MagicMock()
+        motion.move_fast_linear.return_value = {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
+        group = MovementGroup(
+            velocity=70,
+            acceleration=40,
+            motion_type="ptp",
+            position="[1, 2, 3, 4, 5, 6]",
+        )
+        service = NavigationService(
+            motion,
+            CommonSettingsID.ROBOT_CONFIG,
+            CommonSettingsID.MOVEMENT_GROUPS,
+            settings_service=_Settings(group),
+        )
+
+        self.assertTrue(service.move_to_group("HOME", motion_type="fast_lin"))
+
+        motion.move_fast_linear.assert_called_once_with(
+            position=[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            tool=2,
+            user=3,
+            vel=70,
+            acc=40,
+            trajectory_optimizer="TOTG",
+        )
+        motion.move_ptp.assert_not_called()
+        motion.move_linear.assert_not_called()
+
 
 class TestMovementGroupMotionType(unittest.TestCase):
     def test_from_dict_defaults_to_ptp_and_serializes_motion_type(self):

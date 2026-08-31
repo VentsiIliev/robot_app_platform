@@ -59,6 +59,23 @@ class PaintMotionExecutor:
                     blendR=max(0.0, float(blendR)),
                     wait_to_reach=True,
                 )
+            elif str(motion_type or "ptp").strip().lower() == "fast_lin":
+                result = owner._robot_service.move_fast_linear(
+                    position=pose,
+                    tool=owner._pickup_tool,
+                    user=owner._pickup_user,
+                    vel=velocity,
+                    acc=acceleration,
+                    trajectory_optimizer="TOTG",
+                )
+                ok = bool(
+                    isinstance(result, dict)
+                    and result.get("result") == 0
+                    and result.get("success") is True
+                    and result.get("accepted") is True
+                    and result.get("final") is True
+                    and result.get("queued") is False
+                )
             elif str(motion_type or "ptp").strip().lower() == "linear":
                 ok = owner._robot_service.move_linear(
                     position=pose,

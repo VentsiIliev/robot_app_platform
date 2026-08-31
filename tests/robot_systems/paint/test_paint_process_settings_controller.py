@@ -298,6 +298,13 @@ class TestPaintProcessSettingsApplicationService(unittest.TestCase):
         robot = MagicMock()
         robot.move_linear.return_value = True
         robot.move_ptp.return_value = True
+        robot.move_fast_linear.return_value = {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
         service = PaintProcessSettingsApplicationService(
             process_config_service=MagicMock(),
             robot_service_provider=lambda: robot,
@@ -319,12 +326,28 @@ class TestPaintProcessSettingsApplicationService(unittest.TestCase):
             "motion_type": "ptp",
             "blendR": 99,
         }
+        fast_lin = {
+            "position": [13, 14, 15, 16, 17, 18],
+            "vel_percent": 80,
+            "acc_percent": 60,
+            "motion_type": "fast_lin",
+            "blendR": 0,
+        }
 
         self.assertTrue(service.move_to_waypoint(linear))
         self.assertTrue(service.move_to_waypoint(ptp))
+        self.assertTrue(service.move_to_waypoint(fast_lin))
 
         robot.move_linear.assert_called_once_with([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 4, 70.0, 30.0, 12.5, True)
         robot.move_ptp.assert_called_once_with([7.0, 8.0, 9.0, 10.0, 11.0, 12.0], 3, 4, 50.0, 20.0, True)
+        robot.move_fast_linear.assert_called_once_with(
+            position=[13.0, 14.0, 15.0, 16.0, 17.0, 18.0],
+            tool=3,
+            user=4,
+            vel=80.0,
+            acc=60.0,
+            trajectory_optimizer="TOTG",
+        )
 
     def test_move_to_waypoint_uses_live_robot_settings(self):
         robot = MagicMock()

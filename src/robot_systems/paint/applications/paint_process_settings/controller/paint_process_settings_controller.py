@@ -384,7 +384,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             except TypeError:
                 raw_type = "ptp"
         candidate = str(raw_type or "ptp").strip().lower()
-        if candidate in {"ptp", "linear"}:
+        if candidate in {"ptp", "linear", "fast_lin"}:
             motion_type = candidate
         return {"position": pose, "vel_percent": vel, "acc_percent": acc, "motion_type": motion_type, "blendR": blend_r}
 

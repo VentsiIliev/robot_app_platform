@@ -118,6 +118,26 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         vel = normalized["vel_percent"]
         acc = normalized["acc_percent"]
         tool, user = self._resolve_robot_frame()
+        if normalized["motion_type"] == "fast_lin":
+            move = getattr(robot, "move_fast_linear", None)
+            if not callable(move):
+                return False
+            result = move(
+                position=position,
+                tool=tool,
+                user=user,
+                vel=vel,
+                acc=acc,
+                trajectory_optimizer="TOTG",
+            )
+            return bool(
+                isinstance(result, dict)
+                and result.get("result") == 0
+                and result.get("success") is True
+                and result.get("accepted") is True
+                and result.get("final") is True
+                and result.get("queued") is False
+            )
         if normalized["motion_type"] == "linear":
             move = getattr(robot, "move_linear", None)
             if not callable(move):
@@ -165,7 +185,7 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
         motion_type = "ptp"
         if isinstance(value, dict):
             candidate = str(value.get("motion_type", value.get("type", "ptp"))).strip().lower()
-            if candidate in {"ptp", "linear"}:
+            if candidate in {"ptp", "linear", "fast_lin"}:
                 motion_type = candidate
         return {
             "position": position,

@@ -362,7 +362,7 @@ class _WaypointTable(QWidget):
     @staticmethod
     def _normalize_motion_type(value: object) -> str:
         motion_type = str(value or "ptp").strip().lower()
-        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"
 
 
 class _MotionProfileTable(QWidget):
@@ -471,7 +471,7 @@ class _MotionProfileTable(QWidget):
     @staticmethod
     def _normalize_profile(value: dict) -> dict:
         motion_type = str(value.get("motion_type", value.get("type", "ptp")) or "ptp").strip().lower()
-        if motion_type not in {"ptp", "linear"}:
+        if motion_type not in {"ptp", "linear", "fast_lin"}:
             motion_type = "ptp"
         try:
             vel = float(value.get("vel_percent", 0.0))
@@ -520,8 +520,10 @@ class _MotionProfileDialog(AppDialog):
         form.addRow("Acceleration %", self._acc)
 
         self._motion_type = QComboBox()
-        self._motion_type.addItems(["PTP", "Linear"])
-        self._motion_type.setCurrentText("Linear" if normalized["motion_type"] == "linear" else "PTP")
+        self._motion_type.addItems(["PTP", "Linear", "Fast LIN"])
+        self._motion_type.setCurrentText(
+            {"linear": "Linear", "fast_lin": "Fast LIN"}.get(normalized["motion_type"], "PTP")
+        )
         self._motion_type.setStyleSheet(DIALOG_INPUT_STYLE)
         form.addRow("Type", self._motion_type)
 
@@ -534,12 +536,16 @@ class _MotionProfileDialog(AppDialog):
         root.addWidget(self._build_button_row(ok_label="Save"))
 
     def profile(self) -> dict:
+        selected_type = {
+            "linear": "linear",
+            "fast lin": "fast_lin",
+        }.get(self._motion_type.currentText().strip().lower(), "ptp")
         return {
             "key": self._key,
             "label": self._label,
             "vel_percent": float(self._vel.text()),
             "acc_percent": float(self._acc.text()),
-            "motion_type": "linear" if self._motion_type.currentText().lower() == "linear" else "ptp",
+            "motion_type": selected_type,
             "blendR": float(self._blend_r.text()),
         }
 
@@ -603,8 +609,10 @@ class _WaypointDialog(AppDialog):
             form.addRow(label, edit)
             self._fields.append(edit)
         self._motion_type = QComboBox()
-        self._motion_type.addItems(["PTP", "Linear"])
-        self._motion_type.setCurrentText("Linear" if motion_type == "linear" else "PTP")
+        self._motion_type.addItems(["PTP", "Linear", "Fast LIN"])
+        self._motion_type.setCurrentText(
+            {"linear": "Linear", "fast_lin": "Fast LIN"}.get(motion_type, "PTP")
+        )
         self._motion_type.setStyleSheet(DIALOG_INPUT_STYLE)
         form.addRow("Type", self._motion_type)
         self._blend_r = KeyboardLineEdit()
@@ -652,11 +660,15 @@ class _WaypointDialog(AppDialog):
 
     def waypoint(self) -> dict:
         values = [float(field.text()) for field in self._fields]
+        selected_type = {
+            "linear": "linear",
+            "fast lin": "fast_lin",
+        }.get(self._motion_type.currentText().strip().lower(), "ptp")
         return {
             "position": values[:6],
             "vel_percent": values[6],
             "acc_percent": values[7],
-            "motion_type": "linear" if self._motion_type.currentText().lower() == "linear" else "ptp",
+            "motion_type": selected_type,
             "blendR": values[8],
         }
 

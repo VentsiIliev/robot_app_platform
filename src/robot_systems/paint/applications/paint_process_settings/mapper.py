@@ -95,7 +95,7 @@ class PaintProcessSettingsMapper:
     @staticmethod
     def _motion_type_from_value(value: object) -> str:
         motion_type = str(value or "ptp").strip().lower()
-        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"
 
     @staticmethod
     def _profile_from_config(config: object, key: str, label: str, vel_attr: str, acc_attr: str) -> dict:

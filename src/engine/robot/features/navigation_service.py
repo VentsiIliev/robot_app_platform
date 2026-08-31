@@ -161,6 +161,23 @@ class NavigationService:
         acc = acceleration if acceleration is not None else group.acceleration
         resolved_motion_type = self._normalize_motion_type(motion_type) if motion_type is not None else self._group_motion_type(group)
         blend_r = max(0.0, float(blendR)) if blendR is not None else 0.0
+        if resolved_motion_type == "fast_lin":
+            result = self._motion.move_fast_linear(
+                position=position,
+                tool=tool,
+                user=user,
+                vel=vel,
+                acc=acc,
+                trajectory_optimizer="TOTG",
+            )
+            return bool(
+                isinstance(result, dict)
+                and result.get("result") == 0
+                and result.get("success") is True
+                and result.get("accepted") is True
+                and result.get("final") is True
+                and result.get("queued") is False
+            )
         if resolved_motion_type == "linear":
             return self._motion.move_linear(
                 position=position,
@@ -189,4 +206,4 @@ class NavigationService:
     @staticmethod
     def _normalize_motion_type(value: object) -> str:
         motion_type = str(value or "ptp").strip().lower()
-        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"

@@ -687,7 +687,7 @@ def build_paint_pickup_segments(waypoints: tuple[PickupWaypoint, ...] | list[Pic
         is_pickup_contact = waypoint.label == "Descending to pickup pose"
         move_type = "linear" if is_pickup_contact else "ptp"
         configured_type = str(getattr(waypoint, "motion_type", None) or "").strip().lower()
-        if configured_type in {"ptp", "linear"}:
+        if configured_type in {"ptp", "linear", "fast_lin"}:
             move_type = configured_type
         default_blend_r = (
             0.0
