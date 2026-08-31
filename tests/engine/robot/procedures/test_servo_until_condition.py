@@ -374,11 +374,46 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertTrue(result.retracted)
-        self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 35.0, 180.0, 0.0, 7.0])
+        self.assertEqual(robot.fast_linear_request["position"], [9.0, 9.0, 35.0, 0.0, 0.0, 0.0])
         self.assertEqual(robot.fast_linear_request["tool"], 1)
         self.assertEqual(robot.fast_linear_request["user"], 2)
         self.assertEqual(robot.fast_linear_request["vel"], 70.0)
         self.assertEqual(robot.fast_linear_request["acc"], 40.0)
+
+    def test_fast_lin_retract_waits_for_delayed_final_pose_feedback(self):
+        class DelayedFeedbackRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position_reads = 0
+
+            def get_current_position(self):
+                self.position_reads += 1
+                if self.position_reads < 5:
+                    return [0.0, 0.0, 5.0, 0.0, 0.0, 0.0]
+                return [9.0, 9.0, 35.0, 0.0, 0.0, 0.0]
+
+            def move_fast_linear(self, **_kwargs):
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": True,
+                    "queued": False,
+                }
+
+        result = ServoUntilConditionProcedure(
+            DelayedFeedbackRobot(), _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                target_pose=[9.0, 9.0, 35.0, 0.0, 0.0, 0.0],
+                motion_type="fast_lin",
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+            ),
+        )
+
+        self.assertTrue(result.success, result.message)
 
     def test_fast_lin_retract_rejects_non_final_acceptance(self):
         class FastLinRobot(FakeRobot):

@@ -276,7 +276,7 @@ def _execute_magazine_servo_contact_pickup_release(
         return False, "Magazine release motion could not be prepared before servo pickup"
     if release_has_fast_lin:
         _logger.info(
-            "[MAGAZINE_LOAD] Release contains Fast LIN; deferring mixed execution until after Servo retract"
+            "[MAGAZINE_LOAD] Release contains Fast LIN; deferring mixed execution until after Fast LIN retract"
         )
 
     def discard_prepared() -> None:
@@ -316,19 +316,9 @@ def _execute_magazine_servo_contact_pickup_release(
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,
                 motion_type="fast_lin",
-                linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
-                final_linear_mm_s=float(
-                    getattr(pickup_motion, "servo_contact_retract_final_linear_mm_s", 50.0)
-                ),
-                slowdown_distance_mm=float(
-                    getattr(pickup_motion, "servo_contact_retract_slowdown_clearance_mm", 20.0)
-                ),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
-                safety_margin_mm=float(
-                    getattr(pickup_motion, "servo_contact_retract_safety_margin_mm", 10.0)
-                ),
                 fast_lin_velocity_percent=float(
                     getattr(pickup_motion, "lift_align_vel_percent", 80.0)
                 ),
@@ -395,15 +385,15 @@ def _execute_magazine_servo_contact_pickup_release(
             off_ok, off_msg = executor._motion.turn_vacuum_off()
             if not off_ok:
                 return False, (
-                    "Magazine workpiece is no longer detected after Servo retract; "
+                    "Magazine workpiece is no longer detected after Fast LIN retract; "
                     f"vacuum pump OFF also failed: {off_msg}"
                 )
-            return False, "Magazine workpiece is no longer detected after Servo retract"
+            return False, "Magazine workpiece is no longer detected after Fast LIN retract"
         current_pose = _wait_for_stable_pose(executor._robot_service)
         if current_pose is None:
             return False, "Magazine post-retract pose did not become stable"
         if not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
-            return False, "Magazine servo retract did not reach the prepared release start pose"
+            return False, "Magazine Fast LIN retract did not reach the prepared release start pose"
 
         if prepared_plan_id is not None:
             execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
@@ -411,7 +401,7 @@ def _execute_magazine_servo_contact_pickup_release(
                 return False, f"Magazine {release_label} prepared release execution failed"
             prepared_plan_id = None
         elif not executor._motion.move_ordered_pickup_sequence(
-            f"Magazine {release_label} release after Servo retract",
+            f"Magazine {release_label} release after Fast LIN retract",
             release_segments,
         ):
             return False, f"Magazine {release_label} mixed release execution failed"

@@ -325,7 +325,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
 
         self.assertFalse(ok)
-        self.assertEqual("Magazine workpiece is no longer detected after Servo retract", message)
+        self.assertEqual("Magazine workpiece is no longer detected after Fast LIN retract", message)
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["prepared-1"], robot.discarded_prepared)
 
@@ -398,7 +398,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             [label for label, _segments in motion.sequences],
             [
                 "Pickup approach before servo contact",
-                "Pickup lift and continuation after completed Servo retract",
+                "Pickup lift and continuation after completed Fast LIN retract",
             ],
         )
         moved_labels = [
@@ -408,7 +408,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         ]
         self.assertEqual(
             moved_labels,
-            ["approach", "Raising workpiece after Servo retract", "stage"],
+            ["approach", "Raising workpiece after Fast LIN retract", "stage"],
         )
         self.assertEqual(motion.sequences[0][1][0]["blendR"], 0.0)
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
@@ -498,7 +498,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(len(robot.fast_linear_requests), 1)
-        self.assertEqual(robot.fast_linear_requests[0]["position"], [0.0, 0.0, 100.0, 0.0, 0.0, 0.0])
+        self.assertEqual(robot.fast_linear_requests[0]["position"], [1.0, 2.0, 100.0, 0.0, 0.0, 3.0])
         self.assertEqual(robot.fast_linear_requests[0]["vel"], 30.0)
         self.assertEqual(robot.fast_linear_requests[0]["acc"], 30.0)
         self.assertEqual(robot.ptp_moves, [])

@@ -825,7 +825,12 @@ class ServoUntilConditionProcedure:
         if not math.isfinite(acceleration) or not 0.0 < acceleration <= 100.0:
             return False, "invalid_retract_fast_lin_acceleration"
 
-        target_pose = list(current_pose[:6])
+        configured_target = self._valid_pose(retract.target_pose)
+        target_pose = (
+            list(configured_target)
+            if configured_target is not None
+            else list(current_pose[:6])
+        )
         target_pose[2] = float(target_z)
         mover = getattr(self._robot, "move_fast_linear", None)
         if not callable(mover):
@@ -853,11 +858,32 @@ class ServoUntilConditionProcedure:
             detail = outcome.get("detail") or outcome.get("error") or outcome.get("result") or "failed"
             return False, f"fast_lin_failed:{detail}"
 
-        final_pose = self._read_current_pose()
-        if final_pose is None:
-            return False, "retract_position_unreadable"
-        if abs(float(final_pose[2]) - float(target_z)) > tolerance:
-            return False, "fast_lin_retract_final_mismatch"
+        deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
+        final_pose = None
+        while True:
+            final_pose = self._read_current_pose()
+            if final_pose is not None:
+                position_error = math.sqrt(
+                    sum(
+                        (float(final_pose[index]) - float(target_pose[index])) ** 2
+                        for index in range(3)
+                    )
+                )
+                if position_error <= tolerance:
+                    break
+            if time.monotonic() >= deadline:
+                if final_pose is None:
+                    return False, "retract_position_unreadable"
+                _logger.error(
+                    "[SERVO_UNTIL_CONDITION] Fast LIN final pose mismatch "
+                    "target=%s actual=%s position_error_mm=%.3f tolerance_mm=%.3f",
+                    [round(float(value), 3) for value in target_pose[:6]],
+                    [round(float(value), 3) for value in final_pose[:6]],
+                    position_error,
+                    tolerance,
+                )
+                return False, "fast_lin_retract_final_mismatch"
+            time.sleep(max(0.005, float(retract.poll_interval_s)))
         _logger.info(
             "[SERVO_UNTIL_CONDITION] Fast LIN retract completed target_z=%.3f final_z=%.3f",
             target_z,

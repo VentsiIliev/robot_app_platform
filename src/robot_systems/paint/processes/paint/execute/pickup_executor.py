@@ -53,17 +53,17 @@ def pickup_pose_is_close(
 
 
 def pickup_condition_is_active_after_retract(condition: object) -> bool:
-    """Return whether the picked workpiece remains detected after Servo retract."""
+    """Return whether the picked workpiece remains detected after Fast LIN retract."""
     try:
         reader = getattr(condition, "is_active", None)
         active = reader() if callable(reader) else condition()
     except Exception:
-        _logger.exception("[PICKUP] Pickup condition read failed after Servo retract")
+        _logger.exception("[PICKUP] Pickup condition read failed after Fast LIN retract")
         return False
     if not bool(active):
-        _logger.error("[PICKUP] Workpiece is no longer detected after Servo retract")
+        _logger.error("[PICKUP] Workpiece is no longer detected after Fast LIN retract")
         return False
-    _logger.info("[PICKUP] Workpiece detection verified after Servo retract")
+    _logger.info("[PICKUP] Workpiece detection verified after Fast LIN retract")
     return True
 
 
@@ -405,7 +405,7 @@ class PaintPickupExecutor:
             combined_waypoints = continuation_waypoints
         else:
             lift_waypoint = PickupWaypoint(
-                "Raising workpiece after Servo retract",
+                "Raising workpiece after Fast LIN retract",
                 list(predicted_retract_pose),
                 float(pickup_motion.lift_align_vel_percent),
                 float(pickup_motion.lift_align_acc_percent),
@@ -436,7 +436,7 @@ class PaintPickupExecutor:
                 _logger.exception("[PICKUP] Failed to prepare continuation before Servo pickup")
         elif has_fast_lin:
             _logger.info(
-                "[PICKUP] Continuation contains Fast LIN; deferring mixed execution until after Servo retract"
+                "[PICKUP] Continuation contains Fast LIN; deferring mixed execution until after Fast LIN retract"
             )
 
         def discard_prepared() -> None:
@@ -489,19 +489,9 @@ class PaintPickupExecutor:
             retract=ServoRetractConfig(
                 target_pose=predicted_retract_pose,
                 motion_type="fast_lin",
-                linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
-                final_linear_mm_s=float(
-                    getattr(pickup_motion, "servo_contact_retract_final_linear_mm_s", 50.0)
-                ),
-                slowdown_distance_mm=float(
-                    getattr(pickup_motion, "servo_contact_retract_slowdown_clearance_mm", 20.0)
-                ),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
                 position_tolerance_mm=2.0,
-                safety_margin_mm=float(
-                    getattr(pickup_motion, "servo_contact_retract_safety_margin_mm", 10.0)
-                ),
                 fast_lin_velocity_percent=float(pickup_motion.lift_align_vel_percent),
                 fast_lin_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
             ),
@@ -563,7 +553,7 @@ class PaintPickupExecutor:
             off_ok, off_msg = self._owner._motion.turn_vacuum_off()
             if not off_ok:
                 self._last_failure_message = (
-                    "Workpiece is no longer detected after Servo retract; "
+                    "Workpiece is no longer detected after Fast LIN retract; "
                     f"vacuum pump OFF also failed: {off_msg}"
                 )
             return False
@@ -576,7 +566,7 @@ class PaintPickupExecutor:
         if retract_z_error > 2.0:
             discard_prepared()
             _logger.error(
-                "[PICKUP] Servo retract did not reach calibration target Z "
+                "[PICKUP] Fast LIN retract did not reach calibration target Z "
                 "target_z=%.3f current_z=%.3f error_mm=%.3f",
                 float(predicted_retract_pose[2]),
                 float(current_pose[2]),
@@ -597,7 +587,7 @@ class PaintPickupExecutor:
                 discard_prepared()
         else:
             ok = self._owner._motion.move_ordered_pickup_sequence(
-                "Pickup lift and continuation after completed Servo retract",
+                "Pickup lift and continuation after completed Fast LIN retract",
                 combined_segments,
             )
         return bool(ok)
