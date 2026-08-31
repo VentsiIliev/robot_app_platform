@@ -563,7 +563,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
         self.assertEqual(prepared_segments[0]["vel"], 80.0)
         self.assertEqual(prepared_segments[0]["acc"], 60.0)
-        self.assertEqual(prepared_segments[0]["blendR"], 0.0)
+        self.assertEqual(prepared_segments[0]["blendR"], 20.0)
 
     def test_servo_pickup_with_safe_travel_never_revisits_calibration_xy(self):
         robot = _FakeRobot()
@@ -612,6 +612,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             ["Safe travel waypoint 1", "Moving to staging offset before first pivot contact pose"],
         )
         self.assertEqual(prepared_segments[0]["position"], [50, 60, 150, 180, 0, 0])
+        self.assertEqual(prepared_segments[0]["blendR"], 20.0)
 
     def test_servo_contact_prepared_chain_replaces_separate_ptp_retract(self):
         robot = _FakeRobot()
