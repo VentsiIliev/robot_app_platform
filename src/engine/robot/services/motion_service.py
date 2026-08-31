@@ -110,12 +110,6 @@ class MotionService(IMotionService):
                 wait_started = time.perf_counter()
                 success = self._wait_for_position(position, cancelled=wait_cancelled)
                 wait_elapsed = time.perf_counter() - wait_started
-            if wait_to_reach:
-                diag_started = time.perf_counter()
-                while time.perf_counter() - diag_started < 1.0:
-                    current = self._robot.get_current_position() or self._cached_position
-                    self._logger.debug("[DIAG] move_ptp settle pose=%s", current)
-                    time.sleep(0.1)
             self._logger.info(
                 "[TIMING] move_ptp_total success=%s driver_elapsed_s=%.3f wait_elapsed_s=%.3f total_elapsed_s=%.3f pos=%s vel=%s acc=%s",
                 success,
