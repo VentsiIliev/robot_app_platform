@@ -26,6 +26,7 @@ from src.robot_systems.paint.processes.paint.config import (
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     pickup_condition_is_active_after_retract,
+    pickup_pose_is_close,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.timing import timed_step
@@ -353,10 +354,17 @@ def _execute_magazine_servo_contact_pickup_release(
                         ),
                     )
                 )
-                recovered = executor._motion.move_ordered_pickup_sequence(
-                    "Magazine pickup timeout recovery",
-                    recovery_segments,
-                )
+                current_pose = _read_fresh_pose(executor._robot_service)
+                if pickup_pose_is_close(current_pose, recovery_waypoint[1]):
+                    _logger.info(
+                        "[MAGAZINE_LOAD] Timeout recovery skipped: robot already at pickup origin"
+                    )
+                    recovered = True
+                else:
+                    recovered = executor._motion.move_ordered_pickup_sequence(
+                        "Magazine pickup timeout recovery",
+                        recovery_segments,
+                    )
                 recovery_failures = []
                 if not off_ok:
                     recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")

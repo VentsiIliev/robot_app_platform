@@ -173,11 +173,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertFalse(executor._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual("No workpiece at calibration", executor._last_failure_message)
-        self.assertEqual(
-            "Returning to calibration pickup origin after no contact",
-            motion.sequences[-1][1][0]["label"],
-        )
-        self.assertEqual([0, 0, 100, 0, 0, 0], motion.sequences[-1][1][0]["position"])
+        self.assertEqual(["Pickup approach before servo contact"], [label for label, _ in motion.sequences])
 
     def test_magazine_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
@@ -220,10 +216,9 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["prepared-1"], robot.discarded_prepared)
         self.assertEqual(
-            "Returning to magazine pickup origin after no contact",
-            motion.sequences[-1][1][0]["label"],
+            ["Magazine pickup approach before servo contact"],
+            [label for label, _ in motion.sequences],
         )
-        self.assertEqual([0, 0, 100, 0, 0, 0], motion.sequences[-1][1][0]["position"])
 
     def test_magazine_servo_handoff_executes_clearance_and_release_as_one_chain(self):
         robot = _FakeRobot()

@@ -29,6 +29,29 @@ from src.robot_systems.paint.timing import timed_block, timed_step
 _logger = logging.getLogger(__name__)
 
 
+def pickup_pose_is_close(
+    actual_pose: object,
+    target_pose: object,
+    *,
+    position_tolerance_mm: float = 0.5,
+    orientation_tolerance_deg: float = 0.5,
+) -> bool:
+    """Return True when a recovery move would be an effective no-op."""
+    try:
+        actual = [float(value) for value in list(actual_pose)[:6]]
+        target = [float(value) for value in list(target_pose)[:6]]
+    except (TypeError, ValueError):
+        return False
+    if len(actual) != 6 or len(target) != 6:
+        return False
+    position_error = math.sqrt(sum((actual[index] - target[index]) ** 2 for index in range(3)))
+    orientation_error = max(
+        abs((actual[index] - target[index] + 180.0) % 360.0 - 180.0)
+        for index in range(3, 6)
+    )
+    return position_error <= position_tolerance_mm and orientation_error <= orientation_tolerance_deg
+
+
 def pickup_condition_is_active_after_retract(condition: object) -> bool:
     """Return whether the picked workpiece remains detected after Servo retract."""
     try:
@@ -482,10 +505,17 @@ class PaintPickupExecutor:
                     "linear",
                     0.0,
                 )
-                recovered = self._move_waypoint_sequence(
-                    "Calibration pickup timeout recovery",
-                    [recovery_waypoint],
-                )
+                current_pose = self._read_fresh_pose()
+                if pickup_pose_is_close(current_pose, recovery_waypoint.pose):
+                    _logger.info(
+                        "[PICKUP] Calibration timeout recovery skipped: robot already at pickup origin"
+                    )
+                    recovered = True
+                else:
+                    recovered = self._move_waypoint_sequence(
+                        "Calibration pickup timeout recovery",
+                        [recovery_waypoint],
+                    )
                 recovery_failures = []
                 if not off_ok:
                     recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
