@@ -826,6 +826,8 @@ class MotionService(IMotionService):
             cancelled: Callable[[], bool] | None = None,
     ) -> bool:
         deadline = time.monotonic() + timeout
+        required_stable_samples = 3
+        stable_samples = 0
         last_current: List[float] | None = None
         last_dist: float | None = None
         last_orientation_delta: float | None = None
@@ -833,7 +835,7 @@ class MotionService(IMotionService):
             if cancelled is not None and cancelled():
                 self._logger.debug("wait_for_position cancelled while waiting for %s", target)
                 return False
-            current = self._robot.get_current_position() or self._cached_position
+            current = self._fresh_position()
             if current and len(current) >= 3:
                 dist = math.sqrt(sum((a - b) ** 2 for a, b in zip(current[:3], target[:3])))
                 orientation_delta = 0.0
@@ -843,7 +845,11 @@ class MotionService(IMotionService):
                 last_dist = dist
                 last_orientation_delta = orientation_delta
                 if dist <= threshold and orientation_delta <= orientation_threshold_deg:
-                    return True
+                    stable_samples += 1
+                    if stable_samples >= required_stable_samples:
+                        return True
+                else:
+                    stable_samples = 0
             time.sleep(delay)
         if last_current and len(last_current) >= 6:
             self._logger.warning(

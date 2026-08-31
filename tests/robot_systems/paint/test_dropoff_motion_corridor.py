@@ -24,7 +24,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
 
 
 class TestDropoffMotionCorridor(unittest.TestCase):
-    def test_sub_zero_release_executes_prepared_retract_and_next_cycle_start_tail(self):
+    def test_sub_zero_release_retracts_then_moves_to_and_validates_next_cycle_start(self):
         dropoff = SimpleNamespace(
             strategy="movement_group",
             allow_sub_zero_dropoff=True,
@@ -35,10 +35,6 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             release_align_blendR=0.0,
         )
         robot = MagicMock()
-        robot.prepare_ordered_motion_chain.return_value = {"plan_id": "next-cycle-1"}
-        robot.execute_prepared_ordered_motion_chain.return_value = {
-            "state": "completed", "result": 0,
-        }
         motion = MagicMock()
         motion.move_pickup_phase.return_value = True
         motion.turn_vacuum_off.return_value = (True, "")
@@ -73,17 +69,20 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             )
 
         self.assertTrue(ok, message)
-        prepared = robot.prepare_ordered_motion_chain.call_args.kwargs
-        self.assertEqual(-80.0, prepared["start_position"][2])
+        labels = [call.args[0] for call in motion.move_pickup_phase.call_args_list]
         self.assertEqual(
-            ["Retracting through dropoff group 'Dropoff' passage", "Moving to next-cycle start 'Magazine Fixed Pickup'"],
-            [segment["label"] for segment in prepared["segments"]],
+            [
+                "Moving above dropoff group 'Dropoff'",
+                "Descending through dropoff group 'Dropoff' passage",
+                "Retracting through dropoff group 'Dropoff' passage",
+                "Moving to next-cycle start 'Magazine Fixed Pickup'",
+            ],
+            labels,
         )
-        self.assertEqual(50.0, prepared["segments"][0]["position"][2])
-        self.assertTrue(prepared["segments"][0]["protected"])
-        robot.execute_prepared_ordered_motion_chain.assert_called_once_with("next-cycle-1")
+        robot.prepare_ordered_motion_chain.assert_not_called()
+        robot.execute_prepared_ordered_motion_chain.assert_not_called()
         self.assertEqual("Magazine Fixed Pickup", owner._last_prepositioned_start_group)
-        self.assertEqual(2, motion.move_pickup_phase.call_count)
+        self.assertEqual(4, motion.move_pickup_phase.call_count)
 
     def test_saved_settings_update_snapshot_and_notify_live_corridor_consumer(self):
         settings_repository = MagicMock()

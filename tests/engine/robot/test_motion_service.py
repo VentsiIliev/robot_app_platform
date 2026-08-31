@@ -487,17 +487,17 @@ class TestMotionService(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_wait_for_position_returns_true_when_within_threshold(self):
-        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 0.0, 0.0, 0.0]
+        self.robot.get_current_position_fresh.return_value = [100.0, 0.0, 300.0, 0.0, 0.0, 0.0]
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=1.0)
         self.assertTrue(result)
 
     def test_wait_for_position_returns_false_on_timeout(self):
-        self.robot.get_current_position.return_value = [0.0, 0.0, 0.0]
+        self.robot.get_current_position_fresh.return_value = [0.0, 0.0, 0.0]
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=0.05)
         self.assertFalse(result)
 
     def test_wait_for_position_returns_false_when_cancelled(self):
-        self.robot.get_current_position.return_value = [0.0, 0.0, 0.0]
+        self.robot.get_current_position_fresh.return_value = [0.0, 0.0, 0.0]
         result = self.service._wait_for_position(
             [100.0, 0.0, 300.0],
             threshold=2.0,
@@ -508,7 +508,7 @@ class TestMotionService(unittest.TestCase):
         self.assertFalse(result)
 
     def test_wait_for_position_waits_for_orientation_when_target_contains_rpy(self):
-        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, 0.0]
+        self.robot.get_current_position_fresh.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, 0.0]
         result = self.service._wait_for_position(
             [100.0, 0.0, 300.0, 180.0, 0.0, 15.0],
             threshold=2.0,
@@ -519,7 +519,7 @@ class TestMotionService(unittest.TestCase):
         self.assertFalse(result)
 
     def test_wait_for_position_accepts_orientation_when_within_wrapped_threshold(self):
-        self.robot.get_current_position.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, -179.5]
+        self.robot.get_current_position_fresh.return_value = [100.0, 0.0, 300.0, 180.0, 0.0, -179.5]
         result = self.service._wait_for_position(
             [100.0, 0.0, 300.0, 180.0, 0.0, 179.8],
             threshold=2.0,
@@ -528,3 +528,21 @@ class TestMotionService(unittest.TestCase):
             timeout=1.0,
         )
         self.assertTrue(result)
+
+    def test_wait_for_position_does_not_accept_one_transient_target_sample(self):
+        target = [100.0, 0.0, 300.0, 0.0, 0.0, 0.0]
+        drifted = [97.0, 0.0, 300.0, 0.0, 0.0, 0.0]
+        self.robot.get_current_position_fresh.side_effect = [
+            target,
+            drifted,
+            target,
+            target,
+            target,
+        ]
+
+        result = self.service._wait_for_position(
+            target, threshold=2.0, delay=0.001, timeout=1.0
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(5, self.robot.get_current_position_fresh.call_count)
