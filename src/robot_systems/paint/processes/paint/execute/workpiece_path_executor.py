@@ -421,10 +421,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Return the last paint execution plan prepared by this executor."""
         return self._last_execution_plan
 
-    def reset_learned_servo_pickup_height(self) -> None:
-        """Force the next learned-height pickup at every source to relearn safely."""
-        self._servo_pickup_approach_selector.reset()
-
     def _refresh_runtime_config(self) -> None:
         """Refresh robot-dependent pickup settings from the latest robot configuration."""
         if self._robot_config_provider is None:
