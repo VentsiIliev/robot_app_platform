@@ -307,7 +307,7 @@ def _execute_magazine_servo_contact_pickup_release(
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,
-                motion_type="servo",
+                motion_type="fast_lin",
                 linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
                 final_linear_mm_s=float(
                     getattr(pickup_motion, "servo_contact_retract_final_linear_mm_s", 50.0)
@@ -320,6 +320,12 @@ def _execute_magazine_servo_contact_pickup_release(
                 position_tolerance_mm=2.0,
                 safety_margin_mm=float(
                     getattr(pickup_motion, "servo_contact_retract_safety_margin_mm", 10.0)
+                ),
+                fast_lin_velocity_percent=float(
+                    getattr(pickup_motion, "lift_align_vel_percent", 80.0)
+                ),
+                fast_lin_acceleration_percent=float(
+                    getattr(pickup_motion, "lift_align_acc_percent", 60.0)
                 ),
             ),
             cancel_requested=(

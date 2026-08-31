@@ -304,8 +304,13 @@ class ServoUntilConditionProcedure:
                     read_failure_count = 0
 
                 if active:
+                    retract_motion_type = str(
+                        getattr(retract, "motion_type", "servo") if retract is not None else ""
+                    ).strip().lower()
                     keep_override_for_retract = bool(
-                        cfg.disable_collision_checking and retract is not None
+                        cfg.disable_collision_checking
+                        and retract is not None
+                        and retract_motion_type == "servo"
                     )
                     stop_ret = self._stop_servo(
                         restore_collision_checking=not keep_override_for_retract

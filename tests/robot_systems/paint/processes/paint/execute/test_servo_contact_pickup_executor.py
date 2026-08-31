@@ -278,12 +278,15 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual([1, 2, 100, 0, 0, 3], prepared_start)
         self.assertTrue(prepared_kwargs["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
+        self.assertEqual(len(robot.fast_linear_requests), 1)
+        self.assertEqual(robot.fast_linear_requests[0]["position"], [1.0, 2.0, 100.0, 0.0, 0.0, 3.0])
+        self.assertEqual(robot.fast_linear_requests[0]["vel"], 30.0)
+        self.assertEqual(robot.fast_linear_requests[0]["acc"], 30.0)
         self.assertEqual([label for label, _segments in motion.sequences], [
             "Magazine pickup approach before servo contact",
         ])
-        self.assertEqual(robot.started[1][1]["linear_mm_s"], 250.0)
+        self.assertEqual(len(robot.started), 1)
         self.assertTrue(robot.started[0][1]["disable_collision_checking"])
-        self.assertTrue(robot.started[1][1]["disable_collision_checking"])
 
     def test_magazine_lost_after_retract_turns_vacuum_off(self):
         robot = _FakeRobot()
@@ -413,8 +416,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 100.0)
         self.assertEqual(len(robot.started), 1)
         self.assertEqual(len(robot.fast_linear_requests), 1)
-        self.assertEqual(robot.fast_linear_requests[0]["vel"], 80.0)
-        self.assertEqual(robot.fast_linear_requests[0]["acc"], 60.0)
+        self.assertEqual(robot.fast_linear_requests[0]["vel"], 30.0)
+        self.assertEqual(robot.fast_linear_requests[0]["acc"], 30.0)
         self.assertEqual(robot.ptp_moves, [])
 
     def test_servo_contact_pickup_stops_when_workpiece_is_lost_after_retract(self):
@@ -496,8 +499,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(len(robot.fast_linear_requests), 1)
         self.assertEqual(robot.fast_linear_requests[0]["position"], [0.0, 0.0, 100.0, 0.0, 0.0, 0.0])
-        self.assertEqual(robot.fast_linear_requests[0]["vel"], 80.0)
-        self.assertEqual(robot.fast_linear_requests[0]["acc"], 60.0)
+        self.assertEqual(robot.fast_linear_requests[0]["vel"], 30.0)
+        self.assertEqual(robot.fast_linear_requests[0]["acc"], 30.0)
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(
             [label for label, _ in motion.sequences],

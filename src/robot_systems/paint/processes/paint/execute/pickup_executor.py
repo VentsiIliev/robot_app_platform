@@ -494,6 +494,8 @@ class PaintPickupExecutor:
                 safety_margin_mm=float(
                     getattr(pickup_motion, "servo_contact_retract_safety_margin_mm", 10.0)
                 ),
+                fast_lin_velocity_percent=float(pickup_motion.lift_align_vel_percent),
+                fast_lin_acceleration_percent=float(pickup_motion.lift_align_acc_percent),
             ),
             cancel_requested=(
                 None
