@@ -479,7 +479,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(len(robot.prepared), 1)
         self.assertEqual(robot.prepared[0][1], [1, 2, 100.0, 0, 0, 3])
-        self.assertNotIn("allow_servo_during_prepare", robot.prepared[0][4])
+        self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(

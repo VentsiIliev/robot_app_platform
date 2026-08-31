@@ -404,6 +404,7 @@ class PaintPickupExecutor:
                     start_position=predicted_retract_pose,
                     tool=int(self._owner._pickup_tool),
                     user=int(self._owner._pickup_user),
+                    allow_servo_during_prepare=True,
                 )
                 if isinstance(prepared, dict) and prepared.get("plan_id"):
                     prepared_plan_id = str(prepared["plan_id"])
