@@ -27,10 +27,6 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
     pickup_condition_is_active_after_retract,
 )
-from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
-    execute_learned_linear_approach,
-    resolve_transition,
-)
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
 from src.robot_systems.paint.timing import timed_step
 
@@ -284,19 +280,6 @@ def _execute_magazine_servo_contact_pickup_release(
     try:
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
-        source = "magazine_fixed" if expected_start_pose is not None else "magazine_vision"
-        approach_strategy, speed_transition = resolve_transition(
-            executor,
-            source=source,
-            approach_z_mm=float(transfer_waypoints[0][1][2]),
-        )
-        if not execute_learned_linear_approach(
-            executor,
-            speed_transition,
-            transfer_waypoints[0][1],
-        ):
-            discard_prepared()
-            return False, "Magazine LIN move to learned pickup clearance failed"
         _logger.info(
             "[MAGAZINE_LOAD] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -320,8 +303,6 @@ def _execute_magazine_servo_contact_pickup_release(
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
-                initial_linear_mm_s=speed_transition.initial_linear_mm_s,
-                slowdown_z_mm=speed_transition.slowdown_z_mm,
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,
@@ -406,7 +387,6 @@ def _execute_magazine_servo_contact_pickup_release(
         if not _prepared_execution_succeeded(execution):
             return False, f"Magazine {release_label} prepared release execution failed"
         prepared_plan_id = None
-        approach_strategy.record_success(source, result.contact_pose)
         return True, ""
     finally:
         discard_prepared()

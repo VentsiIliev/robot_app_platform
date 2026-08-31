@@ -2,7 +2,6 @@ import unittest
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 paint_package = types.ModuleType("src.robot_systems.paint")
 paint_package.__path__ = ["/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint"]
@@ -17,11 +16,6 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     PickupWaypoint,
     build_magazine_pickup_release_segments,
     build_paint_pickup_segments,
-)
-from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
-    execute_learned_linear_approach,
-    LearnedHeightServoApproachStrategy,
-    ServoPickupApproachSelector,
 )
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
@@ -124,97 +118,6 @@ class _ConditionLostAfterDetection:
 
 
 class ServoContactPickupExecutorTest(unittest.TestCase):
-    def test_learned_height_lin_uses_lin_only_after_first_success(self):
-        selector = ServoPickupApproachSelector()
-        strategy = selector.select("learned_height_lin")
-
-        first = strategy.resolve(
-            source="calibration_vision", approach_z_mm=100.0, minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0, fast_linear_mm_s=5.0, clearance_mm=10.0,
-        )
-        strategy.record_success("calibration_vision", (1.0, 2.0, 30.0, 0.0, 0.0, 0.0))
-        second = strategy.resolve(
-            source="calibration_vision", approach_z_mm=100.0, minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0, fast_linear_mm_s=5.0, clearance_mm=10.0,
-        )
-
-        self.assertIsNone(first.linear_approach_z_mm)
-        self.assertEqual(40.0, second.linear_approach_z_mm)
-        self.assertIsNone(second.initial_linear_mm_s)
-        self.assertIsNone(second.slowdown_z_mm)
-
-    def test_learned_height_lin_executes_linear_move_with_strategy_settings(self):
-        motion = MagicMock()
-        motion.move_pickup_phase.return_value = True
-        owner = SimpleNamespace(
-            _motion=motion,
-            _paint_process_config=lambda: SimpleNamespace(
-                pickup_motion=SimpleNamespace(
-                    servo_contact_learned_lin_vel_percent=70.0,
-                    servo_contact_learned_lin_acc_percent=35.0,
-                )
-            ),
-        )
-
-        ok = execute_learned_linear_approach(
-            owner,
-            SimpleNamespace(linear_approach_z_mm=42.0),
-            [1.0, 2.0, 100.0, 4.0, 5.0, 6.0],
-        )
-
-        self.assertTrue(ok)
-        motion.move_pickup_phase.assert_called_once_with(
-            "LIN to learned Servo pickup clearance",
-            [1.0, 2.0, 42.0, 4.0, 5.0, 6.0],
-            velocity=70.0,
-            acceleration=35.0,
-            motion_type="linear",
-            blendR=0.0,
-        )
-
-    def test_learned_height_strategy_uses_first_success_only_on_next_pickup(self):
-        strategy = LearnedHeightServoApproachStrategy()
-
-        first = strategy.resolve(
-            source="magazine_vision",
-            approach_z_mm=100.0,
-            minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0,
-            fast_linear_mm_s=100.0,
-            clearance_mm=10.0,
-        )
-        strategy.record_success("magazine_vision", (1.0, 2.0, 30.0, 0.0, 0.0, 0.0))
-        second = strategy.resolve(
-            source="magazine_vision",
-            approach_z_mm=100.0,
-            minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0,
-            fast_linear_mm_s=100.0,
-            clearance_mm=10.0,
-        )
-
-        self.assertIsNone(first.initial_linear_mm_s)
-        self.assertEqual(100.0, second.initial_linear_mm_s)
-        self.assertEqual(40.0, second.slowdown_z_mm)
-
-    def test_learned_height_is_isolated_by_source_and_reset_when_strategy_changes(self):
-        selector = ServoPickupApproachSelector()
-        learned = selector.select("learned_height")
-        learned.record_success("magazine_fixed", (0.0, 0.0, 20.0, 0.0, 0.0, 0.0))
-        vision = learned.resolve(
-            source="magazine_vision", approach_z_mm=100.0, minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0, fast_linear_mm_s=100.0, clearance_mm=10.0,
-        )
-        selector.select("full_servo")
-        learned_again = selector.select("learned_height")
-        fixed = learned_again.resolve(
-            source="magazine_fixed", approach_z_mm=100.0, minimum_z_mm=0.0,
-            contact_linear_mm_s=10.0, fast_linear_mm_s=100.0, clearance_mm=10.0,
-        )
-
-        self.assertIsNone(vision.initial_linear_mm_s)
-        self.assertIsNone(fixed.initial_linear_mm_s)
-
     def test_calibration_contact_timeout_turns_vacuum_off(self):
         robot = _FakeRobot()
         robot.position[2] = 100.0

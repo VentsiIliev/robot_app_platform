@@ -22,10 +22,6 @@ from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODES,
 )
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
-from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
-    execute_learned_linear_approach,
-    resolve_transition,
-)
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_CALIBRATION,
 )
@@ -409,17 +405,6 @@ class PaintPickupExecutor:
 
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
-        approach_strategy, speed_transition = resolve_transition(
-            self._owner,
-            source="calibration_vision",
-            approach_z_mm=float(approach_waypoints[-1].pose[2]),
-        )
-        if not execute_learned_linear_approach(
-            self._owner,
-            speed_transition,
-            approach_waypoints[-1].pose,
-        ):
-            return False
         _logger.info(
             "[PICKUP] Servo contact descent starting: speed_mm_s=%.3f timeout_s=%.3f tool=%d user=%d",
             contact_speed_mm_s,
@@ -444,8 +429,6 @@ class PaintPickupExecutor:
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
                 minimum_z_mm=minimum_contact_z_mm,
-                initial_linear_mm_s=speed_transition.initial_linear_mm_s,
-                slowdown_z_mm=speed_transition.slowdown_z_mm,
             ),
             retract=ServoRetractConfig(
                 distance_mm=float(getattr(pickup_motion, "servo_contact_retract_distance_mm", 10.0)),
@@ -545,7 +528,6 @@ class PaintPickupExecutor:
             return False
 
         if not combined_segments:
-            approach_strategy.record_success("calibration_vision", result.contact_pose)
             return True
         if prepared_plan_id:
             execution = self._owner._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
@@ -561,8 +543,6 @@ class PaintPickupExecutor:
                 "Pickup lift and continuation after completed Servo retract",
                 combined_segments,
             )
-        if ok:
-            approach_strategy.record_success("calibration_vision", result.contact_pose)
         return bool(ok)
 
     def _read_fresh_pose(self) -> list[float] | None:
