@@ -500,6 +500,7 @@ class MotionService(IMotionService):
         position = driver_kwargs.get("position")
         allow_subzero_retract = bool(driver_kwargs.pop("allow_subzero_retract", False))
         subzero_recovery = False
+        safety_current = None
         if allow_subzero_retract:
             current = self._fresh_position()
             try:
@@ -516,6 +517,7 @@ class MotionService(IMotionService):
                 and vertical_target[2] > current_values[2]
             )
             subzero_recovery = bool(valid_upward_retract and current_values[2] < 0.0)
+            safety_current = current_values
             if not valid_upward_retract or (
                 subzero_recovery
                 and not self._is_bounded_subzero_retract(current_values, vertical_target)
@@ -530,7 +532,7 @@ class MotionService(IMotionService):
             # to this same fresh sample so the authorized escape remains pure +Z.
             position = vertical_target
             driver_kwargs["position"] = vertical_target
-        violations = self._motion_violations(position)
+        violations = self._motion_violations(position, current_position=safety_current)
         if subzero_recovery:
             violations = [
                 violation for violation in violations
@@ -905,14 +907,21 @@ class MotionService(IMotionService):
             (sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx),
             (-sy, cy * sx, cy * cx),
         )
-    def _motion_violations(self, position: List[float]) -> List[str]:
+    def _motion_violations(
+        self,
+        position: List[float],
+        *,
+        current_position: List[float] | None = None,
+    ) -> List[str]:
         violations = list(self._safety.get_violations(position))
-        current_getter = getattr(self._robot, "get_current_position_fresh", None)
-        if not callable(current_getter):
-            current_getter = self._robot.get_current_position
-        current = current_getter()
-        if not isinstance(current, (list, tuple)) or len(current) < 3:
-            current = self._robot.get_current_position()
+        current = current_position
+        if current is None:
+            current_getter = getattr(self._robot, "get_current_position_fresh", None)
+            if not callable(current_getter):
+                current_getter = self._robot.get_current_position
+            current = current_getter()
+            if not isinstance(current, (list, tuple)) or len(current) < 3:
+                current = self._robot.get_current_position()
         current = current or self._cached_position or []
         if current and len(current) >= 3 and isinstance(current[2], (int, float)) and float(current[2]) < 0.0:
             violations.append(
