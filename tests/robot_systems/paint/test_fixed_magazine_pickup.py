@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
@@ -12,6 +12,7 @@ from src.robot_systems.paint.processes.paint.execution_control import PaintExecu
 from src.robot_systems.paint.processes.paint.execution_machine.context import PaintExecutionContext
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     _verify_fixed_pickup_start_pose,
+    execute_magazine_pickup_release,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_move_to_magazine_handler import (
     handle_magazine_move_to_magazine,
@@ -29,6 +30,38 @@ from src.robot_systems.paint.applications.paint_process_settings.mapper import (
 
 
 class TestFixedMagazinePickup(unittest.TestCase):
+    def test_fixed_pickup_allows_approach_to_correct_initial_tolerance_miss(self):
+        config = PaintProcessConfig()
+        executor = MagicMock()
+        executor._paint_process_config.return_value = config
+        executor._pickup_z_mm = 20.0
+        executor._pickup_safety_z_min_mm = 0.0
+        executor._motion.turn_vacuum_on.return_value = (True, "")
+        executor._motion.turn_vacuum_off.return_value = (True, "")
+        fixed_pose = [0.0, 0.0, 100.0, 180.0, 0.0, 0.0]
+        executor._robot_service.get_current_position_fresh.return_value = [
+            1.5, 0.0, 100.0, 180.0, 0.0, 0.0
+        ]
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler._execute_magazine_servo_contact_pickup_release",
+            return_value=(True, "corrected"),
+        ) as execute_servo:
+            ok, message = execute_magazine_pickup_release(
+                MagicMock(_path_executor=executor),
+                pickup_xy=(0.0, 0.0),
+                pickup_rz=0.0,
+                pickup_base_pose=fixed_pose,
+                release_pose=[10.0, 20.0, 30.0, 180.0, 0.0, 0.0],
+                fixed_approach_pose=fixed_pose,
+                fixed_position_tolerance_mm=1.0,
+                fixed_orientation_tolerance_deg=0.5,
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            )
+
+        self.assertTrue(ok, message)
+        execute_servo.assert_called_once()
+
     def test_old_settings_default_to_vision_targeting(self):
         restored = PaintProcessConfigSerializer().from_dict({"magazine_load": {"enabled": True}})
 

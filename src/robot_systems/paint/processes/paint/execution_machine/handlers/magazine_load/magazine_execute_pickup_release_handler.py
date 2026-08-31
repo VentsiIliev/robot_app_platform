@@ -185,14 +185,10 @@ def execute_magazine_pickup_release(
                     "Fixed magazine pickup start Z must be above the servo-contact minimum Z "
                     f"(start {fixed_start_z:.3f} mm, minimum {minimum_z:.3f} mm)"
                 )
-            ok, msg = _verify_fixed_pickup_start_pose(
-                executor._robot_service,
-                fixed_approach_pose,
-                position_tolerance_mm=fixed_position_tolerance_mm,
-                orientation_tolerance_deg=fixed_orientation_tolerance_deg,
-            )
-            if not ok:
-                return False, msg
+            # The preceding group move can legally finish outside this stricter
+            # servo-start tolerance.  The ordered approach below re-commands the
+            # exact fixed pose and performs the safety verification immediately
+            # before servo descent.  Rejecting here prevented that correction.
         ok, msg = executor._motion.turn_vacuum_on(
             required=contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT,
         )

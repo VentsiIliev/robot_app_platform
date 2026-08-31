@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QPushButton,
     QScrollArea,
-    QSlider,
     QTabWidget,
     QSizePolicy,
     QVBoxLayout,
@@ -84,6 +83,7 @@ class PaintControlsDrawer(QWidget):
         unmatched_layout.setContentsMargins(14, 20, 14, 14)
         unmatched_layout.setSpacing(10)
         self._unmatched_step_buttons: list[QPushButton] = []
+        self._acceleration_scale_step_buttons: list[QPushButton] = []
         self._unmatched_pass_count = KeyboardSpinBox()
         self._unmatched_pass_count.setRange(1, 2)
         self._unmatched_pass_count.setSingleStep(1)
@@ -186,19 +186,19 @@ class PaintControlsDrawer(QWidget):
         acceleration_scale_layout = QVBoxLayout(self._acceleration_scale_box)
         acceleration_scale_header = QHBoxLayout()
         self._acceleration_scale_label = QLabel()
-        self._acceleration_scale_value = QLabel()
         acceleration_scale_header.addWidget(self._acceleration_scale_label)
         acceleration_scale_header.addStretch(1)
-        acceleration_scale_header.addWidget(self._acceleration_scale_value)
         acceleration_scale_layout.addLayout(acceleration_scale_header)
-        self._acceleration_scale = QSlider(Qt.Orientation.Horizontal)
+        self._acceleration_scale = KeyboardSpinBox()
         self._acceleration_scale.setRange(0, 100)
         self._acceleration_scale.setSingleStep(1)
-        self._acceleration_scale.setPageStep(10)
         self._acceleration_scale.setValue(100)
-        self._acceleration_scale.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._acceleration_scale.valueChanged.connect(self._on_acceleration_scale_changed)
-        acceleration_scale_layout.addWidget(self._acceleration_scale)
+        self._acceleration_scale.setSuffix("%")
+        self._acceleration_scale.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._acceleration_scale.setMinimumHeight(48)
+        acceleration_scale_layout.addWidget(
+            self._build_touch_spin_row("acceleration_scale", self._acceleration_scale)
+        )
         self._acceleration_scale_apply = QPushButton()
         self._acceleration_scale_apply.setStyleSheet(ACTION_BTN_STYLE)
         self._acceleration_scale_apply.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -281,7 +281,10 @@ class PaintControlsDrawer(QWidget):
         button.setAutoRepeatDelay(400)
         button.setAutoRepeatInterval(50)
         button.clicked.connect(self._on_touch_step)
-        self._unmatched_step_buttons.append(button)
+        if field_id == "acceleration_scale":
+            self._acceleration_scale_step_buttons.append(button)
+        else:
+            self._unmatched_step_buttons.append(button)
         return button
 
     def _on_touch_step(self) -> None:
@@ -290,6 +293,7 @@ class PaintControlsDrawer(QWidget):
             "pass_count": self._unmatched_pass_count,
             "velocity": self._unmatched_velocity,
             "acceleration": self._unmatched_acceleration,
+            "acceleration_scale": self._acceleration_scale,
             "offset": self._unmatched_offset,
         }
         field = fields.get(str(button.property("field_id")))
@@ -313,9 +317,6 @@ class PaintControlsDrawer(QWidget):
 
     def _on_pass_count_changed(self, count: int) -> None:
         self._unmatched_tabs.setTabVisible(1, int(count) == 2)
-
-    def _on_acceleration_scale_changed(self, value: int) -> None:
-        self._acceleration_scale_value.setText(f"{int(value)}%")
 
     def _on_acceleration_scale_apply(self) -> None:
         self.acceleration_scale_requested.emit(float(self._acceleration_scale.value()))
@@ -438,7 +439,6 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_box.setTitle(self.tr("Painting"))
         self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
         self._acceleration_scale_label.setText(self.tr("Process Acceleration Scale"))
-        self._on_acceleration_scale_changed(self._acceleration_scale.value())
         self._acceleration_scale_box.setTitle(self.tr("Process Scaling"))
         self._acceleration_scale_apply.setText(self.tr("Apply"))
         self._unmatched_tabs.setTabText(0, self.tr("Pass 1"))
@@ -463,6 +463,8 @@ class PaintControlsDrawer(QWidget):
     def set_acceleration_scale_editable(self, editable: bool) -> None:
         self._acceleration_scale.setEnabled(editable)
         self._acceleration_scale_apply.setEnabled(editable)
+        for button in self._acceleration_scale_step_buttons:
+            button.setEnabled(editable)
 
     def _render_shortcuts(self) -> None:
         for folder_box in getattr(self, "_folder_boxes", []):
