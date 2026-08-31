@@ -271,6 +271,7 @@ def build_ordered_second_pass_segments(
             paint_paths,
             paint_jobs,
             config.contact_staging,
+            label_prefix="paint_pass_2",
         ),
     ]
 

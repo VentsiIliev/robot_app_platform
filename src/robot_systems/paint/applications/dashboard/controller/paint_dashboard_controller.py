@@ -121,7 +121,7 @@ class PaintDashboardController(
             self._view.set_unmatched_paint_settings(
                 self._model.get_unmatched_paint_settings()
             )
-        self._show_command_result(self._t("Unmatched Painting"), result)
+        self._show_command_result(self._t("Painting"), result)
 
     def _on_cable_relief(self) -> None:
         self._view.set_cable_relief_busy(True)

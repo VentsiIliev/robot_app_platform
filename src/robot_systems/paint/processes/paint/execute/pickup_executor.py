@@ -745,6 +745,8 @@ def build_ordered_paint_contact_segments(
     paint_paths: list[list[list[float]]],
     paint_jobs: list[dict],
     contact_staging,
+    *,
+    label_prefix: str = "paint",
 ) -> list[dict]:
     """
     Build ordered paint-contact path segments.
@@ -756,11 +758,11 @@ def build_ordered_paint_contact_segments(
         if not command_path:
             continue
         job = paint_jobs[path_index] if path_index < len(paint_jobs) else {}
-        readiness_group = f"paint_contact_{path_index + 1}"
+        readiness_group = f"{label_prefix}_contact_{path_index + 1}"
         segments.append(
             {
                 "type": "linear",
-                "label": f"paint_attach_{path_index + 1}",
+                "label": f"{label_prefix}_attach_{path_index + 1}",
                 "position": list(command_path[0]),
                 "vel": float(contact_staging.attach_vel_percent),
                 "acc": float(contact_staging.attach_acc_percent),
@@ -774,7 +776,7 @@ def build_ordered_paint_contact_segments(
         segments.append(
             {
                 "type": "path",
-                "label": f"paint_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
+                "label": f"{label_prefix}_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
                 "path": command_path,
                 "vel": float(job.get("vel", 10.0)),
                 "acc": float(job.get("acc", 30.0)),

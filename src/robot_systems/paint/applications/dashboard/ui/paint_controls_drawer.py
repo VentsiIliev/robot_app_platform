@@ -400,7 +400,7 @@ class PaintControlsDrawer(QWidget):
 
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Controls"))
-        self._unmatched_box.setTitle(self.tr("Unmatched Painting"))
+        self._unmatched_box.setTitle(self.tr("Painting"))
         self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
         self._unmatched_tabs.setTabText(0, self.tr("Pass 1"))
         self._unmatched_tabs.setTabText(1, self.tr("Pass 2"))
