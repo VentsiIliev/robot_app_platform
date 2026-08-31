@@ -54,7 +54,6 @@
     "pickup_contact_mode": "servo_contact",
     "servo_contact_linear_mm_s": 350.0,
     "servo_contact_min_z_mm": 0.0,
-    "servo_contact_retract_distance_mm": 20.0,
     "servo_contact_retract_linear_mm_s": 350.0,
     "servo_contact_retract_final_linear_mm_s": 50.0,
     "servo_contact_retract_slowdown_clearance_mm": 20.0,

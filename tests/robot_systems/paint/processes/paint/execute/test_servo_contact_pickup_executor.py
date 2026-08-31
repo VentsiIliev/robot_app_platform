@@ -3,6 +3,8 @@ import sys
 import types
 from types import SimpleNamespace
 
+from src.engine.robot.enums.axis import Direction, RobotAxis
+
 paint_package = types.ModuleType("src.robot_systems.paint")
 paint_package.__path__ = ["/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint"]
 sys.modules.setdefault("src.robot_systems.paint", paint_package)
@@ -52,6 +54,18 @@ class _FakeRobot:
     def stop_servo_jog(self, *, restore_collision_checking=True):
         self.stopped += 1
         return 0
+
+    def servo_jog_to_z(self, **kwargs):
+        self.started.append((
+            (RobotAxis.Z, Direction.PLUS),
+            {
+                "linear_mm_s": kwargs["fast_linear_mm_s"],
+                "disable_collision_checking": kwargs["disable_collision_checking"],
+            },
+        ))
+        self.position[2] = float(kwargs["target_z_mm"])
+        self.stopped += 1
+        return {"success": True, "final_z": self.position[2]}
 
     def stop_motion(self):
         return True
@@ -129,7 +143,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
-            servo_contact_retract_distance_mm=10.0,
             servo_contact_retract_linear_mm_s=25.0,
             lift_align_vel_percent=30.0,
             lift_align_acc_percent=30.0,
@@ -178,7 +191,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
-            servo_contact_retract_distance_mm=10.0,
             servo_contact_retract_linear_mm_s=25.0,
         )
         owner = SimpleNamespace(
@@ -225,7 +237,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
-            servo_contact_retract_distance_mm=10.0,
             servo_contact_retract_linear_mm_s=250.0,
             lift_align_vel_percent=30.0,
             lift_align_acc_percent=30.0,
@@ -279,7 +290,6 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
             servo_contact_poll_interval_s=0.01,
             servo_contact_preflight_read_attempts=2,
             servo_contact_read_failure_limit=3,
-            servo_contact_retract_distance_mm=10.0,
             servo_contact_retract_linear_mm_s=25.0,
         )
         owner = SimpleNamespace(
@@ -473,8 +483,8 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertTrue(PaintPickupExecutor(owner)._execute_servo_contact_pickup_sequence(plan))
         self.assertEqual(len(robot.prepared), 1)
-        self.assertEqual(robot.prepared[0][1], [0.0, 0.0, 10.0, 0.0, 0.0, 0.0])
-        self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
+        self.assertEqual(robot.prepared[0][1], [1, 2, 100.0, 0, 0, 3])
+        self.assertNotIn("allow_servo_during_prepare", robot.prepared[0][4])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(

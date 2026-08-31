@@ -86,7 +86,6 @@ class PickupMotionConfig:
     pickup_contact_mode: str = PICKUP_CONTACT_MODE_PLANNED  # [LIVE SETTINGS]
     servo_contact_linear_mm_s: float = 10.0  # [LIVE SETTINGS]
     servo_contact_min_z_mm: float = 0.0  # [LIVE SETTINGS]
-    servo_contact_retract_distance_mm: float = 10.0  # [LIVE SETTINGS]
     servo_contact_retract_linear_mm_s: float = 25.0  # [LIVE SETTINGS]
     servo_contact_retract_final_linear_mm_s: float = 50.0  # [LIVE SETTINGS]
     servo_contact_retract_slowdown_clearance_mm: float = 20.0  # [LIVE SETTINGS]

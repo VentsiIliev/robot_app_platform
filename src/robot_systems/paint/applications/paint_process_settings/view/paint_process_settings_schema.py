@@ -209,7 +209,6 @@ def build_process_groups() -> list[SettingGroup]:
         SettingGroup(_t("Servo Contact Settings"), [
             _mm_per_second_field("pickup_servo_contact_linear_mm_s", "Descent Speed", 10.0),
             _mm_field("pickup_servo_contact_min_z_mm", "Minimum Allowed Z", 0.0, min_val=-100.0),
-            _mm_field("pickup_servo_contact_retract_distance_mm", "Servo Retract Distance", 10.0, min_val=0.0),
             _mm_per_second_field("pickup_servo_contact_retract_linear_mm_s", "Fast Servo Retract Speed", 25.0),
             _mm_per_second_field("pickup_servo_contact_retract_final_linear_mm_s", "Final Servo Retract Speed", 50.0),
             _mm_field("pickup_servo_contact_retract_slowdown_clearance_mm", "Retract Slowdown Clearance", 20.0, min_val=2.1),
