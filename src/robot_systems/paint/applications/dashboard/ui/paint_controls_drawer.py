@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QPushButton,
     QScrollArea,
+    QSlider,
     QTabWidget,
     QSizePolicy,
     QVBoxLayout,
@@ -44,6 +45,7 @@ class PaintControlsDrawer(QWidget):
         *,
         show_manual_controls: bool = True,
         show_unmatched_paint_controls: bool = True,
+        show_acceleration_scale_control: bool = True,
         show_shortcuts: bool = True,
         parent=None,
     ) -> None:
@@ -91,6 +93,28 @@ class PaintControlsDrawer(QWidget):
         unmatched_layout.addWidget(
             self._build_touch_spin_row("pass_count", self._unmatched_pass_count)
         )
+        self._acceleration_scale_label = QLabel()
+        self._acceleration_scale_value = QLabel()
+        acceleration_scale_header = QHBoxLayout()
+        acceleration_scale_header.addWidget(self._acceleration_scale_label)
+        acceleration_scale_header.addStretch(1)
+        acceleration_scale_header.addWidget(self._acceleration_scale_value)
+        self._acceleration_scale = QSlider(Qt.Orientation.Horizontal)
+        self._acceleration_scale.setRange(0, 100)
+        self._acceleration_scale.setSingleStep(1)
+        self._acceleration_scale.setPageStep(10)
+        self._acceleration_scale.setValue(100)
+        self._acceleration_scale.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._acceleration_scale.valueChanged.connect(
+            self._on_acceleration_scale_changed
+        )
+        self._acceleration_scale_container = QWidget()
+        acceleration_scale_layout = QVBoxLayout(self._acceleration_scale_container)
+        acceleration_scale_layout.setContentsMargins(0, 0, 0, 0)
+        acceleration_scale_layout.addLayout(acceleration_scale_header)
+        acceleration_scale_layout.addWidget(self._acceleration_scale)
+        self._acceleration_scale_container.setVisible(show_acceleration_scale_control)
+        unmatched_layout.addWidget(self._acceleration_scale_container)
         self._unmatched_tabs = QTabWidget()
         self._unmatched_tabs.setStyleSheet(f"""
             QTabWidget::pane {{
@@ -278,12 +302,16 @@ class PaintControlsDrawer(QWidget):
     def _settings_payload(self) -> dict:
         return {
             "pass_count": self._unmatched_pass_count.value(),
+            "acceleration_scale_percent": self._acceleration_scale.value(),
             "pass_1": {"velocity_percent": self._unmatched_velocity.value(), "acceleration_percent": self._unmatched_acceleration.value(), "offset_mm": self._unmatched_offset.value()},
             "pass_2": {"use_pass_1_settings": self._pass_2_use_first.isChecked(), "velocity_percent": self._pass_2_velocity.value(), "acceleration_percent": self._pass_2_acceleration.value(), "offset_mm": self._pass_2_offset.value()},
         }
 
     def _on_pass_count_changed(self, count: int) -> None:
         self._unmatched_tabs.setTabVisible(1, int(count) == 2)
+
+    def _on_acceleration_scale_changed(self, value: int) -> None:
+        self._acceleration_scale_value.setText(f"{int(value)}%")
 
     def _sync_pass_2_enabled(self) -> None:
         enabled = not self._pass_2_use_first.isChecked()
@@ -298,6 +326,9 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_acceleration.setValue(float(settings.get("acceleration_percent", 10.0)))
         self._unmatched_offset.setValue(float(settings.get("offset_mm", 0.0)))
         self._unmatched_pass_count.setValue(int(settings.get("pass_count", 1)))
+        self._acceleration_scale.setValue(
+            int(settings.get("acceleration_scale_percent", 100))
+        )
         pass_2 = dict(settings.get("pass_2") or {})
         self._pass_2_use_first.setChecked(bool(pass_2.get("use_pass_1_settings", True)))
         self._pass_2_velocity.setValue(float(pass_2.get("velocity_percent", settings.get("velocity_percent", 10.0))))
@@ -313,6 +344,7 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_offset.setEnabled(editable)
         self._unmatched_apply.setEnabled(editable)
         self._unmatched_pass_count.setEnabled(editable)
+        self._acceleration_scale.setEnabled(editable)
         self._pass_2_use_first.setEnabled(editable)
         if editable:
             self._sync_pass_2_enabled()
@@ -402,6 +434,8 @@ class PaintControlsDrawer(QWidget):
         self._title.setText(self.tr("Manual Controls"))
         self._unmatched_box.setTitle(self.tr("Painting"))
         self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
+        self._acceleration_scale_label.setText(self.tr("Process Acceleration Scale"))
+        self._on_acceleration_scale_changed(self._acceleration_scale.value())
         self._unmatched_tabs.setTabText(0, self.tr("Pass 1"))
         self._unmatched_tabs.setTabText(1, self.tr("Pass 2"))
         self._pass_2_use_first.setText(self.tr("Use Pass 1 settings"))

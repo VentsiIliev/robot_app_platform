@@ -33,6 +33,7 @@ from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PAINT_PROCESS_CONFIG,
     PaintProcessConfig,
+    scale_paint_process_accelerations,
     PaintSimulationConfig,
 )
 from src.robot_systems.paint.processes.paint.plan import (
@@ -469,7 +470,9 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
             return
         try:
-            self._paint_process_config_snapshot = service.get_snapshot()
+            self._paint_process_config_snapshot = scale_paint_process_accelerations(
+                service.get_snapshot()
+            )
             self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
             if self._pickup_condition_provider is not None:
                 self._pickup_condition = self._pickup_condition_provider()
@@ -479,6 +482,18 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
 
     def _paint_process_config(self) -> PaintProcessConfig:
         return self._paint_process_config_snapshot or PAINT_PROCESS_CONFIG
+
+    def _scale_process_acceleration(self, acceleration: float) -> float:
+        scale = max(
+            0.0,
+            min(
+                100.0,
+                float(
+                    self._paint_process_config().paint_process_acceleration_scale_percent
+                ),
+            ),
+        )
+        return float(acceleration) * scale / 100.0
 
     def _apply_paint_process_contact_config(self) -> None:
         """Apply the latest Paint process settings to the active contact-motion profile."""

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 
@@ -347,6 +347,8 @@ class PaintProcessConfig:
     enable_workpiece_matching: bool = True  # [LIVE SETTINGS]
     default_paint_velocity_percent: float = 10.0  # [LIVE SETTINGS]
     default_paint_acceleration_percent: float = 10.0  # [LIVE SETTINGS]
+    # Cycle-wide multiplier applied to acceleration commands. 100 means unchanged.
+    paint_process_acceleration_scale_percent: float = 100.0  # [LIVE SETTINGS]
     # Pivot/contact offset used only for captured contours executed without matching.
     # Matched workpieces keep the offset stored in their segment settings.
     default_paint_offset_mm: float = 0.0  # [LIVE SETTINGS]
@@ -385,6 +387,39 @@ class PaintProcessConfig:
     enable_pivot_debug_plot: bool = False  # [LIVE SETTINGS]
     # Enables path-preparation diagnostic plots such as contour canonicalization and trajectory comparison.
     enable_path_debug_plots: bool = False  # [LIVE SETTINGS]
+
+
+def scale_paint_process_accelerations(config: PaintProcessConfig) -> PaintProcessConfig:
+    """Return a cycle-local config with every configured acceleration scaled."""
+    scale = max(
+        0.0,
+        min(100.0, float(config.paint_process_acceleration_scale_percent)),
+    ) / 100.0
+    if scale == 1.0:
+        return config
+
+    def scaled_dataclass(value):
+        updates = {}
+        for item in fields(value):
+            current = getattr(value, item.name)
+            if item.name == "unmatched_second_pass":
+                # Contact-job accelerations are scaled at command construction.
+                continue
+            if is_dataclass(current):
+                updates[item.name] = scaled_dataclass(current)
+            elif (
+                isinstance(current, (int, float))
+                and item.name != "paint_process_acceleration_scale_percent"
+                and (
+                    "acceleration" in item.name
+                    or item.name.startswith("acc_")
+                    or "_acc_" in item.name
+                )
+            ):
+                updates[item.name] = float(current) * scale
+        return replace(value, **updates) if updates else value
+
+    return scaled_dataclass(config)
 
 
 

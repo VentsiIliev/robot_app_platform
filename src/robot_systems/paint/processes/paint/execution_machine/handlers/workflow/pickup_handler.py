@@ -143,6 +143,10 @@ def try_execute_ordered_pickup_and_paint_contact(
         paint_paths,
         paint_jobs,
         executor._paint_process_config().contact_staging,
+        acceleration_scale=(
+            executor._paint_process_config().paint_process_acceleration_scale_percent
+            / 100.0
+        ),
     )
     post_pickup_segments = list(paint_segments)
 
@@ -156,7 +160,11 @@ def try_execute_ordered_pickup_and_paint_contact(
         pass_2 = config.unmatched_second_pass
         use_first = bool(pass_2.use_pass_1_settings)
         velocity = None if use_first else float(pass_2.velocity_percent)
-        acceleration = None if use_first else float(pass_2.acceleration_percent)
+        acceleration = (
+            None
+            if use_first
+            else executor._scale_process_acceleration(pass_2.acceleration_percent)
+        )
         offset = (
             executor._resolve_pivot_offset_mm(None, prepared_workpiece)
             if use_first
@@ -272,6 +280,11 @@ def build_ordered_second_pass_segments(
             paint_jobs,
             config.contact_staging,
             label_prefix="paint_pass_2",
+            acceleration_scale=(
+                1.0
+                if not bool(config.unmatched_second_pass.use_pass_1_settings)
+                else config.paint_process_acceleration_scale_percent / 100.0
+            ),
         ),
     ]
 

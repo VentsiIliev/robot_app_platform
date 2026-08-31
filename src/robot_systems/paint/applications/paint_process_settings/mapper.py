@@ -733,6 +733,9 @@ class PaintProcessSettingsMapper:
                     base.default_paint_acceleration_percent,
                 )
             ),
+            paint_process_acceleration_scale_percent=(
+                base.paint_process_acceleration_scale_percent
+            ),
             default_paint_offset_mm=float(
                 flat.get("default_paint_offset_mm", base.default_paint_offset_mm)
             ),

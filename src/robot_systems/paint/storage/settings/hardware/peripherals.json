@@ -56,7 +56,7 @@
     "statuses": {}
   },
   "dryer": {
-    "enabled": false,
+    "enabled": true,
     "slave_id": 10,
     "inputs": {
       "status": "0"

@@ -200,7 +200,11 @@ class PaintContactExecutor:
             job_started = perf_counter()
             spline = pivot_source_path(job, owner._contact_motion_config)
             vel = float(vel_override) if vel_override is not None else float(job.get("vel", 10.0))
-            acc = float(acc_override) if acc_override is not None else float(job.get("acc", 30.0))
+            acc = (
+                float(acc_override)
+                if acc_override is not None
+                else owner._scale_process_acceleration(float(job.get("acc", 30.0)))
+            )
             pattern_type = str(job.get("pattern_type", "Path"))
             pivot_offset_mm = (
                 float(pivot_offset_override_mm)

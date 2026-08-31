@@ -235,6 +235,7 @@ class PaintDashboardView(IApplicationView):
             self._auxiliary_toggles,
             show_manual_controls=self._ui_config.show_manual_controls,
             show_unmatched_paint_controls=self._ui_config.show_unmatched_paint_controls,
+            show_acceleration_scale_control=self._ui_config.show_acceleration_scale_control,
             show_shortcuts=self._ui_config.show_application_shortcuts,
         )
         self._controls_drawer.add_widget(self._controls_widget, fill_height=True)

@@ -17,6 +17,9 @@ from src.robot_systems.paint.processes.paint.execution_machine import (
     PaintExecutionMachineFactory,
 )
 from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORKPIECE_AT_MAGAZINE
+from src.robot_systems.paint.processes.paint.config import (
+    scale_paint_process_accelerations,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -407,7 +410,7 @@ class PaintProductionService:
         if config_service is None:
             return True, "", None
         try:
-            config = config_service.get_snapshot()
+            config = scale_paint_process_accelerations(config_service.get_snapshot())
         except Exception:
             _logger.exception("Failed to read paint process settings")
             return False, "Failed to read paint process settings", None

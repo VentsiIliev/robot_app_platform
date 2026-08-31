@@ -747,6 +747,7 @@ def build_ordered_paint_contact_segments(
     contact_staging,
     *,
     label_prefix: str = "paint",
+    acceleration_scale: float = 1.0,
 ) -> list[dict]:
     """
     Build ordered paint-contact path segments.
@@ -779,7 +780,7 @@ def build_ordered_paint_contact_segments(
                 "label": f"{label_prefix}_contact_{path_index + 1}:{job.get('pattern_type', 'Path')}",
                 "path": command_path,
                 "vel": float(job.get("vel", 10.0)),
-                "acc": float(job.get("acc", 30.0)),
+                "acc": float(job.get("acc", 30.0)) * float(acceleration_scale),
                 "protected": True,
                 "limit_profile": "paint_contact",
                 "readiness_group": readiness_group,
