@@ -376,7 +376,6 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._dropoff = PaintDropoffExecutor(self)
         self._edge_cleanup = PaintEdgeCleanupExecutor(self)
         self._pickup = PaintPickupExecutor(self)
-        self._servo_pickup_approach_selector = ServoPickupApproachSelector()
         self._paint_contact = PaintContactExecutor(self)
         self._motion = PaintMotionExecutor(self)
         self._pickup_transfer_planner = PaintPickupTransferPlanner(self)
