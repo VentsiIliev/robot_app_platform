@@ -346,21 +346,25 @@ def execute_dropoff_release_for_executor(
         ):
             discard_prepared_start()
             return False, "Dropoff retracted safely, but prepared move to next-cycle start failed"
+        if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+            _logger.warning(
+                "[NEXT_CYCLE] Prepared move completed outside start-pose tolerance; retrying group='%s'",
+                next_cycle_start["group_id"],
+            )
+            if not _move_to_next_cycle_start(executor, next_cycle_start):
+                return False, "Dropoff retracted safely, but retry to next-cycle start failed"
+            if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+                return False, "Dropoff retracted safely, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
         _logger.info(
             "[NEXT_CYCLE] Reached prepositioned start group='%s'",
             executor._last_prepositioned_start_group,
         )
     elif next_cycle_start is not None and str(next_cycle_start.get("type", "")).strip().lower() == "fast_lin":
-        if not executor._motion.move_pickup_phase(
-            f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
-            list(next_cycle_start["position"]),
-            velocity=float(next_cycle_start["vel"]),
-            acceleration=float(next_cycle_start["acc"]),
-            motion_type="fast_lin",
-            blendR=0.0,
-        ):
+        if not _move_to_next_cycle_start(executor, next_cycle_start):
             return False, "Dropoff retracted safely, but Fast LIN move to next-cycle start failed"
+        if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+            return False, "Dropoff retracted safely, but Fast LIN next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
 
     _logger.info(
@@ -369,6 +373,63 @@ def execute_dropoff_release_for_executor(
         elapsed_s(started),
     )
     return True, ""
+
+
+def _move_to_next_cycle_start(executor: object, next_cycle_start: dict) -> bool:
+    return bool(executor._motion.move_pickup_phase(
+        f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
+        list(next_cycle_start["position"]),
+        velocity=float(next_cycle_start["vel"]),
+        acceleration=float(next_cycle_start["acc"]),
+        motion_type=str(next_cycle_start.get("type", "ptp")),
+        blendR=0.0,
+    ))
+
+
+def _next_cycle_start_pose_reached(
+    executor: object,
+    next_cycle_start: dict,
+    position_tolerance_mm: float = 2.0,
+    orientation_tolerance_deg: float = 2.0,
+) -> bool:
+    getter = getattr(executor._robot_service, "get_current_position_fresh", None)
+    if not callable(getter):
+        getter = getattr(executor._robot_service, "get_current_position", None)
+    if not callable(getter):
+        return False
+    try:
+        actual = getter()
+    except Exception:
+        _logger.exception("[NEXT_CYCLE] Failed to read pose after start move")
+        return False
+    expected = next_cycle_start.get("position")
+    if not isinstance(actual, (list, tuple)) or not isinstance(expected, (list, tuple)):
+        return False
+    if len(actual) < 6 or len(expected) < 6:
+        return False
+    position_error = float(np.linalg.norm(
+        np.asarray(actual[:3], dtype=float) - np.asarray(expected[:3], dtype=float)
+    ))
+    orientation_error = max(
+        abs((float(actual[index]) - float(expected[index]) + 180.0) % 360.0 - 180.0)
+        for index in range(3, 6)
+    )
+    reached = (
+        position_error <= float(position_tolerance_mm)
+        and orientation_error <= float(orientation_tolerance_deg)
+    )
+    _logger.info(
+        "[NEXT_CYCLE] Start-pose verification reached=%s position_error_mm=%.3f "
+        "orientation_error_deg=%.3f tolerance_mm=%.3f tolerance_deg=%.3f actual=%s target=%s",
+        reached,
+        position_error,
+        orientation_error,
+        float(position_tolerance_mm),
+        float(orientation_tolerance_deg),
+        [round(float(value), 3) for value in actual[:6]],
+        [round(float(value), 3) for value in expected[:6]],
+    )
+    return reached
 
 
 def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:

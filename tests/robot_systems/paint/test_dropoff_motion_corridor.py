@@ -62,6 +62,7 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             "acc": 40.0,
             "type": "ptp",
         }
+        robot.get_current_position_fresh.return_value = list(next_start["position"])
 
         with patch(
             "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
