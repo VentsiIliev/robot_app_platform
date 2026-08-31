@@ -42,9 +42,7 @@ from src.robot_systems.paint.processes.paint.plan import (
 )
 from src.robot_systems.paint.processes.paint.execute.dropoff_executor import PaintDropoffExecutor
 from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor import PaintEdgeCleanupExecutor
-from src.robot_systems.paint.processes.paint.execute.servo_pickup_approach import (
-    ServoPickupApproachSelector,
-)
+
 from src.robot_systems.paint.processes.paint.execute.execution_plane import (
     get_execution_plane_strategy,
 )
