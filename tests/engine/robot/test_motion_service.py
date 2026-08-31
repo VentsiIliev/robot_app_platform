@@ -143,6 +143,31 @@ class TestMotionService(unittest.TestCase):
             self.robot.move_fast_linear.call_args.kwargs["position"],
         )
 
+    def test_authorized_fast_linear_retract_accepts_positive_start_z(self):
+        self.robot.get_current_position_fresh.return_value = [100.2, 49.8, 4.0, 1.0, 2.0, 3.0]
+        self.robot.move_fast_linear.return_value = {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
+
+        result = self.service.move_fast_linear(
+            position=[100.0, 50.0, 20.0, 0.0, 0.0, 0.0],
+            tool=1,
+            user=1,
+            vel=20,
+            acc=20,
+            allow_subzero_retract=True,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            [100.2, 49.8, 20.0, 1.0, 2.0, 3.0],
+            self.robot.move_fast_linear.call_args.kwargs["position"],
+        )
+
     def test_regular_linear_move_below_zero_is_blocked(self):
         result = self.service.move_linear([100, 50, -1, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)

@@ -499,14 +499,27 @@ class MotionService(IMotionService):
         driver_kwargs = dict(kwargs)
         position = driver_kwargs.get("position")
         allow_subzero_retract = bool(driver_kwargs.pop("allow_subzero_retract", False))
+        subzero_recovery = False
         if allow_subzero_retract:
             current = self._fresh_position()
             try:
-                vertical_target = list(current[:6])
+                current_values = [float(value) for value in current[:6]]
+                vertical_target = list(current_values)
                 vertical_target[2] = float(position[2])
             except (IndexError, TypeError, ValueError):
+                current_values = []
                 vertical_target = []
-            if not self._is_bounded_subzero_retract(current, vertical_target):
+            valid_upward_retract = (
+                len(current_values) == 6
+                and len(vertical_target) == 6
+                and all(math.isfinite(value) for value in (*current_values, *vertical_target))
+                and vertical_target[2] > current_values[2]
+            )
+            subzero_recovery = bool(valid_upward_retract and current_values[2] < 0.0)
+            if not valid_upward_retract or (
+                subzero_recovery
+                and not self._is_bounded_subzero_retract(current_values, vertical_target)
+            ):
                 return {
                     "result": -1, "success": False, "accepted": False,
                     "final": True, "queued": False,
@@ -518,7 +531,7 @@ class MotionService(IMotionService):
             position = vertical_target
             driver_kwargs["position"] = vertical_target
         violations = self._motion_violations(position)
-        if allow_subzero_retract:
+        if subzero_recovery:
             violations = [
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
