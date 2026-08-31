@@ -284,6 +284,7 @@ class TestPaintDashboardService(unittest.TestCase):
 
     def test_control_methods_delegate_to_process(self) -> None:
         process = MagicMock(process_id="paint")
+        process.state = ProcessState.ERROR
         service = PaintDashboardService(process)
 
         self.assertEqual(service.get_process_id(), "paint")
@@ -298,6 +299,14 @@ class TestPaintDashboardService(unittest.TestCase):
         process.pause.assert_called_once_with()
         process.resume.assert_called_once_with()
         process.reset_errors.assert_called_once_with()
+
+    def test_reset_errors_is_ignored_while_process_is_running(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+
+        PaintDashboardService(process).reset_errors()
+
+        process.reset_errors.assert_not_called()
 
     def test_get_process_id_uses_enum_value(self) -> None:
         process = MagicMock(process_id=ProcessID.MAIN_PROCESS)

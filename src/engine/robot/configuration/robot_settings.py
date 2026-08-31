@@ -119,7 +119,7 @@ class MovementGroup:
     @staticmethod
     def _normalize_motion_type(value: object) -> str:
         motion_type = str(value or "ptp").strip().lower()
-        return motion_type if motion_type in {"ptp", "linear"} else "ptp"
+        return motion_type if motion_type in {"ptp", "linear", "fast_lin"} else "ptp"
 
 
 

@@ -263,13 +263,25 @@ def _execute_magazine_servo_contact_pickup_release(
             return False, msg
 
     release_segments = build_magazine_pickup_release_segments(transfer_waypoints[3:])
-    prepared_plan_id = _prepare_magazine_release(
-        executor,
-        release_segments,
-        start_pose=safe_clearance_pose,
+    release_has_fast_lin = any(
+        str(segment.get("type", "")).strip().lower() == "fast_lin"
+        for segment in release_segments
     )
-    if prepared_plan_id is None:
+    prepared_plan_id = (
+        None
+        if release_has_fast_lin
+        else _prepare_magazine_release(
+            executor,
+            release_segments,
+            start_pose=safe_clearance_pose,
+        )
+    )
+    if prepared_plan_id is None and not release_has_fast_lin:
         return False, "Magazine release motion could not be prepared before servo pickup"
+    if release_has_fast_lin:
+        _logger.info(
+            "[MAGAZINE_LOAD] Release contains Fast LIN; deferring mixed execution until after Servo retract"
+        )
 
     def discard_prepared() -> None:
         nonlocal prepared_plan_id
@@ -397,10 +409,16 @@ def _execute_magazine_servo_contact_pickup_release(
         if not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
             return False, "Magazine servo retract did not reach the prepared release start pose"
 
-        execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
-        if not _prepared_execution_succeeded(execution):
-            return False, f"Magazine {release_label} prepared release execution failed"
-        prepared_plan_id = None
+        if prepared_plan_id is not None:
+            execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
+            if not _prepared_execution_succeeded(execution):
+                return False, f"Magazine {release_label} prepared release execution failed"
+            prepared_plan_id = None
+        elif not executor._motion.move_ordered_pickup_sequence(
+            f"Magazine {release_label} release after Servo retract",
+            release_segments,
+        ):
+            return False, f"Magazine {release_label} mixed release execution failed"
         return True, ""
     finally:
         discard_prepared()
@@ -612,21 +630,30 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
             ctx.magazine_group,
         )
         return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
-    ok, msg = execute_magazine_pickup_release(
-        load_service,
-        pickup_xy=ctx.magazine_target["pickup_xy"],
-        pickup_rz=ctx.magazine_target["pickup_rz"],
-        pickup_base_pose=ctx.magazine_pose,
-        release_pose=ctx.magazine_release_pose,
-        workpiece_height_mm=0.0,
-        release_label=f"{load_service._release_work_area_id} work area center",
-        resume_from_current_pose=resume_from_current_pose,
-        fixed_approach_pose=ctx.magazine_fixed_pickup_pose if is_fixed_group else None,
-        fixed_position_tolerance_mm=float(ctx.magazine_config.fixed_pickup_position_tolerance_mm),
-        fixed_orientation_tolerance_deg=float(ctx.magazine_config.fixed_pickup_orientation_tolerance_deg),
-        magazine_pickup_mode=pickup_mode,
-    )
+    executor = load_service._path_executor
+    previous_control = executor._active_execution_control
+    executor._active_execution_control = ctx.control
+    try:
+        ok, msg = execute_magazine_pickup_release(
+            load_service,
+            pickup_xy=ctx.magazine_target["pickup_xy"],
+            pickup_rz=ctx.magazine_target["pickup_rz"],
+            pickup_base_pose=ctx.magazine_pose,
+            release_pose=ctx.magazine_release_pose,
+            workpiece_height_mm=0.0,
+            release_label=f"{load_service._release_work_area_id} work area center",
+            resume_from_current_pose=resume_from_current_pose,
+            fixed_approach_pose=ctx.magazine_fixed_pickup_pose if is_fixed_group else None,
+            fixed_position_tolerance_mm=float(ctx.magazine_config.fixed_pickup_position_tolerance_mm),
+            fixed_orientation_tolerance_deg=float(ctx.magazine_config.fixed_pickup_orientation_tolerance_deg),
+            magazine_pickup_mode=pickup_mode,
+        )
+    finally:
+        executor._active_execution_control = previous_control
     if not ok:
+        interrupted = guard_control(ctx, PaintExecutionState.MAGAZINE_EXECUTE_PICKUP_RELEASE)
+        if interrupted is not None:
+            return interrupted
         if msg == NO_WORKPIECE_AT_MAGAZINE:
             ctx.set_result(False, NO_WORKPIECE_AT_MAGAZINE)
             return PaintExecutionState.COMPLETED

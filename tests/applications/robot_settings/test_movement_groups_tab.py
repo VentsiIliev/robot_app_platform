@@ -102,6 +102,11 @@ class TestMovementGroupWidgetLoad(unittest.TestCase):
         w.load(MovementGroup(motion_type="linear"))
         self.assertEqual(w._motion_type_combo.currentData(), "linear")
 
+    def test_load_sets_fast_lin_motion_type(self):
+        w = self._single()
+        w.load(MovementGroup(motion_type="fast_lin"))
+        self.assertEqual(w._motion_type_combo.currentData(), "fast_lin")
+
     def test_load_sets_position_display_for_single(self):
         w = self._single()
         w.load(MovementGroup(position="[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]"))

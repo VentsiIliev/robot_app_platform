@@ -634,6 +634,7 @@ class PaintDashboardView(IApplicationView):
         self.set_stop_enabled(state.can_stop)
         self.set_pause_enabled(state.can_pause)
         self.set_pause_label(state.pause_label)
+        self.set_action_enabled("reset_errors", state.process_state == "error")
         self.set_unmatched_paint_settings_editable(
             state.process_state in ("idle", "stopped", "error")
         )

@@ -111,6 +111,8 @@ class PaintMotionExecutor:
             owner._pickup_user,
             len(segments),
         )
+        if any(str(segment.get("type", "")).strip().lower() == "fast_lin" for segment in segments):
+            return self._move_mixed_pickup_sequence(label, segments)
         execute_chain = getattr(owner._robot_service, "execute_ordered_motion_chain", None)
         if not callable(execute_chain):
             _logger.info("[PICKUP] Ordered motion chain unavailable")
@@ -134,6 +136,41 @@ class PaintMotionExecutor:
                 return False
             active_segments = self.trim_ordered_pickup_segments_from_current_pose(active_segments)
         return True
+
+    def _move_mixed_pickup_sequence(self, label: str, segments: list[dict]) -> bool:
+        """Execute ordered-compatible chunks around explicit Fast LIN moves."""
+        ordered_chunk: list[dict] = []
+
+        def flush_ordered_chunk() -> bool:
+            if not ordered_chunk:
+                return True
+            chunk = [dict(segment) for segment in ordered_chunk]
+            chunk[-1]["blendR"] = 0.0
+            ordered_chunk.clear()
+            return self.move_ordered_pickup_sequence(f"{label} (ordered chunk)", chunk)
+
+        for segment in segments:
+            segment_type = str(segment.get("type", "")).strip().lower()
+            if segment_type != "fast_lin":
+                ordered_chunk.append(segment)
+                continue
+            if not flush_ordered_chunk():
+                return False
+            position = segment.get("position")
+            if not isinstance(position, (list, tuple)) or len(position) < 6:
+                self.last_motion_error = "Fast LIN segment has no valid six-axis position"
+                _logger.error("[PICKUP] %s: %s", label, self.last_motion_error)
+                return False
+            if not self.move_pickup_phase(
+                str(segment.get("label") or label),
+                list(position[:6]),
+                velocity=float(segment.get("vel", 30.0)),
+                acceleration=float(segment.get("acc", 30.0)),
+                motion_type="fast_lin",
+                blendR=0.0,
+            ):
+                return False
+        return flush_ordered_chunk()
 
     def pause_current_execution(self) -> None:
         owner = self._owner

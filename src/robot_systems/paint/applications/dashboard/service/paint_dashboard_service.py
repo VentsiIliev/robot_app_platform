@@ -93,7 +93,13 @@ class PaintDashboardService(IPaintDashboardService):
         self._process.resume()
 
     def reset_errors(self) -> None:
-        self._process.reset_errors()
+        if self._process.state == ProcessState.ERROR:
+            self._process.reset_errors()
+            return
+        self._logger.debug(
+            "Ignoring Reset Errors while paint process state is %s",
+            getattr(self._process.state, "value", self._process.state),
+        )
 
     def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
         service = self._paint_process_config_service

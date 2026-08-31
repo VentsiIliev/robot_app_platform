@@ -77,6 +77,9 @@ class _FakeDashboardWidget(QWidget):
     def set_pause_text(self, text: str) -> None:
         self.calls.append(("pause_text", text))
 
+    def set_action_button_enabled(self, action_id: str, enabled: bool) -> None:
+        self.calls.append(("action_enabled", action_id, enabled))
+
 
 class TestPaintDashboardUi(unittest.TestCase):
     @classmethod

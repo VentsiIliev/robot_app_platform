@@ -417,7 +417,11 @@ class PaintPickupExecutor:
         combined_segments.extend(prepared_continuation_segments or [])
         prepared_plan_id: str | None = None
         prepare = getattr(self._owner._robot_service, "prepare_ordered_motion_chain", None)
-        if combined_segments and callable(prepare):
+        has_fast_lin = any(
+            str(segment.get("type", "")).strip().lower() == "fast_lin"
+            for segment in combined_segments
+        )
+        if combined_segments and callable(prepare) and not has_fast_lin:
             try:
                 prepared = prepare(
                     segments=combined_segments,
@@ -430,6 +434,10 @@ class PaintPickupExecutor:
                     prepared_plan_id = str(prepared["plan_id"])
             except Exception:
                 _logger.exception("[PICKUP] Failed to prepare continuation before Servo pickup")
+        elif has_fast_lin:
+            _logger.info(
+                "[PICKUP] Continuation contains Fast LIN; deferring mixed execution until after Servo retract"
+            )
 
         def discard_prepared() -> None:
             if not prepared_plan_id:

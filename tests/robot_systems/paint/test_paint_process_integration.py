@@ -850,10 +850,12 @@ class TestPaintMagazineLoadService(unittest.TestCase):
         self.assertEqual("Magazine contour: Workpiece transferred to paint work area center", msg)
         self.assertEqual(2, navigation.move_to_group.call_count)
         navigation.move_to_group.assert_any_call(
-            "Magazine", wait_cancelled=ANY, velocity=17.0, acceleration=18.0
+            "Magazine", wait_cancelled=ANY, velocity=17.0, acceleration=18.0,
+            motion_type="ptp", blendR=0.0,
         )
         navigation.move_to_group.assert_any_call(
-            "CALIBRATION", wait_cancelled=ANY, velocity=30.0, acceleration=30.0
+            "CALIBRATION", wait_cancelled=ANY, velocity=30.0, acceleration=30.0,
+            motion_type="ptp", blendR=0.0,
         )
         capture.capture_snapshot.assert_called_once_with(source="paint_magazine_load")
         work_area_service.get_work_area.assert_called_once_with("paint")
@@ -882,7 +884,10 @@ class TestPaintMagazineLoadService(unittest.TestCase):
                 self.move_calls = []
                 self.stop_motion_calls = 0
 
-            def move_to_group(self, group, wait_cancelled=None, velocity=None, acceleration=None):
+            def move_to_group(
+                self, group, wait_cancelled=None, velocity=None, acceleration=None,
+                motion_type=None, blendR=None,
+            ):
                 self.move_calls.append((group, velocity, acceleration))
                 if group == "Magazine" and len(self.move_calls) == 1:
                     self.entered_first_move.set()
@@ -982,7 +987,10 @@ class TestPaintMagazineLoadService(unittest.TestCase):
                 self.move_calls = []
                 self.stop_motion_calls = 0
 
-            def move_to_group(self, group, wait_cancelled=None, velocity=None, acceleration=None):
+            def move_to_group(
+                self, group, wait_cancelled=None, velocity=None, acceleration=None,
+                motion_type=None, blendR=None,
+            ):
                 self.move_calls.append((group, velocity, acceleration))
                 if group == "Magazine" and len([call for call in self.move_calls if call[0] == "Magazine"]) == 1:
                     self.entered_first_move.set()

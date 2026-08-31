@@ -261,6 +261,36 @@ class TestDropoffMotionCorridor(unittest.TestCase):
             acc=40.0,
             trajectory_optimizer="TOTG",
         )
+
+    def test_mixed_ordered_sequence_executes_fast_lin_outside_ordered_chain(self):
+        robot = MagicMock()
+        robot.execute_ordered_motion_chain.return_value = 0
+        robot.move_fast_linear.return_value = {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _pickup_tool=1,
+            _pickup_user=2,
+            _active_execution_control=None,
+        )
+        motion = PaintMotionExecutor(owner)
+        segments = [
+            {"type": "ptp", "label": "before", "position": [0, 0, 10, 0, 0, 0], "vel": 20, "acc": 30, "blendR": 5},
+            {"type": "fast_lin", "label": "fast", "position": [1, 2, 20, 0, 0, 0], "vel": 40, "acc": 50, "blendR": 5},
+            {"type": "linear", "label": "after", "position": [2, 3, 30, 0, 0, 0], "vel": 60, "acc": 70, "blendR": 0},
+        ]
+
+        self.assertTrue(motion.move_ordered_pickup_sequence("mixed", segments))
+
+        self.assertEqual(robot.execute_ordered_motion_chain.call_count, 2)
+        first_chunk = robot.execute_ordered_motion_chain.call_args_list[0].kwargs["segments"]
+        self.assertEqual(first_chunk[0]["blendR"], 0.0)
+        robot.move_fast_linear.assert_called_once()
         robot.move_ptp.assert_not_called()
         robot.move_linear.assert_not_called()
 

@@ -195,39 +195,14 @@ def try_execute_ordered_pickup_and_paint_contact(
         if not ok:
             return False, msg, total_waypoints
 
-    active_segments = list(segments)
-    chain_completed = False
-    while active_segments:
-        _logger.info(
-            "[ORDERED_CHAIN] executing pickup plus paint contact chain: segments=%d paint_paths=%d dropoff_prep=%s",
-            len(active_segments),
-            len(paint_paths),
-            dropoff_prepared_in_chain,
-        )
-        executor._motion.mark_ordered_chain_interrupted_by_pause(False)
-        result = execute_chain(
-            active_segments,
-            tool=executor._pickup_tool,
-            user=executor._pickup_user,
-            blocking=True,
-        )
-        if result in (0, True, None):
-            chain_completed = True
-            break
-        if not executor._motion.resume_after_interrupted_non_contact_motion("Ordered pickup plus paint contact chain"):
-            return False, motion_failure_message(
-                executor._robot_service,
-                f"Ordered pickup and paint contact chain failed with code {result}",
-            ), total_waypoints
-        start_index = executor._motion.consume_ordered_chain_resume_start_index()
-        if start_index is None:
-            start_index = executor._motion.ordered_motion_chain_resume_index(
-                executor._motion.read_ordered_motion_chain_status()
-            )
-        executor._motion.mark_ordered_chain_interrupted_by_pause(False)
-        active_segments = active_segments[max(0, min(start_index, len(active_segments))):]
-    if not chain_completed:
-        return True, "", total_waypoints
+    if not executor._motion.move_ordered_pickup_sequence(
+        "Ordered pickup plus paint contact chain",
+        segments,
+    ):
+        return False, motion_failure_message(
+            executor._robot_service,
+            "Ordered pickup and paint contact chain failed",
+        ), total_waypoints
 
     if dropoff_prepared_in_chain:
         executor._dropoff_unwind_prepared = True

@@ -180,6 +180,12 @@ class TestMovementGroupMotionType(unittest.TestCase):
 
         self.assertEqual(group.motion_type, "linear")
 
+    def test_from_dict_preserves_fast_lin_motion_type(self):
+        group = MovementGroup.from_dict({"motion_type": "fast_lin"})
+
+        self.assertEqual(group.motion_type, "fast_lin")
+        self.assertEqual(group.to_dict()["motion_type"], "fast_lin")
+
 
 if __name__ == "__main__":
     unittest.main()

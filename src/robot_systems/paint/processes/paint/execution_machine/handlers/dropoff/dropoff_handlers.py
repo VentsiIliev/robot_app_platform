@@ -215,23 +215,32 @@ def execute_dropoff_release_for_executor(
                 "acc": float(next_cycle_start["acc"]),
                 "blendR": 0.0,
             })
-            try:
-                prepared = prepare(
-                    segments=tail_segments,
-                    start_position=list(release_start_pose),
-                    tool=int(executor._pickup_tool),
-                    user=int(executor._pickup_user),
-                    allow_servo_during_prepare=True,
+            tail_has_fast_lin = any(
+                str(segment.get("type", "")).strip().lower() == "fast_lin"
+                for segment in tail_segments
+            )
+            if tail_has_fast_lin:
+                _logger.info(
+                    "[NEXT_CYCLE] Mixed Fast LIN tail will execute after release"
                 )
-                if isinstance(prepared, dict) and prepared.get("plan_id"):
-                    prepared_start_plan_id = str(prepared["plan_id"])
-                    _logger.info(
-                        "[NEXT_CYCLE] Prepared post-dropoff move group='%s' plan_id=%s",
-                        next_cycle_start["group_id"],
-                        prepared_start_plan_id,
+            else:
+                try:
+                    prepared = prepare(
+                        segments=tail_segments,
+                        start_position=list(release_start_pose),
+                        tool=int(executor._pickup_tool),
+                        user=int(executor._pickup_user),
+                        allow_servo_during_prepare=True,
                     )
-            except Exception:
-                _logger.exception("[NEXT_CYCLE] Failed to prepare post-dropoff start move")
+                    if isinstance(prepared, dict) and prepared.get("plan_id"):
+                        prepared_start_plan_id = str(prepared["plan_id"])
+                        _logger.info(
+                            "[NEXT_CYCLE] Prepared post-dropoff move group='%s' plan_id=%s",
+                            next_cycle_start["group_id"],
+                            prepared_start_plan_id,
+                        )
+                except Exception:
+                    _logger.exception("[NEXT_CYCLE] Failed to prepare post-dropoff start move")
 
     def discard_prepared_start() -> None:
         if not prepared_start_plan_id:
@@ -342,6 +351,17 @@ def execute_dropoff_release_for_executor(
             "[NEXT_CYCLE] Reached prepositioned start group='%s'",
             executor._last_prepositioned_start_group,
         )
+    elif next_cycle_start is not None and str(next_cycle_start.get("type", "")).strip().lower() == "fast_lin":
+        if not executor._motion.move_pickup_phase(
+            f"Moving to next-cycle start '{next_cycle_start['group_id']}'",
+            list(next_cycle_start["position"]),
+            velocity=float(next_cycle_start["vel"]),
+            acceleration=float(next_cycle_start["acc"]),
+            motion_type="fast_lin",
+            blendR=0.0,
+        ):
+            return False, "Dropoff retracted safely, but Fast LIN move to next-cycle start failed"
+        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
 
     _logger.info(
         "[DROPOFF] strategy=%s completed elapsed_s=%.3f",

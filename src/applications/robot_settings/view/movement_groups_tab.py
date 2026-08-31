@@ -400,6 +400,7 @@ class MovementGroupWidget(QWidget):
         self._motion_type_combo = QComboBox()
         self._motion_type_combo.addItem("PTP", "ptp")
         self._motion_type_combo.addItem("Linear", "linear")
+        self._motion_type_combo.addItem("Fast LIN", "fast_lin")
         self._motion_type_combo.setStyleSheet(_COMBO_STYLE)
         self._motion_type_combo.currentIndexChanged.connect(self._on_motion_type_changed)
         type_cell.layout().addWidget(self._motion_type_combo)
@@ -643,7 +644,8 @@ class MovementGroupWidget(QWidget):
         if self._motion_type_combo:
             self._motion_type_combo.blockSignals(True)
             motion_type = MovementGroup._normalize_motion_type(getattr(group, "motion_type", "ptp"))
-            self._motion_type_combo.setCurrentIndex(1 if motion_type == "linear" else 0)
+            index = self._motion_type_combo.findData(motion_type)
+            self._motion_type_combo.setCurrentIndex(max(0, index))
             self._motion_type_combo.blockSignals(False)
 
         if self._position_display and group.position is not None:
