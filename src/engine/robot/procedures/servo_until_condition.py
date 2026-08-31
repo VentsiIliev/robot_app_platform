@@ -838,6 +838,7 @@ class ServoUntilConditionProcedure:
             acc=acceleration,
             trajectory_optimizer="TOTG",
             request_timeout_s=max(8.0, float(retract.timeout_s) + 5.0),
+            allow_subzero_retract=True,
         )
         if not isinstance(outcome, dict) or outcome.get("unsupported"):
             return False, "fast_lin_unsupported"

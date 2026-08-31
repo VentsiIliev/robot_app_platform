@@ -104,6 +104,20 @@ class TestMotionService(unittest.TestCase):
         result = self.service.move_linear([100, 0, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)
 
+    def test_fast_linear_blocks_target_outside_platform_safety_limits(self):
+        self.safety.get_violations.return_value = ["out of bounds"]
+
+        result = self.service.move_fast_linear(
+            position=[100, 50, 300, 0, 0, 0],
+            tool=1,
+            user=1,
+            vel=20,
+            acc=20,
+        )
+
+        self.assertEqual(result["error"], "platform_safety_violation")
+        self.robot.move_fast_linear.assert_not_called()
+
     def test_regular_linear_move_below_zero_is_blocked(self):
         result = self.service.move_linear([100, 50, -1, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)

@@ -26,14 +26,13 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 5.0)
 
         robot.set_active_tool.assert_called_once_with(1)
-        robot.move_linear.assert_called_once_with(
-            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+        robot.move_fast_linear.assert_called_once_with(
+            position=[15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
-            velocity=20.0,
-            acceleration=10.0,
-            blendR=0.0,
-            wait_to_reach=True,
+            vel=20.0,
+            acc=10.0,
+            trajectory_optimizer="TOTG",
         )
 
     def test_jog_uses_live_motion_settings_getters(self):
@@ -53,14 +52,13 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("X", "PLUS", 5.0)
 
-        robot.move_linear.assert_called_once_with(
-            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+        robot.move_fast_linear.assert_called_once_with(
+            position=[15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
-            velocity=35.0,
-            acceleration=25.0,
-            blendR=0.0,
-            wait_to_reach=True,
+            vel=35.0,
+            acc=25.0,
+            trajectory_optimizer="TOTG",
         )
 
     def test_rotation_jog_uses_linear_pose_move(self):
@@ -81,14 +79,13 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("RZ", "PLUS", 5.0)
 
         robot.start_jog.assert_not_called()
-        robot.move_linear.assert_called_once_with(
-            [10.0, 20.0, 30.0, 0.0, 0.0, 5.0],
+        robot.move_fast_linear.assert_called_once_with(
+            position=[10.0, 20.0, 30.0, 0.0, 0.0, 5.0],
             tool=1,
             user=2,
-            velocity=35.0,
-            acceleration=25.0,
-            blendR=0.0,
-            wait_to_reach=True,
+            vel=35.0,
+            acc=25.0,
+            trajectory_optimizer="TOTG",
         )
 
     def test_builder_uses_ten_when_saved_jog_velocity_or_acceleration_is_zero(self):
@@ -113,14 +110,13 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 5.0)
 
         settings_service.get.assert_called_with(CommonSettingsID.MOVEMENT_GROUPS)
-        robot.move_linear.assert_called_once_with(
-            [15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
+        robot.move_fast_linear.assert_called_once_with(
+            position=[15.0, 20.0, 30.0, 0.0, 0.0, 0.0],
             tool=1,
             user=2,
-            velocity=10.0,
-            acceleration=10.0,
-            blendR=0.0,
-            wait_to_reach=True,
+            vel=10.0,
+            acc=10.0,
+            trajectory_optimizer="TOTG",
         )
 
     def test_builder_reads_current_tool_and_workobject_from_settings(self):
@@ -145,8 +141,8 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("X", "PLUS", 5.0)
 
         robot.set_active_tool.assert_called_once_with(0)
-        self.assertEqual(robot.move_linear.call_args.kwargs["tool"], 0)
-        self.assertEqual(robot.move_linear.call_args.kwargs["user"], 0)
+        self.assertEqual(robot.move_fast_linear.call_args.kwargs["tool"], 0)
+        self.assertEqual(robot.move_fast_linear.call_args.kwargs["user"], 0)
 
     def test_jog_activates_tool_before_reading_current_position(self):
         robot = MagicMock()
@@ -187,7 +183,7 @@ class TestRobotJogService(unittest.TestCase):
 
         service.jog("X", "PLUS", 5.0)
 
-        target = robot.move_linear.call_args.args[0]
+        target = robot.move_fast_linear.call_args.kwargs["position"]
         self.assertAlmostEqual(target[0], 15.0, places=6)
         self.assertAlmostEqual(target[1], 20.0, places=6)
         self.assertAlmostEqual(target[2], 30.0, places=6)
@@ -336,8 +332,11 @@ class TestRobotJogService(unittest.TestCase):
         self.assertEqual(service.get_available_frames(), [])
         self.assertEqual(service.get_default_frame(), "")
         resolver.resolve.assert_not_called()
-        robot.move_linear.assert_called_once()
-        self.assertEqual(robot.move_linear.call_args.args[0], [1.0, 2.0, 1.0, 0.0, 0.0, 0.0])
+        robot.move_fast_linear.assert_called_once()
+        self.assertEqual(
+            robot.move_fast_linear.call_args.kwargs["position"],
+            [1.0, 2.0, 1.0, 0.0, 0.0, 0.0],
+        )
 
     def test_jog_does_not_use_native_incremental_jog_when_driver_prefers_it(self):
         robot = MagicMock()
@@ -350,8 +349,11 @@ class TestRobotJogService(unittest.TestCase):
         service.jog("Y", "PLUS", 4.0)
 
         robot.start_jog.assert_not_called()
-        robot.move_linear.assert_called_once()
-        self.assertEqual(robot.move_linear.call_args.args[0], [0.0, 4.0, 0.0, 0.0, 0.0, 0.0])
+        robot.move_fast_linear.assert_called_once()
+        self.assertEqual(
+            robot.move_fast_linear.call_args.kwargs["position"],
+            [0.0, 4.0, 0.0, 0.0, 0.0, 0.0],
+        )
 
 
 if __name__ == "__main__":

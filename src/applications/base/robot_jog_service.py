@@ -151,20 +151,31 @@ class RobotJogService:
                     and robot_axis == RobotAxis.Z
                     and robot_direction == Direction.PLUS
                 )
-                move_kwargs = {
-                    "tool": tool,
-                    "user": user,
-                    "velocity": self._current_move_velocity(),
-                    "acceleration": self._current_move_acceleration(),
-                    "blendR": 0.0,
-                    "wait_to_reach": True,
-                }
-                if allow_subzero_recovery:
-                    move_kwargs["allow_subzero_step_recovery"] = True
                 if self._recovery_mode:
+                    move_kwargs = {
+                        "tool": tool,
+                        "user": user,
+                        "velocity": self._current_move_velocity(),
+                        "acceleration": self._current_move_acceleration(),
+                        "blendR": 0.0,
+                        "wait_to_reach": True,
+                    }
+                    if allow_subzero_recovery:
+                        move_kwargs["allow_subzero_step_recovery"] = True
                     move_kwargs["allow_collision_recovery"] = True
                     move_kwargs["bypass_safety_limits"] = True
-                self._robot.move_linear(target, **move_kwargs)
+                    self._robot.move_linear(target, **move_kwargs)
+                else:
+                    outcome = self._robot.move_fast_linear(
+                        position=target,
+                        tool=tool,
+                        user=user,
+                        vel=self._current_move_velocity(),
+                        acc=self._current_move_acceleration(),
+                        trajectory_optimizer="TOTG",
+                    )
+                    if not self._fast_linear_completed(outcome):
+                        _logger.error("[JOG] fast_lin step failed: %s", outcome)
             self._lock.release()
         except Exception:
             _logger.exception(
@@ -176,6 +187,17 @@ class RobotJogService:
             )
             if self._lock.locked():
                 self._lock.release()
+
+    @staticmethod
+    def _fast_linear_completed(outcome) -> bool:
+        return bool(
+            isinstance(outcome, dict)
+            and outcome.get("result") == 0
+            and outcome.get("success") is True
+            and outcome.get("accepted") is True
+            and outcome.get("final") is True
+            and outcome.get("queued") is False
+        )
 
     def joint_jog(
         self,

@@ -496,11 +496,42 @@ class MotionService(IMotionService):
     def move_fast_linear(self, **kwargs) -> dict | None:
         self._last_jog_target = []
         self._servo_floor_stop.set()
+        driver_kwargs = dict(kwargs)
+        position = driver_kwargs.get("position")
+        allow_subzero_retract = bool(driver_kwargs.pop("allow_subzero_retract", False))
+        violations = self._motion_violations(position)
+        if allow_subzero_retract:
+            current = self._fresh_position()
+            if not self._is_bounded_subzero_retract(current, position):
+                return {
+                    "result": -1, "success": False, "accepted": False,
+                    "final": True, "queued": False,
+                    "error": "invalid_subzero_retract",
+                }
+            violations = [
+                violation for violation in violations
+                if "sub-zero" not in violation.lower()
+                and not (
+                    violation.lstrip().startswith("Z=")
+                    and "not in [0," in violation
+                )
+            ]
+        if violations:
+            self._logger.warning(
+                "move_fast_linear blocked by safety limits: %s",
+                ", ".join(violations),
+            )
+            return {
+                "result": -1, "success": False, "accepted": False,
+                "final": True, "queued": False,
+                "error": "platform_safety_violation",
+                "detail": ", ".join(violations),
+            }
         mover = getattr(self._robot, "move_fast_linear", None)
         if not callable(mover):
             return None
         try:
-            return mover(**kwargs)
+            return mover(**driver_kwargs)
         except Exception:
             self._logger.exception("move_fast_linear failed")
             return {"success": False, "error": "platform_fast_linear_failed"}
