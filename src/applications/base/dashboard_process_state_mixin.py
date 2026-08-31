@@ -77,13 +77,16 @@ class DashboardProcessStateMixin:
     def _dashboard_warning_for_event(cls, event_state: str, message: str) -> tuple[str, str] | None:
         if not message:
             return None
+        # Preserve failures verbatim. Hardware and motion failures may mention
+        # "no workpiece" as context, but they must not be downgraded to the
+        # normal empty-camera/end-of-batch operator notice.
+        if event_state == "error":
+            return "Process Blocked", message
         if cls._is_no_workpiece_message(message):
             return (
                 "No Workpiece Found",
                 "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
             )
-        if event_state == "error":
-            return "Process Blocked", message
         return None
 
     @staticmethod

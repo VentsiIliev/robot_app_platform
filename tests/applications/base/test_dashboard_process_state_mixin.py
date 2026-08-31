@@ -37,7 +37,7 @@ class TestDashboardProcessStateMixin(unittest.TestCase):
             "Move the robot to Calibration or Magazine before starting.",
         )
 
-    def test_no_workpiece_error_message_is_shown_as_operator_warning(self):
+    def test_no_workpiece_text_in_error_preserves_failure_message(self):
         controller = _Controller()
         event = SimpleNamespace(
             process_id="paint_process",
@@ -48,9 +48,22 @@ class TestDashboardProcessStateMixin(unittest.TestCase):
         controller._on_dashboard_process_state_raw(event)
 
         controller._view.show_warning.assert_called_once_with(
-            "No Workpiece Found",
-            "No workpiece was found in the camera view. Place a workpiece in the active area and start again.",
+            "Process Blocked",
+            "No usable contour detected",
         )
+
+    def test_magazine_servo_failure_with_no_workpiece_text_is_not_downgraded(self):
+        controller = _Controller()
+        message = "Magazine servo contact pickup failed: no workpiece detected after retract"
+        event = SimpleNamespace(
+            process_id="paint_process",
+            state=SimpleNamespace(value="error"),
+            message=message,
+        )
+
+        controller._on_dashboard_process_state_raw(event)
+
+        controller._view.show_warning.assert_called_once_with("Process Blocked", message)
 
     def test_no_workpiece_stopped_message_is_shown_as_operator_warning(self):
         controller = _Controller()
