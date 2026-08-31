@@ -146,6 +146,7 @@ class PaintDashboardView(IApplicationView):
     auxiliary_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
     unmatched_paint_settings_requested = pyqtSignal(object)
+    acceleration_scale_requested = pyqtSignal(float)
 
     def __init__(
         self,
@@ -246,6 +247,9 @@ class PaintDashboardView(IApplicationView):
         )
         self._controls_widget.unmatched_paint_settings_requested.connect(
             self.unmatched_paint_settings_requested
+        )
+        self._controls_widget.acceleration_scale_requested.connect(
+            self.acceleration_scale_requested
         )
         self._controls_drawer.set_visible(self._ui_config.show_left_drawer)
 
@@ -525,6 +529,12 @@ class PaintDashboardView(IApplicationView):
         if self._quick_controls is not None:
             self._quick_controls.set_settings_editable(editable)
 
+    def set_acceleration_scale(self, value: float) -> None:
+        self._controls_widget.set_acceleration_scale(value)
+
+    def set_acceleration_scale_editable(self, editable: bool) -> None:
+        self._controls_widget.set_acceleration_scale_editable(editable)
+
     def show_info(self, title: str, message: str) -> None:
         self._enqueue_message("info", title, message)
 
@@ -631,6 +641,9 @@ class PaintDashboardView(IApplicationView):
         self.set_pause_label(state.pause_label)
         self.set_action_enabled("reset_errors", state.process_state == "error")
         self.set_unmatched_paint_settings_editable(
+            state.process_state in ("idle", "stopped", "error")
+        )
+        self.set_acceleration_scale_editable(
             state.process_state in ("idle", "stopped", "error")
         )
 

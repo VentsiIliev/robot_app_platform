@@ -112,9 +112,6 @@ class PaintDashboardService(IPaintDashboardService):
             "offset_mm": float(config.default_paint_offset_mm),
             "matching_enabled": bool(config.enable_workpiece_matching),
             "pass_count": max(1, min(2, int(config.unmatched_paint_pass_count))),
-            "acceleration_scale_percent": float(
-                config.paint_process_acceleration_scale_percent
-            ),
             "pass_2": {
                 "use_pass_1_settings": bool(config.unmatched_second_pass.use_pass_1_settings),
                 "velocity_percent": float(config.unmatched_second_pass.velocity_percent),
@@ -153,7 +150,6 @@ class PaintDashboardService(IPaintDashboardService):
         try:
             current = service.get_snapshot()
             pass_count = int(settings.get("pass_count", 1))
-            acceleration_scale = float(settings.get("acceleration_scale_percent", 100.0))
             velocity = float(pass_1.get("velocity_percent", 0.0))
             acceleration = float(pass_1.get("acceleration_percent", 0.0))
             offset = float(pass_1.get("offset_mm", 0.0))
@@ -164,10 +160,6 @@ class PaintDashboardService(IPaintDashboardService):
             return DashboardCommandResult(False, "Invalid unmatched paint settings.")
         if pass_count not in (1, 2):
             return DashboardCommandResult(False, "Paint pass count must be 1 or 2.")
-        if not 0.0 <= acceleration_scale <= 100.0:
-            return DashboardCommandResult(
-                False, "Process acceleration scale must be between 0 and 100 percent."
-            )
         values = ((velocity, acceleration), (pass_2_velocity, pass_2_acceleration))
         if any(not 0.0 < vel <= 100.0 or not 0.0 < acc <= 100.0 for vel, acc in values):
             return DashboardCommandResult(
@@ -181,7 +173,6 @@ class PaintDashboardService(IPaintDashboardService):
                 default_paint_acceleration_percent=acceleration,
                 default_paint_offset_mm=offset,
                 unmatched_paint_pass_count=pass_count,
-                paint_process_acceleration_scale_percent=acceleration_scale,
                 unmatched_second_pass=replace(
                     current.unmatched_second_pass,
                     use_pass_1_settings=bool(pass_2.get("use_pass_1_settings", True)),
@@ -195,6 +186,43 @@ class PaintDashboardService(IPaintDashboardService):
             self._logger.exception("Could not save unmatched paint settings")
             return DashboardCommandResult(False, f"Could not save unmatched paint settings: {exc}")
         return DashboardCommandResult(True, "Unmatched paint settings saved.")
+
+    def get_acceleration_scale(self) -> float:
+        if self._paint_process_config_service is None:
+            return 100.0
+        return float(
+            self._paint_process_config_service.get_snapshot()
+            .paint_process_acceleration_scale_percent
+        )
+
+    def save_acceleration_scale(self, scale_percent: float) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False, "Stop the paint process before changing process scaling."
+            )
+        try:
+            scale = float(scale_percent)
+        except (TypeError, ValueError):
+            return DashboardCommandResult(False, "Invalid process acceleration scale.")
+        if not 0.0 <= scale <= 100.0:
+            return DashboardCommandResult(
+                False, "Process acceleration scale must be between 0 and 100 percent."
+            )
+        try:
+            service.save(
+                replace(
+                    service.get_snapshot(),
+                    paint_process_acceleration_scale_percent=scale,
+                )
+            )
+        except Exception as exc:
+            self._logger.exception("Could not save process acceleration scale")
+            return DashboardCommandResult(False, f"Could not save process acceleration scale: {exc}")
+        return DashboardCommandResult(True, "Process acceleration scale saved.")
 
     def relieve_cable(self) -> DashboardCommandResult:
         if self._robot_service is None:

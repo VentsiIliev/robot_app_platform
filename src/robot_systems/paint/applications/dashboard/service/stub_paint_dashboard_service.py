@@ -31,6 +31,7 @@ class StubPaintDashboardService(IPaintDashboardService):
             "pass_count": 1,
             "pass_2": {"use_pass_1_settings": True, "velocity_percent": 10.0, "acceleration_percent": 10.0, "offset_mm": 0.0},
         }
+        self._acceleration_scale = 100.0
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -92,6 +93,13 @@ class StubPaintDashboardService(IPaintDashboardService):
             "pass_2": dict(settings.get("pass_2") or {}),
         })
         return DashboardCommandResult(True, "Unmatched paint settings saved.")
+
+    def get_acceleration_scale(self) -> float:
+        return self._acceleration_scale
+
+    def save_acceleration_scale(self, scale_percent: float) -> DashboardCommandResult:
+        self._acceleration_scale = float(scale_percent)
+        return DashboardCommandResult(True, "Process acceleration scale saved.")
 
     def relieve_cable(self) -> DashboardCommandResult:
         return DashboardCommandResult(True, "Cable relief completed.")

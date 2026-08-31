@@ -65,6 +65,7 @@ class PaintDashboardController(
         self._view.unmatched_paint_settings_requested.connect(
             self._on_unmatched_paint_settings
         )
+        self._view.acceleration_scale_requested.connect(self._on_acceleration_scale)
 
     def load(self) -> None:
         self._active = True
@@ -76,6 +77,7 @@ class PaintDashboardController(
         self._view.set_unmatched_paint_settings(
             self._model.get_unmatched_paint_settings()
         )
+        self._view.set_acceleration_scale(self._model.get_acceleration_scale())
         self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
         self._load_application_shortcuts()
         self._retranslate()
@@ -126,6 +128,12 @@ class PaintDashboardController(
     def _on_cable_relief(self) -> None:
         self._view.set_cable_relief_busy(True)
         self._run_background(self._model.relieve_cable, self._on_cable_relief_finished)
+
+    def _on_acceleration_scale(self, scale_percent: float) -> None:
+        result = self._model.save_acceleration_scale(scale_percent)
+        if bool(getattr(result, "success", False)):
+            self._view.set_acceleration_scale(self._model.get_acceleration_scale())
+        self._show_command_result(self._t("Process Scaling"), result)
 
     def _on_auxiliary_toggle(self, device_id: str, enabled: bool) -> None:
         self._pending_auxiliary[device_id] = enabled

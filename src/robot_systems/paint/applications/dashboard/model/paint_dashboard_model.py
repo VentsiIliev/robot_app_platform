@@ -56,6 +56,12 @@ class PaintDashboardModel(IApplicationModel):
     def relieve_cable(self):
         return self._service.relieve_cable()
 
+    def get_acceleration_scale(self) -> float:
+        return self._service.get_acceleration_scale()
+
+    def save_acceleration_scale(self, scale_percent: float):
+        return self._service.save_acceleration_scale(scale_percent)
+
     def get_auxiliary_states(self) -> dict[str, bool]:
         return self._service.get_auxiliary_states()
 
