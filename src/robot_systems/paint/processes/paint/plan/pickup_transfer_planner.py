@@ -256,7 +256,10 @@ class PaintPickupTransferPlanner:
             projected_pivot_path=projected_pivot_path,
             projected_snapshots=projected_snapshots,
             projected_diagnostics=projected_diagnostics,
-            pickup_retract_reference_pose=list(pickup_pivot_pose),
+            # Servo only needs enough vertical clearance to leave the pickup
+            # surface. The prepared transfer completes the remaining lift,
+            # avoiding a slow Servo retract to the calibration reference Z.
+            pickup_retract_reference_pose=list(lift_pose),
         )
 
     def _resolve_safe_travel_waypoints(self) -> list[dict]:

@@ -361,6 +361,32 @@ class PaintPickupExecutor:
         predicted_retract_pose = list(waypoints[contact_index].pose)
         predicted_retract_pose[2] = float(retract_reference_pose[2])
         continuation_waypoints = remaining_waypoints[1:]
+        motion_plane = str(
+            getattr(getattr(self._owner, "_contact_motion_config", None), "motion_plane", "")
+            or ""
+        ).strip().lower()
+        combine_lift_with_alignment = motion_plane == "xy_z_rz"
+        if (
+            combine_lift_with_alignment
+            and len(continuation_waypoints) >= 2
+            and continuation_waypoints[0].label == "Aligning workpiece to paint axis"
+            and continuation_waypoints[1].label.startswith("Safe travel waypoint ")
+        ):
+            align = continuation_waypoints[0]
+            safe = continuation_waypoints[1]
+            combined_safe_pose = list(safe.pose)
+            combined_safe_pose[3:6] = list(align.pose[3:6])
+            continuation_waypoints = [
+                PickupWaypoint(
+                    safe.label,
+                    combined_safe_pose,
+                    safe.vel_percent,
+                    safe.acc_percent,
+                    safe.motion_type,
+                    safe.blendR,
+                ),
+                *continuation_waypoints[2:],
+            ]
         if continuation_waypoints:
             first = continuation_waypoints[0]
             first_pose = list(first.pose)
@@ -373,15 +399,11 @@ class PaintPickupExecutor:
                 # any motion can start.
                 first.motion_type, 0.0,
             )
-        motion_plane = str(
-            getattr(getattr(self._owner, "_contact_motion_config", None), "motion_plane", "")
-            or ""
-        ).strip().lower()
-        combine_lift_with_alignment = motion_plane == "xy_z_rz"
         if combine_lift_with_alignment:
             # The bounded Servo retract has already established vertical
-            # clearance. For XY/RZ painting, move directly to the align pose so
-            # the remaining lift and RZ alignment happen in one PTP segment.
+            # clearance. For XY/RZ painting, the first continuation move
+            # completes the lift and alignment together; when safe travel is
+            # configured, that move targets its first waypoint directly.
             combined_waypoints = continuation_waypoints
         else:
             lift_waypoint = PickupWaypoint(

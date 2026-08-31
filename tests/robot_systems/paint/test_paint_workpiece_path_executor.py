@@ -789,6 +789,7 @@ class TestPaintWorkpiecePathExecutor(unittest.TestCase):
         self.assertEqual(plan.pickup_pose, [11.0, 22.0, expected_pickup_z, 180.0, 5.0, 33.0])
         self.assertEqual(plan.pickup_approach_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 33.0])
         self.assertEqual(plan.lift_pose, [11.0, 22.0, expected_lift_z, 180.0, 5.0, 33.0])
+        self.assertEqual(plan.pickup_retract_reference_pose, plan.lift_pose)
         self.assertEqual(plan.align_pose, [11.0, 22.0, expected_approach_z, 180.0, 5.0, 15.0])
         self.assertEqual(len(plan.staged_pose), 6)
         self.assertEqual(plan.staged_pose[5], 15.0)
