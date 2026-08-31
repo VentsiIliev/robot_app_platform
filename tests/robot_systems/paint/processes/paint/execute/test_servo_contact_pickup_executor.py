@@ -438,7 +438,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(1, motion.vacuum_off)
         self.assertEqual(["Pickup approach before servo contact"], [label for label, _ in motion.sequences])
 
-    def test_servo_contact_preplans_from_short_retract_and_executes_after_retract(self):
+    def test_xy_rz_servo_pickup_combines_post_retract_lift_with_alignment(self):
         robot = _FakeRobot()
         robot.support_prepared = True
         motion = _FakeMotion()
@@ -455,6 +455,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         owner = SimpleNamespace(
             _robot_service=robot, _motion=motion,
             _pickup_condition=_ConditionAfterStart(), _pickup_tool=1, _pickup_user=0,
+            _contact_motion_config=SimpleNamespace(motion_plane="xy_z_rz"),
             _paint_process_config=lambda: SimpleNamespace(pickup_motion=pickup_motion),
         )
         plan = PickupPlan(
@@ -463,7 +464,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
                 PickupWaypoint("contact", [1, 2, 0, 0, 0, 3], 10, 10, "linear", 0),
                 PickupWaypoint("lift", [1, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
-                PickupWaypoint("stage", [10, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
+                PickupWaypoint("align", [1, 2, 100, 0, 0, 45], 10, 10, "ptp", 0),
             ),
             contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
             contact_waypoint_index=1,
@@ -482,9 +483,10 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         )
         self.assertEqual(
             [segment["label"] for segment in robot.prepared[0][0]],
-            ["Raising workpiece after Servo retract", "stage"],
+            ["align"],
         )
-        self.assertEqual(robot.prepared[0][0][0]["blendR"], 10.0)
+        self.assertEqual(robot.prepared[0][0][0]["position"], [1, 2, 100, 0, 0, 45])
+        self.assertEqual(robot.prepared[0][0][0]["blendR"], 0.0)
 
     def test_servo_contact_prepared_chain_replaces_separate_ptp_retract(self):
         robot = _FakeRobot()

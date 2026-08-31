@@ -359,15 +359,26 @@ class PaintPickupExecutor:
         if not self._move_waypoint_sequence("Pickup approach before servo contact", approach_waypoints):
             return False
 
-        lift_waypoint = PickupWaypoint(
-            "Raising workpiece after Servo retract",
-            list(predicted_retract_pose),
-            float(pickup_motion.lift_align_vel_percent),
-            float(pickup_motion.lift_align_acc_percent),
-            "ptp",
-            10.0,
-        )
-        combined_waypoints = [lift_waypoint] + continuation_waypoints
+        motion_plane = str(
+            getattr(getattr(self._owner, "_contact_motion_config", None), "motion_plane", "")
+            or ""
+        ).strip().lower()
+        combine_lift_with_alignment = motion_plane == "xy_z_rz"
+        if combine_lift_with_alignment:
+            # The bounded Servo retract has already established vertical
+            # clearance. For XY/RZ painting, move directly to the align pose so
+            # the remaining lift and RZ alignment happen in one PTP segment.
+            combined_waypoints = continuation_waypoints
+        else:
+            lift_waypoint = PickupWaypoint(
+                "Raising workpiece after Servo retract",
+                list(predicted_retract_pose),
+                float(pickup_motion.lift_align_vel_percent),
+                float(pickup_motion.lift_align_acc_percent),
+                "ptp",
+                10.0,
+            )
+            combined_waypoints = [lift_waypoint] + continuation_waypoints
         combined_segments = build_paint_pickup_segments(combined_waypoints)
         combined_segments.extend(prepared_continuation_segments or [])
         preparation: dict[str, object] = {"plan_id": None, "thread": None}
