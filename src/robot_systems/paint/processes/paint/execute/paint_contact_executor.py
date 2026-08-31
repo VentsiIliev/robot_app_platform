@@ -97,6 +97,42 @@ def _remove_projected_local_reversals(
     return cleaned
 
 
+def _workpiece_min_rect_size_mm(execution_plan: WorkpieceExecutionPlan) -> tuple[float, float]:
+    """Return the prepared geometry's minimum-area-rectangle sides in millimetres."""
+    points: list[list[float]] = []
+    execution_paths = getattr(execution_plan, "execution_paths", None)
+    paths = (
+        execution_paths()
+        if callable(execution_paths)
+        else [
+            list(job.get("execution_path") or job.get("path") or [])
+            for job in getattr(execution_plan, "execution_jobs", [])
+        ]
+    )
+    for path in paths:
+        points.extend(pose for pose in path if len(pose) >= 2)
+    if not points:
+        return 0.0, 0.0
+
+    xy = np.asarray([pose[:2] for pose in points], dtype=float)
+    if xy.ndim != 2 or xy.shape[0] == 0 or xy.shape[1] < 2 or not np.all(np.isfinite(xy)):
+        return 0.0, 0.0
+    if xy.shape[0] < 3:
+        return 0.0, 0.0
+
+    import cv2
+
+    contour = np.ascontiguousarray(xy[:, :2].reshape(-1, 1, 2), dtype=np.float32)
+    _, size, _ = cv2.minAreaRect(contour)
+    width_mm, height_mm = float(size[0]), float(size[1])
+    return max(0.0, width_mm), max(0.0, height_mm)
+
+
+def _workpiece_largest_side_mm(execution_plan: WorkpieceExecutionPlan) -> float:
+    """Return the long side of the prepared geometry's minimum-area rectangle."""
+    return max(_workpiece_min_rect_size_mm(execution_plan))
+
+
 def _tcp_to_tool_local_xy(job: dict, paint_config: PaintSimulationConfig) -> tuple[float, float] | None:
     """Return the local vector from configured robot TCP to selected tool point."""
     target_name = str(job.get("execution_target_point_name", "") or "").strip().lower()
@@ -148,6 +184,15 @@ class PaintContactExecutor:
             owner._refresh_runtime_config()
         owner._last_process_start_rz = None
         owner._last_process_end_pose = None
+        workpiece_width_mm, workpiece_height_mm = _workpiece_min_rect_size_mm(execution_plan)
+        detach_clearance_mm = max(workpiece_width_mm, workpiece_height_mm)
+        _logger.info(
+            "[PAINT_CONTACT] Detach clearance from workpiece min rect: width_mm=%.3f height_mm=%.3f "
+            "largest_side_mm=%.3f",
+            workpiece_width_mm,
+            workpiece_height_mm,
+            detach_clearance_mm,
+        )
         total_jobs = len(execution_plan.execution_jobs)
         for job_index, job in enumerate(execution_plan.execution_jobs, start=1):
             job_label = f"job_{job_index}"
@@ -270,7 +315,10 @@ class PaintContactExecutor:
                 if retreat_fn is not None:
                     command_pivot_path = retreat_fn(command_pivot_path)
                 elif append_retreat:
-                    command_pivot_path = self._append_retreat_opposite_to_staging(command_pivot_path)
+                    command_pivot_path = self._append_retreat_opposite_to_staging(
+                        command_pivot_path,
+                        additional_paint_axis_offset_mm=detach_clearance_mm,
+                    )
             if owner._last_process_start_rz is None and command_pivot_path:
                 owner._last_process_start_rz = float(command_pivot_path[0][5]) if len(command_pivot_path[0]) >= 6 else 0.0
 
@@ -408,13 +456,21 @@ class PaintContactExecutor:
         )
         return True, "", total_waypoints
 
-    def _append_retreat_opposite_to_staging(self, command_path: list[list[float]]) -> list[list[float]]:
+    def _append_retreat_opposite_to_staging(
+        self,
+        command_path: list[list[float]],
+        *,
+        additional_paint_axis_offset_mm: float = 0.0,
+    ) -> list[list[float]]:
         """Append the configured retreat offset on the side opposite the paint-entry staging offset."""
         if not command_path:
             return []
 
         owner = self._owner
-        path_with_retreat = self._append_contact_retreat_waypoint(command_path)
+        path_with_retreat = self._append_contact_retreat_waypoint(
+            command_path,
+            additional_paint_axis_offset_mm=additional_paint_axis_offset_mm,
+        )
         if len(path_with_retreat) <= len(command_path):
             return path_with_retreat
 
@@ -448,13 +504,21 @@ class PaintContactExecutor:
         )
         return path_with_retreat
 
-    def _append_contact_retreat_waypoint(self, command_path: list[list[float]]) -> list[list[float]]:
+    def _append_contact_retreat_waypoint(
+        self,
+        command_path: list[list[float]],
+        *,
+        additional_paint_axis_offset_mm: float = 0.0,
+    ) -> list[list[float]]:
         """Append an off-contact retreat waypoint to the paint trajectory command."""
         if not command_path:
             return []
         path_with_retreat = [list(pose) for pose in command_path]
         final_contact_pose = list(path_with_retreat[-1])
-        retreat_pose = self._owner._paint_detach_staging_offset_pose(final_contact_pose)
+        retreat_pose = self._owner._paint_detach_staging_offset_pose(
+            final_contact_pose,
+            additional_paint_axis_offset_mm=additional_paint_axis_offset_mm,
+        )
         if np.allclose(
             np.asarray(final_contact_pose[:3], dtype=float),
             np.asarray(retreat_pose[:3], dtype=float),

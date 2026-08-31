@@ -53,6 +53,33 @@ def _execution_plan(*jobs, workpiece=None):
 
 
 class TestPaintStagingOffsetPose(unittest.TestCase):
+    def test_detach_adds_workpiece_clearance_to_configured_paint_axis_offset(self):
+        config = SimpleNamespace(
+            planar_axes=("x", "y"),
+            planar_coordinate_indices=(0, 1),
+            translation_axis="x",
+            direction_sign=1.0,
+        )
+        owner = SimpleNamespace(
+            _contact_motion_config=config,
+            _paint_process_config=lambda: SimpleNamespace(
+                contact_staging=SimpleNamespace(
+                    detach_z_offset_mm=3.0,
+                    detach_paint_axis_offset_mm=20.0,
+                    detach_perpendicular_axis_offset_mm=5.0,
+                )
+            ),
+        )
+
+        pose = PaintWorkpiecePathExecutor._paint_staging_offset_pose(
+            owner,
+            [200.0, 100.0, 50.0, 0.0, 0.0, 0.0],
+            detach=True,
+            additional_paint_axis_offset_mm=80.0,
+        )
+
+        self.assertEqual([100.0, 105.0, 53.0, 0.0, 0.0, 0.0], pose)
+
     def test_offsets_axis_perpendicular_to_xy_paint_axis(self):
         config = SimpleNamespace(
             planar_axes=("x", "y"),

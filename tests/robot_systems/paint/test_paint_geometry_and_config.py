@@ -28,7 +28,9 @@ from src.robot_systems.paint.processes.paint.execute.edge_cleanup_executor impor
 from src.robot_systems.paint.processes.paint.execute.paint_contact_executor import (
     PaintContactExecutor,
     _remove_projected_local_reversals,
+    _workpiece_largest_side_mm,
 )
+from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor import (
     PaintWorkpiecePathExecutor,
     _camera_to_tcp_delta,
@@ -37,6 +39,27 @@ from src.robot_systems.paint.processes.paint.execute.workpiece_path_executor imp
 
 
 class TestProjectedPathSanitizer(unittest.TestCase):
+    def test_workpiece_largest_side_uses_rotated_minimum_area_rectangle(self) -> None:
+        # A 100 x 20 mm rectangle rotated by 45 degrees has an axis-aligned span
+        # of about 84.85 mm, but its minimum-area rectangle retains the 100 mm side.
+        points = [
+            [-28.284271, -42.426407],
+            [42.426407, 28.284271],
+            [28.284271, 42.426407],
+            [-42.426407, -28.284271],
+        ]
+        plan = WorkpieceExecutionPlan(
+            workpiece={"height_mm": 7.0},
+            raw_paths=[],
+            prepared_paths=[],
+            curve_paths=[],
+            sampled_paths=[],
+            execution_jobs=[{"execution_path": points}],
+            total_spline_pts=len(points),
+        )
+
+        self.assertAlmostEqual(100.0, _workpiece_largest_side_mm(plan), places=3)
+
     def test_removes_short_fold_and_preserves_retreat(self) -> None:
         path = [
             [0.0, 0.0, 10.0, 0.0, 0.0, 0.0],
@@ -619,7 +642,7 @@ class TestPaintProcessConfig(unittest.TestCase):
                 side_effect=lambda pose: list(pose)
             ),
             _paint_detach_staging_offset_pose=MagicMock(
-                side_effect=lambda pose: list(pose)
+                side_effect=lambda pose, **_: list(pose)
             ),
         )
         execution_plan = SimpleNamespace(

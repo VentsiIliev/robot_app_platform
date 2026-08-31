@@ -738,23 +738,36 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         """Return the configured plane-aware pre-contact staging pose."""
         return self._paint_staging_offset_pose(contact_pose, detach=False)
 
-    def _paint_detach_staging_offset_pose(self, contact_pose: list[float]) -> list[float]:
+    def _paint_detach_staging_offset_pose(
+        self,
+        contact_pose: list[float],
+        *,
+        additional_paint_axis_offset_mm: float = 0.0,
+    ) -> list[float]:
         """Return the configured plane-aware post-contact staging pose."""
-        return self._paint_staging_offset_pose(contact_pose, detach=True)
+        return self._paint_staging_offset_pose(
+            contact_pose,
+            detach=True,
+            additional_paint_axis_offset_mm=additional_paint_axis_offset_mm,
+        )
 
     def _paint_staging_offset_pose(
         self,
         contact_pose: list[float],
         *,
         detach: bool,
+        additional_paint_axis_offset_mm: float = 0.0,
     ) -> list[float]:
         staging = self._paint_process_config().contact_staging
         prefix = "detach" if detach else "attach"
+        paint_axis_offset_mm = float(getattr(staging, f"{prefix}_paint_axis_offset_mm"))
+        if detach:
+            paint_axis_offset_mm += max(0.0, float(additional_paint_axis_offset_mm))
         return _paint_axis_staging_offset_pose(
             contact_pose,
             self._contact_motion_config,
             z_offset_mm=float(getattr(staging, f"{prefix}_z_offset_mm")),
-            paint_axis_offset_mm=float(getattr(staging, f"{prefix}_paint_axis_offset_mm")),
+            paint_axis_offset_mm=paint_axis_offset_mm,
             perpendicular_axis_offset_mm=float(
                 getattr(staging, f"{prefix}_perpendicular_axis_offset_mm")
             ),
