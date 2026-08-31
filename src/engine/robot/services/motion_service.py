@@ -499,15 +499,26 @@ class MotionService(IMotionService):
         driver_kwargs = dict(kwargs)
         position = driver_kwargs.get("position")
         allow_subzero_retract = bool(driver_kwargs.pop("allow_subzero_retract", False))
-        violations = self._motion_violations(position)
         if allow_subzero_retract:
             current = self._fresh_position()
-            if not self._is_bounded_subzero_retract(current, position):
+            try:
+                vertical_target = list(current[:6])
+                vertical_target[2] = float(position[2])
+            except (IndexError, TypeError, ValueError):
+                vertical_target = []
+            if not self._is_bounded_subzero_retract(current, vertical_target):
                 return {
                     "result": -1, "success": False, "accepted": False,
                     "final": True, "queued": False,
                     "error": "invalid_subzero_retract",
                 }
+            # Servo stop settling can change the live pose between the procedure's
+            # target construction and this safety gate. Anchor every non-Z component
+            # to this same fresh sample so the authorized escape remains pure +Z.
+            position = vertical_target
+            driver_kwargs["position"] = vertical_target
+        violations = self._motion_violations(position)
+        if allow_subzero_retract:
             violations = [
                 violation for violation in violations
                 if "sub-zero" not in violation.lower()
