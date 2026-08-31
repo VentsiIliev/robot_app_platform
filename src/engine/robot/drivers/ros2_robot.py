@@ -103,6 +103,14 @@ class Ros2Robot(IRobot):
         logger.debug("servo_jog_to_z ← %s", result)
         return result if isinstance(result, dict) else None
 
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        mover = getattr(self._client, "move_fast_linear", None)
+        if not callable(mover):
+            return None
+        result = mover(**kwargs)
+        logger.debug("move_fast_linear ← %s", result)
+        return result if isinstance(result, dict) else None
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         setter = getattr(self._client, "set_motion_passage_closed", None)
         return bool(callable(setter) and setter(passage_id, closed))

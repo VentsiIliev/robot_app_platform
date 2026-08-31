@@ -482,7 +482,7 @@ class PaintPickupExecutor:
             ),
             retract=ServoRetractConfig(
                 target_pose=predicted_retract_pose,
-                motion_type="servo",
+                motion_type="fast_lin",
                 linear_mm_s=float(getattr(pickup_motion, "servo_contact_retract_linear_mm_s", 25.0)),
                 final_linear_mm_s=float(
                     getattr(pickup_motion, "servo_contact_retract_final_linear_mm_s", 50.0)

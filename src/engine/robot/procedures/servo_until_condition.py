@@ -55,6 +55,8 @@ class ServoRetractConfig:
     final_linear_mm_s: float | None = None
     slowdown_distance_mm: float | None = None
     progress_timeout_s: float = 1.5
+    fast_lin_velocity_percent: float = 80.0
+    fast_lin_acceleration_percent: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -576,6 +578,15 @@ class ServoUntilConditionProcedure:
                 cfg=cfg,
                 cancel_requested=cancel_requested,
             )
+        if motion_type == "fast_lin":
+            return self._retract_fast_linear(
+                current_pose=current_pose,
+                target_z=target_z,
+                tolerance=tolerance,
+                retract=retract,
+                cfg=cfg,
+                cancel_requested=cancel_requested,
+            )
         if motion_type != "servo":
             return False, "invalid_retract_motion_type"
 
@@ -787,6 +798,64 @@ class ServoUntilConditionProcedure:
             "[SERVO_UNTIL_CONDITION] retract completed final_z=%.3f target_z=%.3f",
             final_pose[2],
             target_z,
+        )
+        return True, ""
+
+    def _retract_fast_linear(
+        self,
+        *,
+        current_pose: Sequence[float],
+        target_z: float,
+        tolerance: float,
+        retract: ServoRetractConfig,
+        cfg: ServoUntilConditionConfig,
+        cancel_requested: Callable[[], bool] | None,
+    ) -> tuple[bool, str]:
+        if cancel_requested is not None and cancel_requested():
+            return False, "cancelled_before_retract"
+        velocity = float(retract.fast_lin_velocity_percent)
+        acceleration = float(retract.fast_lin_acceleration_percent)
+        if not math.isfinite(velocity) or not 0.0 < velocity <= 100.0:
+            return False, "invalid_retract_fast_lin_velocity"
+        if not math.isfinite(acceleration) or not 0.0 < acceleration <= 100.0:
+            return False, "invalid_retract_fast_lin_acceleration"
+
+        target_pose = list(current_pose[:6])
+        target_pose[2] = float(target_z)
+        mover = getattr(self._robot, "move_fast_linear", None)
+        if not callable(mover):
+            return False, "fast_lin_unsupported"
+        outcome = mover(
+            position=target_pose,
+            tool=int(cfg.tool),
+            user=int(cfg.user),
+            vel=velocity,
+            acc=acceleration,
+            trajectory_optimizer="TOTG",
+            request_timeout_s=max(8.0, float(retract.timeout_s) + 5.0),
+        )
+        if not isinstance(outcome, dict) or outcome.get("unsupported"):
+            return False, "fast_lin_unsupported"
+        completed = (
+            outcome.get("result") == 0
+            and outcome.get("success") is True
+            and outcome.get("accepted") is True
+            and outcome.get("final") is True
+            and outcome.get("queued") is False
+        )
+        if not completed:
+            detail = outcome.get("detail") or outcome.get("error") or outcome.get("result") or "failed"
+            return False, f"fast_lin_failed:{detail}"
+
+        final_pose = self._read_current_pose()
+        if final_pose is None:
+            return False, "retract_position_unreadable"
+        if abs(float(final_pose[2]) - float(target_z)) > tolerance:
+            return False, "fast_lin_retract_final_mismatch"
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] Fast LIN retract completed target_z=%.3f final_z=%.3f",
+            target_z,
+            float(final_pose[2]),
         )
         return True, ""
 

@@ -149,6 +149,10 @@ class RobotService(IRobotService):
         mover = getattr(self._motion, "servo_jog_to_z", None)
         return mover(**kwargs) if callable(mover) else None
 
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        mover = getattr(self._motion, "move_fast_linear", None)
+        return mover(**kwargs) if callable(mover) else None
+
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
 

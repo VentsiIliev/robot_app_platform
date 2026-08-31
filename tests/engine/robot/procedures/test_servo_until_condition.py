@@ -331,6 +331,88 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertAlmostEqual(77.121, robot.bounded_request["maximum_distance_mm"])
         self.assertEqual([Direction.MINUS], [item["direction"] for item in robot.started])
 
+    def test_fast_lin_retract_requires_final_success_and_verifies_target_z(self):
+        class FastLinRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [1.0, 2.0, 5.0, 180.0, 0.0, 7.0]
+                self.fast_linear_request = None
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def move_fast_linear(self, **kwargs):
+                self.fast_linear_request = kwargs
+                self.position = list(kwargs["position"])
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": True,
+                    "queued": False,
+                }
+
+        robot = FastLinRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(
+                poll_interval_s=0.005,
+                timeout_s=0.1,
+                tool=1,
+                user=2,
+            ),
+            retract=ServoRetractConfig(
+                target_pose=[9.0, 9.0, 35.0, 0.0, 0.0, 0.0],
+                motion_type="fast_lin",
+                position_tolerance_mm=0.5,
+                safety_margin_mm=10.0,
+                fast_lin_velocity_percent=70.0,
+                fast_lin_acceleration_percent=40.0,
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.retracted)
+        self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 35.0, 180.0, 0.0, 7.0])
+        self.assertEqual(robot.fast_linear_request["tool"], 1)
+        self.assertEqual(robot.fast_linear_request["user"], 2)
+        self.assertEqual(robot.fast_linear_request["vel"], 70.0)
+        self.assertEqual(robot.fast_linear_request["acc"], 40.0)
+
+    def test_fast_lin_retract_rejects_non_final_acceptance(self):
+        class FastLinRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.position = [0.0, 0.0, 5.0, 0.0, 0.0, 0.0]
+
+            def get_current_position(self):
+                return list(self.position)
+
+            def move_fast_linear(self, **kwargs):
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": False,
+                    "queued": False,
+                }
+
+        result = ServoUntilConditionProcedure(
+            FastLinRobot(), _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(poll_interval_s=0.005, timeout_s=0.1),
+            retract=ServoRetractConfig(
+                target_pose=[0.0, 0.0, 35.0, 0.0, 0.0, 0.0],
+                motion_type="fast_lin",
+                safety_margin_mm=10.0,
+            ),
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.retract_failed)
+        self.assertEqual(result.message, "fast_lin_failed:failed")
+
     def test_distance_retract_delegates_computed_target_and_notifies_planning_hook(self):
         class BoundedRobot(FakeRobot):
             def __init__(self):

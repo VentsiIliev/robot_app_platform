@@ -111,6 +111,10 @@ class IMotionService(ABC):
     def servo_jog_to_z(self, **kwargs) -> dict | None:
         return None
 
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        """Optionally execute a blocking Pilz LIN move and return its final outcome."""
+        return None
+
     @abstractmethod
     def stop_motion(self) -> bool:
         ...

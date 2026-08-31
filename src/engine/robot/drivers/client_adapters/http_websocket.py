@@ -1117,6 +1117,43 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("servo_jog_to_z error: %s", exc, exc_info=True)
             return {"success": False, "error": str(exc)}
 
+    def move_fast_linear(self, **kwargs):
+        payload = dict(kwargs)
+        request_timeout = max(8.0, float(payload.pop("request_timeout_s", 15.0)))
+        payload["blocking"] = True
+        payload["position"] = self._to_float_list(payload.get("position", []))
+        tool = int(payload.get("tool", 0))
+        if not self.set_active_tool(tool):
+            return {"result": -1, "success": False, "accepted": False, "final": True,
+                    "queued": False, "error": "active_tool_rejected"}
+        if not self._drive_enabled and self.enable() != 0:
+            return {"result": -1, "success": False, "accepted": False, "final": True,
+                    "queued": False, "error": "drive_enable_failed"}
+        preflight_error = self._motion_preflight_error("move_fast_linear")
+        if preflight_error is not None:
+            return {"result": preflight_error, "success": False, "accepted": False,
+                    "final": True, "queued": False, "error": "motion_preflight_failed"}
+        logger.debug("move_fast_linear → POST /move/fast_lin payload=%s", payload)
+        try:
+            response = requests.post(
+                f"{self.server_url}/move/fast_lin",
+                json=payload,
+                timeout=request_timeout,
+            )
+            if response.status_code == 404:
+                logger.info("move_fast_linear unsupported by runtime")
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            if not isinstance(raw, dict):
+                return {"success": False, "error": "invalid_response"}
+            self._mark_available()
+            logger.debug("move_fast_linear ← http=%s raw=%s", response.status_code, raw)
+            return raw
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("move_fast_linear error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         try:
             response = requests.post(

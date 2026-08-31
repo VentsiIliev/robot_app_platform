@@ -80,6 +80,10 @@ class IRobot(ABC):
         """Optional blocking target-bounded +Z ServoJog operation."""
         return None
 
+    def move_fast_linear(self, **kwargs) -> dict | None:
+        """Optional blocking Pilz LIN operation with a final outcome payload."""
+        return None
+
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
         """Optionally add/remove a configured ROS planning-scene passage lid."""
         return False

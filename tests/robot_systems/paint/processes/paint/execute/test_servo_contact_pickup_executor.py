@@ -43,6 +43,7 @@ class _FakeRobot:
         self.executed_prepared = []
         self.discarded_prepared = []
         self.ptp_return = True
+        self.fast_linear_requests = []
 
     def start_servo_jog(self, *args, **kwargs):
         self.started.append((args, kwargs))
@@ -66,6 +67,17 @@ class _FakeRobot:
         self.position[2] = float(kwargs["target_z_mm"])
         self.stopped += 1
         return {"success": True, "final_z": self.position[2]}
+
+    def move_fast_linear(self, **kwargs):
+        self.fast_linear_requests.append(kwargs)
+        self.position = list(kwargs["position"])
+        return {
+            "result": 0,
+            "success": True,
+            "accepted": True,
+            "final": True,
+            "queued": False,
+        }
 
     def stop_motion(self):
         return True
@@ -378,7 +390,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
 
         self.assertEqual(motion.vacuum_on, 1)
         self.assertTrue(motion.vacuum_required)
-        self.assertEqual(robot.stopped, 2)
+        self.assertEqual(robot.stopped, 1)
         self.assertEqual(
             [label for label, _segments in motion.sequences],
             [
@@ -399,9 +411,10 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(motion.sequences[1][1][-1]["blendR"], 0.0)
         self.assertEqual(100.0, motion.sequences[1][1][0]["position"][2])
         self.assertEqual(robot.started[0][1]["linear_mm_s"], 100.0)
-        self.assertEqual(robot.started[1][1]["linear_mm_s"], 25.0)
-        self.assertEqual(robot.started[1][0][1].name, "PLUS")
-        self.assertEqual(len(robot.started), 2)
+        self.assertEqual(len(robot.started), 1)
+        self.assertEqual(len(robot.fast_linear_requests), 1)
+        self.assertEqual(robot.fast_linear_requests[0]["vel"], 80.0)
+        self.assertEqual(robot.fast_linear_requests[0]["acc"], 60.0)
         self.assertEqual(robot.ptp_moves, [])
 
     def test_servo_contact_pickup_stops_when_workpiece_is_lost_after_retract(self):
@@ -481,6 +494,10 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual(robot.prepared[0][1], [1, 2, 100.0, 0, 0, 3])
         self.assertTrue(robot.prepared[0][4]["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
+        self.assertEqual(len(robot.fast_linear_requests), 1)
+        self.assertEqual(robot.fast_linear_requests[0]["position"], [0.0, 0.0, 100.0, 0.0, 0.0, 0.0])
+        self.assertEqual(robot.fast_linear_requests[0]["vel"], 80.0)
+        self.assertEqual(robot.fast_linear_requests[0]["acc"], 60.0)
         self.assertEqual(robot.ptp_moves, [])
         self.assertEqual(
             [label for label, _ in motion.sequences],
