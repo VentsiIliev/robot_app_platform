@@ -175,6 +175,7 @@ class PaintContactExecutor:
         collected_command_paths: list[list[list[float]]] | None = None,
         collected_command_jobs: list[dict] | None = None,
         control=None,
+        pivot_offset_override_mm: float | None = None,
     ) -> tuple[bool, str, int]:
         """Execute all projected paint-contact paths in the prepared execution plan."""
         owner = self._owner
@@ -201,7 +202,11 @@ class PaintContactExecutor:
             vel = float(vel_override) if vel_override is not None else float(job.get("vel", 10.0))
             acc = float(acc_override) if acc_override is not None else float(job.get("acc", 30.0))
             pattern_type = str(job.get("pattern_type", "Path"))
-            pivot_offset_mm = owner._resolve_pivot_offset_mm(job, execution_plan)
+            pivot_offset_mm = (
+                float(pivot_offset_override_mm)
+                if pivot_offset_override_mm is not None
+                else owner._resolve_pivot_offset_mm(job, execution_plan)
+            )
             if not spline:
                 continue
 
@@ -216,6 +221,7 @@ class PaintContactExecutor:
                     job_index == 1
                     and owner._last_pickup_plan is not None
                     and owner._contact_motion_config.motion_plane == owner._configured_contact_motion_plane
+                    and pivot_offset_override_mm is None
                     and owner._last_pickup_plan.projected_source_path is spline
                     and owner._last_pickup_plan.projected_pivot_path
                 ):

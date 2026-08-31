@@ -28,6 +28,8 @@ class StubPaintDashboardService(IPaintDashboardService):
             "acceleration_percent": 10.0,
             "offset_mm": 0.0,
             "matching_enabled": False,
+            "pass_count": 1,
+            "pass_2": {"use_pass_1_settings": True, "velocity_percent": 10.0, "acceleration_percent": 10.0, "offset_mm": 0.0},
         }
 
     def get_process_id(self) -> str:
@@ -70,19 +72,24 @@ class StubPaintDashboardService(IPaintDashboardService):
     def reset_errors(self) -> None:
         self._state = "idle"
 
-    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+    def get_unmatched_paint_settings(self) -> dict:
         return dict(self._unmatched_paint_settings)
 
     def save_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
     ) -> DashboardCommandResult:
+        if not isinstance(settings, dict):
+            settings = {"pass_count": 1, "pass_1": {"velocity_percent": settings, "acceleration_percent": acceleration_percent, "offset_mm": offset_mm}}
+        pass_1 = dict(settings.get("pass_1") or {})
         self._unmatched_paint_settings.update({
-            "velocity_percent": float(velocity_percent),
-            "acceleration_percent": float(acceleration_percent),
-            "offset_mm": float(offset_mm),
+            "velocity_percent": float(pass_1.get("velocity_percent", 10.0)),
+            "acceleration_percent": float(pass_1.get("acceleration_percent", 10.0)),
+            "offset_mm": float(pass_1.get("offset_mm", 0.0)),
+            "pass_count": int(settings.get("pass_count", 1)),
+            "pass_2": dict(settings.get("pass_2") or {}),
         })
         return DashboardCommandResult(True, "Unmatched paint settings saved.")
 

@@ -70,6 +70,10 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         ctx.paint_contact_executed_in_ordered_chain = True
         return PaintExecutionState.PAINT_CONTACT
 
+    if _unmatched_second_pass_requested(executor, ctx.execution_plan):
+        fail_paint_motion(ctx, "Two-pass painting requires ordered motion-chain support")
+        return PaintExecutionState.ERROR
+
     if pickup_plan is None:
         ok, msg = executor._pickup.execute(ctx.execution_plan)
     else:
@@ -142,8 +146,46 @@ def try_execute_ordered_pickup_and_paint_contact(
     )
     post_pickup_segments = list(paint_segments)
 
+    second_pass_paths: list[list[list[float]]] = []
+    second_pass_jobs: list[dict] = []
+    config = executor._paint_process_config()
+    workpiece = getattr(prepared_workpiece, "workpiece", {}) or {}
+    is_unmatched = str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
+    pass_count = max(1, min(2, int(getattr(config, "unmatched_paint_pass_count", 1))))
+    if is_unmatched and pass_count == 2:
+        pass_2 = config.unmatched_second_pass
+        use_first = bool(pass_2.use_pass_1_settings)
+        velocity = None if use_first else float(pass_2.velocity_percent)
+        acceleration = None if use_first else float(pass_2.acceleration_percent)
+        offset = (
+            executor._resolve_pivot_offset_mm(None, prepared_workpiece)
+            if use_first
+            else float(pass_2.offset_mm)
+        )
+        ok, msg, second_waypoints = executor._paint_contact.execute(
+            prepared_workpiece,
+            vel_override=velocity,
+            acc_override=acceleration,
+            execute_robot=False,
+            collected_command_paths=second_pass_paths,
+            collected_command_jobs=second_pass_jobs,
+            pivot_offset_override_mm=offset,
+        )
+        if not ok or not second_pass_paths:
+            executor._edge_cleanup.cancel_early_preplanning()
+            return False, msg or "Second paint pass could not be planned", total_waypoints
+        total_waypoints += int(second_waypoints)
+        post_pickup_segments.extend(
+            build_ordered_second_pass_segments(
+                second_pass_paths, second_pass_jobs, config
+            )
+        )
     dropoff_prepared_in_chain = False
-    final_pose: list[float] | None = list(paint_paths[-1][-1])
+    final_pose: list[float] | None = (
+        list(second_pass_paths[-1][-1])
+        if second_pass_paths
+        else list(paint_paths[-1][-1])
+    )
     if not executor._edge_cleanup.should_run_after_xz_ry() and not executor._edge_cleanup.should_run_after_xy_rz():
         config = executor._paint_process_config()
         if bool(config.dropoff_safe_travel.enabled) and not _resolve_dropoff_safe_travel_waypoints(executor):
@@ -209,3 +251,34 @@ def try_execute_ordered_pickup_and_paint_contact(
     if final_pose is not None:
         executor._last_process_end_pose = list(final_pose)
     return True, "", total_waypoints
+
+
+def build_ordered_second_pass_segments(
+    paint_paths: list[list[list[float]]],
+    paint_jobs: list[dict],
+    config,
+) -> list[dict]:
+    """Build the guarded unwind, re-attach, and contact sequence for pass two."""
+    return [
+        {
+            "type": "unwind_joint6",
+            "label": "paint_pass_2_unwind",
+            "vel": float(config.navigation_return.unwind_vel_percent),
+            "acc": float(config.navigation_return.unwind_acc_percent),
+            "protected": True,
+        },
+        *build_ordered_paint_contact_segments(
+            paint_paths,
+            paint_jobs,
+            config.contact_staging,
+        ),
+    ]
+
+
+def _unmatched_second_pass_requested(executor: object, execution_plan: object) -> bool:
+    config = executor._paint_process_config()
+    workpiece = getattr(execution_plan, "workpiece", {}) or {}
+    return (
+        str(workpiece.get("workpieceId", "")).strip().lower() == "captured"
+        and int(getattr(config, "unmatched_paint_pass_count", 1)) == 2
+    )

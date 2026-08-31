@@ -98,6 +98,12 @@ Non-settings storage owned by the paint system:
 - `storage/users/users.csv`
 - `storage/workpieces/`
 
+### Unmatched two-pass painting
+
+Captured contours executed without a library match can run one or two paint passes. Pass one keeps the legacy default velocity, acceleration, and press-offset keys. Pass two either inherits those values dynamically or uses its own overrides.
+
+For two passes, the ordered robot chain is built before execution as `pass 1 → detach → Joint 6 unwind → pass 2 attach → pass 2 → detach`. The backend may preplan later segments, but executes each only after the preceding protected segment succeeds. The prepared workpiece execution plan is reused; capture, contour preparation, matching, and interpolation are not repeated. Matched workpieces remain single-pass and retain their segment-owned settings.
+
 ---
 
 ## Services

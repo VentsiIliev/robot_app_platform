@@ -106,12 +106,12 @@ class PaintDashboardController(
 
     def _on_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
     ) -> None:
         result = self._model.save_unmatched_paint_settings(
-            velocity_percent,
+            settings,
             acceleration_percent,
             offset_mm,
         )

@@ -45,14 +45,12 @@ class IPaintDashboardService(ABC):
     def reset_errors(self) -> None: ...
 
     @abstractmethod
-    def get_unmatched_paint_settings(self) -> dict[str, float | bool]: ...
+    def get_unmatched_paint_settings(self) -> dict: ...
 
     @abstractmethod
     def save_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict,
     ) -> DashboardCommandResult: ...
 
     @abstractmethod

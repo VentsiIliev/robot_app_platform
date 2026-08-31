@@ -111,13 +111,20 @@ class PaintDashboardService(IPaintDashboardService):
             "acceleration_percent": float(config.default_paint_acceleration_percent),
             "offset_mm": float(config.default_paint_offset_mm),
             "matching_enabled": bool(config.enable_workpiece_matching),
+            "pass_count": max(1, min(2, int(config.unmatched_paint_pass_count))),
+            "pass_2": {
+                "use_pass_1_settings": bool(config.unmatched_second_pass.use_pass_1_settings),
+                "velocity_percent": float(config.unmatched_second_pass.velocity_percent),
+                "acceleration_percent": float(config.unmatched_second_pass.acceleration_percent),
+                "offset_mm": float(config.unmatched_second_pass.offset_mm),
+            },
         }
 
     def save_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
     ) -> DashboardCommandResult:
         service = self._paint_process_config_service
         if service is None:
@@ -128,20 +135,51 @@ class PaintDashboardService(IPaintDashboardService):
                 False,
                 "Stop the paint process before changing unmatched paint settings.",
             )
-        velocity = float(velocity_percent)
-        acceleration = float(acceleration_percent)
-        offset = float(offset_mm)
-        if not 0.0 < velocity <= 100.0 or not 0.0 < acceleration <= 100.0:
+        if not isinstance(settings, dict):
+            settings = {
+                "pass_count": 1,
+                "pass_1": {
+                    "velocity_percent": settings,
+                    "acceleration_percent": acceleration_percent,
+                    "offset_mm": offset_mm,
+                },
+                "pass_2": {"use_pass_1_settings": True},
+            }
+        pass_1 = dict(settings.get("pass_1") or {})
+        pass_2 = dict(settings.get("pass_2") or {})
+        try:
+            current = service.get_snapshot()
+            pass_count = int(settings.get("pass_count", 1))
+            velocity = float(pass_1.get("velocity_percent", 0.0))
+            acceleration = float(pass_1.get("acceleration_percent", 0.0))
+            offset = float(pass_1.get("offset_mm", 0.0))
+            pass_2_velocity = float(pass_2.get("velocity_percent", velocity))
+            pass_2_acceleration = float(pass_2.get("acceleration_percent", acceleration))
+            pass_2_offset = float(pass_2.get("offset_mm", offset))
+        except (TypeError, ValueError):
+            return DashboardCommandResult(False, "Invalid unmatched paint settings.")
+        if pass_count not in (1, 2):
+            return DashboardCommandResult(False, "Paint pass count must be 1 or 2.")
+        values = ((velocity, acceleration), (pass_2_velocity, pass_2_acceleration))
+        if any(not 0.0 < vel <= 100.0 or not 0.0 < acc <= 100.0 for vel, acc in values):
             return DashboardCommandResult(
                 False,
                 "Velocity and acceleration must be greater than 0 and at most 100 percent.",
             )
         try:
             updated = replace(
-                service.get_snapshot(),
+                current,
                 default_paint_velocity_percent=velocity,
                 default_paint_acceleration_percent=acceleration,
                 default_paint_offset_mm=offset,
+                unmatched_paint_pass_count=pass_count,
+                unmatched_second_pass=replace(
+                    current.unmatched_second_pass,
+                    use_pass_1_settings=bool(pass_2.get("use_pass_1_settings", True)),
+                    velocity_percent=pass_2_velocity,
+                    acceleration_percent=pass_2_acceleration,
+                    offset_mm=pass_2_offset,
+                ),
             )
             service.save(updated)
         except Exception as exc:

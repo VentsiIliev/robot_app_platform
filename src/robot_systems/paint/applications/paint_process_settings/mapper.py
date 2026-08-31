@@ -736,6 +736,8 @@ class PaintProcessSettingsMapper:
             default_paint_offset_mm=float(
                 flat.get("default_paint_offset_mm", base.default_paint_offset_mm)
             ),
+            unmatched_paint_pass_count=base.unmatched_paint_pass_count,
+            unmatched_second_pass=base.unmatched_second_pass,
             closed_contour_overlap_mm=max(
                 0.0,
                 float(flat.get("closed_contour_overlap_mm", base.closed_contour_overlap_mm)),

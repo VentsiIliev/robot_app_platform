@@ -145,7 +145,7 @@ class PaintDashboardView(IApplicationView):
     cable_relief_requested = pyqtSignal()
     auxiliary_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
-    unmatched_paint_settings_requested = pyqtSignal(float, float, float)
+    unmatched_paint_settings_requested = pyqtSignal(object)
 
     def __init__(
         self,
@@ -271,15 +271,9 @@ class PaintDashboardView(IApplicationView):
 
     def _on_quick_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict,
     ) -> None:
-        self.unmatched_paint_settings_requested.emit(
-            velocity_percent,
-            acceleration_percent,
-            offset_mm,
-        )
+        self.unmatched_paint_settings_requested.emit(settings)
 
     def _on_quick_device_off(self, device_id: str) -> None:
         self.auxiliary_toggle_requested.emit(device_id, False)

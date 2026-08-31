@@ -38,17 +38,17 @@ class PaintDashboardModel(IApplicationModel):
         self._service.reset_errors()
         return self.load()
 
-    def get_unmatched_paint_settings(self) -> dict[str, float | bool]:
+    def get_unmatched_paint_settings(self) -> dict:
         return self._service.get_unmatched_paint_settings()
 
     def save_unmatched_paint_settings(
         self,
-        velocity_percent: float,
-        acceleration_percent: float,
-        offset_mm: float,
+        settings: dict | float,
+        acceleration_percent: float | None = None,
+        offset_mm: float | None = None,
     ):
         return self._service.save_unmatched_paint_settings(
-            velocity_percent,
+            settings,
             acceleration_percent,
             offset_mm,
         )

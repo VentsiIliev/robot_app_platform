@@ -19,7 +19,7 @@ from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDouble
 class PaintQuickControlsPanel(QWidget):
     """Touch-oriented paint settings and safe OFF commands for the dashboard."""
 
-    unmatched_paint_settings_requested = pyqtSignal(float, float, float)
+    unmatched_paint_settings_requested = pyqtSignal(object)
     device_off_requested = pyqtSignal(str)
     cable_relief_requested = pyqtSignal()
 
@@ -28,6 +28,7 @@ class PaintQuickControlsPanel(QWidget):
         self._device_states = {item.device_id: False for item in toggle_configs}
         self._off_buttons: dict[str, QPushButton] = {}
         self._step_buttons: list[QPushButton] = []
+        self._unmatched_settings: dict = {}
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -123,17 +124,23 @@ class PaintQuickControlsPanel(QWidget):
 
     def _on_step(self) -> None:
         button = self.sender()
-        fields = {"velocity": self._velocity, "acceleration": self._acceleration, "offset": self._offset}
+        fields = {
+            "velocity": self._velocity,
+            "acceleration": self._acceleration,
+            "offset": self._offset,
+        }
         field = fields.get(str(button.property("field_id")))
         if field is not None:
-            field.setValue(
-                field.value()
-                + float(button.property("step_direction") or 0.0) * field.singleStep()
-            )
+            value = field.value() + float(button.property("step_direction") or 0.0) * field.singleStep()
+            field.setValue(value)
 
     def _on_apply(self) -> None:
         self.unmatched_paint_settings_requested.emit(
-            self._velocity.value(), self._acceleration.value(), self._offset.value()
+            {
+                "pass_count": int(self._unmatched_settings.get("pass_count", 1)),
+                "pass_1": {"velocity_percent": self._velocity.value(), "acceleration_percent": self._acceleration.value(), "offset_mm": self._offset.value()},
+                "pass_2": dict(self._unmatched_settings.get("pass_2") or {"use_pass_1_settings": True}),
+            }
         )
 
     def _on_device_off(self) -> None:
@@ -146,6 +153,7 @@ class PaintQuickControlsPanel(QWidget):
         if not settings:
             self._box.setEnabled(False)
             return
+        self._unmatched_settings = dict(settings)
         self._velocity.setValue(float(settings.get("velocity_percent", 10.0)))
         self._acceleration.setValue(float(settings.get("acceleration_percent", 10.0)))
         self._offset.setValue(float(settings.get("offset_mm", 0.0)))

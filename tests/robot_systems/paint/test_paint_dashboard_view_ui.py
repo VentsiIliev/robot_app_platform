@@ -100,6 +100,28 @@ class TestPaintDashboardUi(unittest.TestCase):
         self.assertEqual(cards[0][1:], (3, 1, 2))
         self.assertEqual(cards[1][1:], (4, None, None))
 
+    def test_unmatched_second_pass_tab_defaults_to_pass_one_inheritance(self) -> None:
+        drawer = PaintControlsDrawer([])
+        drawer.set_unmatched_paint_settings({
+            "velocity_percent": 12.0,
+            "acceleration_percent": 23.0,
+            "offset_mm": -1.0,
+            "pass_count": 2,
+            "pass_2": {
+                "use_pass_1_settings": True,
+                "velocity_percent": 34.0,
+                "acceleration_percent": 45.0,
+                "offset_mm": -2.0,
+            },
+        })
+
+        self.assertTrue(drawer._unmatched_tabs.isTabVisible(1))
+        self.assertTrue(drawer._pass_2_use_first.isChecked())
+        self.assertFalse(drawer._pass_2_velocity.isEnabled())
+        drawer._pass_2_use_first.setChecked(False)
+        self.assertTrue(drawer._pass_2_velocity.isEnabled())
+        self.assertEqual(drawer._settings_payload()["pass_2"]["offset_mm"], -2.0)
+
     def test_info_card_displays_configured_placeholder_content(self) -> None:
         card = PaintInfoCard("Paint", "Running", "Current state")
 

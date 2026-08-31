@@ -112,6 +112,16 @@ class PaintContactStagingConfig:
     detach_paint_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
     detach_perpendicular_axis_offset_mm: float = 0.0  # [LIVE SETTINGS]
 
+
+@dataclass(frozen=True)
+class UnmatchedSecondPassConfig:
+    """Optional second coat for captured contours that were not library-matched."""
+
+    use_pass_1_settings: bool = True
+    velocity_percent: float = 10.0
+    acceleration_percent: float = 10.0
+    offset_mm: float = 0.0
+
 @dataclass(frozen=True)
 class PaintEdgeCleanupConfig:
     """Optional XY/RZ cleanup pass tuning used after XZ/RY paint."""
@@ -340,6 +350,11 @@ class PaintProcessConfig:
     # Pivot/contact offset used only for captured contours executed without matching.
     # Matched workpieces keep the offset stored in their segment settings.
     default_paint_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    # Unmatched painting is deliberately capped at two passes for the initial rollout.
+    unmatched_paint_pass_count: int = 1  # [LIVE SETTINGS]
+    unmatched_second_pass: UnmatchedSecondPassConfig = field(
+        default_factory=UnmatchedSecondPassConfig
+    )
     # Continue past the seam along the beginning of a closed paint contour.
     closed_contour_overlap_mm: float = 0.0  # [LIVE SETTINGS]
     # Log one end-of-cycle timing table for every paint execution state.

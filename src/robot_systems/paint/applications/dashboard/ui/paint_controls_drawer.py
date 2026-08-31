@@ -8,8 +8,10 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QCheckBox,
     QPushButton,
     QScrollArea,
+    QTabWidget,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -18,11 +20,15 @@ from PyQt6.QtWidgets import (
 from pl_gui.shell.ui.icon_loader import load_icon
 from pl_gui.settings.settings_view.styles import (
     ACTION_BTN_STYLE,
+    BG_COLOR,
+    BORDER,
     GHOST_BTN_STYLE,
     GROUP_STYLE,
     LABEL_STYLE,
+    PRIMARY,
+    PRIMARY_DARK,
 )
-from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox
+from src.applications.base.widgets.custom_virtual_keyboard import KeyboardDoubleSpinBox, KeyboardSpinBox
 
 class PaintControlsDrawer(QWidget):
     """Data-driven manual controls hosted by the dashboard drawer."""
@@ -30,7 +36,7 @@ class PaintControlsDrawer(QWidget):
     cable_relief_requested = pyqtSignal()
     device_toggle_requested = pyqtSignal(str, bool)
     application_shortcut_requested = pyqtSignal(str)
-    unmatched_paint_settings_requested = pyqtSignal(float, float, float)
+    unmatched_paint_settings_requested = pyqtSignal(object)
 
     def __init__(
         self,
@@ -74,11 +80,56 @@ class PaintControlsDrawer(QWidget):
         unmatched_layout = QVBoxLayout(self._unmatched_box)
         unmatched_layout.setContentsMargins(14, 20, 14, 14)
         unmatched_layout.setSpacing(10)
+        self._unmatched_step_buttons: list[QPushButton] = []
+        self._unmatched_pass_count = KeyboardSpinBox()
+        self._unmatched_pass_count.setRange(1, 2)
+        self._unmatched_pass_count.setSingleStep(1)
+        self._unmatched_pass_count.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._unmatched_pass_count.valueChanged.connect(self._on_pass_count_changed)
+        self._unmatched_pass_count_label = QLabel()
+        unmatched_layout.addWidget(self._unmatched_pass_count_label)
+        unmatched_layout.addWidget(
+            self._build_touch_spin_row("pass_count", self._unmatched_pass_count)
+        )
+        self._unmatched_tabs = QTabWidget()
+        self._unmatched_tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                background-color: {BG_COLOR};
+                border: 1px solid {BORDER};
+                border-radius: 8px;
+                top: -1px;
+            }}
+            QTabBar::tab {{
+                color: {PRIMARY};
+                background-color: {BG_COLOR};
+                border: 1px solid {BORDER};
+                border-bottom: none;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+                min-width: 90px;
+                min-height: 36px;
+                padding: 0 14px;
+                font-size: 11pt;
+                font-weight: bold;
+                margin-right: 4px;
+            }}
+            QTabBar::tab:selected {{
+                color: white;
+                background-color: {PRIMARY};
+                border-color: {PRIMARY};
+            }}
+            QTabBar::tab:hover:!selected {{
+                color: white;
+                background-color: {PRIMARY_DARK};
+                border-color: {PRIMARY_DARK};
+            }}
+        """)
+        pass_1_widget = QWidget()
+        pass_1_layout = QVBoxLayout(pass_1_widget)
         self._unmatched_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_acceleration = self._make_spin_box(0.1, 100.0, 1.0, "%")
         self._unmatched_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
         self._unmatched_offset.setSingleStep(0.1)
-        self._unmatched_step_buttons: list[QPushButton] = []
         self._unmatched_velocity_label = QLabel()
         self._unmatched_acceleration_label = QLabel()
         self._unmatched_offset_label = QLabel()
@@ -88,18 +139,34 @@ class PaintControlsDrawer(QWidget):
             self._unmatched_offset_label,
         ):
             label.setMinimumHeight(24)
-        unmatched_layout.addWidget(self._unmatched_velocity_label)
-        unmatched_layout.addWidget(
+        pass_1_layout.addWidget(self._unmatched_velocity_label)
+        pass_1_layout.addWidget(
             self._build_touch_spin_row("velocity", self._unmatched_velocity)
         )
-        unmatched_layout.addWidget(self._unmatched_acceleration_label)
-        unmatched_layout.addWidget(
+        pass_1_layout.addWidget(self._unmatched_acceleration_label)
+        pass_1_layout.addWidget(
             self._build_touch_spin_row("acceleration", self._unmatched_acceleration)
         )
-        unmatched_layout.addWidget(self._unmatched_offset_label)
-        unmatched_layout.addWidget(
+        pass_1_layout.addWidget(self._unmatched_offset_label)
+        pass_1_layout.addWidget(
             self._build_touch_spin_row("offset", self._unmatched_offset)
         )
+        self._unmatched_tabs.addTab(pass_1_widget, "")
+        pass_2_widget = QWidget()
+        pass_2_layout = QVBoxLayout(pass_2_widget)
+        self._pass_2_use_first = QCheckBox()
+        self._pass_2_use_first.stateChanged.connect(self._sync_pass_2_enabled)
+        pass_2_layout.addWidget(self._pass_2_use_first)
+        self._pass_2_velocity = self._make_spin_box(0.1, 100.0, 1.0, "%")
+        self._pass_2_acceleration = self._make_spin_box(0.1, 100.0, 1.0, "%")
+        self._pass_2_offset = self._make_spin_box(-100.0, 100.0, 0.0, " mm")
+        self._pass_2_offset.setSingleStep(0.1)
+        self._pass_2_labels = [QLabel(), QLabel(), QLabel()]
+        for label, field in zip(self._pass_2_labels, (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset)):
+            pass_2_layout.addWidget(label)
+            pass_2_layout.addWidget(field)
+        self._unmatched_tabs.addTab(pass_2_widget, "")
+        unmatched_layout.addWidget(self._unmatched_tabs)
         self._unmatched_note = QLabel()
         self._unmatched_note.setWordWrap(True)
         unmatched_layout.addWidget(self._unmatched_note)
@@ -161,7 +228,7 @@ class PaintControlsDrawer(QWidget):
     def _build_touch_spin_row(
         self,
         field_id: str,
-        field: KeyboardDoubleSpinBox,
+        field: KeyboardDoubleSpinBox | KeyboardSpinBox,
     ) -> QWidget:
         row = QWidget()
         row.setStyleSheet("background: transparent;")
@@ -191,6 +258,7 @@ class PaintControlsDrawer(QWidget):
     def _on_touch_step(self) -> None:
         button = self.sender()
         fields = {
+            "pass_count": self._unmatched_pass_count,
             "velocity": self._unmatched_velocity,
             "acceleration": self._unmatched_acceleration,
             "offset": self._unmatched_offset,
@@ -199,14 +267,28 @@ class PaintControlsDrawer(QWidget):
         if field is None:
             return
         direction = float(button.property("step_direction") or 0.0)
-        field.setValue(field.value() + direction * field.singleStep())
+        value = field.value() + direction * field.singleStep()
+        field.setValue(int(value) if isinstance(field, KeyboardSpinBox) else value)
 
     def _on_unmatched_paint_settings(self) -> None:
         self.unmatched_paint_settings_requested.emit(
-            self._unmatched_velocity.value(),
-            self._unmatched_acceleration.value(),
-            self._unmatched_offset.value(),
+            self._settings_payload()
         )
+
+    def _settings_payload(self) -> dict:
+        return {
+            "pass_count": self._unmatched_pass_count.value(),
+            "pass_1": {"velocity_percent": self._unmatched_velocity.value(), "acceleration_percent": self._unmatched_acceleration.value(), "offset_mm": self._unmatched_offset.value()},
+            "pass_2": {"use_pass_1_settings": self._pass_2_use_first.isChecked(), "velocity_percent": self._pass_2_velocity.value(), "acceleration_percent": self._pass_2_acceleration.value(), "offset_mm": self._pass_2_offset.value()},
+        }
+
+    def _on_pass_count_changed(self, count: int) -> None:
+        self._unmatched_tabs.setTabVisible(1, int(count) == 2)
+
+    def _sync_pass_2_enabled(self) -> None:
+        enabled = not self._pass_2_use_first.isChecked()
+        for field in (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset):
+            field.setEnabled(enabled)
 
     def set_unmatched_paint_settings(self, settings: dict) -> None:
         if not settings:
@@ -215,6 +297,14 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_velocity.setValue(float(settings.get("velocity_percent", 10.0)))
         self._unmatched_acceleration.setValue(float(settings.get("acceleration_percent", 10.0)))
         self._unmatched_offset.setValue(float(settings.get("offset_mm", 0.0)))
+        self._unmatched_pass_count.setValue(int(settings.get("pass_count", 1)))
+        pass_2 = dict(settings.get("pass_2") or {})
+        self._pass_2_use_first.setChecked(bool(pass_2.get("use_pass_1_settings", True)))
+        self._pass_2_velocity.setValue(float(pass_2.get("velocity_percent", settings.get("velocity_percent", 10.0))))
+        self._pass_2_acceleration.setValue(float(pass_2.get("acceleration_percent", settings.get("acceleration_percent", 10.0))))
+        self._pass_2_offset.setValue(float(pass_2.get("offset_mm", settings.get("offset_mm", 0.0))))
+        self._on_pass_count_changed(self._unmatched_pass_count.value())
+        self._sync_pass_2_enabled()
         self._unmatched_box.setEnabled(True)
 
     def set_unmatched_paint_settings_editable(self, editable: bool) -> None:
@@ -222,6 +312,13 @@ class PaintControlsDrawer(QWidget):
         self._unmatched_acceleration.setEnabled(editable)
         self._unmatched_offset.setEnabled(editable)
         self._unmatched_apply.setEnabled(editable)
+        self._unmatched_pass_count.setEnabled(editable)
+        self._pass_2_use_first.setEnabled(editable)
+        if editable:
+            self._sync_pass_2_enabled()
+        else:
+            for field in (self._pass_2_velocity, self._pass_2_acceleration, self._pass_2_offset):
+                field.setEnabled(False)
         for button in self._unmatched_step_buttons:
             button.setEnabled(editable)
 
@@ -304,9 +401,15 @@ class PaintControlsDrawer(QWidget):
     def retranslateUi(self) -> None:
         self._title.setText(self.tr("Manual Controls"))
         self._unmatched_box.setTitle(self.tr("Unmatched Painting"))
+        self._unmatched_pass_count_label.setText(self.tr("Number of Passes"))
+        self._unmatched_tabs.setTabText(0, self.tr("Pass 1"))
+        self._unmatched_tabs.setTabText(1, self.tr("Pass 2"))
+        self._pass_2_use_first.setText(self.tr("Use Pass 1 settings"))
         self._unmatched_velocity_label.setText(self.tr("Velocity"))
         self._unmatched_acceleration_label.setText(self.tr("Acceleration"))
         self._unmatched_offset_label.setText(self.tr("Press Offset"))
+        for label, text in zip(self._pass_2_labels, ("Velocity", "Acceleration", "Press Offset")):
+            label.setText(self.tr(text))
         self._unmatched_note.setText(self.tr("Used only when workpiece matching is off."))
         self._unmatched_apply.setText(self.tr("Apply"))
         self._relief_button.setText(self.tr("Relieve Cable (Unwind J6)"))

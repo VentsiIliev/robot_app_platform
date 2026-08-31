@@ -56,6 +56,8 @@ Live data    →  Broker sub   →  Bridge      →  View setter
 | `pick_and_place_visualizer/` | Live placement plane visualizer, step-mode debugger, and log panel for pick-and-place |
 | `work_area_settings/` | Shared work-area and detection ROI editor (separate from camera settings) |
 
+Robot-system-specific dashboards may expose process-owned quick settings while retaining the same MVC boundary. The paint dashboard's unmatched controls use a one/two-pass selector and pass tabs. Pass two defaults to an explicit “Use Pass 1 settings” mode; disabling inheritance enables independent velocity, acceleration, and press-offset fields. The service rejects changes while the process is running or paused and saves the complete configuration atomically.
+
 ---
 
 ## Lifecycle
