@@ -6,7 +6,10 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 
-from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
+from src.robot_systems.paint.processes.paint.config import (
+    PaintNavigationReturnConfig,
+    PaintProcessConfig,
+)
 
 from src.shared_contracts.events.process_events import (
     ProcessBusyEvent,
@@ -35,6 +38,34 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_cable_relief_uses_configured_unwind_motion_values(self) -> None:
+        process = MagicMock(process_id="paint")
+        robot = MagicMock()
+        robot.unwind_joint6.return_value = True
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            navigation_return=PaintNavigationReturnConfig(
+                unwind_vel_percent=42.0,
+                unwind_acc_percent=27.0,
+                unwind_queue_if_busy=False,
+            )
+        )
+        service = PaintDashboardService(
+            process,
+            robot_service=robot,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.relieve_cable()
+
+        self.assertTrue(result.success)
+        robot.unwind_joint6.assert_called_once_with(
+            blocking=True,
+            queue_if_busy=False,
+            vel=42.0,
+            acc=27.0,
+        )
+
     def test_unmatched_paint_settings_persist_and_replace_runtime_snapshot(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.IDLE

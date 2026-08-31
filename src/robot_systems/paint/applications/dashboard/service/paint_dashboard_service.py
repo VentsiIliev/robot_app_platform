@@ -146,8 +146,19 @@ class PaintDashboardService(IPaintDashboardService):
     def relieve_cable(self) -> DashboardCommandResult:
         if self._robot_service is None:
             return DashboardCommandResult(False, "Robot service is not available.")
+        config_service = self._paint_process_config_service
+        if config_service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
         try:
-            success = bool(self._robot_service.unwind_joint6())
+            navigation = config_service.get_snapshot().navigation_return
+            success = bool(
+                self._robot_service.unwind_joint6(
+                    blocking=True,
+                    queue_if_busy=bool(navigation.unwind_queue_if_busy),
+                    vel=float(navigation.unwind_vel_percent),
+                    acc=float(navigation.unwind_acc_percent),
+                )
+            )
         except Exception as exc:
             self._logger.exception("Dashboard cable relief failed")
             return DashboardCommandResult(False, f"Cable relief failed: {exc}")
