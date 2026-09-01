@@ -1302,8 +1302,11 @@ class ServoUntilConditionProcedure:
         )
         if not isinstance(outcome, dict) or outcome.get("unsupported"):
             return False, "fast_lin_unsupported"
+        result_code = outcome.get("result")
         accepted = (
-            outcome.get("result") == 0
+            isinstance(result_code, int)
+            and not isinstance(result_code, bool)
+            and result_code >= 0
             and outcome.get("success") is True
             and outcome.get("accepted") is True
         )

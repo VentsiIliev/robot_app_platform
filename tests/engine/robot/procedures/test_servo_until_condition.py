@@ -427,11 +427,12 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             def move_fast_linear(self, **kwargs):
                 self.position = list(kwargs["position"])
                 return {
-                    "result": 0,
+                    "result": 1,
                     "success": True,
                     "accepted": True,
                     "final": False,
-                    "queued": False,
+                    "queued": True,
+                    "queue_position": 1,
                     "task_id": 23,
                 }
 
