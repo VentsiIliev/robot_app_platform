@@ -1295,26 +1295,35 @@ class ServoUntilConditionProcedure:
             user=int(cfg.user),
             vel=velocity,
             acc=acceleration,
+            blocking=False,
             trajectory_optimizer="TOTG",
             request_timeout_s=max(8.0, float(retract.timeout_s) + 5.0),
             allow_subzero_retract=True,
         )
         if not isinstance(outcome, dict) or outcome.get("unsupported"):
             return False, "fast_lin_unsupported"
-        completed = (
+        accepted = (
             outcome.get("result") == 0
             and outcome.get("success") is True
             and outcome.get("accepted") is True
-            and outcome.get("final") is True
-            and outcome.get("queued") is False
         )
-        if not completed:
+        if not accepted:
             detail = outcome.get("detail") or outcome.get("error") or outcome.get("result") or "failed"
             return False, f"fast_lin_failed:{detail}"
+
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] Fast LIN retract accepted asynchronously "
+            "task_id=%s target_z=%.3f",
+            outcome.get("task_id"),
+            target_z,
+        )
 
         deadline = time.monotonic() + max(0.0, float(retract.timeout_s))
         final_pose = None
         while True:
+            if cancel_requested is not None and cancel_requested():
+                self._stop_motion()
+                return False, "cancelled_during_retract"
             final_pose = self._read_current_pose()
             if final_pose is not None:
                 position_error = math.sqrt(

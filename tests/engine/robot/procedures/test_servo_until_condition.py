@@ -415,7 +415,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
 
         self.assertTrue(result.success, result.message)
 
-    def test_fast_lin_retract_rejects_non_final_acceptance(self):
+    def test_fast_lin_retract_accepts_non_final_response_and_waits_for_pose(self):
         class FastLinRobot(FakeRobot):
             def __init__(self):
                 super().__init__()
@@ -425,12 +425,14 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                 return list(self.position)
 
             def move_fast_linear(self, **kwargs):
+                self.position = list(kwargs["position"])
                 return {
                     "result": 0,
                     "success": True,
                     "accepted": True,
                     "final": False,
                     "queued": False,
+                    "task_id": 23,
                 }
 
         result = ServoUntilConditionProcedure(
@@ -444,9 +446,8 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             ),
         )
 
-        self.assertFalse(result.success)
-        self.assertTrue(result.retract_failed)
-        self.assertEqual(result.message, "fast_lin_failed:failed")
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(result.retracted)
 
     def test_distance_retract_delegates_computed_target_and_notifies_planning_hook(self):
         class BoundedRobot(FakeRobot):
