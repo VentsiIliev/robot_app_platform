@@ -140,7 +140,7 @@ class IMotionService(ABC):
         return self.get_current_position()
 
     def register_motion_corridor(self, corridor) -> None:
-        """Register one installation-specific constrained passage."""
+        """Register one installation-specific constrained linear-motion region."""
         raise NotImplementedError
 
     def set_motion_passage_closed(self, passage_id: str, closed: bool) -> bool:
@@ -158,5 +158,5 @@ class IMotionService(ABC):
         blendR: float = 0.0,
         wait_to_reach: bool = False,
     ) -> bool:
-        """Execute a bounded LIN move that may cross the platform Z=0 floor."""
+        """Execute a LIN move constrained by a registered corridor."""
         return False

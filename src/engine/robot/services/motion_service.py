@@ -646,8 +646,13 @@ class MotionService(IMotionService):
             target_z = float(target[2])
             descending = 0.0 <= current_z <= corridor.entry_z_max and corridor.z_min <= target_z < 0.0
             retracting = corridor.z_min <= current_z < 0.0 and 0.0 <= target_z <= corridor.entry_z_max
-            if not (descending or retracting):
-                violations.append("move must be a corridor descent or retract across Z=0")
+            planar_transit = (
+                corridor.allow_planar_transit
+                and corridor.contains_xyz(current)
+                and corridor.contains_xyz(target)
+            )
+            if not (descending or retracting or planar_transit):
+                violations.append("move is not permitted by the registered corridor")
             if float(velocity) > corridor.maximum_velocity:
                 violations.append("velocity exceeds corridor limit")
             if float(acceleration) > corridor.maximum_acceleration:
@@ -660,7 +665,8 @@ class MotionService(IMotionService):
             )
             return False
         passage_setter = getattr(self._robot, "set_motion_passage_closed", None)
-        if not callable(passage_setter):
+        requires_passage_control = descending or retracting
+        if requires_passage_control and not callable(passage_setter):
             self._logger.error("Corridor LIN rejected: ROS passage-lid control is unavailable")
             return False
         if descending and not passage_setter(corridor_id, False):

@@ -8,6 +8,7 @@ import math
 class PlateDropoffReservation:
     release_pose: list[float]
     approach_pose: list[float]
+    transit_pose: list[float]
     has_space_for_same_footprint: bool
     width_mm: float
     height_mm: float
@@ -105,8 +106,21 @@ class PlateLayoutService:
             taught_pose,
             workpiece_rz_at_calibration_deg,
         )
+        if len(release_pose) < 3 or float(release_pose[2]) < 0.0:
+            return None, "Plate-layout dropoff requires a release pose at or above Z=0"
         approach_pose = list(release_pose)
         approach_pose[2] += float(config.plate_approach_clearance_mm)
+        plate_center = _map_plate_point(
+            corners, plate_width, plate_height, plate_width / 2.0, plate_height / 2.0
+        )
+        transit_pose = list(approach_pose)
+        transit_pose[:3] = [
+            plate_center[0],
+            plate_center[1],
+            max(corner[2] for corner in corners)
+            + float(config.plate_release_z_offset_mm)
+            + float(config.plate_approach_clearance_mm),
+        ]
 
         next_left = left + width + float(config.plate_spacing_x_mm)
         next_row_height = max(row_height, height)
@@ -120,6 +134,7 @@ class PlateLayoutService:
         self._pending = PlateDropoffReservation(
             release_pose=release_pose,
             approach_pose=approach_pose,
+            transit_pose=transit_pose,
             has_space_for_same_footprint=has_more,
             width_mm=width,
             height_mm=height,

@@ -91,6 +91,9 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         _logger.info("[DROPOFF] Pre-dropoff align/unwind already completed by ordered cleanup chain")
         return True, ""
 
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        return _execute_plate_layout_preparation(executor)
+
     if _should_prepare_dropoff_align_before_unwind(executor):
         opened, message = open_dropoff_passage_for_preparation(executor)
         if not opened:
@@ -528,6 +531,7 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                     acc_percent=dropoff.release_align_acc_percent,
                     motion_type=dropoff.release_align_motion_type,
                     blendR=dropoff.release_align_blendR,
+                    corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
                     label="Descending to calculated plate position",
@@ -536,6 +540,7 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                     acc_percent=dropoff.release_align_acc_percent,
                     motion_type="linear",
                     release_here=True,
+                    corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
                     label="Retracting from calculated plate position",
@@ -543,6 +548,15 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                     vel_percent=dropoff.release_align_vel_percent,
                     acc_percent=dropoff.release_align_acc_percent,
                     motion_type="linear",
+                    corridor_id=_plate_layout_corridor_id(executor),
+                ),
+                DropoffReleaseWaypoint(
+                    label="Returning through plate center",
+                    pose=list(reservation.transit_pose),
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type="linear",
+                    corridor_id=_plate_layout_corridor_id(executor),
                 ),
             ),
         )
@@ -818,6 +832,82 @@ def _resolve_dropoff_preparation_pose(
     approach_pose = list(pose)
     approach_pose[2] = float(dropoff.sub_zero_approach_z_mm)
     return approach_pose
+
+
+def _plate_layout_corridor_id(executor: object) -> str:
+    base_id = str(getattr(executor, "_dropoff_motion_corridor_id", "") or "paint_dropoff")
+    return f"{base_id}_plate_layout"
+
+
+def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
+    """Enter the plate through its center and unwind without generic dropoff waypoints."""
+    service = getattr(executor, "_plate_layout_service", None)
+    reservation = None if service is None else service.pending
+    if reservation is None:
+        return False, "Plate-layout dropoff has no active reservation"
+
+    config = executor._paint_process_config()
+    register = getattr(executor._robot_service, "register_motion_corridor", None)
+    current_getter = getattr(executor._robot_service, "get_current_position", None)
+    if not callable(register) or not callable(current_getter):
+        return False, "Plate-layout bounded transit is unavailable"
+    try:
+        current_pose = list(current_getter() or [])
+    except Exception:
+        _logger.exception("[PLATE_LAYOUT] Failed to read current pose for bounded transit")
+        return False, "Plate-layout bounded transit could not read the current robot pose"
+    if len(current_pose) < 3:
+        current_pose = list(getattr(executor, "_last_process_end_pose", None) or [])
+    if len(current_pose) < 3:
+        return False, "Plate-layout bounded transit requires a valid current robot pose"
+
+    from src.engine.robot.safety import MotionCorridor
+    from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_corners
+
+    corners, error = validate_plate_corners(config.dropoff.plate_corners)
+    if error:
+        return False, error
+    bounded_poses = [current_pose, reservation.transit_pose, reservation.approach_pose,
+                     reservation.release_pose, *corners]
+    padding_mm = 1.0
+    corridor = MotionCorridor(
+        corridor_id=_plate_layout_corridor_id(executor),
+        x_min=min(float(pose[0]) for pose in bounded_poses) - padding_mm,
+        x_max=max(float(pose[0]) for pose in bounded_poses) + padding_mm,
+        y_min=min(float(pose[1]) for pose in bounded_poses) - padding_mm,
+        y_max=max(float(pose[1]) for pose in bounded_poses) + padding_mm,
+        z_min=min(float(pose[2]) for pose in bounded_poses) - padding_mm,
+        entry_z_max=max(float(pose[2]) for pose in bounded_poses) + padding_mm,
+        maximum_velocity=max(0.1, float(config.dropoff.corridor_maximum_velocity_percent)),
+        maximum_acceleration=max(0.1, float(config.dropoff.corridor_maximum_acceleration_percent)),
+        allow_planar_transit=True,
+    )
+    try:
+        register(corridor)
+    except (TypeError, ValueError, NotImplementedError):
+        _logger.exception("[PLATE_LAYOUT] Failed to register bounded transit corridor")
+        return False, "Plate-layout bounded transit corridor could not be registered"
+
+    if not executor._motion.move_pickup_phase(
+        "Moving through plate center before dropoff",
+        list(reservation.transit_pose),
+        velocity=config.dropoff.release_align_vel_percent,
+        acceleration=config.dropoff.release_align_acc_percent,
+        motion_type="linear",
+        corridor_id=corridor.corridor_id,
+    ):
+        return False, "Pivot paint finished, but bounded move to plate center failed"
+
+    if not executor._robot_service.unwind_joint6(
+        blocking=True,
+        queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+        vel=config.navigation_return.unwind_vel_percent,
+        acc=config.navigation_return.unwind_acc_percent,
+    ):
+        return False, "Pivot paint finished, but Joint 6 unwind failed at plate center"
+    executor._dropoff_unwind_prepared = True
+    executor._last_process_end_pose = list(reservation.transit_pose)
+    return True, ""
 
 
 def _dropoff_align_pose_near_reference(

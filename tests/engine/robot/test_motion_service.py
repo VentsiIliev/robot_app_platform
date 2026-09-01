@@ -104,6 +104,30 @@ class TestMotionService(unittest.TestCase):
         result = self.service.move_linear([100, 0, 300, 0, 0, 0], 0, 0, 20, 20)
         self.assertFalse(result)
 
+    def test_planar_corridor_allows_bounded_positive_z_transit_without_passage_lid(self):
+        self.robot.get_current_position_fresh.return_value = [0, 0, 50, 0, 0, 0]
+        self.robot.move_linear.return_value = 0
+        self.service.register_motion_corridor(MotionCorridor(
+            corridor_id="plate_layout",
+            x_min=-1,
+            x_max=101,
+            y_min=-201,
+            y_max=1,
+            z_min=0,
+            entry_z_max=101,
+            maximum_velocity=60,
+            maximum_acceleration=40,
+            allow_planar_transit=True,
+        ))
+
+        result = self.service.move_linear_in_corridor(
+            "plate_layout", [100, -200, 100, 0, 0, 0], 1, 1, 60, 40
+        )
+
+        self.assertTrue(result)
+        self.robot.move_linear.assert_called_once()
+        self.robot.set_motion_passage_closed.assert_not_called()
+
     def test_fast_linear_blocks_target_outside_platform_safety_limits(self):
         self.safety.get_violations.return_value = ["out of bounds"]
 
