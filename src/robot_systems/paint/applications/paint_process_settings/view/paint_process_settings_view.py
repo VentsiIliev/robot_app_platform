@@ -709,6 +709,7 @@ class PaintProcessSettingsView(IApplicationView):
     value_changed = pyqtSignal(str, object)
     set_safe_travel_current_requested = pyqtSignal()
     set_dropoff_safe_travel_current_requested = pyqtSignal()
+    capture_plate_corner_requested = pyqtSignal(str)
     move_to_safe_travel_waypoint_requested = pyqtSignal(dict)
 
     def __init__(self, parent=None):
@@ -748,10 +749,18 @@ class PaintProcessSettingsView(IApplicationView):
     def set_dropoff_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("dropoff_safe_travel_positions", position)
 
+    def set_plate_corner(self, corner_key: str, position: list[float], tool: int, user: int) -> None:
+        values = self.values()
+        values[corner_key] = ", ".join(f"{float(value):.3f}" for value in position[:6])
+        values["dropoff_plate_robot_tool"] = int(tool)
+        values["dropoff_plate_robot_user"] = int(user)
+        values["dropoff_plate_robot_frame"] = f"Tool {int(tool)}, User {int(user)}"
+        self.set_values(values)
+
     def values(self) -> dict:
         if self.settings_view is None:
             return dict(self._current_values)
-        return self.settings_view.get_values()
+        return {**self._current_values, **self.settings_view.get_values()}
 
     def set_status(self, message: str) -> None:
         if self._status_label is not None:
@@ -896,6 +905,15 @@ class PaintProcessSettingsView(IApplicationView):
             return
         if key == "dropoff_safe_travel_positions" and value == "dropoff_safe_travel_positions_add_current":
             self.set_dropoff_safe_travel_current_requested.emit()
+            return
+        corner_actions = {
+            "dropoff_plate_capture_bottom_left": "dropoff_plate_bottom_left",
+            "dropoff_plate_capture_bottom_right": "dropoff_plate_bottom_right",
+            "dropoff_plate_capture_top_right": "dropoff_plate_top_right",
+            "dropoff_plate_capture_top_left": "dropoff_plate_top_left",
+        }
+        if key in corner_actions and bool(value):
+            self.capture_plate_corner_requested.emit(corner_actions[key])
             return
         if key in {"safe_travel_positions", "dropoff_safe_travel_positions"} and isinstance(value, dict):
             if value.get("action") == "move_to":

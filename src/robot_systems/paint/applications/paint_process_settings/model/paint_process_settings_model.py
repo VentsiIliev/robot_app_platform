@@ -27,6 +27,9 @@ class PaintProcessSettingsModel(IApplicationModel):
     def get_current_robot_position(self) -> list[float] | None:
         return self._service.get_current_robot_position()
 
+    def get_current_robot_frame(self) -> tuple[int, int]:
+        return self._service.get_current_robot_frame()
+
     def move_to_waypoint(self, waypoint: dict) -> bool:
         return self._service.move_to_waypoint(waypoint)
 

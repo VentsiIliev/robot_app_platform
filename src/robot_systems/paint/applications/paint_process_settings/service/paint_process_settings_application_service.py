@@ -87,6 +87,10 @@ class PaintProcessSettingsApplicationService(IPaintProcessSettingsService):
             return None
         return values if len(values) >= 6 else None
 
+    def get_current_robot_frame(self) -> tuple[int, int]:
+        """Return the live tool/user configured in Robot Settings."""
+        return self._resolve_robot_frame()
+
     def get_pickup_safety_enabled(self) -> tuple[bool, bool]:
         if self._peripherals_provider is None:
             return False, False

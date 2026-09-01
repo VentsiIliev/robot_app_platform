@@ -278,6 +278,13 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_margin_top_mm": dropoff.plate_margin_top_mm,
             "dropoff_plate_spacing_x_mm": dropoff.plate_spacing_x_mm,
             "dropoff_plate_spacing_y_mm": dropoff.plate_spacing_y_mm,
+            "dropoff_plate_robot_tool": dropoff.plate_robot_tool,
+            "dropoff_plate_robot_user": dropoff.plate_robot_user,
+            "dropoff_plate_robot_frame": (
+                f"Tool {dropoff.plate_robot_tool}, User {dropoff.plate_robot_user}"
+                if dropoff.plate_robot_tool >= 0 and dropoff.plate_robot_user >= 0
+                else "Not captured"
+            ),
             "dropoff_allow_sub_zero": dropoff.allow_sub_zero_dropoff,
             "dropoff_corridor_x_margin_mm": dropoff.corridor_x_margin_mm,
             "dropoff_corridor_y_margin_mm": dropoff.corridor_y_margin_mm,
@@ -546,6 +553,8 @@ class PaintProcessSettingsMapper:
             plate_margin_top_mm=float(flat.get("dropoff_plate_margin_top_mm", base.dropoff.plate_margin_top_mm)),
             plate_spacing_x_mm=float(flat.get("dropoff_plate_spacing_x_mm", base.dropoff.plate_spacing_x_mm)),
             plate_spacing_y_mm=float(flat.get("dropoff_plate_spacing_y_mm", base.dropoff.plate_spacing_y_mm)),
+            plate_robot_tool=int(flat.get("dropoff_plate_robot_tool", base.dropoff.plate_robot_tool)),
+            plate_robot_user=int(flat.get("dropoff_plate_robot_user", base.dropoff.plate_robot_user)),
             allow_sub_zero_dropoff=bool(
                 flat.get("dropoff_allow_sub_zero", base.dropoff.allow_sub_zero_dropoff)
             ),

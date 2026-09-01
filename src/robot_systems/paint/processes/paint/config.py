@@ -175,6 +175,8 @@ class PaintDropoffConfig:
     plate_margin_top_mm: float = 10.0  # [LIVE SETTINGS]
     plate_spacing_x_mm: float = 10.0  # [LIVE SETTINGS]
     plate_spacing_y_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
+    plate_robot_user: int = -1
 
 
 @dataclass(frozen=True)

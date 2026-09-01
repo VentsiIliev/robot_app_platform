@@ -37,6 +37,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.save_requested.connect(self._on_save)
         self._view.set_safe_travel_current_requested.connect(self._on_set_safe_travel_current)
         self._view.set_dropoff_safe_travel_current_requested.connect(self._on_set_dropoff_safe_travel_current)
+        self._view.capture_plate_corner_requested.connect(self._on_capture_plate_corner)
         self._view.move_to_safe_travel_waypoint_requested.connect(self._on_move_to_safe_travel_waypoint)
 
     def stop(self) -> None:
@@ -55,6 +56,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             pass
         try:
             self._view.set_dropoff_safe_travel_current_requested.disconnect(self._on_set_dropoff_safe_travel_current)
+        except Exception:
+            pass
+        try:
+            self._view.capture_plate_corner_requested.disconnect(self._on_capture_plate_corner)
         except Exception:
             pass
         try:
@@ -283,6 +288,47 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         self._view.set_dropoff_safe_travel_position(position)
         self._view.set_status(
             self._t("Paint-to-dropoff safe travel pose set. Waypoint added from current robot position. Save settings to keep it.")
+        )
+
+    def _on_capture_plate_corner(self, corner_key: str) -> None:
+        position = self._model.get_current_robot_position()
+        if position is None:
+            message = self._t("Could not read the current robot position for the plate corner.")
+            show_warning(self._view, self._t("Robot Position Not Available"), message)
+            self._view.set_status(message)
+            return
+        tool, user = self._model.get_current_robot_frame()
+        values = self._view.values()
+        captured_pose_keys = (
+            "dropoff_plate_bottom_left",
+            "dropoff_plate_bottom_right",
+            "dropoff_plate_top_right",
+            "dropoff_plate_top_left",
+        )
+        has_existing_corner = any(str(values.get(key, "") or "").strip() for key in captured_pose_keys)
+        captured_tool = int(values.get("dropoff_plate_robot_tool", -1))
+        captured_user = int(values.get("dropoff_plate_robot_user", -1))
+        if has_existing_corner and captured_tool >= 0 and captured_user >= 0 and (
+            tool != captured_tool or user != captured_user
+        ):
+            message = self._t(
+                "Plate corners must use one robot frame. Captured tool/user is {captured_tool}/{captured_user}; "
+                "Robot Settings currently uses {tool}/{user}."
+            ).format(
+                captured_tool=captured_tool,
+                captured_user=captured_user,
+                tool=tool,
+                user=user,
+            )
+            show_warning(self._view, self._t("Robot Frame Mismatch"), message)
+            self._view.set_status(message)
+            return
+        self._view.set_plate_corner(corner_key, position, tool, user)
+        self._view.set_status(
+            self._t("Plate corner captured using Robot Settings tool {tool} and user {user}.").format(
+                tool=tool,
+                user=user,
+            )
         )
 
     def _on_move_to_safe_travel_waypoint(self, waypoint: dict) -> None:

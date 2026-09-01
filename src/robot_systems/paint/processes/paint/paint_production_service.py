@@ -502,6 +502,21 @@ class PaintProductionService:
         image: object | None = None,
         reason: str = "",
     ) -> None:
+        vision = self._vision_service
+        lifecycle_method = (
+            getattr(vision, "pause_processing", None)
+            if paused
+            else getattr(vision, "resume_processing", None)
+        )
+        if callable(lifecycle_method):
+            try:
+                lifecycle_method()
+            except Exception:
+                _logger.exception(
+                    "Failed to %s vision processing: %s",
+                    "pause" if paused else "resume",
+                    reason,
+                )
         messaging = self._messaging_service
         if messaging is None:
             return
