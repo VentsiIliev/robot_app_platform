@@ -827,6 +827,46 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         )
         self.assertEqual(robot.started, [])
 
+    def test_fast_lin_diagnostic_moves_to_minimum_z_without_starting_servo(self):
+        class DiagnosticRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.pose = [1.0, 2.0, 80.0, 4.0, 5.0, 6.0]
+                self.fast_linear_request = None
+
+            def get_current_position(self):
+                return list(self.pose)
+
+            def move_fast_linear(self, **kwargs):
+                self.fast_linear_request = kwargs
+                self.pose = list(kwargs["position"])
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": True,
+                    "queued": False,
+                }
+
+        robot = DiagnosticRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, True)
+        ).run(config=ServoUntilConditionConfig(
+            execution_mode="fast_lin_diagnostic",
+            minimum_z_mm=50.0,
+            approach_velocity=10.0,
+            approach_acceleration=10.0,
+            tool=1,
+            user=2,
+        ))
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.message, "fast_lin_diagnostic_detected")
+        self.assertEqual(robot.started, [])
+        self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 50.0, 4.0, 5.0, 6.0])
+        self.assertEqual(robot.fast_linear_request["vel"], 10.0)
+        self.assertEqual(robot.fast_linear_request["acc"], 10.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -236,6 +236,17 @@ class ServoUntilConditionProcedure:
                         message="minimum_z_reached_before_servo",
                     )
 
+            if cfg.execution_mode == "fast_lin_diagnostic":
+                return self._run_fast_lin_diagnostic(
+                    started_at=started_at,
+                    cfg=cfg,
+                    retract=retract,
+                    cancel_requested=cancel_requested,
+                    stop_guard=stop_guard,
+                    on_retract_start=on_retract_start,
+                    start_pose=travel_start_pose,
+                )
+
             if cfg.execution_mode == "ros_managed":
                 return self._run_ros_managed(
                     started_at=started_at,
@@ -741,6 +752,122 @@ class ServoUntilConditionProcedure:
                 }.get(state, state or "ros_managed_unknown_state"),
             )
 
+    def _run_fast_lin_diagnostic(
+        self,
+        *,
+        started_at: float,
+        cfg: ServoUntilConditionConfig,
+        retract: ServoRetractConfig | None,
+        cancel_requested: Callable[[], bool] | None,
+        stop_guard: Callable[[], bool] | None,
+        on_retract_start: Callable[[tuple[float, ...], float], None] | None,
+        start_pose: Sequence[float] | None,
+    ) -> ServoUntilConditionResult:
+        """Diagnostic replacement for conditional Servo using one bounded Fast LIN."""
+        if start_pose is None or cfg.minimum_z_mm is None:
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=True,
+                message="fast_lin_diagnostic_missing_start_or_minimum_z",
+            )
+        if cancel_requested is not None and cancel_requested():
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=False, condition_failed=False, guard_triggered=True,
+                message="cancelled_before_fast_lin_diagnostic",
+            )
+
+        target_pose = [float(value) for value in start_pose[:6]]
+        target_pose[2] = float(cfg.minimum_z_mm)
+        velocity = float(cfg.approach_velocity)
+        acceleration = float(cfg.approach_acceleration)
+        mover = getattr(self._robot, "move_fast_linear", None)
+        if not callable(mover):
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message="fast_lin_diagnostic_unsupported",
+            )
+
+        _logger.warning(
+            "[FAST_LIN_DIAGNOSTIC] Conditional Servo bypassed: "
+            "start_z=%.3f target_z=%.3f vel=%.1f acc=%.1f",
+            float(start_pose[2]), target_pose[2], velocity, acceleration,
+        )
+        outcome = mover(
+            position=target_pose,
+            tool=int(cfg.tool),
+            user=int(cfg.user),
+            vel=velocity,
+            acc=acceleration,
+            trajectory_optimizer="TOTG",
+            request_timeout_s=max(8.0, float(cfg.timeout_s) + 5.0),
+        )
+        completed = bool(
+            isinstance(outcome, dict)
+            and outcome.get("result") == 0
+            and outcome.get("success") is True
+            and outcome.get("accepted") is True
+            and outcome.get("final") is True
+            and outcome.get("queued") is False
+        )
+        if not completed:
+            detail = (
+                outcome.get("detail") or outcome.get("error") or outcome.get("result")
+                if isinstance(outcome, dict) else outcome
+            )
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message=f"fast_lin_diagnostic_failed:{detail}",
+            )
+
+        contact_pose = self._read_current_pose()
+        detected, read_ok = self._read_condition()
+        _logger.warning(
+            "[FAST_LIN_DIAGNOSTIC] Fast LIN completed: final_z=%s detected=%s read_ok=%s",
+            None if contact_pose is None else f"{float(contact_pose[2]):.3f}",
+            detected,
+            read_ok,
+        )
+        if not read_ok or not detected:
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=False, condition_failed=not read_ok,
+                guard_triggered=not detected, contact_pose=contact_pose,
+                message=(
+                    "fast_lin_diagnostic_condition_unreadable" if not read_ok
+                    else "fast_lin_diagnostic_condition_not_detected"
+                ),
+            )
+
+        if retract is not None:
+            retract_ok, retract_message = self._retract(
+                retract,
+                cfg,
+                cancel_requested=cancel_requested,
+                stop_guard=stop_guard,
+                on_retract_start=on_retract_start,
+            )
+            if not retract_ok:
+                return self._result(
+                    started_at, success=False, detected=True,
+                    timed_out=retract_message == "retract_timeout",
+                    start_failed=False, condition_failed=False,
+                    guard_triggered=retract_message.startswith("stop_guard"),
+                    retract_failed=True, contact_pose=contact_pose,
+                    message=retract_message,
+                )
+        return self._result(
+            started_at, success=True, detected=True, timed_out=False,
+            start_failed=False, condition_failed=False, guard_triggered=False,
+            retracted=retract is not None, contact_pose=contact_pose,
+            message=(
+                "fast_lin_diagnostic_detected_and_retracted"
+                if retract is not None else "fast_lin_diagnostic_detected"
+            ),
+        )
+
     @staticmethod
     def _elapsed_ms(start_ns, end_ns):
         if not isinstance(start_ns, int) or not isinstance(end_ns, int):
@@ -814,6 +941,7 @@ class ServoUntilConditionProcedure:
                 cfg=cfg,
                 cancel_requested=cancel_requested,
             )
+
         if motion_type == "fast_lin":
             return self._retract_fast_linear(
                 current_pose=current_pose,
@@ -1313,7 +1441,7 @@ class ServoUntilConditionProcedure:
 
     @staticmethod
     def _validate_config(cfg: ServoUntilConditionConfig) -> tuple[bool, str]:
-        if cfg.execution_mode not in {"legacy", "ros_managed"}:
+        if cfg.execution_mode not in {"legacy", "ros_managed", "fast_lin_diagnostic"}:
             return False, "invalid_execution_mode"
         try:
             axis = cfg.axis

@@ -4,6 +4,7 @@ import logging
 import math
 import time
 
+from src.engine.geometry.planar import unwrap_degrees
 from src.engine.robot.enums.axis import Direction, RobotAxis
 from src.engine.robot.procedures import (
     ServoRetractConfig,
@@ -32,6 +33,37 @@ from src.robot_systems.paint.processes.paint.magazine_load_result import NO_WORK
 from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
+
+
+def calculate_workpiece_dropoff_pose(
+    calibration_pose: list[float] | tuple[float, ...],
+    plate_dropoff_pose: list[float] | tuple[float, ...],
+    workpiece_rz_at_calibration_deg: float,
+) -> list[float]:
+    """Return a plate pose preserving workpiece orientation across plane rotation.
+
+    ``workpiece_rz_at_calibration_deg`` is the resolved robot/tool RZ holding the
+    workpiece at the calibration pose, not the raw contour angle.  XYZ, RX, and
+    RY come from the plate pose; RZ also includes the taught rotation from the
+    calibration pose to the plate pose.
+    """
+    calibration = _finite_pose(calibration_pose)
+    dropoff = _finite_pose(plate_dropoff_pose)
+    try:
+        workpiece_rz = float(workpiece_rz_at_calibration_deg)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Workpiece calibration RZ must be finite") from exc
+    if calibration is None:
+        raise ValueError("Calibration pose must contain six finite values")
+    if dropoff is None:
+        raise ValueError("Plate dropoff pose must contain six finite values")
+    if not math.isfinite(workpiece_rz):
+        raise ValueError("Workpiece calibration RZ must be finite")
+
+    calibration_to_plate_rz = dropoff[5] - calibration[5]
+    mapped_workpiece_rz = workpiece_rz + calibration_to_plate_rz
+    dropoff[5] = unwrap_degrees(dropoff[5], mapped_workpiece_rz)
+    return dropoff
 
 
 @timed_step(_logger, "pickup_target_to_position_release")
@@ -299,7 +331,7 @@ def _execute_magazine_servo_contact_pickup_release(
         control = getattr(executor, "_active_execution_control", None)
         result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
             config=ServoUntilConditionConfig(
-                execution_mode="ros_managed",
+                execution_mode="fast_lin_diagnostic",
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,
@@ -312,7 +344,9 @@ def _execute_magazine_servo_contact_pickup_release(
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
-                minimum_z_mm=minimum_contact_z_mm,
+                minimum_z_mm=50.0,
+                approach_velocity=10.0,
+                approach_acceleration=10.0,
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,
