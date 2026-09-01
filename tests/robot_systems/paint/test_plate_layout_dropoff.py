@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock
 
 from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
 from src.robot_systems.paint.processes.paint.config import PaintProcessConfig
@@ -9,6 +10,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 from src.robot_systems.paint.processes.paint.plate_layout import (
     PlateLayoutService,
     validate_plate_corners,
+)
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
+    _should_preplan_dropoff_in_ordered_chain,
 )
 
 
@@ -22,6 +26,22 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
+    def test_plate_dropoff_preparation_is_not_appended_to_pickup_paint_chain(self) -> None:
+        executor = MagicMock()
+        executor._paint_process_config.return_value.dropoff.strategy = "plate_layout"
+
+        self.assertFalse(_should_preplan_dropoff_in_ordered_chain(executor))
+        executor._edge_cleanup.should_run_after_xz_ry.assert_not_called()
+        executor._edge_cleanup.should_run_after_xy_rz.assert_not_called()
+
+    def test_existing_dropoff_strategy_keeps_ordered_preparation(self) -> None:
+        executor = MagicMock()
+        executor._paint_process_config.return_value.dropoff.strategy = "pickup_origin"
+        executor._edge_cleanup.should_run_after_xz_ry.return_value = False
+        executor._edge_cleanup.should_run_after_xy_rz.return_value = False
+
+        self.assertTrue(_should_preplan_dropoff_in_ordered_chain(executor))
+
     def test_settings_mapper_roundtrips_plate_strategy_and_corners(self) -> None:
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",

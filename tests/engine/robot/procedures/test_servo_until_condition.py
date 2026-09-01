@@ -844,9 +844,14 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                     "result": 0,
                     "success": True,
                     "accepted": True,
-                    "final": True,
-                    "queued": False,
+                    "final": False,
+                    "queued": True,
+                    "task_id": 17,
                 }
+
+            def stop_motion(self):
+                self.stopped += 1
+                return True
 
         robot = DiagnosticRobot()
         result = ServoUntilConditionProcedure(
@@ -866,6 +871,8 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 50.0, 4.0, 5.0, 6.0])
         self.assertEqual(robot.fast_linear_request["vel"], 10.0)
         self.assertEqual(robot.fast_linear_request["acc"], 10.0)
+        self.assertFalse(robot.fast_linear_request["blocking"])
+        self.assertEqual(robot.stopped, 1)
 
 
 if __name__ == "__main__":

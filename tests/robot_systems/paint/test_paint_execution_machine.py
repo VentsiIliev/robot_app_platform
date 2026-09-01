@@ -102,6 +102,10 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
 
         self.assertTrue(progressed)
         self.assertEqual(PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE, machine.current_state)
+        service._set_dashboard_live_view_paused.assert_called_once_with(
+            True,
+            reason="magazine workflow robot motion starting",
+        )
 
     def test_starting_routes_to_stopped_when_stop_requested(self):
         ctx = PaintExecutionContext(

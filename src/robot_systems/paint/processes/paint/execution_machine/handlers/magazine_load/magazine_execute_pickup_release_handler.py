@@ -346,7 +346,7 @@ def _execute_magazine_servo_contact_pickup_release(
                 disable_collision_checking=True,
                 minimum_z_mm=50.0,
                 approach_velocity=10.0,
-                approach_acceleration=10.0,
+                approach_acceleration=30.0,
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,

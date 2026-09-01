@@ -262,7 +262,7 @@ def try_execute_ordered_pickup_and_paint_contact(
         if second_pass_paths
         else list(paint_paths[-1][-1])
     )
-    if not executor._edge_cleanup.should_run_after_xz_ry() and not executor._edge_cleanup.should_run_after_xy_rz():
+    if _should_preplan_dropoff_in_ordered_chain(executor):
         config = executor._paint_process_config()
         if bool(config.dropoff_safe_travel.enabled) and not _resolve_dropoff_safe_travel_waypoints(executor):
             return (
@@ -327,6 +327,15 @@ def try_execute_ordered_pickup_and_paint_contact(
     if final_pose is not None:
         executor._last_process_end_pose = list(final_pose)
     return True, "", total_waypoints
+
+
+def _should_preplan_dropoff_in_ordered_chain(executor: object) -> bool:
+    """Keep plate travel/unwind in PREPARE_DROPOFF after paint completes."""
+    return (
+        _dropoff_strategy(executor) != "plate_layout"
+        and not executor._edge_cleanup.should_run_after_xz_ry()
+        and not executor._edge_cleanup.should_run_after_xy_rz()
+    )
 
 
 def build_ordered_second_pass_segments(

@@ -1314,7 +1314,10 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
     def move_fast_linear(self, **kwargs):
         payload = dict(kwargs)
         request_timeout = max(8.0, float(payload.pop("request_timeout_s", 15.0)))
-        payload["blocking"] = True
+        # Existing callers remain blocking by default.  Pickup diagnostics can
+        # opt into asynchronous execution so their sensor loop can stop the
+        # in-flight trajectory as soon as contact is detected.
+        payload["blocking"] = bool(payload.get("blocking", True))
         payload["position"] = self._to_float_list(payload.get("position", []))
         tool = int(payload.get("tool", 0))
         if not self.set_active_tool(tool):

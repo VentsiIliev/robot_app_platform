@@ -19,6 +19,10 @@ def handle_starting(ctx: PaintExecutionContext) -> PaintExecutionState:
     service = ctx.production_service
     if ctx.magazine_config is not None and bool(getattr(ctx.magazine_config, "enabled", False)):
         if supports_fine_magazine_states(getattr(service, "_magazine_load_service", None)):
+            service._set_dashboard_live_view_paused(
+                True,
+                reason="magazine workflow robot motion starting",
+            )
             return PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE
         service._restore_capture_view("before legacy magazine load")
         return PaintExecutionState.MAGAZINE_LOAD

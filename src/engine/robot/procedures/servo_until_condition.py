@@ -800,18 +800,17 @@ class ServoUntilConditionProcedure:
             user=int(cfg.user),
             vel=velocity,
             acc=acceleration,
+            blocking=False,
             trajectory_optimizer="TOTG",
             request_timeout_s=max(8.0, float(cfg.timeout_s) + 5.0),
         )
-        completed = bool(
+        accepted = bool(
             isinstance(outcome, dict)
             and outcome.get("result") == 0
             and outcome.get("success") is True
             and outcome.get("accepted") is True
-            and outcome.get("final") is True
-            and outcome.get("queued") is False
         )
-        if not completed:
+        if not accepted:
             detail = (
                 outcome.get("detail") or outcome.get("error") or outcome.get("result")
                 if isinstance(outcome, dict) else outcome
@@ -822,8 +821,104 @@ class ServoUntilConditionProcedure:
                 message=f"fast_lin_diagnostic_failed:{detail}",
             )
 
-        contact_pose = self._read_current_pose()
-        detected, read_ok = self._read_condition()
+        _logger.warning(
+            "[FAST_LIN_DIAGNOSTIC] Fast LIN accepted asynchronously task_id=%s; "
+            "polling sensor every %.3fs",
+            outcome.get("task_id"),
+            float(cfg.poll_interval_s),
+        )
+        deadline = started_at + float(cfg.timeout_s)
+        read_failures = 0
+        detected = False
+        contact_pose = None
+        while time.monotonic() < deadline:
+            if cancel_requested is not None and cancel_requested():
+                self._stop_motion()
+                return self._result(
+                    started_at, success=False, detected=False, timed_out=False,
+                    start_failed=False, condition_failed=False, guard_triggered=True,
+                    message="cancelled_during_fast_lin_diagnostic",
+                )
+            if stop_guard is not None:
+                try:
+                    guarded = bool(stop_guard())
+                except Exception:
+                    _logger.exception("[FAST_LIN_DIAGNOSTIC] stop guard read failed")
+                    guarded = True
+                if guarded:
+                    self._stop_motion()
+                    return self._result(
+                        started_at, success=False, detected=False, timed_out=False,
+                        start_failed=False, condition_failed=False, guard_triggered=True,
+                        message="stop_guard_triggered_during_fast_lin_diagnostic",
+                    )
+
+            detected, read_ok = self._read_condition()
+            if not read_ok:
+                read_failures += 1
+                if read_failures >= int(cfg.condition_read_failure_limit):
+                    self._stop_motion()
+                    return self._result(
+                        started_at, success=False, detected=False, timed_out=False,
+                        start_failed=False, condition_failed=True, guard_triggered=False,
+                        message="fast_lin_diagnostic_condition_unreadable",
+                    )
+            else:
+                read_failures = 0
+                if detected:
+                    trigger_ns = time.monotonic_ns()
+                    _logger.warning(
+                        "[FAST_LIN_DIAGNOSTIC_TIMING] event=sensor_trigger task_id=%s elapsed_s=%.3f",
+                        outcome.get("task_id"),
+                        time.monotonic() - started_at,
+                    )
+                    stop_ok = self._stop_motion_checked()
+                    stop_done_ns = time.monotonic_ns()
+                    if not stop_ok:
+                        return self._result(
+                            started_at, success=False, detected=True, timed_out=False,
+                            start_failed=False, condition_failed=False, guard_triggered=False,
+                            stop_failed=True, message="fast_lin_diagnostic_stop_failed",
+                        )
+                    contact_pose = self._wait_for_stable_pose(
+                        timeout_s=1.0,
+                        sample_interval_s=max(0.01, min(0.05, float(cfg.poll_interval_s))),
+                    )
+                    stationary_ns = time.monotonic_ns()
+                    _logger.warning(
+                        "[FAST_LIN_DIAGNOSTIC_TIMING] event=stationary task_id=%s "
+                        "trigger_to_stop_response_ms=%.3f stop_response_to_stationary_ms=%.3f",
+                        outcome.get("task_id"),
+                        (stop_done_ns - trigger_ns) / 1_000_000.0,
+                        (stationary_ns - stop_done_ns) / 1_000_000.0,
+                    )
+                    if contact_pose is None:
+                        return self._result(
+                            started_at, success=False, detected=True, timed_out=False,
+                            start_failed=False, condition_failed=False, guard_triggered=False,
+                            stop_failed=True, message="fast_lin_diagnostic_stationary_unconfirmed",
+                        )
+                    break
+
+            live_pose = self._read_current_pose()
+            if live_pose is not None and live_pose[2] <= float(cfg.minimum_z_mm) + 0.5:
+                contact_pose = live_pose
+                break
+            time.sleep(max(0.001, float(cfg.poll_interval_s)))
+        else:
+            self._stop_motion()
+            return self._result(
+                started_at, success=False, detected=False, timed_out=True,
+                start_failed=False, condition_failed=False, guard_triggered=False,
+                message="fast_lin_diagnostic_timeout",
+            )
+
+        if contact_pose is None:
+            contact_pose = self._read_current_pose()
+        if not detected:
+            detected, read_ok = self._read_condition()
+        else:
+            read_ok = True
         _logger.warning(
             "[FAST_LIN_DIAGNOSTIC] Fast LIN completed: final_z=%s detected=%s read_ok=%s",
             None if contact_pose is None else f"{float(contact_pose[2]):.3f}",
@@ -1354,6 +1449,51 @@ class ServoUntilConditionProcedure:
             self._robot.stop_motion()
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] stop_motion failed")
+
+    def _stop_motion_checked(self) -> bool:
+        try:
+            result = self._robot.stop_motion()
+            return result is True or result == 0
+        except Exception:
+            _logger.exception("[SERVO_UNTIL_CONDITION] stop_motion failed")
+            return False
+
+    def _wait_for_stable_pose(
+        self,
+        *,
+        timeout_s: float,
+        sample_interval_s: float,
+        required_stable_samples: int = 3,
+        xyz_tolerance_mm: float = 0.25,
+        angular_tolerance_deg: float = 0.1,
+    ) -> list[float] | None:
+        deadline = time.monotonic() + max(0.1, float(timeout_s))
+        previous = None
+        stable_samples = 0
+        while time.monotonic() < deadline:
+            pose = self._read_current_pose()
+            if pose is None:
+                previous = None
+                stable_samples = 0
+            elif previous is not None:
+                xyz_delta = math.sqrt(sum(
+                    (pose[index] - previous[index]) ** 2 for index in range(3)
+                ))
+                angular_delta = max(
+                    abs((pose[index] - previous[index] + 180.0) % 360.0 - 180.0)
+                    for index in range(3, 6)
+                )
+                if xyz_delta <= xyz_tolerance_mm and angular_delta <= angular_tolerance_deg:
+                    stable_samples += 1
+                    if stable_samples >= max(1, int(required_stable_samples)):
+                        return pose
+                else:
+                    stable_samples = 0
+                previous = pose
+            else:
+                previous = pose
+            time.sleep(max(0.001, float(sample_interval_s)))
+        return None
 
     def _read_current_pose(self) -> list[float] | None:
         try:
