@@ -19,6 +19,7 @@ class PickupCondition(Protocol):
 
 @dataclass(frozen=True)
 class ServoUntilConditionConfig:
+    execution_mode: str = "legacy"
     axis: RobotAxis = RobotAxis.Z
     direction: Direction = Direction.MINUS
     linear_mm_s: float = 25.0
@@ -235,18 +236,17 @@ class ServoUntilConditionProcedure:
                         message="minimum_z_reached_before_servo",
                     )
 
-            fast_phase_active = cfg.initial_linear_mm_s is not None
-            managed_result = self._run_ros_managed(
-                started_at=started_at,
-                cfg=cfg,
-                retract=retract,
-                cancel_requested=cancel_requested,
-                stop_guard=stop_guard,
-                on_retract_start=on_retract_start,
-            )
-            if managed_result is not None:
-                return managed_result
+            if cfg.execution_mode == "ros_managed":
+                return self._run_ros_managed(
+                    started_at=started_at,
+                    cfg=cfg,
+                    retract=retract,
+                    cancel_requested=cancel_requested,
+                    stop_guard=stop_guard,
+                    on_retract_start=on_retract_start,
+                )
 
+            fast_phase_active = cfg.initial_linear_mm_s is not None
             servo_kwargs = {
                 "linear_mm_s": (
                     cfg.initial_linear_mm_s if fast_phase_active else cfg.linear_mm_s
@@ -546,16 +546,34 @@ class ServoUntilConditionProcedure:
         cancel_requested: Callable[[], bool] | None,
         stop_guard: Callable[[], bool] | None,
         on_retract_start: Callable[[tuple[float, ...], float], None] | None,
-    ) -> ServoUntilConditionResult | None:
+    ) -> ServoUntilConditionResult:
         starter = getattr(self._robot, "start_conditional_servo", None)
         publisher = getattr(self._robot, "publish_conditional_servo_sensor", None)
         status_getter = getattr(self._robot, "get_conditional_servo_status", None)
         canceller = getattr(self._robot, "cancel_conditional_servo", None)
-        if not all(callable(method) for method in (starter, publisher, status_getter, canceller)):
-            return None
+        capabilities = {
+            "start": starter,
+            "publish_sensor": publisher,
+            "status": status_getter,
+            "cancel": canceller,
+        }
+        missing = [name for name, method in capabilities.items() if not callable(method)]
+        if missing:
+            message = f"ros_managed_unavailable:missing_capabilities:{','.join(missing)}"
+            _logger.error("[SERVO_UNTIL_CONDITION] %s", message)
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message=message,
+            )
         if cfg.initial_linear_mm_s is not None or cfg.slowdown_z_mm is not None:
-            _logger.info("[SERVO_UNTIL_CONDITION] ROS-managed mode skipped for two-speed descent")
-            return None
+            message = "ros_managed_unsupported:two_speed_descent"
+            _logger.error("[SERVO_UNTIL_CONDITION] %s", message)
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message=message,
+            )
 
         boundary = None
         if cfg.minimum_z_mm is not None:
@@ -589,16 +607,21 @@ class ServoUntilConditionProcedure:
             "restore_collision_checking": True,
         }
         response = starter(request)
-        if response is None or response.get("unsupported"):
-            return None
+        if response is None:
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message="ros_managed_unavailable:no_response",
+            )
+        if response.get("unsupported"):
+            error = response.get("error") or response.get("result") or "unsupported"
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message=f"ros_managed_unavailable:{error}",
+            )
         if not response.get("success"):
             error = str(response.get("error") or "")
-            if "sensor websocket is not connected" in error or "supervisor unavailable" in error:
-                _logger.warning(
-                    "[SERVO_UNTIL_CONDITION] ROS-managed mode unavailable (%s); using HTTP fallback",
-                    error,
-                )
-                return None
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=True, condition_failed=False, guard_triggered=False,
@@ -1290,6 +1313,8 @@ class ServoUntilConditionProcedure:
 
     @staticmethod
     def _validate_config(cfg: ServoUntilConditionConfig) -> tuple[bool, str]:
+        if cfg.execution_mode not in {"legacy", "ros_managed"}:
+            return False, "invalid_execution_mode"
         try:
             axis = cfg.axis
             axis_value = int(axis.value if hasattr(axis, "value") else axis)

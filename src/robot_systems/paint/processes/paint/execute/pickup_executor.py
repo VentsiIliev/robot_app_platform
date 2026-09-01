@@ -472,6 +472,7 @@ class PaintPickupExecutor:
         control = getattr(self._owner, "_active_execution_control", None)
         result = procedure.run(
             config=ServoUntilConditionConfig(
+                execution_mode="ros_managed",
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,

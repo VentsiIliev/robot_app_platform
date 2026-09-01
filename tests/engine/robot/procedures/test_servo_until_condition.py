@@ -799,7 +799,11 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         robot = ManagedRobot()
         result = ServoUntilConditionProcedure(
             robot, _ConditionSequence(False, False, False, True)
-        ).run(config=ServoUntilConditionConfig(poll_interval_s=0.001, timeout_s=0.1))
+        ).run(config=ServoUntilConditionConfig(
+            execution_mode="ros_managed",
+            poll_interval_s=0.001,
+            timeout_s=0.1,
+        ))
 
         self.assertTrue(result.success)
         self.assertTrue(result.detected)
@@ -807,6 +811,21 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(robot.started, [])
         self.assertEqual([False, True], [event["state"] for event in robot.sensor_events])
         self.assertTrue(robot.sensor_events[-1]["detected_monotonic_ns"] > 0)
+
+    def test_ros_managed_mode_fails_without_capabilities_and_never_starts_legacy_servo(self):
+        robot = FakeRobot()
+
+        result = ServoUntilConditionProcedure(robot, lambda: False).run(
+            config=ServoUntilConditionConfig(execution_mode="ros_managed")
+        )
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.start_failed)
+        self.assertEqual(
+            result.message,
+            "ros_managed_unavailable:missing_capabilities:start,publish_sensor,status,cancel",
+        )
+        self.assertEqual(robot.started, [])
 
 
 if __name__ == "__main__":

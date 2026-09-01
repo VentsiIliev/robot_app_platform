@@ -60,7 +60,7 @@
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
     "pickup_contact_mode": "servo_contact",
-    "servo_contact_linear_mm_s": 350.0,
+    "servo_contact_linear_mm_s": 10.0,
     "servo_contact_min_z_mm": 0.0,
     "servo_contact_timeout_s": 7.0,
     "servo_contact_poll_interval_s": 0.01,

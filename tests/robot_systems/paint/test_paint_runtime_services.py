@@ -558,6 +558,23 @@ class TestModbusFanControl(unittest.TestCase):
 
 
 class TestVacuumSensorService(unittest.TestCase):
+    def test_repeated_sensor_state_logs_are_throttled_but_transitions_log_immediately(self) -> None:
+        transport = MagicMock()
+        transport.read_register.side_effect = [1, 1, 0]
+        service = VacuumSensorService(
+            transport,
+            VacuumSensorConfig(sensor_register="Y4"),
+        )
+
+        with patch(
+            "src.engine.hardware.vacuum_sensor.vacuum_sensor_service._logger.debug"
+        ) as debug:
+            self.assertTrue(service.is_vacuum_detected())
+            self.assertTrue(service.is_vacuum_detected())
+            self.assertFalse(service.is_vacuum_detected())
+
+        self.assertEqual(debug.call_count, 2)
+
     def test_sensor_register_accepts_xinje_output_label(self) -> None:
         transport = MagicMock()
         transport.read_register.return_value = 1

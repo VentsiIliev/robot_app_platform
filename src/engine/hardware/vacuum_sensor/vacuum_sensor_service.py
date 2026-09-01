@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from src.engine.hardware.vacuum_sensor.interfaces.i_vacuum_sensor_service import IVacuumSensorService
 from src.engine.hardware.vacuum_sensor.interfaces.i_vacuum_sensor_transport import IVacuumSensorTransport
@@ -8,6 +9,7 @@ from src.engine.hardware.vacuum_sensor.models.vacuum_sensor_config import Vacuum
 from src.engine.hardware.xinje import XinjeMA8X8YR
 
 _logger = logging.getLogger(__name__)
+_SENSOR_LOG_INTERVAL_S = 1.0
 
 
 class VacuumSensorService(IVacuumSensorService):
@@ -33,6 +35,8 @@ class VacuumSensorService(IVacuumSensorService):
         )
         self._last_read_ok = False
         self._last_raw_value: int | None = None
+        self._last_logged_state: tuple[int, bool] | None = None
+        self._last_log_at = 0.0
 
     # ── IVacuumSensorService ───────────────────────────────────────────
 
@@ -56,12 +60,17 @@ class VacuumSensorService(IVacuumSensorService):
             self._last_read_ok = True
             self._last_raw_value = int(raw)
             detected = raw == self._config.detected_value
-            _logger.debug(
-                "Vacuum sensor register=%d raw=%d -> detected=%s",
-                self._sensor_register,
-                raw,
-                detected,
-            )
+            state = (int(raw), detected)
+            now = time.monotonic()
+            if state != self._last_logged_state or now - self._last_log_at >= _SENSOR_LOG_INTERVAL_S:
+                _logger.debug(
+                    "Vacuum sensor register=%d raw=%d -> detected=%s",
+                    self._sensor_register,
+                    raw,
+                    detected,
+                )
+                self._last_logged_state = state
+                self._last_log_at = now
             return detected
         self._last_read_ok = False
         return False
