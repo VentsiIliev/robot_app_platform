@@ -297,6 +297,7 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_top_left": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[3]) if len(dropoff.plate_corners) > 3 else "",
             "dropoff_plate_release_z_offset_mm": dropoff.plate_release_z_offset_mm,
             "dropoff_plate_approach_clearance_mm": dropoff.plate_approach_clearance_mm,
+            "dropoff_plate_center_distributed_unwind_deg": dropoff.plate_center_distributed_unwind_deg,
             "dropoff_plate_margin_left_mm": dropoff.plate_margin_left_mm,
             "dropoff_plate_margin_right_mm": dropoff.plate_margin_right_mm,
             "dropoff_plate_margin_bottom_mm": dropoff.plate_margin_bottom_mm,
@@ -587,6 +588,10 @@ class PaintProcessSettingsMapper:
             ],
             plate_release_z_offset_mm=float(flat.get("dropoff_plate_release_z_offset_mm", base.dropoff.plate_release_z_offset_mm)),
             plate_approach_clearance_mm=float(flat.get("dropoff_plate_approach_clearance_mm", base.dropoff.plate_approach_clearance_mm)),
+            plate_center_distributed_unwind_deg=float(flat.get(
+                "dropoff_plate_center_distributed_unwind_deg",
+                base.dropoff.plate_center_distributed_unwind_deg,
+            )),
             plate_margin_left_mm=float(flat.get("dropoff_plate_margin_left_mm", base.dropoff.plate_margin_left_mm)),
             plate_margin_right_mm=float(flat.get("dropoff_plate_margin_right_mm", base.dropoff.plate_margin_right_mm)),
             plate_margin_bottom_mm=float(flat.get("dropoff_plate_margin_bottom_mm", base.dropoff.plate_margin_bottom_mm)),

@@ -17,6 +17,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _build_dropoff_release_plan,
     _execute_plate_layout_preparation,
+    _plate_center_pose_with_distributed_unwind,
 )
 
 
@@ -53,6 +54,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_approach_clearance_mm=35.0,
             plate_robot_tool=7,
             plate_robot_user=3,
+            plate_center_distributed_unwind_deg=135.0,
             plate_motion_profiles=[
                 {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
                 {"key": "center_to_approach", "vel_percent": 12, "acc_percent": 22, "motion_type": "linear", "blendR": 2},
@@ -72,6 +74,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(35.0, restored.dropoff.plate_approach_clearance_mm)
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
+        self.assertEqual(135.0, restored.dropoff.plate_center_distributed_unwind_deg)
         self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
 
     def test_requires_exactly_four_corners_without_fallback(self) -> None:
@@ -146,6 +149,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._paint_process_config.return_value = config
         executor._plate_layout_service = service
         executor._dropoff_motion_corridor_id = "dropoff"
+        executor._contact_motion_config.rotation_index = 5
 
         plan = _build_dropoff_release_plan(executor)
 
@@ -195,6 +199,32 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(-110.0, corridor.x_min)
         self.assertEqual(330.0, corridor.x_max)
         executor._robot_service.get_current_position.assert_not_called()
+
+    def test_center_lin_distributes_at_most_180_degrees_of_whole_turn_unwind(self) -> None:
+        executor = MagicMock()
+        executor._contact_motion_config.rotation_index = 5
+
+        target = _plate_center_pose_with_distributed_unwind(
+            executor,
+            [100, 200, 250, 180, 0, 720],
+            [500, -40, 100, 180, 0, 0],
+            180,
+        )
+
+        self.assertEqual(540.0, target[5])
+
+    def test_center_lin_keeps_nominal_rotation_when_no_whole_turn_is_present(self) -> None:
+        executor = MagicMock()
+        executor._contact_motion_config.rotation_index = 5
+
+        target = _plate_center_pose_with_distributed_unwind(
+            executor,
+            [100, 200, 250, 180, 0, 170],
+            [500, -40, 100, 180, 0, 0],
+            180,
+        )
+
+        self.assertEqual(0.0, target[5])
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()

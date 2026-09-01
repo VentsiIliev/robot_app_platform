@@ -185,6 +185,7 @@
     "Plate corners must use one robot frame. Captured tool/user is {captured_tool}/{captured_user}; Robot Settings currently uses {tool}/{user}.": "Ъглите на плочата трябва да използват една роботна рамка. Записаните tool/user са {captured_tool}/{captured_user}, а Robot Settings в момента използва {tool}/{user}.",
     "Plate Release Z Offset": "Z отместване за освобождаване върху плочата",
     "Plate Approach Clearance": "Безопасна височина над плочата",
+    "Distributed Unwind During Center Move": "Разпределено развиване при движение към центъра",
     "Plate Left Margin": "Ляв отстъп на плочата",
     "Plate Right Margin": "Десен отстъп на плочата",
     "Plate Bottom Margin": "Долен отстъп на плочата",

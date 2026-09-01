@@ -185,6 +185,7 @@
     "Plate corners must use one robot frame. Captured tool/user is {captured_tool}/{captured_user}; Robot Settings currently uses {tool}/{user}.": "Plate corners must use one robot frame. Captured tool/user is {captured_tool}/{captured_user}; Robot Settings currently uses {tool}/{user}.",
     "Plate Release Z Offset": "Plate Release Z Offset",
     "Plate Approach Clearance": "Plate Approach Clearance",
+    "Distributed Unwind During Center Move": "Distributed Unwind During Center Move",
     "Plate Left Margin": "Plate Left Margin",
     "Plate Right Margin": "Plate Right Margin",
     "Plate Bottom Margin": "Plate Bottom Margin",

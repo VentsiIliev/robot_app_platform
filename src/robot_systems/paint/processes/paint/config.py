@@ -192,6 +192,7 @@ class PaintDropoffConfig:
     plate_corners: list[list[float]] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_release_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
     plate_approach_clearance_mm: float = 50.0  # [LIVE SETTINGS]
+    plate_center_distributed_unwind_deg: float = 180.0  # [LIVE SETTINGS]
     plate_margin_left_mm: float = 10.0  # [LIVE SETTINGS]
     plate_margin_right_mm: float = 10.0  # [LIVE SETTINGS]
     plate_margin_bottom_mm: float = 10.0  # [LIVE SETTINGS]

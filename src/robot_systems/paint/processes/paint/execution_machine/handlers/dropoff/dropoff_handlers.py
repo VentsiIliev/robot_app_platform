@@ -867,6 +867,43 @@ def _plate_motion_profile(dropoff: object, key: str) -> dict[str, float]:
     return fallback
 
 
+def _plate_center_pose_with_distributed_unwind(
+    executor: object,
+    current_pose: list[float],
+    nominal_center_pose: list[float],
+    maximum_unwind_deg: float,
+) -> list[float]:
+    """Apply at most part of a whole-turn unwind during the center LIN move."""
+    target = list(nominal_center_pose)
+    rotation_index = int(executor._contact_motion_config.rotation_index)
+    if (
+        rotation_index < 0
+        or len(current_pose) <= rotation_index
+        or len(target) <= rotation_index
+    ):
+        return target
+    maximum = max(0.0, min(180.0, float(maximum_unwind_deg)))
+    start_rotation = float(current_pose[rotation_index])
+    nominal_continuous = unwrap_degrees(start_rotation, float(target[rotation_index]))
+    canonical = ((nominal_continuous + 180.0) % 360.0) - 180.0
+    whole_turn_shift = canonical - nominal_continuous
+    applied_shift = max(-maximum, min(maximum, whole_turn_shift))
+    target[rotation_index] = nominal_continuous + applied_shift
+    _logger.info(
+        "[PLATE_LAYOUT] Center-move distributed unwind rotation_index=%d "
+        "start=%.3f nominal_continuous=%.3f whole_turn_shift=%.3f "
+        "maximum=%.3f applied=%.3f target=%.3f",
+        rotation_index,
+        start_rotation,
+        nominal_continuous,
+        whole_turn_shift,
+        maximum,
+        applied_shift,
+        target[rotation_index],
+    )
+    return target
+
+
 def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     """Enter the plate through its center and unwind without generic dropoff waypoints."""
     service = getattr(executor, "_plate_layout_service", None)
@@ -892,6 +929,13 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     if len(current_pose) < 3:
         return False, "Plate-layout bounded transit requires a valid current robot pose"
 
+    center_pose = _plate_center_pose_with_distributed_unwind(
+        executor,
+        current_pose,
+        reservation.transit_pose,
+        config.dropoff.plate_center_distributed_unwind_deg,
+    )
+
     from src.engine.robot.safety import MotionCorridor
     from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_corners
 
@@ -899,7 +943,7 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     if error:
         return False, error
     commanded_end_pose = list(getattr(executor, "_last_process_end_pose", None) or [])
-    bounded_poses = [current_pose, reservation.transit_pose, reservation.approach_pose,
+    bounded_poses = [current_pose, center_pose, reservation.transit_pose, reservation.approach_pose,
                      reservation.release_pose, *corners]
     if len(commanded_end_pose) >= 3:
         # The ordered-chain completion notification and live TCP telemetry can
@@ -940,7 +984,7 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
 
     if not executor._motion.move_pickup_phase(
         "Moving through plate center before dropoff",
-        list(reservation.transit_pose),
+        center_pose,
         velocity=enter_profile["vel_percent"],
         acceleration=enter_profile["acc_percent"],
         motion_type="linear",
@@ -957,7 +1001,7 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     ):
         return False, "Pivot paint finished, but Joint 6 unwind failed at plate center"
     executor._dropoff_unwind_prepared = True
-    executor._last_process_end_pose = list(reservation.transit_pose)
+    executor._last_process_end_pose = list(center_pose)
     return True, ""
 
 

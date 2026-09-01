@@ -169,6 +169,12 @@ def build_process_groups() -> list[SettingGroup]:
             ]),
             _mm_field("dropoff_plate_release_z_offset_mm", "Plate Release Z Offset", 0.0),
             _mm_field("dropoff_plate_approach_clearance_mm", "Plate Approach Clearance", 50.0, min_val=0.0),
+            _deg_field(
+                "dropoff_plate_center_distributed_unwind_deg",
+                "Distributed Unwind During Center Move",
+                180.0,
+                min_val=0.0,
+            ),
             _mm_field("dropoff_plate_margin_left_mm", "Plate Left Margin", 10.0, min_val=0.0),
             _mm_field("dropoff_plate_margin_right_mm", "Plate Right Margin", 10.0, min_val=0.0),
             _mm_field("dropoff_plate_margin_bottom_mm", "Plate Bottom Margin", 10.0, min_val=0.0),
