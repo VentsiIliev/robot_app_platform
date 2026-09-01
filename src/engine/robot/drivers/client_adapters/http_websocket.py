@@ -69,6 +69,14 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         self._last_execution_preplan_signature = None
         self._state_ws_dependency_missing = False
         self._execution_ws_dependency_missing = False
+        self._sensor_ws_url = self._derive_sensor_ws_url(self.server_url)
+        self._sensor_ws_lock = threading.Lock()
+        self._sensor_ws_loop_ref = None
+        self._sensor_ws_queue = None
+        self._sensor_ws_connected = False
+        self._sensor_ws_stop = threading.Event()
+        self._sensor_ws_thread = None
+        self._conditional_servo_latest = None
         self._state_http_snapshot = None
         self._state_http_snapshot_at = 0.0
         logger.info("Connecting to ROS2 bridge at %s", self.server_url)
@@ -82,6 +90,7 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.info("Connected to ROS2 bridge at %s", server_url)
         self._start_state_websocket()
         self._start_execution_websocket()
+        self._start_sensor_websocket()
 
     @staticmethod
     def _derive_state_ws_url(server_url: str) -> str:
@@ -108,6 +117,16 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
         port = 5002
         netloc = f"{hostname}:{port}"
         return urlunparse((scheme, netloc, "/ws/execution", "", "", ""))
+
+    @staticmethod
+    def _derive_sensor_ws_url(server_url: str) -> str:
+        explicit = os.environ.get("ROBOT_SENSOR_WS_URL")
+        if explicit:
+            return explicit.rstrip("/")
+        parsed = urlparse(server_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        hostname = parsed.hostname or "localhost"
+        return urlunparse((scheme, f"{hostname}:5003", "/ws/sensors", "", "", ""))
 
     def _mark_available(self):
         self._available = True
@@ -331,6 +350,107 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             if time.monotonic() - self._execution_ws_last_at > self._EXECUTION_WS_STALE_AFTER_S:
                 return None
             return dict(self._execution_ws_latest)
+
+    def _start_sensor_websocket(self):
+        if self._sensor_ws_thread is not None:
+            return
+        self._sensor_ws_thread = threading.Thread(
+            target=self._run_sensor_websocket_thread,
+            daemon=True,
+            name="RobotSensorWebSocket",
+        )
+        self._sensor_ws_thread.start()
+
+    def _run_sensor_websocket_thread(self):
+        try:
+            asyncio.run(self._sensor_websocket_loop())
+        except Exception:
+            logger.debug("Sensor WebSocket thread exited", exc_info=True)
+
+    async def _sensor_websocket_loop(self):
+        try:
+            import websockets
+        except Exception as exc:
+            logger.warning("Sensor WebSocket disabled because websockets is unavailable: %s", exc)
+            return
+        loop = asyncio.get_running_loop()
+        queue = asyncio.Queue(maxsize=64)
+        with self._sensor_ws_lock:
+            self._sensor_ws_loop_ref = loop
+            self._sensor_ws_queue = queue
+        while not self._sensor_ws_stop.is_set():
+            try:
+                async with websockets.connect(
+                    self._sensor_ws_url,
+                    open_timeout=1.0,
+                    ping_interval=10.0,
+                    ping_timeout=3.0,
+                    close_timeout=1.0,
+                ) as websocket:
+                    self._sensor_ws_connected = True
+                    logger.info("Connected to ROS2 sensor WebSocket at %s", self._sensor_ws_url)
+                    while not self._sensor_ws_stop.is_set():
+                        send_task = asyncio.create_task(queue.get())
+                        receive_task = asyncio.create_task(websocket.recv())
+                        done, pending = await asyncio.wait(
+                            {send_task, receive_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for task in pending:
+                            task.cancel()
+                        if send_task in done:
+                            await websocket.send(send_task.result())
+                        if receive_task in done:
+                            self._accept_sensor_ws_message(receive_task.result())
+            except Exception as exc:
+                self._sensor_ws_connected = False
+                logger.debug("Sensor WebSocket unavailable at %s: %s", self._sensor_ws_url, exc)
+                await asyncio.sleep(1.0)
+
+    def _accept_sensor_ws_message(self, message):
+        try:
+            data = json.loads(message)
+        except (TypeError, ValueError):
+            return
+        snapshot = data.get("conditional_servo")
+        if isinstance(snapshot, dict):
+            with self._sensor_ws_lock:
+                self._conditional_servo_latest = dict(snapshot)
+
+    def publish_sensor_state(self, *, sensor: str, state: bool, stream_id: str, sequence: int,
+                             detected_monotonic_ns: int | None = None) -> bool:
+        with self._sensor_ws_lock:
+            loop = self._sensor_ws_loop_ref
+            queue = self._sensor_ws_queue
+            connected = self._sensor_ws_connected
+        if not connected or loop is None or queue is None:
+            return False
+        payload = json.dumps({
+            "type": "sensor_state",
+            "sensor": str(sensor),
+            "state": "active" if state else "inactive",
+            "stream_id": str(stream_id),
+            "sequence": int(sequence),
+            "detected_monotonic_ns": int(detected_monotonic_ns or time.monotonic_ns()),
+        }, separators=(",", ":"))
+
+        def enqueue():
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            queue.put_nowait(payload)
+
+        loop.call_soon_threadsafe(enqueue)
+        return True
+
+    def get_conditional_servo_status(self) -> dict | None:
+        execution = self._get_execution_ws_status()
+        if isinstance(execution, dict) and isinstance(execution.get("conditional_servo"), dict):
+            return dict(execution["conditional_servo"])
+        with self._sensor_ws_lock:
+            return dict(self._conditional_servo_latest) if self._conditional_servo_latest else None
 
     def _mark_execution_request_sent(self, label: str) -> float:
         now = time.monotonic()
@@ -1134,6 +1254,40 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             self._mark_unavailable(e)
             logger.error("stop_servo_jog error: %s", e, exc_info=True)
             return -1
+
+    def start_conditional_servo(self, request: dict) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/servojog/until-condition/start",
+                json=dict(request),
+                timeout=8,
+            )
+            if response.status_code == 404:
+                return {"success": False, "unsupported": True, "error": "unsupported"}
+            raw = response.json()
+            self._mark_available()
+            snapshot = raw.get("conditional_servo") if isinstance(raw, dict) else None
+            if isinstance(snapshot, dict):
+                with self._sensor_ws_lock:
+                    self._conditional_servo_latest = dict(snapshot)
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            self._mark_unavailable(exc)
+            logger.error("start_conditional_servo error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
+    def cancel_conditional_servo(self) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/servojog/until-condition/cancel",
+                json={},
+                timeout=5,
+            )
+            raw = response.json()
+            return raw if isinstance(raw, dict) else {"success": False, "error": "invalid_response"}
+        except Exception as exc:
+            logger.error("cancel_conditional_servo error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
 
     def servo_jog_to_z(self, **kwargs):
         payload = dict(kwargs)

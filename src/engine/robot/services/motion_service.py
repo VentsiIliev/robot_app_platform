@@ -490,6 +490,22 @@ class MotionService(IMotionService):
             self._logger.exception("servo_jog_to_z failed")
             return {"success": False, "error": "platform_servo_jog_to_z_failed"}
 
+    def start_conditional_servo(self, request: dict) -> dict | None:
+        method = getattr(self._robot, "start_conditional_servo", None)
+        return method(request) if callable(method) else None
+
+    def publish_conditional_servo_sensor(self, **event) -> bool:
+        method = getattr(self._robot, "publish_conditional_servo_sensor", None)
+        return bool(callable(method) and method(**event))
+
+    def get_conditional_servo_status(self) -> dict | None:
+        method = getattr(self._robot, "get_conditional_servo_status", None)
+        return method() if callable(method) else None
+
+    def cancel_conditional_servo(self) -> dict | None:
+        method = getattr(self._robot, "cancel_conditional_servo", None)
+        return method() if callable(method) else None
+
     def move_fast_linear(self, **kwargs) -> dict | None:
         self._last_jog_target = []
         self._servo_floor_stop.set()

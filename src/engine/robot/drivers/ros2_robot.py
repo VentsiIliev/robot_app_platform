@@ -106,6 +106,22 @@ class Ros2Robot(IRobot):
         logger.debug("servo_jog_to_z ← %s", result)
         return result if isinstance(result, dict) else None
 
+    def start_conditional_servo(self, request: dict) -> dict | None:
+        method = getattr(self._client, "start_conditional_servo", None)
+        return method(request) if callable(method) else None
+
+    def publish_conditional_servo_sensor(self, **event) -> bool:
+        method = getattr(self._client, "publish_sensor_state", None)
+        return bool(callable(method) and method(**event))
+
+    def get_conditional_servo_status(self) -> dict | None:
+        method = getattr(self._client, "get_conditional_servo_status", None)
+        return method() if callable(method) else None
+
+    def cancel_conditional_servo(self) -> dict | None:
+        method = getattr(self._client, "cancel_conditional_servo", None)
+        return method() if callable(method) else None
+
     def move_fast_linear(self, **kwargs) -> dict | None:
         mover = getattr(self._client, "move_fast_linear", None)
         if not callable(mover):

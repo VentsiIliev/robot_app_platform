@@ -111,6 +111,18 @@ class IMotionService(ABC):
     def servo_jog_to_z(self, **kwargs) -> dict | None:
         return None
 
+    def start_conditional_servo(self, request: dict) -> dict | None:
+        return None
+
+    def publish_conditional_servo_sensor(self, **event) -> bool:
+        return False
+
+    def get_conditional_servo_status(self) -> dict | None:
+        return None
+
+    def cancel_conditional_servo(self) -> dict | None:
+        return None
+
     def move_fast_linear(self, **kwargs) -> dict | None:
         """Optionally execute a blocking Pilz LIN move and return its final outcome."""
         return None

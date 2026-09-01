@@ -757,6 +757,57 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertEqual(len(robot.started), 1)
         self.assertEqual(robot.stopped, 1)
 
+    def test_ros_managed_mode_waits_for_terminal_stationary_state(self):
+        class ManagedRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.operation_id = "managed-1"
+                self.state = "moving"
+                self.sensor_events = []
+
+            def start_conditional_servo(self, request):
+                self.request = request
+                return {
+                    "success": True,
+                    "conditional_servo": {
+                        "operation_id": self.operation_id,
+                        "state": "moving",
+                    },
+                }
+
+            def publish_conditional_servo_sensor(self, **event):
+                self.sensor_events.append(event)
+                if event["state"]:
+                    # The ROS supervisor only exposes this terminal state after
+                    # local stop and stationary joint-state confirmation.
+                    self.state = "condition_met"
+                return True
+
+            def get_conditional_servo_status(self):
+                return {
+                    "operation_id": self.operation_id,
+                    "state": self.state,
+                    "trigger_monotonic_ns": 10,
+                    "stop_command_completed_monotonic_ns": 20,
+                    "stopped_monotonic_ns": 30,
+                }
+
+            def cancel_conditional_servo(self):
+                self.state = "cancelled"
+                return True
+
+        robot = ManagedRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, False, True)
+        ).run(config=ServoUntilConditionConfig(poll_interval_s=0.001, timeout_s=0.1))
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.detected)
+        self.assertEqual(result.message, "condition_detected")
+        self.assertEqual(robot.started, [])
+        self.assertEqual([False, True], [event["state"] for event in robot.sensor_events])
+        self.assertTrue(robot.sensor_events[-1]["detected_monotonic_ns"] > 0)
+
 
 if __name__ == "__main__":
     unittest.main()

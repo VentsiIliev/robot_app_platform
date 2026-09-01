@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
@@ -235,6 +236,17 @@ class ServoUntilConditionProcedure:
                     )
 
             fast_phase_active = cfg.initial_linear_mm_s is not None
+            managed_result = self._run_ros_managed(
+                started_at=started_at,
+                cfg=cfg,
+                retract=retract,
+                cancel_requested=cancel_requested,
+                stop_guard=stop_guard,
+                on_retract_start=on_retract_start,
+            )
+            if managed_result is not None:
+                return managed_result
+
             servo_kwargs = {
                 "linear_mm_s": (
                     cfg.initial_linear_mm_s if fast_phase_active else cfg.linear_mm_s
@@ -524,6 +536,193 @@ class ServoUntilConditionProcedure:
                 # disabled for retract. Always restore it on every final exit,
                 # including retract-start and exception failures.
                 self._stop_servo(restore_collision_checking=True)
+
+    def _run_ros_managed(
+        self,
+        *,
+        started_at: float,
+        cfg: ServoUntilConditionConfig,
+        retract: ServoRetractConfig | None,
+        cancel_requested: Callable[[], bool] | None,
+        stop_guard: Callable[[], bool] | None,
+        on_retract_start: Callable[[tuple[float, ...], float], None] | None,
+    ) -> ServoUntilConditionResult | None:
+        starter = getattr(self._robot, "start_conditional_servo", None)
+        publisher = getattr(self._robot, "publish_conditional_servo_sensor", None)
+        status_getter = getattr(self._robot, "get_conditional_servo_status", None)
+        canceller = getattr(self._robot, "cancel_conditional_servo", None)
+        if not all(callable(method) for method in (starter, publisher, status_getter, canceller)):
+            return None
+        if cfg.initial_linear_mm_s is not None or cfg.slowdown_z_mm is not None:
+            _logger.info("[SERVO_UNTIL_CONDITION] ROS-managed mode skipped for two-speed descent")
+            return None
+
+        boundary = None
+        if cfg.minimum_z_mm is not None:
+            boundary = {
+                "frame": "user",
+                "user": int(cfg.user),
+                "tool": int(cfg.tool),
+                "axis": "z",
+                "operator": "less_or_equal",
+                "value_mm": float(cfg.minimum_z_mm),
+            }
+        request = {
+            "servo": {
+                "axis": cfg.axis.name,
+                "direction": cfg.direction.name,
+                "linear_mm_s": float(cfg.linear_mm_s) if cfg.axis.value <= 3 else None,
+                "angular_deg_s": cfg.angular_deg_s if cfg.axis.value > 3 else None,
+                "frame": cfg.frame,
+                "tool": int(cfg.tool),
+                "user": int(cfg.user),
+                "disable_collision_checking": bool(cfg.disable_collision_checking),
+            },
+            "condition": {
+                "source": "servo_condition",
+                "required_state": True,
+                "require_fresh_transition": True,
+            },
+            "boundary": boundary,
+            "timeout_s": float(cfg.timeout_s),
+            "sensor_stale_timeout_s": max(0.25, float(cfg.poll_interval_s) * 10.0),
+            "restore_collision_checking": True,
+        }
+        response = starter(request)
+        if response is None or response.get("unsupported"):
+            return None
+        if not response.get("success"):
+            error = str(response.get("error") or "")
+            if "sensor websocket is not connected" in error or "supervisor unavailable" in error:
+                _logger.warning(
+                    "[SERVO_UNTIL_CONDITION] ROS-managed mode unavailable (%s); using HTTP fallback",
+                    error,
+                )
+                return None
+            return self._result(
+                started_at, success=False, detected=False, timed_out=False,
+                start_failed=True, condition_failed=False, guard_triggered=False,
+                message=f"ros_managed_servo_start_failed:{response.get('error') or response.get('result')}",
+            )
+
+        operation = response.get("conditional_servo") or {}
+        operation_id = operation.get("operation_id")
+        _logger.info(
+            "[SERVO_UNTIL_CONDITION] ROS-managed operation started operation_id=%s state=%s",
+            operation_id, operation.get("state"),
+        )
+        self._notify_condition_servo_started()
+        stream_id = str(uuid.uuid4())
+        sequence = 0
+        last_published_state = None
+        last_state_change_ns = None
+        last_publish_at = 0.0
+        poll_interval = max(0.005, float(cfg.poll_interval_s))
+        read_failures = 0
+        while True:
+            if cancel_requested is not None and cancel_requested():
+                canceller()
+            if stop_guard is not None:
+                try:
+                    if bool(stop_guard()):
+                        canceller()
+                except Exception:
+                    _logger.exception("[SERVO_UNTIL_CONDITION] stop guard read failed")
+                    canceller()
+
+            active, read_ok = self._read_condition()
+            if read_ok:
+                read_failures = 0
+                now = time.monotonic()
+                if active != last_published_state:
+                    last_state_change_ns = time.monotonic_ns()
+                if active != last_published_state or now - last_publish_at >= 0.1:
+                    sequence += 1
+                    if not publisher(
+                        sensor="servo_condition",
+                        state=active,
+                        stream_id=stream_id,
+                        sequence=sequence,
+                        detected_monotonic_ns=last_state_change_ns,
+                    ):
+                        canceller()
+                    last_published_state = active
+                    last_publish_at = now
+            else:
+                read_failures += 1
+                if read_failures >= max(1, int(cfg.condition_read_failure_limit)):
+                    canceller()
+
+            status = status_getter() or {}
+            if operation_id and status.get("operation_id") not in (None, operation_id):
+                canceller()
+                return self._result(
+                    started_at, success=False, detected=False, timed_out=False,
+                    start_failed=False, condition_failed=True, guard_triggered=False,
+                    message="ros_managed_operation_replaced",
+                )
+            state = str(status.get("state") or "").strip().lower()
+            if state in {"moving", "arming", "stopping", "awaiting_stationary", ""}:
+                time.sleep(poll_interval)
+                continue
+
+            contact_pose = self._read_current_pose()
+            _logger.info(
+                "[SERVO_UNTIL_CONDITION] ROS-managed operation completed operation_id=%s state=%s reason=%s",
+                operation_id, state, status.get("reason"),
+            )
+            _logger.info(
+                "[CONDITIONAL_SERVO_TIMING] operation_id=%s sensor_transport_ms=%s "
+                "trigger_to_stop_command_ms=%s stop_command_to_stationary_ms=%s",
+                operation_id,
+                status.get("sensor_transport_latency_ms"),
+                self._elapsed_ms(status.get("trigger_monotonic_ns"), status.get("stop_command_completed_monotonic_ns")),
+                self._elapsed_ms(status.get("stop_command_completed_monotonic_ns"), status.get("stopped_monotonic_ns")),
+            )
+            if state == "condition_met":
+                if retract is not None:
+                    retract_ok, retract_message = self._retract(
+                        retract, cfg,
+                        cancel_requested=cancel_requested,
+                        stop_guard=stop_guard,
+                        on_retract_start=on_retract_start,
+                    )
+                    if not retract_ok:
+                        return self._result(
+                            started_at, success=False, detected=True,
+                            timed_out=retract_message == "retract_timeout",
+                            start_failed=False, condition_failed=False,
+                            guard_triggered=retract_message.startswith("stop_guard"),
+                            retract_failed=True, contact_pose=contact_pose,
+                            message=retract_message,
+                        )
+                return self._result(
+                    started_at, success=True, detected=True, timed_out=False,
+                    start_failed=False, condition_failed=False, guard_triggered=False,
+                    retracted=retract is not None, contact_pose=contact_pose,
+                    message="condition_detected_and_retracted" if retract is not None else "condition_detected",
+                )
+            return self._result(
+                started_at,
+                success=False,
+                detected=False,
+                timed_out=state == "timeout",
+                start_failed=state == "start_failed",
+                condition_failed=state == "sensor_fault",
+                guard_triggered=state in {"boundary_reached", "cancelled"},
+                stop_failed=state == "stop_failed",
+                contact_pose=contact_pose,
+                message={
+                    "boundary_reached": "minimum_z_reached",
+                    "sensor_fault": "condition_stream_failed",
+                }.get(state, state or "ros_managed_unknown_state"),
+            )
+
+    @staticmethod
+    def _elapsed_ms(start_ns, end_ns):
+        if not isinstance(start_ns, int) or not isinstance(end_ns, int):
+            return None
+        return (end_ns - start_ns) / 1_000_000.0
 
     def _retract(
         self,
