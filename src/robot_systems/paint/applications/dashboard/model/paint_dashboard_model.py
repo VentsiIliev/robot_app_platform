@@ -26,6 +26,11 @@ class PaintDashboardModel(IApplicationModel):
         self._service.stop()
         return self.load()
 
+    def resume_vision_for_dashboard_exit(self) -> None:
+        resume = getattr(self._service, "resume_vision_for_dashboard_exit", None)
+        if callable(resume):
+            resume()
+
     def toggle_pause(self) -> DashboardState:
         state = self.load()
         if state.process_state == "paused":

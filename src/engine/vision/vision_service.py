@@ -28,6 +28,12 @@ class VisionService(IVisionService, IHealthCheckable,IExposureControl):
         self._running = False
         self._logger.info("VisionService stopped")
 
+    def pause_processing(self) -> None:
+        self._vision_system.pause_processing()
+
+    def resume_processing(self) -> None:
+        self._vision_system.resume_processing()
+
     def set_raw_mode(self, enabled: bool) -> None:
         self._vision_system.rawMode = enabled
 

@@ -92,6 +92,12 @@ class PaintDashboardService(IPaintDashboardService):
     def resume(self) -> None:
         self._process.resume()
 
+    def resume_vision_for_dashboard_exit(self) -> None:
+        """Safety release until all vision consumers own acquisition leases."""
+        resume = getattr(self._vision_service, "resume_processing", None)
+        if callable(resume):
+            resume()
+
     def reset_errors(self) -> None:
         if self._process.state == ProcessState.ERROR:
             self._process.reset_errors()

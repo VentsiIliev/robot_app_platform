@@ -1,4 +1,6 @@
 import unittest
+import time
+from collections import deque
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -6,9 +8,33 @@ import numpy as np
 
 from src.engine.vision.i_vision_service import VisionFrameUnavailableError
 from src.engine.vision.implementation.VisionSystem.VisionSystem import VisionSystem
+from src.engine.vision.implementation.VisionSystem.core.camera.frame_grabber import (
+    FrameGrabber,
+    FrameSnapshot,
+)
 
 
 class TestVisionSystemStaleFrame(unittest.TestCase):
+    def test_frame_grabber_pause_clears_frames_and_resume_keeps_camera_open(self):
+        camera = MagicMock()
+        grabber = FrameGrabber(camera)
+        grabber.buffer = deque(
+            [FrameSnapshot(frame="old", timestamp_s=time.time(), sequence=1)],
+            maxlen=5,
+        )
+        grabber._last_frame_at = time.time()
+
+        grabber.pause()
+
+        self.assertFalse(grabber._resume_event.is_set())
+        self.assertEqual(list(grabber.buffer), [])
+        camera.stop_stream.assert_not_called()
+
+        grabber.resume()
+
+        self.assertTrue(grabber._resume_event.is_set())
+        camera.start_stream.assert_not_called()
+
     def test_compute_contours_for_latest_frame_blocks_when_no_fresh_snapshot(self):
         vision = SimpleNamespace(
             frame_grabber=MagicMock(),

@@ -94,6 +94,8 @@ class VisionSystem:
 
         self.stop_signal  = False
         self.cameraThread = None
+        self._processing_resume_event = threading.Event()
+        self._processing_resume_event.set()
         self._camera_init_thread = threading.Thread(
             target=self._init_camera_in_background,
             name="camera-init",
@@ -481,9 +483,24 @@ class VisionSystem:
         self.cameraThread = threading.Thread(target=self._loop, name="_loop", daemon=True)
         self.cameraThread.start()
 
+    def pause_processing(self) -> None:
+        """Suspend capture and image processing while keeping the camera open."""
+        self._processing_resume_event.clear()
+        if self.frame_grabber is not None:
+            self.frame_grabber.pause()
+        _logger.info("VisionSystem acquisition and processing paused")
+
+    def resume_processing(self) -> None:
+        """Resume capture and processing from fresh frames."""
+        if self.frame_grabber is not None:
+            self.frame_grabber.resume()
+        self._processing_resume_event.set()
+        _logger.info("VisionSystem acquisition and processing resumed")
+
     def stop_system(self) -> None:
         _logger.info("Stopping VisionSystem...")
         self.stop_signal = True
+        self._processing_resume_event.set()
         if self.frame_grabber is not None:
             self.frame_grabber.stop()
         if getattr(self, "_camera_init_thread", None) is not None:
@@ -498,6 +515,9 @@ class VisionSystem:
 
     def _loop(self) -> None:
         while not self.stop_signal:
+            self._processing_resume_event.wait()
+            if self.stop_signal:
+                break
             self.run()
 
     def _get_area_points_by_region(self, area: str):

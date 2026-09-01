@@ -142,6 +142,7 @@ class TestPaintDashboardController(unittest.TestCase):
             controller.stop()
             self.assertFalse(controller._active)
             self.assertFalse(controller._dashboard_live_view_paused)
+            model.resume_vision_for_dashboard_exit.assert_called_once_with()
             unsub_all.assert_called_once_with()
 
     def test_action_handlers_apply_updated_state(self) -> None:
