@@ -344,7 +344,7 @@ def _execute_magazine_servo_contact_pickup_release(
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
-                minimum_z_mm=50.0,
+                minimum_z_mm=20.0,
                 approach_velocity=10.0,
                 approach_acceleration=30.0,
             ),
