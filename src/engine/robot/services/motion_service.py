@@ -463,14 +463,17 @@ class MotionService(IMotionService):
             self._logger.exception("start_joint_jog failed")
             return -1
 
-    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
         self._last_jog_target = []
         self._servo_floor_stop.set()
         try:
             stopper = getattr(self._robot, "stop_servo_jog", None)
             if not callable(stopper):
                 return -1
-            return int(stopper(restore_collision_checking=restore_collision_checking))
+            kwargs = {"restore_collision_checking": restore_collision_checking}
+            if timing_trace_id is not None:
+                kwargs["timing_trace_id"] = timing_trace_id
+            return int(stopper(**kwargs))
         except Exception:
             self._logger.exception("stop_servo_jog failed")
             return -1

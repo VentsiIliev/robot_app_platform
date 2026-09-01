@@ -1072,10 +1072,26 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("start_servo_jog error: %s", e, exc_info=True)
             return -1
 
-    def stop_servo_jog(self, *, restore_collision_checking: bool = True):
-        payload = {"restore_collision_checking": bool(restore_collision_checking)}
+    def stop_servo_jog(
+        self,
+        *,
+        restore_collision_checking: bool = True,
+        timing_trace_id: str | None = None,
+    ):
+        trace_id = timing_trace_id or f"servo-stop-{time.monotonic_ns()}"
+        payload = {
+            "restore_collision_checking": bool(restore_collision_checking),
+            "timing_trace_id": trace_id,
+        }
         logger.debug("stop_servo_jog → POST /servojog/stop payload=%s", payload)
         try:
+            request_sent_ns = time.monotonic_ns()
+            logger.info(
+                "[SERVO_STOP_TIMING] trace_id=%s event=stop_http_send "
+                "monotonic_ns=%d",
+                trace_id,
+                request_sent_ns,
+            )
             response = requests.post(
                 f"{self.server_url}/servojog/stop", json=payload, timeout=5
             )
@@ -1083,6 +1099,30 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
                 logger.info("stop_servo_jog unsupported by runtime")
                 return -404
             raw = response.json()
+            response_received_ns = time.monotonic_ns()
+            ros_timing = raw.get("timing") if isinstance(raw, dict) else None
+            ros_receive_ns = (
+                ros_timing.get("ros_http_route_enter_ns")
+                if isinstance(ros_timing, dict)
+                else None
+            )
+            send_to_ros_receive_ms = (
+                (ros_receive_ns - request_sent_ns) / 1_000_000.0
+                if isinstance(ros_receive_ns, int)
+                else None
+            )
+            logger.info(
+                "[SERVO_STOP_TIMING] trace_id=%s event=stop_http_response "
+                "monotonic_ns=%d round_trip_ms=%.3f "
+                "send_to_ros_receive_ms=%s ros_timing=%s",
+                trace_id,
+                response_received_ns,
+                (response_received_ns - request_sent_ns) / 1_000_000.0,
+                f"{send_to_ros_receive_ms:.3f}"
+                if send_to_ros_receive_ms is not None
+                else "na",
+                ros_timing,
+            )
             result_code = self._parse_motion_response("stop_servo_jog", response, raw, blocking=True)
             self._mark_available()
             logger.debug(

@@ -304,6 +304,7 @@ class ServoUntilConditionProcedure:
                     read_failure_count = 0
 
                 if active:
+                    stop_timing_trace_id = f"servo-condition-{time.monotonic_ns()}"
                     retract_motion_type = str(
                         getattr(retract, "motion_type", "servo") if retract is not None else ""
                     ).strip().lower()
@@ -313,7 +314,8 @@ class ServoUntilConditionProcedure:
                         and retract_motion_type == "servo"
                     )
                     stop_ret = self._stop_servo(
-                        restore_collision_checking=not keep_override_for_retract
+                        restore_collision_checking=not keep_override_for_retract,
+                        timing_trace_id=stop_timing_trace_id,
                     )
                     started = False
                     collision_override_held = keep_override_for_retract
@@ -333,6 +335,13 @@ class ServoUntilConditionProcedure:
                             message=f"servo_stop_failed:{stop_ret}",
                         )
                     if retract is not None:
+                        retract_allowed_ns = time.monotonic_ns()
+                        _logger.info(
+                            "[SERVO_STOP_TIMING] trace_id=%s event=retract_allowed "
+                            "monotonic_ns=%d",
+                            stop_timing_trace_id,
+                            retract_allowed_ns,
+                        )
                         retract_ok, retract_message = self._retract(
                             retract,
                             cfg,
@@ -966,11 +975,26 @@ class ServoUntilConditionProcedure:
         )
         return True, ""
 
-    def _stop_servo(self, *, restore_collision_checking: bool = True):
+    def _stop_servo(
+        self,
+        *,
+        restore_collision_checking: bool = True,
+        timing_trace_id: str | None = None,
+    ):
         try:
-            return self._robot.stop_servo_jog(
-                restore_collision_checking=restore_collision_checking
-            )
+            try:
+                return self._robot.stop_servo_jog(
+                    restore_collision_checking=restore_collision_checking,
+                    timing_trace_id=timing_trace_id,
+                )
+            except TypeError as exc:
+                # Preserve compatibility with third-party/test robot adapters
+                # that have not yet added the optional observability keyword.
+                if "timing_trace_id" not in str(exc):
+                    raise
+                return self._robot.stop_servo_jog(
+                    restore_collision_checking=restore_collision_checking,
+                )
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] stop_servo_jog failed")
             return -1

@@ -72,7 +72,7 @@ class IRobot(ABC):
         """Optional incremental joint jog. Step is in degrees."""
         return -1
 
-    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
         """Optional stop for continuous ServoJog."""
         return -1
 

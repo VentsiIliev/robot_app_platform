@@ -139,11 +139,14 @@ class RobotService(IRobotService):
             acceleration=acceleration,
         )
 
-    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
         stopper = getattr(self._motion, "stop_servo_jog", None)
         if not callable(stopper):
             return -1
-        return stopper(restore_collision_checking=restore_collision_checking)
+        kwargs = {"restore_collision_checking": restore_collision_checking}
+        if timing_trace_id is not None:
+            kwargs["timing_trace_id"] = timing_trace_id
+        return stopper(**kwargs)
 
     def servo_jog_to_z(self, **kwargs) -> dict | None:
         mover = getattr(self._motion, "servo_jog_to_z", None)

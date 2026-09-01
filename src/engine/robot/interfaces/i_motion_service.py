@@ -105,7 +105,7 @@ class IMotionService(ABC):
     ) -> int:
         return -1
 
-    def stop_servo_jog(self, *, restore_collision_checking: bool = True) -> int:
+    def stop_servo_jog(self, *, restore_collision_checking: bool = True, timing_trace_id: str | None = None) -> int:
         return -1
 
     def servo_jog_to_z(self, **kwargs) -> dict | None:
