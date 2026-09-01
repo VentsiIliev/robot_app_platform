@@ -872,7 +872,7 @@ class ServoUntilConditionProcedure:
                         outcome.get("task_id"),
                         time.monotonic() - started_at,
                     )
-                    stop_ok = self._stop_motion_checked()
+                    stop_ok = self._controlled_stop_checked(outcome.get("task_id"))
                     stop_done_ns = time.monotonic_ns()
                     if not stop_ok:
                         return self._result(
@@ -1481,6 +1481,23 @@ class ServoUntilConditionProcedure:
         except Exception:
             _logger.exception("[SERVO_UNTIL_CONDITION] stop_motion failed")
             return False
+
+    def _controlled_stop_checked(self, task_id) -> bool:
+        method = getattr(self._robot, "controlled_stop", None)
+        if not callable(method):
+            _logger.error("[FAST_LIN_DIAGNOSTIC] controlled stop is unsupported")
+            return False
+        try:
+            result = method(task_id)
+        except Exception:
+            _logger.exception("[FAST_LIN_DIAGNOSTIC] controlled stop failed")
+            return False
+        return bool(
+            isinstance(result, dict)
+            and result.get("success") is True
+            and result.get("stopped") is True
+            and result.get("future_work_preserved") is True
+        )
 
     def _wait_for_stable_pose(
         self,

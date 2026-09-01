@@ -44,6 +44,7 @@ class _FakeRobot:
         self.discarded_prepared = []
         self.ptp_return = True
         self.fast_linear_requests = []
+        self.next_task_id = 1
 
     def start_servo_jog(self, *args, **kwargs):
         self.started.append((args, kwargs))
@@ -71,12 +72,24 @@ class _FakeRobot:
     def move_fast_linear(self, **kwargs):
         self.fast_linear_requests.append(kwargs)
         self.position = list(kwargs["position"])
+        task_id = self.next_task_id
+        self.next_task_id += 1
         return {
             "result": 0,
             "success": True,
             "accepted": True,
-            "final": True,
+            "final": bool(kwargs.get("blocking", True)),
             "queued": False,
+            "task_id": task_id,
+        }
+
+    def controlled_stop(self, expected_task_id):
+        return {
+            "result": 0,
+            "success": True,
+            "stopped": True,
+            "expected_task_id": expected_task_id,
+            "future_work_preserved": True,
         }
 
     def stop_motion(self):
@@ -278,15 +291,16 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         self.assertEqual([1, 2, 100, 0, 0, 3], prepared_start)
         self.assertTrue(prepared_kwargs["allow_servo_during_prepare"])
         self.assertEqual(robot.executed_prepared, ["prepared-1"])
-        self.assertEqual(len(robot.fast_linear_requests), 1)
-        self.assertEqual(robot.fast_linear_requests[0]["position"], [1.0, 2.0, 100.0, 0.0, 0.0, 3.0])
-        self.assertEqual(robot.fast_linear_requests[0]["vel"], 30.0)
-        self.assertEqual(robot.fast_linear_requests[0]["acc"], 30.0)
+        self.assertEqual(len(robot.fast_linear_requests), 2)
+        self.assertEqual(robot.fast_linear_requests[0]["position"], [1.0, 2.0, 50.0, 0.0, 0.0, 3.0])
+        self.assertFalse(robot.fast_linear_requests[0]["blocking"])
+        self.assertEqual(robot.fast_linear_requests[1]["position"], [1.0, 2.0, 100.0, 0.0, 0.0, 3.0])
+        self.assertEqual(robot.fast_linear_requests[1]["vel"], 30.0)
+        self.assertEqual(robot.fast_linear_requests[1]["acc"], 30.0)
         self.assertEqual([label for label, _segments in motion.sequences], [
             "Magazine pickup approach before servo contact",
         ])
-        self.assertEqual(len(robot.started), 1)
-        self.assertTrue(robot.started[0][1]["disable_collision_checking"])
+        self.assertEqual(robot.started, [])
 
     def test_magazine_lost_after_retract_turns_vacuum_off(self):
         robot = _FakeRobot()

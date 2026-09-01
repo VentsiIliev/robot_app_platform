@@ -1398,6 +1398,27 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
 
+    def controlled_stop(self, expected_task_id) -> dict:
+        try:
+            response = requests.post(
+                f"{self.server_url}/motion/controlled-stop",
+                json={"expected_task_id": expected_task_id},
+                timeout=2,
+            )
+            raw = response.json()
+            logger.debug(
+                "controlled_stop ← http=%s expected_task_id=%s raw=%s",
+                response.status_code,
+                expected_task_id,
+                raw,
+            )
+            return raw if isinstance(raw, dict) else {
+                "success": False, "error": "invalid_response",
+            }
+        except Exception as exc:
+            logger.error("controlled_stop error: %s", exc, exc_info=True)
+            return {"success": False, "error": str(exc)}
+
     def get_last_stop_response(self):
         return self._last_stop_response
 

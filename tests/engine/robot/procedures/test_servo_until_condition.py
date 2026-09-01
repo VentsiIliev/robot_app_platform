@@ -54,6 +54,16 @@ class FakeRobot:
         self.stop_restore_collision.append(restore_collision_checking)
         return 0
 
+    def controlled_stop(self, expected_task_id):
+        self.stopped += 1
+        return {
+            "result": 0,
+            "success": True,
+            "stopped": True,
+            "expected_task_id": expected_task_id,
+            "future_work_preserved": True,
+        }
+
 
 class ManualCondition:
     def __init__(self):
