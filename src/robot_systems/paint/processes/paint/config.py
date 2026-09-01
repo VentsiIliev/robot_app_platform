@@ -163,6 +163,18 @@ class PaintDropoffConfig:
     release_align_acc_percent: float = 40.0  # [LIVE SETTINGS]
     release_align_motion_type: str = "ptp"  # [LIVE SETTINGS]
     release_align_blendR: float = 0.0  # [LIVE SETTINGS]
+    # Plate corners are full robot poses ordered BL, BR, TR, TL.  The plate
+    # strategy is invalid until all four finite, consistently ordered corners
+    # are configured.
+    plate_corners: list[list[float]] = field(default_factory=list)  # [LIVE SETTINGS]
+    plate_release_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
+    plate_approach_clearance_mm: float = 50.0  # [LIVE SETTINGS]
+    plate_margin_left_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_right_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_bottom_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_margin_top_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_spacing_x_mm: float = 10.0  # [LIVE SETTINGS]
+    plate_spacing_y_mm: float = 10.0  # [LIVE SETTINGS]
 
 
 @dataclass(frozen=True)

@@ -167,6 +167,8 @@ class PaintProductionService:
                 if completed_cycles == 0:
                     return True, "No usable contour detected"
                 return True, f"No workpiece detected after {completed_cycles} paint cycle(s)"
+            if not ok and msg == "Drop-off plate is full":
+                return True, msg
             if not ok:
                 self._log_phase_timing(
                     "manual_loop_total",
@@ -176,6 +178,8 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
+            if msg == "Drop-off plate has no space for another workpiece of the same footprint":
+                return True, msg
         self._log_phase_timing(
             "manual_loop_total",
             total_start,
@@ -207,6 +211,8 @@ class PaintProductionService:
                 if completed_cycles == 0:
                     return True, NO_WORKPIECE_AT_MAGAZINE
                 return True, f"Magazine empty after {completed_cycles} paint cycle(s)"
+            if not ok and msg == "Drop-off plate is full":
+                return True, msg
             if not ok:
                 self._log_phase_timing(
                     "magazine_loop_total",
@@ -216,6 +222,8 @@ class PaintProductionService:
                 )
                 return False, msg
             completed_cycles += 1
+            if msg == "Drop-off plate has no space for another workpiece of the same footprint":
+                return True, msg
         self._log_phase_timing(
             "magazine_loop_total",
             total_start,

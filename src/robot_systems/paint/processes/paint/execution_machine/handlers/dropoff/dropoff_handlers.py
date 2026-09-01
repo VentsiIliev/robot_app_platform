@@ -41,6 +41,8 @@ class DropoffReleasePlan:
 
 def open_dropoff_passage_for_preparation(executor: object) -> tuple[bool, str]:
     """Open the configured passage before planning any route that crosses its lid."""
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        return True, ""
     # Validate the configured release target before changing the planning scene.
     # A disabled sub-zero dropoff must not open the paint passage or allow an
     # ordered cleanup chain containing that target to execute.
@@ -70,7 +72,11 @@ def open_dropoff_passage_for_preparation(executor: object) -> tuple[bool, str]:
 @timed_step(_logger, "prepare_dropoff_unwind")
 def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, str]:
     """Build and execute paint-to-dropoff safe travel, align, and Joint 6 unwind."""
-    dryer_ready = getattr(executor, "_dryer_ready_for_release", None)
+    dryer_ready = (
+        None
+        if _dropoff_strategy_name(executor) == "plate_layout"
+        else getattr(executor, "_dryer_ready_for_release", None)
+    )
     if callable(dryer_ready):
         try:
             ready, reason = dryer_ready()
@@ -345,6 +351,13 @@ def _next_cycle_start_pose_reached(
 
 def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
     """Notify the composed system after release verification succeeds."""
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        service = getattr(executor, "_plate_layout_service", None)
+        if service is None or service.pending is None:
+            return False, "Workpiece released, but no plate-layout reservation was active"
+        service.commit(executor._paint_process_config().dropoff)
+        _logger.info("[PLATE_LAYOUT] Committed plate position after verified release")
+        return True, ""
     callback = getattr(executor, "_on_workpiece_release_verified", None)
     if callback is None:
         return True, ""
@@ -494,6 +507,42 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
                     motion_type=dropoff.release_align_motion_type,
                     blendR=dropoff.release_align_blendR,
                     release_here=True,
+                ),
+            ),
+        )
+
+    if strategy_name == "plate_layout":
+        service = getattr(executor, "_plate_layout_service", None)
+        reservation = None if service is None else service.pending
+        if reservation is None:
+            _logger.error("[PLATE_LAYOUT] Dropoff requested without an active reservation")
+            return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
+        dropoff = executor._paint_process_config().dropoff
+        return DropoffReleasePlan(
+            strategy_name=strategy_name,
+            waypoints=(
+                DropoffReleaseWaypoint(
+                    label="Moving above calculated plate position",
+                    pose=list(reservation.approach_pose),
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type=dropoff.release_align_motion_type,
+                    blendR=dropoff.release_align_blendR,
+                ),
+                DropoffReleaseWaypoint(
+                    label="Descending to calculated plate position",
+                    pose=list(reservation.release_pose),
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type="linear",
+                    release_here=True,
+                ),
+                DropoffReleaseWaypoint(
+                    label="Retracting from calculated plate position",
+                    pose=list(reservation.approach_pose),
+                    vel_percent=dropoff.release_align_vel_percent,
+                    acc_percent=dropoff.release_align_acc_percent,
+                    motion_type="linear",
                 ),
             ),
         )
@@ -709,7 +758,7 @@ def _apply_distributed_dropoff_unwind(
 
 
 def _should_prepare_dropoff_align_before_unwind(executor: object) -> bool:
-    if _dropoff_strategy_name(executor) == "movement_group":
+    if _dropoff_strategy_name(executor) in {"movement_group", "plate_layout"}:
         return _resolve_dropoff_release_pose(executor) is not None
     return (
         executor._configured_contact_motion_plane == "xz_y_ry"
@@ -725,10 +774,18 @@ def _should_release_at_current_dropoff_pose(executor: object) -> bool:
 
 
 def _dropoff_strategy_name(executor: object) -> str:
-    return str(executor._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
+    config_getter = getattr(executor, "_paint_process_config", None)
+    if not callable(config_getter):
+        return "pickup_origin"
+    dropoff = getattr(config_getter(), "dropoff", None)
+    return str(getattr(dropoff, "strategy", "pickup_origin") or "pickup_origin").strip().lower()
 
 
 def _resolve_dropoff_release_pose(executor: object) -> list[float] | None:
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        service = getattr(executor, "_plate_layout_service", None)
+        reservation = None if service is None else service.pending
+        return None if reservation is None else list(reservation.release_pose)
     if _dropoff_strategy_name(executor) == "movement_group":
         return executor._read_provider_position(executor._dropoff_position_provider)
     if executor._last_pickup_plan is not None and hasattr(executor._last_pickup_plan, "align_pose"):
@@ -748,6 +805,10 @@ def _resolve_dropoff_preparation_pose(
     reference_pose: list[float] | None = None,
 ) -> list[float] | None:
     """Resolve the safe above-floor endpoint used before a corridor dropoff."""
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        service = getattr(executor, "_plate_layout_service", None)
+        reservation = None if service is None else service.pending
+        return None if reservation is None else list(reservation.approach_pose)
     pose = _resolve_dropoff_align_pose(executor, reference_pose)
     if pose is None or len(pose) < 3 or float(pose[2]) >= 0.0:
         return pose

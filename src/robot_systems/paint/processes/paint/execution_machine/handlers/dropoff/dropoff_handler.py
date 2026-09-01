@@ -48,12 +48,20 @@ def handle_dropoff(ctx: PaintExecutionContext) -> PaintExecutionState:
         len(ctx.execution_plan.execution_jobs),
         ctx.paint_total_waypoints,
     )
+    plate_service = getattr(executor, "_plate_layout_service", None)
+    plate_is_full = (
+        str(executor._paint_process_config().dropoff.strategy).strip().lower() == "plate_layout"
+        and plate_service is not None
+        and not plate_service.has_space_for_same_footprint
+    )
     set_paint_result(
         ctx,
         True,
         (
-            f"Paint process completed for "
-            f"{len(ctx.execution_plan.execution_jobs)} path(s), {ctx.paint_total_waypoints} waypoints"
+            "Drop-off plate has no space for another workpiece of the same footprint"
+            if plate_is_full
+            else f"Paint process completed for {len(ctx.execution_plan.execution_jobs)} path(s), "
+                 f"{ctx.paint_total_waypoints} waypoints"
         ),
     )
     return PaintExecutionState.POST_RETURN

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import numpy as np
+
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_ordered_paint_contact_segments,
@@ -28,6 +30,9 @@ from src.robot_systems.paint.processes.paint.execution_machine.state import Pain
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
     NO_WORKPIECE_AT_CALIBRATION,
 )
+from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
+    calculate_workpiece_dropoff_pose,
+)
 from src.robot_systems.paint.timing import timed_block, timed_step
 
 _logger = logging.getLogger(__name__)
@@ -47,6 +52,13 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
     if callable(build_plan) and pickup_plan is None:
         fail_paint_motion(ctx, "Could not compute pickup-to-pivot poses")
         return PaintExecutionState.ERROR
+
+    if pickup_plan is not None and _dropoff_strategy(executor) == "plate_layout":
+        ok, message = _reserve_plate_dropoff(ctx, executor, pickup_plan)
+        if not ok:
+            finish_paint_motion(ctx, success=False)
+            ctx.set_result(False, message)
+            return PaintExecutionState.COMPLETED if message == "Drop-off plate is full" else PaintExecutionState.ERROR
 
     ctx.paint_ordered_result = (
         try_execute_ordered_pickup_and_paint_contact(
@@ -90,6 +102,62 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
         fail_paint_motion(ctx, msg)
         return PaintExecutionState.ERROR
     return PaintExecutionState.PAINT_CONTACT
+
+
+def _dropoff_strategy(executor: object) -> str:
+    return str(executor._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
+
+
+def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
+    width_mm, height_mm = _workpiece_footprint_mm(ctx.execution_plan)
+    motion_plan = getattr(pickup_plan, "motion_plan", pickup_plan)
+    align_pose = getattr(motion_plan, "align_pose", None)
+    if align_pose is None or len(align_pose) < 6:
+        return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
+
+    magazine = ctx.magazine_config or getattr(ctx.process_config, "magazine_load", None)
+    group_id = str(getattr(magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
+    navigation = getattr(ctx.production_service._magazine_load_service, "_navigation", None)
+    getter = getattr(navigation, "get_group_position", None)
+    calibration_pose = getter(group_id) if callable(getter) else None
+    if calibration_pose is None or len(calibration_pose) < 6:
+        return False, f"Plate-layout dropoff requires calibration movement group '{group_id}'"
+
+    reservation, message = executor._plate_layout_service.reserve(
+        executor._paint_process_config().dropoff,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        calibration_pose=list(calibration_pose),
+        workpiece_rz_at_calibration_deg=float(align_pose[5]),
+        pose_calculator=calculate_workpiece_dropoff_pose,
+    )
+    if reservation is None:
+        return False, message
+    _logger.info(
+        "[PLATE_LAYOUT] reserved release_pose=%s footprint=(%.3f, %.3f) has_space_for_same_footprint=%s",
+        [round(value, 3) for value in reservation.release_pose],
+        width_mm,
+        height_mm,
+        reservation.has_space_for_same_footprint,
+    )
+    return True, ""
+
+
+def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
+    points = [
+        pose[:2]
+        for path in execution_plan.execution_paths()
+        for pose in path
+        if len(pose) >= 2
+    ]
+    if len(points) < 3:
+        return 0.0, 0.0
+    xy = np.asarray(points, dtype=np.float32)
+    if not np.all(np.isfinite(xy)):
+        return 0.0, 0.0
+    import cv2
+    _, size, _ = cv2.minAreaRect(np.ascontiguousarray(xy.reshape(-1, 1, 2)))
+    return float(size[0]), float(size[1])
 
 
 @timed_step(_logger, "ordered_pickup_paint_contact_chain")

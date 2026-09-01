@@ -266,6 +266,18 @@ class PaintProcessSettingsMapper:
             "cleanup_perpendicular_retreat_offset_mm": cleanup.perpendicular_retreat_offset_mm,
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
+            "dropoff_plate_bottom_left": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[0]) if len(dropoff.plate_corners) > 0 else "",
+            "dropoff_plate_bottom_right": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[1]) if len(dropoff.plate_corners) > 1 else "",
+            "dropoff_plate_top_right": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[2]) if len(dropoff.plate_corners) > 2 else "",
+            "dropoff_plate_top_left": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[3]) if len(dropoff.plate_corners) > 3 else "",
+            "dropoff_plate_release_z_offset_mm": dropoff.plate_release_z_offset_mm,
+            "dropoff_plate_approach_clearance_mm": dropoff.plate_approach_clearance_mm,
+            "dropoff_plate_margin_left_mm": dropoff.plate_margin_left_mm,
+            "dropoff_plate_margin_right_mm": dropoff.plate_margin_right_mm,
+            "dropoff_plate_margin_bottom_mm": dropoff.plate_margin_bottom_mm,
+            "dropoff_plate_margin_top_mm": dropoff.plate_margin_top_mm,
+            "dropoff_plate_spacing_x_mm": dropoff.plate_spacing_x_mm,
+            "dropoff_plate_spacing_y_mm": dropoff.plate_spacing_y_mm,
             "dropoff_allow_sub_zero": dropoff.allow_sub_zero_dropoff,
             "dropoff_corridor_x_margin_mm": dropoff.corridor_x_margin_mm,
             "dropoff_corridor_y_margin_mm": dropoff.corridor_y_margin_mm,
@@ -516,6 +528,24 @@ class PaintProcessSettingsMapper:
         dropoff = replace(
             base.dropoff,
             strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
+            plate_corners=[
+                PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
+                for key in (
+                    "dropoff_plate_bottom_left",
+                    "dropoff_plate_bottom_right",
+                    "dropoff_plate_top_right",
+                    "dropoff_plate_top_left",
+                )
+                if PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
+            ],
+            plate_release_z_offset_mm=float(flat.get("dropoff_plate_release_z_offset_mm", base.dropoff.plate_release_z_offset_mm)),
+            plate_approach_clearance_mm=float(flat.get("dropoff_plate_approach_clearance_mm", base.dropoff.plate_approach_clearance_mm)),
+            plate_margin_left_mm=float(flat.get("dropoff_plate_margin_left_mm", base.dropoff.plate_margin_left_mm)),
+            plate_margin_right_mm=float(flat.get("dropoff_plate_margin_right_mm", base.dropoff.plate_margin_right_mm)),
+            plate_margin_bottom_mm=float(flat.get("dropoff_plate_margin_bottom_mm", base.dropoff.plate_margin_bottom_mm)),
+            plate_margin_top_mm=float(flat.get("dropoff_plate_margin_top_mm", base.dropoff.plate_margin_top_mm)),
+            plate_spacing_x_mm=float(flat.get("dropoff_plate_spacing_x_mm", base.dropoff.plate_spacing_x_mm)),
+            plate_spacing_y_mm=float(flat.get("dropoff_plate_spacing_y_mm", base.dropoff.plate_spacing_y_mm)),
             allow_sub_zero_dropoff=bool(
                 flat.get("dropoff_allow_sub_zero", base.dropoff.allow_sub_zero_dropoff)
             ),

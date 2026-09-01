@@ -87,6 +87,10 @@ class PaintDashboardController(
 
     def stop(self) -> None:
         self._active = False
+        # The current pause is dashboard-local. Never carry a frozen preview
+        # state across dashboard exit/re-entry. When acquisition leases are
+        # introduced, this exit path must release the dashboard's lease too.
+        self._dashboard_live_view_paused = False
         self._status_timer.stop()
         self._unsubscribe_all()
         for thread, _worker in list(self._workers):

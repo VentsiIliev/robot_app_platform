@@ -8,6 +8,11 @@ def restore_cycle_resources(
     *,
     defer_for_next_capture: bool = False,
 ) -> None:
+    if not bool(ctx.result_ok):
+        executor = getattr(ctx.production_service, "_path_executor", None)
+        plate_service = getattr(executor, "_plate_layout_service", None)
+        if plate_service is not None:
+            plate_service.cancel()
     if defer_for_next_capture:
         return
     service = ctx.production_service

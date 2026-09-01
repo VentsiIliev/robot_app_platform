@@ -72,7 +72,12 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             self._reject_servo_contact(flat)
             return
         if not self._dropoff_strategy_is_allowed(flat):
-            self._reject_movement_group_dropoff()
+            if str(flat.get("dropoff_strategy", "")).strip().lower() == "plate_layout":
+                message = self._t("Plate layout requires four valid corners ordered BL, BR, TR, TL.")
+                show_warning(self._view, self._t("Plate Layout Not Configured"), message)
+                self._view.set_status(message)
+            else:
+                self._reject_movement_group_dropoff()
             return
         if not self._safe_travel_is_allowed(flat):
             self._reject_safe_travel_pose()
@@ -197,7 +202,23 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
 
     def _dropoff_strategy_is_allowed(self, flat: dict) -> bool:
         strategy = str(flat.get("dropoff_strategy", self._model.current_settings.dropoff.strategy)).strip().lower()
-        return strategy != "movement_group" or self._model.is_dropoff_movement_group_configured()
+        if strategy == "movement_group":
+            return self._model.is_dropoff_movement_group_configured()
+        if strategy == "plate_layout":
+            from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_corners
+            from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
+            corners = [
+                PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
+                for key in (
+                    "dropoff_plate_bottom_left",
+                    "dropoff_plate_bottom_right",
+                    "dropoff_plate_top_right",
+                    "dropoff_plate_top_left",
+                )
+            ]
+            _, error = validate_plate_corners(corners)
+            return not error
+        return True
 
     def _safe_travel_is_allowed(self, flat: dict) -> bool:
         if not bool(flat.get("safe_travel_enabled", self._model.current_settings.safe_travel.enabled)):

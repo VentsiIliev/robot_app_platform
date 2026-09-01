@@ -373,6 +373,8 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         # Per-run state and phase executors.
         self._last_execution_plan: WorkpieceExecutionPlan | None = None
         self._last_pickup_plan: PickupTransferPlan | None = None
+        from src.robot_systems.paint.processes.paint.plate_layout import PlateLayoutService
+        self._plate_layout_service = PlateLayoutService()
         self._pending_stage_pose: list[float] | None = None
         self._dropoff = PaintDropoffExecutor(self)
         self._edge_cleanup = PaintEdgeCleanupExecutor(self)
