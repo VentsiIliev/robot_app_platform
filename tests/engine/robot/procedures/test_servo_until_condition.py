@@ -876,6 +876,72 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertFalse(robot.fast_linear_request["blocking"])
         self.assertEqual(robot.stopped, 1)
 
+    def test_fast_lin_diagnostic_waits_for_stopped_task_to_become_inactive(self):
+        class DiagnosticRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.pose = [1.0, 2.0, 80.0, 4.0, 5.0, 6.0]
+                self.status_reads = 0
+                self.retract_started_after_status_reads = None
+
+            def get_current_position(self):
+                return list(self.pose)
+
+            def get_execution_status(self):
+                self.status_reads += 1
+                if self.status_reads < 3:
+                    return {
+                        "is_executing": False,
+                        "current_task_id": None,
+                        "last_completed_task_id": 16,
+                        "state": "idle",
+                    }
+                if self.status_reads < 5:
+                    return {"is_executing": True, "current_task_id": 17, "state": "stopping"}
+                return {
+                    "is_executing": False,
+                    "current_task_id": None,
+                    "last_completed_task_id": 17,
+                    "state": "idle",
+                }
+
+            def move_fast_linear(self, **kwargs):
+                if kwargs["position"][2] == 50.0:
+                    return {
+                        "result": 0, "success": True, "accepted": True,
+                        "final": False, "queued": False, "task_id": 17,
+                    }
+                self.retract_started_after_status_reads = self.status_reads
+                self.pose = list(kwargs["position"])
+                return {
+                    "result": 0, "success": True, "accepted": True,
+                    "final": False, "queued": False, "task_id": 18,
+                }
+
+            def stop_motion(self):
+                return True
+
+        robot = DiagnosticRobot()
+        result = ServoUntilConditionProcedure(
+            robot, _ConditionSequence(False, False, True)
+        ).run(
+            config=ServoUntilConditionConfig(
+                execution_mode="fast_lin_diagnostic",
+                minimum_z_mm=50.0,
+                poll_interval_s=0.001,
+                timeout_s=0.2,
+            ),
+            retract=ServoRetractConfig(
+                target_pose=[1.0, 2.0, 100.0, 4.0, 5.0, 6.0],
+                motion_type="fast_lin",
+                poll_interval_s=0.001,
+                timeout_s=0.2,
+            ),
+        )
+
+        self.assertTrue(result.success, result.message)
+        self.assertGreaterEqual(robot.retract_started_after_status_reads, 6)
+
 
 if __name__ == "__main__":
     unittest.main()

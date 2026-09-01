@@ -880,6 +880,18 @@ class ServoUntilConditionProcedure:
                             start_failed=False, condition_failed=False, guard_triggered=False,
                             stop_failed=True, message="fast_lin_diagnostic_stop_failed",
                         )
+                    execution_inactive = self._wait_for_execution_inactive(
+                        task_id=outcome.get("task_id"),
+                        timeout_s=1.0,
+                        poll_interval_s=max(0.01, min(0.05, float(cfg.poll_interval_s))),
+                    )
+                    if not execution_inactive:
+                        return self._result(
+                            started_at, success=False, detected=True, timed_out=False,
+                            start_failed=False, condition_failed=False, guard_triggered=False,
+                            stop_failed=True,
+                            message="fast_lin_diagnostic_execution_still_active",
+                        )
                     contact_pose = self._wait_for_stable_pose(
                         timeout_s=1.0,
                         sample_interval_s=max(0.01, min(0.05, float(cfg.poll_interval_s))),
@@ -1506,6 +1518,62 @@ class ServoUntilConditionProcedure:
                 previous = pose
             time.sleep(max(0.001, float(sample_interval_s)))
         return None
+
+    def _wait_for_execution_inactive(
+        self,
+        *,
+        task_id,
+        timeout_s: float,
+        poll_interval_s: float,
+        required_inactive_samples: int = 2,
+    ) -> bool:
+        getter = getattr(self._robot, "get_execution_status", None)
+        if not callable(getter):
+            # Test and third-party adapters may not expose runtime task state.
+            return True
+        deadline = time.monotonic() + max(0.1, float(timeout_s))
+        inactive_samples = 0
+        observed_descent_active = False
+        while time.monotonic() < deadline:
+            try:
+                status = getter()
+            except Exception:
+                _logger.exception("[FAST_LIN_DIAGNOSTIC] execution status read failed")
+                status = None
+            if isinstance(status, dict):
+                current_task_id = status.get("current_task_id") or status.get("task_id")
+                last_completed_task_id = status.get("last_completed_task_id")
+                state = str(status.get("state") or status.get("status") or "").strip().lower()
+                active = bool(status.get("is_executing")) or state in {
+                    "running", "executing", "active", "moving", "stopping",
+                }
+                descent_still_current = (
+                    task_id is not None
+                    and current_task_id is not None
+                    and str(current_task_id) == str(task_id)
+                )
+                if descent_still_current or active:
+                    observed_descent_active = observed_descent_active or descent_still_current
+                explicitly_completed = (
+                    task_id is not None
+                    and last_completed_task_id is not None
+                    and str(last_completed_task_id) == str(task_id)
+                )
+                transitioned_inactive = (
+                    observed_descent_active
+                    and not active
+                    and not descent_still_current
+                )
+                if explicitly_completed or transitioned_inactive:
+                    inactive_samples += 1
+                    if inactive_samples >= max(1, int(required_inactive_samples)):
+                        return True
+                else:
+                    inactive_samples = 0
+            else:
+                inactive_samples = 0
+            time.sleep(max(0.001, float(poll_interval_s)))
+        return False
 
     def _read_current_pose(self) -> list[float] | None:
         try:
