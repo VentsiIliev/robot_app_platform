@@ -155,6 +155,27 @@ class PaintProcessSettingsMapper:
         return flat.get(legacy_key, fallback)
 
     @staticmethod
+    def _normalize_plate_motion_profiles(value: object, fallback: list[dict]) -> list[dict]:
+        required_keys = (
+            "enter_plate_center",
+            "center_to_approach",
+            "descend_release",
+            "retract_after_release",
+            "return_plate_center",
+        )
+        incoming = PaintProcessSettingsMapper._profiles_by_key(value)
+        defaults = PaintProcessSettingsMapper._profiles_by_key(fallback)
+        profiles: list[dict] = []
+        for key in required_keys:
+            profile = dict(defaults.get(key, {}))
+            profile.update(incoming.get(key, {}))
+            profile["key"] = key
+            # Plate transit is constrained to the registered linear corridor.
+            profile["motion_type"] = "linear"
+            profiles.append(profile)
+        return profiles
+
+    @staticmethod
     def _waypoint_list_from_value(value: object, fallback: list[dict], default_vel: float, default_acc: float) -> list[dict]:
         if not value:
             return [dict(item) for item in fallback]
@@ -284,6 +305,7 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_spacing_y_mm": dropoff.plate_spacing_y_mm,
             "dropoff_plate_robot_tool": dropoff.plate_robot_tool,
             "dropoff_plate_robot_user": dropoff.plate_robot_user,
+            "dropoff_plate_motion_profiles": [dict(profile) for profile in dropoff.plate_motion_profiles],
             "dropoff_plate_robot_frame": (
                 f"Tool {dropoff.plate_robot_tool}, User {dropoff.plate_robot_user}"
                 if dropoff.plate_robot_tool >= 0 and dropoff.plate_robot_user >= 0
@@ -573,6 +595,9 @@ class PaintProcessSettingsMapper:
             plate_spacing_y_mm=float(flat.get("dropoff_plate_spacing_y_mm", base.dropoff.plate_spacing_y_mm)),
             plate_robot_tool=int(flat.get("dropoff_plate_robot_tool", base.dropoff.plate_robot_tool)),
             plate_robot_user=int(flat.get("dropoff_plate_robot_user", base.dropoff.plate_robot_user)),
+            plate_motion_profiles=PaintProcessSettingsMapper._normalize_plate_motion_profiles(
+                flat.get("dropoff_plate_motion_profiles"), base.dropoff.plate_motion_profiles
+            ),
             allow_sub_zero_dropoff=bool(
                 flat.get("dropoff_allow_sub_zero", base.dropoff.allow_sub_zero_dropoff)
             ),

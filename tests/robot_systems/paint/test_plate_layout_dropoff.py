@@ -53,6 +53,13 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_approach_clearance_mm=35.0,
             plate_robot_tool=7,
             plate_robot_user=3,
+            plate_motion_profiles=[
+                {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
+                {"key": "center_to_approach", "vel_percent": 12, "acc_percent": 22, "motion_type": "linear", "blendR": 2},
+                {"key": "descend_release", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
+                {"key": "retract_after_release", "vel_percent": 14, "acc_percent": 24, "motion_type": "linear", "blendR": 4},
+                {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
+            ],
         ))
 
         restored = PaintProcessSettingsMapper.from_flat_dict(
@@ -65,6 +72,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(35.0, restored.dropoff.plate_approach_clearance_mm)
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
+        self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
 
     def test_requires_exactly_four_corners_without_fallback(self) -> None:
         corners, error = validate_plate_corners(_corners()[:3])
@@ -118,6 +126,13 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             strategy="plate_layout",
             plate_corners=_corners(),
             plate_approach_clearance_mm=40.0,
+            plate_motion_profiles=[
+                {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
+                {"key": "center_to_approach", "vel_percent": 12, "acc_percent": 22, "motion_type": "linear", "blendR": 2},
+                {"key": "descend_release", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
+                {"key": "retract_after_release", "vel_percent": 14, "acc_percent": 24, "motion_type": "linear", "blendR": 4},
+                {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
+            ],
         ))
         service.reserve(
             config.dropoff,
@@ -138,6 +153,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual("Returning through plate center", plan.waypoints[-1].label)
         self.assertEqual(service.pending.transit_pose, plan.waypoints[-1].pose)
         self.assertTrue(all(item.corridor_id == "dropoff_plate_layout" for item in plan.waypoints))
+        self.assertEqual(
+            [(12, 22, 2), (13, 23, 3), (14, 24, 4), (15, 25, 5)],
+            [(item.vel_percent, item.acc_percent, item.blendR) for item in plan.waypoints],
+        )
 
     def test_preparation_registers_corridor_from_fresh_not_cached_pose(self) -> None:
         service = PlateLayoutService()

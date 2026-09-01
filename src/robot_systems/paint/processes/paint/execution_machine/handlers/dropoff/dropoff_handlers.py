@@ -523,41 +523,48 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
             _logger.error("[PLATE_LAYOUT] Dropoff requested without an active reservation")
             return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
         dropoff = executor._paint_process_config().dropoff
+        center_to_approach = _plate_motion_profile(dropoff, "center_to_approach")
+        descend_release = _plate_motion_profile(dropoff, "descend_release")
+        retract_after_release = _plate_motion_profile(dropoff, "retract_after_release")
+        return_plate_center = _plate_motion_profile(dropoff, "return_plate_center")
         return DropoffReleasePlan(
             strategy_name=strategy_name,
             waypoints=(
                 DropoffReleaseWaypoint(
                     label="Moving above calculated plate position",
                     pose=list(reservation.approach_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
-                    blendR=dropoff.release_align_blendR,
+                    vel_percent=center_to_approach["vel_percent"],
+                    acc_percent=center_to_approach["acc_percent"],
+                    motion_type="linear",
+                    blendR=center_to_approach["blendR"],
                     corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
                     label="Descending to calculated plate position",
                     pose=list(reservation.release_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
+                    vel_percent=descend_release["vel_percent"],
+                    acc_percent=descend_release["acc_percent"],
                     motion_type="linear",
+                    blendR=descend_release["blendR"],
                     release_here=True,
                     corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
                     label="Retracting from calculated plate position",
                     pose=list(reservation.approach_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
+                    vel_percent=retract_after_release["vel_percent"],
+                    acc_percent=retract_after_release["acc_percent"],
                     motion_type="linear",
+                    blendR=retract_after_release["blendR"],
                     corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
                     label="Returning through plate center",
                     pose=list(reservation.transit_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
+                    vel_percent=return_plate_center["vel_percent"],
+                    acc_percent=return_plate_center["acc_percent"],
                     motion_type="linear",
+                    blendR=return_plate_center["blendR"],
                     corridor_id=_plate_layout_corridor_id(executor),
                 ),
             ),
@@ -841,6 +848,25 @@ def _plate_layout_corridor_id(executor: object) -> str:
     return f"{base_id}_plate_layout"
 
 
+def _plate_motion_profile(dropoff: object, key: str) -> dict[str, float]:
+    fallback = {
+        "vel_percent": float(dropoff.release_align_vel_percent),
+        "acc_percent": float(dropoff.release_align_acc_percent),
+        "blendR": float(dropoff.release_align_blendR),
+    }
+    for raw in list(getattr(dropoff, "plate_motion_profiles", []) or []):
+        if isinstance(raw, dict) and str(raw.get("key", "")) == key:
+            try:
+                return {
+                    "vel_percent": float(raw.get("vel_percent", fallback["vel_percent"])),
+                    "acc_percent": float(raw.get("acc_percent", fallback["acc_percent"])),
+                    "blendR": max(0.0, float(raw.get("blendR", fallback["blendR"]))),
+                }
+            except (TypeError, ValueError):
+                break
+    return fallback
+
+
 def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     """Enter the plate through its center and unwind without generic dropoff waypoints."""
     service = getattr(executor, "_plate_layout_service", None)
@@ -849,6 +875,7 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
         return False, "Plate-layout dropoff has no active reservation"
 
     config = executor._paint_process_config()
+    enter_profile = _plate_motion_profile(config.dropoff, "enter_plate_center")
     register = getattr(executor._robot_service, "register_motion_corridor", None)
     current_getter = getattr(executor._robot_service, "get_current_position_fresh", None)
     if not callable(current_getter):
@@ -888,8 +915,8 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
         y_max=max(float(pose[1]) for pose in bounded_poses) + padding_mm,
         z_min=min(float(pose[2]) for pose in bounded_poses) - padding_mm,
         entry_z_max=max(float(pose[2]) for pose in bounded_poses) + padding_mm,
-        maximum_velocity=max(0.1, float(config.dropoff.corridor_maximum_velocity_percent)),
-        maximum_acceleration=max(0.1, float(config.dropoff.corridor_maximum_acceleration_percent)),
+        maximum_velocity=100.0,
+        maximum_acceleration=100.0,
         allow_planar_transit=True,
     )
     try:
@@ -914,9 +941,10 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     if not executor._motion.move_pickup_phase(
         "Moving through plate center before dropoff",
         list(reservation.transit_pose),
-        velocity=config.dropoff.release_align_vel_percent,
-        acceleration=config.dropoff.release_align_acc_percent,
+        velocity=enter_profile["vel_percent"],
+        acceleration=enter_profile["acc_percent"],
         motion_type="linear",
+        blendR=enter_profile["blendR"],
         corridor_id=corridor.corridor_id,
     ):
         return False, "Pivot paint finished, but bounded move to plate center failed"

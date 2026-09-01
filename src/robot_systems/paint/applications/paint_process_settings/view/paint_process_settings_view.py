@@ -43,6 +43,7 @@ from src.robot_systems.paint.processes.paint.config import (
 
 _MAGAZINE_PICKUP_MODE_KEY = "magazine_pickup_mode"
 _PICKUP_CONTACT_MODE_KEY = "pickup_contact_mode"
+_DROPOFF_STRATEGY_KEY = "dropoff_strategy"
 _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
     "pickup_servo_contact_min_z_mm",
     "pickup_servo_contact_fast_lin_velocity_percent",
@@ -62,6 +63,28 @@ _FIXED_MAGAZINE_ONLY_KEYS = {
 }
 _VISION_MAGAZINE_ONLY_KEYS = {
     "magazine_camera_settle_s",
+}
+_PLATE_DROPOFF_ONLY_KEYS = {
+    "dropoff_plate_bottom_left", "dropoff_plate_capture_bottom_left",
+    "dropoff_plate_bottom_right", "dropoff_plate_capture_bottom_right",
+    "dropoff_plate_top_right", "dropoff_plate_capture_top_right",
+    "dropoff_plate_top_left", "dropoff_plate_capture_top_left",
+    "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
+    "dropoff_plate_release_z_offset_mm", "dropoff_plate_approach_clearance_mm",
+    "dropoff_plate_margin_left_mm", "dropoff_plate_margin_right_mm",
+    "dropoff_plate_margin_bottom_mm", "dropoff_plate_margin_top_mm",
+    "dropoff_plate_spacing_x_mm", "dropoff_plate_spacing_y_mm",
+}
+_MOVEMENT_GROUP_DROPOFF_ONLY_KEYS = {
+    "dropoff_allow_sub_zero", "dropoff_sub_zero_approach_z_mm",
+    "dropoff_corridor_x_margin_mm", "dropoff_corridor_y_margin_mm",
+    "dropoff_corridor_z_tolerance_mm", "dropoff_corridor_entry_z_max_mm",
+    "dropoff_corridor_maximum_velocity_percent",
+    "dropoff_corridor_maximum_acceleration_percent",
+}
+_NON_PLATE_DROPOFF_KEYS = {
+    "dropoff_motion_profiles", "dropoff_safe_travel_enabled",
+    "dropoff_safe_travel_positions",
 }
 
 
@@ -758,6 +781,7 @@ class PaintProcessSettingsView(IApplicationView):
                 values.get(_MAGAZINE_PICKUP_MODE_KEY, "vision_planned")
             )
             self._update_sensor_controlled_fast_lin_visibility(values)
+            self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "pickup_origin"))
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -914,6 +938,8 @@ class PaintProcessSettingsView(IApplicationView):
         self.save_requested.emit(values)
 
     def _on_value_changed(self, key: str, value: object, _component_name: str) -> None:
+        if key == _DROPOFF_STRATEGY_KEY:
+            self._update_dropoff_strategy_visibility(value)
         if key == _MAGAZINE_PICKUP_MODE_KEY:
             self._update_magazine_mode_field_visibility(value)
         if key in {_MAGAZINE_PICKUP_MODE_KEY, _PICKUP_CONTACT_MODE_KEY}:
@@ -964,6 +990,14 @@ class PaintProcessSettingsView(IApplicationView):
             }
         )
         self._set_setting_fields_visible(_SENSOR_CONTROLLED_FAST_LIN_KEYS, enabled)
+
+    def _update_dropoff_strategy_visibility(self, strategy: object) -> None:
+        selected = str(strategy or "pickup_origin").strip().lower()
+        self._set_setting_fields_visible(_PLATE_DROPOFF_ONLY_KEYS, selected == "plate_layout")
+        self._set_setting_fields_visible(
+            _MOVEMENT_GROUP_DROPOFF_ONLY_KEYS, selected == "movement_group"
+        )
+        self._set_setting_fields_visible(_NON_PLATE_DROPOFF_KEYS, selected != "plate_layout")
 
     def _set_setting_fields_visible(self, keys: set[str], visible: bool) -> None:
         if self.settings_view is None:
