@@ -16,6 +16,8 @@ from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
 
+_PLATE_LAYOUT_CORRIDOR_PADDING_MM = 10.0
+
 
 @dataclass(frozen=True)
 class DropoffReleaseWaypoint:
@@ -869,9 +871,15 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     corners, error = validate_plate_corners(config.dropoff.plate_corners)
     if error:
         return False, error
+    commanded_end_pose = list(getattr(executor, "_last_process_end_pose", None) or [])
     bounded_poses = [current_pose, reservation.transit_pose, reservation.approach_pose,
                      reservation.release_pose, *corners]
-    padding_mm = 1.0
+    if len(commanded_end_pose) >= 3:
+        # The ordered-chain completion notification and live TCP telemetry can
+        # arrive a few samples apart.  Bound the whole settling segment rather
+        # than a single instantaneous sample so corridor entry is deterministic.
+        bounded_poses.append(commanded_end_pose)
+    padding_mm = _PLATE_LAYOUT_CORRIDOR_PADDING_MM
     corridor = MotionCorridor(
         corridor_id=_plate_layout_corridor_id(executor),
         x_min=min(float(pose[0]) for pose in bounded_poses) - padding_mm,
@@ -890,10 +898,11 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
         _logger.exception("[PLATE_LAYOUT] Failed to register bounded transit corridor")
         return False, "Plate-layout bounded transit corridor could not be registered"
     _logger.info(
-        "[PLATE_LAYOUT] Registered bounded transit corridor=%s current_xyz=%s "
+        "[PLATE_LAYOUT] Registered bounded transit corridor=%s current_xyz=%s commanded_end_xyz=%s "
         "bounds=x[%.3f, %.3f] y[%.3f, %.3f] z[%.3f, %.3f]",
         corridor.corridor_id,
         [round(float(value), 3) for value in current_pose[:3]],
+        [round(float(value), 3) for value in commanded_end_pose[:3]],
         corridor.x_min,
         corridor.x_max,
         corridor.y_min,

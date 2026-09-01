@@ -160,6 +160,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._dropoff_motion_corridor_id = "dropoff"
         executor._robot_service.get_current_position.return_value = [999, 999, 999, 0, 0, 0]
         fresh_pose = [320, 210, 247, 180, 0, 0]
+        commanded_end_pose = [175, 212, 247, 180, 0, 0]
+        executor._last_process_end_pose = commanded_end_pose
         executor._robot_service.get_current_position_fresh.return_value = fresh_pose
         executor._motion.move_pickup_phase.return_value = True
         executor._robot_service.unwind_joint6.return_value = True
@@ -169,6 +171,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertTrue(ok, message)
         corridor = executor._robot_service.register_motion_corridor.call_args.args[0]
         self.assertTrue(corridor.contains_xyz(fresh_pose))
+        self.assertTrue(corridor.contains_xyz(commanded_end_pose))
+        self.assertTrue(corridor.contains_xyz([220, 211, 247, 180, 0, 0]))
+        self.assertEqual(-110.0, corridor.x_min)
+        self.assertEqual(330.0, corridor.x_max)
         executor._robot_service.get_current_position.assert_not_called()
 
     def test_failed_reservation_does_not_consume_position(self) -> None:

@@ -659,8 +659,10 @@ class MotionService(IMotionService):
                 violations.append("acceleration exceeds corridor limit")
         if violations:
             self._logger.error(
-                "Corridor LIN rejected corridor_id=%s: %s",
+                "Corridor LIN rejected corridor_id=%s current_xyz=%s target_xyz=%s: %s",
                 corridor_id,
+                [round(float(value), 3) for value in current[:3]] if len(current) >= 3 else current,
+                [round(float(value), 3) for value in target[:3]] if len(target) >= 3 else target,
                 ", ".join(violations),
             )
             return False
