@@ -211,6 +211,8 @@ def build_process_groups() -> list[SettingGroup]:
                 step_options=[0.1, 0.5, 1.0],
             ),
             _mm_field("magazine_release_z_mm", "Release Z", 50.0, min_val=0.0),
+            _toggle("magazine_full_retract_before_release", "Full Retract Before Release", True),
+            _mm_field("magazine_short_retract_distance_mm", "Short Retract Distance", 10.0, min_val=1.0),
             _seconds_field("magazine_camera_settle_s", "Camera Settle After Magazine Move", 0.5),
             _seconds_field("magazine_release_settle_s", "Settle After Calibration Release", 0.5),
         ]),

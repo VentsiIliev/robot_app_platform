@@ -157,6 +157,17 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         self.assertEqual(15.0, restored.pickup_motion.servo_contact_fast_lin_velocity_percent)
         self.assertEqual(25.0, restored.pickup_motion.servo_contact_fast_lin_acceleration_percent)
 
+    def test_magazine_retract_policy_round_trips(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["magazine_full_retract_before_release"] = False
+        flat["magazine_short_retract_distance_mm"] = 12.5
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertFalse(restored.magazine_load.full_retract_before_release)
+        self.assertEqual(12.5, restored.magazine_load.short_retract_distance_mm)
+
     def test_motion_profile_tables_round_trip_type_and_blendr(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

@@ -302,6 +302,63 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
         ])
         self.assertEqual(robot.started, [])
 
+    def test_magazine_short_retract_plans_release_after_live_retract(self):
+        robot = _FakeRobot()
+        robot.support_prepared = True
+        robot.position = [1.0, 2.0, 90.0, 0.0, 0.0, 3.0]
+        motion = _FakeMotion()
+        pickup_motion = SimpleNamespace(
+            servo_contact_linear_mm_s=100.0,
+            servo_contact_min_z_mm=20.0,
+            servo_contact_timeout_s=1.0,
+            servo_contact_poll_interval_s=0.01,
+            servo_contact_preflight_read_attempts=2,
+            servo_contact_read_failure_limit=3,
+            lift_align_vel_percent=30.0,
+            lift_align_acc_percent=30.0,
+        )
+        magazine_load = SimpleNamespace(
+            full_retract_before_release=False,
+            short_retract_distance_mm=12.0,
+        )
+        owner = SimpleNamespace(
+            _robot_service=robot,
+            _motion=motion,
+            _pickup_condition=_ConditionAfterStart(),
+            _pickup_tool=1,
+            _pickup_user=0,
+            _paint_process_config=lambda: SimpleNamespace(
+                pickup_motion=pickup_motion,
+                magazine_load=magazine_load,
+            ),
+        )
+        waypoints = (
+            ("approach", [1, 2, 100, 0, 0, 3], 10, 10, "ptp", 0),
+            ("contact", [1, 2, 20, 0, 0, 3], 10, 10, "linear", 0),
+            ("lift", [1, 2, 100, 0, 0, 3], 30, 30, "ptp", 20),
+            ("release", [20, 30, 40, 0, 0, 0], 25, 25, "ptp", 0),
+        )
+
+        ok, message = _execute_magazine_servo_contact_pickup_release(
+            owner,
+            waypoints,
+            retract_reference_pose=[9, 9, 100, 0, 0, 0],
+            release_label="calibration",
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(robot.prepared, [])
+        self.assertEqual(robot.executed_prepared, [])
+        self.assertEqual(robot.fast_linear_requests[0]["position"][2], 20.0)
+        self.assertEqual(robot.fast_linear_requests[1]["position"][2], 32.0)
+        self.assertEqual(
+            [label for label, _segments in motion.sequences],
+            [
+                "Magazine pickup approach before servo contact",
+                "Magazine calibration release after Fast LIN retract",
+            ],
+        )
+
     def test_magazine_lost_after_retract_turns_vacuum_off(self):
         robot = _FakeRobot()
         robot.support_prepared = True

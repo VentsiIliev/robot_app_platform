@@ -211,6 +211,8 @@ class PaintMagazineLoadConfig:
     fixed_pickup_group_id: str = "Magazine Fixed Pickup"  # [LIVE SETTINGS]
     fixed_pickup_position_tolerance_mm: float = 2.0  # [LIVE SETTINGS]
     fixed_pickup_orientation_tolerance_deg: float = 1.0  # [LIVE SETTINGS]
+    full_retract_before_release: bool = True  # [LIVE SETTINGS]
+    short_retract_distance_mm: float = 10.0  # [LIVE SETTINGS]
     magazine_group_id: str = "Magazine"
     calibration_group_id: str = "CALIBRATION"
     move_to_magazine_vel_percent: float = 30.0  # [LIVE SETTINGS]

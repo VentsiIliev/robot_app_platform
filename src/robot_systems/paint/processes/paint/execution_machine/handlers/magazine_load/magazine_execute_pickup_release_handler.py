@@ -274,6 +274,28 @@ def _execute_magazine_servo_contact_pickup_release(
     approach_segments = build_magazine_pickup_release_segments(transfer_waypoints[:1])
     safe_clearance_pose = list(transfer_waypoints[1][1])
     safe_clearance_pose[2] = float(retract_reference_pose[2])
+    full_retract = bool(
+        getattr(pickup_motion, "magazine_full_retract_before_release", True)
+    )
+    short_retract_distance_mm = float(
+        getattr(pickup_motion, "magazine_short_retract_distance_mm", 10.0)
+    )
+    # Magazine retract policy belongs to the magazine config. Accept it from
+    # there when available while retaining pickup-motion fallbacks for older
+    # test doubles and integrations.
+    magazine_config = getattr(executor._paint_process_config(), "magazine_load", None)
+    if magazine_config is not None:
+        full_retract = bool(
+            getattr(magazine_config, "full_retract_before_release", full_retract)
+        )
+        short_retract_distance_mm = float(
+            getattr(magazine_config, "short_retract_distance_mm", short_retract_distance_mm)
+        )
+    if not full_retract and (
+        not math.isfinite(short_retract_distance_mm)
+        or short_retract_distance_mm <= 0.0
+    ):
+        return False, "Magazine short retract distance must be greater than zero"
     if not executor._motion.move_ordered_pickup_sequence(
         "Magazine pickup approach before servo contact",
         approach_segments,
@@ -297,15 +319,21 @@ def _execute_magazine_servo_contact_pickup_release(
     )
     prepared_plan_id = (
         None
-        if release_has_fast_lin
+        if release_has_fast_lin or not full_retract
         else _prepare_magazine_release(
             executor,
             release_segments,
             start_pose=safe_clearance_pose,
         )
     )
-    if prepared_plan_id is None and not release_has_fast_lin:
+    if prepared_plan_id is None and not release_has_fast_lin and full_retract:
         return False, "Magazine release motion could not be prepared before servo pickup"
+    if not full_retract:
+        _logger.info(
+            "[MAGAZINE_LOAD] Short retract enabled: distance_mm=%.3f; "
+            "release will be planned from the settled retract pose",
+            short_retract_distance_mm,
+        )
     if release_has_fast_lin:
         _logger.info(
             "[MAGAZINE_LOAD] Release contains Fast LIN; deferring mixed execution until after Fast LIN retract"
@@ -353,7 +381,8 @@ def _execute_magazine_servo_contact_pickup_release(
                 ),
             ),
             retract=ServoRetractConfig(
-                target_pose=safe_clearance_pose,
+                target_pose=safe_clearance_pose if full_retract else None,
+                distance_mm=None if full_retract else short_retract_distance_mm,
                 motion_type="fast_lin",
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
                 timeout_s=3.0,
@@ -431,7 +460,7 @@ def _execute_magazine_servo_contact_pickup_release(
         current_pose = _wait_for_stable_pose(executor._robot_service)
         if current_pose is None:
             return False, "Magazine post-retract pose did not become stable"
-        if not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
+        if full_retract and not _poses_match(current_pose, safe_clearance_pose, 2.0, 2.0):
             return False, "Magazine Fast LIN retract did not reach the prepared release start pose"
 
         if prepared_plan_id is not None:
