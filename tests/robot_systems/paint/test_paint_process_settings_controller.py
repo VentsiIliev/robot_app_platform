@@ -132,6 +132,19 @@ class TestPaintProcessSettingsController(unittest.TestCase):
 
         self.assertEqual(-5.0, restored.pickup_motion.servo_contact_min_z_mm)
 
+    def test_sensor_controlled_fast_lin_settings_round_trip(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["pickup_servo_contact_min_z_mm"] = 20.0
+        flat["pickup_servo_contact_fast_lin_velocity_percent"] = 15.0
+        flat["pickup_servo_contact_fast_lin_acceleration_percent"] = 25.0
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(20.0, restored.pickup_motion.servo_contact_min_z_mm)
+        self.assertEqual(15.0, restored.pickup_motion.servo_contact_fast_lin_velocity_percent)
+        self.assertEqual(25.0, restored.pickup_motion.servo_contact_fast_lin_acceleration_percent)
+
     def test_motion_profile_tables_round_trip_type_and_blendr(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)

@@ -36,10 +36,25 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
 )
 from src.robot_systems.paint.processes.paint.config import (
     MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_SERVO_CONTACT,
 )
 
 
 _MAGAZINE_PICKUP_MODE_KEY = "magazine_pickup_mode"
+_PICKUP_CONTACT_MODE_KEY = "pickup_contact_mode"
+_SENSOR_CONTROLLED_FAST_LIN_KEYS = {
+    "pickup_servo_contact_min_z_mm",
+    "pickup_servo_contact_fast_lin_velocity_percent",
+    "pickup_servo_contact_fast_lin_acceleration_percent",
+    "pickup_servo_contact_timeout_s",
+    "pickup_servo_contact_poll_interval_s",
+    "pickup_servo_contact_preflight_read_attempts",
+    "pickup_servo_contact_read_failure_limit",
+    "pickup_servo_contact_fallback_to_planned_descend",
+    "pickup_servo_contact_dummy_sensor_enabled",
+    "pickup_servo_contact_dummy_detect_after_s",
+}
 _FIXED_MAGAZINE_ONLY_KEYS = {
     "magazine_fixed_pickup_group_id",
     "magazine_fixed_pickup_position_tolerance_mm",
@@ -742,6 +757,7 @@ class PaintProcessSettingsView(IApplicationView):
             self._update_magazine_mode_field_visibility(
                 values.get(_MAGAZINE_PICKUP_MODE_KEY, "vision_planned")
             )
+            self._update_sensor_controlled_fast_lin_visibility(values)
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -900,6 +916,10 @@ class PaintProcessSettingsView(IApplicationView):
     def _on_value_changed(self, key: str, value: object, _component_name: str) -> None:
         if key == _MAGAZINE_PICKUP_MODE_KEY:
             self._update_magazine_mode_field_visibility(value)
+        if key in {_MAGAZINE_PICKUP_MODE_KEY, _PICKUP_CONTACT_MODE_KEY}:
+            pending_values = self.values()
+            pending_values[key] = value
+            self._update_sensor_controlled_fast_lin_visibility(pending_values)
         if key == "safe_travel_positions" and value == "safe_travel_positions_add_current":
             self.set_safe_travel_current_requested.emit()
             return
@@ -931,6 +951,19 @@ class PaintProcessSettingsView(IApplicationView):
         )
         self._set_setting_fields_visible(_FIXED_MAGAZINE_ONLY_KEYS, fixed_group)
         self._set_setting_fields_visible(_VISION_MAGAZINE_ONLY_KEYS, not fixed_group)
+
+    def _update_sensor_controlled_fast_lin_visibility(self, values: dict) -> None:
+        pickup_mode = str(values.get(_PICKUP_CONTACT_MODE_KEY, "")).strip().lower()
+        magazine_mode = str(values.get(_MAGAZINE_PICKUP_MODE_KEY, "")).strip().lower()
+        enabled = (
+            pickup_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT
+            or magazine_mode
+            in {
+                MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+                MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            }
+        )
+        self._set_setting_fields_visible(_SENSOR_CONTROLLED_FAST_LIN_KEYS, enabled)
 
     def _set_setting_fields_visible(self, keys: set[str], visible: bool) -> None:
         if self.settings_view is None:

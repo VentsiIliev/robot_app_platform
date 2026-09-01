@@ -236,8 +236,8 @@ class ServoUntilConditionProcedure:
                         message="minimum_z_reached_before_servo",
                     )
 
-            if cfg.execution_mode == "fast_lin_diagnostic":
-                return self._run_fast_lin_diagnostic(
+            if cfg.execution_mode == "sensor_controlled_fast_lin":
+                return self._run_sensor_controlled_fast_lin(
                     started_at=started_at,
                     cfg=cfg,
                     retract=retract,
@@ -752,7 +752,7 @@ class ServoUntilConditionProcedure:
                 }.get(state, state or "ros_managed_unknown_state"),
             )
 
-    def _run_fast_lin_diagnostic(
+    def _run_sensor_controlled_fast_lin(
         self,
         *,
         started_at: float,
@@ -768,13 +768,13 @@ class ServoUntilConditionProcedure:
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=True, condition_failed=False, guard_triggered=True,
-                message="fast_lin_diagnostic_missing_start_or_minimum_z",
+                message="sensor_controlled_fast_lin_missing_start_or_minimum_z",
             )
         if cancel_requested is not None and cancel_requested():
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=False, condition_failed=False, guard_triggered=True,
-                message="cancelled_before_fast_lin_diagnostic",
+                message="cancelled_before_sensor_controlled_fast_lin",
             )
 
         target_pose = [float(value) for value in start_pose[:6]]
@@ -786,11 +786,11 @@ class ServoUntilConditionProcedure:
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=True, condition_failed=False, guard_triggered=False,
-                message="fast_lin_diagnostic_unsupported",
+                message="sensor_controlled_fast_lin_unsupported",
             )
 
         _logger.warning(
-            "[FAST_LIN_DIAGNOSTIC] Conditional Servo bypassed: "
+            "[SENSOR_CONTROLLED_FAST_LIN] Starting sensor-controlled Fast LIN: "
             "start_z=%.3f target_z=%.3f vel=%.1f acc=%.1f",
             float(start_pose[2]), target_pose[2], velocity, acceleration,
         )
@@ -818,11 +818,11 @@ class ServoUntilConditionProcedure:
             return self._result(
                 started_at, success=False, detected=False, timed_out=False,
                 start_failed=True, condition_failed=False, guard_triggered=False,
-                message=f"fast_lin_diagnostic_failed:{detail}",
+                message=f"sensor_controlled_fast_lin_failed:{detail}",
             )
 
         _logger.warning(
-            "[FAST_LIN_DIAGNOSTIC] Fast LIN accepted asynchronously task_id=%s; "
+            "[SENSOR_CONTROLLED_FAST_LIN] Fast LIN accepted asynchronously task_id=%s; "
             "polling sensor every %.3fs",
             outcome.get("task_id"),
             float(cfg.poll_interval_s),
@@ -837,20 +837,20 @@ class ServoUntilConditionProcedure:
                 return self._result(
                     started_at, success=False, detected=False, timed_out=False,
                     start_failed=False, condition_failed=False, guard_triggered=True,
-                    message="cancelled_during_fast_lin_diagnostic",
+                    message="cancelled_during_sensor_controlled_fast_lin",
                 )
             if stop_guard is not None:
                 try:
                     guarded = bool(stop_guard())
                 except Exception:
-                    _logger.exception("[FAST_LIN_DIAGNOSTIC] stop guard read failed")
+                    _logger.exception("[SENSOR_CONTROLLED_FAST_LIN] stop guard read failed")
                     guarded = True
                 if guarded:
                     self._stop_motion()
                     return self._result(
                         started_at, success=False, detected=False, timed_out=False,
                         start_failed=False, condition_failed=False, guard_triggered=True,
-                        message="stop_guard_triggered_during_fast_lin_diagnostic",
+                        message="stop_guard_triggered_during_sensor_controlled_fast_lin",
                     )
 
             detected, read_ok = self._read_condition()
@@ -861,14 +861,14 @@ class ServoUntilConditionProcedure:
                     return self._result(
                         started_at, success=False, detected=False, timed_out=False,
                         start_failed=False, condition_failed=True, guard_triggered=False,
-                        message="fast_lin_diagnostic_condition_unreadable",
+                        message="sensor_controlled_fast_lin_condition_unreadable",
                     )
             else:
                 read_failures = 0
                 if detected:
                     trigger_ns = time.monotonic_ns()
                     _logger.warning(
-                        "[FAST_LIN_DIAGNOSTIC_TIMING] event=sensor_trigger task_id=%s elapsed_s=%.3f",
+                        "[SENSOR_CONTROLLED_FAST_LIN_TIMING] event=sensor_trigger task_id=%s elapsed_s=%.3f",
                         outcome.get("task_id"),
                         time.monotonic() - started_at,
                     )
@@ -878,7 +878,7 @@ class ServoUntilConditionProcedure:
                         return self._result(
                             started_at, success=False, detected=True, timed_out=False,
                             start_failed=False, condition_failed=False, guard_triggered=False,
-                            stop_failed=True, message="fast_lin_diagnostic_stop_failed",
+                            stop_failed=True, message="sensor_controlled_fast_lin_stop_failed",
                         )
                     execution_inactive = self._wait_for_execution_inactive(
                         task_id=outcome.get("task_id"),
@@ -890,7 +890,7 @@ class ServoUntilConditionProcedure:
                             started_at, success=False, detected=True, timed_out=False,
                             start_failed=False, condition_failed=False, guard_triggered=False,
                             stop_failed=True,
-                            message="fast_lin_diagnostic_execution_still_active",
+                            message="sensor_controlled_fast_lin_execution_still_active",
                         )
                     contact_pose = self._wait_for_stable_pose(
                         timeout_s=1.0,
@@ -898,7 +898,7 @@ class ServoUntilConditionProcedure:
                     )
                     stationary_ns = time.monotonic_ns()
                     _logger.warning(
-                        "[FAST_LIN_DIAGNOSTIC_TIMING] event=stationary task_id=%s "
+                        "[SENSOR_CONTROLLED_FAST_LIN_TIMING] event=stationary task_id=%s "
                         "trigger_to_stop_response_ms=%.3f stop_response_to_stationary_ms=%.3f",
                         outcome.get("task_id"),
                         (stop_done_ns - trigger_ns) / 1_000_000.0,
@@ -908,7 +908,7 @@ class ServoUntilConditionProcedure:
                         return self._result(
                             started_at, success=False, detected=True, timed_out=False,
                             start_failed=False, condition_failed=False, guard_triggered=False,
-                            stop_failed=True, message="fast_lin_diagnostic_stationary_unconfirmed",
+                            stop_failed=True, message="sensor_controlled_fast_lin_stationary_unconfirmed",
                         )
                     break
 
@@ -922,7 +922,7 @@ class ServoUntilConditionProcedure:
             return self._result(
                 started_at, success=False, detected=False, timed_out=True,
                 start_failed=False, condition_failed=False, guard_triggered=False,
-                message="fast_lin_diagnostic_timeout",
+                message="sensor_controlled_fast_lin_timeout",
             )
 
         if contact_pose is None:
@@ -932,7 +932,7 @@ class ServoUntilConditionProcedure:
         else:
             read_ok = True
         _logger.warning(
-            "[FAST_LIN_DIAGNOSTIC] Fast LIN completed: final_z=%s detected=%s read_ok=%s",
+            "[SENSOR_CONTROLLED_FAST_LIN] Fast LIN completed: final_z=%s detected=%s read_ok=%s",
             None if contact_pose is None else f"{float(contact_pose[2]):.3f}",
             detected,
             read_ok,
@@ -943,8 +943,8 @@ class ServoUntilConditionProcedure:
                 start_failed=False, condition_failed=not read_ok,
                 guard_triggered=not detected, contact_pose=contact_pose,
                 message=(
-                    "fast_lin_diagnostic_condition_unreadable" if not read_ok
-                    else "fast_lin_diagnostic_condition_not_detected"
+                    "sensor_controlled_fast_lin_condition_unreadable" if not read_ok
+                    else "sensor_controlled_fast_lin_condition_not_detected"
                 ),
             )
 
@@ -970,8 +970,8 @@ class ServoUntilConditionProcedure:
             start_failed=False, condition_failed=False, guard_triggered=False,
             retracted=retract is not None, contact_pose=contact_pose,
             message=(
-                "fast_lin_diagnostic_detected_and_retracted"
-                if retract is not None else "fast_lin_diagnostic_detected"
+                "sensor_controlled_fast_lin_detected_and_retracted"
+                if retract is not None else "sensor_controlled_fast_lin_detected"
             ),
         )
 
@@ -1485,12 +1485,12 @@ class ServoUntilConditionProcedure:
     def _controlled_stop_checked(self, task_id) -> bool:
         method = getattr(self._robot, "controlled_stop", None)
         if not callable(method):
-            _logger.error("[FAST_LIN_DIAGNOSTIC] controlled stop is unsupported")
+            _logger.error("[SENSOR_CONTROLLED_FAST_LIN] controlled stop is unsupported")
             return False
         try:
             result = method(task_id)
         except Exception:
-            _logger.exception("[FAST_LIN_DIAGNOSTIC] controlled stop failed")
+            _logger.exception("[SENSOR_CONTROLLED_FAST_LIN] controlled stop failed")
             return False
         return bool(
             isinstance(result, dict)
@@ -1555,7 +1555,7 @@ class ServoUntilConditionProcedure:
             try:
                 status = getter()
             except Exception:
-                _logger.exception("[FAST_LIN_DIAGNOSTIC] execution status read failed")
+                _logger.exception("[SENSOR_CONTROLLED_FAST_LIN] execution status read failed")
                 status = None
             if isinstance(status, dict):
                 current_task_id = status.get("current_task_id") or status.get("task_id")
@@ -1678,7 +1678,7 @@ class ServoUntilConditionProcedure:
 
     @staticmethod
     def _validate_config(cfg: ServoUntilConditionConfig) -> tuple[bool, str]:
-        if cfg.execution_mode not in {"legacy", "ros_managed", "fast_lin_diagnostic"}:
+        if cfg.execution_mode not in {"legacy", "ros_managed", "sensor_controlled_fast_lin"}:
             return False, "invalid_execution_mode"
         try:
             axis = cfg.axis

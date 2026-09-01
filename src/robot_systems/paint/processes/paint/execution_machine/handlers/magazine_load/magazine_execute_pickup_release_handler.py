@@ -331,7 +331,7 @@ def _execute_magazine_servo_contact_pickup_release(
         control = getattr(executor, "_active_execution_control", None)
         result = ServoUntilConditionProcedure(executor._robot_service, condition).run(
             config=ServoUntilConditionConfig(
-                execution_mode="fast_lin_diagnostic",
+                execution_mode="sensor_controlled_fast_lin",
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,
@@ -344,9 +344,13 @@ def _execute_magazine_servo_contact_pickup_release(
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
-                minimum_z_mm=0.0,
-                approach_velocity=10.0,
-                approach_acceleration=30.0,
+                minimum_z_mm=minimum_contact_z_mm,
+                approach_velocity=float(
+                    getattr(pickup_motion, "servo_contact_fast_lin_velocity_percent", 10.0)
+                ),
+                approach_acceleration=float(
+                    getattr(pickup_motion, "servo_contact_fast_lin_acceleration_percent", 30.0)
+                ),
             ),
             retract=ServoRetractConfig(
                 target_pose=safe_clearance_pose,

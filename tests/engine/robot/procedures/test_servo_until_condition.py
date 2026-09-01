@@ -839,7 +839,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         )
         self.assertEqual(robot.started, [])
 
-    def test_fast_lin_diagnostic_moves_to_minimum_z_without_starting_servo(self):
+    def test_sensor_controlled_fast_lin_moves_to_minimum_z_without_starting_servo(self):
         class DiagnosticRobot(FakeRobot):
             def __init__(self):
                 super().__init__()
@@ -869,7 +869,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         result = ServoUntilConditionProcedure(
             robot, _ConditionSequence(False, False, True)
         ).run(config=ServoUntilConditionConfig(
-            execution_mode="fast_lin_diagnostic",
+            execution_mode="sensor_controlled_fast_lin",
             minimum_z_mm=50.0,
             approach_velocity=10.0,
             approach_acceleration=10.0,
@@ -878,7 +878,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         ))
 
         self.assertTrue(result.success)
-        self.assertEqual(result.message, "fast_lin_diagnostic_detected")
+        self.assertEqual(result.message, "sensor_controlled_fast_lin_detected")
         self.assertEqual(robot.started, [])
         self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 50.0, 4.0, 5.0, 6.0])
         self.assertEqual(robot.fast_linear_request["vel"], 10.0)
@@ -886,7 +886,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertFalse(robot.fast_linear_request["blocking"])
         self.assertEqual(robot.stopped, 1)
 
-    def test_fast_lin_diagnostic_waits_for_stopped_task_to_become_inactive(self):
+    def test_sensor_controlled_fast_lin_waits_for_stopped_task_to_become_inactive(self):
         class DiagnosticRobot(FakeRobot):
             def __init__(self):
                 super().__init__()
@@ -936,7 +936,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
             robot, _ConditionSequence(False, False, True)
         ).run(
             config=ServoUntilConditionConfig(
-                execution_mode="fast_lin_diagnostic",
+                execution_mode="sensor_controlled_fast_lin",
                 minimum_z_mm=50.0,
                 poll_interval_s=0.001,
                 timeout_s=0.2,

@@ -226,6 +226,8 @@ class PaintProcessSettingsMapper:
             "pickup_contact_mode": pickup.pickup_contact_mode,
             "pickup_servo_contact_linear_mm_s": pickup.servo_contact_linear_mm_s,
             "pickup_servo_contact_min_z_mm": pickup.servo_contact_min_z_mm,
+            "pickup_servo_contact_fast_lin_velocity_percent": pickup.servo_contact_fast_lin_velocity_percent,
+            "pickup_servo_contact_fast_lin_acceleration_percent": pickup.servo_contact_fast_lin_acceleration_percent,
             "pickup_servo_contact_timeout_s": pickup.servo_contact_timeout_s,
             "pickup_servo_contact_poll_interval_s": pickup.servo_contact_poll_interval_s,
             "pickup_servo_contact_preflight_read_attempts": pickup.servo_contact_preflight_read_attempts,
@@ -392,6 +394,18 @@ class PaintProcessSettingsMapper:
             ),
             servo_contact_min_z_mm=float(
                 flat.get("pickup_servo_contact_min_z_mm", base.pickup_motion.servo_contact_min_z_mm)
+            ),
+            servo_contact_fast_lin_velocity_percent=float(
+                flat.get(
+                    "pickup_servo_contact_fast_lin_velocity_percent",
+                    base.pickup_motion.servo_contact_fast_lin_velocity_percent,
+                )
+            ),
+            servo_contact_fast_lin_acceleration_percent=float(
+                flat.get(
+                    "pickup_servo_contact_fast_lin_acceleration_percent",
+                    base.pickup_motion.servo_contact_fast_lin_acceleration_percent,
+                )
             ),
             servo_contact_timeout_s=float(
                 flat.get("pickup_servo_contact_timeout_s", base.pickup_motion.servo_contact_timeout_s)

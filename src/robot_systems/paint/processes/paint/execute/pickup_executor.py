@@ -472,7 +472,7 @@ class PaintPickupExecutor:
         control = getattr(self._owner, "_active_execution_control", None)
         result = procedure.run(
             config=ServoUntilConditionConfig(
-                execution_mode="fast_lin_diagnostic",
+                execution_mode="sensor_controlled_fast_lin",
                 axis=RobotAxis.Z,
                 direction=Direction.MINUS,
                 linear_mm_s=contact_speed_mm_s,
@@ -485,9 +485,13 @@ class PaintPickupExecutor:
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),
                 allow_subzero_descent=True,
                 disable_collision_checking=True,
-                minimum_z_mm=8.0,
-                approach_velocity=10.0,
-                approach_acceleration=30.0,
+                minimum_z_mm=minimum_contact_z_mm,
+                approach_velocity=float(
+                    getattr(pickup_motion, "servo_contact_fast_lin_velocity_percent", 10.0)
+                ),
+                approach_acceleration=float(
+                    getattr(pickup_motion, "servo_contact_fast_lin_acceleration_percent", 30.0)
+                ),
             ),
             retract=ServoRetractConfig(
                 target_pose=predicted_retract_pose,
