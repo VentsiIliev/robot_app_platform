@@ -425,7 +425,7 @@ def _prepare_magazine_release(
             start_position=list(start_pose),
             tool=int(executor._pickup_tool),
             user=int(executor._pickup_user),
-            allow_servo_during_prepare=True,
+            allow_servo_during_prepare=False,
         )
     except Exception:
         _logger.exception("[MAGAZINE_LOAD] Failed to prepare release while Servo is idle")

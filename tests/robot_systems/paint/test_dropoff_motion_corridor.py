@@ -24,6 +24,42 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
 
 
 class TestDropoffMotionCorridor(unittest.TestCase):
+    def test_retract_failure_reports_that_release_already_completed(self):
+        dropoff = SimpleNamespace(
+            strategy="movement_group",
+            allow_sub_zero_dropoff=True,
+            sub_zero_approach_z_mm=50.0,
+            release_align_vel_percent=20.0,
+            release_align_acc_percent=15.0,
+            release_align_motion_type="ptp",
+            release_align_blendR=0.0,
+        )
+        motion = MagicMock()
+        motion.move_pickup_phase.side_effect = [True, True, False]
+        motion.turn_vacuum_off.return_value = (True, "")
+        owner = SimpleNamespace(
+            _dropoff_motion_corridor_id="workpiece_drop_opening",
+            _dropoff_unwind_prepared=False,
+            _last_process_end_pose=None,
+            _last_prepositioned_start_group=None,
+            _robot_service=MagicMock(),
+            _motion=motion,
+            _vacuum_sensor=None,
+            _enable_vacuum_pump=False,
+            _paint_process_config=lambda: SimpleNamespace(dropoff=dropoff),
+        )
+
+        with patch(
+            "src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers._resolve_dropoff_align_pose",
+            return_value=[300.0, 120.0, -80.0, 180.0, 0.0, 0.0],
+        ):
+            ok, message = execute_dropoff_release_for_executor(owner)
+
+        self.assertFalse(ok)
+        self.assertIn("Workpiece release completed", message)
+        self.assertIn("robot may still be inside the dropoff passage", message)
+        motion.turn_vacuum_off.assert_called_once()
+
     def test_sub_zero_release_retracts_then_moves_to_and_validates_next_cycle_start(self):
         dropoff = SimpleNamespace(
             strategy="movement_group",

@@ -192,6 +192,7 @@ def execute_dropoff_release_for_executor(
         and release_waypoint.pose is not None
         and _poses_close(release_waypoint.pose, getattr(executor, "_last_process_end_pose", None))
     )
+    release_completed = False
     for index, waypoint in enumerate(plan.waypoints, start=1):
         waypoint_started = perf_counter()
         if waypoint.pose is not None:
@@ -224,10 +225,13 @@ def execute_dropoff_release_for_executor(
                     elapsed_s(waypoint_started),
                     elapsed_s(started),
                 )
-                return False, motion_failure_message(
-                    executor._robot_service,
-                    f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release",
+                failure = (
+                    f"Workpiece release completed, but post-release dropoff waypoint "
+                    f"'{waypoint.label}' failed; robot may still be inside the dropoff passage"
+                    if release_completed
+                    else f"Pivot paint finished, but dropoff waypoint '{waypoint.label}' failed before release"
                 )
+                return False, motion_failure_message(executor._robot_service, failure)
 
         if waypoint.release_here:
             ok, msg = executor._motion.turn_vacuum_off()
@@ -250,6 +254,7 @@ def execute_dropoff_release_for_executor(
                     elapsed_s(started),
                 )
                 return False, msg
+            release_completed = True
             ok, msg = _on_workpiece_release_verified(executor)
             if not ok:
                 _logger.info(
