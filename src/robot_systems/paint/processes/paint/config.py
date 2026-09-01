@@ -3,25 +3,46 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from src.engine.robot.path_preparation import PIXEL_TO_MM_MODE_HOMOGRAPHY_RESIDUAL, PIXEL_TO_MM_MODE_GEOMETRY_PPM_ANCHOR
 
 PICKUP_CONTACT_MODE_PLANNED = "planned"
-PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
+PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN = "sensor_controlled_fast_lin"
 PICKUP_CONTACT_MODE_HEIGHT_MEASURE = "height_measure"
 # Deprecated and intentionally unsupported: the former ``learned_height`` and
 # ``learned_height_lin`` Servo approach strategies must not be wired back into
 # runtime configuration because learned pickup heights are unsafe across batches.
 PICKUP_CONTACT_MODES = (
     PICKUP_CONTACT_MODE_PLANNED,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
 )
 
 MAGAZINE_PICKUP_MODE_VISION_PLANNED = "vision_planned"
-MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
-MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
+MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN = "vision_sensor_controlled_fast_lin"
+MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN = "fixed_group_sensor_controlled_fast_lin"
 MAGAZINE_PICKUP_MODES = (
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
-    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
 )
+
+_LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT = "servo_contact"
+_LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT = "vision_servo_contact"
+_LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT = "fixed_group_servo_contact"
+
+
+def normalize_pickup_contact_mode(value: object) -> str:
+    mode = str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
+    if mode == _LEGACY_PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        return PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
+    return mode
+
+
+def normalize_magazine_pickup_mode(value: object) -> str:
+    mode = str(value or MAGAZINE_PICKUP_MODE_VISION_PLANNED).strip().lower()
+    return {
+        _LEGACY_MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT:
+            MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+        _LEGACY_MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    }.get(mode, mode)
 
 
 # [LIVE SETTINGS] marks defaults that are already read through the paint-process

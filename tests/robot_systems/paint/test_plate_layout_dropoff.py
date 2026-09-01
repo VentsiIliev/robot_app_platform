@@ -16,6 +16,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _build_dropoff_release_plan,
+    _execute_plate_layout_preparation,
 )
 
 
@@ -137,6 +138,38 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual("Returning through plate center", plan.waypoints[-1].label)
         self.assertEqual(service.pending.transit_pose, plan.waypoints[-1].pose)
         self.assertTrue(all(item.corridor_id == "dropoff_plate_layout" for item in plan.waypoints))
+
+    def test_preparation_registers_corridor_from_fresh_not_cached_pose(self) -> None:
+        service = PlateLayoutService()
+        config = PaintProcessConfig(dropoff=PaintDropoffConfig(
+            strategy="plate_layout",
+            plate_corners=_corners(),
+            plate_approach_clearance_mm=40.0,
+        ))
+        service.reserve(
+            config.dropoff,
+            width_mm=20.0,
+            height_mm=30.0,
+            calibration_pose=[0.0, 0.0, 0.0, 180.0, 0.0, 0.0],
+            workpiece_rz_at_calibration_deg=0.0,
+            pose_calculator=calculate_workpiece_dropoff_pose,
+        )
+        executor = MagicMock()
+        executor._paint_process_config.return_value = config
+        executor._plate_layout_service = service
+        executor._dropoff_motion_corridor_id = "dropoff"
+        executor._robot_service.get_current_position.return_value = [999, 999, 999, 0, 0, 0]
+        fresh_pose = [320, 210, 247, 180, 0, 0]
+        executor._robot_service.get_current_position_fresh.return_value = fresh_pose
+        executor._motion.move_pickup_phase.return_value = True
+        executor._robot_service.unwind_joint6.return_value = True
+
+        ok, message = _execute_plate_layout_preparation(executor)
+
+        self.assertTrue(ok, message)
+        corridor = executor._robot_service.register_motion_corridor.call_args.args[0]
+        self.assertTrue(corridor.contains_xyz(fresh_pose))
+        executor._robot_service.get_current_position.assert_not_called()
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()

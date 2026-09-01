@@ -7,7 +7,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.context import Pa
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.common.guards import guard_control
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
 )
 
 _logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def handle_magazine_prepare_pickup_release(ctx: PaintExecutionContext) -> PaintE
         return PaintExecutionState.ERROR
 
     pickup_started = perf_counter()
-    if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+    if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
         ctx.magazine_fixed_pickup_pose = load_service._validated_pose(ctx.magazine_pose)
         if ctx.magazine_fixed_pickup_pose is None:
             ctx.set_result(False, f"Fixed magazine pickup group '{ctx.magazine_group}' has an invalid pose")

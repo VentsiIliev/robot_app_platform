@@ -17,8 +17,9 @@ from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
     PICKUP_CONTACT_MODES,
+    normalize_pickup_contact_mode as normalize_configured_pickup_contact_mode,
 )
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.magazine_load_result import (
@@ -94,7 +95,7 @@ class PickupPlan:
 
 
 def normalize_pickup_contact_mode(value: object) -> str:
-    return str(value or PICKUP_CONTACT_MODE_PLANNED).strip().lower()
+    return normalize_configured_pickup_contact_mode(value)
 
 
 class PaintPickupStrategy(Protocol):
@@ -284,7 +285,7 @@ class PaintPickupExecutor:
         self._owner._last_pickup_contact_mode = pickup_plan.contact_mode
         _logger.info("[TIMING] pickup_to_pivot stage=build_poses elapsed_s=%.3f", elapsed_s(plan_started))
 
-        if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        if pickup_plan.contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
             ok = self._execute_servo_contact_pickup_sequence(
                 pickup_plan,
                 prepared_continuation_segments=prepared_continuation_segments,

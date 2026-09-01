@@ -69,12 +69,12 @@ class TestPaintProcessSettingsController(unittest.TestCase):
             with self.subTest(enabled=enabled):
                 model = _FakeModel(True, pickup_safety_enabled=enabled)
                 view = _FakeView()
-                view.values_set = {"pickup_contact_mode": "servo_contact"}
+                view.values_set = {"pickup_contact_mode": "sensor_controlled_fast_lin"}
                 controller = PaintProcessSettingsController(model, view)
                 with patch(
                     "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
                 ) as show_warning:
-                    controller._on_value_changed("pickup_contact_mode", "servo_contact")
+                    controller._on_value_changed("pickup_contact_mode", "sensor_controlled_fast_lin")
 
                 show_warning.assert_called_once()
                 for missing in expected:
@@ -86,13 +86,13 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         view = _FakeView()
         view.values_set = {
             "enable_vacuum_pump": False,
-            "pickup_contact_mode": "servo_contact",
+            "pickup_contact_mode": "sensor_controlled_fast_lin",
         }
         controller = PaintProcessSettingsController(model, view)
         with patch(
             "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
         ) as show_warning:
-            controller._on_value_changed("pickup_contact_mode", "servo_contact")
+            controller._on_value_changed("pickup_contact_mode", "sensor_controlled_fast_lin")
 
         self.assertIn(
             "Enable Vacuum Pump in Paint Process Settings",
@@ -103,7 +103,7 @@ class TestPaintProcessSettingsController(unittest.TestCase):
     def test_magazine_servo_mode_is_allowed_when_pump_and_sensor_are_enabled(self):
         model = _FakeModel(True, pickup_safety_enabled=(True, True))
         view = _FakeView()
-        view.values_set = {"magazine_pickup_mode": "vision_servo_contact"}
+        view.values_set = {"magazine_pickup_mode": "vision_sensor_controlled_fast_lin"}
         controller = PaintProcessSettingsController(model, view)
 
         self.assertTrue(controller._servo_contact_is_allowed(view.values_set))
@@ -113,7 +113,7 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         view = _FakeView()
         controller = PaintProcessSettingsController(model, view)
         flat = PaintProcessSettingsMapper.to_flat_dict(model.current_settings)
-        flat["pickup_contact_mode"] = "servo_contact"
+        flat["pickup_contact_mode"] = "sensor_controlled_fast_lin"
         with patch(
             "src.robot_systems.paint.applications.paint_process_settings.controller.paint_process_settings_controller.show_warning"
         ):
@@ -131,6 +131,18 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
 
         self.assertEqual(-5.0, restored.pickup_motion.servo_contact_min_z_mm)
+
+    def test_legacy_servo_contact_mode_migrates_to_sensor_controlled_fast_lin(self):
+        base = PaintProcessConfig()
+        flat = PaintProcessSettingsMapper.to_flat_dict(base)
+        flat["pickup_contact_mode"] = "servo_contact"
+
+        restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
+
+        self.assertEqual(
+            "sensor_controlled_fast_lin",
+            restored.pickup_motion.pickup_contact_mode,
+        )
 
     def test_sensor_controlled_fast_lin_settings_round_trip(self):
         base = PaintProcessConfig()

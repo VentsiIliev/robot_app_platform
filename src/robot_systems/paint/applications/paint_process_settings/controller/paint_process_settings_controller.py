@@ -13,9 +13,9 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
     PaintProcessSettingsView,
 )
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
-    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
 )
 
 _CONTACT_MODE_KEYS = ("pickup_contact_mode",)
@@ -101,7 +101,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
                 self._model.current_settings.magazine_load.pickup_mode,
             )
         ).strip().lower()
-        if mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+        if mode != MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return True
         group_id = str(
             flat.get(
@@ -151,8 +151,8 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             )
         ).strip().lower()
         magazine_servo_selected = magazine_mode in {
-            MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
         }
         if not calibration_servo_selected and not magazine_servo_selected:
             return True
@@ -167,7 +167,7 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
 
     @staticmethod
     def _is_servo_contact(value: object) -> bool:
-        return str(value or "").strip().lower() == PICKUP_CONTACT_MODE_SERVO_CONTACT
+        return str(value or "").strip().lower() == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
 
     def _current_contact_mode(self, key: str) -> str:
         pickup = self._model.current_settings.pickup_motion

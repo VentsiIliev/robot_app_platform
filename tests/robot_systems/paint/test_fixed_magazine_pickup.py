@@ -2,9 +2,9 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
-    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
     PaintMagazineLoadConfig,
     PaintProcessConfig,
 )
@@ -56,7 +56,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
                 fixed_approach_pose=fixed_pose,
                 fixed_position_tolerance_mm=1.0,
                 fixed_orientation_tolerance_deg=0.5,
-                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+                magazine_pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             )
 
         self.assertTrue(ok, message)
@@ -74,7 +74,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         })
 
         self.assertEqual(
-            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             restored.magazine_load.pickup_mode,
         )
 
@@ -84,13 +84,13 @@ class TestFixedMagazinePickup(unittest.TestCase):
             "magazine_load": {},
         })
 
-        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT, restored.magazine_load.pickup_mode)
+        self.assertEqual(MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN, restored.magazine_load.pickup_mode)
 
     def test_fixed_group_settings_round_trip_through_ui_mapper(self):
         base = PaintProcessConfig()
         flat = PaintProcessSettingsMapper.to_flat_dict(base)
         flat.update({
-            "magazine_pickup_mode": MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            "magazine_pickup_mode": MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             "magazine_fixed_pickup_group_id": "Magazine Pickup Taught",
             "magazine_fixed_pickup_position_tolerance_mm": 1.5,
             "magazine_fixed_pickup_orientation_tolerance_deg": 0.75,
@@ -98,7 +98,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
 
         restored = PaintProcessSettingsMapper.from_flat_dict(flat, base)
 
-        self.assertEqual(MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT, restored.magazine_load.pickup_mode)
+        self.assertEqual(MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN, restored.magazine_load.pickup_mode)
         self.assertEqual("Magazine Pickup Taught", restored.magazine_load.fixed_pickup_group_id)
         self.assertEqual(1.5, restored.magazine_load.fixed_pickup_position_tolerance_mm)
         self.assertEqual(0.75, restored.magazine_load.fixed_pickup_orientation_tolerance_deg)
@@ -110,7 +110,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         service._magazine_load_service = load_service
         config = PaintMagazineLoadConfig(
             enabled=True,
-            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             fixed_pickup_group_id="Magazine Fixed Pickup",
         )
         ctx = self._context(service, config)
@@ -131,7 +131,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         service._consume_verified_prepositioned_start_group.return_value = True
         config = PaintMagazineLoadConfig(
             enabled=True,
-            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             fixed_pickup_group_id="Magazine Fixed Pickup",
         )
         ctx = self._context(service, config)
@@ -158,7 +158,7 @@ class TestFixedMagazinePickup(unittest.TestCase):
         service._magazine_load_service = load_service
         config = PaintMagazineLoadConfig(
             enabled=True,
-            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             release_z_mm=50.0,
         )
         process_config = PaintProcessConfig(magazine_load=config)

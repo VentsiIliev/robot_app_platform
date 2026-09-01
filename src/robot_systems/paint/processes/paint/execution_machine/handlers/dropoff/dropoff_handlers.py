@@ -99,7 +99,7 @@ def execute_dropoff_preparation_for_executor(executor: object) -> tuple[bool, st
         if not opened:
             return False, message
 
-    if getattr(executor, "_last_pickup_contact_mode", None) == "servo_contact":
+    if getattr(executor, "_last_pickup_contact_mode", None) == "sensor_controlled_fast_lin":
         segments, final_pose = build_ordered_dropoff_preparation_segments(executor)
         if not segments:
             return False, "Pivot paint finished, but ordered dropoff preparation could not be built"
@@ -848,7 +848,9 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
 
     config = executor._paint_process_config()
     register = getattr(executor._robot_service, "register_motion_corridor", None)
-    current_getter = getattr(executor._robot_service, "get_current_position", None)
+    current_getter = getattr(executor._robot_service, "get_current_position_fresh", None)
+    if not callable(current_getter):
+        current_getter = getattr(executor._robot_service, "get_current_position", None)
     if not callable(register) or not callable(current_getter):
         return False, "Plate-layout bounded transit is unavailable"
     try:
@@ -887,6 +889,18 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
     except (TypeError, ValueError, NotImplementedError):
         _logger.exception("[PLATE_LAYOUT] Failed to register bounded transit corridor")
         return False, "Plate-layout bounded transit corridor could not be registered"
+    _logger.info(
+        "[PLATE_LAYOUT] Registered bounded transit corridor=%s current_xyz=%s "
+        "bounds=x[%.3f, %.3f] y[%.3f, %.3f] z[%.3f, %.3f]",
+        corridor.corridor_id,
+        [round(float(value), 3) for value in current_pose[:3]],
+        corridor.x_min,
+        corridor.x_max,
+        corridor.y_min,
+        corridor.y_max,
+        corridor.z_min,
+        corridor.entry_z_max,
+    )
 
     if not executor._motion.move_pickup_phase(
         "Moving through plate center before dropoff",

@@ -281,7 +281,7 @@ class PaintProductionService:
             mode = str(getattr(magazine, "pickup_mode", "") or "").strip().lower()
             group_id = (
                 magazine.fixed_pickup_group_id
-                if mode == "fixed_group_servo_contact"
+                if mode == "fixed_group_sensor_controlled_fast_lin"
                 else magazine.magazine_group_id
             )
             velocity = float(magazine.move_to_magazine_vel_percent)

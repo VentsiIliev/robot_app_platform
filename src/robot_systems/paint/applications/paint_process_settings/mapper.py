@@ -6,6 +6,8 @@ from src.robot_systems.paint.processes.paint.config import (
     PaintNavigationReturnConfig,
     PaintProcessConfig,
     PickupMotionConfig,
+    normalize_magazine_pickup_mode,
+    normalize_pickup_contact_mode,
 )
 
 
@@ -386,7 +388,7 @@ class PaintProcessSettingsMapper:
             initial_lift_clearance_mm=float(
                 flat.get("pickup_initial_lift_clearance_mm", base.pickup_motion.initial_lift_clearance_mm)
             ),
-            pickup_contact_mode=str(
+            pickup_contact_mode=normalize_pickup_contact_mode(
                 flat.get("pickup_contact_mode", base.pickup_motion.pickup_contact_mode)
             ),
             servo_contact_linear_mm_s=float(
@@ -614,7 +616,7 @@ class PaintProcessSettingsMapper:
         magazine = replace(
             base.magazine_load,
             enabled=bool(flat.get("magazine_load_enabled", base.magazine_load.enabled)),
-            pickup_mode=str(
+            pickup_mode=normalize_magazine_pickup_mode(
                 flat.get("magazine_pickup_mode", base.magazine_load.pickup_mode)
             ),
             fixed_pickup_group_id=str(

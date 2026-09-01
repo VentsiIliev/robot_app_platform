@@ -35,9 +35,9 @@ from src.robot_systems.paint.applications.paint_process_settings.view.paint_proc
     build_paint_process_settings_tabs,
 )
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
-    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
 )
 
 
@@ -947,7 +947,7 @@ class PaintProcessSettingsView(IApplicationView):
     def _update_magazine_mode_field_visibility(self, mode: object) -> None:
         fixed_group = (
             str(mode or "").strip().lower()
-            == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+            == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
         )
         self._set_setting_fields_visible(_FIXED_MAGAZINE_ONLY_KEYS, fixed_group)
         self._set_setting_fields_visible(_VISION_MAGAZINE_ONLY_KEYS, not fixed_group)
@@ -956,11 +956,11 @@ class PaintProcessSettingsView(IApplicationView):
         pickup_mode = str(values.get(_PICKUP_CONTACT_MODE_KEY, "")).strip().lower()
         magazine_mode = str(values.get(_MAGAZINE_PICKUP_MODE_KEY, "")).strip().lower()
         enabled = (
-            pickup_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT
+            pickup_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
             or magazine_mode
             in {
-                MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-                MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+                MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+                MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
             }
         )
         self._set_setting_fields_visible(_SENSOR_CONTROLLED_FAST_LIN_KEYS, enabled)

@@ -18,11 +18,11 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODE_VISION_PLANNED,
-    MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
     PICKUP_CONTACT_MODE_PLANNED,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
 )
 from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
     build_magazine_pickup_release_segments,
@@ -187,10 +187,10 @@ def execute_magazine_pickup_release(
     if magazine_pickup_mode == MAGAZINE_PICKUP_MODE_VISION_PLANNED:
         contact_mode = PICKUP_CONTACT_MODE_PLANNED
     elif magazine_pickup_mode in {
-        MAGAZINE_PICKUP_MODE_VISION_SERVO_CONTACT,
-        MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+        MAGAZINE_PICKUP_MODE_VISION_SENSOR_CONTROLLED_FAST_LIN,
+        MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     }:
-        contact_mode = PICKUP_CONTACT_MODE_SERVO_CONTACT
+        contact_mode = PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN
     else:
         return False, f"Invalid magazine pickup mode: {magazine_pickup_mode}"
     ordered_segments = build_magazine_pickup_release_segments(transfer_waypoints)
@@ -222,11 +222,11 @@ def execute_magazine_pickup_release(
             # exact fixed pose and performs the safety verification immediately
             # before servo descent.  Rejecting here prevented that correction.
         ok, msg = executor._motion.turn_vacuum_on(
-            required=contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            required=contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
         )
         if not ok:
             return False, msg
-        if contact_mode == PICKUP_CONTACT_MODE_SERVO_CONTACT:
+        if contact_mode == PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN:
             ok, msg = _execute_magazine_servo_contact_pickup_release(
                 executor,
                 transfer_waypoints,
@@ -647,7 +647,7 @@ def handle_magazine_execute_pickup_release(ctx: PaintExecutionContext) -> PaintE
 
     load_service = ctx.production_service._magazine_load_service
     pickup_mode = str(ctx.magazine_config.pickup_mode or "").strip().lower()
-    is_fixed_group = pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+    is_fixed_group = pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
     resume_from_current_pose = ctx.consume_resume_retry()
     if is_fixed_group and resume_from_current_pose:
         _logger.info(

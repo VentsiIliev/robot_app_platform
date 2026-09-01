@@ -22,7 +22,7 @@ from src.robot_systems.paint.processes.paint.execute.pickup_executor import (
 from src.robot_systems.paint.processes.paint.config import (
     PICKUP_CONTACT_MODE_HEIGHT_MEASURE,
     PICKUP_CONTACT_MODE_PLANNED,
-    PICKUP_CONTACT_MODE_SERVO_CONTACT,
+    PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine_load.magazine_execute_pickup_release_handler import (
     _execute_magazine_servo_contact_pickup_release,
@@ -189,7 +189,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
             ),
             vacuum_on_before_moves=True,
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[0, 0, 100, 0, 0, 0],
         )
@@ -398,7 +398,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("stage", [10, 0, 50, 0, 0, 0], 10, 10, "ptp", 0),
             ),
             vacuum_on_before_moves=True,
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[0, 0, 100, 0, 0, 0],
         )
@@ -464,7 +464,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("lift", [0, 0, 50, 0, 0, 0], 10, 10),
                 PickupWaypoint("stage", [10, 0, 50, 0, 0, 0], 10, 10),
             ),
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[0, 0, 100, 0, 0, 0],
         )
@@ -501,7 +501,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("lift", [1, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
                 PickupWaypoint("align", [1, 2, 100, 0, 0, 45], 10, 10, "ptp", 0),
             ),
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[9, 9, 100, 0, 0, 0],
         )
@@ -561,7 +561,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("Safe travel waypoint 1", [50, 60, 150, 170, 5, 25], 80, 60, "ptp", 20),
                 PickupWaypoint("stage", [100, 120, 150, 180, 0, 0], 80, 60, "ptp", 0),
             ),
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[1, 2, 20, 180, 0, 15],
         )
@@ -616,7 +616,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("Safe travel waypoint 1", [50, 60, 150, 170, 5, 25], 80, 60, "ptp", 20),
                 PickupWaypoint("Moving to staging offset before first pivot contact pose", [100, 120, 150, 180, 0, 0], 80, 60, "ptp", 0),
             ),
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[1, 2, 20, 180, 0, 15],
         )
@@ -659,7 +659,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("lift", [1, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
                 PickupWaypoint("stage", [10, 2, 50, 0, 0, 3], 10, 10, "ptp", 0),
             ),
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
             retract_reference_pose=[9, 9, 100, 0, 0, 0],
         )
@@ -692,7 +692,7 @@ class ServoContactPickupExecutorTest(unittest.TestCase):
                 PickupWaypoint("contact", [0, 0, 0, 0, 0, 0], 10, 10),
             ),
             vacuum_on_before_moves=True,
-            contact_mode=PICKUP_CONTACT_MODE_SERVO_CONTACT,
+            contact_mode=PICKUP_CONTACT_MODE_SENSOR_CONTROLLED_FAST_LIN,
             contact_waypoint_index=1,
         )
 

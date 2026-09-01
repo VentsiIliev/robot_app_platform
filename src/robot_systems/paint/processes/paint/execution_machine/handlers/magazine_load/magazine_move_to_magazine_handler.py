@@ -9,7 +9,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.magazine
 )
 from src.robot_systems.paint.processes.paint.execution_machine.state import PaintExecutionState
 from src.robot_systems.paint.processes.paint.config import (
-    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT,
+    MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
     MAGAZINE_PICKUP_MODES,
 )
 
@@ -34,7 +34,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
     if not ctx.magazine_group:
         group_id = (
             config.fixed_pickup_group_id
-            if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+            if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
             else config.magazine_group_id
         )
         ctx.magazine_group = str(group_id or "").strip()
@@ -49,12 +49,12 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
 
     position_tolerance = (
         float(config.fixed_pickup_position_tolerance_mm)
-        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
         else 2.0
     )
     orientation_tolerance = (
         float(config.fixed_pickup_orientation_tolerance_deg)
-        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
         else 2.0
     )
     if service._consume_verified_prepositioned_start_group(
@@ -63,7 +63,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         orientation_tolerance_deg=orientation_tolerance,
     ) is True:
         _logger.info("[MAGAZINE_LOAD] Reusing verified prepositioned group '%s'", ctx.magazine_group)
-        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+        if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
             return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
         service._restore_capture_view("after verifying prepositioned magazine pickup")
         return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
@@ -84,7 +84,7 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
             f"Move to magazine group '{ctx.magazine_group}' failed",
         )
     _logger.info("[MAGAZINE_LOAD] Moved to magazine group '%s'", ctx.magazine_group)
-    if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SERVO_CONTACT:
+    if pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN:
         return PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE
     service._restore_capture_view("after reaching magazine pickup")
     return PaintExecutionState.MAGAZINE_WAIT_CAMERA_SETTLE
