@@ -14,6 +14,7 @@ from src.robot_systems.paint.processes.paint.plate_layout import (
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow.pickup_handler import (
     _should_preplan_dropoff_in_ordered_chain,
+    _workpiece_footprint_mm,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _execute_plate_layout_preparation,
@@ -34,6 +35,29 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
+    def test_workpiece_footprint_sides_follow_held_tool_axes(self) -> None:
+        execution_plan = MagicMock()
+        execution_plan.execution_paths.return_value = [[
+            [-10.0, -30.0],
+            [10.0, -30.0],
+            [10.0, 30.0],
+            [-10.0, 30.0],
+        ]]
+
+        width_at_zero, height_at_zero = _workpiece_footprint_mm(
+            execution_plan,
+            workpiece_rz_deg=0.0,
+        )
+        width_at_ninety, height_at_ninety = _workpiece_footprint_mm(
+            execution_plan,
+            workpiece_rz_deg=90.0,
+        )
+
+        self.assertAlmostEqual(20.0, width_at_zero)
+        self.assertAlmostEqual(60.0, height_at_zero)
+        self.assertAlmostEqual(60.0, width_at_ninety)
+        self.assertAlmostEqual(20.0, height_at_ninety)
+
     def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(
             plate_use_center_waypoint=False,
@@ -234,8 +258,8 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
         self.assertEqual(2, executor._motion.move_ordered_pickup_sequence.call_count)
-        self.assertIsNone(executor._last_prepositioned_start_group)
-        executor._robot_service.unwind_joint6.assert_called_once()
+        self.assertEqual("Start", executor._last_prepositioned_start_group)
+        executor._robot_service.unwind_joint6.assert_not_called()
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()

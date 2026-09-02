@@ -1121,19 +1121,11 @@ def _execute_plate_layout_ordered_release(
     ):
         return False, "Workpiece released, but plate-layout ordered exit chain failed"
     if next_cycle_start is not None:
-        if bool(dropoff.plate_distribute_unwind):
-            if not executor._robot_service.unwind_joint6(
-                blocking=True,
-                queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-                vel=executor._paint_process_config().navigation_return.unwind_vel_percent,
-                acc=executor._paint_process_config().navigation_return.unwind_acc_percent,
-            ):
-                return False, "Plate route completed, but final Joint 6 unwind failed at next-cycle start"
-        # Do not mark this group as prepositioned.  The cleanup unwind may leave
-        # an equivalent Cartesian orientation on a different continuous branch,
-        # and issuing an immediate restore races the backend slot release.  The
-        # next cycle owns the exact start-group move and its verification.
-        executor._last_prepositioned_start_group = None
+        # The next cycle verifies the fresh Cartesian pose before trusting this
+        # marker.  A valid distributed-route endpoint avoids commanding the
+        # same group a second time; an endpoint outside tolerance still takes
+        # the normal correction-move path.
+        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
     _logger.info("[DROPOFF] strategy=plate_layout ordered entry/release/exit completed")
     return True, ""
 
