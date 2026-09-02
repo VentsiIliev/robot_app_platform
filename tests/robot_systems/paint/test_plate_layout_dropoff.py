@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from src.robot_systems.paint.processes.paint.config import PaintDropoffConfig
@@ -18,6 +19,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
     _execute_plate_layout_preparation,
     _execute_plate_layout_ordered_release,
     _plate_route_poses_with_distributed_unwind,
+    _plate_route_uses_center,
     _wait_for_motion_slot_idle,
 )
 
@@ -32,6 +34,39 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
+    def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
+        dropoff = SimpleNamespace(
+            plate_use_center_waypoint=False,
+            plate_corners=[[0.0, 0.0, 0.0, 180.0, 0.0, 0.0]],
+        )
+        reservation = SimpleNamespace(
+            transit_pose=[100.0, 100.0, 50.0, 180.0, 0.0, 0.0],
+            release_pose=[25.0, 25.0, 10.0, 180.0, 0.0, 0.0],
+        )
+
+        self.assertTrue(_plate_route_uses_center(dropoff, reservation))
+
+    def test_automatic_center_route_is_skipped_outside_half_corner_to_center_radius(self) -> None:
+        dropoff = SimpleNamespace(
+            plate_use_center_waypoint=False,
+            plate_corners=[[0.0, 0.0, 0.0, 180.0, 0.0, 0.0]],
+        )
+        reservation = SimpleNamespace(
+            transit_pose=[100.0, 100.0, 50.0, 180.0, 0.0, 0.0],
+            release_pose=[150.0, 150.0, 10.0, 180.0, 0.0, 0.0],
+        )
+
+        self.assertFalse(_plate_route_uses_center(dropoff, reservation))
+
+    def test_explicit_center_route_setting_forces_center_for_far_position(self) -> None:
+        dropoff = SimpleNamespace(
+            plate_use_center_waypoint=True,
+            plate_corners=[],
+        )
+        reservation = SimpleNamespace(transit_pose=[], release_pose=[])
+
+        self.assertTrue(_plate_route_uses_center(dropoff, reservation))
+
     def test_plate_entry_waits_for_two_inactive_motion_status_samples(self) -> None:
         executor = MagicMock()
         executor._robot_service.get_execution_status.side_effect = [
@@ -192,10 +227,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertTrue(ok, message)
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
-        self.assertEqual([1, 0.0], [item["blendR"] for item in entry])
-        self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
-        self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
-        self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
+        self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
+        self.assertEqual([4, 5, 0.0], [item["blendR"] for item in exit_chain])
+        self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])
+        self.assertIn("center to calculated dropoff", entry[-1]["label"])
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
         self.assertEqual(2, executor._motion.move_ordered_pickup_sequence.call_count)

@@ -974,6 +974,45 @@ def _plate_route_poses_with_distributed_unwind(
     return poses
 
 
+def _plate_route_uses_center(dropoff: object, reservation: object) -> bool:
+    """Select the safer center route for placements near the bottom-left corner."""
+    if bool(dropoff.plate_use_center_waypoint):
+        _logger.info("[PLATE_LAYOUT] Center waypoint enabled explicitly")
+        return True
+
+    try:
+        bottom_left = [float(value) for value in dropoff.plate_corners[0][:2]]
+        center = [float(value) for value in reservation.transit_pose[:2]]
+        release = [float(value) for value in reservation.release_pose[:2]]
+    except (AttributeError, IndexError, TypeError, ValueError):
+        raise ValueError(
+            "Plate-layout automatic center routing requires valid bottom-left, center, "
+            "and release XY coordinates"
+        ) from None
+    if (
+        len(bottom_left) != 2
+        or len(center) != 2
+        or len(release) != 2
+        or not all(math.isfinite(value) for value in bottom_left + center + release)
+    ):
+        raise ValueError(
+            "Plate-layout automatic center routing requires valid bottom-left, center, "
+            "and release XY coordinates"
+        )
+
+    center_radius_mm = 0.5 * math.dist(bottom_left, center)
+    release_distance_mm = math.dist(bottom_left, release)
+    use_center = release_distance_mm <= center_radius_mm
+    _logger.info(
+        "[PLATE_LAYOUT] Automatic center route release_distance_from_bottom_left_mm=%.3f "
+        "radius_mm=%.3f use_center=%s",
+        release_distance_mm,
+        center_radius_mm,
+        use_center,
+    )
+    return use_center
+
+
 def _execute_plate_layout_ordered_release(
     executor: object,
     *,
@@ -989,6 +1028,10 @@ def _execute_plate_layout_ordered_release(
     gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
     if error:
         return False, error
+    try:
+        use_center_waypoint = _plate_route_uses_center(dropoff, reservation)
+    except ValueError as exc:
+        return False, str(exc)
     route_poses = {
         "entry_gate": list(gate_pose),
         "entry_center": list(reservation.transit_pose),
@@ -1006,7 +1049,7 @@ def _execute_plate_layout_ordered_release(
                 center_pose=reservation.transit_pose,
                 dropoff_pose=reservation.release_pose,
                 next_start_pose=None if next_cycle_start is None else list(next_cycle_start["position"]),
-                use_center_waypoint=bool(dropoff.plate_use_center_waypoint),
+                use_center_waypoint=use_center_waypoint,
             )
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
@@ -1016,7 +1059,7 @@ def _execute_plate_layout_ordered_release(
         route_poses["entry_gate"],
         _plate_motion_profile(dropoff, "entry_gate"),
     )]
-    if bool(dropoff.plate_use_center_waypoint):
+    if use_center_waypoint:
         entry_segments.append(_plate_ordered_segment(
             "Plate entry: passage gate to plate center",
             route_poses["entry_center"],
@@ -1025,7 +1068,7 @@ def _execute_plate_layout_ordered_release(
     entry_segments.append(_plate_ordered_segment(
         (
             "Plate entry: center to calculated dropoff"
-            if bool(dropoff.plate_use_center_waypoint)
+            if use_center_waypoint
             else "Plate entry: passage gate to calculated dropoff"
         ),
         route_poses["dropoff"],
@@ -1050,7 +1093,7 @@ def _execute_plate_layout_ordered_release(
         return False, message
 
     exit_segments = []
-    if bool(dropoff.plate_use_center_waypoint):
+    if use_center_waypoint:
         exit_segments.append(_plate_ordered_segment(
             "Plate exit: dropoff to plate center",
             route_poses["exit_center"],
@@ -1059,7 +1102,7 @@ def _execute_plate_layout_ordered_release(
     exit_segments.append(_plate_ordered_segment(
         (
             "Plate exit: plate center to passage gate"
-            if bool(dropoff.plate_use_center_waypoint)
+            if use_center_waypoint
             else "Plate exit: dropoff to passage gate"
         ),
         route_poses["exit_gate"],
