@@ -162,6 +162,7 @@ def build_process_groups() -> list[SettingGroup]:
             SettingField("dropoff_plate_robot_frame", _t("Captured Robot Frame"), "paint_pose_display", default=_t("Not captured")),
             SettingField("dropoff_plate_passage_gate", _t("Plate Passage Gate Pose"), "line_edit", default=""),
             SettingField("dropoff_plate_capture_passage_gate", _t("Capture Passage Gate From Current Pose"), "paint_action_button", default=_t("Capture Passage Gate From Current Pose")),
+            _toggle("dropoff_plate_use_center_waypoint", "Use Plate Center Waypoint", True),
             _profile_table("dropoff_plate_motion_profiles", "Plate Dropoff Moves (Execution Order)", [
                 _profile("entry_gate", "1. Paint Detach to Passage Gate", 70.0, 50.0, "ptp", 20.0),
                 _profile("entry_center", "2. Passage Gate to Plate Center", 70.0, 50.0, "ptp", 20.0),

@@ -54,6 +54,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_robot_tool=7,
             plate_robot_user=3,
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_use_center_waypoint=False,
             plate_motion_profiles=[
                 {"key": "entry_gate", "vel_percent": 11, "acc_percent": 21, "motion_type": "ptp", "blendR": 1},
                 {"key": "entry_center", "vel_percent": 12, "acc_percent": 22, "motion_type": "ptp", "blendR": 2},
@@ -75,6 +76,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
         self.assertEqual([200, 100, 180, 180, 0, 0], restored.dropoff.plate_passage_gate_pose)
+        self.assertFalse(restored.dropoff.plate_use_center_waypoint)
         self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
 
     def test_requires_exactly_four_corners_without_fallback(self) -> None:
@@ -97,6 +99,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             strategy="plate_layout",
             plate_corners=_corners(),
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_use_center_waypoint=False,
             plate_margin_left_mm=10.0,
             plate_margin_right_mm=10.0,
             plate_margin_bottom_mm=10.0,
@@ -130,6 +133,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             strategy="plate_layout",
             plate_corners=_corners(),
             plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
+            plate_use_center_waypoint=False,
             plate_approach_clearance_mm=40.0,
             plate_motion_profiles=[
                 {"key": "entry_gate", "vel_percent": 11, "acc_percent": 21, "motion_type": "ptp", "blendR": 1},
@@ -163,9 +167,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertTrue(ok, message)
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
-        self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
-        self.assertEqual([4, 5, 0.0], [item["blendR"] for item in exit_chain])
-        self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])
+        self.assertEqual([1, 0.0], [item["blendR"] for item in entry])
+        self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
+        self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
+        self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()

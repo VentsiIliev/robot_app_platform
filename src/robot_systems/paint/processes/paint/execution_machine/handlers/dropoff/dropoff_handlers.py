@@ -845,15 +845,21 @@ def _execute_plate_layout_ordered_release(
             "Plate entry: paint detach to passage gate", gate_pose,
             _plate_motion_profile(dropoff, "entry_gate"),
         ),
-        _plate_ordered_segment(
+    ]
+    if bool(dropoff.plate_use_center_waypoint):
+        entry_segments.append(_plate_ordered_segment(
             "Plate entry: passage gate to plate center", reservation.transit_pose,
             _plate_motion_profile(dropoff, "entry_center"),
+        ))
+    entry_segments.append(_plate_ordered_segment(
+        (
+            "Plate entry: center to calculated dropoff"
+            if bool(dropoff.plate_use_center_waypoint)
+            else "Plate entry: passage gate to calculated dropoff"
         ),
-        _plate_ordered_segment(
-            "Plate entry: center to calculated dropoff", reservation.release_pose,
-            _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
-        ),
-    ]
+        reservation.release_pose,
+        _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
+    ))
     if not executor._motion.move_ordered_pickup_sequence(
         "Plate-layout ordered entry chain", entry_segments
     ):
@@ -869,17 +875,22 @@ def _execute_plate_layout_ordered_release(
     if not ok:
         return False, message
 
-    exit_segments = [
-        _plate_ordered_segment(
+    exit_segments = []
+    if bool(dropoff.plate_use_center_waypoint):
+        exit_segments.append(_plate_ordered_segment(
             "Plate exit: dropoff to plate center", reservation.transit_pose,
             _plate_motion_profile(dropoff, "exit_center"),
+        ))
+    exit_segments.append(_plate_ordered_segment(
+        (
+            "Plate exit: plate center to passage gate"
+            if bool(dropoff.plate_use_center_waypoint)
+            else "Plate exit: dropoff to passage gate"
         ),
-        _plate_ordered_segment(
-            "Plate exit: plate center to passage gate", gate_pose,
-            _plate_motion_profile(dropoff, "exit_gate"),
-            stop=next_cycle_start is None,
-        ),
-    ]
+        gate_pose,
+        _plate_motion_profile(dropoff, "exit_gate"),
+        stop=next_cycle_start is None,
+    ))
     if next_cycle_start is not None:
         exit_segments.append(_plate_ordered_segment(
             f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'",

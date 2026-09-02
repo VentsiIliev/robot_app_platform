@@ -201,6 +201,7 @@ class PaintDropoffConfig:
     plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
     plate_robot_user: int = -1
     plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
+    plate_use_center_waypoint: bool = True  # [LIVE SETTINGS]
     plate_motion_profiles: list[dict] = field(default_factory=lambda: [
         {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
         {"key": "entry_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},

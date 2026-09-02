@@ -174,6 +174,7 @@
     "Captured Robot Frame": "Записана роботна рамка",
     "Plate Passage Gate Pose": "Поза на входа към плочата",
     "Capture Passage Gate From Current Pose": "Запиши входа към плочата от текущата поза",
+    "Use Plate Center Waypoint": "Използвай точка в центъра на плочата",
     "Plate Dropoff Moves (Execution Order)": "Движения за разтоварване върху плочата (ред на изпълнение)",
     "1. Paint End to Plate Center": "1. От края на боядисването до центъра на плочата",
     "1. Paint Detach to Passage Gate": "1. От отделянето след боядисване до входа",
