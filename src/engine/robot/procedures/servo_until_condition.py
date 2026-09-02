@@ -1291,12 +1291,11 @@ class ServoUntilConditionProcedure:
         if not math.isfinite(acceleration) or not 0.0 < acceleration <= 100.0:
             return False, "invalid_retract_fast_lin_acceleration"
 
-        configured_target = self._valid_pose(retract.target_pose)
-        target_pose = (
-            list(configured_target)
-            if configured_target is not None
-            else list(current_pose[:6])
-        )
+        # Fast-LIN retract is a pure vertical escape from the detected contact
+        # pose.  A configured target pose supplies the reference Z only; using
+        # its XY here disagrees with MotionService, which deliberately anchors
+        # every non-Z component to a fresh live pose for this safety operation.
+        target_pose = list(current_pose[:6])
         target_pose[2] = float(target_z)
         verification_target = tuple(float(value) for value in target_pose[:6])
         mover = getattr(self._robot, "move_fast_linear", None)
@@ -1328,6 +1327,9 @@ class ServoUntilConditionProcedure:
         if not accepted:
             detail = outcome.get("detail") or outcome.get("error") or outcome.get("result") or "failed"
             return False, f"fast_lin_failed:{detail}"
+        effective_target = self._valid_pose(outcome.get("commanded_position"))
+        if effective_target is not None:
+            verification_target = tuple(effective_target)
 
         _logger.info(
             "[SERVO_UNTIL_CONDITION] Fast LIN retract accepted asynchronously "

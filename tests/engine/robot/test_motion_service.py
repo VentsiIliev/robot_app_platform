@@ -166,6 +166,10 @@ class TestMotionService(unittest.TestCase):
             [100.2, 49.8, 20.0, 1.0, 2.0, 3.0],
             self.robot.move_fast_linear.call_args.kwargs["position"],
         )
+        self.assertEqual(
+            [100.2, 49.8, 20.0, 1.0, 2.0, 3.0],
+            result["commanded_position"],
+        )
 
     def test_authorized_fast_linear_retract_accepts_positive_start_z(self):
         self.robot.get_current_position_fresh.return_value = [100.2, 49.8, 4.0, 1.0, 2.0, 3.0]

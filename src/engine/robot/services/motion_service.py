@@ -570,7 +570,11 @@ class MotionService(IMotionService):
         if not callable(mover):
             return None
         try:
-            return mover(**driver_kwargs)
+            outcome = mover(**driver_kwargs)
+            if isinstance(outcome, dict):
+                outcome = dict(outcome)
+                outcome["commanded_position"] = [float(value) for value in position[:6]]
+            return outcome
         except Exception:
             self._logger.exception("move_fast_linear failed")
             return {"success": False, "error": "platform_fast_linear_failed"}

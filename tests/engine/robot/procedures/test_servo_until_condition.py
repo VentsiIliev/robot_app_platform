@@ -384,7 +384,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertTrue(result.retracted)
-        self.assertEqual(robot.fast_linear_request["position"], [9.0, 9.0, 35.0, 0.0, 0.0, 0.0])
+        self.assertEqual(robot.fast_linear_request["position"], [1.0, 2.0, 35.0, 180.0, 0.0, 7.0])
         self.assertEqual(robot.fast_linear_request["tool"], 1)
         self.assertEqual(robot.fast_linear_request["user"], 2)
         self.assertEqual(robot.fast_linear_request["vel"], 70.0)
@@ -400,7 +400,7 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                 self.position_reads += 1
                 if self.position_reads < 5:
                     return [0.0, 0.0, 5.0, 0.0, 0.0, 0.0]
-                return [9.0, 9.0, 35.0, 0.0, 0.0, 0.0]
+                return [0.0, 0.0, 35.0, 0.0, 0.0, 0.0]
 
             def move_fast_linear(self, **_kwargs):
                 return {
@@ -975,6 +975,44 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
                 }
 
         procedure = ServoUntilConditionProcedure(MutatingRobot(), lambda: True)
+
+        success, message = procedure._retract_fast_linear(
+            current_pose=[10.0, 20.0, 3.0, 0.0, 0.0, 0.0],
+            target_z=35.0,
+            tolerance=2.0,
+            retract=ServoRetractConfig(
+                motion_type="fast_lin",
+                poll_interval_s=0.001,
+                timeout_s=0.05,
+            ),
+            cfg=ServoUntilConditionConfig(),
+            cancel_requested=None,
+        )
+
+        self.assertTrue(success, message)
+        self.assertEqual(message, "")
+
+    def test_fast_lin_retract_verifies_motion_service_effective_target(self):
+        class ReanchoringRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.pose = [13.0, 24.0, 35.0, 0.0, 0.0, 0.0]
+
+            def get_current_position(self):
+                return list(self.pose)
+
+            def move_fast_linear(self, **_kwargs):
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": False,
+                    "queued": False,
+                    "task_id": 20,
+                    "commanded_position": [13.0, 24.0, 35.0, 0.0, 0.0, 0.0],
+                }
+
+        procedure = ServoUntilConditionProcedure(ReanchoringRobot(), lambda: True)
 
         success, message = procedure._retract_fast_linear(
             current_pose=[10.0, 20.0, 3.0, 0.0, 0.0, 0.0],
