@@ -14,12 +14,16 @@ class IDryerService(IDryerController, IHealthCheckable):
         """Construct and initialize the configured dryer controller."""
 
     @abstractmethod
+    def enable_async(self) -> bool:
+        """Start controller construction and initialization without blocking."""
+
+    @abstractmethod
     def disable(self) -> None:
         """Release dryer hardware resources and reject commands."""
 
     @abstractmethod
     def is_enabled(self) -> bool:
-        """Return whether the dryer currently has an active controller."""
+        """Return whether the dryer is enabled or currently initializing."""
 
     @abstractmethod
     def is_healthy(self) -> bool:

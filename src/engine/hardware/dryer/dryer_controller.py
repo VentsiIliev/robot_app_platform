@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Mapping
 
@@ -38,11 +39,13 @@ class DryerController(IDryerController):
         self._status_poll_interval_s = max(0.0, float(status_poll_interval_s))
         self._command_settle_s = max(0.0, float(command_settle_s))
         self._max_retries = max(0, int(max_retries))
+        self._initialization_cancelled = threading.Event()
         self._register_map.require_contiguous()
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def initialize(self) -> bool:
         """Write persisted defaults, then command the dryer to its next position."""
+        self._initialization_cancelled.clear()
         if not self.write_data(DryerWriteData.from_config(self._config)):
             return False
         if not self.next_position():
@@ -55,6 +58,9 @@ class DryerController(IDryerController):
         fresh_cycle_observed = False
         unhealthy_since: float | None = None
         while True:
+            if self._initialization_cancelled.is_set():
+                self._logger.info("[DRYER] Initialization cancelled")
+                return False
             state = self.get_state()
             now = time.monotonic()
             self._logger.info(
@@ -90,6 +96,7 @@ class DryerController(IDryerController):
             time.sleep(self._status_poll_interval_s)
 
     def shutdown(self) -> None:
+        self._initialization_cancelled.set()
         self._transport.disconnect()
 
     def update_config(self, config: DryerConfig) -> None:

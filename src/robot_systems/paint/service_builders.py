@@ -117,22 +117,8 @@ def build_dryer_service(ctx):
             )
 
         service = DryerService(build_controller, dryer_config)
-        if binding.enabled and not service.enable():
-            from src.engine.hardware.peripherals import PeripheralBinding
-
-            disabled = PeripheralBinding(
-                slave_id=binding.slave_id,
-                enabled=False,
-                inputs=binding.inputs,
-                outputs=binding.outputs,
-                commands=binding.commands,
-                statuses=binding.statuses,
-            )
-            ctx.settings.save(
-                SettingsID.PERIPHERALS,
-                PeripheralConfig({**peripheral_config.peripherals, "dryer": disabled}),
-            )
-            _logger.error("Dryer disabled after initialization failure: %s", service.last_error)
+        if binding.enabled and not service.enable_async():
+            _logger.error("Dryer asynchronous initialization could not be started")
         return service
     except Exception:
         _logger.exception("Dryer service could not be built; continuing without it")

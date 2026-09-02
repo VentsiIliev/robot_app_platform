@@ -43,6 +43,11 @@ class DryerReleaseCoordinator:
                 "[DRYER_RELEASE] Dryer disabled; skipping NEXT_POSITION/EJECT sequence"
             )
             return True
+        if not self._dryer_healthy():
+            self._logger.error(
+                "[DRYER_RELEASE] Dryer is enabled but not ready; refusing release sequence"
+            )
+            return False
         with self._lock:
             if self._stopped or self._sequence_active or not self._last_sequence_succeeded:
                 return False
@@ -71,6 +76,13 @@ class DryerReleaseCoordinator:
         if not self._dryer_enabled():
             self._logger.info("[DRYER_RELEASE] Dryer disabled; readiness check bypassed")
             return True, ""
+        if not self._dryer_healthy():
+            reason = str(
+                getattr(self._dryer, "last_error", None)
+                or "Dryer is enabled but not ready"
+            )
+            self._logger.error("[DRYER_RELEASE] Dropoff refused: %s", reason)
+            return False, reason
         self._completion.wait()
         with self._lock:
             ready = not self._sequence_active and self._last_sequence_succeeded
@@ -168,6 +180,17 @@ class DryerReleaseCoordinator:
             self._logger.exception("[DRYER_RELEASE] Failed to read dryer enabled state")
             # Fail closed when an enabled-state provider exists but is unreadable.
             return True
+
+    def _dryer_healthy(self) -> bool:
+        """Fail closed while a managed dryer is initializing or unhealthy."""
+        getter = getattr(self._dryer, "is_healthy", None)
+        if not callable(getter):
+            return True
+        try:
+            return bool(getter())
+        except Exception:
+            self._logger.exception("[DRYER_RELEASE] Failed to read dryer health state")
+            return False
 
     def _wait_for_next_position_cycle(
         self,
