@@ -72,6 +72,7 @@ _PLATE_DROPOFF_ONLY_KEYS = {
     "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
     "dropoff_plate_passage_gate", "dropoff_plate_capture_passage_gate",
     "dropoff_plate_use_center_waypoint",
+    "dropoff_plate_distribute_unwind",
     "dropoff_plate_release_z_offset_mm", "dropoff_plate_approach_clearance_mm",
     "dropoff_plate_margin_left_mm", "dropoff_plate_margin_right_mm",
     "dropoff_plate_margin_bottom_mm", "dropoff_plate_margin_top_mm",

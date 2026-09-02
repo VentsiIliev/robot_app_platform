@@ -175,6 +175,7 @@
     "Plate Passage Gate Pose": "Поза на входа към плочата",
     "Capture Passage Gate From Current Pose": "Запиши входа към плочата от текущата поза",
     "Use Plate Center Waypoint": "Използвай точка в центъра на плочата",
+    "Distribute Joint 6 Unwind Across Plate Route": "Разпредели развиването на ос 6 по маршрута към плочата",
     "Plate Dropoff Moves (Execution Order)": "Движения за разтоварване върху плочата (ред на изпълнение)",
     "1. Paint End to Plate Center": "1. От края на боядисването до центъра на плочата",
     "1. Paint Detach to Passage Gate": "1. От отделянето след боядисване до входа",

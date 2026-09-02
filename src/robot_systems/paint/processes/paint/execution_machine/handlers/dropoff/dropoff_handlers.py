@@ -855,6 +855,61 @@ def _plate_ordered_segment(label: str, pose: list[float], profile: dict, *, stop
     }
 
 
+def _plate_route_poses_with_distributed_unwind(
+    executor: object,
+    *,
+    gate_pose: list[float],
+    center_pose: list[float],
+    dropoff_pose: list[float],
+    next_start_pose: list[float] | None,
+) -> dict[str, list[float]]:
+    poses = {
+        "entry_gate": list(gate_pose),
+        "entry_center": list(center_pose),
+        "dropoff": list(dropoff_pose),
+        "exit_center": list(center_pose),
+        "exit_gate": list(gate_pose),
+    }
+    if next_start_pose is not None:
+        poses["next_start"] = list(next_start_pose)
+    getter = getattr(executor._robot_service, "get_current_position_fresh", None)
+    if not callable(getter):
+        getter = getattr(executor._robot_service, "get_current_position", None)
+    try:
+        current = list(getter() or []) if callable(getter) else []
+    except Exception:
+        _logger.exception("[PLATE_LAYOUT] Could not read pose for distributed unwind")
+        current = []
+    rotation_index = int(executor._contact_motion_config.rotation_index)
+    if rotation_index < 0 or len(current) <= rotation_index:
+        raise ValueError("Plate-layout distributed unwind requires a valid current rotation pose")
+    start_rotation = float(current[rotation_index])
+    canonical = ((start_rotation + 180.0) % 360.0) - 180.0
+    unwind_shift = canonical - start_rotation
+    direction = -1.0 if unwind_shift < 0.0 else 1.0
+    step = 90.0 * direction
+    rotations = {
+        "entry_gate": start_rotation + step,
+        "entry_center": start_rotation + step,
+        "dropoff": start_rotation + (2.0 * step),
+        "exit_center": start_rotation + (2.0 * step),
+        "exit_gate": start_rotation + (3.0 * step),
+        "next_start": start_rotation + (4.0 * step),
+    }
+    for key, pose in poses.items():
+        if len(pose) <= rotation_index:
+            raise ValueError(f"Plate-layout route pose '{key}' has no configured rotation axis")
+        pose[rotation_index] = rotations[key]
+    _logger.info(
+        "[PLATE_LAYOUT] Distributed unwind start=%.3f canonical=%.3f step=%.3f targets=%s",
+        start_rotation,
+        canonical,
+        step,
+        {key: round(value, 3) for key, value in rotations.items() if key in poses},
+    )
+    return poses
+
+
 def _execute_plate_layout_ordered_release(
     executor: object,
     *,
@@ -870,15 +925,36 @@ def _execute_plate_layout_ordered_release(
     gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
     if error:
         return False, error
+    route_poses = {
+        "entry_gate": list(gate_pose),
+        "entry_center": list(reservation.transit_pose),
+        "dropoff": list(reservation.release_pose),
+        "exit_center": list(reservation.transit_pose),
+        "exit_gate": list(gate_pose),
+    }
+    if next_cycle_start is not None:
+        route_poses["next_start"] = list(next_cycle_start["position"])
+    if bool(dropoff.plate_distribute_unwind):
+        try:
+            route_poses = _plate_route_poses_with_distributed_unwind(
+                executor,
+                gate_pose=gate_pose,
+                center_pose=reservation.transit_pose,
+                dropoff_pose=reservation.release_pose,
+                next_start_pose=None if next_cycle_start is None else list(next_cycle_start["position"]),
+            )
+        except (TypeError, ValueError):
+            _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
+            return False, "Plate-layout distributed unwind route could not be built"
     entry_segments = [
         _plate_ordered_segment(
-            "Plate entry: paint detach to passage gate", gate_pose,
+            "Plate entry: paint detach to passage gate", route_poses["entry_gate"],
             _plate_motion_profile(dropoff, "entry_gate"),
         ),
     ]
     if bool(dropoff.plate_use_center_waypoint):
         entry_segments.append(_plate_ordered_segment(
-            "Plate entry: passage gate to plate center", reservation.transit_pose,
+            "Plate entry: passage gate to plate center", route_poses["entry_center"],
             _plate_motion_profile(dropoff, "entry_center"),
         ))
     entry_segments.append(_plate_ordered_segment(
@@ -887,7 +963,7 @@ def _execute_plate_layout_ordered_release(
             if bool(dropoff.plate_use_center_waypoint)
             else "Plate entry: passage gate to calculated dropoff"
         ),
-        reservation.release_pose,
+        route_poses["dropoff"],
         _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
     ))
     if not executor._motion.move_ordered_pickup_sequence(
@@ -908,7 +984,7 @@ def _execute_plate_layout_ordered_release(
     exit_segments = []
     if bool(dropoff.plate_use_center_waypoint):
         exit_segments.append(_plate_ordered_segment(
-            "Plate exit: dropoff to plate center", reservation.transit_pose,
+            "Plate exit: dropoff to plate center", route_poses["exit_center"],
             _plate_motion_profile(dropoff, "exit_center"),
         ))
     exit_segments.append(_plate_ordered_segment(
@@ -917,14 +993,14 @@ def _execute_plate_layout_ordered_release(
             if bool(dropoff.plate_use_center_waypoint)
             else "Plate exit: dropoff to passage gate"
         ),
-        gate_pose,
+        route_poses["exit_gate"],
         _plate_motion_profile(dropoff, "exit_gate"),
         stop=next_cycle_start is None,
     ))
     if next_cycle_start is not None:
         exit_segments.append(_plate_ordered_segment(
             f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'",
-            list(next_cycle_start["position"]),
+            route_poses["next_start"],
             _plate_motion_profile(dropoff, "gate_to_next_start"),
             stop=True,
         ))
@@ -933,6 +1009,13 @@ def _execute_plate_layout_ordered_release(
     ):
         return False, "Workpiece released, but plate-layout ordered exit chain failed"
     if next_cycle_start is not None:
+        if bool(dropoff.plate_distribute_unwind) and not executor._robot_service.unwind_joint6(
+            blocking=True,
+            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+            vel=executor._paint_process_config().navigation_return.unwind_vel_percent,
+            acc=executor._paint_process_config().navigation_return.unwind_acc_percent,
+        ):
+            return False, "Plate route completed, but final Joint 6 unwind failed at next-cycle start"
         if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff exit completed, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
@@ -948,6 +1031,10 @@ def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
         return False, "Plate-layout dropoff has no active reservation"
 
     config = executor._paint_process_config()
+    if bool(config.dropoff.plate_distribute_unwind):
+        _logger.info("[PLATE_LAYOUT] Deferring Joint 6 unwind until distributed plate route completes")
+        executor._dropoff_unwind_prepared = True
+        return True, ""
     if not executor._robot_service.unwind_joint6(
         blocking=True,
         queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,

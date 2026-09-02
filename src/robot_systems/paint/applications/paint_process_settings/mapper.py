@@ -310,6 +310,7 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_robot_user": dropoff.plate_robot_user,
             "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_passage_gate_pose),
             "dropoff_plate_use_center_waypoint": dropoff.plate_use_center_waypoint,
+            "dropoff_plate_distribute_unwind": dropoff.plate_distribute_unwind,
             "dropoff_plate_motion_profiles": [dict(profile) for profile in dropoff.plate_motion_profiles],
             "dropoff_plate_robot_frame": (
                 f"Tool {dropoff.plate_robot_tool}, User {dropoff.plate_robot_user}"
@@ -605,6 +606,9 @@ class PaintProcessSettingsMapper:
             ),
             plate_use_center_waypoint=bool(flat.get(
                 "dropoff_plate_use_center_waypoint", base.dropoff.plate_use_center_waypoint
+            )),
+            plate_distribute_unwind=bool(flat.get(
+                "dropoff_plate_distribute_unwind", base.dropoff.plate_distribute_unwind
             )),
             plate_motion_profiles=PaintProcessSettingsMapper._normalize_plate_motion_profiles(
                 flat.get("dropoff_plate_motion_profiles"), base.dropoff.plate_motion_profiles
