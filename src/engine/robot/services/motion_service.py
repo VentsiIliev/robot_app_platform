@@ -93,12 +93,13 @@ class MotionService(IMotionService):
                                acceleration)
             driver_started = time.perf_counter()
 
-            ret = self._robot.move_ptp(
+            ret = self._robot.move_linear(
                 position,
                 tool,
                 user,
                 velocity,
                 acceleration,
+                0.0,
                 blocking=wait_to_reach
             )
 
