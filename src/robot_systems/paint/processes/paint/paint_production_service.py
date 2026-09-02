@@ -242,6 +242,16 @@ class PaintProductionService:
         cycle_index: int,
         repeats_after_success: bool = False,
     ) -> tuple[bool, str]:
+        cycle_strategy = self._effective_dropoff_strategy(process_config, cycle_index)
+        set_cycle_strategy = getattr(self._path_executor, "set_cycle_dropoff_strategy", None)
+        if callable(set_cycle_strategy):
+            set_cycle_strategy(cycle_strategy)
+        _logger.info(
+            "[DRYING_MODE] cycle=%d effective_dropoff_strategy=%s alternating_demo=%s",
+            cycle_index,
+            cycle_strategy or "configured",
+            bool(getattr(getattr(process_config, "dropoff", None), "alternate_drying_demo", False)),
+        )
         context = PaintExecutionContext(
             production_service=self,
             stop_requested=should_stop,
@@ -262,6 +272,8 @@ class PaintProductionService:
             with self._active_context_lock:
                 if self._active_execution_context is context:
                     self._active_execution_context = None
+            if callable(set_cycle_strategy):
+                set_cycle_strategy(None)
 
         snapshot = machine.get_snapshot()
         if snapshot.last_error is not None:
@@ -271,6 +283,15 @@ class PaintProductionService:
             return False, snapshot.last_error
 
         return context.result_ok, context.result_message
+
+    @staticmethod
+    def _effective_dropoff_strategy(process_config, cycle_index: int) -> str | None:
+        dropoff = getattr(process_config, "dropoff", None)
+        if dropoff is None:
+            return None
+        if bool(getattr(dropoff, "alternate_drying_demo", False)):
+            return "movement_group" if int(cycle_index) % 2 == 1 else "plate_layout"
+        return str(getattr(dropoff, "strategy", "movement_group") or "movement_group").strip().lower()
 
     def _next_cycle_start_target(self, ctx: PaintExecutionContext) -> dict | None:
         if not ctx.repeats_after_success:

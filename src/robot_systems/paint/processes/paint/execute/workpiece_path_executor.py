@@ -15,7 +15,7 @@ still being split into smaller collaborators:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Optional
 
 import numpy as np
@@ -389,6 +389,7 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         self._last_pickup_contact_mode: str | None = None
         self._last_safe_travel_error: str = ""
         self._paint_process_config_snapshot: PaintProcessConfig = PAINT_PROCESS_CONFIG
+        self._cycle_dropoff_strategy: str | None = None
         self._active_execution_control = None
 
     def _is_vacuum_pump_enabled(self) -> bool:
@@ -470,17 +471,36 @@ class PaintWorkpiecePathExecutor(IWorkpiecePathExecutor):
         service = self._paint_process_config_service
         if service is None:
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
+            self._apply_cycle_dropoff_strategy()
             return
         try:
             self._paint_process_config_snapshot = scale_paint_process_accelerations(
                 service.get_snapshot()
             )
+            self._apply_cycle_dropoff_strategy()
             self._enable_vacuum_pump = bool(self._paint_process_config_snapshot.enable_vacuum_pump)
             if self._pickup_condition_provider is not None:
                 self._pickup_condition = self._pickup_condition_provider()
         except Exception:
             _logger.debug("[PAINT_CONFIG] Failed to refresh paint process settings", exc_info=True)
             self._paint_process_config_snapshot = PAINT_PROCESS_CONFIG
+            self._apply_cycle_dropoff_strategy()
+
+    def _apply_cycle_dropoff_strategy(self) -> None:
+        if self._cycle_dropoff_strategy is None:
+            return
+        self._paint_process_config_snapshot = replace(
+            self._paint_process_config_snapshot,
+            dropoff=replace(
+                self._paint_process_config_snapshot.dropoff,
+                strategy=self._cycle_dropoff_strategy,
+            ),
+        )
+
+    def set_cycle_dropoff_strategy(self, strategy: str | None) -> None:
+        """Override the persisted strategy for one production cycle."""
+        self._cycle_dropoff_strategy = str(strategy).strip().lower() if strategy else None
+        self._refresh_paint_process_config_snapshot()
 
     def _paint_process_config(self) -> PaintProcessConfig:
         return self._paint_process_config_snapshot or PAINT_PROCESS_CONFIG

@@ -103,7 +103,8 @@ class PaintDashboardController(
         self._workers.clear()
 
     def _on_start(self) -> None:
-        if self._model.get_drying_mode() == "auto":
+        drying_mode = self._model.get_drying_mode()
+        if drying_mode in {"auto", "demo"}:
             state = self._model.get_dryer_state()
             if not bool(state.get("available", False)):
                 if self._confirm_development_dryer_bypass(state):
@@ -134,7 +135,7 @@ class PaintDashboardController(
                 self._dryer_start_pending = True
                 self._view.set_action_enabled("start", False)
                 self._run_background(
-                    self._model.enable_dryer_and_set_auto_mode,
+                    self._dryer_enable_command(drying_mode),
                     self._on_dryer_enabled_for_start,
                 )
                 return
@@ -203,11 +204,12 @@ class PaintDashboardController(
             self._view.set_auxiliary_state(device_id, bool(enabled))
 
     def _on_drying_mode(self, mode: str) -> None:
-        if str(mode).strip().lower() == "auto":
+        normalized_mode = str(mode).strip().lower()
+        if normalized_mode in {"auto", "demo"}:
             state = self._model.get_dryer_state()
             if not bool(state.get("available", False)):
                 if self._confirm_development_dryer_bypass(state):
-                    self._start_drying_mode_change("auto")
+                    self._start_drying_mode_change(normalized_mode)
                     return
                 self._view.show_warning(
                     self._t("Drying Mode"),
@@ -227,15 +229,20 @@ class PaintDashboardController(
                 )
                 if not confirmed:
                     if self._confirm_development_dryer_bypass(state):
-                        self._start_drying_mode_change("auto")
+                        self._start_drying_mode_change(normalized_mode)
                     return
                 self._view.set_drying_mode_busy(True)
                 self._run_background(
-                    self._model.enable_dryer_and_set_auto_mode,
+                    self._dryer_enable_command(normalized_mode),
                     self._on_drying_mode_finished,
                 )
                 return
         self._start_drying_mode_change(mode)
+
+    def _dryer_enable_command(self, mode: str):
+        if mode == "auto":
+            return self._model.enable_dryer_and_set_auto_mode
+        return partial(self._model.enable_dryer_and_set_auto_mode, mode)
 
     def _start_drying_mode_change(self, mode: str) -> None:
         self._view.set_drying_mode_busy(True)

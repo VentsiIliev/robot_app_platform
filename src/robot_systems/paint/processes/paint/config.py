@@ -174,6 +174,9 @@ class PaintDropoffConfig:
 
     # Return from pivot completion back to the pickup align pose before release.
     strategy: str = "movement_group"
+    # Dashboard demo mode alternates the effective strategy per production cycle,
+    # starting with movement_group and then plate_layout.
+    alternate_drying_demo: bool = False
     allow_sub_zero_dropoff: bool = False  # [LIVE SETTINGS]
     # Safety corridor used only when the configured Dropoff pose is below Z=0.
     corridor_x_margin_mm: float = 70.0

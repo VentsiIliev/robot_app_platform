@@ -157,17 +157,23 @@ class PaintQuickControlsPanel(QWidget):
         self.cable_relief_requested.emit()
 
     def _on_drying_mode(self) -> None:
-        self.drying_mode_requested.emit("manual" if self._drying_mode == "auto" else "auto")
+        next_mode = {"auto": "manual", "manual": "demo", "demo": "auto"}
+        self.drying_mode_requested.emit(next_mode[self._drying_mode])
 
     def set_drying_mode(self, mode: str) -> None:
-        self._drying_mode = "manual" if str(mode).lower() == "manual" else "auto"
+        normalized = str(mode).lower()
+        self._drying_mode = normalized if normalized in {"auto", "manual", "demo"} else "auto"
         self._update_drying_mode_text()
 
     def set_drying_mode_busy(self, busy: bool) -> None:
         self._drying_mode_button.setEnabled(not busy)
 
     def _update_drying_mode_text(self) -> None:
-        text = self.tr("Manual Dry") if self._drying_mode == "manual" else self.tr("Auto Dry")
+        text = {
+            "auto": self.tr("Auto Dry"),
+            "manual": self.tr("Manual Dry"),
+            "demo": self.tr("Demo Alternate"),
+        }[self._drying_mode]
         self._drying_mode_button.setText(text)
 
     def set_unmatched_paint_settings(self, settings: dict) -> None:

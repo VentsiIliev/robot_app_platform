@@ -299,7 +299,7 @@ class TestPaintDashboardUi(unittest.TestCase):
         panel.set_device_busy("fan", False)
         self.assertTrue(panel._off_buttons["fan"].isEnabled())
 
-    def test_quick_drying_mode_button_switches_between_auto_and_manual(self) -> None:
+    def test_quick_drying_mode_button_cycles_auto_manual_demo(self) -> None:
         panel = PaintQuickControlsPanel([])
         callback = MagicMock()
         panel.drying_mode_requested.connect(callback)
@@ -310,6 +310,11 @@ class TestPaintDashboardUi(unittest.TestCase):
 
         callback.reset_mock()
         panel.set_drying_mode("manual")
+        panel._drying_mode_button.click()
+        callback.assert_called_once_with("demo")
+
+        callback.reset_mock()
+        panel.set_drying_mode("demo")
         panel._drying_mode_button.click()
         callback.assert_called_once_with("auto")
 

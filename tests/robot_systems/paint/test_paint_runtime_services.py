@@ -105,6 +105,45 @@ class TestPaintDashboardService(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual("plate_layout", config_service.save.call_args.args[0].dropoff.strategy)
 
+    def test_demo_drying_mode_persists_alternation_starting_with_auto(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig()
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.set_drying_mode("demo")
+
+        self.assertTrue(result.success)
+        saved_dropoff = config_service.save.call_args.args[0].dropoff
+        self.assertTrue(saved_dropoff.alternate_drying_demo)
+        self.assertEqual("movement_group", saved_dropoff.strategy)
+
+    def test_demo_drying_mode_resolves_odd_auto_and_even_manual_cycles(self) -> None:
+        from src.robot_systems.paint.processes.paint.paint_production_service import (
+            PaintProductionService,
+        )
+
+        config = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(alternate_drying_demo=True)
+        )
+
+        self.assertEqual(
+            "movement_group",
+            PaintProductionService._effective_dropoff_strategy(config, 1),
+        )
+        self.assertEqual(
+            "plate_layout",
+            PaintProductionService._effective_dropoff_strategy(config, 2),
+        )
+        self.assertEqual(
+            "movement_group",
+            PaintProductionService._effective_dropoff_strategy(config, 3),
+        )
+
     def test_drying_mode_cannot_change_while_running(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.RUNNING

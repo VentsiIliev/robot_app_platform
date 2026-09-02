@@ -118,7 +118,7 @@ class StubPaintDashboardService(IPaintDashboardService):
         return self._drying_mode
 
     def set_drying_mode(self, mode: str) -> DashboardCommandResult:
-        if mode not in {"auto", "manual"}:
+        if mode not in {"auto", "manual", "demo"}:
             return DashboardCommandResult(False, "Invalid drying mode.")
         self._drying_mode = mode
         return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
@@ -132,9 +132,9 @@ class StubPaintDashboardService(IPaintDashboardService):
             "development_bypass_allowed": False,
         }
 
-    def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:
-        self._drying_mode = "auto"
-        return DashboardCommandResult(True, "Drying mode changed to auto.")
+    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
+        self._drying_mode = mode
+        return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return ContourTransformDebugResult(False, "No usable contour detected (stub service).")

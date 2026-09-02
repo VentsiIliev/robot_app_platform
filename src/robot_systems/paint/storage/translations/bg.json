@@ -38,7 +38,8 @@
     "OFF": "ИЗКЛ.",
     "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
     "Auto Dry": "Автоматично сушене",
-    "Manual Dry": "Ръчно сушене"
+    "Manual Dry": "Ръчно сушене",
+    "Demo Alternate": "Демо редуване"
   },
   "PaintDashboard": {
     "Painting": "Боядисване",

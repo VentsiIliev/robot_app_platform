@@ -311,7 +311,10 @@ class PaintDashboardService(IPaintDashboardService):
         service = self._paint_process_config_service
         if service is None:
             return "auto"
-        strategy = str(service.get_snapshot().dropoff.strategy or "movement_group").strip().lower()
+        dropoff = service.get_snapshot().dropoff
+        if bool(getattr(dropoff, "alternate_drying_demo", False)):
+            return "demo"
+        strategy = str(dropoff.strategy or "movement_group").strip().lower()
         return "manual" if strategy == "plate_layout" else "auto"
 
     def set_drying_mode(self, mode: str) -> DashboardCommandResult:
@@ -322,13 +325,20 @@ class PaintDashboardService(IPaintDashboardService):
         if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
             return DashboardCommandResult(False, "Stop the paint process before changing drying mode.")
         normalized = str(mode or "").strip().lower()
-        strategies = {"auto": "movement_group", "manual": "plate_layout"}
+        strategies = {"auto": "movement_group", "manual": "plate_layout", "demo": "movement_group"}
         strategy = strategies.get(normalized)
         if strategy is None:
             return DashboardCommandResult(False, "Invalid drying mode.")
         try:
             current = service.get_snapshot()
-            service.save(replace(current, dropoff=replace(current.dropoff, strategy=strategy)))
+            service.save(replace(
+                current,
+                dropoff=replace(
+                    current.dropoff,
+                    strategy=strategy,
+                    alternate_drying_demo=normalized == "demo",
+                ),
+            ))
         except Exception as exc:
             self._logger.exception("Could not save drying mode")
             return DashboardCommandResult(False, f"Could not save drying mode: {exc}")
@@ -365,7 +375,7 @@ class PaintDashboardService(IPaintDashboardService):
             "development_bypass_allowed": self._development_mode,
         }
 
-    def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:
+    def enable_dryer_and_set_auto_mode(self, mode: str = "auto") -> DashboardCommandResult:
         dryer = self._dryer_service
         if dryer is None:
             return DashboardCommandResult(False, "Dryer service is not available.")
@@ -387,7 +397,7 @@ class PaintDashboardService(IPaintDashboardService):
         except Exception as exc:
             self._logger.exception("Could not enable dryer")
             return DashboardCommandResult(False, f"Could not enable dryer: {exc}")
-        return self.set_drying_mode("auto")
+        return self.set_drying_mode(mode)
 
     def _robot_status_card(self) -> DashboardCardState:
         robot = self._robot_service

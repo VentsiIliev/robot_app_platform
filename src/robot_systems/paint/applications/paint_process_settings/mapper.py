@@ -295,6 +295,7 @@ class PaintProcessSettingsMapper:
             "cleanup_perpendicular_retreat_offset_mm": cleanup.perpendicular_retreat_offset_mm,
             "cleanup_second_pass_pivot_z_offset_mm": cleanup.second_pass_pivot_z_offset_mm,
             "dropoff_strategy": dropoff.strategy,
+            "dropoff_alternate_drying_demo": bool(dropoff.alternate_drying_demo),
             "dropoff_plate_bottom_left": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[0]) if len(dropoff.plate_corners) > 0 else "",
             "dropoff_plate_bottom_right": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[1]) if len(dropoff.plate_corners) > 1 else "",
             "dropoff_plate_top_right": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[2]) if len(dropoff.plate_corners) > 2 else "",
@@ -587,6 +588,12 @@ class PaintProcessSettingsMapper:
         )
         dropoff = replace(
             base.dropoff,
+            alternate_drying_demo=bool(
+                flat.get(
+                    "dropoff_alternate_drying_demo",
+                    base.dropoff.alternate_drying_demo,
+                )
+            ),
             strategy=(
                 "movement_group"
                 if str(flat.get("dropoff_strategy", base.dropoff.strategy)).strip().lower()
