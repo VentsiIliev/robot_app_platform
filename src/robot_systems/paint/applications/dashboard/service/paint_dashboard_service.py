@@ -38,6 +38,7 @@ class PaintDashboardService(IPaintDashboardService):
         fan_control=None,
         dryer_service=None,
         persist_dryer_enabled=None,
+        development_mode: bool = False,
         paint_process_config_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
@@ -51,6 +52,7 @@ class PaintDashboardService(IPaintDashboardService):
         self._paint_process_config_service = paint_process_config_service
         self._dryer_service = dryer_service
         self._persist_dryer_enabled = persist_dryer_enabled
+        self._development_mode = bool(development_mode)
         self._auxiliary_devices = {
             "pump": vacuum_pump,
             "fan": fan_control,
@@ -340,6 +342,7 @@ class PaintDashboardService(IPaintDashboardService):
                 "enabled": False,
                 "healthy": False,
                 "message": "Dryer service is not available.",
+                "development_bypass_allowed": self._development_mode,
             }
         try:
             enabled = bool(dryer.is_enabled())
@@ -352,12 +355,14 @@ class PaintDashboardService(IPaintDashboardService):
                 "enabled": False,
                 "healthy": False,
                 "message": f"Could not read dryer state: {exc}",
+                "development_bypass_allowed": self._development_mode,
             }
         return {
             "available": True,
             "enabled": enabled,
             "healthy": healthy,
             "message": message,
+            "development_bypass_allowed": self._development_mode,
         }
 
     def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:

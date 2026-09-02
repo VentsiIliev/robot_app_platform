@@ -62,6 +62,8 @@
     "Automatic drying requires the dryer. Do you want to enable it now?": "Автоматичното сушене изисква сушилнята. Искате ли да я включите сега?",
     "Dryer service is not available.": "Услугата за сушилнята не е налична.",
     "Dryer is not ready.": "Сушилнята не е готова.",
+    "Development Mode": "Режим за разработка",
+    "The dryer is disabled. Do you want to continue without automatic dryer commands?": "Сушилнята е изключена. Искате ли да продължите без автоматични команди към сушилнята?",
     "Command failed.": "Командата е неуспешна.",
     "Robot service is not available.": "Услугата за робота не е налична.",
     "Cable relief completed.": "Освобождаването на кабела завърши.",

@@ -149,6 +149,82 @@ class TestPaintDashboardController(unittest.TestCase):
             "Drying Mode", "Dryer initialization is in progress"
         )
 
+    def test_start_in_auto_mode_prompts_for_disabled_dryer(self):
+        model = MagicMock()
+        model.get_drying_mode.return_value = "auto"
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": False,
+            "healthy": False,
+            "message": "",
+        }
+        view = self._make_view()
+        view.ask_enable_dryer.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_start()
+
+        model.start.assert_not_called()
+        view.ask_enable_dryer.assert_called_once()
+        view.set_action_enabled.assert_called_once_with("start", False)
+        run_background.assert_called_once_with(
+            model.enable_dryer_and_set_auto_mode,
+            controller._on_dryer_enabled_for_start,
+        )
+
+    def test_successful_dryer_enable_continues_pending_start(self):
+        model = MagicMock()
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+        controller._active = True
+
+        controller._on_dryer_enabled_for_start(SimpleNamespace(success=True, message=""))
+
+        model.start.assert_called_once_with()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
+    def test_development_mode_can_confirm_start_without_disabled_dryer(self):
+        model = MagicMock()
+        model.get_drying_mode.return_value = "auto"
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": False,
+            "healthy": False,
+            "message": "",
+            "development_bypass_allowed": True,
+        }
+        running = DashboardState(process_state="running")
+        model.start.return_value = running
+        view = self._make_view()
+        view.ask_enable_dryer.return_value = False
+        view.ask_run_without_dryer.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        controller._on_start()
+
+        view.ask_enable_dryer.assert_called_once()
+        view.ask_run_without_dryer.assert_called_once()
+        model.start.assert_called_once_with()
+        view.apply_dashboard_state.assert_called_once_with(running)
+
     def test_init_wires_signals_and_mixin_setup(self) -> None:
         model = MagicMock()
         view = self._make_view()

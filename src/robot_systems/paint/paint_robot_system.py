@@ -519,6 +519,7 @@ class PaintRobotSystem(BaseRobotSystem):
             fan_control=self._fan,
             dryer_service=self._dryer,
             persist_dryer_enabled=self._persist_dryer_enabled,
+            development_mode=self.development_mode,
             paint_process_config_service=self._paint_process_config_service,
             target_point_name="camera",
             frame_name="calibration",

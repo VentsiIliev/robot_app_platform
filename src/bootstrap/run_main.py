@@ -143,6 +143,7 @@ def main() -> None:
             SystemBuilder()
             .with_robot(bootstrap_provider.build_robot())
             .with_messaging_service(ctx.messaging_service)
+            .with_development_mode(dev_skip_login)
             .build(bootstrap_provider.system_class)
         )
     except Exception:

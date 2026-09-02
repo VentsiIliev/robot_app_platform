@@ -47,6 +47,7 @@ class PaintDashboardController(
         self._dashboard_live_view_paused = False
         self._workers: list[tuple[QThread, _Worker]] = []
         self._pending_auxiliary: dict[str, bool] = {}
+        self._dryer_start_pending = False
         timer_parent = self._view if isinstance(self._view, QObject) else None
         self._status_timer = QTimer(timer_parent)
         self._status_timer.setInterval(1000)
@@ -102,7 +103,52 @@ class PaintDashboardController(
         self._workers.clear()
 
     def _on_start(self) -> None:
+        if self._model.get_drying_mode() == "auto":
+            state = self._model.get_dryer_state()
+            if not bool(state.get("available", False)):
+                if self._confirm_development_dryer_bypass(state):
+                    self._view.apply_dashboard_state(self._model.start())
+                    return
+                self._view.show_warning(
+                    self._t("Drying Mode"),
+                    self._t("Dryer service is not available."),
+                )
+                return
+            if bool(state.get("enabled", False)) and not bool(state.get("healthy", False)):
+                message = str(state.get("message") or self._t("Dryer is not ready."))
+                self._view.show_warning(self._t("Drying Mode"), message)
+                return
+            if not bool(state.get("healthy", False)):
+                confirmed = self._view.ask_enable_dryer(
+                    self._t("Enable Dryer"),
+                    self._t(
+                        "Automatic drying requires the dryer. Do you want to enable it now?"
+                    ),
+                )
+                if not confirmed:
+                    if self._confirm_development_dryer_bypass(state):
+                        self._view.apply_dashboard_state(self._model.start())
+                    return
+                if self._dryer_start_pending:
+                    return
+                self._dryer_start_pending = True
+                self._view.set_action_enabled("start", False)
+                self._run_background(
+                    self._model.enable_dryer_and_set_auto_mode,
+                    self._on_dryer_enabled_for_start,
+                )
+                return
         self._view.apply_dashboard_state(self._model.start())
+
+    def _on_dryer_enabled_for_start(self, result: object) -> None:
+        self._dryer_start_pending = False
+        if not self._view_ok():
+            return
+        if bool(getattr(result, "success", False)):
+            self._view.apply_dashboard_state(self._model.start())
+            return
+        self._view.apply_dashboard_state(self._model.load())
+        self._show_command_result(self._t("Drying Mode"), result)
 
     def _on_stop(self) -> None:
         self._view.apply_dashboard_state(self._model.stop_process())
@@ -160,6 +206,9 @@ class PaintDashboardController(
         if str(mode).strip().lower() == "auto":
             state = self._model.get_dryer_state()
             if not bool(state.get("available", False)):
+                if self._confirm_development_dryer_bypass(state):
+                    self._start_drying_mode_change("auto")
+                    return
                 self._view.show_warning(
                     self._t("Drying Mode"),
                     self._t("Dryer service is not available."),
@@ -177,6 +226,8 @@ class PaintDashboardController(
                     ),
                 )
                 if not confirmed:
+                    if self._confirm_development_dryer_bypass(state):
+                        self._start_drying_mode_change("auto")
                     return
                 self._view.set_drying_mode_busy(True)
                 self._run_background(
@@ -184,8 +235,24 @@ class PaintDashboardController(
                     self._on_drying_mode_finished,
                 )
                 return
+        self._start_drying_mode_change(mode)
+
+    def _start_drying_mode_change(self, mode: str) -> None:
         self._view.set_drying_mode_busy(True)
-        self._run_background(partial(self._model.set_drying_mode, mode), self._on_drying_mode_finished)
+        self._run_background(
+            partial(self._model.set_drying_mode, mode),
+            self._on_drying_mode_finished,
+        )
+
+    def _confirm_development_dryer_bypass(self, state: dict[str, object]) -> bool:
+        if not bool(state.get("development_bypass_allowed", False)):
+            return False
+        return self._view.ask_run_without_dryer(
+            self._t("Development Mode"),
+            self._t(
+                "The dryer is disabled. Do you want to continue without automatic dryer commands?"
+            ),
+        )
 
     def _on_drying_mode_finished(self, result: object) -> None:
         if not self._view_ok():

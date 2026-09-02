@@ -62,6 +62,8 @@
     "Automatic drying requires the dryer. Do you want to enable it now?": "Automatic drying requires the dryer. Do you want to enable it now?",
     "Dryer service is not available.": "Dryer service is not available.",
     "Dryer is not ready.": "Dryer is not ready.",
+    "Development Mode": "Development Mode",
+    "The dryer is disabled. Do you want to continue without automatic dryer commands?": "The dryer is disabled. Do you want to continue without automatic dryer commands?",
     "Command failed.": "Command failed.",
     "Robot service is not available.": "Robot service is not available.",
     "Cable relief completed.": "Cable relief completed.",

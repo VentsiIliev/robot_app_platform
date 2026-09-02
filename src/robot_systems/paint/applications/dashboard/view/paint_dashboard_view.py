@@ -530,6 +530,9 @@ class PaintDashboardView(IApplicationView):
     def ask_enable_dryer(self, title: str, message: str) -> bool:
         return ask_yes_no(self, title, message, default_no=True)
 
+    def ask_run_without_dryer(self, title: str, message: str) -> bool:
+        return ask_yes_no(self, title, message, default_no=True)
+
     def set_application_shortcuts(self, shortcuts: list) -> None:
         self._controls_widget.set_application_shortcuts(shortcuts)
 

@@ -124,7 +124,13 @@ class StubPaintDashboardService(IPaintDashboardService):
         return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
 
     def get_dryer_state(self) -> dict[str, object]:
-        return {"available": True, "enabled": True, "healthy": True, "message": ""}
+        return {
+            "available": True,
+            "enabled": True,
+            "healthy": True,
+            "message": "",
+            "development_bypass_allowed": False,
+        }
 
     def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:
         self._drying_mode = "auto"
