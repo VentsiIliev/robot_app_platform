@@ -570,7 +570,23 @@ class PaintPickupExecutor:
             discard_prepared()
             _logger.error("[PICKUP] Current pose unavailable after servo contact")
             return False
-        retract_z_error = abs(float(predicted_retract_pose[2]) - float(current_pose[2]))
+        retract_delta = [
+            float(current_pose[index]) - float(predicted_retract_pose[index])
+            for index in range(3)
+        ]
+        retract_xyz_error = math.sqrt(sum(delta * delta for delta in retract_delta))
+        retract_z_error = abs(retract_delta[2])
+        _logger.info(
+            "[PICKUP] Fast LIN retract settled "
+            "xyz_error_mm=%.3f dx_mm=%+.3f dy_mm=%+.3f dz_mm=%+.3f "
+            "target_xyz=%s current_xyz=%s",
+            retract_xyz_error,
+            retract_delta[0],
+            retract_delta[1],
+            retract_delta[2],
+            [round(float(value), 3) for value in predicted_retract_pose[:3]],
+            [round(float(value), 3) for value in current_pose[:3]],
+        )
         if retract_z_error > 2.0:
             discard_prepared()
             _logger.error(
@@ -593,6 +609,16 @@ class PaintPickupExecutor:
             )
             if not ok:
                 discard_prepared()
+                error = str(execution.get("error", "")) if isinstance(execution, dict) else ""
+                if error.startswith("prepared chain start mismatch:"):
+                    _logger.warning(
+                        "[PICKUP] %s; replanning continuation from live robot state",
+                        error,
+                    )
+                    ok = self._owner._motion.move_ordered_pickup_sequence(
+                        "Pickup lift and continuation after completed Fast LIN retract",
+                        combined_segments,
+                    )
         else:
             ok = self._owner._motion.move_ordered_pickup_sequence(
                 "Pickup lift and continuation after completed Fast LIN retract",

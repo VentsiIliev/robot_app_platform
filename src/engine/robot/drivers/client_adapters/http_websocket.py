@@ -1041,7 +1041,9 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             # Prepared execution returns a structured motion failure (for
             # example an active-drive cancellation) with HTTP 500. Preserve
             # that body so paint/process callers can report the real reason.
-            if suffix == "/execute" and isinstance(data, dict) and "state" in data:
+            if suffix == "/execute" and isinstance(data, dict) and (
+                "state" in data or "error" in data
+            ):
                 return data
             if self._response_failed(f"{method}_prepared_ordered_motion_chain", response, data):
                 return None

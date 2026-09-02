@@ -466,7 +466,19 @@ def _execute_magazine_servo_contact_pickup_release(
         if prepared_plan_id is not None:
             execution = executor._robot_service.execute_prepared_ordered_motion_chain(prepared_plan_id)
             if not _prepared_execution_succeeded(execution):
-                return False, f"Magazine {release_label} prepared release execution failed"
+                error = str(execution.get("error", "")) if isinstance(execution, dict) else ""
+                if not error.startswith("prepared chain start mismatch:"):
+                    return False, f"Magazine {release_label} prepared release execution failed"
+                _logger.warning(
+                    "[MAGAZINE_LOAD] %s; replanning release from live robot state",
+                    error,
+                )
+                discard_prepared()
+                if not executor._motion.move_ordered_pickup_sequence(
+                    f"Magazine {release_label} release after Fast LIN retract",
+                    release_segments,
+                ):
+                    return False, f"Magazine {release_label} mixed release execution failed"
             prepared_plan_id = None
         elif not executor._motion.move_ordered_pickup_sequence(
             f"Magazine {release_label} release after Fast LIN retract",

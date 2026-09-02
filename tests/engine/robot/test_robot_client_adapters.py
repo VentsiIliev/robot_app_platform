@@ -209,6 +209,27 @@ class TestRobotClientAdapters(unittest.TestCase):
         self.assertEqual(client.get_last_execute_path_response()["task_id"], 42)
         self.assertFalse(client.get_last_execute_path_response()["final"])
 
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.post")
+    @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
+    def test_prepared_start_mismatch_response_is_preserved(self, get_mock, post_mock):
+        health = MagicMock()
+        health.status_code = 200
+        health.json.return_value = {"status": "ok"}
+        get_mock.return_value = health
+        response = MagicMock()
+        response.status_code = 409
+        response.json.return_value = {
+            "success": False,
+            "error": "prepared chain start mismatch: xyz_error_mm=2.557",
+        }
+        post_mock.return_value = response
+
+        client = HttpWebSocketRobotClient(server_url="http://localhost:5000")
+
+        result = client.execute_prepared_ordered_motion_chain("plan-1")
+
+        self.assertEqual(result["error"], "prepared chain start mismatch: xyz_error_mm=2.557")
+
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.Session.get")
     @patch("src.engine.robot.drivers.client_adapters.http_websocket.requests.get")
     def test_partial_kinematics_snapshot_is_returned(self, get_mock, session_get_mock):
