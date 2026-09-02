@@ -78,7 +78,9 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             return
         if not self._dropoff_strategy_is_allowed(flat):
             if str(flat.get("dropoff_strategy", "")).strip().lower() == "plate_layout":
-                message = self._t("Plate layout requires four valid corners ordered BL, BR, TR, TL.")
+                message = self._t(
+                    "Plate layout requires four valid corners ordered BL, BR, TR, TL and a valid passage gate pose."
+                )
                 show_warning(self._view, self._t("Plate Layout Not Configured"), message)
                 self._view.set_status(message)
             else:
@@ -210,7 +212,10 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
         if strategy == "movement_group":
             return self._model.is_dropoff_movement_group_configured()
         if strategy == "plate_layout":
-            from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_corners
+            from src.robot_systems.paint.processes.paint.plate_layout import (
+                validate_plate_corners,
+                validate_plate_passage_gate,
+            )
             from src.robot_systems.paint.applications.paint_process_settings.mapper import PaintProcessSettingsMapper
             corners = [
                 PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
@@ -222,6 +227,12 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
                 )
             ]
             _, error = validate_plate_corners(corners)
+            if error:
+                return False
+            gate = PaintProcessSettingsMapper._pose_from_value(
+                flat.get("dropoff_plate_passage_gate", ""), []
+            )
+            _, error = validate_plate_passage_gate(gate)
             return not error
         return True
 
@@ -324,8 +335,13 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             self._view.set_status(message)
             return
         self._view.set_plate_corner(corner_key, position, tool, user)
+        captured_label = (
+            "Plate passage gate captured using Robot Settings tool {tool} and user {user}."
+            if corner_key == "dropoff_plate_passage_gate"
+            else "Plate corner captured using Robot Settings tool {tool} and user {user}."
+        )
         self._view.set_status(
-            self._t("Plate corner captured using Robot Settings tool {tool} and user {user}.").format(
+            self._t(captured_label).format(
                 tool=tool,
                 user=user,
             )

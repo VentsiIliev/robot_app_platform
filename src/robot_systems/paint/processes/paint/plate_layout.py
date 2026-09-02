@@ -44,6 +44,9 @@ class PlateLayoutService:
         corners, error = validate_plate_corners(config.plate_corners)
         if error:
             return None, error
+        gate_pose, error = validate_plate_passage_gate(config.plate_passage_gate_pose)
+        if error:
+            return None, error
         numeric = (
             config.plate_release_z_offset_mm, config.plate_approach_clearance_mm,
             config.plate_margin_left_mm, config.plate_margin_right_mm,
@@ -187,6 +190,16 @@ def validate_plate_corners(raw_corners) -> tuple[list[list[float]], str]:
     ):
         return [], "Plate-layout dropoff corners are not consistently ordered BL, BR, TR, TL"
     return corners, ""
+
+
+def validate_plate_passage_gate(raw_pose) -> tuple[list[float], str]:
+    try:
+        pose = [float(value) for value in list(raw_pose)[:6]]
+    except (TypeError, ValueError):
+        return [], "Plate-layout dropoff requires a valid six-axis passage gate pose"
+    if len(pose) != 6 or not all(math.isfinite(value) for value in pose):
+        return [], "Plate-layout dropoff requires a valid six-axis passage gate pose"
+    return pose, ""
 
 
 def _average_edge_length(a, b, c, d) -> float:

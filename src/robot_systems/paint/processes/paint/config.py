@@ -192,7 +192,6 @@ class PaintDropoffConfig:
     plate_corners: list[list[float]] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_release_z_offset_mm: float = 0.0  # [LIVE SETTINGS]
     plate_approach_clearance_mm: float = 50.0  # [LIVE SETTINGS]
-    plate_center_distributed_unwind_deg: float = 180.0  # [LIVE SETTINGS]
     plate_margin_left_mm: float = 10.0  # [LIVE SETTINGS]
     plate_margin_right_mm: float = 10.0  # [LIVE SETTINGS]
     plate_margin_bottom_mm: float = 10.0  # [LIVE SETTINGS]
@@ -201,10 +200,14 @@ class PaintDropoffConfig:
     plate_spacing_y_mm: float = 10.0  # [LIVE SETTINGS]
     plate_robot_tool: int = -1  # Captured Robot Settings frame metadata.
     plate_robot_user: int = -1
+    plate_passage_gate_pose: list[float] = field(default_factory=list)  # [LIVE SETTINGS]
     plate_motion_profiles: list[dict] = field(default_factory=lambda: [
-        {"key": "enter_plate_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
-        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
-        {"key": "return_plate_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
+        {"key": "entry_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "entry_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 0.0},
+        {"key": "exit_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "exit_gate", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "ptp", "blendR": 20.0},
+        {"key": "gate_to_next_start", "vel_percent": 60.0, "acc_percent": 40.0, "motion_type": "ptp", "blendR": 0.0},
     ])  # [LIVE SETTINGS]
 
 

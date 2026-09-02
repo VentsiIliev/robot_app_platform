@@ -15,9 +15,8 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow
     _should_preplan_dropoff_in_ordered_chain,
 )
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
-    _build_dropoff_release_plan,
     _execute_plate_layout_preparation,
-    _plate_center_pose_with_distributed_unwind,
+    _execute_plate_layout_ordered_release,
 )
 
 
@@ -54,11 +53,14 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_approach_clearance_mm=35.0,
             plate_robot_tool=7,
             plate_robot_user=3,
-            plate_center_distributed_unwind_deg=135.0,
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
             plate_motion_profiles=[
-                {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
+                {"key": "entry_gate", "vel_percent": 11, "acc_percent": 21, "motion_type": "ptp", "blendR": 1},
+                {"key": "entry_center", "vel_percent": 12, "acc_percent": 22, "motion_type": "ptp", "blendR": 2},
                 {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
-                {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
+                {"key": "exit_center", "vel_percent": 14, "acc_percent": 24, "motion_type": "ptp", "blendR": 4},
+                {"key": "exit_gate", "vel_percent": 15, "acc_percent": 25, "motion_type": "ptp", "blendR": 5},
+                {"key": "gate_to_next_start", "vel_percent": 16, "acc_percent": 26, "motion_type": "ptp", "blendR": 6},
             ],
         ))
 
@@ -72,7 +74,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(35.0, restored.dropoff.plate_approach_clearance_mm)
         self.assertEqual(7, restored.dropoff.plate_robot_tool)
         self.assertEqual(3, restored.dropoff.plate_robot_user)
-        self.assertEqual(135.0, restored.dropoff.plate_center_distributed_unwind_deg)
+        self.assertEqual([200, 100, 180, 180, 0, 0], restored.dropoff.plate_passage_gate_pose)
         self.assertEqual(config.dropoff.plate_motion_profiles, restored.dropoff.plate_motion_profiles)
 
     def test_requires_exactly_four_corners_without_fallback(self) -> None:
@@ -94,6 +96,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
             plate_margin_left_mm=10.0,
             plate_margin_right_mm=10.0,
             plate_margin_bottom_mm=10.0,
@@ -121,16 +124,20 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertAlmostEqual(50.0, reservation.transit_pose[2])
         self.assertTrue(reservation.has_space_for_same_footprint)
 
-    def test_release_plan_returns_to_plate_center_after_retract(self) -> None:
+    def test_ordered_release_uses_configured_entry_and_exit_chains(self) -> None:
         service = PlateLayoutService()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
             plate_approach_clearance_mm=40.0,
             plate_motion_profiles=[
-                {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
+                {"key": "entry_gate", "vel_percent": 11, "acc_percent": 21, "motion_type": "ptp", "blendR": 1},
+                {"key": "entry_center", "vel_percent": 12, "acc_percent": 22, "motion_type": "ptp", "blendR": 2},
                 {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
-                {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
+                {"key": "exit_center", "vel_percent": 14, "acc_percent": 24, "motion_type": "ptp", "blendR": 4},
+                {"key": "exit_gate", "vel_percent": 15, "acc_percent": 25, "motion_type": "ptp", "blendR": 5},
+                {"key": "gate_to_next_start", "vel_percent": 16, "acc_percent": 26, "motion_type": "ptp", "blendR": 6},
             ],
         ))
         service.reserve(
@@ -144,25 +151,28 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor = MagicMock()
         executor._paint_process_config.return_value = config
         executor._plate_layout_service = service
-        executor._dropoff_motion_corridor_id = "dropoff"
-        executor._contact_motion_config.rotation_index = 5
+        executor._motion.move_ordered_pickup_sequence.return_value = True
+        executor._motion.turn_vacuum_off.return_value = (True, "")
+        executor._enable_vacuum_pump = False
+        executor._is_vacuum_pump_enabled.return_value = False
+        executor._robot_service.get_current_position_fresh.return_value = [10, 20, 30, 180, 0, 0]
+        next_start = {"group_id": "Start", "position": [10, 20, 30, 180, 0, 0]}
 
-        plan = _build_dropoff_release_plan(executor)
+        ok, message = _execute_plate_layout_ordered_release(executor, next_cycle_start=next_start)
 
-        self.assertEqual(2, len(plan.waypoints))
-        self.assertEqual("Returning through plate center", plan.waypoints[-1].label)
-        self.assertEqual(service.pending.transit_pose, plan.waypoints[-1].pose)
-        self.assertTrue(all(item.corridor_id == "dropoff_plate_layout" for item in plan.waypoints))
-        self.assertEqual(
-            [(13, 23, 3), (15, 25, 5)],
-            [(item.vel_percent, item.acc_percent, item.blendR) for item in plan.waypoints],
-        )
+        self.assertTrue(ok, message)
+        entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
+        exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
+        self.assertEqual([1, 2, 0.0], [item["blendR"] for item in entry])
+        self.assertEqual([4, 5, 0.0], [item["blendR"] for item in exit_chain])
+        self.assertEqual(["ptp", "ptp", "linear"], [item["type"] for item in entry])
 
-    def test_preparation_registers_corridor_from_fresh_not_cached_pose(self) -> None:
+    def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()
         config = PaintProcessConfig(dropoff=PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
             plate_approach_clearance_mm=40.0,
         ))
         service.reserve(
@@ -176,57 +186,20 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor = MagicMock()
         executor._paint_process_config.return_value = config
         executor._plate_layout_service = service
-        executor._dropoff_motion_corridor_id = "dropoff"
-        executor._robot_service.get_current_position.return_value = [999, 999, 999, 0, 0, 0]
-        fresh_pose = [320, 210, 247, 180, 0, 0]
-        commanded_end_pose = [175, 212, 247, 180, 0, 0]
-        executor._last_process_end_pose = commanded_end_pose
-        executor._robot_service.get_current_position_fresh.return_value = fresh_pose
-        executor._motion.move_pickup_phase.return_value = True
         executor._robot_service.unwind_joint6.return_value = True
 
         ok, message = _execute_plate_layout_preparation(executor)
 
         self.assertTrue(ok, message)
-        corridor = executor._robot_service.register_motion_corridor.call_args.args[0]
-        self.assertTrue(corridor.contains_xyz(fresh_pose))
-        self.assertTrue(corridor.contains_xyz(commanded_end_pose))
-        self.assertTrue(corridor.contains_xyz([220, 211, 247, 180, 0, 0]))
-        self.assertEqual(-110.0, corridor.x_min)
-        self.assertEqual(330.0, corridor.x_max)
-        executor._robot_service.get_current_position.assert_not_called()
-
-    def test_center_lin_distributes_at_most_180_degrees_of_whole_turn_unwind(self) -> None:
-        executor = MagicMock()
-        executor._contact_motion_config.rotation_index = 5
-
-        target = _plate_center_pose_with_distributed_unwind(
-            executor,
-            [100, 200, 250, 180, 0, 720],
-            [500, -40, 100, 180, 0, 0],
-            180,
-        )
-
-        self.assertEqual(540.0, target[5])
-
-    def test_center_lin_keeps_nominal_rotation_when_no_whole_turn_is_present(self) -> None:
-        executor = MagicMock()
-        executor._contact_motion_config.rotation_index = 5
-
-        target = _plate_center_pose_with_distributed_unwind(
-            executor,
-            [100, 200, 250, 180, 0, 170],
-            [500, -40, 100, 180, 0, 0],
-            180,
-        )
-
-        self.assertEqual(0.0, target[5])
+        executor._robot_service.unwind_joint6.assert_called_once()
+        executor._motion.move_pickup_phase.assert_not_called()
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()
         config = PaintDropoffConfig(
             strategy="plate_layout",
             plate_corners=_corners(),
+            plate_passage_gate_pose=[200, 100, 180, 180, 0, 0],
             plate_margin_left_mm=10.0,
             plate_margin_right_mm=10.0,
             plate_margin_bottom_mm=10.0,

@@ -70,8 +70,8 @@ _PLATE_DROPOFF_ONLY_KEYS = {
     "dropoff_plate_top_right", "dropoff_plate_capture_top_right",
     "dropoff_plate_top_left", "dropoff_plate_capture_top_left",
     "dropoff_plate_robot_frame", "dropoff_plate_motion_profiles",
+    "dropoff_plate_passage_gate", "dropoff_plate_capture_passage_gate",
     "dropoff_plate_release_z_offset_mm", "dropoff_plate_approach_clearance_mm",
-    "dropoff_plate_center_distributed_unwind_deg",
     "dropoff_plate_margin_left_mm", "dropoff_plate_margin_right_mm",
     "dropoff_plate_margin_bottom_mm", "dropoff_plate_margin_top_mm",
     "dropoff_plate_spacing_x_mm", "dropoff_plate_spacing_y_mm",
@@ -958,6 +958,7 @@ class PaintProcessSettingsView(IApplicationView):
             "dropoff_plate_capture_bottom_right": "dropoff_plate_bottom_right",
             "dropoff_plate_capture_top_right": "dropoff_plate_top_right",
             "dropoff_plate_capture_top_left": "dropoff_plate_top_left",
+            "dropoff_plate_capture_passage_gate": "dropoff_plate_passage_gate",
         }
         if key in corner_actions and bool(value):
             self.capture_plate_corner_requested.emit(corner_actions[key])

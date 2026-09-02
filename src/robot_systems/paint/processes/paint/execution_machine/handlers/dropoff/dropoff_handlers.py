@@ -16,8 +16,6 @@ from src.robot_systems.paint.timing import timed_step
 
 _logger = logging.getLogger(__name__)
 
-_PLATE_LAYOUT_CORRIDOR_PADDING_MM = 10.0
-
 
 @dataclass(frozen=True)
 class DropoffReleaseWaypoint:
@@ -180,8 +178,10 @@ def execute_dropoff_release_for_executor(
 ) -> tuple[bool, str]:
     """Build and execute the configured dropoff release strategy."""
     started = perf_counter()
-    plan = _build_dropoff_release_plan(executor)
     executor._last_prepositioned_start_group = None
+    if _dropoff_strategy_name(executor) == "plate_layout":
+        return _execute_plate_layout_ordered_release(executor, next_cycle_start=next_cycle_start)
+    plan = _build_dropoff_release_plan(executor)
     release_count = sum(1 for waypoint in plan.waypoints if waypoint.release_here)
     if release_count != 1:
         if plan.strategy_name == "movement_group":
@@ -516,40 +516,6 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
             ),
         )
 
-    if strategy_name == "plate_layout":
-        service = getattr(executor, "_plate_layout_service", None)
-        reservation = None if service is None else service.pending
-        if reservation is None:
-            _logger.error("[PLATE_LAYOUT] Dropoff requested without an active reservation")
-            return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
-        dropoff = executor._paint_process_config().dropoff
-        center_to_dropoff = _plate_motion_profile(dropoff, "center_to_dropoff")
-        return_plate_center = _plate_motion_profile(dropoff, "return_plate_center")
-        return DropoffReleasePlan(
-            strategy_name=strategy_name,
-            waypoints=(
-                DropoffReleaseWaypoint(
-                    label="Moving from plate center to calculated dropoff position",
-                    pose=list(reservation.release_pose),
-                    vel_percent=center_to_dropoff["vel_percent"],
-                    acc_percent=center_to_dropoff["acc_percent"],
-                    motion_type="linear",
-                    blendR=center_to_dropoff["blendR"],
-                    release_here=True,
-                    corridor_id=_plate_layout_corridor_id(executor),
-                ),
-                DropoffReleaseWaypoint(
-                    label="Returning through plate center",
-                    pose=list(reservation.transit_pose),
-                    vel_percent=return_plate_center["vel_percent"],
-                    acc_percent=return_plate_center["acc_percent"],
-                    motion_type="linear",
-                    blendR=return_plate_center["blendR"],
-                    corridor_id=_plate_layout_corridor_id(executor),
-                ),
-            ),
-        )
-
     return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
 
 
@@ -823,16 +789,12 @@ def _resolve_dropoff_preparation_pose(
     return approach_pose
 
 
-def _plate_layout_corridor_id(executor: object) -> str:
-    base_id = str(getattr(executor, "_dropoff_motion_corridor_id", "") or "paint_dropoff")
-    return f"{base_id}_plate_layout"
-
-
-def _plate_motion_profile(dropoff: object, key: str) -> dict[str, float]:
+def _plate_motion_profile(dropoff: object, key: str) -> dict[str, object]:
     fallback = {
         "vel_percent": float(dropoff.release_align_vel_percent),
         "acc_percent": float(dropoff.release_align_acc_percent),
         "blendR": float(dropoff.release_align_blendR),
+        "motion_type": str(dropoff.release_align_motion_type),
     }
     accepted_keys = {key}
     if key == "center_to_dropoff":
@@ -844,147 +806,115 @@ def _plate_motion_profile(dropoff: object, key: str) -> dict[str, float]:
                     "vel_percent": float(raw.get("vel_percent", fallback["vel_percent"])),
                     "acc_percent": float(raw.get("acc_percent", fallback["acc_percent"])),
                     "blendR": max(0.0, float(raw.get("blendR", fallback["blendR"]))),
+                    "motion_type": str(raw.get("motion_type", raw.get("type", "ptp"))),
                 }
             except (TypeError, ValueError):
                 break
     return fallback
 
 
-def _plate_center_pose_with_distributed_unwind(
+def _plate_ordered_segment(label: str, pose: list[float], profile: dict, *, stop: bool = False) -> dict:
+    return {
+        "label": label,
+        "position": list(pose),
+        "vel": float(profile["vel_percent"]),
+        "acc": float(profile["acc_percent"]),
+        "type": str(profile.get("motion_type", "ptp")),
+        "blendR": 0.0 if stop else float(profile["blendR"]),
+        "protected": True,
+    }
+
+
+def _execute_plate_layout_ordered_release(
     executor: object,
-    current_pose: list[float],
-    nominal_center_pose: list[float],
-    maximum_unwind_deg: float,
-) -> list[float]:
-    """Apply at most part of a whole-turn unwind during the center LIN move."""
-    target = list(nominal_center_pose)
-    rotation_index = int(executor._contact_motion_config.rotation_index)
-    if (
-        rotation_index < 0
-        or len(current_pose) <= rotation_index
-        or len(target) <= rotation_index
+    *,
+    next_cycle_start: dict | None,
+) -> tuple[bool, str]:
+    service = getattr(executor, "_plate_layout_service", None)
+    reservation = None if service is None else service.pending
+    if reservation is None:
+        return False, "Plate-layout dropoff has no active reservation"
+    dropoff = executor._paint_process_config().dropoff
+    from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_passage_gate
+
+    gate_pose, error = validate_plate_passage_gate(dropoff.plate_passage_gate_pose)
+    if error:
+        return False, error
+    entry_segments = [
+        _plate_ordered_segment(
+            "Plate entry: paint detach to passage gate", gate_pose,
+            _plate_motion_profile(dropoff, "entry_gate"),
+        ),
+        _plate_ordered_segment(
+            "Plate entry: passage gate to plate center", reservation.transit_pose,
+            _plate_motion_profile(dropoff, "entry_center"),
+        ),
+        _plate_ordered_segment(
+            "Plate entry: center to calculated dropoff", reservation.release_pose,
+            _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
+        ),
+    ]
+    if not executor._motion.move_ordered_pickup_sequence(
+        "Plate-layout ordered entry chain", entry_segments
     ):
-        return target
-    maximum = max(0.0, min(180.0, float(maximum_unwind_deg)))
-    start_rotation = float(current_pose[rotation_index])
-    nominal_continuous = unwrap_degrees(start_rotation, float(target[rotation_index]))
-    canonical = ((nominal_continuous + 180.0) % 360.0) - 180.0
-    whole_turn_shift = canonical - nominal_continuous
-    applied_shift = max(-maximum, min(maximum, whole_turn_shift))
-    target[rotation_index] = nominal_continuous + applied_shift
-    _logger.info(
-        "[PLATE_LAYOUT] Center-move distributed unwind rotation_index=%d "
-        "start=%.3f nominal_continuous=%.3f whole_turn_shift=%.3f "
-        "maximum=%.3f applied=%.3f target=%.3f",
-        rotation_index,
-        start_rotation,
-        nominal_continuous,
-        whole_turn_shift,
-        maximum,
-        applied_shift,
-        target[rotation_index],
-    )
-    return target
+        return False, "Pivot paint finished, but plate-layout ordered entry chain failed before release"
+
+    ok, message = executor._motion.turn_vacuum_off()
+    if not ok:
+        return False, message
+    ok, message = _verify_workpiece_released(executor)
+    if not ok:
+        return False, message
+    ok, message = _on_workpiece_release_verified(executor)
+    if not ok:
+        return False, message
+
+    exit_segments = [
+        _plate_ordered_segment(
+            "Plate exit: dropoff to plate center", reservation.transit_pose,
+            _plate_motion_profile(dropoff, "exit_center"),
+        ),
+        _plate_ordered_segment(
+            "Plate exit: plate center to passage gate", gate_pose,
+            _plate_motion_profile(dropoff, "exit_gate"),
+            stop=next_cycle_start is None,
+        ),
+    ]
+    if next_cycle_start is not None:
+        exit_segments.append(_plate_ordered_segment(
+            f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'",
+            list(next_cycle_start["position"]),
+            _plate_motion_profile(dropoff, "gate_to_next_start"),
+            stop=True,
+        ))
+    if not executor._motion.move_ordered_pickup_sequence(
+        "Plate-layout ordered exit chain", exit_segments
+    ):
+        return False, "Workpiece released, but plate-layout ordered exit chain failed"
+    if next_cycle_start is not None:
+        if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+            return False, "Dropoff exit completed, but next-cycle start pose was not reached"
+        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
+    _logger.info("[DROPOFF] strategy=plate_layout ordered entry/release/exit completed")
+    return True, ""
 
 
 def _execute_plate_layout_preparation(executor: object) -> tuple[bool, str]:
-    """Enter the plate through its center and unwind without generic dropoff waypoints."""
+    """Unwind at the paint-detach pose before the plate entry chain."""
     service = getattr(executor, "_plate_layout_service", None)
     reservation = None if service is None else service.pending
     if reservation is None:
         return False, "Plate-layout dropoff has no active reservation"
 
     config = executor._paint_process_config()
-    enter_profile = _plate_motion_profile(config.dropoff, "enter_plate_center")
-    register = getattr(executor._robot_service, "register_motion_corridor", None)
-    current_getter = getattr(executor._robot_service, "get_current_position_fresh", None)
-    if not callable(current_getter):
-        current_getter = getattr(executor._robot_service, "get_current_position", None)
-    if not callable(register) or not callable(current_getter):
-        return False, "Plate-layout bounded transit is unavailable"
-    try:
-        current_pose = list(current_getter() or [])
-    except Exception:
-        _logger.exception("[PLATE_LAYOUT] Failed to read current pose for bounded transit")
-        return False, "Plate-layout bounded transit could not read the current robot pose"
-    if len(current_pose) < 3:
-        current_pose = list(getattr(executor, "_last_process_end_pose", None) or [])
-    if len(current_pose) < 3:
-        return False, "Plate-layout bounded transit requires a valid current robot pose"
-
-    center_pose = _plate_center_pose_with_distributed_unwind(
-        executor,
-        current_pose,
-        reservation.transit_pose,
-        config.dropoff.plate_center_distributed_unwind_deg,
-    )
-
-    from src.engine.robot.safety import MotionCorridor
-    from src.robot_systems.paint.processes.paint.plate_layout import validate_plate_corners
-
-    corners, error = validate_plate_corners(config.dropoff.plate_corners)
-    if error:
-        return False, error
-    commanded_end_pose = list(getattr(executor, "_last_process_end_pose", None) or [])
-    bounded_poses = [current_pose, center_pose, reservation.transit_pose, reservation.approach_pose,
-                     reservation.release_pose, *corners]
-    if len(commanded_end_pose) >= 3:
-        # The ordered-chain completion notification and live TCP telemetry can
-        # arrive a few samples apart.  Bound the whole settling segment rather
-        # than a single instantaneous sample so corridor entry is deterministic.
-        bounded_poses.append(commanded_end_pose)
-    padding_mm = _PLATE_LAYOUT_CORRIDOR_PADDING_MM
-    corridor = MotionCorridor(
-        corridor_id=_plate_layout_corridor_id(executor),
-        x_min=min(float(pose[0]) for pose in bounded_poses) - padding_mm,
-        x_max=max(float(pose[0]) for pose in bounded_poses) + padding_mm,
-        y_min=min(float(pose[1]) for pose in bounded_poses) - padding_mm,
-        y_max=max(float(pose[1]) for pose in bounded_poses) + padding_mm,
-        z_min=min(float(pose[2]) for pose in bounded_poses) - padding_mm,
-        entry_z_max=max(float(pose[2]) for pose in bounded_poses) + padding_mm,
-        maximum_velocity=100.0,
-        maximum_acceleration=100.0,
-        allow_planar_transit=True,
-    )
-    try:
-        register(corridor)
-    except (TypeError, ValueError, NotImplementedError):
-        _logger.exception("[PLATE_LAYOUT] Failed to register bounded transit corridor")
-        return False, "Plate-layout bounded transit corridor could not be registered"
-    _logger.info(
-        "[PLATE_LAYOUT] Registered bounded transit corridor=%s current_xyz=%s commanded_end_xyz=%s "
-        "bounds=x[%.3f, %.3f] y[%.3f, %.3f] z[%.3f, %.3f]",
-        corridor.corridor_id,
-        [round(float(value), 3) for value in current_pose[:3]],
-        [round(float(value), 3) for value in commanded_end_pose[:3]],
-        corridor.x_min,
-        corridor.x_max,
-        corridor.y_min,
-        corridor.y_max,
-        corridor.z_min,
-        corridor.entry_z_max,
-    )
-
-    if not executor._motion.move_pickup_phase(
-        "Moving through plate center before dropoff",
-        center_pose,
-        velocity=enter_profile["vel_percent"],
-        acceleration=enter_profile["acc_percent"],
-        motion_type="linear",
-        blendR=enter_profile["blendR"],
-        corridor_id=corridor.corridor_id,
-    ):
-        return False, "Pivot paint finished, but bounded move to plate center failed"
-
     if not executor._robot_service.unwind_joint6(
         blocking=True,
         queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
         vel=config.navigation_return.unwind_vel_percent,
         acc=config.navigation_return.unwind_acc_percent,
     ):
-        return False, "Pivot paint finished, but Joint 6 unwind failed at plate center"
+        return False, "Pivot paint finished, but Joint 6 unwind failed at paint detach pose"
     executor._dropoff_unwind_prepared = True
-    executor._last_process_end_pose = list(center_pose)
     return True, ""
 
 

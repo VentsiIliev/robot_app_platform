@@ -157,9 +157,12 @@ class PaintProcessSettingsMapper:
     @staticmethod
     def _normalize_plate_motion_profiles(value: object, fallback: list[dict]) -> list[dict]:
         required_keys = (
-            "enter_plate_center",
+            "entry_gate",
+            "entry_center",
             "center_to_dropoff",
-            "return_plate_center",
+            "exit_center",
+            "exit_gate",
+            "gate_to_next_start",
         )
         incoming = PaintProcessSettingsMapper._profiles_by_key(value)
         defaults = PaintProcessSettingsMapper._profiles_by_key(fallback)
@@ -172,8 +175,6 @@ class PaintProcessSettingsMapper:
             profile = dict(defaults.get(key, {}))
             profile.update(incoming.get(key, {}))
             profile["key"] = key
-            # Plate transit is constrained to the registered linear corridor.
-            profile["motion_type"] = "linear"
             profiles.append(profile)
         return profiles
 
@@ -299,7 +300,6 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_top_left": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_corners[3]) if len(dropoff.plate_corners) > 3 else "",
             "dropoff_plate_release_z_offset_mm": dropoff.plate_release_z_offset_mm,
             "dropoff_plate_approach_clearance_mm": dropoff.plate_approach_clearance_mm,
-            "dropoff_plate_center_distributed_unwind_deg": dropoff.plate_center_distributed_unwind_deg,
             "dropoff_plate_margin_left_mm": dropoff.plate_margin_left_mm,
             "dropoff_plate_margin_right_mm": dropoff.plate_margin_right_mm,
             "dropoff_plate_margin_bottom_mm": dropoff.plate_margin_bottom_mm,
@@ -308,6 +308,7 @@ class PaintProcessSettingsMapper:
             "dropoff_plate_spacing_y_mm": dropoff.plate_spacing_y_mm,
             "dropoff_plate_robot_tool": dropoff.plate_robot_tool,
             "dropoff_plate_robot_user": dropoff.plate_robot_user,
+            "dropoff_plate_passage_gate": PaintProcessSettingsMapper._pose_to_text(dropoff.plate_passage_gate_pose),
             "dropoff_plate_motion_profiles": [dict(profile) for profile in dropoff.plate_motion_profiles],
             "dropoff_plate_robot_frame": (
                 f"Tool {dropoff.plate_robot_tool}, User {dropoff.plate_robot_user}"
@@ -590,10 +591,6 @@ class PaintProcessSettingsMapper:
             ],
             plate_release_z_offset_mm=float(flat.get("dropoff_plate_release_z_offset_mm", base.dropoff.plate_release_z_offset_mm)),
             plate_approach_clearance_mm=float(flat.get("dropoff_plate_approach_clearance_mm", base.dropoff.plate_approach_clearance_mm)),
-            plate_center_distributed_unwind_deg=float(flat.get(
-                "dropoff_plate_center_distributed_unwind_deg",
-                base.dropoff.plate_center_distributed_unwind_deg,
-            )),
             plate_margin_left_mm=float(flat.get("dropoff_plate_margin_left_mm", base.dropoff.plate_margin_left_mm)),
             plate_margin_right_mm=float(flat.get("dropoff_plate_margin_right_mm", base.dropoff.plate_margin_right_mm)),
             plate_margin_bottom_mm=float(flat.get("dropoff_plate_margin_bottom_mm", base.dropoff.plate_margin_bottom_mm)),
@@ -602,6 +599,9 @@ class PaintProcessSettingsMapper:
             plate_spacing_y_mm=float(flat.get("dropoff_plate_spacing_y_mm", base.dropoff.plate_spacing_y_mm)),
             plate_robot_tool=int(flat.get("dropoff_plate_robot_tool", base.dropoff.plate_robot_tool)),
             plate_robot_user=int(flat.get("dropoff_plate_robot_user", base.dropoff.plate_robot_user)),
+            plate_passage_gate_pose=PaintProcessSettingsMapper._pose_from_value(
+                flat.get("dropoff_plate_passage_gate", ""), base.dropoff.plate_passage_gate_pose
+            ),
             plate_motion_profiles=PaintProcessSettingsMapper._normalize_plate_motion_profiles(
                 flat.get("dropoff_plate_motion_profiles"), base.dropoff.plate_motion_profiles
             ),
