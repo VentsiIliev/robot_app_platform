@@ -856,6 +856,40 @@ def _plate_ordered_segment(label: str, pose: list[float], profile: dict, *, stop
     }
 
 
+def _wait_for_motion_slot_idle(
+    executor: object,
+    *,
+    timeout_s: float = 2.0,
+    poll_interval_s: float = 0.025,
+    stable_samples: int = 2,
+) -> bool:
+    """Wait through the controller-success/backend-slot release handoff."""
+    getter = getattr(executor._robot_service, "get_execution_status", None)
+    if not callable(getter):
+        return True
+    deadline = monotonic() + max(0.1, float(timeout_s))
+    consecutive = 0
+    while monotonic() < deadline:
+        try:
+            status = getter()
+        except Exception:
+            _logger.exception("[PLATE_LAYOUT] Failed to read execution status before entry")
+            return False
+        if not isinstance(status, dict):
+            return True
+        ordered = status.get("ordered_motion_chain")
+        ordered_active = bool(isinstance(ordered, dict) and ordered.get("active"))
+        if not bool(status.get("is_executing")) and not ordered_active:
+            consecutive += 1
+            if consecutive >= max(1, int(stable_samples)):
+                return True
+        else:
+            consecutive = 0
+        sleep(max(0.005, float(poll_interval_s)))
+    _logger.error("[PLATE_LAYOUT] Motion backend remained busy before plate entry")
+    return False
+
+
 def _plate_route_poses_with_distributed_unwind(
     executor: object,
     *,
@@ -1001,6 +1035,8 @@ def _execute_plate_layout_ordered_release(
         route_poses["dropoff"],
         _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
     ))
+    if not _wait_for_motion_slot_idle(executor):
+        return False, "Pivot paint finished, but the motion backend remained busy before plate entry"
     if not executor._motion.move_ordered_pickup_sequence(
         "Plate-layout ordered entry chain", entry_segments
     ):

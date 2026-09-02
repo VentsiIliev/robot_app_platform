@@ -18,6 +18,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.
     _execute_plate_layout_preparation,
     _execute_plate_layout_ordered_release,
     _plate_route_poses_with_distributed_unwind,
+    _wait_for_motion_slot_idle,
 )
 
 
@@ -31,6 +32,19 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
+    def test_plate_entry_waits_for_two_inactive_motion_status_samples(self) -> None:
+        executor = MagicMock()
+        executor._robot_service.get_execution_status.side_effect = [
+            {"is_executing": True},
+            {"is_executing": False},
+            {"is_executing": False},
+        ]
+
+        self.assertTrue(_wait_for_motion_slot_idle(
+            executor, timeout_s=0.1, poll_interval_s=0.005
+        ))
+        self.assertEqual(3, executor._robot_service.get_execution_status.call_count)
+
     def test_plate_dropoff_preparation_is_not_appended_to_pickup_paint_chain(self) -> None:
         executor = MagicMock()
         executor._paint_process_config.return_value.dropoff.strategy = "plate_layout"
