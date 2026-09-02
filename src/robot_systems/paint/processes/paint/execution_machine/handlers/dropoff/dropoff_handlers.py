@@ -933,23 +933,42 @@ def _plate_route_poses_with_distributed_unwind(
         )
     start_rotation = float(current[rotation_index])
     step = -90.0 if paint_rz_delta > 0.0 else 90.0
+    ideal_dropoff_rotation = start_rotation + (2.0 * step)
+    nominal_dropoff_rotation = float(dropoff_pose[rotation_index])
+    branch = (ideal_dropoff_rotation - nominal_dropoff_rotation) / 180.0
+    branch_candidates = {
+        nominal_dropoff_rotation + 180.0 * math.floor(branch),
+        nominal_dropoff_rotation + 180.0 * math.ceil(branch),
+    }
+    direction = -1.0 if step < 0.0 else 1.0
+    dropoff_rotation = min(
+        branch_candidates,
+        key=lambda candidate: (
+            abs(candidate - ideal_dropoff_rotation),
+            0 if direction * (candidate - start_rotation) >= 0.0 else 1,
+        ),
+    )
+    next_start_rotation = start_rotation + (4.0 * step)
     rotations = {
-        "entry_gate": start_rotation + step,
-        "entry_center": start_rotation + step,
-        "dropoff": start_rotation + (2.0 * step),
-        "exit_center": start_rotation + (2.0 * step),
-        "exit_gate": start_rotation + (3.0 * step),
-        "next_start": start_rotation + (4.0 * step),
+        "entry_gate": (start_rotation + dropoff_rotation) / 2.0,
+        "entry_center": (start_rotation + dropoff_rotation) / 2.0,
+        "dropoff": dropoff_rotation,
+        "exit_center": dropoff_rotation,
+        "exit_gate": (dropoff_rotation + next_start_rotation) / 2.0,
+        "next_start": next_start_rotation,
     }
     for key, pose in poses.items():
         if len(pose) <= rotation_index:
             raise ValueError(f"Plate-layout route pose '{key}' has no configured rotation axis")
         pose[rotation_index] = rotations[key]
     _logger.info(
-        "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f step=%.3f targets=%s",
+        "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f "
+        "preferred_step=%.3f nominal_dropoff=%.3f selected_dropoff=%.3f targets=%s",
         start_rotation,
         paint_rz_delta,
         step,
+        nominal_dropoff_rotation,
+        dropoff_rotation,
         {key: round(value, 3) for key, value in rotations.items() if key in poses},
     )
     return poses

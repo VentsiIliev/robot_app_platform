@@ -273,6 +273,27 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(-90.0, poses["exit_gate"][5])
         self.assertEqual(0.0, poses["next_start"][5])
 
+    def test_distributed_unwind_preserves_dropoff_rectangle_orientation_modulo_180(self) -> None:
+        executor = MagicMock()
+        executor._contact_motion_config.rotation_index = 5
+        executor._last_process_start_rz = 0.0
+        executor._last_process_end_pose = [0, 0, 0, 180, 0, 360.0]
+        executor._robot_service.get_current_position_fresh.return_value = [0, 0, 0, 180, 0, 360]
+
+        poses = _plate_route_poses_with_distributed_unwind(
+            executor,
+            gate_pose=[1, 2, 3, 180, 0, 0],
+            center_pose=[4, 5, 6, 180, 0, 0],
+            dropoff_pose=[7, 8, 9, 180, 0, 25],
+            next_start_pose=[10, 11, 12, 180, 0, 0],
+            use_center_waypoint=False,
+        )
+
+        self.assertEqual(205.0, poses["dropoff"][5])
+        self.assertEqual(25.0, poses["dropoff"][5] % 180.0)
+        self.assertEqual(282.5, poses["entry_gate"][5])
+        self.assertEqual(102.5, poses["exit_gate"][5])
+
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()
         config = PaintDropoffConfig(
