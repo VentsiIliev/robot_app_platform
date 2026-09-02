@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from time import monotonic, perf_counter, sleep
 
@@ -883,11 +884,20 @@ def _plate_route_poses_with_distributed_unwind(
     rotation_index = int(executor._contact_motion_config.rotation_index)
     if rotation_index < 0 or len(current) <= rotation_index:
         raise ValueError("Plate-layout distributed unwind requires a valid current rotation pose")
+    paint_start_rz = getattr(executor, "_last_process_start_rz", None)
+    paint_end_pose = getattr(executor, "_last_process_end_pose", None)
+    try:
+        paint_rz_delta = float(paint_end_pose[5]) - float(paint_start_rz)
+    except (TypeError, ValueError, IndexError):
+        raise ValueError(
+            "Plate-layout distributed unwind requires a valid executed paint RZ direction"
+        ) from None
+    if not math.isfinite(paint_rz_delta) or abs(paint_rz_delta) <= 1e-6:
+        raise ValueError(
+            "Plate-layout distributed unwind requires a non-zero executed paint RZ direction"
+        )
     start_rotation = float(current[rotation_index])
-    canonical = ((start_rotation + 180.0) % 360.0) - 180.0
-    unwind_shift = canonical - start_rotation
-    direction = -1.0 if unwind_shift < 0.0 else 1.0
-    step = 90.0 * direction
+    step = -90.0 if paint_rz_delta > 0.0 else 90.0
     rotations = {
         "entry_gate": start_rotation + step,
         "entry_center": start_rotation + step,
@@ -901,9 +911,9 @@ def _plate_route_poses_with_distributed_unwind(
             raise ValueError(f"Plate-layout route pose '{key}' has no configured rotation axis")
         pose[rotation_index] = rotations[key]
     _logger.info(
-        "[PLATE_LAYOUT] Distributed unwind start=%.3f canonical=%.3f step=%.3f targets=%s",
+        "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f step=%.3f targets=%s",
         start_rotation,
-        canonical,
+        paint_rz_delta,
         step,
         {key: round(value, 3) for key, value in rotations.items() if key in poses},
     )
