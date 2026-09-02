@@ -900,7 +900,7 @@ def _plate_route_poses_with_distributed_unwind(
     start_rotation = float(current[rotation_index])
     direction = -1.0 if paint_rz_delta > 0.0 else 1.0
     dropoff_rotation = unwrap_degrees(start_rotation, float(dropoff_pose[rotation_index]))
-    while direction * (dropoff_rotation - start_rotation) <= 1e-6:
+    while direction * (dropoff_rotation - start_rotation) < 360.0 - 1e-6:
         dropoff_rotation += direction * 360.0
     # Select the equivalent dropoff branch reached by rotating opposite to the
     # paint path.  The endpoint preserves the calculated workpiece orientation;
@@ -1044,6 +1044,25 @@ def _execute_plate_layout_ordered_release(
     ):
         return False, "Workpiece released, but plate-layout ordered exit chain failed"
     if next_cycle_start is not None:
+        if bool(dropoff.plate_distribute_unwind):
+            if not executor._robot_service.unwind_joint6(
+                blocking=True,
+                queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
+                vel=executor._paint_process_config().navigation_return.unwind_vel_percent,
+                acc=executor._paint_process_config().navigation_return.unwind_acc_percent,
+            ):
+                return False, "Plate route completed, but final Joint 6 unwind failed at next-cycle start"
+            exact_start_segment = _plate_ordered_segment(
+                f"Plate exit: restore exact next-cycle start '{next_cycle_start['group_id']}' after unwind",
+                list(next_cycle_start["position"]),
+                _plate_motion_profile(dropoff, "gate_to_next_start"),
+                stop=True,
+            )
+            if not executor._motion.move_ordered_pickup_sequence(
+                "Plate-layout exact next-cycle start after final unwind",
+                [exact_start_segment],
+            ):
+                return False, "Final Joint 6 unwind completed, but exact next-cycle start restore failed"
         if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff exit completed, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])

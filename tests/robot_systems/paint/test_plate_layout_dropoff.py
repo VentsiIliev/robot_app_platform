@@ -178,14 +178,16 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertTrue(ok, message)
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
+        exact_start = executor._motion.move_ordered_pickup_sequence.call_args_list[2].args[1]
         self.assertEqual([1, 0.0], [item["blendR"] for item in entry])
         self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
         self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
+        self.assertEqual(next_start["position"], exact_start[0]["position"])
         self.assertEqual(4, executor._robot_service.get_current_position_fresh.call_count)
-        executor._robot_service.unwind_joint6.assert_not_called()
+        executor._robot_service.unwind_joint6.assert_called_once()
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()
