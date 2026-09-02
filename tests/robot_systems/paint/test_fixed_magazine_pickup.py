@@ -124,6 +124,26 @@ class TestFixedMagazinePickup(unittest.TestCase):
             load_service._move_to_group_with_pause_resume_recovery.call_args.args[2],
         )
 
+    def test_fixed_mode_retries_one_exact_move_after_endpoint_miss(self):
+        load_service = MagicMock()
+        load_service._move_to_group_with_pause_resume_recovery.side_effect = [False, True]
+        service = MagicMock()
+        service._magazine_load_service = load_service
+        config = PaintMagazineLoadConfig(
+            enabled=True,
+            pickup_mode=MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN,
+            fixed_pickup_group_id="Magazine Fixed Pickup",
+            move_to_magazine_blendR=20.0,
+        )
+        ctx = self._context(service, config)
+
+        next_state = handle_magazine_move_to_magazine(ctx)
+
+        self.assertEqual(PaintExecutionState.MAGAZINE_PREPARE_PICKUP_RELEASE, next_state)
+        self.assertEqual(2, load_service._move_to_group_with_pause_resume_recovery.call_count)
+        correction = load_service._move_to_group_with_pause_resume_recovery.call_args_list[1]
+        self.assertEqual(0.0, correction.kwargs["blendR"])
+
     def test_verified_prepositioned_fixed_group_skips_duplicate_move(self):
         load_service = MagicMock()
         service = MagicMock()

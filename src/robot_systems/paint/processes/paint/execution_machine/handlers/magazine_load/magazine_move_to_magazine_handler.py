@@ -77,6 +77,25 @@ def handle_magazine_move_to_magazine(ctx: PaintExecutionContext) -> PaintExecuti
         motion_type=config.move_to_magazine_motion_type,
         blendR=float(config.move_to_magazine_blendR),
     )
+    if (
+        not ok
+        and pickup_mode == MAGAZINE_PICKUP_MODE_FIXED_GROUP_SENSOR_CONTROLLED_FAST_LIN
+        and not ctx.motion_cancel_requested()
+    ):
+        _logger.warning(
+            "[MAGAZINE_LOAD] Fixed pickup group '%s' missed endpoint verification; "
+            "commanding one exact correction move",
+            ctx.magazine_group,
+        )
+        ok = load_service._move_to_group_with_pause_resume_recovery(
+            ctx,
+            PaintExecutionState.MAGAZINE_MOVE_TO_MAGAZINE,
+            ctx.magazine_group,
+            velocity=float(config.move_to_magazine_vel_percent),
+            acceleration=float(config.move_to_magazine_acc_percent),
+            motion_type=config.move_to_magazine_motion_type,
+            blendR=0.0,
+        )
     if not ok:
         return interrupted_or_error(
             ctx,
