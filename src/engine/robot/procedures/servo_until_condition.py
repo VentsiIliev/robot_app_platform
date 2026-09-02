@@ -1298,11 +1298,14 @@ class ServoUntilConditionProcedure:
             else list(current_pose[:6])
         )
         target_pose[2] = float(target_z)
+        verification_target = tuple(float(value) for value in target_pose[:6])
         mover = getattr(self._robot, "move_fast_linear", None)
         if not callable(mover):
             return False, "fast_lin_unsupported"
         outcome = mover(
-            position=target_pose,
+            # The asynchronous driver may retain or mutate the submitted list.
+            # Keep the verification target isolated from transport ownership.
+            position=list(verification_target),
             tool=int(cfg.tool),
             user=int(cfg.user),
             vel=velocity,
@@ -1343,7 +1346,7 @@ class ServoUntilConditionProcedure:
             if final_pose is not None:
                 position_error = math.sqrt(
                     sum(
-                        (float(final_pose[index]) - float(target_pose[index])) ** 2
+                        (float(final_pose[index]) - verification_target[index]) ** 2
                         for index in range(3)
                     )
                 )
@@ -1355,7 +1358,7 @@ class ServoUntilConditionProcedure:
                 _logger.error(
                     "[SERVO_UNTIL_CONDITION] Fast LIN final pose mismatch "
                     "target=%s actual=%s position_error_mm=%.3f tolerance_mm=%.3f",
-                    [round(float(value), 3) for value in target_pose[:6]],
+                    [round(value, 3) for value in verification_target],
                     [round(float(value), 3) for value in final_pose[:6]],
                     position_error,
                     tolerance,

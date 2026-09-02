@@ -952,6 +952,46 @@ class TestServoUntilConditionProcedure(unittest.TestCase):
         self.assertTrue(result.success, result.message)
         self.assertGreaterEqual(robot.retract_started_after_status_reads, 6)
 
+    def test_fast_lin_retract_verification_isolated_from_driver_pose_mutation(self):
+        class MutatingRobot(FakeRobot):
+            def __init__(self):
+                super().__init__()
+                self.pose = [10.0, 20.0, 35.0, 0.0, 0.0, 0.0]
+
+            def get_current_position(self):
+                return list(self.pose)
+
+            def move_fast_linear(self, **kwargs):
+                submitted_pose = kwargs["position"]
+                self.pose = list(submitted_pose)
+                submitted_pose[0] = 999.0
+                return {
+                    "result": 0,
+                    "success": True,
+                    "accepted": True,
+                    "final": False,
+                    "queued": False,
+                    "task_id": 19,
+                }
+
+        procedure = ServoUntilConditionProcedure(MutatingRobot(), lambda: True)
+
+        success, message = procedure._retract_fast_linear(
+            current_pose=[10.0, 20.0, 3.0, 0.0, 0.0, 0.0],
+            target_z=35.0,
+            tolerance=2.0,
+            retract=ServoRetractConfig(
+                motion_type="fast_lin",
+                poll_interval_s=0.001,
+                timeout_s=0.05,
+            ),
+            cfg=ServoUntilConditionConfig(),
+            cancel_requested=None,
+        )
+
+        self.assertTrue(success, message)
+        self.assertEqual(message, "")
+
 
 if __name__ == "__main__":
     unittest.main()
