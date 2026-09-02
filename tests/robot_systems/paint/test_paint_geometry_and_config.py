@@ -88,6 +88,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             "dropoff_corridor_maximum_velocity_percent": 33.0,
             "dropoff_corridor_maximum_acceleration_percent": 22.0,
             "dropoff_sub_zero_approach_z_mm": 55.0,
+            "dropoff_sub_zero_exit_blendR_mm": 12.0,
         })
 
         restored = PaintProcessConfigSerializer().from_dict(
@@ -105,6 +106,7 @@ class TestPaintProcessConfig(unittest.TestCase):
         self.assertEqual(restored.dropoff.corridor_maximum_velocity_percent, 33.0)
         self.assertEqual(restored.dropoff.corridor_maximum_acceleration_percent, 22.0)
         self.assertEqual(restored.dropoff.sub_zero_approach_z_mm, 55.0)
+        self.assertEqual(restored.dropoff.sub_zero_exit_blendR_mm, 12.0)
         self.assertTrue({
             "dropoff_corridor_x_margin_mm",
             "dropoff_corridor_y_margin_mm",
@@ -113,6 +115,7 @@ class TestPaintProcessConfig(unittest.TestCase):
             "dropoff_corridor_maximum_velocity_percent",
             "dropoff_corridor_maximum_acceleration_percent",
             "dropoff_sub_zero_approach_z_mm",
+            "dropoff_sub_zero_exit_blendR_mm",
         }.issubset(keys))
 
     def test_contact_staging_settings_roundtrip_through_ui_and_serializer(self) -> None:

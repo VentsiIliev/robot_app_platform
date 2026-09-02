@@ -522,10 +522,15 @@ class PaintDashboardService(IPaintDashboardService):
             details = details if isinstance(details, dict) else {}
             health_ok = bool(healthy_getter()) if callable(healthy_getter) else True
             healthy = bool(details.get("healthy", health_ok))
-            value = "ONLINE" if healthy else "OFFLINE"
+            paused = bool(details.get("processing_paused", False))
+            value = "PAUSED" if healthy and paused else ("ONLINE" if healthy else "OFFLINE")
             note = str(
                 details.get("message")
-                or ("Vision service healthy" if healthy else "Vision service is stopped or unhealthy")
+                or (
+                    "Vision processing paused by paint process"
+                    if healthy and paused
+                    else ("Vision service healthy" if healthy else "Vision service is stopped or unhealthy")
+                )
             )
         except Exception as exc:
             return DashboardCardState("Vision Status", "ERROR", f"Could not read vision state: {exc}")

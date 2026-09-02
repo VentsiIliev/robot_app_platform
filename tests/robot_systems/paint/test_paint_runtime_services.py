@@ -402,6 +402,25 @@ class TestPaintDashboardService(unittest.TestCase):
         self.assertEqual(state.card_states[2].value, "OFFLINE")
         self.assertEqual(state.card_states[2].note, "No fresh camera frame available")
 
+    def test_load_state_reports_intentionally_paused_vision_as_paused(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        vision = MagicMock()
+        vision.is_healthy.return_value = True
+        vision.get_health_details.return_value = {
+            "healthy": True,
+            "processing_paused": True,
+            "message": "Vision processing paused by paint process",
+        }
+
+        state = PaintDashboardService(process, vision_service=vision).load_state()
+
+        self.assertEqual(state.card_states[2].value, "PAUSED")
+        self.assertEqual(
+            state.card_states[2].note,
+            "Vision processing paused by paint process",
+        )
+
     def test_control_methods_delegate_to_process(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.ERROR
