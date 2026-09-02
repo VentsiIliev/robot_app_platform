@@ -1172,20 +1172,11 @@ def _execute_plate_layout_ordered_release(
                 acc=executor._paint_process_config().navigation_return.unwind_acc_percent,
             ):
                 return False, "Plate route completed, but final Joint 6 unwind failed at next-cycle start"
-            exact_start_segment = _plate_ordered_segment(
-                f"Plate exit: restore exact next-cycle start '{next_cycle_start['group_id']}' after unwind",
-                list(next_cycle_start["position"]),
-                _plate_motion_profile(dropoff, "gate_to_next_start"),
-                stop=True,
-            )
-            if not executor._motion.move_ordered_pickup_sequence(
-                "Plate-layout exact next-cycle start after final unwind",
-                [exact_start_segment],
-            ):
-                return False, "Final Joint 6 unwind completed, but exact next-cycle start restore failed"
-        if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
-            return False, "Dropoff exit completed, but next-cycle start pose was not reached"
-        executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
+        # Do not mark this group as prepositioned.  The cleanup unwind may leave
+        # an equivalent Cartesian orientation on a different continuous branch,
+        # and issuing an immediate restore races the backend slot release.  The
+        # next cycle owns the exact start-group move and its verification.
+        executor._last_prepositioned_start_group = None
     _logger.info("[DROPOFF] strategy=plate_layout ordered entry/release/exit completed")
     return True, ""
 
