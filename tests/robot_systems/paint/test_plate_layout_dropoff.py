@@ -196,10 +196,11 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         exact_start = executor._motion.move_ordered_pickup_sequence.call_args_list[2].args[1]
         entry_gate_segments = [item for item in entry if "paint detach" in item["label"]]
         entry_dropoff_segments = [item for item in entry if "calculated dropoff" in item["label"]]
-        self.assertTrue(all(item["blendR"] == 1 for item in entry_gate_segments))
+        self.assertTrue(all(item["blendR"] == 5 for item in entry_gate_segments[:-1]))
+        self.assertEqual(1, entry_gate_segments[-1]["blendR"])
         self.assertTrue(all(item["type"] == "ptp" for item in entry_gate_segments))
         self.assertTrue(all(item["type"] == "linear" for item in entry_dropoff_segments))
-        self.assertTrue(all(item["blendR"] == 3 for item in entry_dropoff_segments[:-1]))
+        self.assertTrue(all(item["blendR"] == 5 for item in entry_dropoff_segments[:-1]))
         self.assertEqual(0.0, entry_dropoff_segments[-1]["blendR"])
         self.assertEqual(0.0, exit_chain[-1]["blendR"])
         self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
@@ -300,9 +301,27 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(6, len(segments))
         rotations = [segment["position"][5] for segment in segments]
         self.assertEqual([-30, -60, -90, -120, -150, -180], rotations)
-        self.assertTrue(all(segment["blendR"] == 4 for segment in segments[:-1]))
+        self.assertTrue(all(segment["blendR"] == 5 for segment in segments[:-1]))
         self.assertEqual(0.0, segments[-1]["blendR"])
         self.assertEqual([120, 60, 30, 180, 0, -180], segments[-1]["position"])
+
+    def test_distributed_unwind_internal_points_blend_when_leg_blend_is_zero(self) -> None:
+        profile = {
+            "vel_percent": 20,
+            "acc_percent": 30,
+            "blendR": 0,
+            "motion_type": "ptp",
+        }
+
+        segments = _plate_ordered_leg_segments(
+            "Plate entry",
+            [0, 0, 0, 180, 0, 0],
+            [120, 60, 30, 180, 0, -90],
+            profile,
+            rotation_index=5,
+        )
+
+        self.assertEqual([5.0, 5.0, 0.0], [segment["blendR"] for segment in segments])
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()

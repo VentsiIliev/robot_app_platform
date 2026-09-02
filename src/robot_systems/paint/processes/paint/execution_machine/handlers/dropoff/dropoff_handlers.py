@@ -865,8 +865,9 @@ def _plate_ordered_leg_segments(
     rotation_index: int,
     stop: bool = False,
     max_rotation_step_deg: float = 30.0,
+    internal_blend_radius_mm: float = 5.0,
 ) -> list[dict]:
-    """Split a distributed-unwind leg into orientation-safe PTP increments."""
+    """Split a distributed-unwind leg without turning artificial points into stops."""
     rotation_delta = float(target_pose[rotation_index]) - float(start_pose[rotation_index])
     part_count = max(1, int(math.ceil(abs(rotation_delta) / max_rotation_step_deg)))
     segments: list[dict] = []
@@ -877,14 +878,18 @@ def _plate_ordered_leg_segments(
             for start, target in zip(start_pose, target_pose)
         ]
         part_label = label if part_count == 1 else f"{label} ({part_index}/{part_count})"
-        segments.append(
-            _plate_ordered_segment(
-                part_label,
-                pose,
-                profile,
-                stop=stop and part_index == part_count,
-            )
+        segment = _plate_ordered_segment(
+            part_label,
+            pose,
+            profile,
+            stop=stop and part_index == part_count,
         )
+        if part_index < part_count:
+            segment["blendR"] = max(
+                float(segment["blendR"]),
+                float(internal_blend_radius_mm),
+            )
+        segments.append(segment)
     return segments
 
 
