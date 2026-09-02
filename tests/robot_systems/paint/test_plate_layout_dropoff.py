@@ -17,6 +17,7 @@ from src.robot_systems.paint.processes.paint.execution_machine.handlers.workflow
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _execute_plate_layout_preparation,
     _execute_plate_layout_ordered_release,
+    _plate_ordered_leg_segments,
     _plate_route_poses_with_distributed_unwind,
     _wait_for_motion_slot_idle,
 )
@@ -193,9 +194,14 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         entry = executor._motion.move_ordered_pickup_sequence.call_args_list[0].args[1]
         exit_chain = executor._motion.move_ordered_pickup_sequence.call_args_list[1].args[1]
         exact_start = executor._motion.move_ordered_pickup_sequence.call_args_list[2].args[1]
-        self.assertEqual([1, 0.0], [item["blendR"] for item in entry])
-        self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
-        self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
+        entry_gate_segments = [item for item in entry if "paint detach" in item["label"]]
+        entry_dropoff_segments = [item for item in entry if "calculated dropoff" in item["label"]]
+        self.assertTrue(all(item["blendR"] == 1 for item in entry_gate_segments))
+        self.assertTrue(all(item["type"] == "ptp" for item in entry_gate_segments))
+        self.assertTrue(all(item["type"] == "linear" for item in entry_dropoff_segments))
+        self.assertTrue(all(item["blendR"] == 3 for item in entry_dropoff_segments[:-1]))
+        self.assertEqual(0.0, entry_dropoff_segments[-1]["blendR"])
+        self.assertEqual(0.0, exit_chain[-1]["blendR"])
         self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
         self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
         self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
@@ -273,6 +279,30 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual(0.0, poses["dropoff"][5])
         self.assertEqual(0.0, poses["exit_gate"][5])
         self.assertEqual(0.0, poses["next_start"][5])
+
+    def test_distributed_unwind_leg_is_split_below_orientation_limit(self) -> None:
+        profile = {
+            "vel_percent": 20,
+            "acc_percent": 30,
+            "blendR": 4,
+            "motion_type": "ptp",
+        }
+
+        segments = _plate_ordered_leg_segments(
+            "Plate entry",
+            [0, 0, 0, 180, 0, 0],
+            [120, 60, 30, 180, 0, -180],
+            profile,
+            rotation_index=5,
+            stop=True,
+        )
+
+        self.assertEqual(6, len(segments))
+        rotations = [segment["position"][5] for segment in segments]
+        self.assertEqual([-30, -60, -90, -120, -150, -180], rotations)
+        self.assertTrue(all(segment["blendR"] == 4 for segment in segments[:-1]))
+        self.assertEqual(0.0, segments[-1]["blendR"])
+        self.assertEqual([120, 60, 30, 180, 0, -180], segments[-1]["position"])
 
     def test_failed_reservation_does_not_consume_position(self) -> None:
         service = PlateLayoutService()

@@ -856,6 +856,38 @@ def _plate_ordered_segment(label: str, pose: list[float], profile: dict, *, stop
     }
 
 
+def _plate_ordered_leg_segments(
+    label: str,
+    start_pose: list[float],
+    target_pose: list[float],
+    profile: dict,
+    *,
+    rotation_index: int,
+    stop: bool = False,
+    max_rotation_step_deg: float = 30.0,
+) -> list[dict]:
+    """Split a distributed-unwind leg into orientation-safe PTP increments."""
+    rotation_delta = float(target_pose[rotation_index]) - float(start_pose[rotation_index])
+    part_count = max(1, int(math.ceil(abs(rotation_delta) / max_rotation_step_deg)))
+    segments: list[dict] = []
+    for part_index in range(1, part_count + 1):
+        fraction = part_index / part_count
+        pose = [
+            float(start) + (float(target) - float(start)) * fraction
+            for start, target in zip(start_pose, target_pose)
+        ]
+        part_label = label if part_count == 1 else f"{label} ({part_index}/{part_count})"
+        segments.append(
+            _plate_ordered_segment(
+                part_label,
+                pose,
+                profile,
+                stop=stop and part_index == part_count,
+            )
+        )
+    return segments
+
+
 def _wait_for_motion_slot_idle(
     executor: object,
     *,
@@ -900,6 +932,7 @@ def _plate_route_poses_with_distributed_unwind(
     use_center_waypoint: bool,
 ) -> dict[str, list[float]]:
     poses = {
+        "entry_start": [],
         "entry_gate": list(gate_pose),
         "entry_center": list(center_pose),
         "dropoff": list(dropoff_pose),
@@ -932,6 +965,7 @@ def _plate_route_poses_with_distributed_unwind(
             "Plate-layout distributed unwind requires a non-zero executed paint RZ direction"
         )
     start_rotation = float(current[rotation_index])
+    poses["entry_start"] = list(current)
     direction = -1.0 if paint_rz_delta > 0.0 else 1.0
     dropoff_rotation = unwrap_degrees(start_rotation, float(dropoff_pose[rotation_index]))
     while direction * (dropoff_rotation - start_rotation) < 360.0 - 1e-6:
@@ -947,6 +981,7 @@ def _plate_route_poses_with_distributed_unwind(
         gate_fraction = 0.5
         center_fraction = 0.5
     rotations = {
+        "entry_start": start_rotation,
         "entry_gate": start_rotation + total_entry_rotation * gate_fraction,
         "entry_center": start_rotation + total_entry_rotation * center_fraction,
         "dropoff": dropoff_rotation,
@@ -1015,25 +1050,60 @@ def _execute_plate_layout_ordered_release(
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
             return False, "Plate-layout distributed unwind route could not be built"
-    entry_segments = [
-        _plate_ordered_segment(
-            "Plate entry: paint detach to passage gate", route_poses["entry_gate"],
-            _plate_motion_profile(dropoff, "entry_gate"),
-        ),
-    ]
+    distribute_unwind = bool(dropoff.plate_distribute_unwind)
+    rotation_index = int(executor._contact_motion_config.rotation_index)
+
+    def build_leg(
+        label: str,
+        start_pose: list[float],
+        target_pose: list[float],
+        profile_key: str,
+        *,
+        stop: bool = False,
+    ) -> list[dict]:
+        profile = _plate_motion_profile(dropoff, profile_key)
+        if not distribute_unwind:
+            return [_plate_ordered_segment(label, target_pose, profile, stop=stop)]
+        return _plate_ordered_leg_segments(
+            label,
+            start_pose,
+            target_pose,
+            profile,
+            rotation_index=rotation_index,
+            stop=stop,
+        )
+
+    entry_start = route_poses.get("entry_start")
+    if distribute_unwind and not entry_start:
+        return False, "Plate-layout distributed unwind has no valid entry start pose"
+    entry_segments = build_leg(
+        "Plate entry: paint detach to passage gate",
+        entry_start if distribute_unwind else route_poses["entry_gate"],
+        route_poses["entry_gate"],
+        "entry_gate",
+    )
     if bool(dropoff.plate_use_center_waypoint):
-        entry_segments.append(_plate_ordered_segment(
-            "Plate entry: passage gate to plate center", route_poses["entry_center"],
-            _plate_motion_profile(dropoff, "entry_center"),
+        entry_segments.extend(build_leg(
+            "Plate entry: passage gate to plate center",
+            route_poses["entry_gate"],
+            route_poses["entry_center"],
+            "entry_center",
         ))
-    entry_segments.append(_plate_ordered_segment(
+    dropoff_leg_start = (
+        route_poses["entry_center"]
+        if bool(dropoff.plate_use_center_waypoint)
+        else route_poses["entry_gate"]
+    )
+    entry_segments.extend(build_leg(
         (
             "Plate entry: center to calculated dropoff"
             if bool(dropoff.plate_use_center_waypoint)
             else "Plate entry: passage gate to calculated dropoff"
         ),
+        dropoff_leg_start,
         route_poses["dropoff"],
-        _plate_motion_profile(dropoff, "center_to_dropoff"), stop=True,
+        "center_to_dropoff",
+        stop=True,
     ))
     if not _wait_for_motion_slot_idle(executor):
         return False, "Pivot paint finished, but the motion backend remained busy before plate entry"
@@ -1054,25 +1124,34 @@ def _execute_plate_layout_ordered_release(
 
     exit_segments = []
     if bool(dropoff.plate_use_center_waypoint):
-        exit_segments.append(_plate_ordered_segment(
-            "Plate exit: dropoff to plate center", route_poses["exit_center"],
-            _plate_motion_profile(dropoff, "exit_center"),
+        exit_segments.extend(build_leg(
+            "Plate exit: dropoff to plate center",
+            route_poses["dropoff"],
+            route_poses["exit_center"],
+            "exit_center",
         ))
-    exit_segments.append(_plate_ordered_segment(
+    exit_gate_start = (
+        route_poses["exit_center"]
+        if bool(dropoff.plate_use_center_waypoint)
+        else route_poses["dropoff"]
+    )
+    exit_segments.extend(build_leg(
         (
             "Plate exit: plate center to passage gate"
             if bool(dropoff.plate_use_center_waypoint)
             else "Plate exit: dropoff to passage gate"
         ),
+        exit_gate_start,
         route_poses["exit_gate"],
-        _plate_motion_profile(dropoff, "exit_gate"),
+        "exit_gate",
         stop=next_cycle_start is None,
     ))
     if next_cycle_start is not None:
-        exit_segments.append(_plate_ordered_segment(
+        exit_segments.extend(build_leg(
             f"Plate exit: passage gate to next-cycle start '{next_cycle_start['group_id']}'",
+            route_poses["exit_gate"],
             route_poses["next_start"],
-            _plate_motion_profile(dropoff, "gate_to_next_start"),
+            "gate_to_next_start",
             stop=True,
         ))
     if not executor._motion.move_ordered_pickup_sequence(
