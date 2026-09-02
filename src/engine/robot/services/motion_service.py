@@ -14,8 +14,11 @@ from src.shared_contracts.events.robot_events import RobotTopics
 
 
 class MotionService(IMotionService):
-    _WAIT_THRESHOLD_MM = 2
-    _WAIT_THRESHOLD_DEG = 1.0
+    # ROS2 accepts controller completion within 0.02 rad per joint.  Cartesian
+    # TCP error varies with configuration; 5 mm / 1.2 deg is the corresponding
+    # bounded platform acceptance envelope used after a successful driver move.
+    _WAIT_THRESHOLD_MM = 5.0
+    _WAIT_THRESHOLD_DEG = 1.2
     _WAIT_DELAY_S = 0.1
     _WAIT_TIMEOUT_S = 10.0
     _STOP_RETRY_DELAY_S = 0.05

@@ -519,6 +519,19 @@ class TestMotionService(unittest.TestCase):
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=1.0)
         self.assertTrue(result)
 
+    def test_wait_for_position_default_accepts_ros2_controller_completion_envelope(self):
+        accepted = [96.59, 0.0, 300.0, 0.0, 0.0, 0.3]
+        self.robot.get_current_position_fresh.return_value = accepted
+
+        result = self.service._wait_for_position(
+            [100.0, 0.0, 300.0, 0.0, 0.0, 0.0],
+            delay=0.001,
+            timeout=1.0,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(3, self.robot.get_current_position_fresh.call_count)
+
     def test_wait_for_position_returns_false_on_timeout(self):
         self.robot.get_current_position_fresh.return_value = [0.0, 0.0, 0.0]
         result = self.service._wait_for_position([100.0, 0.0, 300.0], threshold=2.0, delay=0.01, timeout=0.05)
