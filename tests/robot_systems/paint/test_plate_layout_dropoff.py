@@ -159,7 +159,11 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._motion.turn_vacuum_off.return_value = (True, "")
         executor._enable_vacuum_pump = False
         executor._is_vacuum_pump_enabled.return_value = False
-        executor._robot_service.get_current_position_fresh.return_value = [10, 20, 30, 180, 0, 0]
+        executor._robot_service.get_current_position_fresh.side_effect = [
+            [200, 100, 180, 180, 0, 0],
+            [10, 20, 30, 180, 0, 0],
+            [10, 20, 30, 180, 0, 0],
+        ]
         next_start = {"group_id": "Start", "position": [10, 20, 30, 180, 0, 0]}
 
         ok, message = _execute_plate_layout_ordered_release(executor, next_cycle_start=next_start)
@@ -171,6 +175,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
         self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
+        self.assertEqual(3, executor._robot_service.get_current_position_fresh.call_count)
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()

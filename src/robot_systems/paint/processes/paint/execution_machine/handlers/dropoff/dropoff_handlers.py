@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 
 import numpy as np
 
@@ -313,6 +313,8 @@ def _next_cycle_start_pose_reached(
     next_cycle_start: dict,
     position_tolerance_mm: float = 2.0,
     orientation_tolerance_deg: float = 2.0,
+    *,
+    log_result: bool = True,
 ) -> bool:
     getter = getattr(executor._robot_service, "get_current_position_fresh", None)
     if not callable(getter):
@@ -340,18 +342,46 @@ def _next_cycle_start_pose_reached(
         position_error <= float(position_tolerance_mm)
         and orientation_error <= float(orientation_tolerance_deg)
     )
-    _logger.info(
-        "[NEXT_CYCLE] Start-pose verification reached=%s position_error_mm=%.3f "
-        "orientation_error_deg=%.3f tolerance_mm=%.3f tolerance_deg=%.3f actual=%s target=%s",
-        reached,
-        position_error,
-        orientation_error,
-        float(position_tolerance_mm),
-        float(orientation_tolerance_deg),
-        [round(float(value), 3) for value in actual[:6]],
-        [round(float(value), 3) for value in expected[:6]],
-    )
+    if log_result:
+        _logger.info(
+            "[NEXT_CYCLE] Start-pose verification reached=%s position_error_mm=%.3f "
+            "orientation_error_deg=%.3f tolerance_mm=%.3f tolerance_deg=%.3f actual=%s target=%s",
+            reached,
+            position_error,
+            orientation_error,
+            float(position_tolerance_mm),
+            float(orientation_tolerance_deg),
+            [round(float(value), 3) for value in actual[:6]],
+            [round(float(value), 3) for value in expected[:6]],
+        )
     return reached
+
+
+def _wait_for_next_cycle_start_pose(
+    executor: object,
+    next_cycle_start: dict,
+    *,
+    timeout_s: float = 2.0,
+    poll_interval_s: float = 0.05,
+    stable_samples: int = 2,
+) -> bool:
+    """Wait through ordered-chain response/telemetry skew for stable arrival."""
+    deadline = monotonic() + max(0.1, float(timeout_s))
+    consecutive = 0
+    while monotonic() < deadline:
+        if _next_cycle_start_pose_reached(executor, next_cycle_start, log_result=False):
+            consecutive += 1
+            if consecutive >= max(1, int(stable_samples)):
+                _logger.info(
+                    "[NEXT_CYCLE] Stable start pose reached after ordered exit chain samples=%d",
+                    consecutive,
+                )
+                return True
+        else:
+            consecutive = 0
+        sleep(max(0.01, float(poll_interval_s)))
+    _next_cycle_start_pose_reached(executor, next_cycle_start, log_result=True)
+    return False
 
 
 def _on_workpiece_release_verified(executor: object) -> tuple[bool, str]:
@@ -903,7 +933,7 @@ def _execute_plate_layout_ordered_release(
     ):
         return False, "Workpiece released, but plate-layout ordered exit chain failed"
     if next_cycle_start is not None:
-        if not _next_cycle_start_pose_reached(executor, next_cycle_start):
+        if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff exit completed, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
     _logger.info("[DROPOFF] strategy=plate_layout ordered entry/release/exit completed")
