@@ -182,8 +182,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         self.assertEqual([5, 0.0], [item["blendR"] for item in exit_chain])
         self.assertEqual(["ptp", "linear"], [item["type"] for item in entry])
         self.assertIn("passage gate to calculated dropoff", entry[-1]["label"])
+        self.assertAlmostEqual(90.0, entry[-1]["position"][5] % 360.0)
+        self.assertAlmostEqual(0.0, exit_chain[-1]["position"][5] % 360.0)
         self.assertEqual(4, executor._robot_service.get_current_position_fresh.call_count)
-        executor._robot_service.unwind_joint6.assert_called_once()
+        executor._robot_service.unwind_joint6.assert_not_called()
 
     def test_preparation_unwinds_at_detach_without_moving(self) -> None:
         service = PlateLayoutService()
@@ -212,7 +214,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
         executor._robot_service.unwind_joint6.assert_called_once()
         executor._motion.move_pickup_phase.assert_not_called()
 
-    def test_distributed_unwind_uses_four_cumulative_ninety_degree_steps(self) -> None:
+    def test_distributed_unwind_finishes_at_equivalent_dropoff_orientation(self) -> None:
         executor = MagicMock()
         executor._contact_motion_config.rotation_index = 5
         executor._last_process_start_rz = 0.0
@@ -225,13 +227,14 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             center_pose=[4, 5, 6, 180, 0, 0],
             dropoff_pose=[7, 8, 9, 180, 0, 0],
             next_start_pose=[10, 11, 12, 180, 0, 0],
+            use_center_waypoint=True,
         )
 
-        self.assertEqual(270.0, poses["entry_gate"][5])
-        self.assertEqual(270.0, poses["entry_center"][5])
-        self.assertEqual(180.0, poses["dropoff"][5])
-        self.assertEqual(180.0, poses["exit_center"][5])
-        self.assertEqual(90.0, poses["exit_gate"][5])
+        self.assertEqual(240.0, poses["entry_gate"][5])
+        self.assertEqual(120.0, poses["entry_center"][5])
+        self.assertEqual(0.0, poses["dropoff"][5])
+        self.assertEqual(0.0, poses["exit_center"][5])
+        self.assertEqual(0.0, poses["exit_gate"][5])
         self.assertEqual(0.0, poses["next_start"][5])
 
     def test_distributed_unwind_is_positive_when_paint_rz_rotation_is_negative(self) -> None:
@@ -247,11 +250,12 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             center_pose=[4, 5, 6, 180, 0, 0],
             dropoff_pose=[7, 8, 9, 180, 0, 0],
             next_start_pose=[10, 11, 12, 180, 0, 0],
+            use_center_waypoint=True,
         )
 
-        self.assertEqual(-270.0, poses["entry_gate"][5])
-        self.assertEqual(-180.0, poses["dropoff"][5])
-        self.assertEqual(-90.0, poses["exit_gate"][5])
+        self.assertEqual(-240.0, poses["entry_gate"][5])
+        self.assertEqual(0.0, poses["dropoff"][5])
+        self.assertEqual(0.0, poses["exit_gate"][5])
         self.assertEqual(0.0, poses["next_start"][5])
 
     def test_failed_reservation_does_not_consume_position(self) -> None:

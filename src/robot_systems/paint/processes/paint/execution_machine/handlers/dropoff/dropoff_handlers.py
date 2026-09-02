@@ -863,6 +863,7 @@ def _plate_route_poses_with_distributed_unwind(
     center_pose: list[float],
     dropoff_pose: list[float],
     next_start_pose: list[float] | None,
+    use_center_waypoint: bool,
 ) -> dict[str, list[float]]:
     poses = {
         "entry_gate": list(gate_pose),
@@ -897,24 +898,47 @@ def _plate_route_poses_with_distributed_unwind(
             "Plate-layout distributed unwind requires a non-zero executed paint RZ direction"
         )
     start_rotation = float(current[rotation_index])
-    step = -90.0 if paint_rz_delta > 0.0 else 90.0
+    direction = -1.0 if paint_rz_delta > 0.0 else 1.0
+    dropoff_rotation = unwrap_degrees(start_rotation, float(dropoff_pose[rotation_index]))
+    while direction * (dropoff_rotation - start_rotation) <= 1e-6:
+        dropoff_rotation += direction * 360.0
+    # Select the equivalent dropoff branch reached by rotating opposite to the
+    # paint path.  The endpoint preserves the calculated workpiece orientation;
+    # only the continuous branch differs by a whole turn.
+    total_entry_rotation = dropoff_rotation - start_rotation
+    if use_center_waypoint:
+        gate_fraction = 1.0 / 3.0
+        center_fraction = 2.0 / 3.0
+    else:
+        gate_fraction = 0.5
+        center_fraction = 0.5
     rotations = {
-        "entry_gate": start_rotation + step,
-        "entry_center": start_rotation + step,
-        "dropoff": start_rotation + (2.0 * step),
-        "exit_center": start_rotation + (2.0 * step),
-        "exit_gate": start_rotation + (3.0 * step),
-        "next_start": start_rotation + (4.0 * step),
+        "entry_gate": start_rotation + total_entry_rotation * gate_fraction,
+        "entry_center": start_rotation + total_entry_rotation * center_fraction,
+        "dropoff": dropoff_rotation,
     }
+    previous_rotation = dropoff_rotation
+    for key, nominal_pose in (
+        ("exit_center", center_pose),
+        ("exit_gate", gate_pose),
+        ("next_start", next_start_pose),
+    ):
+        if nominal_pose is None:
+            continue
+        previous_rotation = unwrap_degrees(
+            previous_rotation, float(nominal_pose[rotation_index])
+        )
+        rotations[key] = previous_rotation
     for key, pose in poses.items():
         if len(pose) <= rotation_index:
             raise ValueError(f"Plate-layout route pose '{key}' has no configured rotation axis")
         pose[rotation_index] = rotations[key]
     _logger.info(
-        "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f step=%.3f targets=%s",
+        "[PLATE_LAYOUT] Distributed unwind start=%.3f paint_rz_delta=%.3f "
+        "entry_delta=%.3f targets=%s",
         start_rotation,
         paint_rz_delta,
-        step,
+        total_entry_rotation,
         {key: round(value, 3) for key, value in rotations.items() if key in poses},
     )
     return poses
@@ -952,6 +976,7 @@ def _execute_plate_layout_ordered_release(
                 center_pose=reservation.transit_pose,
                 dropoff_pose=reservation.release_pose,
                 next_start_pose=None if next_cycle_start is None else list(next_cycle_start["position"]),
+                use_center_waypoint=bool(dropoff.plate_use_center_waypoint),
             )
         except (TypeError, ValueError):
             _logger.exception("[PLATE_LAYOUT] Failed to build distributed-unwind route")
@@ -1019,13 +1044,6 @@ def _execute_plate_layout_ordered_release(
     ):
         return False, "Workpiece released, but plate-layout ordered exit chain failed"
     if next_cycle_start is not None:
-        if bool(dropoff.plate_distribute_unwind) and not executor._robot_service.unwind_joint6(
-            blocking=True,
-            queue_if_busy=PAINT_PROCESS_CONFIG.navigation_return.unwind_queue_if_busy,
-            vel=executor._paint_process_config().navigation_return.unwind_vel_percent,
-            acc=executor._paint_process_config().navigation_return.unwind_acc_percent,
-        ):
-            return False, "Plate route completed, but final Joint 6 unwind failed at next-cycle start"
         if not _wait_for_next_cycle_start_pose(executor, next_cycle_start):
             return False, "Dropoff exit completed, but next-cycle start pose was not reached"
         executor._last_prepositioned_start_group = str(next_cycle_start["group_id"])
