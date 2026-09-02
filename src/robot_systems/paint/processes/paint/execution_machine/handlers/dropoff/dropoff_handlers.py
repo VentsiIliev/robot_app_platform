@@ -523,39 +523,19 @@ def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
             _logger.error("[PLATE_LAYOUT] Dropoff requested without an active reservation")
             return DropoffReleasePlan(strategy_name=strategy_name, waypoints=())
         dropoff = executor._paint_process_config().dropoff
-        center_to_approach = _plate_motion_profile(dropoff, "center_to_approach")
-        descend_release = _plate_motion_profile(dropoff, "descend_release")
-        retract_after_release = _plate_motion_profile(dropoff, "retract_after_release")
+        center_to_dropoff = _plate_motion_profile(dropoff, "center_to_dropoff")
         return_plate_center = _plate_motion_profile(dropoff, "return_plate_center")
         return DropoffReleasePlan(
             strategy_name=strategy_name,
             waypoints=(
                 DropoffReleaseWaypoint(
-                    label="Moving above calculated plate position",
-                    pose=list(reservation.approach_pose),
-                    vel_percent=center_to_approach["vel_percent"],
-                    acc_percent=center_to_approach["acc_percent"],
-                    motion_type="linear",
-                    blendR=center_to_approach["blendR"],
-                    corridor_id=_plate_layout_corridor_id(executor),
-                ),
-                DropoffReleaseWaypoint(
-                    label="Descending to calculated plate position",
+                    label="Moving from plate center to calculated dropoff position",
                     pose=list(reservation.release_pose),
-                    vel_percent=descend_release["vel_percent"],
-                    acc_percent=descend_release["acc_percent"],
+                    vel_percent=center_to_dropoff["vel_percent"],
+                    acc_percent=center_to_dropoff["acc_percent"],
                     motion_type="linear",
-                    blendR=descend_release["blendR"],
+                    blendR=center_to_dropoff["blendR"],
                     release_here=True,
-                    corridor_id=_plate_layout_corridor_id(executor),
-                ),
-                DropoffReleaseWaypoint(
-                    label="Retracting from calculated plate position",
-                    pose=list(reservation.approach_pose),
-                    vel_percent=retract_after_release["vel_percent"],
-                    acc_percent=retract_after_release["acc_percent"],
-                    motion_type="linear",
-                    blendR=retract_after_release["blendR"],
                     corridor_id=_plate_layout_corridor_id(executor),
                 ),
                 DropoffReleaseWaypoint(
@@ -854,8 +834,11 @@ def _plate_motion_profile(dropoff: object, key: str) -> dict[str, float]:
         "acc_percent": float(dropoff.release_align_acc_percent),
         "blendR": float(dropoff.release_align_blendR),
     }
+    accepted_keys = {key}
+    if key == "center_to_dropoff":
+        accepted_keys.update({"descend_release", "center_to_approach"})
     for raw in list(getattr(dropoff, "plate_motion_profiles", []) or []):
-        if isinstance(raw, dict) and str(raw.get("key", "")) == key:
+        if isinstance(raw, dict) and str(raw.get("key", "")) in accepted_keys:
             try:
                 return {
                     "vel_percent": float(raw.get("vel_percent", fallback["vel_percent"])),

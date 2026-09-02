@@ -162,10 +162,8 @@ def build_process_groups() -> list[SettingGroup]:
             SettingField("dropoff_plate_robot_frame", _t("Captured Robot Frame"), "paint_pose_display", default=_t("Not captured")),
             _profile_table("dropoff_plate_motion_profiles", "Plate Dropoff Moves (Execution Order)", [
                 _profile("enter_plate_center", "1. Paint End to Plate Center", 70.0, 50.0, "linear", 0.0),
-                _profile("center_to_approach", "2. Plate Center to Dropoff Approach", 70.0, 50.0, "linear", 0.0),
-                _profile("descend_release", "3. Descend to Dropoff and Release", 70.0, 50.0, "linear", 0.0),
-                _profile("retract_after_release", "4. Retract After Release", 70.0, 50.0, "linear", 0.0),
-                _profile("return_plate_center", "5. Return to Plate Center", 70.0, 50.0, "linear", 0.0),
+                _profile("center_to_dropoff", "2. Plate Center to Dropoff and Release", 70.0, 50.0, "linear", 0.0),
+                _profile("return_plate_center", "3. Return to Plate Center", 70.0, 50.0, "linear", 0.0),
             ]),
             _mm_field("dropoff_plate_release_z_offset_mm", "Plate Release Z Offset", 0.0),
             _mm_field("dropoff_plate_approach_clearance_mm", "Plate Approach Clearance", 50.0, min_val=0.0),

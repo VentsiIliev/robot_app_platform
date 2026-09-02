@@ -158,13 +158,15 @@ class PaintProcessSettingsMapper:
     def _normalize_plate_motion_profiles(value: object, fallback: list[dict]) -> list[dict]:
         required_keys = (
             "enter_plate_center",
-            "center_to_approach",
-            "descend_release",
-            "retract_after_release",
+            "center_to_dropoff",
             "return_plate_center",
         )
         incoming = PaintProcessSettingsMapper._profiles_by_key(value)
         defaults = PaintProcessSettingsMapper._profiles_by_key(fallback)
+        if "center_to_dropoff" not in incoming:
+            legacy = incoming.get("descend_release") or incoming.get("center_to_approach")
+            if legacy is not None:
+                incoming["center_to_dropoff"] = dict(legacy)
         profiles: list[dict] = []
         for key in required_keys:
             profile = dict(defaults.get(key, {}))

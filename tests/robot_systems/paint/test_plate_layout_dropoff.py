@@ -57,9 +57,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_center_distributed_unwind_deg=135.0,
             plate_motion_profiles=[
                 {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
-                {"key": "center_to_approach", "vel_percent": 12, "acc_percent": 22, "motion_type": "linear", "blendR": 2},
-                {"key": "descend_release", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
-                {"key": "retract_after_release", "vel_percent": 14, "acc_percent": 24, "motion_type": "linear", "blendR": 4},
+                {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
                 {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
             ],
         ))
@@ -131,9 +129,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             plate_approach_clearance_mm=40.0,
             plate_motion_profiles=[
                 {"key": "enter_plate_center", "vel_percent": 11, "acc_percent": 21, "motion_type": "linear", "blendR": 1},
-                {"key": "center_to_approach", "vel_percent": 12, "acc_percent": 22, "motion_type": "linear", "blendR": 2},
-                {"key": "descend_release", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
-                {"key": "retract_after_release", "vel_percent": 14, "acc_percent": 24, "motion_type": "linear", "blendR": 4},
+                {"key": "center_to_dropoff", "vel_percent": 13, "acc_percent": 23, "motion_type": "linear", "blendR": 3},
                 {"key": "return_plate_center", "vel_percent": 15, "acc_percent": 25, "motion_type": "linear", "blendR": 5},
             ],
         ))
@@ -153,12 +149,12 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
         plan = _build_dropoff_release_plan(executor)
 
-        self.assertEqual(4, len(plan.waypoints))
+        self.assertEqual(2, len(plan.waypoints))
         self.assertEqual("Returning through plate center", plan.waypoints[-1].label)
         self.assertEqual(service.pending.transit_pose, plan.waypoints[-1].pose)
         self.assertTrue(all(item.corridor_id == "dropoff_plate_layout" for item in plan.waypoints))
         self.assertEqual(
-            [(12, 22, 2), (13, 23, 3), (14, 24, 4), (15, 25, 5)],
+            [(13, 23, 3), (15, 25, 5)],
             [(item.vel_percent, item.acc_percent, item.blendR) for item in plan.waypoints],
         )
 

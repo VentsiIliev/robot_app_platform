@@ -203,9 +203,7 @@ class PaintDropoffConfig:
     plate_robot_user: int = -1
     plate_motion_profiles: list[dict] = field(default_factory=lambda: [
         {"key": "enter_plate_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
-        {"key": "center_to_approach", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
-        {"key": "descend_release", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
-        {"key": "retract_after_release", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
+        {"key": "center_to_dropoff", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
         {"key": "return_plate_center", "vel_percent": 70.0, "acc_percent": 50.0, "motion_type": "linear", "blendR": 0.0},
     ])  # [LIVE SETTINGS]
 
