@@ -1400,11 +1400,14 @@ class HttpWebSocketRobotClient(RobotClientAdapter):
             logger.error("stop_motion error: %s", e, exc_info=True)
             return -1
 
-    def controlled_stop(self, expected_task_id) -> dict:
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         try:
+            payload = {"expected_task_id": expected_task_id}
+            if stop_duration_s is not None:
+                payload["stop_duration_s"] = float(stop_duration_s)
             response = requests.post(
                 f"{self.server_url}/motion/controlled-stop",
-                json={"expected_task_id": expected_task_id},
+                json=payload,
                 timeout=2,
             )
             raw = response.json()

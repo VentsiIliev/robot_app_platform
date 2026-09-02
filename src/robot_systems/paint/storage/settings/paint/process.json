@@ -66,6 +66,7 @@
     "servo_contact_fast_lin_acceleration_percent": 30.0,
     "servo_contact_timeout_s": 7.0,
     "servo_contact_poll_interval_s": 0.01,
+    "servo_contact_controlled_stop_duration_s": 0.2,
     "servo_contact_preflight_read_attempts": 2,
     "servo_contact_read_failure_limit": 3,
     "servo_contact_fallback_to_planned_descend": false,
@@ -96,7 +97,7 @@
     "second_pass_pivot_z_offset_mm": -25.0
   },
   "dropoff": {
-    "strategy": "movement_group",
+    "strategy": "plate_layout",
     "allow_sub_zero_dropoff": true,
     "corridor_x_margin_mm": 70.0,
     "corridor_y_margin_mm": 70.0,

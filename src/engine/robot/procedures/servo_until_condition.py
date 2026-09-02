@@ -39,6 +39,7 @@ class ServoUntilConditionConfig:
     minimum_z_mm: float | None = None
     initial_linear_mm_s: float | None = None
     slowdown_z_mm: float | None = None
+    controlled_stop_duration_s: float | None = 0.20
 
 
 @dataclass(frozen=True)
@@ -872,7 +873,10 @@ class ServoUntilConditionProcedure:
                         outcome.get("task_id"),
                         time.monotonic() - started_at,
                     )
-                    stop_ok = self._controlled_stop_checked(outcome.get("task_id"))
+                    stop_ok = self._controlled_stop_checked(
+                        outcome.get("task_id"),
+                        stop_duration_s=cfg.controlled_stop_duration_s,
+                    )
                     stop_done_ns = time.monotonic_ns()
                     if not stop_ok:
                         return self._result(
@@ -1487,13 +1491,18 @@ class ServoUntilConditionProcedure:
             _logger.exception("[SERVO_UNTIL_CONDITION] stop_motion failed")
             return False
 
-    def _controlled_stop_checked(self, task_id) -> bool:
+    def _controlled_stop_checked(self, task_id, *, stop_duration_s=None) -> bool:
         method = getattr(self._robot, "controlled_stop", None)
         if not callable(method):
             _logger.error("[SENSOR_CONTROLLED_FAST_LIN] controlled stop is unsupported")
             return False
         try:
-            result = method(task_id)
+            try:
+                result = method(task_id, stop_duration_s=stop_duration_s)
+            except TypeError as exc:
+                if "stop_duration_s" not in str(exc):
+                    raise
+                result = method(task_id)
         except Exception:
             _logger.exception("[SENSOR_CONTROLLED_FAST_LIN] controlled stop failed")
             return False

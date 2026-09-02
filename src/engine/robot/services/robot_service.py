@@ -175,11 +175,11 @@ class RobotService(IRobotService):
     def stop_motion(self) -> bool:
         return self._motion.stop_motion()
 
-    def controlled_stop(self, expected_task_id) -> dict:
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         method = getattr(self._motion, "controlled_stop", None)
         if not callable(method):
             return {"success": False, "error": "controlled_stop_unsupported"}
-        return method(expected_task_id)
+        return method(expected_task_id, stop_duration_s=stop_duration_s)
 
     def get_current_position(self) -> List[float]:
         return list(self._state.position)

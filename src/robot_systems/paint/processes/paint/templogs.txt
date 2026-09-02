@@ -1,29 +1,36 @@
-/home/ilv/Desktop/robot_app_platform/.venv/bin/python /home/ilv/Desktop/robot_app_platform/src/bootstrap/run_main.py
-14:25:10 [INFO    ] src.bootstrap.ros_backend_launcher.start — ROS backend autostart disabled
-14:25:10 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot init — server_url=http://localhost:5000
-14:25:10 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connecting to ROS2 bridge at http://localhost:5000
-14:25:10 [WARNING ] src.engine.robot.drivers.client_adapters.http_websocket._log_health_check_error — health_check error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:10 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — health_check response: {'status': 'error', 'message': 'HTTPConnectionPool(host=\'localhost\', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host=\'localhost\', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))'}
-14:25:10 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Bridge health check failed: {'status': 'error', 'message': 'HTTPConnectionPool(host=\'localhost\', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host=\'localhost\', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))'}
-14:25:10 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-14:25:10 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-14:25:10 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
-14:25:10 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot ready
-14:25:10 [DEBUG   ] SystemBuilder.build — Building PaintSystem
-14:25:10 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.0s)
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
-14:25:10 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._log_health_check_error — health_check error repeated: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:10 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — State WebSocket unavailable at ws://localhost:5001/ws/state: [Errno 111] Connect call failed ('127.0.0.1', 5001)
-14:25:10 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Execution WebSocket unavailable at ws://localhost:5002/ws/execution: [Errno 111] Connect call failed ('127.0.0.1', 5002)
-14:25:10 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Sensor WebSocket unavailable at ws://localhost:5003/ws/sensors: [Errno 111] Connect call failed ('127.0.0.1', 5003)
+plp@plp:~/Desktop/cobot/robot_app_platform$ ./launch_robot_app.sh
+Press Ctrl+X in this terminal to stop the robot app.
+14:26:48 [INFO    ] src.bootstrap.ros_backend_launcher.start — ROS backend autostart disabled
+14:26:48 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot init — server_url=http://localhost:5000
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connecting to ROS2 bridge at http://localhost:5000
+14:26:48 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.health_check — health_check ← status=200 body={'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1788347995.601312, 'status': 'ok', 'updated_at': 1788347996.9277315}
+14:26:48 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — health_check response: {'error': None, 'message': 'Robot runtime is ready', 'motion_stack_fault': None, 'motion_stack_ready': True, 'phase': 'ready', 'ready': True, 'ros2_active': True, 'started_at': 1788347995.601312, 'status': 'ok', 'updated_at': 1788347996.9277315}
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.__init__ — Connected to ROS2 bridge at http://localhost:5000
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [INFO    ] src.engine.robot.drivers.ros2_robot.__init__ — Ros2Robot ready
+14:26:48 [DEBUG   ] asyncio.__init__ — Using selector: EpollSelector
+14:26:48 [DEBUG   ] SystemBuilder.build — Building PaintSystem
+14:26:48 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
+14:26:48 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/config.json'.
+14:26:48 [INFO    ] RobotStateManager.start_monitoring — State monitoring started (poll interval=0.0s)
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'robot' → RobotService
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'navigation' → NavigationService
+14:26:48 [DEBUG   ] SystemBuilder.build — Built 'work_areas' → WorkAreaService
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_tool — Active ROS2 tool set to 1 (TOOL_1)
+14:26:48 [INFO    ] RobotStateManager._sync_configured_tool — Configured active robot tool synced: 1
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.set_active_workobject — Active ROS2 workobject set to 1 (WOBJ_1)
+14:26:48 [INFO    ] RobotStateManager._sync_configured_workobject — Configured active robot workobject synced: 1
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Connected to ROS2 execution WebSocket at ws://localhost:5002/ws/execution
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Connected to ROS2 sensor WebSocket at ws://localhost:5003/ws/sensors
+14:26:48 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — Connected to ROS2 state WebSocket at ws://localhost:5001/ws/state
 4.13.0
-14:25:10 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data
-14:25:10 [INFO    ] SettingsManager.loadSettings — [SettingsManager] Loading settings from /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/camera_settings.json
-14:25:10 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
-14:25:10 [INFO    ] Service.loadSettings — <class 'dict'>
-14:25:10 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
+14:26:49 [INFO    ] DataManager.build_storage_paths — Building storage paths: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data
+14:26:49 [INFO    ] src.engine.vision.implementation.VisionSystem.VisionSystem._configure_opencv_threads — OpenCV worker threads capped at 2
+14:26:49 [INFO    ] SettingsManager.loadSettings — [SettingsManager] Loading settings from /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/camera_settings.json
+14:26:49 [INFO    ] Service.loadSettings — [SettingsManager] settings type in loadSettings
+14:26:49 [INFO    ] Service.loadSettings — <class 'dict'>
+14:26:49 [INFO    ] Service.loadSettings — [SettingsManager] after from dict <class 'src.engine.vision.implementation.VisionSystem.core.settings.CameraSettings.CameraSettings'> CameraSettings:
   Index: 0
   Resolution: 1280x720
   Skip Frames: 30
@@ -48,138 +55,457 @@
   ArUco Enabled: False
   ArUco Dictionary: DICT_4X4_250
   ArUco Flip Image: False
-14:25:10 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/perspectiveTransform.npy
-14:25:10 [INFO    ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix loaded from: /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy
-14:25:10 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 1/10)
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'modbus_config'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'modbus_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/modbus.json'.
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PERIPHERALS'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'peripheral_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/peripherals.json'.
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → VacuumPumpController
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.FAN' → ModbusFanControl
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.PHYSICAL_CONTROL_BUTTONS' → ModbusPhysicalControlButtons
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_SENSOR' → VacuumSensorService
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.DRYER_CONFIG'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'dryer_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/dryer/settings.json'.
-14:25:10 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.DRYER' → DryerService
-14:25:10 [INFO    ] PaintRobotSystem.start — Starting PaintSystem v1.0.0
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (VacuumPumpController)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.FAN' (ModbusFanControl)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.PHYSICAL_CONTROL_BUTTONS' (ModbusPhysicalControlButtons)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_SENSOR' (VacuumSensorService)
-14:25:10 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.DRYER' (DryerService)
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PAINT_PROCESS_CONFIG'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'paint_process_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/paint/process.json'.
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'robot_config'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_config' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/config.json'.
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/movement_groups.json'.
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/robot/calibration.json'.
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/targeting/definitions.json'.
-14:25:10 [INFO    ] VisionService.start — VisionService started
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'height_measuring_settings'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'height_measuring_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/settings.json'.
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'laser_calibration_data' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/calibration_data.json'.
-14:25:10 [INFO    ] src.engine.robot.height_measuring.height_measuring_service._load_calibration — No calibration data found
-14:25:10 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
-14:25:10 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/settings/vision/calibration_settings.json'.
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/ilv/Desktop/robot_app_platform/src/robot_systems/paint/storage/workpieces
-14:25:10 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable →
-14:25:10 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable → POST /drive/enable
-14:25:10 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/enable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 85, in create_connection
-    raise err
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 73, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused
+14:26:49 [INFO    ] DataManager.loadPerspectiveMatrix — No perspective matrix found at: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/perspectiveTransform.npy
+14:26:49 [INFO    ] DataManager.loadCameraToRobotMatrix — Camera-to-robot matrix loaded from: /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/data/cameraToRobotMatrix_camera_center.npy
+14:26:49 [INFO    ] CameraInitializer.initializeCameraWithRetry — Attempting camera 0 (attempt 1/10)
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'vision' → VisionService
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'modbus_config'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'modbus_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/modbus.json'.
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PERIPHERALS'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'peripheral_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/hardware/peripherals.json'.
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_PUMP' → VacuumPumpController
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.FAN' → ModbusFanControl
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.PHYSICAL_CONTROL_BUTTONS' → ModbusPhysicalControlButtons
+14:26:49 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.VACUUM_SENSOR' → VacuumSensorService
+14:26:49 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.DRYER_CONFIG'
+14:26:49 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'dryer_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/dryer/settings.json'.
+14:26:49 [DEBUG   ] ModbusRegisterTransport.write_registers — Writing starting register 0 (values=[0, 0, 600, 180, 600, 180, 80, 50, 100, 100, 500, 350, 50, 50, 1, 500, 500])
+MinimalModbus debug mode. Will write to instrument (expecting 8 bytes back): 0A 10 00 00 00 11 22 00 00 00 00 02 58 00 B4 02 58 00 B4 00 50 00 32 00 64 00 64 01 F4 01 5E 00 32 00 32 00 01 01 F4 01 F4 52 B8 (43 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 24454604.78 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 10 00 00 00 11 01 7E (8 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-The above exception was the direct cause of the following exception:
+14:26:49 [INFO    ] DryerController.write_data — Dryer write ok start_register=0 values=[0, 0, 600, 180, 600, 180, 80, 50, 100, 100, 500, 350, 50, 50, 1, 500, 500]
+14:26:49 [INFO    ] DryerController.next_position — [DRYER] Sending NEXT_POSITION command=0x01 command_register=1
+14:26:49 [DEBUG   ] ModbusRegisterTransport.write_registers — Writing starting register 1 (values=[1])
+MinimalModbus debug mode. Will write to instrument (expecting 8 bytes back): 0A 10 00 01 00 01 02 00 01 15 71 (11 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 2.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 10 00 01 00 01 51 72 (8 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 493, in _make_request
-    conn.request(
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 500, in request
-    self.endheaders()
-  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
-    self.send(msg)
-  File "/usr/lib/python3.12/http/client.py", line 1064, in send
-    self.connect()
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 331, in connect
-    self.sock = self._new_conn()
-                ^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 219, in _new_conn
-    raise NewConnectionError(
-urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused
+14:26:49 [INFO    ] DryerController.next_position — [DRYER] NEXT_POSITION FC16 write completed success=True command_register=1 command=0x01
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 31.47 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-The above exception was the direct cause of the following exception:
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.69 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 644, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/enable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-During handling of the above exception, another exception occurred:
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:49 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.05 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
 
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/client_adapters/http_websocket.py", line 1784, in enable
-    response = requests.post(f"{self.server_url}/drive/enable", timeout=5)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 115, in post
-    return request("post", url, data=data, json=json, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 59, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 677, in send
-    raise ConnectionError(e, request=request)
-requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/enable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:10 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable ← done
-14:25:10 [INFO    ] PaintRobotSystem.start — PaintSystem started
-14:25:10 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
-14:25:10 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
-14:25:10 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
-14:25:10 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
-14:25:10 [INFO    ] ShellConfigurator.configure — PaintSystem: configured 4 folders
+14:26:49 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:49 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.35 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.61 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.38 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [INFO    ] CameraInitializer.initializeCameraWithRetry — Camera 0 initialised on attempt 1
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.72 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.50 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.50 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.96 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:50 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.56 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:50 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:50 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.11 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.91 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.35 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.36 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.40 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.45 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.54 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:51 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.49 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:51 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:51 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.94 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.55 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.63 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.42 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.85 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.45 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.54 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:52 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.94 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:52 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:52 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.71 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.97 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.60 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.81 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.44 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 102.39 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.49 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:53 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.73 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:53 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:53 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.43 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.44 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.57 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 31 DC 51 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=49 (0x0031) healthy=True ready=True ejecting=False eject_done=True next_position_moving=True next_position_done=False
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0031 healthy=True ready=True next_pos_done=False
+14:26:54 [DEBUG   ] ModbusRegisterTransport.read_register — Reading register 0 ...
+MinimalModbus debug mode. Will write to instrument (expecting 7 bytes back): 0A 03 00 00 00 01 85 71 (8 bytes)
+MinimalModbus debug mode. Clearing serial buffers for port /dev/ttyUSB0
+MinimalModbus debug mode. No sleep required before write. Time since previous read: 101.38 ms, minimum silent period: 1.75 ms.
+MinimalModbus debug mode. Response from instrument: 0A 03 02 00 51 DC 79 (7 bytes), roundtrip time: 0.0 ms. Timeout for reading: 500.0 ms.
+
+14:26:54 [DEBUG   ] DryerController.get_state — Dryer status read register=0 raw=81 (0x0051) healthy=True ready=True ejecting=False eject_done=True next_position_moving=False next_position_done=True
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization status raw=0x0051 healthy=True ready=True next_pos_done=True
+14:26:54 [INFO    ] DryerController._wait_until_next_position_done — [DRYER] Initialization completed: next position confirmed
+14:26:54 [DEBUG   ] SystemBuilder.build — Built 'ServiceID.DRYER' → DryerService
+14:26:54 [INFO    ] PaintRobotSystem.start — Starting PaintSystem v1.0.0
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'robot' (RobotService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'navigation' (NavigationService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'work_areas' (WorkAreaService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'vision' (VisionService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_PUMP' (VacuumPumpController)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.FAN' (ModbusFanControl)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.PHYSICAL_CONTROL_BUTTONS' (ModbusPhysicalControlButtons)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.VACUUM_SENSOR' (VacuumSensorService)
+14:26:54 [DEBUG   ] PaintRobotSystem._validate_and_inject — Injected 'ServiceID.DRYER' (DryerService)
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'SettingsID.PAINT_PROCESS_CONFIG'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'paint_process_config' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/paint/process.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'movement_groups'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'movement_group_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/movement_groups.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'robot_calibration'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'robot_calibration' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/robot/calibration.json'.
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'targeting'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'targeting' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/targeting/definitions.json'.
+14:26:54 [INFO    ] VisionService.start — VisionService started
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'height_measuring_settings'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'height_measuring_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/settings.json'.
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'laser_calibration_data' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/height_measuring/calibration_data.json'.
+14:26:54 [INFO    ] src.engine.robot.height_measuring.height_measuring_service._load_calibration — No calibration data found
+14:26:54 [DEBUG   ] SettingsService.reload — Loading settings 'calibration_vision_settings'
+14:26:54 [INFO    ] BaseJsonSettingsRepository.load — Loaded 'calibration_vision_settings' settings from '/home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/settings/vision/calibration_settings.json'.
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.robot_systems.paint.domain.workpieces.repository.json_paint_workpiece_repository.__init__ — JsonPaintWorkpieceRepository: root -> /home/plp/Desktop/cobot/robot_app_platform/src/robot_systems/paint/storage/workpieces
+14:26:54 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable →
+14:26:54 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable → POST /drive/enable
+14:26:54 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution first_active_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': True}
+14:26:55 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket._log_execution_ws_transition — [EXECUTION_TIMING] execution inactive_status after_request_s=-1.000 task_id=None status={'source': 'websocket', 'is_executing': False}
+14:26:55 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.enable — enable ← http=200 raw={'actual_enabled': True, 'command_accepted': True, 'desired_enabled': True, 'hardware_fault': None, 'hardware_ready': True, 'motion_allowed_by_drive_enable': True, 'request': {'controller_deactivate_ok': True, 'controller_switch_ok': True, 'mode': 'csp', 'requested_enabled': True, 'state': 'ENABLE_REQUESTED', 'success': True}, 'requested_enabled': True, 'state': 'OPERATION_ENABLED', 'status_state': ['operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled', 'operation_enabled'], 'statusword': [5815, 4791, 5815, 5815, 5815, 5815], 'success': True}
+14:26:55 [INFO    ] src.engine.robot.drivers.ros2_robot.enable — enable ← done
+14:26:55 [INFO    ] PaintRobotSystem.start — PaintSystem started
 [ShellConfig] Cleared all folder definitions
 [ShellConfig] Added folder: PRODUCTION (ID: 1)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Production (id=1)
 [ShellConfig] Added folder: SERVICE (ID: 2)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Service (id=2)
 [ShellConfig] Added folder: ADMIN (ID: 3)
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Administration (id=3)
 [ShellConfig] Added folder: Tests (ID: 4)
-14:25:10 [INFO    ] CameraInitializer.initializeCameraWithRetry — Camera 0 initialised on attempt 1
+14:26:55 [INFO    ] ShellConfigurator.configure — Registered shell folder: Tests (id=4)
+14:26:55 [INFO    ] ShellConfigurator.configure — PaintSystem: configured 4 folders
+14:26:55 [WARNING ] main.main — ui.dev_skip_login is enabled — bypassing authentication
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'EthercatDiagnostics' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DryerSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'BrokerDebug' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionPlaneSetup' → folder 4
+14:26:55 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionRecipe' → folder 4
 [AppShell] Added PaintDashboard to folder 1
 [AppShell] Added WorkpieceLibrary to folder 1
 [AppShell] Added WorkpieceEditor to folder 1
@@ -198,339 +524,4 @@ requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5
 [AppShell] Added PickTarget to folder 4
 [AppShell] Added PaintMotionPlaneSetup to folder 4
 [AppShell] Added PaintMotionRecipe to folder 4
-14:25:10 [WARNING ] main.main — ui.dev_skip_login is enabled — bypassing authentication
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintDashboard' → folder 1
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceLibrary' → folder 1
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkpieceEditor' → folder 1
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'RobotSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'EthercatDiagnostics' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'ModbusSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DryerSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'DeviceControl' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'WorkAreaSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CameraSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'CalibrationSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintProcessSettings' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'Calibration' → folder 2
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'BrokerDebug' → folder 4
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'UserManagement' → folder 3
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PickTarget' → folder 4
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionPlaneSetup' → folder 4
-14:25:10 [INFO    ] ApplicationLoader.register_lazy — Registered lazy application 'PaintMotionRecipe' → folder 4
-14:25:11 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._log_health_check_error — health_check error repeated: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:11 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Execution WebSocket unavailable at ws://localhost:5002/ws/execution: [Errno 111] Connect call failed ('127.0.0.1', 5002)
-14:25:11 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Sensor WebSocket unavailable at ws://localhost:5003/ws/sensors: [Errno 111] Connect call failed ('127.0.0.1', 5003)
-14:25:11 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — State WebSocket unavailable at ws://localhost:5001/ws/state: [Errno 111] Connect call failed ('127.0.0.1', 5001)
-14:25:12 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Execution WebSocket unavailable at ws://localhost:5002/ws/execution: [Errno 111] Connect call failed ('127.0.0.1', 5002)
-14:25:12 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._log_health_check_error — health_check error repeated: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:12 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — State WebSocket unavailable at ws://localhost:5001/ws/state: [Errno 111] Connect call failed ('127.0.0.1', 5001)
-14:25:12 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Sensor WebSocket unavailable at ws://localhost:5003/ws/sensors: [Errno 111] Connect call failed ('127.0.0.1', 5003)
-MainWindow: Cleaning up...
-MainWindow: Closing all running apps...
-MainWindow: All apps closed, back to folder view.
-MainWindow: Cleanup complete
-14:25:13 [INFO    ] main._on_power_off_requested — Platform shutdown requested from header
-14:25:13 [INFO    ] PaintRobotSystem.stop — Stopping PaintSystem
-14:25:13 [DEBUG   ] MotionService.stop_motion — stop_motion →
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion →
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion → POST /stop
-14:25:13 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 85, in create_connection
-    raise err
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 73, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused
 
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 493, in _make_request
-    conn.request(
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 500, in request
-    self.endheaders()
-  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
-    self.send(msg)
-  File "/usr/lib/python3.12/http/client.py", line 1064, in send
-    self.connect()
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 331, in connect
-    self.sock = self._new_conn()
-                ^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 219, in _new_conn
-    raise NewConnectionError(
-urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 644, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/client_adapters/http_websocket.py", line 1387, in stop_motion
-    response = requests.post(f"{self.server_url}/stop", timeout=5)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 115, in post
-    return request("post", url, data=data, json=json, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 59, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 677, in send
-    raise ConnectionError(e, request=request)
-requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion ← raw_ret=-1 success=False
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._execution_websocket_loop — Execution WebSocket unavailable at ws://localhost:5002/ws/execution: [Errno 111] Connect call failed ('127.0.0.1', 5002)
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._sensor_websocket_loop — Sensor WebSocket unavailable at ws://localhost:5003/ws/sensors: [Errno 111] Connect call failed ('127.0.0.1', 5003)
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._state_websocket_loop — State WebSocket unavailable at ws://localhost:5001/ws/state: [Errno 111] Connect call failed ('127.0.0.1', 5001)
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket._log_health_check_error — health_check error repeated: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /health (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion →
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion → POST /stop
-14:25:13 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 85, in create_connection
-    raise err
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 73, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 493, in _make_request
-    conn.request(
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 500, in request
-    self.endheaders()
-  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
-    self.send(msg)
-  File "/usr/lib/python3.12/http/client.py", line 1064, in send
-    self.connect()
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 331, in connect
-    self.sock = self._new_conn()
-                ^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 219, in _new_conn
-    raise NewConnectionError(
-urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 644, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/client_adapters/http_websocket.py", line 1387, in stop_motion
-    response = requests.post(f"{self.server_url}/stop", timeout=5)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 115, in post
-    return request("post", url, data=data, json=json, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 59, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 677, in send
-    raise ConnectionError(e, request=request)
-requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion ← raw_ret=-1 success=False
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion →
-14:25:13 [DEBUG   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion → POST /stop
-14:25:13 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.stop_motion — stop_motion error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 85, in create_connection
-    raise err
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 73, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 493, in _make_request
-    conn.request(
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 500, in request
-    self.endheaders()
-  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
-    self.send(msg)
-  File "/usr/lib/python3.12/http/client.py", line 1064, in send
-    self.connect()
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 331, in connect
-    self.sock = self._new_conn()
-                ^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 219, in _new_conn
-    raise NewConnectionError(
-urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 644, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/client_adapters/http_websocket.py", line 1387, in stop_motion
-    response = requests.post(f"{self.server_url}/stop", timeout=5)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 115, in post
-    return request("post", url, data=data, json=json, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 59, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 677, in send
-    raise ConnectionError(e, request=request)
-requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /stop (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:13 [DEBUG   ] src.engine.robot.drivers.ros2_robot.stop_motion — stop_motion ← raw_ret=-1 success=False
-14:25:13 [DEBUG   ] MotionService.stop_motion — stop_motion ← success=False attempts=3
-14:25:13 [INFO    ] src.engine.robot.drivers.ros2_robot.disable — disable →
-14:25:13 [INFO    ] src.engine.robot.drivers.client_adapters.http_websocket.disable — disable → POST /drive/disable
-14:25:13 [ERROR   ] src.engine.robot.drivers.client_adapters.http_websocket.disable — disable error: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/disable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 85, in create_connection
-    raise err
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/connection.py", line 73, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-               ^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 493, in _make_request
-    conn.request(
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 500, in request
-    self.endheaders()
-  File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
-    self._send_output(message_body, encode_chunked=encode_chunked)
-  File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
-    self.send(msg)
-  File "/usr/lib/python3.12/http/client.py", line 1064, in send
-    self.connect()
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 331, in connect
-    self.sock = self._new_conn()
-                ^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connection.py", line 219, in _new_conn
-    raise NewConnectionError(
-urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 644, in send
-    resp = conn.urlopen(
-           ^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-              ^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/disable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/ilv/Desktop/robot_app_platform/src/engine/robot/drivers/client_adapters/http_websocket.py", line 1814, in disable
-    response = requests.post(f"{self.server_url}/drive/disable", timeout=5)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 115, in post
-    return request("post", url, data=data, json=json, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/api.py", line 59, in request
-    return session.request(method=method, url=url, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 589, in request
-    resp = self.send(prep, **send_kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/sessions.py", line 703, in send
-    r = adapter.send(request, **kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ilv/Desktop/robot_app_platform/.venv/lib/python3.12/site-packages/requests/adapters.py", line 677, in send
-    raise ConnectionError(e, request=request)
-requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded with url: /drive/disable (Caused by NewConnectionError("HTTPConnection(host='localhost', port=5000): Failed to establish a new connection: [Errno 111] Connection refused"))
-14:25:13 [INFO    ] src.engine.robot.drivers.ros2_robot.disable — disable ← done
-14:25:13 [WARNING ] Process[ProcessID.MAIN_PROCESS]._transition — Invalid transition idle → stopped (allowed: {'running'})
-14:25:13 [WARNING ] Process[ProcessID.ROBOT_CALIBRATION]._transition — Invalid transition idle → stopped (allowed: {'running'})
-14:25:13 [INFO    ] src.engine.vision.implementation.VisionSystem.VisionSystem.stop_system — Stopping VisionSystem...
-14:25:13 [INFO    ] VisionService.stop — VisionService stopped
-14:25:13 [INFO    ] RobotStateManager.stop_monitoring — State monitoring stopped
-14:25:13 [INFO    ] PaintRobotSystem.stop — PaintSystem stopped
-14:25:13 [INFO    ] src.bootstrap.ros_backend_launcher.stop — ROS backend autostop disabled
-
-Process finished with exit code 0

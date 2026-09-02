@@ -50,6 +50,7 @@ _SENSOR_CONTROLLED_FAST_LIN_KEYS = {
     "pickup_servo_contact_fast_lin_acceleration_percent",
     "pickup_servo_contact_timeout_s",
     "pickup_servo_contact_poll_interval_s",
+    "pickup_servo_contact_controlled_stop_duration_s",
     "pickup_servo_contact_preflight_read_attempts",
     "pickup_servo_contact_read_failure_limit",
     "pickup_servo_contact_fallback_to_planned_descend",

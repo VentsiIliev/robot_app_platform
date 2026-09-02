@@ -517,12 +517,34 @@ class PaintRobotSystem(BaseRobotSystem):
             vision_service=self._vision,
             vacuum_pump=self._vacuum_pump,
             fan_control=self._fan,
+            dryer_service=self._dryer,
+            persist_dryer_enabled=self._persist_dryer_enabled,
             paint_process_config_service=self._paint_process_config_service,
             target_point_name="camera",
             frame_name="calibration",
         )
 
         self._robot.enable_robot()
+
+    def _persist_dryer_enabled(self, enabled: bool) -> None:
+        from src.engine.hardware.peripherals import PeripheralBinding, PeripheralConfig
+
+        peripheral_config = self._settings_service.get(SettingsID.PERIPHERALS)
+        current = peripheral_config.peripherals.get("dryer")
+        if current is None:
+            raise KeyError("Dryer peripheral is not configured")
+        updated = PeripheralBinding(
+            slave_id=current.slave_id,
+            enabled=bool(enabled),
+            inputs=current.inputs,
+            outputs=current.outputs,
+            commands=current.commands,
+            statuses=current.statuses,
+        )
+        self._settings_service.save(
+            SettingsID.PERIPHERALS,
+            PeripheralConfig({**peripheral_config.peripherals, "dryer": updated}),
+        )
 
     def _refresh_dropoff_motion_corridor(self, process_config):
         """Replace the registered corridor with values from the live settings snapshot."""

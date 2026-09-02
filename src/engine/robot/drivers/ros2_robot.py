@@ -141,11 +141,11 @@ class Ros2Robot(IRobot):
         logger.debug("stop_motion ← raw_ret=%s success=%s", ret, ret == 0)
         return ret
 
-    def controlled_stop(self, expected_task_id) -> dict:
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         method = getattr(self._client, "controlled_stop", None)
         if not callable(method):
             return {"success": False, "error": "controlled_stop_unsupported"}
-        return method(expected_task_id)
+        return method(expected_task_id, stop_duration_s=stop_duration_s)
 
     def get_state_snapshot(self) -> dict | None:
         snapshot = self._client.get_state_snapshot()

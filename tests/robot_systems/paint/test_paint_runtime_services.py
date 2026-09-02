@@ -39,6 +39,54 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_enabling_dryer_then_switching_auto_persists_both_settings(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        dryer = MagicMock()
+        dryer.is_healthy.return_value = False
+        dryer.enable.return_value = True
+        persist_enabled = MagicMock()
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(strategy="plate_layout")
+        )
+        service = PaintDashboardService(
+            process,
+            dryer_service=dryer,
+            persist_dryer_enabled=persist_enabled,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.enable_dryer_and_set_auto_mode()
+
+        self.assertTrue(result.success)
+        dryer.enable.assert_called_once_with()
+        persist_enabled.assert_called_once_with(True)
+        self.assertEqual("movement_group", config_service.save.call_args.args[0].dropoff.strategy)
+
+    def test_failed_dryer_enable_does_not_switch_auto_mode(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        dryer = MagicMock()
+        dryer.is_healthy.return_value = False
+        dryer.enable.return_value = False
+        dryer.last_error = "Dryer did not initialize"
+        persist_enabled = MagicMock()
+        config_service = MagicMock()
+        service = PaintDashboardService(
+            process,
+            dryer_service=dryer,
+            persist_dryer_enabled=persist_enabled,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.enable_dryer_and_set_auto_mode()
+
+        self.assertFalse(result.success)
+        self.assertEqual("Dryer did not initialize", result.message)
+        persist_enabled.assert_called_once_with(False)
+        config_service.save.assert_not_called()
+
     def test_drying_mode_persists_matching_dropoff_strategy(self) -> None:
         process = MagicMock(process_id="paint")
         process.state = ProcessState.IDLE

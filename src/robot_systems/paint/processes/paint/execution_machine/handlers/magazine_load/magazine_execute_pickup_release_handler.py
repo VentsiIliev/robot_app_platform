@@ -367,6 +367,9 @@ def _execute_magazine_servo_contact_pickup_release(
                 tool=int(executor._pickup_tool),
                 user=int(executor._pickup_user),
                 poll_interval_s=float(pickup_motion.servo_contact_poll_interval_s),
+                controlled_stop_duration_s=float(
+                    getattr(pickup_motion, "servo_contact_controlled_stop_duration_s", 0.20)
+                ),
                 timeout_s=float(pickup_motion.servo_contact_timeout_s),
                 preflight_condition_read_attempts=int(pickup_motion.servo_contact_preflight_read_attempts),
                 condition_read_failure_limit=int(pickup_motion.servo_contact_read_failure_limit),

@@ -123,6 +123,13 @@ class StubPaintDashboardService(IPaintDashboardService):
         self._drying_mode = mode
         return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
 
+    def get_dryer_state(self) -> dict[str, object]:
+        return {"available": True, "enabled": True, "healthy": True, "message": ""}
+
+    def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:
+        self._drying_mode = "auto"
+        return DashboardCommandResult(True, "Drying mode changed to auto.")
+
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return ContourTransformDebugResult(False, "No usable contour detected (stub service).")
 

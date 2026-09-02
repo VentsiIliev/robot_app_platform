@@ -36,6 +36,8 @@ class PaintDashboardService(IPaintDashboardService):
         vision_service=None,
         vacuum_pump=None,
         fan_control=None,
+        dryer_service=None,
+        persist_dryer_enabled=None,
         paint_process_config_service=None,
         target_point_name: str = "camera",
         frame_name: str = "calibration",
@@ -47,6 +49,8 @@ class PaintDashboardService(IPaintDashboardService):
         self._robot_service = robot_service
         self._vision_service = vision_service
         self._paint_process_config_service = paint_process_config_service
+        self._dryer_service = dryer_service
+        self._persist_dryer_enabled = persist_dryer_enabled
         self._auxiliary_devices = {
             "pump": vacuum_pump,
             "fan": fan_control,
@@ -327,6 +331,58 @@ class PaintDashboardService(IPaintDashboardService):
             self._logger.exception("Could not save drying mode")
             return DashboardCommandResult(False, f"Could not save drying mode: {exc}")
         return DashboardCommandResult(True, f"Drying mode changed to {normalized}.")
+
+    def get_dryer_state(self) -> dict[str, object]:
+        dryer = self._dryer_service
+        if dryer is None:
+            return {
+                "available": False,
+                "enabled": False,
+                "healthy": False,
+                "message": "Dryer service is not available.",
+            }
+        try:
+            enabled = bool(dryer.is_enabled())
+            healthy = bool(dryer.is_healthy())
+            message = str(getattr(dryer, "last_error", None) or "")
+        except Exception as exc:
+            self._logger.exception("Could not read dryer state")
+            return {
+                "available": True,
+                "enabled": False,
+                "healthy": False,
+                "message": f"Could not read dryer state: {exc}",
+            }
+        return {
+            "available": True,
+            "enabled": enabled,
+            "healthy": healthy,
+            "message": message,
+        }
+
+    def enable_dryer_and_set_auto_mode(self) -> DashboardCommandResult:
+        dryer = self._dryer_service
+        if dryer is None:
+            return DashboardCommandResult(False, "Dryer service is not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(
+                False, "Stop the paint process before changing drying mode."
+            )
+        try:
+            if not bool(dryer.is_healthy()) and not bool(dryer.enable()):
+                if callable(self._persist_dryer_enabled):
+                    self._persist_dryer_enabled(False)
+                return DashboardCommandResult(
+                    False,
+                    str(getattr(dryer, "last_error", None) or "Dryer initialization failed."),
+                )
+            if callable(self._persist_dryer_enabled):
+                self._persist_dryer_enabled(True)
+        except Exception as exc:
+            self._logger.exception("Could not enable dryer")
+            return DashboardCommandResult(False, f"Could not enable dryer: {exc}")
+        return self.set_drying_mode("auto")
 
     def _robot_status_card(self) -> DashboardCardState:
         robot = self._robot_service

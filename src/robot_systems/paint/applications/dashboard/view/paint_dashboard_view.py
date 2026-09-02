@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.applications.base.i_application_view import IApplicationView
+from src.applications.base.styled_message_box import ask_yes_no
 from src.applications.base.drawer_toggle import DrawerToggle
 from pl_gui.dashboard.DashboardWidget import DashboardWidget
 from pl_gui.settings.settings_view.styles import BG_COLOR, BORDER, PRIMARY, TEXT_COLOR
@@ -525,6 +526,9 @@ class PaintDashboardView(IApplicationView):
     def set_drying_mode_busy(self, busy: bool) -> None:
         if self._quick_controls is not None:
             self._quick_controls.set_drying_mode_busy(busy)
+
+    def ask_enable_dryer(self, title: str, message: str) -> bool:
+        return ask_yes_no(self, title, message, default_no=True)
 
     def set_application_shortcuts(self, shortcuts: list) -> None:
         self._controls_widget.set_application_shortcuts(shortcuts)

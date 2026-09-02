@@ -99,6 +99,56 @@ class TestPaintDashboardController(unittest.TestCase):
         view.isVisible.return_value = True
         return view
 
+    def test_auto_dry_prompts_before_enabling_disabled_dryer(self):
+        model = MagicMock()
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": False,
+            "healthy": False,
+            "message": "",
+        }
+        view = self._make_view()
+        view.ask_enable_dryer.return_value = True
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        with patch.object(controller, "_run_background") as run_background:
+            controller._on_drying_mode("auto")
+
+        view.ask_enable_dryer.assert_called_once()
+        view.set_drying_mode_busy.assert_called_once_with(True)
+        run_background.assert_called_once_with(
+            model.enable_dryer_and_set_auto_mode,
+            controller._on_drying_mode_finished,
+        )
+
+    def test_auto_dry_does_not_prompt_while_dryer_is_initializing(self):
+        model = MagicMock()
+        model.get_dryer_state.return_value = {
+            "available": True,
+            "enabled": True,
+            "healthy": False,
+            "message": "Dryer initialization is in progress",
+        }
+        view = self._make_view()
+        broker = MagicMock()
+        with (
+            patch.object(PaintDashboardController, "_init_dashboard_camera_feed"),
+            patch.object(PaintDashboardController, "_init_dashboard_process_state"),
+        ):
+            controller = PaintDashboardController(model, view, broker)
+
+        controller._on_drying_mode("auto")
+
+        view.ask_enable_dryer.assert_not_called()
+        view.show_warning.assert_called_once_with(
+            "Drying Mode", "Dryer initialization is in progress"
+        )
+
     def test_init_wires_signals_and_mixin_setup(self) -> None:
         model = MagicMock()
         view = self._make_view()

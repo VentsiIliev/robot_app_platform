@@ -79,5 +79,11 @@ class PaintDashboardModel(IApplicationModel):
     def set_drying_mode(self, mode: str):
         return self._service.set_drying_mode(mode)
 
+    def get_dryer_state(self) -> dict[str, object]:
+        return self._service.get_dryer_state()
+
+    def enable_dryer_and_set_auto_mode(self):
+        return self._service.enable_dryer_and_set_auto_mode()
+
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return self._service.capture_latest_contour_transform_debug()

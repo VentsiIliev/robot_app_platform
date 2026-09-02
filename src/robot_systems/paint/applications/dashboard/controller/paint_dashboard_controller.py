@@ -157,6 +157,33 @@ class PaintDashboardController(
             self._view.set_auxiliary_state(device_id, bool(enabled))
 
     def _on_drying_mode(self, mode: str) -> None:
+        if str(mode).strip().lower() == "auto":
+            state = self._model.get_dryer_state()
+            if not bool(state.get("available", False)):
+                self._view.show_warning(
+                    self._t("Drying Mode"),
+                    self._t("Dryer service is not available."),
+                )
+                return
+            if bool(state.get("enabled", False)) and not bool(state.get("healthy", False)):
+                message = str(state.get("message") or self._t("Dryer is not ready."))
+                self._view.show_warning(self._t("Drying Mode"), message)
+                return
+            if not bool(state.get("healthy", False)):
+                confirmed = self._view.ask_enable_dryer(
+                    self._t("Enable Dryer"),
+                    self._t(
+                        "Automatic drying requires the dryer. Do you want to enable it now?"
+                    ),
+                )
+                if not confirmed:
+                    return
+                self._view.set_drying_mode_busy(True)
+                self._run_background(
+                    self._model.enable_dryer_and_set_auto_mode,
+                    self._on_drying_mode_finished,
+                )
+                return
         self._view.set_drying_mode_busy(True)
         self._run_background(partial(self._model.set_drying_mode, mode), self._on_drying_mode_finished)
 

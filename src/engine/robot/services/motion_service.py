@@ -600,11 +600,11 @@ class MotionService(IMotionService):
         self._logger.debug("stop_motion ← success=False attempts=%s", self._STOP_ATTEMPTS)
         return False
 
-    def controlled_stop(self, expected_task_id) -> dict:
+    def controlled_stop(self, expected_task_id, *, stop_duration_s=None) -> dict:
         method = getattr(self._robot, "controlled_stop", None)
         if not callable(method):
             return {"success": False, "error": "controlled_stop_unsupported"}
-        return method(expected_task_id)
+        return method(expected_task_id, stop_duration_s=stop_duration_s)
 
     def get_current_position(self) -> List[float]:
         return self._robot.get_current_position()
