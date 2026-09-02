@@ -8,6 +8,9 @@
     "folder.admin": "Администрация",
     "folder.tests": "Тестове"
   },
+  "Header": {
+    "Turn Off Platform": "Изключване на платформата"
+  },
   "StartupSplashView": {
     "Preparing runtime services": "Подготовка на runtime услугите",
     "Loading applications": "Зареждане на приложения",

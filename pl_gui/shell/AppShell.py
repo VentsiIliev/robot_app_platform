@@ -140,16 +140,17 @@ class AppShell(QWidget):
             app_widget.setMinimumSize(min_width, min_height)
 
 
-    def close_all_apps(self):
+    def close_all_apps(self, *, force: bool = False):
         """
         Close all cached app widgets and restore the folder interface.
         Useful when logging out or shutting down.
         """
 
         # Give each widget a chance to veto the close
-        for app_widget in self.running_widgets.values():
-            if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
-                return
+        if not force:
+            for app_widget in self.running_widgets.values():
+                if app_widget and hasattr(app_widget, "can_close") and not app_widget.can_close():
+                    return
         print("MainWindow: Closing all running apps...")
 
         # Only manage OUR cache - no plugin_widget_factory access!
@@ -359,7 +360,7 @@ class AppShell(QWidget):
         try:
             print("MainWindow: Cleaning up...")
             # Only clean our own resources
-            self.close_all_apps()
+            self.close_all_apps(force=True)
             print("MainWindow: Cleanup complete")
         except Exception as e:
             print(f"Error during MainWindow cleanup: {e}")

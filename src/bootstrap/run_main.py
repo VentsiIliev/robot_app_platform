@@ -119,6 +119,7 @@ def main() -> None:
     show_account_button_when_dev_skip_login = (
         startup_config.ui.show_account_button_when_dev_skip_login
     )
+    show_power_off_button = startup_config.ui.show_power_off_button
     bootstrap_provider = load_bootstrap_provider(startup_config)
 
     logging.getLogger("MessageBroker").setLevel(logging.WARNING)
@@ -169,6 +170,19 @@ def main() -> None:
     shell._header_drag = _FramelessHeaderDrag(shell, shell.header)
     localization_svc.sync_selector(shell.header.language_selector)
     shell.header.language_selector.languageChanged.connect(localization_svc.set_language)
+    shell.header.power_toggle_button.setVisible(show_power_off_button)
+
+    shutdown_requested = {"value": False}
+
+    def _on_power_off_requested() -> None:
+        if shutdown_requested["value"]:
+            return
+        shutdown_requested["value"] = True
+        shell.header.power_toggle_button.setEnabled(False)
+        _LOGGER.info("Platform shutdown requested from header")
+        shell.close()
+
+    shell.header.power_off_requested.connect(_on_power_off_requested)
 
     startup_splash_coordinator = None
     notification_presenter = None

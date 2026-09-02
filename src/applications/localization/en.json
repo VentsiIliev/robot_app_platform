@@ -8,6 +8,9 @@
     "folder.admin": "Administration",
     "folder.tests": "Tests"
   },
+  "Header": {
+    "Turn Off Platform": "Turn Off Platform"
+  },
   "StartupSplashView": {
     "Preparing runtime services": "Preparing runtime services",
     "Loading applications": "Loading applications",

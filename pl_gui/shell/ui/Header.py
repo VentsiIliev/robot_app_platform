@@ -2,7 +2,6 @@ import os
 from typing import Callable, Optional
 
 from PyQt6.QtCore import QSize, Qt, QEvent, pyqtSignal
-from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QHBoxLayout, QPushButton, QFrame
 )
@@ -19,13 +18,12 @@ from .LanguageSelectorWidget import LanguageSelectorWidget
 RESOURCE_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resources")
 MENU_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "SANDWICH_MENU.png")
 LOGO_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "logo.ico")
-ON_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "POWER_ON_BUTTON.png")
-OFF_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "POWER_OFF_BUTTON.png")
 DASHBOARD_BUTTON_ICON_PATH: str = os.path.join(RESOURCE_DIR, "pl_ui_icons", "DASHBOARD_BUTTON_SQUARE.png")
 
 
 class Header(QFrame):
     user_account_clicked = pyqtSignal()
+    power_off_requested = pyqtSignal()
     fps_updated = pyqtSignal(float)  # Signal to emit updated FPS values
 
     def __init__(
@@ -81,16 +79,30 @@ class Header(QFrame):
         # Right stretch
         self.header_layout.addStretch()
 
-        # Power Toggle Button
+        # Platform shutdown button. Runtime wiring decides whether it is visible.
         self.power_toggle_button: QPushButton = QPushButton()
-        self.power_toggle_button.setIcon(load_icon(OFF_ICON_PATH))
-        self.power_toggle_button.setToolTip("Power Off")
-        self.power_toggle_button.setStyleSheet("border: none; background: white; padding: 0px;")
-        self.power_toggle_button.clicked.connect(self.toggle_power)
+        self.power_toggle_button.setIcon(load_icon('fa5s.power-off', color=PRIMARY))
+        self.power_toggle_button.setFixedSize(48, 48)
+        self.power_toggle_button.setStyleSheet(f"""
+            QPushButton {{
+                background: white;
+                border: 1px solid {BORDER};
+                border-radius: 8px;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                border: 2px solid {PRIMARY};
+                background-color: rgba(122, 90, 248, 0.08);
+            }}
+            QPushButton:pressed {{
+                background-color: rgba(122, 90, 248, 0.14);
+                border: 2px solid {PRIMARY_DARK};
+            }}
+        """)
+        self.power_toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.power_toggle_button.clicked.connect(self._on_power_off_clicked)
         self.header_layout.addSpacing(20)
         self.header_layout.addWidget(self.power_toggle_button)
-
-        self.power_on: bool = False  # Power state
 
         self.userAccountButton: QPushButton = QPushButton()
         self.userAccountButton.setIcon(load_icon('fa5s.user', color=PRIMARY))
@@ -128,6 +140,7 @@ class Header(QFrame):
 
         # Subscribe to FPS updates - connect signal first, then subscribe to broker
         self.fps_updated.connect(self.update_fps_label)
+        self.retranslateUi()
         # self.broker.subscribe(VisionTopics.FPS, self._on_broker_fps)
         # print(f"[Header] Subscribed to topic: {VisionTopics.FPS}")
         # print(f"[Header] Broker subscriber count for FPS: {self.broker.get_subscriber_count(VisionTopics.FPS)}")
@@ -160,20 +173,23 @@ class Header(QFrame):
     def on_user_account_clicked(self):
         self.user_account_clicked.emit()
 
-    def toggle_power(self) -> None:
-        self.power_on = not self.power_on
-        icon: QIcon = load_icon(ON_ICON_PATH) if self.power_on else load_icon(OFF_ICON_PATH)
-        tooltip: str = "Power On" if self.power_on else "Power Off"
-        self.power_toggle_button.setIcon(icon)
-        self.power_toggle_button.setToolTip(tooltip)
-        print(f"Power turned {'ON' if self.power_on else 'OFF'}")
+    def _on_power_off_clicked(self) -> None:
+        self.power_off_requested.emit()
+
+    def retranslateUi(self) -> None:
+        self.power_toggle_button.setToolTip(self.tr("Turn Off Platform"))
+
+    def changeEvent(self, event: QEvent) -> None:
+        if event.type() == QEvent.Type.LanguageChange:
+            self.retranslateUi()
+        super().changeEvent(event)
 
     def resizeEvent(self, event: QEvent) -> None:
         new_width: int = self.width()
         icon_size: int = int(new_width * 0.05)
 
         self.menu_button.setIconSize(QSize(icon_size, icon_size))
-        self.power_toggle_button.setIconSize(QSize(icon_size, icon_size))
+        self.power_toggle_button.setIconSize(QSize(26, 26))
         self.dashboardButton.setIconSize(QSize(icon_size, icon_size))
         self.userAccountButton.setIconSize(QSize(26, 26))
         super().resizeEvent(event)
