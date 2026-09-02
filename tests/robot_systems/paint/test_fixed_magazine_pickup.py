@@ -204,10 +204,31 @@ class TestFixedMagazinePickup(unittest.TestCase):
             [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
             position_tolerance_mm=2.0,
             orientation_tolerance_deg=1.0,
+            settle_timeout_s=0.0,
         )
 
         self.assertFalse(ok)
         self.assertIn("position error 3.000 mm", message)
+
+    def test_start_pose_verification_waits_for_two_settled_samples(self):
+        robot = MagicMock()
+        robot.get_current_position_fresh.side_effect = [
+            [0.8, 0.0, 100.0, 0.0, 0.0, 0.505],
+            [0.1, 0.0, 100.0, 0.0, 0.0, 0.2],
+            [0.1, 0.0, 100.0, 0.0, 0.0, 0.2],
+        ]
+
+        ok, message = _verify_fixed_pickup_start_pose(
+            robot,
+            [0.0, 0.0, 100.0, 0.0, 0.0, 0.0],
+            position_tolerance_mm=1.0,
+            orientation_tolerance_deg=0.5,
+            settle_timeout_s=0.1,
+            poll_interval_s=0.005,
+        )
+
+        self.assertTrue(ok, message)
+        self.assertEqual(3, robot.get_current_position_fresh.call_count)
 
     @staticmethod
     def _context(service, config, *, process_config=None):

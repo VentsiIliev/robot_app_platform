@@ -568,18 +568,12 @@ def _verify_fixed_pickup_start_pose(
     *,
     position_tolerance_mm: float,
     orientation_tolerance_deg: float,
+    settle_timeout_s: float = 0.5,
+    poll_interval_s: float = 0.025,
 ) -> tuple[bool, str]:
     expected = _finite_pose(expected_pose)
-    actual = _finite_pose(_read_fresh_pose(robot_service))
     if expected is None:
         return False, "Fixed magazine pickup group pose is invalid"
-    if actual is None:
-        return False, "Magazine servo descent refused: fresh robot pose is unavailable"
-    position_error = math.sqrt(sum((actual[index] - expected[index]) ** 2 for index in range(3)))
-    orientation_error = max(
-        abs((actual[index] - expected[index] + 180.0) % 360.0 - 180.0)
-        for index in range(3, 6)
-    )
     try:
         position_tolerance = float(position_tolerance_mm)
         orientation_tolerance = float(orientation_tolerance_deg)
@@ -592,6 +586,30 @@ def _verify_fixed_pickup_start_pose(
         or orientation_tolerance < 0.0
     ):
         return False, "Fixed magazine pickup pose tolerances are invalid"
+    deadline = time.monotonic() + max(0.0, float(settle_timeout_s))
+    stable_samples = 0
+    actual = None
+    position_error = math.inf
+    orientation_error = math.inf
+    while True:
+        actual = _finite_pose(_read_fresh_pose(robot_service))
+        if actual is not None:
+            position_error = math.sqrt(
+                sum((actual[index] - expected[index]) ** 2 for index in range(3))
+            )
+            orientation_error = max(
+                abs((actual[index] - expected[index] + 180.0) % 360.0 - 180.0)
+                for index in range(3, 6)
+            )
+            if position_error <= position_tolerance and orientation_error <= orientation_tolerance:
+                stable_samples += 1
+                if stable_samples >= 2:
+                    break
+            else:
+                stable_samples = 0
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(max(0.005, float(poll_interval_s)))
     _logger.info(
         "[MAGAZINE_LOAD] Fixed pickup start verification position_error_mm=%.3f "
         "position_tolerance_mm=%.3f orientation_error_deg=%.3f orientation_tolerance_deg=%.3f",
@@ -600,7 +618,9 @@ def _verify_fixed_pickup_start_pose(
         orientation_error,
         orientation_tolerance,
     )
-    if position_error > position_tolerance or orientation_error > orientation_tolerance:
+    if actual is None:
+        return False, "Magazine servo descent refused: fresh robot pose is unavailable"
+    if stable_samples < 2:
         return False, (
             "Magazine servo descent refused: robot is not at the fixed pickup group "
             f"(position error {position_error:.3f} mm, allowed {position_tolerance:.3f} mm; "
