@@ -35,7 +35,7 @@ def _corners():
 
 
 class TestPlateLayoutDropoff(unittest.TestCase):
-    def test_workpiece_footprint_sides_follow_held_tool_axes(self) -> None:
+    def test_workpiece_footprint_always_uses_long_side_as_width(self) -> None:
         execution_plan = MagicMock()
         execution_plan.execution_paths.return_value = [[
             [-10.0, -30.0],
@@ -44,19 +44,10 @@ class TestPlateLayoutDropoff(unittest.TestCase):
             [-10.0, 30.0],
         ]]
 
-        width_at_zero, height_at_zero = _workpiece_footprint_mm(
-            execution_plan,
-            workpiece_rz_deg=0.0,
-        )
-        width_at_ninety, height_at_ninety = _workpiece_footprint_mm(
-            execution_plan,
-            workpiece_rz_deg=90.0,
-        )
+        width, height = _workpiece_footprint_mm(execution_plan)
 
-        self.assertAlmostEqual(20.0, width_at_zero)
-        self.assertAlmostEqual(60.0, height_at_zero)
-        self.assertAlmostEqual(60.0, width_at_ninety)
-        self.assertAlmostEqual(20.0, height_at_ninety)
+        self.assertAlmostEqual(60.0, width)
+        self.assertAlmostEqual(20.0, height)
 
     def test_automatic_center_route_is_used_inside_half_corner_to_center_radius(self) -> None:
         dropoff = SimpleNamespace(

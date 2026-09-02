@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 
 import numpy as np
 
@@ -114,10 +113,7 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
     align_pose = getattr(motion_plan, "align_pose", None)
     if align_pose is None or len(align_pose) < 6:
         return False, "Plate-layout dropoff could not resolve workpiece orientation at calibration"
-    width_mm, height_mm = _workpiece_footprint_mm(
-        ctx.execution_plan,
-        workpiece_rz_deg=float(align_pose[5]),
-    )
+    width_mm, height_mm = _workpiece_footprint_mm(ctx.execution_plan)
 
     magazine = ctx.magazine_config or getattr(ctx.process_config, "magazine_load", None)
     group_id = str(getattr(magazine, "calibration_group_id", "CALIBRATION") or "CALIBRATION")
@@ -147,18 +143,8 @@ def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:
     return True, ""
 
 
-def _workpiece_footprint_mm(
-    execution_plan,
-    *,
-    workpiece_rz_deg: float,
-) -> tuple[float, float]:
-    """Return min-rectangle sides tied to the held workpiece/tool axes.
-
-    OpenCV may exchange its raw width and height when the same rectangle crosses
-    a 90-degree angle boundary.  The side parallel to the held tool RZ is the
-    plate-layout width because that tool axis is mapped onto the plate X axis at
-    dropoff; the perpendicular side is the layout height.
-    """
+def _workpiece_footprint_mm(execution_plan) -> tuple[float, float]:
+    """Return canonical min-rectangle sides as long-side width and short-side height."""
     points = [
         pose[:2]
         for path in execution_plan.execution_paths()
@@ -171,18 +157,9 @@ def _workpiece_footprint_mm(
     if not np.all(np.isfinite(xy)):
         return 0.0, 0.0
     import cv2
-    rect = cv2.minAreaRect(np.ascontiguousarray(xy.reshape(-1, 1, 2)))
-    box = cv2.boxPoints(rect).astype(float)
-    sides: list[tuple[float, float]] = []
-    for index in range(2):
-        vector = box[index + 1] - box[index]
-        length = float(np.linalg.norm(vector))
-        heading = math.degrees(math.atan2(float(vector[1]), float(vector[0])))
-        axis_error = abs((heading - float(workpiece_rz_deg) + 90.0) % 180.0 - 90.0)
-        sides.append((axis_error, length))
-    width_index = min(range(2), key=lambda index: sides[index][0])
-    height_index = 1 - width_index
-    return sides[width_index][1], sides[height_index][1]
+    _, size, _ = cv2.minAreaRect(np.ascontiguousarray(xy.reshape(-1, 1, 2)))
+    side_a, side_b = float(size[0]), float(size[1])
+    return max(side_a, side_b), min(side_a, side_b)
 
 
 @timed_step(_logger, "ordered_pickup_paint_contact_chain")
