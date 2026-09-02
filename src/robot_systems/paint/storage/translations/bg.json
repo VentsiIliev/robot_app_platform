@@ -36,7 +36,9 @@
     "Vacuum Pump": "Вакуумна помпа",
     "Fan": "Вентилатор",
     "OFF": "ИЗКЛ.",
-    "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)"
+    "Relieve Cable (Unwind J6)": "Освободи кабела (развий J6)",
+    "Auto Dry": "Автоматично сушене",
+    "Manual Dry": "Ръчно сушене"
   },
   "PaintDashboard": {
     "Painting": "Боядисване",
@@ -55,6 +57,7 @@
     "No process messages": "Няма съобщения от процеса",
     "Cable Relief": "Освобождаване на кабела",
     "Manual Control": "Ръчно управление",
+    "Drying Mode": "Режим на сушене",
     "Command failed.": "Командата е неуспешна.",
     "Robot service is not available.": "Услугата за робота не е налична.",
     "Cable relief completed.": "Освобождаването на кабела завърши.",

@@ -299,6 +299,20 @@ class TestPaintDashboardUi(unittest.TestCase):
         panel.set_device_busy("fan", False)
         self.assertTrue(panel._off_buttons["fan"].isEnabled())
 
+    def test_quick_drying_mode_button_switches_between_auto_and_manual(self) -> None:
+        panel = PaintQuickControlsPanel([])
+        callback = MagicMock()
+        panel.drying_mode_requested.connect(callback)
+
+        panel.set_drying_mode("auto")
+        panel._drying_mode_button.click()
+        callback.assert_called_once_with("manual")
+
+        callback.reset_mock()
+        panel.set_drying_mode("manual")
+        panel._drying_mode_button.click()
+        callback.assert_called_once_with("auto")
+
     def test_system_ui_config_controls_dashboard_drawer_visibility(self) -> None:
         with patch(
             "src.robot_systems.paint.applications.dashboard.view.paint_dashboard_view.DashboardWidget",

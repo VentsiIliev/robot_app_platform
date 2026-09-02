@@ -264,8 +264,6 @@ class PaintProcessSettingsController(IApplicationController, BackgroundWorker):
             message,
         )
         flat = PaintProcessSettingsMapper.to_flat_dict(self._model.current_settings)
-        if not self._model.is_dropoff_movement_group_configured():
-            flat["dropoff_strategy"] = "pickup_origin"
         self._reverting_invalid_dropoff_strategy = True
         try:
             self._view.set_values(flat)

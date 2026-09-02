@@ -444,54 +444,6 @@ def _verify_workpiece_released(executor: object) -> tuple[bool, str]:
 def _build_dropoff_release_plan(executor: object) -> DropoffReleasePlan:
     strategy_name = _dropoff_strategy_name(executor)
     dropoff = executor._paint_process_config().dropoff
-    if strategy_name == "pickup_origin":
-        if _should_release_at_current_dropoff_pose(executor):
-            return DropoffReleasePlan(
-                strategy_name=strategy_name,
-                waypoints=(
-                    DropoffReleaseWaypoint(
-                        label="Release at current dropoff pose",
-                        pose=None,
-                        vel_percent=dropoff.release_align_vel_percent,
-                        acc_percent=dropoff.release_align_acc_percent,
-                        motion_type=dropoff.release_align_motion_type,
-                        blendR=dropoff.release_align_blendR,
-                        release_here=True,
-                    ),
-                ),
-            )
-        pickup_plan = executor._last_pickup_plan
-        if pickup_plan is None:
-            _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")
-            return DropoffReleasePlan(
-                strategy_name=strategy_name,
-                waypoints=(
-                    DropoffReleaseWaypoint(
-                        label="Release at current pose",
-                        pose=None,
-                        vel_percent=dropoff.release_align_vel_percent,
-                        acc_percent=dropoff.release_align_acc_percent,
-                        motion_type=dropoff.release_align_motion_type,
-                        blendR=dropoff.release_align_blendR,
-                        release_here=True,
-                    ),
-                ),
-            )
-        return DropoffReleasePlan(
-            strategy_name=strategy_name,
-            waypoints=(
-                DropoffReleaseWaypoint(
-                    label="Returning to align pose for release",
-                    pose=list(pickup_plan.align_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
-                    blendR=dropoff.release_align_blendR,
-                    release_here=True,
-                ),
-            ),
-        )
-
     if strategy_name == "movement_group":
         pose = _resolve_dropoff_align_pose(executor)
         if pose is None:
@@ -766,19 +718,12 @@ def _should_prepare_dropoff_align_before_unwind(executor: object) -> bool:
     )
 
 
-def _should_release_at_current_dropoff_pose(executor: object) -> bool:
-    return (
-        executor._configured_contact_motion_plane == "xy_z_rz"
-        and _dropoff_strategy_name(executor) == "pickup_origin"
-    )
-
-
 def _dropoff_strategy_name(executor: object) -> str:
     config_getter = getattr(executor, "_paint_process_config", None)
     if not callable(config_getter):
-        return "pickup_origin"
+        return "movement_group"
     dropoff = getattr(config_getter(), "dropoff", None)
-    return str(getattr(dropoff, "strategy", "pickup_origin") or "pickup_origin").strip().lower()
+    return str(getattr(dropoff, "strategy", "movement_group") or "movement_group").strip().lower()
 
 
 def _resolve_dropoff_release_pose(executor: object) -> list[float] | None:

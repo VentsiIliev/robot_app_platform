@@ -105,7 +105,7 @@ class TestPlateLayoutDropoff(unittest.TestCase):
 
     def test_existing_dropoff_strategy_keeps_ordered_preparation(self) -> None:
         executor = MagicMock()
-        executor._paint_process_config.return_value.dropoff.strategy = "pickup_origin"
+        executor._paint_process_config.return_value.dropoff.strategy = "movement_group"
         executor._edge_cleanup.should_run_after_xz_ry.return_value = False
         executor._edge_cleanup.should_run_after_xy_rz.return_value = False
 

@@ -784,7 +784,7 @@ class PaintProcessSettingsView(IApplicationView):
                 values.get(_MAGAZINE_PICKUP_MODE_KEY, "vision_planned")
             )
             self._update_sensor_controlled_fast_lin_visibility(values)
-            self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "pickup_origin"))
+            self._update_dropoff_strategy_visibility(values.get(_DROPOFF_STRATEGY_KEY, "movement_group"))
 
     def set_safe_travel_position(self, position: list[float]) -> None:
         self._append_waypoint("safe_travel_positions", position)
@@ -996,7 +996,7 @@ class PaintProcessSettingsView(IApplicationView):
         self._set_setting_fields_visible(_SENSOR_CONTROLLED_FAST_LIN_KEYS, enabled)
 
     def _update_dropoff_strategy_visibility(self, strategy: object) -> None:
-        selected = str(strategy or "pickup_origin").strip().lower()
+        selected = str(strategy or "movement_group").strip().lower()
         self._set_setting_fields_visible(_PLATE_DROPOFF_ONLY_KEYS, selected == "plate_layout")
         self._set_setting_fields_visible(
             _MOVEMENT_GROUP_DROPOFF_ONLY_KEYS, selected == "movement_group"

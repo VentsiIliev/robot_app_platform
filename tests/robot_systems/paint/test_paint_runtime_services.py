@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, call, patch
 import numpy as np
 
 from src.robot_systems.paint.processes.paint.config import (
+    PaintDropoffConfig,
     PaintNavigationReturnConfig,
     PaintProcessConfig,
 )
@@ -38,6 +39,38 @@ from src.robot_systems.paint.processes.robot_calibration_process import (
 
 
 class TestPaintDashboardService(unittest.TestCase):
+    def test_drying_mode_persists_matching_dropoff_strategy(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.IDLE
+        config_service = MagicMock()
+        config_service.get_snapshot.return_value = PaintProcessConfig(
+            dropoff=PaintDropoffConfig(strategy="movement_group")
+        )
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+        )
+
+        self.assertEqual("auto", service.get_drying_mode())
+        result = service.set_drying_mode("manual")
+
+        self.assertTrue(result.success)
+        self.assertEqual("plate_layout", config_service.save.call_args.args[0].dropoff.strategy)
+
+    def test_drying_mode_cannot_change_while_running(self) -> None:
+        process = MagicMock(process_id="paint")
+        process.state = ProcessState.RUNNING
+        config_service = MagicMock()
+        service = PaintDashboardService(
+            process,
+            paint_process_config_service=config_service,
+        )
+
+        result = service.set_drying_mode("manual")
+
+        self.assertFalse(result.success)
+        config_service.save.assert_not_called()
+
     def test_cable_relief_uses_configured_unwind_motion_values(self) -> None:
         process = MagicMock(process_id="paint")
         robot = MagicMock()

@@ -59,9 +59,11 @@
     "first_contact_acc_percent": 60.0,
     "first_contact_motion_type": "linear",
     "first_contact_blendR": 0.0,
-    "pickup_contact_mode": "servo_contact",
+    "pickup_contact_mode": "sensor_controlled_fast_lin",
     "servo_contact_linear_mm_s": 10.0,
     "servo_contact_min_z_mm": 0.0,
+    "servo_contact_fast_lin_velocity_percent": 10.0,
+    "servo_contact_fast_lin_acceleration_percent": 30.0,
     "servo_contact_timeout_s": 7.0,
     "servo_contact_poll_interval_s": 0.01,
     "servo_contact_preflight_read_attempts": 2,
@@ -106,14 +108,74 @@
     "release_align_vel_percent": 70.0,
     "release_align_acc_percent": 50.0,
     "release_align_motion_type": "ptp",
-    "release_align_blendR": 0.0
+    "release_align_blendR": 0.0,
+    "plate_corners": [],
+    "plate_release_z_offset_mm": 0.0,
+    "plate_approach_clearance_mm": 50.0,
+    "plate_margin_left_mm": 10.0,
+    "plate_margin_right_mm": 10.0,
+    "plate_margin_bottom_mm": 10.0,
+    "plate_margin_top_mm": 10.0,
+    "plate_spacing_x_mm": 10.0,
+    "plate_spacing_y_mm": 10.0,
+    "plate_robot_tool": -1,
+    "plate_robot_user": -1,
+    "plate_passage_gate_pose": [],
+    "plate_use_center_waypoint": true,
+    "plate_distribute_unwind": false,
+    "plate_motion_profiles": [
+      {
+        "key": "entry_gate",
+        "vel_percent": 70.0,
+        "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 20.0
+      },
+      {
+        "key": "entry_center",
+        "vel_percent": 70.0,
+        "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 20.0
+      },
+      {
+        "key": "center_to_dropoff",
+        "vel_percent": 70.0,
+        "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 0.0
+      },
+      {
+        "key": "exit_center",
+        "vel_percent": 70.0,
+        "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 20.0
+      },
+      {
+        "key": "exit_gate",
+        "vel_percent": 70.0,
+        "acc_percent": 50.0,
+        "motion_type": "ptp",
+        "blendR": 20.0
+      },
+      {
+        "key": "gate_to_next_start",
+        "vel_percent": 60.0,
+        "acc_percent": 40.0,
+        "motion_type": "ptp",
+        "blendR": 0.0
+      }
+    ]
   },
   "magazine_load": {
     "enabled": true,
-    "pickup_mode": "fixed_group_servo_contact",
+    "pickup_mode": "fixed_group_sensor_controlled_fast_lin",
     "fixed_pickup_group_id": "Magazine Fixed Pickup",
     "fixed_pickup_position_tolerance_mm": 1.0,
     "fixed_pickup_orientation_tolerance_deg": 0.5,
+    "full_retract_before_release": true,
+    "short_retract_distance_mm": 10.0,
     "magazine_group_id": "Magazine",
     "calibration_group_id": "CALIBRATION",
     "move_to_magazine_vel_percent": 60.0,

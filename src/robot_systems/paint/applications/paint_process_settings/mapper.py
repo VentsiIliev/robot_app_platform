@@ -580,7 +580,12 @@ class PaintProcessSettingsMapper:
         )
         dropoff = replace(
             base.dropoff,
-            strategy=str(flat.get("dropoff_strategy", base.dropoff.strategy)),
+            strategy=(
+                "movement_group"
+                if str(flat.get("dropoff_strategy", base.dropoff.strategy)).strip().lower()
+                == "pickup_origin"
+                else str(flat.get("dropoff_strategy", base.dropoff.strategy))
+            ),
             plate_corners=[
                 PaintProcessSettingsMapper._pose_from_value(flat.get(key, ""), [])
                 for key in (

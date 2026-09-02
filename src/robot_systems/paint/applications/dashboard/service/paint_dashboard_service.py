@@ -301,6 +301,33 @@ class PaintDashboardService(IPaintDashboardService):
         state = "ON" if enabled else "OFF"
         return DashboardCommandResult(success, f"{device_id.title()} switched {state}.", device_id, enabled)
 
+    def get_drying_mode(self) -> str:
+        service = self._paint_process_config_service
+        if service is None:
+            return "auto"
+        strategy = str(service.get_snapshot().dropoff.strategy or "movement_group").strip().lower()
+        return "manual" if strategy == "plate_layout" else "auto"
+
+    def set_drying_mode(self, mode: str) -> DashboardCommandResult:
+        service = self._paint_process_config_service
+        if service is None:
+            return DashboardCommandResult(False, "Paint process settings are not available.")
+        process_state = str(getattr(getattr(self._process, "state", None), "value", ""))
+        if process_state in {ProcessState.RUNNING.value, ProcessState.PAUSED.value}:
+            return DashboardCommandResult(False, "Stop the paint process before changing drying mode.")
+        normalized = str(mode or "").strip().lower()
+        strategies = {"auto": "movement_group", "manual": "plate_layout"}
+        strategy = strategies.get(normalized)
+        if strategy is None:
+            return DashboardCommandResult(False, "Invalid drying mode.")
+        try:
+            current = service.get_snapshot()
+            service.save(replace(current, dropoff=replace(current.dropoff, strategy=strategy)))
+        except Exception as exc:
+            self._logger.exception("Could not save drying mode")
+            return DashboardCommandResult(False, f"Could not save drying mode: {exc}")
+        return DashboardCommandResult(True, f"Drying mode changed to {normalized}.")
+
     def _robot_status_card(self) -> DashboardCardState:
         robot = self._robot_service
         if robot is None:

@@ -73,5 +73,11 @@ class PaintDashboardModel(IApplicationModel):
     def set_auxiliary_enabled(self, device_id: str, enabled: bool):
         return self._service.set_auxiliary_enabled(device_id, enabled)
 
+    def get_drying_mode(self) -> str:
+        return self._service.get_drying_mode()
+
+    def set_drying_mode(self, mode: str):
+        return self._service.set_drying_mode(mode)
+
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return self._service.capture_latest_contour_transform_debug()

@@ -67,6 +67,15 @@ class TestPaintDashboardModel(unittest.TestCase):
         service.relieve_cable.assert_called_once_with()
         service.set_auxiliary_enabled.assert_called_once_with("fan", True)
 
+    def test_model_maps_drying_mode_to_service(self):
+        service = MagicMock()
+        service.get_drying_mode.return_value = "manual"
+        model = PaintDashboardModel(service)
+
+        self.assertEqual("manual", model.get_drying_mode())
+        model.set_drying_mode("auto")
+        service.set_drying_mode.assert_called_once_with("auto")
+
     def test_unmatched_paint_settings_delegate_through_service(self) -> None:
         service = MagicMock()
         settings = {"velocity_percent": 25.0, "acceleration_percent": 35.0, "offset_mm": -4.5}

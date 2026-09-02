@@ -147,6 +147,7 @@ class PaintDashboardView(IApplicationView):
     application_shortcut_requested = pyqtSignal(str)
     unmatched_paint_settings_requested = pyqtSignal(object)
     acceleration_scale_requested = pyqtSignal(float)
+    drying_mode_requested = pyqtSignal(str)
 
     def __init__(
         self,
@@ -271,6 +272,7 @@ class PaintDashboardView(IApplicationView):
             self._quick_controls.cable_relief_requested.connect(
                 self._on_quick_cable_relief
             )
+            self._quick_controls.drying_mode_requested.connect(self.drying_mode_requested)
         except Exception:
             self._quick_controls = None
 
@@ -515,6 +517,14 @@ class PaintDashboardView(IApplicationView):
         self._controls_widget.set_cable_relief_busy(busy)
         if self._quick_controls is not None:
             self._quick_controls.set_cable_relief_busy(busy)
+
+    def set_drying_mode(self, mode: str) -> None:
+        if self._quick_controls is not None:
+            self._quick_controls.set_drying_mode(mode)
+
+    def set_drying_mode_busy(self, busy: bool) -> None:
+        if self._quick_controls is not None:
+            self._quick_controls.set_drying_mode_busy(busy)
 
     def set_application_shortcuts(self, shortcuts: list) -> None:
         self._controls_widget.set_application_shortcuts(shortcuts)

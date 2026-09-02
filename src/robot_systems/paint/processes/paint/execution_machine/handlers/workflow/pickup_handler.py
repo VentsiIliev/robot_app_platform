@@ -105,7 +105,7 @@ def handle_pickup(ctx: PaintExecutionContext) -> PaintExecutionState:
 
 
 def _dropoff_strategy(executor: object) -> str:
-    return str(executor._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
+    return str(executor._paint_process_config().dropoff.strategy or "movement_group").strip().lower()
 
 
 def _reserve_plate_dropoff(ctx, executor, pickup_plan) -> tuple[bool, str]:

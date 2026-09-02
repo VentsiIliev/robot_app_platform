@@ -66,6 +66,7 @@ class PaintDashboardController(
             self._on_unmatched_paint_settings
         )
         self._view.acceleration_scale_requested.connect(self._on_acceleration_scale)
+        self._view.drying_mode_requested.connect(self._on_drying_mode)
 
     def load(self) -> None:
         self._active = True
@@ -79,6 +80,7 @@ class PaintDashboardController(
         )
         self._view.set_acceleration_scale(self._model.get_acceleration_scale())
         self._run_background(self._model.get_auxiliary_states, self._on_auxiliary_states_loaded)
+        self._view.set_drying_mode(self._model.get_drying_mode())
         self._load_application_shortcuts()
         self._retranslate()
         if self._status_timer.parent() is not None or QThread.currentThread().eventDispatcher() is not None:
@@ -153,6 +155,18 @@ class PaintDashboardController(
             return
         for device_id, enabled in states.items():
             self._view.set_auxiliary_state(device_id, bool(enabled))
+
+    def _on_drying_mode(self, mode: str) -> None:
+        self._view.set_drying_mode_busy(True)
+        self._run_background(partial(self._model.set_drying_mode, mode), self._on_drying_mode_finished)
+
+    def _on_drying_mode_finished(self, result: object) -> None:
+        if not self._view_ok():
+            return
+        self._view.set_drying_mode_busy(False)
+        if bool(getattr(result, "success", False)):
+            self._view.set_drying_mode(self._model.get_drying_mode())
+        self._show_command_result(self._t("Drying Mode"), result)
 
     def _on_cable_relief_finished(self, result: object) -> None:
         if not self._view_ok():

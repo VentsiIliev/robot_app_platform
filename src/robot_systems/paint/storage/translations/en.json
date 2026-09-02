@@ -36,7 +36,9 @@
     "Vacuum Pump": "Vacuum Pump",
     "Fan": "Fan",
     "OFF": "OFF",
-    "Relieve Cable (Unwind J6)": "Relieve Cable (Unwind J6)"
+    "Relieve Cable (Unwind J6)": "Relieve Cable (Unwind J6)",
+    "Auto Dry": "Auto Dry",
+    "Manual Dry": "Manual Dry"
   },
   "PaintDashboard": {
     "Painting": "Painting",
@@ -55,6 +57,7 @@
     "No process messages": "No process messages",
     "Cable Relief": "Cable Relief",
     "Manual Control": "Manual Control",
+    "Drying Mode": "Drying Mode",
     "Command failed.": "Command failed.",
     "Robot service is not available.": "Robot service is not available.",
     "Cable relief completed.": "Cable relief completed.",

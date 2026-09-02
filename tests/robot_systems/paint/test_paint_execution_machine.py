@@ -29,6 +29,13 @@ class TestDropoffPassagePreparation(unittest.TestCase):
         executor = SimpleNamespace(
             _dropoff_motion_corridor_id="workpiece_drop_opening",
             _robot_service=robot_service,
+            _dropoff_position_provider=object(),
+            _last_process_end_pose=[0, 0, 10, 180, 0, 0],
+            _configured_contact_motion_plane="xy_z_rz",
+            _paint_process_config=lambda: SimpleNamespace(
+                dropoff=SimpleNamespace(strategy="movement_group")
+            ),
+            _read_provider_position=lambda _provider: [0, 0, 10, 180, 0, 0],
         )
 
         ok, message = open_dropoff_passage_for_preparation(executor)
@@ -45,6 +52,13 @@ class TestDropoffPassagePreparation(unittest.TestCase):
         executor = SimpleNamespace(
             _dropoff_motion_corridor_id="workpiece_drop_opening",
             _robot_service=robot_service,
+            _dropoff_position_provider=object(),
+            _last_process_end_pose=[0, 0, 10, 180, 0, 0],
+            _configured_contact_motion_plane="xy_z_rz",
+            _paint_process_config=lambda: SimpleNamespace(
+                dropoff=SimpleNamespace(strategy="movement_group")
+            ),
+            _read_provider_position=lambda _provider: [0, 0, 10, 180, 0, 0],
         )
 
         ok, message = open_dropoff_passage_for_preparation(executor)
@@ -248,6 +262,7 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             execution_jobs=[{"job": 1}],
         )
         service._path_executor = _FakePhasedPathExecutor(events)
+        service._next_cycle_start_target.return_value = None
         service._pause_dashboard_live_view_after_capture.return_value = False
         service._path_debug_plots_enabled.return_value = False
 
@@ -267,7 +282,14 @@ class TestPaintExecutionMachineScaffold(unittest.TestCase):
             ctx.result_message,
         )
         self.assertEqual(
-            ["pickup", "paint_contact", "unwind", "vacuum_off", "post_return"],
+            [
+                "pickup",
+                "paint_contact",
+                "Moving to dropoff pose before unwind",
+                "unwind",
+                "vacuum_off",
+                "post_return",
+            ],
             events,
         )
         self.assertEqual(PaintExecutionState.IDLE, machine.current_state)
@@ -314,6 +336,7 @@ class _FakePhasedPathExecutor:
         self._configured_contact_motion_plane = "xy_z_rz"
         self._last_process_end_pose = [1, 2, 3, 4, 5, 6]
         self._last_pickup_plan = SimpleNamespace(align_pose=[1, 2, 3, 4, 5, 6])
+        self._dropoff_position_provider = object()
         self._robot_service = SimpleNamespace(unwind_joint6=self._unwind_joint6)
         self._motion = SimpleNamespace(
             move_pickup_phase=self._move_pickup_phase,
@@ -337,12 +360,18 @@ class _FakePhasedPathExecutor:
     def _diagnostics_artifacts_enabled(self) -> bool:
         return False
 
+    def _read_provider_position(self, _provider):
+        return [1, 2, 3, 4, 5, 6]
+
     def _paint_process_config(self):
         return SimpleNamespace(
             dropoff=SimpleNamespace(
-                strategy="pickup_origin",
+                strategy="movement_group",
                 release_align_vel_percent=20.0,
                 release_align_acc_percent=20.0,
+                release_align_motion_type="ptp",
+                release_align_blendR=0.0,
+                allow_sub_zero_dropoff=False,
             ),
             dropoff_safe_travel=SimpleNamespace(
                 enabled=False,
@@ -372,7 +401,9 @@ class _FakePhasedPathExecutor:
     def _prepare_dropoff_joint6_unwind(self) -> tuple[bool, str]:
         raise AssertionError("dropoff preparation should be owned by the handler")
 
-    def _move_pickup_phase(self, label: str, pose: list[float], *, velocity: float, acceleration: float) -> bool:
+    def _move_pickup_phase(
+        self, label: str, pose: list[float], *, velocity: float, acceleration: float, **_kwargs
+    ) -> bool:
         self._events.append(label)
         return True
 

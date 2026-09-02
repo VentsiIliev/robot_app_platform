@@ -227,7 +227,7 @@ class TestPaintProcessSettingsController(unittest.TestCase):
         model.save.assert_not_called()
         show_warning.assert_called_once()
         self.assertIn("velocity must be greater than 0", show_warning.call_args.args[2])
-        self.assertEqual("pickup_origin", view.values_set["dropoff_strategy"])
+        self.assertEqual("movement_group", view.values_set["dropoff_strategy"])
         self.assertIn("velocity must be greater than 0", view.status)
 
     def test_set_safe_travel_current_captures_current_robot_pose_into_view(self):

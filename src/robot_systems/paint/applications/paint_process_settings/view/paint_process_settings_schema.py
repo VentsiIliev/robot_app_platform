@@ -150,7 +150,7 @@ def build_process_groups() -> list[SettingGroup]:
         ]),
         SettingGroup(_t("Dropoff Strategy"), [
             SettingField("dropoff_strategy", _t("Strategy"), "combo",
-                         default="pickup_origin", choices=["pickup_origin", "movement_group", "plate_layout"]),
+                         default="movement_group", choices=["movement_group", "plate_layout"]),
             SettingField("dropoff_plate_bottom_left", _t("Plate Bottom-Left Pose"), "line_edit", default=""),
             SettingField("dropoff_plate_capture_bottom_left", _t("Capture Bottom-Left From Current Pose"), "paint_action_button", default=_t("Capture Bottom-Left From Current Pose")),
             SettingField("dropoff_plate_bottom_right", _t("Plate Bottom-Right Pose"), "line_edit", default=""),

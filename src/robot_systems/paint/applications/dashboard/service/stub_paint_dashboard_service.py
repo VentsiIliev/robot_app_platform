@@ -32,6 +32,7 @@ class StubPaintDashboardService(IPaintDashboardService):
             "pass_2": {"use_pass_1_settings": True, "velocity_percent": 10.0, "acceleration_percent": 10.0, "offset_mm": 0.0},
         }
         self._acceleration_scale = 100.0
+        self._drying_mode = "auto"
 
     def get_process_id(self) -> str:
         return self._process_id
@@ -112,6 +113,15 @@ class StubPaintDashboardService(IPaintDashboardService):
             return DashboardCommandResult(False, f"{device_id.title()} is not available.", device_id)
         self._auxiliary_states[device_id] = enabled
         return DashboardCommandResult(True, f"{device_id.title()} switched {'ON' if enabled else 'OFF'}.", device_id, enabled)
+
+    def get_drying_mode(self) -> str:
+        return self._drying_mode
+
+    def set_drying_mode(self, mode: str) -> DashboardCommandResult:
+        if mode not in {"auto", "manual"}:
+            return DashboardCommandResult(False, "Invalid drying mode.")
+        self._drying_mode = mode
+        return DashboardCommandResult(True, f"Drying mode changed to {mode}.")
 
     def capture_latest_contour_transform_debug(self) -> ContourTransformDebugResult:
         return ContourTransformDebugResult(False, "No usable contour detected (stub service).")

@@ -10,7 +10,6 @@ from src.engine.robot.path_preparation import WorkpieceExecutionPlan
 from src.robot_systems.paint.processes.paint.execute.diagnostics import elapsed_s
 from src.robot_systems.paint.processes.paint.execution_machine.handlers.dropoff.dropoff_handlers import (
     _resolve_dropoff_align_pose,
-    _should_release_at_current_dropoff_pose,
 )
 from src.robot_systems.paint.timing import timed_step
 
@@ -55,57 +54,6 @@ class PaintDropoffStrategy(Protocol):
 
     def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
         """Return the ordered dropoff actions for the active workpiece."""
-
-
-class PickupOriginDropoffStrategy:
-    """Default strategy: return to the pickup align pose and release there."""
-
-    name = "pickup_origin"
-
-    def build_plan(self, owner, execution_plan: WorkpieceExecutionPlan) -> DropoffPlan:
-        dropoff = owner._paint_process_config().dropoff
-        if _should_release_at_current_dropoff_pose(owner):
-            return DropoffPlan(
-                strategy_name=self.name,
-                waypoints=(
-                    DropoffWaypoint(
-                        label="Release at current dropoff pose",
-                        pose=None,
-                        vel_percent=dropoff.release_align_vel_percent,
-                        acc_percent=dropoff.release_align_acc_percent,
-                        motion_type=dropoff.release_align_motion_type,
-                        blendR=dropoff.release_align_blendR,
-                        release_here=True,
-                    ),
-                ),
-            )
-        plan = owner._last_pickup_plan
-        if plan is None:
-            _logger.info("[DROPOFF] pickup_origin has no pickup plan; releasing at current pose")
-            waypoints = (
-                DropoffWaypoint(
-                    label="Release at current pose",
-                    pose=None,
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
-                    blendR=dropoff.release_align_blendR,
-                    release_here=True,
-                ),
-            )
-        else:
-            waypoints = (
-                DropoffWaypoint(
-                    label="Returning to align pose for release",
-                    pose=list(plan.align_pose),
-                    vel_percent=dropoff.release_align_vel_percent,
-                    acc_percent=dropoff.release_align_acc_percent,
-                    motion_type=dropoff.release_align_motion_type,
-                    blendR=dropoff.release_align_blendR,
-                    release_here=True,
-                ),
-            )
-        return DropoffPlan(strategy_name=self.name, waypoints=waypoints)
 
 
 class MovementGroupDropoffStrategy:
@@ -184,14 +132,13 @@ class PaintDropoffExecutor:
         self._owner = owner
         self._strategy_override = strategy
         self._strategies: dict[str, PaintDropoffStrategy] = {
-            PickupOriginDropoffStrategy.name: PickupOriginDropoffStrategy(),
             MovementGroupDropoffStrategy.name: MovementGroupDropoffStrategy(),
         }
 
     def _resolve_strategy(self) -> PaintDropoffStrategy | None:
         if self._strategy_override is not None:
             return self._strategy_override
-        strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "pickup_origin").strip().lower()
+        strategy_name = str(self._owner._paint_process_config().dropoff.strategy or "movement_group").strip().lower()
         return self._strategies.get(strategy_name)
 
     @timed_step(_logger, "pre_release_dropoff")

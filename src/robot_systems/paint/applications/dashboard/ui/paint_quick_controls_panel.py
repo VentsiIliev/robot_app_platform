@@ -22,6 +22,7 @@ class PaintQuickControlsPanel(QWidget):
     unmatched_paint_settings_requested = pyqtSignal(object)
     device_off_requested = pyqtSignal(str)
     cable_relief_requested = pyqtSignal()
+    drying_mode_requested = pyqtSignal(str)
 
     def __init__(self, toggle_configs: list, parent=None) -> None:
         super().__init__(parent)
@@ -74,6 +75,12 @@ class PaintQuickControlsPanel(QWidget):
             button.clicked.connect(self._on_device_off)
             action_row.addWidget(button, 1)
             self._off_buttons[item.device_id] = button
+        self._drying_mode = "auto"
+        self._drying_mode_button = QPushButton()
+        self._drying_mode_button.setStyleSheet(GHOST_BTN_STYLE)
+        self._drying_mode_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._drying_mode_button.clicked.connect(self._on_drying_mode)
+        action_row.addWidget(self._drying_mode_button, 1)
         box_layout.addLayout(action_row)
         self._cable_relief = QPushButton()
         self._cable_relief.setStyleSheet(GHOST_BTN_STYLE)
@@ -149,6 +156,20 @@ class PaintQuickControlsPanel(QWidget):
     def _on_cable_relief(self) -> None:
         self.cable_relief_requested.emit()
 
+    def _on_drying_mode(self) -> None:
+        self.drying_mode_requested.emit("manual" if self._drying_mode == "auto" else "auto")
+
+    def set_drying_mode(self, mode: str) -> None:
+        self._drying_mode = "manual" if str(mode).lower() == "manual" else "auto"
+        self._update_drying_mode_text()
+
+    def set_drying_mode_busy(self, busy: bool) -> None:
+        self._drying_mode_button.setEnabled(not busy)
+
+    def _update_drying_mode_text(self) -> None:
+        text = self.tr("Manual Dry") if self._drying_mode == "manual" else self.tr("Auto Dry")
+        self._drying_mode_button.setText(text)
+
     def set_unmatched_paint_settings(self, settings: dict) -> None:
         if not settings:
             self._box.setEnabled(False)
@@ -186,3 +207,4 @@ class PaintQuickControlsPanel(QWidget):
         self._cable_relief.setText(self.tr("Relieve Cable (Unwind J6)"))
         for button in self._off_buttons.values():
             button.setText(f"{self.tr(str(button.property('device_label')))} {self.tr('OFF')}")
+        self._update_drying_mode_text()

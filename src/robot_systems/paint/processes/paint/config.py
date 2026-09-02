@@ -172,7 +172,7 @@ class PaintDropoffConfig:
     """Dropoff/release motion tuning after paint and Joint 6 unwind."""
 
     # Return from pivot completion back to the pickup align pose before release.
-    strategy: str = "pickup_origin"
+    strategy: str = "movement_group"
     allow_sub_zero_dropoff: bool = False  # [LIVE SETTINGS]
     # Safety corridor used only when the configured Dropoff pose is below Z=0.
     corridor_x_margin_mm: float = 70.0
