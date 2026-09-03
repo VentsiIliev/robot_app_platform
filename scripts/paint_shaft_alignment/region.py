@@ -50,3 +50,35 @@ class CenteredDetectionRegionProvider:
             height=height,
         )
 
+
+class SelectableDetectionRegionProvider:
+    """Uses a drawn ROI when present and otherwise delegates to a default provider."""
+
+    def __init__(self, default_provider: DetectionRegionProvider) -> None:
+        self._default_provider = default_provider
+        self._selected_region: PixelRegion | None = None
+
+    @property
+    def selected_region(self) -> PixelRegion | None:
+        return self._selected_region
+
+    def select(self, start: tuple[int, int], end: tuple[int, int]) -> bool:
+        left, right = sorted((start[0], end[0]))
+        top, bottom = sorted((start[1], end[1]))
+        if right == left or bottom == top:
+            return False
+        self._selected_region = PixelRegion(left, top, right - left, bottom - top)
+        return True
+
+    def clear(self) -> None:
+        self._selected_region = None
+
+    def resolve(self, image_width: int, image_height: int) -> PixelRegion:
+        if self._selected_region is None:
+            return self._default_provider.resolve(image_width, image_height)
+        region = self._selected_region
+        left = min(max(0, region.x), max(0, image_width - 1))
+        top = min(max(0, region.y), max(0, image_height - 1))
+        right = min(image_width, max(left + 1, region.right))
+        bottom = min(image_height, max(top + 1, region.bottom))
+        return PixelRegion(left, top, right - left, bottom - top)

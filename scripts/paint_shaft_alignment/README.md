@@ -32,6 +32,8 @@ Available configuration fields include:
 - `debug_draw_detected_markers` outlines every visible marker and prints its ID;
 - `debug_draw_detection_region` draws that ROI in the viewer;
 - `debug_draw_robot_coordinates` shows mapped paint calibration/base XY in mm;
+- `draw_initial_detection_region` pauses detection on the first frame so the base
+  ROI can be drawn with the mouse (Enter accepts the configured centered ROI);
 - `orientation_strategy` switches between `compare`, `solve_pnp`, and `corner_edge`;
 - `orientation_primary_strategy` chooses which comparison result feeds stabilization;
 - `marker_size_mm` is the measured black marker square size (currently 10 mm);
@@ -52,6 +54,10 @@ Available configuration fields include:
 - `stability_maximum_orientation_spread_deg` limits circular angle variation;
 - `stability_misses_before_reset` clears stale samples after marker loss;
 - `q` or Escape closes the OpenCV viewer.
+- At startup, drag with the left mouse button to set the initial base detection
+  region. Drag again later to replace it; `r`
+  restores the configured centered region. The adaptive tracker continues to
+  operate inside/around the selected base region and falls back to it after loss.
 
 Next milestones should add a timestamped capture contract, stable multi-frame
 sampling, marker pose estimation, and robot-pose synchronization as separate

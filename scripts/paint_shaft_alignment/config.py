@@ -13,6 +13,7 @@ class StandaloneShaftDetectionConfig:
     debug_draw_detected_markers: bool = True
     debug_draw_detection_region: bool = True
     debug_draw_robot_coordinates: bool = True
+    draw_initial_detection_region: bool = True
 
     orientation_strategy: str = "compare"  # "compare", "solve_pnp" or "corner_edge"
     orientation_primary_strategy: str = "solve_pnp"
