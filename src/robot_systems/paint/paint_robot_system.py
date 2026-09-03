@@ -31,7 +31,7 @@ from src.engine.vision.camera_settings_serializer import CameraSettingsSerialize
 from src.engine.vision.i_vision_service import IVisionService
 from src.engine.work_areas import IWorkAreaService, WorkAreaSettingsSerializer
 from src.robot_systems.base_robot_system import BaseRobotSystem
-from src.robot_systems.paint import application_wiring
+from src.robot_systems.paint import application_wiring, paint_system_config
 from src.robot_systems.paint.calibration.provider import PaintRobotSystemCalibrationProvider
 from src.robot_systems.paint.height_measuring.provider import PaintRobotSystemHeightMeasuringProvider
 from src.robot_systems.paint.component_ids import ServiceID, SettingsID
@@ -92,6 +92,73 @@ def _build_sub_zero_dropoff_corridor(corridor_id, dropoff_pose, dropoff_config):
             0.1, float(dropoff_config.corridor_maximum_acceleration_percent)
         ),
     )
+
+
+def _build_application_specs():
+    """Return the Paint applications enabled by paint_system_config."""
+    configured_specs = [
+        (paint_system_config.PAINT_DASHBOARD_APP,
+         ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
+                         factory=application_wiring._build_dashboard_application)),
+        (paint_system_config.WORKPIECE_LIBRARY_APP,
+         ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.shapes",
+                         factory=application_wiring._build_workpiece_library_application)),
+        (paint_system_config.WORKPIECE_EDITOR_APP,
+         ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",
+                         factory=application_wiring._build_paint_contour_editor_application)),
+        (paint_system_config.ROBOT_SETTINGS_APP,
+         ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
+                         factory=application_wiring._build_robot_settings_application)),
+        (paint_system_config.ETHERCAT_DIAGNOSTICS_APP,
+         ApplicationSpec(name="EthercatDiagnostics", folder_id=2, icon="fa5s.network-wired",
+                         factory=application_wiring._build_ethercat_diagnostics_application)),
+        (paint_system_config.MODBUS_SETTINGS_APP,
+         ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
+                         factory=application_wiring._build_modbus_settings_application)),
+        (paint_system_config.DRYER_SETTINGS_APP,
+         ApplicationSpec(name="DryerSettings", folder_id=2, icon="fa5s.wind",
+                         factory=application_wiring._build_dryer_settings_application)),
+        (paint_system_config.DEVICE_CONTROL_APP,
+         ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
+                         factory=application_wiring._build_device_control_application)),
+        (paint_system_config.WORK_AREA_SETTINGS_APP,
+         ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
+                         factory=application_wiring._build_work_area_settings_application)),
+        (paint_system_config.CAMERA_SETTINGS_APP,
+         ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
+                         factory=application_wiring._build_camera_settings_application)),
+        (paint_system_config.CALIBRATION_SETTINGS_APP,
+         ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
+                         factory=application_wiring._build_calibration_settings_application)),
+        (paint_system_config.PAINT_PROCESS_SETTINGS_APP,
+         ApplicationSpec(name="PaintProcessSettings", folder_id=2, icon="fa5s.cogs",
+                         factory=application_wiring._build_paint_process_settings_application)),
+        (paint_system_config.CALIBRATION_APP,
+         ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
+                         factory=application_wiring._build_calibration_application)),
+        (paint_system_config.BROKER_DEBUG_APP,
+         ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
+                         factory=application_wiring._build_broker_debug_application)),
+        (paint_system_config.USER_MANAGEMENT_APP,
+         ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
+                         factory=application_wiring._build_user_management_application)),
+        (paint_system_config.INTRINSIC_CAPTURE_APP,
+         ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
+                         factory=application_wiring._build_intrinsic_capture_application)),
+        (paint_system_config.HAND_EYE_CALIBRATION_APP,
+         ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
+                         factory=application_wiring._build_hand_eye_calibration_application)),
+        (paint_system_config.PICK_TARGET_APP,
+         ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
+                         factory=application_wiring._build_pick_target_application)),
+        (paint_system_config.PAINT_MOTION_PLANE_SETUP_APP,
+         ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
+                         factory=application_wiring._build_paint_motion_plane_setup_application)),
+        (paint_system_config.PAINT_MOTION_RECIPE_APP,
+         ApplicationSpec(name="PaintMotionRecipe", folder_id=4, icon="fa5s.route",
+                         factory=application_wiring._build_paint_motion_recipe_application)),
+    ]
+    return [spec for enabled, spec in configured_specs if enabled]
 
 
 # ── System ───────────────────────────────────────────────────────────────────────
@@ -240,48 +307,7 @@ class PaintRobotSystem(BaseRobotSystem):
             FolderSpec(folder_id=3, name="ADMIN", display_name="Administration"),
             FolderSpec(folder_id=4, name="Tests", display_name="Tests"),
         ],
-        applications=[
-            ApplicationSpec(name="PaintDashboard", folder_id=1, icon="fa5s.tachometer-alt",
-                            factory=application_wiring._build_dashboard_application),
-            ApplicationSpec(name="WorkpieceLibrary", folder_id=1, icon="fa5s.shapes",
-                            factory=application_wiring._build_workpiece_library_application),
-            ApplicationSpec(name="WorkpieceEditor", folder_id=1, icon="fa5s.draw-polygon",
-                            factory=application_wiring._build_paint_contour_editor_application),
-            ApplicationSpec(name="RobotSettings", folder_id=2, icon="mdi.robot-industrial",
-                            factory=application_wiring._build_robot_settings_application),
-            ApplicationSpec(name="EthercatDiagnostics", folder_id=2, icon="fa5s.network-wired",
-                            factory=application_wiring._build_ethercat_diagnostics_application),
-            ApplicationSpec(name="ModbusSettings", folder_id=2, icon="fa5s.network-wired",
-                            factory=application_wiring._build_modbus_settings_application),
-            ApplicationSpec(name="DryerSettings", folder_id=2, icon="fa5s.wind",
-                            factory=application_wiring._build_dryer_settings_application),
-            ApplicationSpec(name="DeviceControl", folder_id=2, icon="fa5s.sliders-h",
-                            factory=application_wiring._build_device_control_application),
-            ApplicationSpec(name="WorkAreaSettings", folder_id=2, icon="fa5s-vector-square",
-                            factory=application_wiring._build_work_area_settings_application),
-            ApplicationSpec(name="CameraSettings", folder_id=2, icon="fa5s.camera",
-                            factory=application_wiring._build_camera_settings_application),
-            ApplicationSpec(name="CalibrationSettings", folder_id=2, icon="fa5s.sliders-h",
-                            factory=application_wiring._build_calibration_settings_application),
-            ApplicationSpec(name="PaintProcessSettings", folder_id=2, icon="fa5s.cogs",
-                            factory=application_wiring._build_paint_process_settings_application),
-            ApplicationSpec(name="Calibration", folder_id=2, icon="fa5s.crosshairs",
-                            factory=application_wiring._build_calibration_application),
-            ApplicationSpec(name="BrokerDebug", folder_id=4, icon="fa5s.project-diagram",
-                            factory=application_wiring._build_broker_debug_application),
-            ApplicationSpec(name="UserManagement", folder_id=3, icon="fa5s.users-cog",
-                            factory=application_wiring._build_user_management_application),
-            # ApplicationSpec(name="IntrinsicCapture", folder_id=4, icon="fa5s.camera-retro",
-            #                 factory=application_wiring._build_intrinsic_capture_application),
-            # ApplicationSpec(name="HandEyeCalibration", folder_id=4, icon="fa5s.hand-paper",
-            #                 factory=application_wiring._build_hand_eye_calibration_application),
-            ApplicationSpec(name="PickTarget", folder_id=4, icon="fa5s.crosshairs",
-                            factory=application_wiring._build_pick_target_application),
-            ApplicationSpec(name="PaintMotionPlaneSetup", folder_id=4, icon="fa5s.compass",
-                            factory=application_wiring._build_paint_motion_plane_setup_application),
-            ApplicationSpec(name="PaintMotionRecipe", folder_id=4, icon="fa5s.route",
-                            factory=application_wiring._build_paint_motion_recipe_application),
-        ],
+        applications=_build_application_specs(),
     )
 
     metadata = SystemMetadata(
