@@ -346,6 +346,36 @@ def _execute_magazine_servo_contact_pickup_release(
         _discard_prepared_magazine_release(executor, prepared_plan_id)
         prepared_plan_id = None
 
+    def return_to_fixed_pose(reason: str) -> tuple[bool, str]:
+        recovery_waypoint = transfer_waypoints[0]
+        recovery_pose = list(retract_reference_pose)
+        recovery_segments = build_magazine_pickup_release_segments(
+            (
+                (
+                    f"Returning to fixed magazine pose {reason}",
+                    recovery_pose,
+                    recovery_waypoint[2],
+                    recovery_waypoint[3],
+                    "linear",
+                    0.0,
+                ),
+            )
+        )
+        current_pose = _read_fresh_pose(executor._robot_service)
+        if pickup_pose_is_close(current_pose, recovery_pose):
+            _logger.info(
+                "[MAGAZINE_LOAD] Recovery skipped: robot already at fixed magazine pose"
+            )
+            return True, ""
+        recovered = executor._motion.move_ordered_pickup_sequence(
+            "Magazine pickup recovery to fixed pose",
+            recovery_segments,
+        )
+        if recovered:
+            return True, ""
+        motion_error = getattr(executor._motion, "last_motion_error", None)
+        return False, str(motion_error or "ordered motion failed")
+
     try:
         contact_speed_mm_s = float(pickup_motion.servo_contact_linear_mm_s)
         minimum_contact_z_mm = float(getattr(pickup_motion, "servo_contact_min_z_mm", 0.0))
@@ -416,38 +446,13 @@ def _execute_magazine_servo_contact_pickup_release(
             discard_prepared()
             if result.timed_out or result.message == "timeout":
                 off_ok, off_msg = executor._motion.turn_vacuum_off()
-                recovery_waypoint = transfer_waypoints[0]
-                recovery_pose = list(retract_reference_pose)
-                recovery_segments = build_magazine_pickup_release_segments(
-                    (
-                        (
-                            "Returning to fixed magazine pose after no contact",
-                            recovery_pose,
-                            recovery_waypoint[2],
-                            recovery_waypoint[3],
-                            "linear",
-                            0.0,
-                        ),
-                    )
-                )
-                current_pose = _read_fresh_pose(executor._robot_service)
-                if pickup_pose_is_close(current_pose, recovery_pose):
-                    _logger.info(
-                        "[MAGAZINE_LOAD] Timeout recovery skipped: robot already at fixed magazine pose"
-                    )
-                    recovered = True
-                else:
-                    recovered = executor._motion.move_ordered_pickup_sequence(
-                        "Magazine pickup timeout recovery to fixed pose",
-                        recovery_segments,
-                    )
+                recovered, recovery_error = return_to_fixed_pose("after no contact")
                 recovery_failures = []
                 if not off_ok:
                     recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
                 if not recovered:
-                    reason = getattr(executor._motion, "last_motion_error", None)
                     recovery_failures.append(
-                        f"return to fixed magazine pose failed: {reason or 'ordered motion failed'}"
+                        f"return to fixed magazine pose failed: {recovery_error}"
                     )
                 if recovery_failures:
                     return False, "Magazine servo pickup timed out; " + "; ".join(recovery_failures)
@@ -455,12 +460,20 @@ def _execute_magazine_servo_contact_pickup_release(
             return False, f"Magazine servo contact pickup failed: {result.message}"
         if not pickup_condition_is_active_after_retract(condition):
             off_ok, off_msg = executor._motion.turn_vacuum_off()
+            recovered, recovery_error = return_to_fixed_pose("after workpiece loss")
+            recovery_failures = []
             if not off_ok:
-                return False, (
-                    "Magazine workpiece is no longer detected after Fast LIN retract; "
-                    f"vacuum pump OFF also failed: {off_msg}"
+                recovery_failures.append(f"vacuum pump OFF failed: {off_msg}")
+            if not recovered:
+                recovery_failures.append(
+                    f"return to fixed magazine pose failed: {recovery_error}"
                 )
-            return False, "Magazine workpiece is no longer detected after Fast LIN retract"
+            if recovery_failures:
+                return False, (
+                    "Magazine workpiece was lost after Fast LIN retract; "
+                    + "; ".join(recovery_failures)
+                )
+            return False, NO_WORKPIECE_AT_MAGAZINE
         current_pose = _wait_for_stable_pose(executor._robot_service)
         if current_pose is None:
             return False, "Magazine post-retract pose did not become stable"
