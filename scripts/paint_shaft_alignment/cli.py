@@ -339,7 +339,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 continue
             result = detector.detect(frame, detection_region=detection_region)
             stable_estimate = stabilizer.estimate()
-            planar_size = MarkerPlanarSize(False, marker_config.marker_size_mm)
+            planar_size = MarkerPlanarSize(False, runtime_config.marker_size_mm)
             if result.detected:
                 target = next(
                     marker
@@ -351,7 +351,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 stable_estimate = stabilizer.record_detection(target)
                 planar_size = coordinate_mapper.measure_planar_size(
                     target.corners_px,
-                    marker_config.marker_size_mm,
+                    runtime_config.marker_size_mm,
                 )
             elif result.status is MarkerDetectionStatus.MARKER_NOT_FOUND:
                 tracker.record_miss()
