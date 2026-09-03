@@ -10,6 +10,7 @@ from .detector import ShaftMarkerDetector
 from .config import CONFIG, StandaloneShaftDetectionConfig
 from .coordinate_mapper import (
     MarkerCenterRobotMapper,
+    MarkerPlanarSize,
     MarkerRobotPosition,
     TcpCoordinateTransformer,
 )
@@ -70,6 +71,7 @@ def _draw_detection(
     robot_position: MarkerRobotPosition,
     draw_robot_coordinates: bool,
     stable_estimate: StableMarkerEstimate,
+    planar_size: MarkerPlanarSize,
     selection_preview: PixelRegion | None = None,
 ):
     display = frame.copy()
@@ -145,6 +147,14 @@ def _draw_detection(
         lines.append(
             f"stable angle: {stable_estimate.orientation_deg:+.2f}deg "
             f"spread={stable_estimate.orientation_spread_deg:.2f}deg"
+        )
+    if planar_size.available:
+        lines.extend(
+            [
+                f"marker real: {planar_size.real_size_mm:.2f} x {planar_size.real_size_mm:.2f} mm",
+                f"marker measured: {planar_size.width_mm:.2f} x {planar_size.height_mm:.2f} mm",
+                f"marker diff: {planar_size.width_difference_mm:+.2f} x {planar_size.height_difference_mm:+.2f} mm",
+            ]
         )
     target_marker = next(
         (marker for marker in result.detected_markers if marker.marker_id == result.marker_id),
@@ -329,6 +339,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 continue
             result = detector.detect(frame, detection_region=detection_region)
             stable_estimate = stabilizer.estimate()
+            planar_size = MarkerPlanarSize(False, marker_config.marker_size_mm)
             if result.detected:
                 target = next(
                     marker
@@ -338,6 +349,10 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                 if not tracker.record_detection(target):
                     tracker.record_miss()
                 stable_estimate = stabilizer.record_detection(target)
+                planar_size = coordinate_mapper.measure_planar_size(
+                    target.corners_px,
+                    marker_config.marker_size_mm,
+                )
             elif result.status is MarkerDetectionStatus.MARKER_NOT_FOUND:
                 tracker.record_miss()
                 stable_estimate = stabilizer.record_miss()
@@ -378,6 +393,7 @@ def main(config: StandaloneShaftDetectionConfig = CONFIG) -> int:
                         robot_position=robot_position,
                         draw_robot_coordinates=runtime_config.debug_draw_robot_coordinates,
                         stable_estimate=stable_estimate,
+                        planar_size=planar_size,
                         selection_preview=mouse_handler.preview_region,
                     ),
                 )
