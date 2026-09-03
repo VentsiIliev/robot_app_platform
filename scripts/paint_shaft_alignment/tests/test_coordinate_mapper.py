@@ -46,11 +46,36 @@ class MarkerCenterRobotMapperTests(unittest.TestCase):
         transformer = CapturePoseCompensatedTransformer(
             _FakeTransformer(),
             (10.0, 20.0, 30.0, -180.0, 0.0, 0.0),
-            (14.0, 17.0, 50.0, -179.0, 0.0, 0.0),
+            (14.0, 17.0, 50.0, -180.0, 0.0, 0.0),
         )
 
         self.assertEqual((4.0, -3.0), transformer.translation_xy_mm)
         self.assertEqual((9.0, -5.0), transformer.transform(10.0, 8.0))
+
+    def test_updates_capture_pose_and_applies_rz_rotation(self):
+        transformer = CapturePoseCompensatedTransformer(
+            _FakeTransformer(),
+            (0.0, 0.0, 30.0, -180.0, 0.0, 0.0),
+            (0.0, 0.0, 30.0, -180.0, 0.0, 0.0),
+        )
+
+        transformer.set_capture_pose((10.0, 20.0, 30.0, -180.0, 0.0, 90.0))
+
+        mapped_x, mapped_y = transformer.transform(2.0, 0.0)
+        self.assertAlmostEqual(10.0, mapped_x)
+        self.assertAlmostEqual(21.0, mapped_y)
+
+    def test_unavailable_until_dynamic_capture_pose_is_set(self):
+        transformer = CapturePoseCompensatedTransformer(
+            _FakeTransformer(),
+            (0.0, 0.0, 30.0, -180.0, 0.0, 0.0),
+            (0.0, 0.0, 30.0, -180.0, 0.0, 0.0),
+        )
+
+        transformer.clear_capture_pose()
+        self.assertFalse(transformer.is_available())
+        transformer.set_capture_pose((1.0, 2.0, 30.0, -180.0, 0.0, 5.0))
+        self.assertTrue(transformer.is_available())
 
     def test_measures_marker_edges_after_transforming_all_corners(self):
         transformer = _FakeTransformer()

@@ -9,6 +9,7 @@ import time
 from collections import deque
 from dataclasses import replace
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
@@ -84,7 +85,15 @@ class _NormalizedRegionProvider:
 class PaintVisionShaftAlignmentService(IShaftAlignmentService):
     """Real example backend composed from the same Paint vision stack as the CLI."""
 
-    def __init__(self, settings_path: str | os.PathLike | None = None) -> None:
+    def __init__(
+        self,
+        settings_path: str | os.PathLike | None = None,
+        *,
+        vision_service=None,
+        robot_pose_provider: Callable[
+            [], list[float] | tuple[float, ...] | None
+        ] | None = None,
+    ) -> None:
         self._settings_path = Path(settings_path) if settings_path is not None else (
             Path(__file__).resolve().parents[1] / "settings" / "config.json"
         )
@@ -96,8 +105,11 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._pending_settings: ShaftAlignmentSettings | None = None
+        self._robot_pose_provider = robot_pose_provider
+        self._last_pose_error_log_s = 0.0
+        self._owns_vision_service = vision_service is None
         self._snapshot = AlignmentSnapshot(message="Detection stopped")
-        self._vision = build_paint_vision_service(config.active_work_area)
+        self._vision = vision_service or build_paint_vision_service(config.active_work_area)
         self._vision.update_settings({"Aruco": {"Enable detection": True}})
         self._configure_runtime(config)
         self._snapshot = AlignmentSnapshot(
@@ -116,7 +128,8 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
                 return
             self._apply_pending_settings()
             self._stop_event.clear()
-            self._vision.start()
+            if self._owns_vision_service:
+                self._vision.start()
             self._thread = threading.Thread(
                 target=self._run,
                 name="shaft-alignment-acquisition",
@@ -130,7 +143,8 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=3.0)
-        self._vision.stop()
+        if self._owns_vision_service:
+            self._vision.stop()
         with self._lock:
             self._thread = None
             self._snapshot = AlignmentSnapshot(
@@ -267,6 +281,7 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
 
     def _process_frame(self) -> None:
         self._apply_pending_settings()
+        self._update_capture_pose()
         frame = (
             self._vision.get_latest_raw_frame()
             if self._config.raw_mode
@@ -477,6 +492,9 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             config.calibration_pose,
             config.capture_pose,
         )
+        self._pose_compensated_transformer = compensated
+        if self._robot_pose_provider is not None:
+            compensated.clear_capture_pose()
         self._mapper = MarkerCenterRobotMapper(compensated)
         self._base_region = _NormalizedRegionProvider(
             CenteredDetectionRegionProvider(
@@ -549,6 +567,21 @@ class PaintVisionShaftAlignmentService(IShaftAlignmentService):
             "reference_marker_width_mm": self._config.reference_marker_width_mm,
             "reference_marker_height_mm": self._config.reference_marker_height_mm,
         }
+
+    def _update_capture_pose(self) -> None:
+        if self._robot_pose_provider is None:
+            return
+        try:
+            pose = self._robot_pose_provider()
+            if pose is None or len(pose) < 6:
+                raise RuntimeError("Robot returned no valid TCP pose")
+            self._pose_compensated_transformer.set_capture_pose(pose)
+        except Exception:
+            self._pose_compensated_transformer.clear_capture_pose()
+            now = time.monotonic()
+            if now - self._last_pose_error_log_s >= 5.0:
+                self._last_pose_error_log_s = now
+                self._logger.exception("Could not read current robot TCP pose")
 
     def _persist_runtime_state(self, **changes) -> None:
         settings = replace(self._stored_settings, **changes)

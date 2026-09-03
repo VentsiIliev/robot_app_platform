@@ -34,7 +34,7 @@
     "Orientation Strategy": "Стратегия за ориентация",
     "Orientation Primary Strategy": "Основна стратегия за ориентация",
     "Calibration Pose": "Калибрационна поза [X,Y,Z,RX,RY,RZ]",
-    "Capture Pose": "Поза на заснемане [X,Y,Z,RX,RY,RZ]",
+    "Capture Pose": "Самостоятелна поза на заснемане [X,Y,Z,RX,RY,RZ]",
     "Base Region Width Px": "Ширина на базовата зона (px)",
     "Base Region Height Px": "Височина на базовата зона (px)",
     "Tracking Region Padding Px": "Отстъп на зоната за проследяване (px)",

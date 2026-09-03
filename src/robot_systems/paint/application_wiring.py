@@ -830,6 +830,29 @@ def _build_camera_settings_application(robot_system):
     )
 
 
+def _build_shaft_alignment_application(robot_system):
+    from src.applications.base.widget_application import WidgetApplication
+    from src.applications.shaft_alignment.service.paint_vision_shaft_alignment_service import (
+        PaintVisionShaftAlignmentService,
+    )
+    from src.applications.shaft_alignment.shaft_alignment_factory import (
+        ShaftAlignmentFactory,
+    )
+
+    vision_service = robot_system.get_optional_service(CommonServiceID.VISION)
+    robot_service = robot_system.get_optional_service(CommonServiceID.ROBOT)
+    if vision_service is None:
+        raise RuntimeError("Shaft Alignment requires the Paint vision service")
+    if robot_service is None:
+        raise RuntimeError("Shaft Alignment requires the robot service")
+    service = PaintVisionShaftAlignmentService(
+        vision_service=vision_service,
+        robot_pose_provider=robot_service.get_current_position,
+    )
+    factory = ShaftAlignmentFactory()
+    return WidgetApplication(widget_factory=lambda _ms: factory.build(service))
+
+
 def _build_calibration_settings_application(robot_system):
     from src.applications.base.widget_application import WidgetApplication
     from src.applications.base.robot_jog_service_builder import build_robot_system_jog_service

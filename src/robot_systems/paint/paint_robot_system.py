@@ -154,6 +154,9 @@ def _build_application_specs():
         (paint_system_config.PAINT_MOTION_RECIPE_APP,
          ApplicationSpec(name="PaintMotionRecipe", folder_id=4, icon="fa5s.route",
                          factory=application_wiring._build_paint_motion_recipe_application)),
+        (paint_system_config.SHAFT_ALIGNMENT_APP,
+         ApplicationSpec(name="ShaftAlignment", folder_id=4, icon="fa5s.bullseye",
+                         factory=application_wiring._build_shaft_alignment_application)),
     ]
     return [spec for enabled, spec in configured_specs if enabled]
 
