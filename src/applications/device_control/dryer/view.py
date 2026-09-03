@@ -28,6 +28,7 @@ from pl_gui.settings.settings_view.styles import (
     TAB_WIDGET_STYLE,
     TERTIARY_TEXT,
     TEXT_COLOR,
+    TOUCH_SCROLL_AREA_STYLE,
 )
 from src.applications.base.i_application_view import IApplicationView
 from src.applications.base.keyboard_settings_view import build_with_keyboard_setting_handlers
@@ -97,7 +98,7 @@ def _make_scroll(widget: QWidget) -> QScrollArea:
     scroll.setWidgetResizable(True)
     scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+    scroll.setStyleSheet(TOUCH_SCROLL_AREA_STYLE)
     scroll.setWidget(widget)
     return scroll
 
